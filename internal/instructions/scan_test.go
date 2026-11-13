@@ -26,7 +26,7 @@ func TestScanImports(t *testing.T) {
 		{"a directory", "@dir/ here", []string{"dir/"}},
 		{"a possessive", "@docs/x.md's rules", []string{"docs/x.md"}},
 		{"other scripts", "@日本語/ファイル.md", []string{"日本語/ファイル.md"}},
-		{"a space that is not ASCII ends it", "@x.md next", []string{"x.md"}},
+		{"a space that is not ASCII ends it", "@x.md\u00a0next", []string{"x.md"}},
 		{"bold after", "see @bold.md**", []string{"bold.md"}},
 		{"a heading", "# Title @h.md", []string{"h.md"}},
 		{"a table row", "| @cell.md | x |", []string{"cell.md"}},
