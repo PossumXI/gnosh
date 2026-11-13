@@ -86,9 +86,26 @@ func (s *Session) Inherited() int {
 	return s.inherited
 }
 
-// View computes what the model is sent from the session's entries.
+// View computes what the model is sent from the session's entries. The
+// stack is the session's own unless opts.Session names another.
 func (s *Session) View(opts ViewOptions) ([]core.Message, ViewInfo) {
+	if opts.Session == "" {
+		opts.Session = s.id
+	}
 	return View(s.Entries(), opts)
+}
+
+// Stack returns the frames the session stands in, bottom to top.
+func (s *Session) Stack() []Frame {
+	return Stack(s.Entries(), s.id)
+}
+
+// Preview says what the frame entries among next would do if they were
+// appended now, as the package's Preview does, for the session's own
+// stack. Of opts, Estimate is used.
+func (s *Session) Preview(next []Entry, opts ViewOptions) ([]Cut, []Frame) {
+	opts.Session = s.id
+	return Preview(s.Entries(), next, opts)
 }
 
 // Append writes e as the session's next entry and returns it as written.

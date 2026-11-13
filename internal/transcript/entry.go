@@ -73,16 +73,6 @@ const (
 	OpSlide FrameOp = "slide"
 )
 
-// Two ways a reply can end that core.StopReason has no name for. An
-// assistant entry's Stop field holds a core.StopReason or one of these.
-const (
-	// StopCancelled: the person stopped the reply, or gnosh was stopped
-	// before it finished.
-	StopCancelled core.StopReason = "cancelled"
-	// StopError: the provider failed while the reply was being written.
-	StopError core.StopReason = "error"
-)
-
 // Entry is one line of a session file. The first seven fields are on every
 // entry; which of the others are set depends on Type. Fields this version
 // does not know are kept in Extra and written back as they were, so a file
@@ -112,7 +102,9 @@ type Entry struct {
 	// Source says where a user entry's message came from, or, on a title
 	// entry, whether the person or gnosh chose the title.
 	Source Source
-	// Stop says how an assistant entry's reply ended. Empty means unknown.
+	// Stop says how an assistant entry's reply ended: one of core's stop
+	// reasons. core.StopCancelled and core.StopError mark a reply that was
+	// cut off; the turn it belongs to ended there. Empty means unknown.
 	Stop core.StopReason
 
 	// Summary is a summary entry's text.

@@ -46,7 +46,8 @@ func TestFrames(t *testing.T) {
 			check: func(t *testing.T, info ViewInfo) {
 				want := Cut{
 					Kind: OpPop, Frame: "A", Label: "label A", Result: "the bug is fixed",
-					UUID: "e11", PushUUID: "e4", Messages: 4,
+					UUID: "e11", PushUUID: "e4", PushCall: "t1", PopCall: "t4", PushReply: "e2", PopReply: "e9",
+					Between: 4, Messages: 4,
 					Note: "[Then came the work in it, 2 tool calls (Edit 1, Read 1)" + popNote,
 				}
 				if len(info.Cuts) != 1 {
@@ -624,7 +625,10 @@ func TestFrames(t *testing.T) {
 			},
 		},
 		{
-			name: "popping a frame takes the frames above it off the stack too",
+			// mem pops only the frame the session stands in, so this cannot
+			// come from mem. If it comes all the same, the stack is still the
+			// pushes without a matching pop (frames.md section 3).
+			name: "popping a frame below the top takes off that frame alone",
 			src: `
 				prompt go
 				call t1
@@ -647,7 +651,7 @@ func TestFrames(t *testing.T) {
 				U: result(t4)
 			`,
 			check: func(t *testing.T, info ViewInfo) {
-				if len(info.Stack) != 0 || !reflect.DeepEqual(info.Cuts[0].Inner, []string{"B"}) {
+				if len(info.Stack) != 1 || info.Stack[0].ID != "B" || !reflect.DeepEqual(info.Cuts[0].Above, []string{"B"}) {
 					t.Errorf("Stack = %+v, Cuts = %+v", info.Stack, info.Cuts)
 				}
 			},

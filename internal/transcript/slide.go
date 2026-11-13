@@ -46,20 +46,26 @@ func (c *conv) planSlides(st *derived, need int, opts ViewOptions) []cut {
 
 	var out []cut
 	// slide cuts from after anchor's round to before until, and reports
-	// whether enough has now been freed.
-	slide := func(frame string, anchor, until int) bool {
+	// whether enough has now been freed. i is the frame of the stack whose
+	// start is cut, or -1 for the rounds before the first frame.
+	slide := func(i, anchor, until int) bool {
 		if until < 0 || c.entries[c.rows[anchor].ent].UUID == "" || c.entries[c.rows[until].ent].UUID == "" {
 			return false
 		}
-		ct := cut{kind: OpSlide, frame: frame, ent: -1, pushEnt: -1, at: len(c.rows), noteRow: -1, turn: len(c.rows), live: true}
-		c.bound(&ct, anchor, until)
+		ct := cut{kind: OpSlide, ent: -1, pushEnt: -1, at: len(c.rows), noteRow: -1, turn: len(c.rows), live: true, lo: -1, hi: -1}
+		if i >= 0 {
+			ct.frame, ct.of = st.stack[i].id, st.stack[i].ent
+		} else {
+			ct.of, ct.before = st.stack[0].ent, st.stack[0].id
+		}
+		c.bound(&ct, anchor, until, st.stack)
 		if ct.from >= ct.to || c.span(ct.from, ct.to) == 0 {
 			return false
 		}
 		c.apply(&ct)
 		out = append(out, ct)
-		if frame != "" {
-			st.slid[frame] = true
+		if i >= 0 {
+			st.slid[ct.of] = true
 		}
 		need -= ct.tokens
 		return need <= 0
@@ -69,17 +75,17 @@ func (c *conv) planSlides(st *derived, need int, opts ViewOptions) []cut {
 	bottom := push[0]
 	if prompt >= c.start && prompt < bottom {
 		if a := c.firstRound(c.start, prompt-1); a >= 0 {
-			if slide("", a, c.partial(a, prompt-1, prompt, need, 1)) {
+			if slide(-1, a, c.partial(a, prompt-1, prompt, need, 1)) {
 				return out
 			}
 		}
 		if a := c.firstRound(prompt+1, bottom); a >= 0 {
-			if slide("", a, c.partial(a, bottom, bottom, need, 1)) {
+			if slide(-1, a, c.partial(a, bottom, bottom, need, 1)) {
 				return out
 			}
 		}
 	} else if a := c.firstRound(c.start, bottom); a >= 0 {
-		if slide("", a, c.partial(a, bottom, bottom, need, 1)) {
+		if slide(-1, a, c.partial(a, bottom, bottom, need, 1)) {
 			return out
 		}
 	}
@@ -91,7 +97,7 @@ func (c *conv) planSlides(st *derived, need int, opts ViewOptions) []cut {
 		if prompt > a && prompt < next {
 			until = c.partial(a, prompt-1, prompt, need, 1)
 		}
-		if slide(st.stack[i].id, a, until) {
+		if slide(i, a, until) {
 			return out
 		}
 	}
@@ -103,7 +109,7 @@ func (c *conv) planSlides(st *derived, need int, opts ViewOptions) []cut {
 		if prompt > a {
 			last, end, k = prompt-1, prompt, 1
 		}
-		slide(st.stack[len(push)-1].id, a, c.partial(a, last, end, need, k))
+		slide(len(push)-1, a, c.partial(a, last, end, need, k))
 	}
 	return out
 }
@@ -180,7 +186,7 @@ func (c *conv) slideEntry(ct *cut) Entry {
 		Type:   TypeFrame,
 		Op:     OpSlide,
 		Frame:  ct.frame,
-		Anchor: c.entries[c.rows[ct.anchor].ent].UUID,
-		Until:  c.entries[c.rows[ct.until].ent].UUID,
+		Anchor: c.entries[c.rows[ct.lo].ent].UUID,
+		Until:  c.entries[c.rows[ct.hi].ent].UUID,
 	}
 }

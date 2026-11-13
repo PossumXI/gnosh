@@ -1,6 +1,8 @@
 package transcript
 
 import (
+	"encoding/json"
+
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
 
@@ -25,7 +27,8 @@ type ViewOptions struct {
 	// means the session of the last entry. Frames entered under another
 	// session id (the session a branch came from) are not on the stack.
 	Session string
-	// Trace asks for ViewInfo.Sources and each Cut's Removed list.
+	// Trace asks for ViewInfo.Sources and for what each Cut took: its
+	// Removed, SparedEntries and Replies lists.
 	Trace bool
 }
 
@@ -80,12 +83,17 @@ type Frame struct {
 	// ID and Label are the frame's id and title.
 	ID    string
 	Label string
-	// UUID is the push entry and ToolUseID the tool call that made it.
+	// UUID is the push entry and ToolUseID the tool call that made it: the
+	// frame's push call id.
 	UUID      string
 	ToolUseID string
 	// Slid is true when the start of the frame has left the view to make
 	// room since it was entered.
 	Slid bool
+	// TotalAtPush is the session's token total when the frame was entered:
+	// the prompt and completion tokens of the last usage entry written
+	// before the push. It is zero when no usage entry came before it.
+	TotalAtPush int
 }
 
 // Cut is one pop or slide and what it took out of the view.
@@ -98,29 +106,114 @@ type Cut struct {
 	Label  string
 	Result string
 	// UUID is the frame entry that made the cut. It is empty for a slide
-	// planned by this call (Planned is true). PushUUID is the entry that
-	// entered the frame, for a pop.
+	// planned by this call (Planned is true) and for an entry that Preview
+	// was shown before it was appended. PushUUID is the entry that entered
+	// the frame, for a pop.
 	UUID     string
 	PushUUID string
 	Planned  bool
-	// Inner lists the frames that were still on the stack above a popped
-	// frame and left it with it.
-	Inner []string
+	// PushCall and PopCall are the two tool calls that bound the cut. For a
+	// pop they are the call that entered the frame and the call that left
+	// it. For a slide they are the first call of the reply whose round
+	// stays in front of the cut (the frame's own push call when the slide
+	// cut a frame's start), and the first call of the reply the cut ends
+	// before (the push call of the frame entered there).
+	PushCall string
+	PopCall  string
+	// PushReply and PopReply are the UUIDs of the replies that hold those
+	// calls: the cut lies after the round of the first and before the
+	// second. PopReply is empty when the reply that made the pop is not in
+	// the conversation, and then nothing is cut. PushReply is empty when
+	// the reply that made the push is not: the cut then begins at the first
+	// reply after the push entry and leaves no note. When the two are the
+	// same reply nothing is cut.
+	PushReply string
+	PopReply  string
+	// Above lists the frames that stood above a popped frame on the stack.
+	// They stay on it: a pop takes off one frame. mem pops only the frame
+	// the session stands in, so this is empty unless the two disagreed.
+	Above []string
+	// Before is, for a slide of the rounds before the first frame, the
+	// frame that was at the bottom of the stack then: the frame the
+	// slide's line names.
+	Before string
+	// Between counts the messages that lie between the two rounds, apart
+	// from the spared prompts and what continues a summary, whether or not
+	// an earlier cut had taken them. Zero means nothing came between.
+	Between int
 	// Messages and Tokens count what this cut took out of the view that no
-	// earlier cut had taken and no summary stood in for.
+	// earlier cut had taken and no summary stood in for. Tokens is by
+	// ViewOptions.Estimate, a row at a time.
 	Messages int
 	Tokens   int
-	// Spared counts the prompts of the pop's own turn that stayed.
+	// Spared counts the prompts of the pop's own turn that stayed in the
+	// view because of it.
 	Spared int
 	// Note is the line added to the answer in front of the cut, or empty.
 	Note string
-	// Live is true for a slide whose frame is still on the stack.
+	// Live is true for a slide whose frame (Frame, or Before) is still on
+	// the stack as the same frame: it was not popped since.
 	Live bool
 	// Reason says why the cut took nothing, when it took nothing.
 	Reason string
-	// Removed, when ViewOptions.Trace is set, lists the UUIDs of the
-	// entries inside the cut, whether or not an earlier cut had taken them.
+
+	// The rest is set when ViewOptions.Trace is.
+
+	// Removed lists the UUIDs of the entries inside the cut, in order,
+	// whether or not an earlier cut had taken them.
 	Removed []string
+	// SparedEntries lists the UUIDs of the entries whose prompts Spared
+	// counts.
+	SparedEntries []string
+	// Replies lists the replies of the model inside the cut, in order,
+	// with their tool calls and what each call returned.
+	Replies []Reply
+}
+
+// Mark returns the marker the frame rule gives the entries this cut
+// removed (spec/gnosh/frames.md sections 11 and 8.6): the frame's id for a
+// pop, and "slide:<frame>:<push call id>:<pop call id>" for a slide. Where
+// two cuts hold an entry, the one made last gives it its marker.
+func (c Cut) Mark() string {
+	if c.Kind == OpSlide {
+		return "slide:" + c.Frame + ":" + c.PushCall + ":" + c.PopCall
+	}
+	return c.Frame
+}
+
+// Reply is one reply of the model that a cut took out of the view.
+type Reply struct {
+	// UUID is the assistant entry.
+	UUID string
+	// Said is true when the reply holds text. A reply that says something
+	// and calls no tool is an answer to the person.
+	Said bool
+	// Calls are the reply's tool calls, in order.
+	Calls []Call
+	// Gone is true when the reply was out of the view already: an earlier
+	// cut had taken it, or it is behind the summary.
+	Gone bool
+}
+
+// Call is one tool call of a Reply, with its result.
+type Call struct {
+	// ID and Name are the call's id and the tool it asked for.
+	ID   string
+	Name string
+	// Input is the call's arguments. It is shared with the entry and must
+	// not be changed.
+	Input json.RawMessage
+	// Path is the call's "file_path" argument, or empty when it has none.
+	Path string
+	// Answered is true when the conversation holds a result for the call.
+	// IsError is that result's failure mark and Content what it says; a
+	// call with no result never ran to its end. Content is shared with
+	// the entry and must not be changed.
+	Answered bool
+	IsError  bool
+	Content  []core.Block
+	// ResultUUID is the user entry that holds the result, or empty.
+	ResultUUID string
 }
 
 // SummaryPrefix is the fixed sentence put in front of a summary's text
@@ -152,7 +245,7 @@ func View(entries []Entry, opts ViewOptions) ([]core.Message, ViewInfo) {
 			}
 		}
 	}
-	c.report(st, opts, &info)
+	c.report(st, &info)
 
 	msgs, srcs := repair(c.pieces(), &info)
 	info.Messages = len(msgs)
@@ -170,14 +263,74 @@ func View(entries []Entry, opts ViewOptions) ([]core.Message, ViewInfo) {
 }
 
 // Stack returns the frames the session stands in, bottom to top, without
-// computing a view. session is as ViewOptions.Session.
+// computing a view. session is as ViewOptions.Session. It is what mem is
+// told before each of its calls.
 func Stack(entries []Entry, session string) []Frame {
 	var info ViewInfo
-	opts := ViewOptions{Session: session}
-	c := newConv(entries, opts, &info)
+	c := newConv(entries, ViewOptions{Session: session}, &info)
+	return c.frames(c.derive())
+}
+
+// Preview says what the frame entries among next would do if next were
+// appended to entries now, without appending anything. It returns one Cut
+// for each pop and each slide among them, in order, and the stack as it
+// would then stand. Every Cut is as View would report it with
+// ViewOptions.Trace once the entries are stored: where next comes to stand
+// after the reply that made the call does not change what is cut. A pop
+// that names a frame the session does not stand in gets a Cut that says so
+// in Reason and takes nothing.
+//
+// This is how a pop's result is written before the pop is stored: the
+// reply that made the call must be among entries; the call's own result
+// need not be. It also gives the rows a pop would take, for judging whether
+// any work was done in a frame, by previewing a pop that is never
+// appended.
+//
+// An entry of next with no session id is taken to be the session's own:
+// that of opts.Session, or of the last of entries. Of opts, Estimate and
+// Session are used.
+func Preview(entries, next []Entry, opts ViewOptions) ([]Cut, []Frame) {
+	session := opts.Session
+	if session == "" && len(entries) > 0 {
+		session = entries[len(entries)-1].SessionID
+	}
+	all := make([]Entry, len(entries), len(entries)+len(next))
+	copy(all, entries)
+	for _, e := range next {
+		if e.SessionID == "" {
+			e.SessionID = session
+		}
+		all = append(all, e)
+	}
+	var info ViewInfo
+	c := newConv(all, ViewOptions{Estimate: opts.Estimate, Session: session, Trace: true}, &info)
 	st := c.derive()
-	c.report(st, opts, &info)
-	return info.Stack
+	for i := range st.cuts {
+		c.apply(&st.cuts[i])
+	}
+	made := map[int]int{} // by entry, the cut it made
+	for n, ev := range c.events {
+		if ev.ent >= len(entries) {
+			made[ev.ent] = st.made[n]
+		}
+	}
+	var cuts []Cut
+	for i := range next {
+		e := &all[len(entries)+i]
+		if e.Type != TypeFrame || e.Op != OpPop && e.Op != OpSlide {
+			continue
+		}
+		if k, ok := made[len(entries)+i]; ok && k >= 0 {
+			cuts = append(cuts, c.cutInfo(&st.cuts[k]))
+			continue
+		}
+		why := "the session does not stand in this frame"
+		if _, ok := made[len(entries)+i]; !ok {
+			why = "the entry would not be part of the conversation"
+		}
+		cuts = append(cuts, Cut{Kind: e.Op, Frame: e.Frame, Label: e.Label, Result: e.Result, PopCall: e.ToolUseID, Reason: why})
+	}
+	return cuts, c.frames(st)
 }
 
 // Slide plans a slide that frees about need tokens. It returns the slide
@@ -196,7 +349,7 @@ func Slide(entries []Entry, need int, opts ViewOptions) (slides []Entry, cuts []
 	}
 	for _, ct := range c.planSlides(st, need, opts) {
 		slides = append(slides, c.slideEntry(&ct))
-		cuts = append(cuts, c.cutInfo(&ct, opts.Trace))
+		cuts = append(cuts, c.cutInfo(&ct))
 	}
 	return slides, cuts
 }
@@ -311,8 +464,9 @@ type row struct {
 
 // event is a frame entry and where it falls among the rows.
 type event struct {
-	at  int // how many rows come before it
-	ent int // the entry: an index into entries
+	at    int // how many rows come before it
+	ent   int // the entry: an index into entries
+	total int // the session's token total by the last usage entry before it
 }
 
 // conv is a conversation laid out as rows, with what has been cut from it.
@@ -328,6 +482,14 @@ type conv struct {
 	summary int
 	// session is the id of the session whose frames make the stack.
 	session string
+	// trace says the caller wants to know what each cut took.
+	trace bool
+	// halts are the places, each as the number of rows before it, of
+	// replies that hold nothing and were cancelled or failed. Such a reply
+	// is not a row, since the model is not sent it, but it ended its turn.
+	// endedBehind says the same of the last reply behind the summary.
+	halts       []int
+	endedBehind bool
 
 	est     func(core.Message) int
 	tokens  []int          // per row, by est; -1 until asked for
@@ -348,7 +510,7 @@ type conv struct {
 
 // newConv lays the entries out as rows.
 func newConv(entries []Entry, opts ViewOptions, info *ViewInfo) *conv {
-	c := &conv{entries: entries, summary: -1, est: opts.Estimate, session: opts.Session}
+	c := &conv{entries: entries, summary: -1, est: opts.Estimate, session: opts.Session, trace: opts.Trace}
 	if c.est == nil {
 		c.est = EstimateTokens
 	}
@@ -379,18 +541,25 @@ func newConv(entries []Entry, opts ViewOptions, info *ViewInfo) *conv {
 		break
 	}
 
+	total := 0 // the session's token total by the last usage entry so far
 	for p, i := range alive {
 		e := &entries[i]
 		switch e.Type {
 		case TypeAssistant:
+			ended := e.Stop == core.StopCancelled || e.Stop == core.StopError
 			if len(e.Message.Blocks) > 0 {
 				c.rows = append(c.rows, row{
 					kind:   rowAssistant,
 					ent:    i,
 					blocks: e.Message.Blocks,
 					calls:  countToolUses(e.Message.Blocks),
-					ended:  e.Stop == StopCancelled || e.Stop == StopError,
+					ended:  ended,
 				})
+			} else if ended && p > covered {
+				c.halts = append(c.halts, len(c.rows))
+			}
+			if p <= covered && (ended || len(e.Message.Blocks) > 0) {
+				c.endedBehind = ended
 			}
 		case TypeUser:
 			results, rest := splitResults(e.Message.Blocks)
@@ -401,10 +570,12 @@ func newConv(entries []Entry, opts ViewOptions, info *ViewInfo) *conv {
 				c.rows = append(c.rows, row{kind: rowPrompt, ent: i, blocks: rest, hidden: e.Source != SourcePrompt})
 			}
 		case TypeFrame:
-			c.events = append(c.events, event{at: len(c.rows), ent: i})
+			c.events = append(c.events, event{at: len(c.rows), ent: i, total: total})
 			if e.Op == OpSlide && c.byUUID == nil {
 				c.byUUID = map[string]int{}
 			}
+		case TypeUsage:
+			total = e.Usage.PromptTokens() + e.Usage.OutputTokens
 		}
 		if p <= covered {
 			c.start = len(c.rows)

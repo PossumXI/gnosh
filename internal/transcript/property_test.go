@@ -3,6 +3,7 @@ package transcript
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"reflect"
@@ -20,6 +21,7 @@ type maker struct {
 	r        *rand.Rand
 	entries  []Entry
 	stack    []string // the frames the session stands in
+	old      []string // tool calls of earlier rounds
 	n, calls int
 	session  string
 	sessions int
@@ -61,7 +63,7 @@ func (m *maker) earlier() string {
 }
 
 func (m *maker) round() {
-	tools := []string{"Read", "Edit", "Bash", "Grep", "mem"}
+	tools := []string{"Read", "Edit", "Bash", "Grep", "gnovm_run"}
 	var msg core.Message
 	if m.r.IntN(4) == 0 {
 		msg.Blocks = append(msg.Blocks, core.Text(m.text()))
@@ -71,32 +73,79 @@ func (m *maker) round() {
 		m.calls++
 		id := fmt.Sprintf("t%d", m.calls)
 		ids = append(ids, id)
-		msg.Blocks = append(msg.Blocks, core.ToolUse(id, tools[m.r.IntN(len(tools))], nil))
+		tool := tools[m.r.IntN(len(tools))]
+		var input json.RawMessage
+		if tool == "Read" || tool == "Edit" {
+			input = json.RawMessage(fmt.Sprintf(`{"file_path":"/work/app/f%d.go"}`, m.r.IntN(5)))
+		}
+		msg.Blocks = append(msg.Blocks, core.ToolUse(id, tool, input))
 	}
 	stop := core.StopToolUse
-	if m.r.IntN(20) == 0 {
-		stop = StopCancelled
+	switch m.r.IntN(30) {
+	case 0:
+		stop = core.StopCancelled
+	case 1:
+		stop = core.StopError
 	}
 	m.add(AssistantEntry(msg, stop))
 
 	answered := ids
 	switch m.r.IntN(20) {
 	case 0:
+		m.old = append(m.old, ids...)
 		return // gnosh died before any result came back
 	case 1:
 		answered = ids[:m.r.IntN(len(ids))]
 	}
-	if len(answered) > 0 {
+	result := func(id string) core.Block {
+		res := core.TextResult(strings.Repeat("x", m.r.IntN(300)))
+		res.IsError = m.r.IntN(8) == 0
+		return core.ToolResultBlock(id, res)
+	}
+	switch {
+	case len(answered) == 0:
+	case m.r.IntN(2) == 0:
+		// One entry for each result, as a loop that stores a result when
+		// its call ends writes them, with a note of the harness between
+		// them now and then.
+		for _, id := range answered {
+			m.add(UserEntry(core.Message{Blocks: []core.Block{result(id)}}, SourceToolResults))
+			if m.r.IntN(12) == 0 {
+				m.add(UserEntry(core.UserText(m.text()), SourceHook))
+			}
+		}
+	default:
 		var res core.Message
 		for _, id := range answered {
-			res.Blocks = append(res.Blocks, core.ToolResultBlock(id, core.TextResult(strings.Repeat("x", m.r.IntN(300)))))
+			res.Blocks = append(res.Blocks, result(id))
 		}
-		if m.r.IntN(15) == 0 {
+		src := SourceToolResults
+		if m.r.IntN(10) == 0 {
+			// Results and words in one message: hidden words, or a prompt
+			// the person typed.
 			res.Blocks = append(res.Blocks, core.Text(m.text()))
+			if m.r.IntN(2) == 0 {
+				src = SourcePrompt
+			}
 		}
-		m.add(UserEntry(res, SourceToolResults))
+		m.add(UserEntry(res, src))
 	}
 
+	// The frame entries the round's calls made: a pop, a push, or the
+	// trampoline's pop and push by one call. Now and then an entry names
+	// no call, and a pop one of an earlier round.
+	pick := func(stale bool) string {
+		switch m.r.IntN(25) {
+		case 0:
+			return ""
+		case 1:
+			if stale && len(m.old) > 0 {
+				return m.old[m.r.IntN(len(m.old))]
+			}
+		}
+		return ids[m.r.IntN(len(ids))]
+	}
+	popped := false
 	if len(m.stack) > 0 && m.r.IntN(4) == 0 {
 		id := m.stack[len(m.stack)-1]
 		switch m.r.IntN(10) {
@@ -105,19 +154,25 @@ func (m *maker) round() {
 		case 1:
 			id = m.stack[m.r.IntN(len(m.stack))]
 		}
-		call := ids[len(ids)-1]
-		if m.r.IntN(25) == 0 {
-			call = ""
-		}
+		call := pick(true)
 		m.add(PopEntry(id, "", "result of "+id, call))
-	}
-	if m.r.IntN(5) == 0 {
-		call := ids[0]
-		if m.r.IntN(25) == 0 {
-			call = ""
+		popped = true
+		if m.r.IntN(2) == 0 {
+			if !slices.Contains(ids, call) {
+				call = ids[0]
+			}
+			m.add(PushEntry(fmt.Sprintf("f%d", m.r.IntN(6)), "a label", call))
 		}
-		m.add(PushEntry(fmt.Sprintf("f%d", m.r.IntN(6)), "a label", call))
 	}
+	if !popped && m.r.IntN(5) == 0 {
+		call := pick(false)
+		m.add(PushEntry(fmt.Sprintf("f%d", m.r.IntN(6)), "a label", call))
+		if m.r.IntN(6) == 0 {
+			// Entered on the way: two frames by one call.
+			m.add(PushEntry(fmt.Sprintf("f%d", m.r.IntN(6)), "a label", call))
+		}
+	}
+	m.old = append(m.old, ids...)
 	if m.entries[len(m.entries)-1].Type == TypeFrame {
 		m.sync()
 	}
@@ -129,12 +184,20 @@ func (m *maker) step() {
 		m.add(PromptEntry(m.text()))
 	case p < 60:
 		m.round()
-	case p < 68:
+	case p < 66:
 		stop := core.StopEndTurn
-		if m.r.IntN(10) == 0 {
-			stop = StopError
+		switch m.r.IntN(12) {
+		case 0:
+			stop = core.StopError
+		case 1:
+			stop = core.StopCancelled
 		}
 		m.add(AssistantEntry(core.AssistantText(m.text()), stop))
+	case p < 68:
+		// A reply that holds nothing: the model said nothing, or it was
+		// stopped or failed before anything arrived.
+		stop := []core.StopReason{core.StopEndTurn, core.StopCancelled, core.StopError}[m.r.IntN(3)]
+		m.add(AssistantEntry(core.Message{}, stop))
 	case p < 73:
 		src := SourceHook
 		if m.r.IntN(2) == 0 {
@@ -154,11 +217,13 @@ func (m *maker) step() {
 			m.add(UserEntry(core.UserText("carry on"), SourceNotice))
 		}
 	case p < 82:
-		switch m.r.IntN(3) {
+		switch m.r.IntN(4) {
 		case 0:
 			m.add(TitleEntry(m.text(), SourceAuto))
 		case 1:
 			m.add(MetaEntry("model", "qwen"))
+		case 2:
+			m.add(UsageEntry(core.Usage{InputTokens: 1000 + 37*m.n, OutputTokens: m.r.IntN(400)}, "qwen", 0))
 		default:
 			m.add(Entry{Type: "mystery"})
 		}
@@ -416,6 +481,18 @@ func FuzzView(f *testing.F) {
 			}
 			Stack(ld.entries, "")
 			Conversation(ld.entries)
+		}
+		// Whatever the file holds, the view of it is the one the spec's
+		// words give (oracle_spec_test.go).
+		if diff := againstSpec(ld.entries, ""); diff != "" {
+			t.Fatal(diff)
+		}
+		// And a pop of each frame the session stands in can be previewed.
+		for _, f := range Stack(ld.entries, "") {
+			cuts, _ := Preview(ld.entries, []Entry{PopEntry(f.ID, "", "", f.ToolUseID)}, ViewOptions{})
+			if len(cuts) != 1 || cuts[0].Kind != OpPop || cuts[0].Frame != f.ID {
+				t.Fatalf("previewing a pop of %q gave %+v", f.ID, cuts)
+			}
 		}
 	})
 }

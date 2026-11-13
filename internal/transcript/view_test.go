@@ -17,10 +17,20 @@ import (
 //	prompt TEXT          a prompt the person typed
 //	hook TEXT            context a hook added
 //	notice TEXT          something the harness said
-//	say TEXT             a reply with no tool call ("say!" was cancelled)
-//	call ID[:Tool]...    a reply with tool calls ("call!" was cancelled)
+//	say TEXT             a reply with no tool call ("say!" was cancelled,
+//	                     "say?" failed)
+//	call ID[:Tool]...    a reply with tool calls ("call!" was cancelled,
+//	                     "call?" failed). ID:Tool=ARG gives the call an
+//	                     argument: "command" for Bash, "name":"mem" and
+//	                     "code" for gnovm_run, "file_path" for any other
+//	                     tool; a _ in a command or in code is a space
+//	tell TEXT | ID...    a reply with words and tool calls
+//	nothing              a reply that holds nothing ("nothing!" was
+//	                     cancelled, "nothing?" failed)
 //	results ID...        the results of those calls
+//	fail ID...           results that say the calls failed
 //	mixed ID... | TEXT   one user entry with results and a typed prompt
+//	usage IN OUT         a usage entry: IN prompt tokens, OUT written
 //	push F ID            frame F entered by tool call ID ("-" for none)
 //	pop F ID [RESULT]    frame F left by tool call ID
 //	slide F @A @U        a recorded slide of F ("-" for the rounds before
@@ -71,33 +81,70 @@ func script(t testing.TB, src string) []Entry {
 		case "say":
 			e = AssistantEntry(core.AssistantText(text), core.StopEndTurn)
 		case "say!":
-			e = AssistantEntry(core.AssistantText(text), StopCancelled)
-		case "call", "call!":
+			e = AssistantEntry(core.AssistantText(text), core.StopCancelled)
+		case "say?":
+			e = AssistantEntry(core.AssistantText(text), core.StopError)
+		case "nothing":
+			e = AssistantEntry(core.Message{}, core.StopEndTurn)
+		case "nothing!":
+			e = AssistantEntry(core.Message{}, core.StopCancelled)
+		case "nothing?":
+			e = AssistantEntry(core.Message{}, core.StopError)
+		case "call", "call!", "call?", "tell":
 			var m core.Message
+			if kind == "tell" {
+				words, calls, _ := strings.Cut(text, " | ")
+				m.Blocks = append(m.Blocks, core.Text(words))
+				args = strings.Fields(calls)
+			}
 			for _, a := range args {
+				a, arg, _ := strings.Cut(a, "=")
 				id, tool, ok := strings.Cut(a, ":")
 				if !ok {
 					tool = "Bash"
 				}
-				m.Blocks = append(m.Blocks, core.ToolUse(id, tool, nil))
+				var input json.RawMessage
+				if arg != "" {
+					var v map[string]string
+					switch tool {
+					case "Bash":
+						v = map[string]string{"command": strings.ReplaceAll(arg, "_", " ")}
+					case "gnovm_run":
+						v = map[string]string{"name": "mem", "code": strings.ReplaceAll(arg, "_", " ")}
+					default:
+						v = map[string]string{"file_path": arg}
+					}
+					input, _ = json.Marshal(v)
+				}
+				m.Blocks = append(m.Blocks, core.ToolUse(id, tool, input))
 			}
 			e = AssistantEntry(m, core.StopToolUse)
-			if kind == "call!" {
-				e.Stop = StopCancelled
+			switch kind {
+			case "call!":
+				e.Stop = core.StopCancelled
+			case "call?":
+				e.Stop = core.StopError
 			}
-		case "results", "mixed":
+		case "results", "mixed", "fail":
 			var m core.Message
 			for i, a := range args {
 				if a == "|" {
 					m.Blocks = append(m.Blocks, core.Text(strings.Join(args[i+1:], " ")))
 					break
 				}
-				m.Blocks = append(m.Blocks, core.ToolResultBlock(a, core.TextResult("out "+a)))
+				res := core.TextResult("out " + a)
+				res.IsError = kind == "fail"
+				m.Blocks = append(m.Blocks, core.ToolResultBlock(a, res))
 			}
 			e = UserEntry(m, SourceToolResults)
 			if kind == "mixed" {
 				e.Source = SourcePrompt
 			}
+		case "usage":
+			var in, out int
+			fmt.Sscan(args[0], &in)
+			fmt.Sscan(args[1], &out)
+			e = UsageEntry(core.Usage{InputTokens: in, OutputTokens: out}, "qwen", 0)
 		case "push":
 			e = PushEntry(args[0], "label "+args[0], dash(args[1]))
 		case "pop":
@@ -205,6 +252,11 @@ func mustView(t testing.TB, entries []Entry, opts ViewOptions) ([]core.Message, 
 	}
 	if info.Messages != len(msgs) {
 		t.Fatalf("info.Messages = %d, the view has %d", info.Messages, len(msgs))
+	}
+	// And, with nothing planned, it is the view the spec's words give
+	// (oracle_spec_test.go).
+	if diff := againstSpec(entries, opts.Session); diff != "" {
+		t.Fatal(diff)
 	}
 	return msgs, info
 }

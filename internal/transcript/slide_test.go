@@ -3,6 +3,7 @@ package transcript
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -515,18 +516,27 @@ func TestSlideInfo(t *testing.T) {
 	_, info := mustView(t, entries, ViewOptions{Budget: 110, Room: 10, Estimate: ten, Trace: true})
 	want := []Cut{
 		{
-			Kind: OpSlide, Frame: "A", Planned: true, Live: true, Messages: 4, Tokens: 40,
-			Note:    "[Then came 2 tool calls (Read 2), removed from your context to make room.]",
-			Removed: []string{"a2", "e6", "a3", "e8"},
+			Kind: OpSlide, Frame: "A", Planned: true, Live: true, Between: 4, Messages: 4, Tokens: 40,
+			PushCall: "t1", PopCall: "t4", PushReply: "a1", PopReply: "a4",
+			Note:    "[Then came the work in it, 2 tool calls (Read 2), removed from your context to make room.]",
+			Removed: []string{"a2", "e6", "a3", "e8"}, SparedEntries: []string{},
 		},
 		{
-			Kind: OpSlide, Frame: "B", Planned: true, Live: true, Messages: 4, Tokens: 40,
-			Note:    "[Then came 2 tool calls (Edit 2), removed from your context to make room.]",
-			Removed: []string{"a5", "e13", "a6", "e15"},
+			Kind: OpSlide, Frame: "B", Planned: true, Live: true, Between: 4, Messages: 4, Tokens: 40,
+			PushCall: "t4", PopCall: "t7", PushReply: "a4", PopReply: "a7",
+			Note:    "[Then came the work in it, 2 tool calls (Edit 2), removed from your context to make room.]",
+			Removed: []string{"a5", "e13", "a6", "e15"}, SparedEntries: []string{},
 		},
 	}
-	if !reflect.DeepEqual(info.Cuts, want) {
-		t.Errorf("Cuts = %+v\nwant   %+v", info.Cuts, want)
+	got := slices.Clone(info.Cuts)
+	for i := range got {
+		if n := len(got[i].Replies); n != 2 {
+			t.Errorf("cut %d lists %d replies, want 2", i, n)
+		}
+		got[i].Replies = nil
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Cuts = %+v\nwant   %+v", got, want)
 	}
 	stack := []Frame{
 		{ID: "A", Label: "label A", UUID: "e4", ToolUseID: "t1", Slid: true},
@@ -565,7 +575,7 @@ func TestRecordedSlide(t *testing.T) {
 		if got := render(msgs); got != tidy(want) {
 			t.Errorf("view:\n%s\n--- want ---\n%s", got, tidy(want))
 		}
-		note := "[Then came 1 tool call (Read 1), removed from your context to make room.]"
+		note := "[Then came the work in it, 1 tool call (Read 1), removed from your context to make room.]"
 		if got := core.TextOf(msgs[2].Blocks[0].Content); got != "out t1\n"+note {
 			t.Errorf("the anchor's answer reads %q", got)
 		}
@@ -728,7 +738,7 @@ func TestAllStagesTogether(t *testing.T) {
 	// messages, and its note tells of all four calls between.
 	slide := info.Cuts[1]
 	if slide.Messages != 6 || slide.Tokens != 60 || !slide.Planned ||
-		slide.Note != "[Then came 4 tool calls (Edit 1, Read 2, mem 1), removed from your context to make room.]" {
+		slide.Note != "[Then came the work in it, 4 tool calls (Edit 1, Read 2, mem 1), removed from your context to make room.]" {
 		t.Errorf("slide = %+v", slide)
 	}
 	if want := [][]string{{"s", "e4"}, {"a1"}, {"e6"}, {"a6"}, {"e21"}, {"a7"}, {}}; !reflect.DeepEqual(info.Sources, want) {

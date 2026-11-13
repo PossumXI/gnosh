@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,7 +13,9 @@ import (
 // This file is the frame rule: how the stack is read off the frame
 // entries, and what a pop or a recorded slide takes out of the view. It
 // follows spec/gnosh/frames.md (sections 3, 4 and 11); doc.go restates the
-// rule in this package's own terms. frames_test.go holds it as examples.
+// rule in this package's own terms, CONFORMANCE.md lists every rule of the
+// spec with the code and the test that holds it, and frames_spec_test.go
+// holds them as examples.
 
 // frame is a frame on a session's stack.
 type frame struct {
@@ -21,17 +24,30 @@ type frame struct {
 	row       int    // the reply that made that call: an assistant row, or -1
 	at        int    // how many rows come before its push entry
 	ent       int    // its push entry
+	total     int    // the session's token total when it was entered
 }
 
 // cut is one pop or slide: the rows it covers and what it left behind.
 type cut struct {
 	kind                 FrameOp
 	frame, label, result string
-	ent                  int // the frame entry that made it; -1 when planned by this call
-	pushEnt              int // the entry that entered the frame; -1 for a slide
-	at                   int // how many rows come before the entry that made it
-	inner                []string
-	live                 bool
+	ent                  int      // the frame entry that made it; -1 when planned by this call
+	pushEnt              int      // the entry that entered the frame; -1 for a slide
+	at                   int      // how many rows come before the entry that made it
+	above                []string // the frames that stood above a popped frame, and stay
+	// A slide concerns one frame on the stack, named by its push entry: the
+	// frame whose start it cut, or the bottom frame for the rounds before
+	// the first frame (before is then that frame's id). -1 for none.
+	of     int
+	before string
+	live   bool
+
+	// lo is the reply whose round stays in front of the cut (the push's
+	// reply, or a slide's anchor) and hi the reply the cut ends before (the
+	// pop's reply, or a slide's end). Either is -1 when it is not in the
+	// conversation. pushCall and popCall are the tool calls that name them.
+	lo, hi            int
+	pushCall, popCall string
 
 	// The cut covers rows [from, to). Nothing is covered when from >= to;
 	// reason then says why.
@@ -40,44 +56,49 @@ type cut struct {
 	// turn is the row the pop's own turn starts at: prompt rows of the
 	// range at or after it are spared. A slide spares none.
 	turn int
-	// anchor and until are a slide's bounds: the assistant row whose round
-	// stays in front of the cut, and the one the cut ends before.
-	anchor, until int
+	// behind says the cut begins behind the summary, so the rows that
+	// continue the summary stay.
+	behind bool
 	// noteRow and noteCall say where the cut's note goes: the result row
 	// and the tool call whose answer gets it. noteRow is -1 for none.
 	noteRow  int
 	noteCall string
 
 	// What apply found.
-	messages, tokens, spared int
-	note                     string
+	between, messages, tokens, spared int
+	note                              string
+	ents, sparedEnts                  []int   // with Trace: the entries taken, and the ones spared
+	replies                           []Reply // with Trace: the replies taken
 }
 
 // derived is what the frame entries of a conversation come to.
 type derived struct {
 	cuts      []cut
-	stack     []frame         // the stack of the conversation's own session
-	slid      map[string]bool // frames on that stack whose start has slid
-	unmatched []int           // pop entries that named a frame not on the stack
+	stack     []frame      // the stack of the conversation's own session
+	slid      map[int]bool // the push entries of frames on that stack whose start has slid
+	unmatched []int        // pop entries that named a frame not on the stack
+	made      []int        // for each frame event, the cut it made: an index into cuts, or -1
 }
 
 // derive walks the frame entries in order and reads off each session's
-// stack and every cut.
+// stack and every cut (frames.md section 3).
 //
 // A push puts a frame on the stack of the session that wrote the entry. A
-// pop takes the topmost frame with its id off that session's stack, along
-// with any frames above it, and makes a cut. A pop that names a frame not
-// on the stack changes nothing. Entries written under another session id
-// (the session a branch came from) keep their cuts but put nothing on this
-// session's stack: a branch starts at the root.
+// pop takes the topmost frame with its id off that session's stack and
+// makes a cut; frames above it stay, since the stack is the pushes without
+// a matching pop, in order. A pop that names a frame not on the stack
+// changes nothing. Entries written under another session id (the session a
+// branch came from) keep their cuts but put nothing on this session's
+// stack: a branch starts at the root.
 func (c *conv) derive() *derived {
 	type session struct {
 		stack  []frame
 		slides []int // live slides: indices into st.cuts
 	}
-	st := &derived{slid: map[string]bool{}}
+	st := &derived{slid: map[int]bool{}, made: make([]int, len(c.events))}
 	sessions := map[string]*session{}
-	for _, ev := range c.events {
+	for n, ev := range c.events {
+		st.made[n] = -1
 		e := &c.entries[ev.ent]
 		s := sessions[e.SessionID]
 		if s == nil {
@@ -87,7 +108,10 @@ func (c *conv) derive() *derived {
 		c.walk(ev.at)
 		switch e.Op {
 		case OpPush:
-			s.stack = append(s.stack, frame{id: e.Frame, label: e.Label, call: e.ToolUseID, row: c.callRow(e.ToolUseID), at: ev.at, ent: ev.ent})
+			s.stack = append(s.stack, frame{
+				id: e.Frame, label: e.Label, call: e.ToolUseID, row: c.callRow(e.ToolUseID),
+				at: ev.at, ent: ev.ent, total: ev.total,
+			})
 		case OpPop:
 			k := len(s.stack) - 1
 			for k >= 0 && s.stack[k].id != e.Frame {
@@ -98,29 +122,28 @@ func (c *conv) derive() *derived {
 				continue
 			}
 			f := s.stack[k]
-			gone := map[string]bool{f.id: true}
-			var inner []string
+			var above []string
 			for _, g := range s.stack[k+1:] {
-				inner = append(inner, g.id)
-				gone[g.id] = true
+				above = append(above, g.id)
 			}
-			s.stack = s.stack[:k]
-			// A slide stays worth telling of only while its frame is on
-			// the stack; an empty stack clears them all.
+			s.stack = slices.Delete(s.stack, k, k+1)
+			// A slide stays worth telling of only while the frame it
+			// names is on the stack; an empty stack clears them all.
 			s.slides = slices.DeleteFunc(s.slides, func(i int) bool {
-				if len(s.stack) == 0 || gone[st.cuts[i].frame] {
+				if len(s.stack) == 0 || st.cuts[i].of == f.ent {
 					st.cuts[i].live = false
 					return true
 				}
 				return false
 			})
 			cut := c.popCut(f, ev, e)
-			cut.inner = inner
+			cut.above = above
 			st.cuts = append(st.cuts, cut)
+			st.made[n] = len(st.cuts) - 1
 		case OpSlide:
-			cut := c.slideCut(ev, e)
-			cut.live = len(s.stack) > 0 && (e.Frame == "" || slices.ContainsFunc(s.stack, func(f frame) bool { return f.id == e.Frame }))
+			cut := c.slideCut(ev, e, s.stack)
 			st.cuts = append(st.cuts, cut)
+			st.made[n] = len(st.cuts) - 1
 			if cut.live {
 				s.slides = append(s.slides, len(st.cuts)-1)
 			}
@@ -129,14 +152,16 @@ func (c *conv) derive() *derived {
 	if s := sessions[c.session]; s != nil {
 		st.stack = s.stack
 		for _, i := range s.slides {
-			st.slid[st.cuts[i].frame] = true
+			if st.cuts[i].frame != "" {
+				st.slid[st.cuts[i].of] = true
+			}
 		}
 	}
 	return st
 }
 
 // popCut works out what the pop written as entry e takes out, for the
-// frame f it closes.
+// frame f it closes (frames.md section 4.1).
 //
 //  1. The pop's reply is the assistant row that holds the pop's tool call.
 //     If it is not in the conversation, nothing is removed.
@@ -144,69 +169,130 @@ func (c *conv) derive() *derived {
 //  3. The cut starts after the last result row that answers a call of the
 //     push's reply, and ends before the pop's reply. So the push round and
 //     the pop round both stay whole.
-//  4. When the push's reply is not in the conversation, the cut starts at
+//  4. When the cut begins behind the summary, the rows that continue the
+//     summary stay (stays has that).
+//  5. When the push's reply is not in the conversation, the cut starts at
 //     the first assistant row after the push entry, and leaves no note.
-//  5. The prompt rows of the turn the pop is made in are spared.
+//     (The spec's fallback starts at the last summary or the first row,
+//     because its store knew a push only by its call. Here a push is an
+//     entry with a place of its own, so the frame's start is still known,
+//     and what came before it stays, as the rule itself says.)
+//  6. The prompt rows of the turn the pop is made in are spared.
 func (c *conv) popCut(f frame, ev event, e *Entry) cut {
 	cut := cut{
 		kind: OpPop, frame: f.id, label: cmp.Or(e.Label, f.label), result: e.Result,
-		ent: ev.ent, pushEnt: f.ent, at: ev.at, noteRow: -1, turn: len(c.rows),
+		ent: ev.ent, pushEnt: f.ent, of: -1, at: ev.at, noteRow: -1, turn: len(c.rows),
+		lo: f.row, hi: -1, pushCall: f.call, popCall: e.ToolUseID,
 	}
 	popRow := c.callRow(e.ToolUseID)
 	if popRow < 0 {
 		cut.reason = "the reply that made the pop call is not in the conversation"
 		return cut
 	}
-	pushRow := f.row
-	if pushRow == popRow {
+	cut.hi = popRow
+	if f.row == popRow {
 		cut.reason = "the frame was entered and left in one reply"
 		return cut
 	}
-	from := f.at
+	from, lead := f.at, f.row
 	noteRow := -1
-	if pushRow >= 0 {
-		from = c.lastAnswer(pushRow) + 1
-		noteRow = c.answerRow(pushRow, f.call)
+	if f.row >= 0 {
+		from = c.lastAnswer(f.row) + 1
+		noteRow = c.answerRow(f.row, f.call)
 	} else {
 		for from < popRow && c.rows[from].kind != rowAssistant {
 			from++
 		}
+		lead = from
 	}
 	if from >= popRow {
 		cut.reason = "nothing came between entering the frame and leaving it"
 		return cut
 	}
 	cut.from, cut.to = from, popRow
+	cut.behind = lead < c.start
 	cut.noteRow, cut.noteCall = noteRow, f.call
 	cut.turn = c.turnStart(popRow)
 	return cut
 }
 
 // slideCut works out what the recorded slide e takes out: the rows after
-// its anchor's round and before the reply it ends at.
-func (c *conv) slideCut(ev event, e *Entry) cut {
-	cut := cut{kind: OpSlide, frame: e.Frame, ent: ev.ent, pushEnt: -1, at: ev.at, noteRow: -1, turn: len(c.rows)}
+// its anchor's round and before the reply it ends at. stack is the stack of
+// the session that wrote it, as it stood then.
+func (c *conv) slideCut(ev event, e *Entry, stack []frame) cut {
+	cut := cut{kind: OpSlide, frame: e.Frame, ent: ev.ent, pushEnt: -1, of: -1, at: ev.at, noteRow: -1, turn: len(c.rows), lo: -1, hi: -1}
 	anchor := c.entryRow(e.Anchor)
 	until := c.entryRow(e.Until)
+	if e.Frame == "" {
+		if len(stack) > 0 {
+			cut.of, cut.before = stack[0].ent, stack[0].id
+		}
+	} else if k := topmost(stack, e.Frame, anchor); k >= 0 {
+		cut.of = stack[k].ent
+	}
+	cut.live = cut.of >= 0
 	if anchor < 0 || until < 0 {
+		cut.lo, cut.hi = anchor, until
 		cut.reason = "the replies that bound the slide are not in the conversation"
 		return cut
 	}
-	c.bound(&cut, anchor, until)
+	c.bound(&cut, anchor, until, stack)
 	return cut
 }
 
-// bound sets a slide's rows from its anchor and the reply it ends before.
-func (c *conv) bound(cut *cut, anchor, until int) {
+// topmost returns the index of the frame of stack that a slide of the
+// frame id, anchored at the row anchor, cut the start of: the topmost with
+// that id that was entered by the anchor's reply, or else the topmost with
+// that id; -1 when there is none. (mem never puts one frame on a stack
+// twice, so the two are the same frame unless the transcript is not mem's.)
+func topmost(stack []frame, id string, anchor int) int {
+	found := -1
+	for k := len(stack) - 1; k >= 0; k-- {
+		if stack[k].id != id {
+			continue
+		}
+		if anchor >= 0 && stack[k].row == anchor {
+			return k
+		}
+		if found < 0 {
+			found = k
+		}
+	}
+	return found
+}
+
+// bound sets a slide's rows from its anchor and the reply it ends before,
+// and names the two tool calls that mark them the way the spec's stored
+// marker does (frames.md section 8.6): the first call of the anchor's
+// reply, and the first call of the reply the cut ends before; or, when the
+// slide cut a frame's start, the frame's own push call, and the push call
+// of the frame above it if that is where the cut ends. The note goes on
+// the answer to the first of the two.
+func (c *conv) bound(cut *cut, anchor, until int, stack []frame) {
+	cut.lo, cut.hi = anchor, until
+	cut.pushCall = firstToolUse(c.rows[anchor].blocks)
+	cut.popCall = firstToolUse(c.rows[until].blocks)
+	for k := range stack {
+		if cut.frame == "" || stack[k].ent != cut.of {
+			continue
+		}
+		if stack[k].row == anchor && stack[k].call != "" {
+			cut.pushCall = stack[k].call
+		}
+		if k+1 < len(stack) && stack[k+1].row == until && stack[k+1].call != "" {
+			cut.popCall = stack[k+1].call
+		}
+		break
+	}
 	from := c.lastAnswer(anchor) + 1
 	if from >= until {
 		cut.reason = "nothing lies between the slide's bounds"
 		return
 	}
 	cut.from, cut.to = from, until
-	cut.anchor, cut.until = anchor, until
-	if call := firstToolUse(c.rows[anchor].blocks); call != "" {
-		cut.noteRow, cut.noteCall = c.answerRow(anchor, call), call
+	cut.behind = anchor < c.start
+	if cut.pushCall != "" {
+		cut.noteRow, cut.noteCall = c.answerRow(anchor, cut.pushCall), cut.pushCall
 	}
 }
 
@@ -306,7 +392,7 @@ type turn struct {
 }
 
 // turnStart returns the row at which the turn that holds the assistant
-// row at begins.
+// row at begins (frames.md section 4.3).
 //
 // Going back from at, the nearest prompt the person typed is found, and
 // with it the run of prompt rows it ends. That run starts the turn when
@@ -315,35 +401,42 @@ type turn struct {
 // before it was cancelled or failed. Otherwise the prompt was folded into
 // a turn already running, and the search goes on further back. When no
 // such run is found the turn starts at the first row the model has.
+//
+// A reply that holds nothing is not a row, but one that was cancelled or
+// failed still ended its turn: c.halts has where those stand.
 func (c *conv) turnStart(at int) int {
 	if !c.turnsBuilt {
 		c.turnsBuilt = true
-		reply := -1 // the nearest assistant row so far
+		ended := c.endedBehind // the nearest reply so far was cancelled or failed
+		h := 0                 // the next of c.halts
+		halt := func(r int) bool { return h < len(c.halts) && c.halts[h] <= r }
 		for r := c.start; r < len(c.rows); {
-			switch c.rows[r].kind {
-			case rowAssistant:
-				reply = r
+			for ; halt(r); h++ {
+				ended = true
+			}
+			if c.rows[r].kind != rowPrompt {
+				if c.rows[r].kind == rowAssistant {
+					ended = c.rows[r].ended
+				}
 				r++
-			case rowResult:
-				r++
-			case rowPrompt:
-				first, typed := r, -1
-				for ; r < len(c.rows) && c.rows[r].kind == rowPrompt; r++ {
-					if !c.rows[r].hidden {
-						typed = r
-					}
+				continue
+			}
+			first, typed := r, -1
+			for ; r < len(c.rows) && c.rows[r].kind == rowPrompt && !(r > first && halt(r)); r++ {
+				if !c.rows[r].hidden {
+					typed = r
 				}
-				if typed < 0 {
-					continue
-				}
-				starts := first == c.start
-				if !starts {
-					before := &c.rows[first-1]
-					starts = before.kind == rowAssistant && before.calls == 0 || reply >= 0 && c.rows[reply].ended
-				}
-				if starts {
-					c.turns = append(c.turns, turn{start: first, prompt: typed})
-				}
+			}
+			if typed < 0 {
+				continue
+			}
+			starts := first == c.start || ended
+			if !starts {
+				before := &c.rows[first-1]
+				starts = before.kind == rowAssistant && before.calls == 0
+			}
+			if starts {
+				c.turns = append(c.turns, turn{start: first, prompt: typed})
 			}
 		}
 	}
@@ -362,7 +455,7 @@ func (c *conv) stays(cut *cut, r int) bool {
 	if c.rows[r].kind == rowPrompt && r >= cut.turn {
 		return true
 	}
-	return c.summary >= 0 && cut.from <= c.start && r >= c.start && r < c.cont
+	return c.summary >= 0 && cut.behind && r >= c.start && r < c.cont
 }
 
 // apply takes the cut's rows out of the view, counts what that freed, and
@@ -372,12 +465,18 @@ func (c *conv) apply(cut *cut) {
 		return
 	}
 	calls := map[string]int{}
-	total, messages, lastEnt, lastTaken := 0, 0, -1, -1
+	total, lastEnt, lastTaken := 0, -1, -1
 	for r := cut.from; r < cut.to; r++ {
 		row := &c.rows[r]
+		had := c.present(r)
 		if c.stays(cut, r) {
-			if row.kind == rowPrompt && r >= cut.turn && r >= c.start {
+			// A prompt of the pop's turn that a slide took earlier stays
+			// taken: only what the model is left with counts as spared.
+			if row.kind == rowPrompt && r >= cut.turn && had {
 				cut.spared++
+				if c.trace {
+					cut.sparedEnts = append(cut.sparedEnts, row.ent)
+				}
 			}
 			continue
 		}
@@ -388,26 +487,91 @@ func (c *conv) apply(cut *cut) {
 					total++
 				}
 			}
+			if c.trace {
+				cut.replies = append(cut.replies, c.reply(r, !had))
+			}
 		}
 		if row.ent != lastEnt {
-			messages++
+			// A user entry that is two rows is still one message.
+			cut.between++
 			lastEnt = row.ent
 		}
-		if r >= c.start && !c.removed[r] {
+		if c.trace {
+			cut.ents = append(cut.ents, row.ent)
+		}
+		if had {
 			c.removed[r] = true
 			cut.tokens += c.rowTokens(r)
 			if row.ent != lastTaken {
-				// A user entry that is two rows is still one message.
 				cut.messages++
 				lastTaken = row.ent
 			}
 		}
 	}
-	if cut.noteRow < 0 || messages == 0 {
+	if cut.noteRow < 0 || cut.between == 0 {
 		return
 	}
-	cut.note = noteText(cut.kind, calls, total, messages)
+	cut.note = noteText(cut.kind, calls, total, cut.between)
 	c.addNote(cut.noteRow, note{call: cut.noteCall, text: cut.note, kind: cut.kind, to: cut.to})
+}
+
+// reply describes the assistant row r for the caller: whether it says
+// anything, and its tool calls with their results. gone says an earlier
+// cut or the summary had taken it out of the view already.
+func (c *conv) reply(r int, gone bool) Reply {
+	row := &c.rows[r]
+	out := Reply{UUID: c.entries[row.ent].UUID, Gone: gone}
+	for i := range row.blocks {
+		b := &row.blocks[i]
+		switch b.Type {
+		case core.BlockText:
+			if strings.TrimSpace(b.Text) != "" {
+				out.Said = true
+			}
+		case core.BlockToolUse:
+			call := Call{ID: b.ID, Name: b.Name, Input: b.Input, Path: filePath(b.Input)}
+			if res, ent := c.result(r, b.ID); res != nil {
+				call.Answered, call.IsError, call.Content = true, res.IsError, res.Content
+				call.ResultUUID = c.entries[ent].UUID
+			}
+			out.Calls = append(out.Calls, call)
+		}
+	}
+	return out
+}
+
+// result returns the block that answers the call id of the assistant row
+// a, and the entry that holds it; or nil.
+func (c *conv) result(a int, id string) (*core.Block, int) {
+	if id == "" {
+		return nil, -1
+	}
+	for r := a + 1; r < len(c.rows) && c.rows[r].kind != rowAssistant; r++ {
+		if c.rows[r].kind != rowResult {
+			continue
+		}
+		for i := range c.rows[r].blocks {
+			if b := &c.rows[r].blocks[i]; b.Type == core.BlockToolResult && b.ToolUseID == id {
+				return b, c.rows[r].ent
+			}
+		}
+	}
+	return nil, -1
+}
+
+// filePath returns the "file_path" argument of a tool call's input, or
+// empty when it has none.
+func filePath(input json.RawMessage) string {
+	if len(input) == 0 {
+		return ""
+	}
+	var args struct {
+		FilePath string `json:"file_path"`
+	}
+	if json.Unmarshal(input, &args) != nil {
+		return ""
+	}
+	return args.FilePath
 }
 
 // note is a line added to one answer of a result row.
@@ -437,9 +601,11 @@ func (c *conv) addNote(r int, n note) {
 	c.notes[r] = append(c.notes[r], n)
 }
 
-// noteText writes the line that tells the model what a cut removed: the
-// tool calls of the removed replies by name, or, when there were none, how
-// many messages went.
+// noteText writes the line that tells the model what a cut removed
+// (frames.md sections 4.4 and 8.6): the tool calls of the removed replies
+// by name, or, when there were none, how many messages went. A slide's
+// line differs from a pop's in how it ends, and, with no tool call, in
+// leaving out "of work in it".
 func noteText(kind FrameOp, calls map[string]int, total, messages int) string {
 	end := "removed from your context when you popped it.]"
 	if kind == OpSlide {
@@ -457,9 +623,6 @@ func noteText(kind FrameOp, calls map[string]int, total, messages int) string {
 		word := "tool calls"
 		if total == 1 {
 			word = "tool call"
-		}
-		if kind == OpSlide {
-			return fmt.Sprintf("[Then came %d %s (%s), %s", total, word, strings.Join(names, ", "), end)
 		}
 		return fmt.Sprintf("[Then came the work in it, %d %s (%s), %s", total, word, strings.Join(names, ", "), end)
 	}
@@ -514,11 +677,12 @@ func appendLine(content []core.Block, line string) []core.Block {
 }
 
 // cutInfo describes a cut for the caller.
-func (c *conv) cutInfo(cut *cut, trace bool) Cut {
+func (c *conv) cutInfo(cut *cut) Cut {
 	out := Cut{
 		Kind: cut.kind, Frame: cut.frame, Label: cut.label, Result: cut.result,
-		Planned: cut.ent < 0, Inner: cut.inner,
-		Messages: cut.messages, Tokens: cut.tokens, Spared: cut.spared,
+		Planned: cut.ent < 0, Above: cut.above, Before: cut.before,
+		PushCall: cut.pushCall, PopCall: cut.popCall,
+		Between: cut.between, Messages: cut.messages, Tokens: cut.tokens, Spared: cut.spared,
 		Note: cut.note, Live: cut.live, Reason: cut.reason,
 	}
 	if cut.ent >= 0 {
@@ -527,25 +691,35 @@ func (c *conv) cutInfo(cut *cut, trace bool) Cut {
 	if cut.pushEnt >= 0 {
 		out.PushUUID = c.entries[cut.pushEnt].UUID
 	}
-	if trace {
-		var src []int
-		for r := cut.from; r < cut.to; r++ {
-			if !c.stays(cut, r) {
-				src = append(src, c.rows[r].ent)
-			}
-		}
-		out.Removed = c.uuids(src)
+	if cut.lo >= 0 {
+		out.PushReply = c.entries[c.rows[cut.lo].ent].UUID
+	}
+	if cut.hi >= 0 {
+		out.PopReply = c.entries[c.rows[cut.hi].ent].UUID
+	}
+	if c.trace {
+		out.Removed = c.uuids(cut.ents)
+		out.SparedEntries = c.uuids(cut.sparedEnts)
+		out.Replies = cut.replies
+	}
+	return out
+}
+
+// frames describes the stack for the caller.
+func (c *conv) frames(st *derived) []Frame {
+	var out []Frame
+	for _, f := range st.stack {
+		out = append(out, Frame{
+			ID: f.id, Label: f.label, UUID: c.entries[f.ent].UUID, ToolUseID: f.call,
+			Slid: st.slid[f.ent], TotalAtPush: f.total,
+		})
 	}
 	return out
 }
 
 // report writes the stack and the cuts into info.
-func (c *conv) report(st *derived, opts ViewOptions, info *ViewInfo) {
-	for _, f := range st.stack {
-		info.Stack = append(info.Stack, Frame{
-			ID: f.id, Label: f.label, UUID: c.entries[f.ent].UUID, ToolUseID: f.call, Slid: st.slid[f.id],
-		})
-	}
+func (c *conv) report(st *derived, info *ViewInfo) {
+	info.Stack = c.frames(st)
 	for i := range st.cuts {
 		cut := &st.cuts[i]
 		if c.summary >= 0 && cut.at <= c.start {
@@ -553,7 +727,7 @@ func (c *conv) report(st *derived, opts ViewOptions, info *ViewInfo) {
 			// of it.
 			continue
 		}
-		info.Cuts = append(info.Cuts, c.cutInfo(cut, opts.Trace))
+		info.Cuts = append(info.Cuts, c.cutInfo(cut))
 	}
 	for _, ent := range st.unmatched {
 		info.UnmatchedPops = append(info.UnmatchedPops, c.entries[ent].UUID)
