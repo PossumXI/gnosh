@@ -109,6 +109,59 @@ func TestSystemParts(t *testing.T) {
 	}
 }
 
+// TestSystemMemoryForms checks the choice between the two texts about mem:
+// the lean one unless the full one is asked for, either of them only with
+// the gnovm_run tool, and nothing else in the system prompt changed by
+// the choice.
+func TestSystemMemoryForms(t *testing.T) {
+	s := Builtin()
+	lean, _ := s.Text(textMemory)
+	full, _ := s.Text(textMemoryFull)
+	if lean.Body == full.Body {
+		t.Fatal("the two texts about mem are the same")
+	}
+	in := SystemInput{
+		Tools:        toolSpecs("Read", "gnovm_run", "Deliver"),
+		GnoProject:   true,
+		Instructions: "INSTRUCTIONS-OF-THE-PROJECT",
+		Append:       "APPENDED-BY-THE-PERSON",
+	}
+	plain := s.System(in)
+	if plain[1] != lean.Body {
+		t.Error("with no choice made, the part about mem is not the lean text")
+	}
+	for form, want := range map[MemoryForm]string{MemoryLean: lean.Body, MemoryFull: full.Body, MemoryForm(7): lean.Body, MemoryForm(-1): lean.Body} {
+		in.Memory = form
+		got := s.System(in)
+		if len(got) != len(plain) {
+			t.Fatalf("form %d: %d parts, want %d", form, len(got), len(plain))
+		}
+		for i := range got {
+			switch {
+			case i == 1 && got[i] != want:
+				t.Errorf("form %d: the part about mem is not the text chosen", form)
+			case i != 1 && got[i] != plain[i]:
+				t.Errorf("form %d: part %d differs from the same part with no choice made", form, i)
+			}
+		}
+	}
+	// The choice says which text, never whether: without the tool, or
+	// with the person's own system prompt, there is no part about mem.
+	for name, in := range map[string]SystemInput{
+		"no gnovm_run":            {Tools: toolSpecs("Read", "Deliver"), Memory: MemoryFull},
+		"no tools":                {Memory: MemoryFull},
+		"the person's own prompt": {Tools: toolSpecs("gnovm_run"), Memory: MemoryFull, Replace: "REPLACED-BY-THE-PERSON"},
+		"a tool with a like name": {Tools: toolSpecs("gnovm_list", "GNOVM_RUN"), Memory: MemoryFull},
+	} {
+		if slices.Contains(partNames(t, s.System(in)), "memory") {
+			t.Errorf("%s: a part about mem was sent", name)
+		}
+	}
+	if MemoryLean != 0 {
+		t.Error("the zero value of MemoryForm is not the lean text")
+	}
+}
+
 func TestSystemInstructionsAreDefused(t *testing.T) {
 	s := Builtin()
 	in := SystemInput{

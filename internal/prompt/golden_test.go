@@ -85,6 +85,14 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "memory-full",
+			texts: []string{textMemoryFull},
+			cases: func(s *Set) []goldenCase {
+				sys := s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run"), Memory: MemoryFull})
+				return []goldenCase{{"the part about mem, with every item the spec lists", sys[1]}}
+			},
+		},
+		{
 			file:  "environment",
 			texts: []string{textEnvironment},
 			cases: func(s *Set) []goldenCase {

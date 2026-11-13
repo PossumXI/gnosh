@@ -28,7 +28,8 @@
 //
 //   - The system prompt is small. The fixed core is about 750 tokens and
 //     the part about mem just under 1,500; with every part on, what gnosh
-//     writes comes to about 2,600. The tests hold these as budgets.
+//     writes comes to about 2,600 (about 2,900 with the fuller of the two
+//     texts about mem). The tests hold these as budgets.
 //   - The system prompt is fixed. Nothing in it is a date, a directory, a
 //     model's name or a session's id. What differs from session to session
 //     goes with the first prompt instead (Environment).
@@ -103,6 +104,9 @@
 //     out right), enter the todo the user names, write a result after the
 //     work, thoughts, questions, facts, rules, secrets. What went is what
 //     mem's own receipts and refusals say at the moment it matters.
+//     memory-full is sent in its place when the system prompt is built
+//     with MemoryFull: the same text with what went put back. The section
+//     after this one says how the two differ and how to choose.
 //
 //   - gno, only in a project with Gno code: a plan that writes Gno code
 //     has an audit todo right after it, against the two guides. Without
@@ -117,6 +121,62 @@
 //     being made before making it. It stands after the instructions so
 //     that a session with the tool and one without share everything before
 //     it in a model server's cache.
+//
+// # The two texts about mem
+//
+// SystemInput.Memory chooses between two texts about mem: memory, the
+// lean one, which is the default, and memory-full. Which of them a model
+// works better with is not known, and it is not to be argued: it is to be
+// settled by measurement on the AI box, the same tasks run on the real
+// model with each, which is how the earlier gnosh settled its wording.
+// The 1,500 tokens the lean text was cut to fit were a guess and not a
+// finding, and every item the full text adds is one the mem spec lists as
+// required in the system prompt (mem.md §14.1). Until the runs are made
+// the lean text is sent.
+//
+// The full text, about 1,750 tokens, says every item of that list but the
+// last, the Gno rule, which is the part gno. It leaves to mem's receipts
+// only what the spec itself gives them to say: what to do on entering a
+// todo (do it now, with your tools; or, for a todo with todos under it,
+// that they are its work), a todo's thoughts, handed back word for word
+// when it is entered and when it is popped, the call to send next after a
+// pop, that a pop closed the whole plan, who else is working the plan and
+// how long a wait for them was, and the right name where a wrong one was
+// typed.
+//
+// The lean text leaves all of that to the receipts too, and besides it
+// what the full text adds, about 250 tokens. For each of those, this is
+// what tells the model instead:
+//
+//   - the receipt for entering a todo, at every push: that the result
+//     is to be what the tools returned (the lean text says so too, the
+//     full one adds "the edit made, the command run and what it
+//     printed"), and that nothing done in a todo is undone by its pop.
+//     That receipt and the frame line, on every typed prompt: that a pop
+//     also removes what the user said;
+//   - the frame line: that work the plan has no todo for goes in a todo
+//     of its own;
+//   - the goal's directive, and the receipt when a goal has no todo left:
+//     that the todo /goal bound the session to is closed with mem.Done;
+//   - mem's refusals: that a todo another session holds is theirs, and
+//     that the Parallel mark goes on the todo the others are under;
+//   - the receipts while other sessions work the plan: to keep to the
+//     todo's files, and that a bare mem.Next() waits for the others;
+//   - the digest a new session is given: what a session starts with;
+//   - the fixed core: that the data folder is never deleted or moved;
+//   - nothing, at the moment it matters: that leaving a todo is neither
+//     popping nor dropping it (the lean text says only that Leave leaves
+//     it open), that todos stay in order unless marked, that what is
+//     fixed outside a todo the others fix again, and the smaller calls:
+//     a thought named by the model itself, a question under a new todo,
+//     a wait taken off, a fact removed, what /mem can do. A model that
+//     needs one of these has mem.Help, or the refusal it gets for doing
+//     without. Here nothing stands in for the system prompt, so this is
+//     where the two texts differ most.
+//
+// The two texts are kept word for word alike but for those items, and a
+// test holds them to it, so that a run with one and a run with the other
+// differ in nothing else.
 //
 // # Lines on the user's side
 //

@@ -125,6 +125,12 @@ const (
 	budgetMemory = 1500 // the part about mem
 	budgetSystem = 2700 // every part gnosh writes, all at once
 	budgetLine   = 180  // any line, before its values
+
+	// The full text about mem has no figure it was cut to: its budget is
+	// what it comes to, so that it cannot grow unnoticed either. With it
+	// in place of the lean text, the whole may be that much larger.
+	budgetMemoryFull = 1750
+	budgetSystemFull = budgetSystem - budgetMemory + budgetMemoryFull
 )
 
 // budgets holds the texts that have a budget of their own.
@@ -133,6 +139,7 @@ var budgets = map[string]int{
 	textSecurity:      100,
 	textNoTools:       30,
 	textMemory:        budgetMemory,
+	textMemoryFull:    budgetMemoryFull,
 	textGno:           130,
 	textDeliver:       270,
 	textEnvironment:   220,
@@ -162,6 +169,20 @@ func TestBudgets(t *testing.T) {
 	}
 	if total > budgetSystem {
 		t.Errorf("gnosh's own parts of the system prompt come to about %d tokens, over the budget of %d", total, budgetSystem)
+	}
+	full := s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, Memory: MemoryFull})
+	if len(full) != 4 {
+		t.Fatalf("a session with everything and the full text about mem has %d parts of gnosh's own, want 4", len(full))
+	}
+	total = 0
+	for _, part := range full {
+		total += EstimateTokens(part)
+	}
+	if total > budgetSystemFull {
+		t.Errorf("with the full text about mem, gnosh's own parts come to about %d tokens, over the budget of %d", total, budgetSystemFull)
+	}
+	if lean, _ := s.Text(textMemory); EstimateTokens(full[1]) <= lean.Tokens {
+		t.Errorf("the full text about mem is no longer than the lean one")
 	}
 	for _, info := range s.Texts() {
 		limit, ok := budgets[info.Name]
@@ -194,6 +215,8 @@ func TestSizes(t *testing.T) {
 	t.Logf("%-22s %-7s %6d %6d", "(the fixed core)", "system", len(core), EstimateTokens(core))
 	all := strings.Join(s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true}), "\n\n")
 	t.Logf("%-22s %-7s %6d %6d", "(everything on)", "system", len(all), EstimateTokens(all))
+	full := strings.Join(s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, Memory: MemoryFull}), "\n\n")
+	t.Logf("%-22s %-7s %6d %6d", "(everything on, full)", "system", len(full), EstimateTokens(full))
 	t.Logf("%-22s %-7s %6d %6d", "(the mem line)", "line", len(s.MemLine()), EstimateTokens(s.MemLine()))
 }
 
@@ -300,7 +323,16 @@ func TestCoreSaysWhatItMust(t *testing.T) {
 // TestMemorySaysWhatItMust does the same for the part about mem, against
 // the list in mem.md §14.1.
 func TestMemorySaysWhatItMust(t *testing.T) {
-	info, _ := Builtin().Text(textMemory)
+	for _, name := range []string{textMemory, textMemoryFull} {
+		info, _ := Builtin().Text(name)
+		checkMemoryText(t, name, info.Body)
+	}
+}
+
+// checkMemoryText checks one of the two texts about mem, the lean one or
+// the full one, for what both of them must say.
+func checkMemoryText(t *testing.T, name, body string) {
+	t.Helper()
 	must := map[string][]string{
 		"1 what mem is":                {"outlives the session", "no size limit", "`gnovm_run` name \"mem\"", "scratch machine"},
 		"2 figures are run":            {"print every term", "never bend one to fit the other"},
@@ -324,15 +356,90 @@ func TestMemorySaysWhatItMust(t *testing.T) {
 	}
 	for what, phrases := range must {
 		for _, p := range phrases {
-			if !strings.Contains(info.Body, p) {
-				t.Errorf("the part about mem no longer says %q, which it had for item %s", p, what)
+			if !strings.Contains(body, p) {
+				t.Errorf("%s no longer says %q, which it had for item %s", name, p, what)
 			}
 		}
 	}
 	// Calls mem no longer has must not be taught (mem.md §5.10).
 	for _, gone := range []string{"mem.Goal(", "mem.Steps", "mem.Push()", "mem.NewFrame", "mem.Remind", "mem.Start(", "mem.Erase", "mem.Add("} {
-		if strings.Contains(info.Body, gone) {
-			t.Errorf("the part about mem teaches %s, which is gone", gone)
+		if strings.Contains(body, gone) {
+			t.Errorf("%s teaches %s, which is gone", name, gone)
 		}
+	}
+}
+
+// onlyInFull lists what the full text about mem says and the lean one
+// leaves out, by the item of mem.md §14.1 it belongs to. The package's
+// documentation says, for each, what tells the model instead when the
+// lean text is sent: one of mem's receipts or refusals, the frame line,
+// the fixed core, or nothing.
+var onlyInFull = map[string]string{
+	"4 what a session starts with":           "A session starts with the user's rules, what mem has open and its newest facts",
+	"7 leave, pop and drop told apart":       "a pop records it done, a drop gives it up",
+	"7 a pop removes the user's words too":   "what the user said to you in it included",
+	"7 what a pop does not undo":             "your file edits and mem changes are not undone",
+	"7 a bound todo is closed with mem.Done": "a todo /goal bound you to is the root: close it with `mem.Done`",
+	"7 what a result is written from":        "the edit made, the command run and what it printed",
+	"7 work the plan has no todo for":        "Work the plan has no todo for: `mem.Todo(\"rename the port flag\").Push()`, popped the same way",
+	"7 a todo another session holds":         "A todo mem shows another session holding is theirs: leave it",
+	"8 todos stay in order unless marked":    "Todos stay in order unless you say they need not",
+	"8 where the mark goes":                  "the mark goes on the todo they are under, not on each of them",
+	"8 keep to the todo's files":             "keep to your todo's files",
+	"8 a bare Next waits":                    "A bare `mem.Next()` ending your call waits for the others",
+	"8 why nothing is fixed outside a todo":  "or the others fix it too",
+	"9 naming a thought":                     "named for you (or name it yourself: `mem.Think(\"port\", \"…\")`)",
+	"10 asking under a new todo":             "or under a new todo, `mem.Todo(\"…\").Ask(\"…\")`",
+	"11 no longer waiting":                   "`mem.Wait(name, \"\")` when it no longer waits",
+	"12 removing a fact":                     "and `mem.Fact(name, \"\")` removes it",
+	"14 the data folder":                     "Never delete or move `.gnosh/` either",
+	"16 what /mem can do":                    "`/mem find`, `/mem log`, `/mem undo`, `/mem forget`, `/mem redact`",
+}
+
+// TestMemoryFullIsLeanAndMore pins how the two texts about mem stand to
+// each other: the full one says everything the lean one says, in the same
+// words and the same order, and the items of onlyInFull besides. So a
+// change to one of them that is not made to the other fails here, and the
+// two stay comparable when they are measured against each other.
+func TestMemoryFullIsLeanAndMore(t *testing.T) {
+	s := Builtin()
+	lean, _ := s.Text(textMemory)
+	full, _ := s.Text(textMemoryFull)
+	for item, phrase := range onlyInFull {
+		if !strings.Contains(full.Body, phrase) {
+			t.Errorf("the full text does not say %q (item %s)", phrase, item)
+		}
+		if strings.Contains(lean.Body, phrase) {
+			t.Errorf("the lean text says %q (item %s), which it is listed as leaving out", phrase, item)
+		}
+	}
+	// Every word of the lean text is in the full text, in order. The
+	// mark at the end of a word and its letter case are set aside, since
+	// a sentence that goes on in the full text ends or begins otherwise
+	// there.
+	words := func(text string) []string {
+		list := strings.Fields(text)
+		for i, w := range list {
+			list[i] = strings.ToLower(strings.TrimRight(w, ".,;:"))
+		}
+		return list
+	}
+	rest := words(full.Body)
+	for i, w := range words(lean.Body) {
+		at := slices.Index(rest, w)
+		if at < 0 {
+			t.Fatalf("word %d of the lean text, %q, is not in the full text after the words before it: the two have drifted apart", i, w)
+		}
+		rest = rest[at+1:]
+	}
+	// What the full text adds is those items and nothing else: they
+	// account for every word it has beyond the lean text.
+	extra := len(words(full.Body)) - len(words(lean.Body))
+	listed := 0
+	for _, phrase := range onlyInFull {
+		listed += len(strings.Fields(phrase))
+	}
+	if extra != listed {
+		t.Errorf("the full text has %d words more than the lean one, and the items listed come to %d: something was added to it, or taken out, without the list", extra, listed)
 	}
 }

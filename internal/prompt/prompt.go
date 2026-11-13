@@ -40,6 +40,7 @@ const (
 	textSecurity         = "security"
 	textNoTools          = "no-tools"
 	textMemory           = "memory"
+	textMemoryFull       = "memory-full"
 	textGno              = "gno"
 	textDeliver          = "deliver"
 	textEnvironment      = "environment"
@@ -112,6 +113,8 @@ func specs() []spec {
 			when: "A part of the system prompt only when the session has no tools at all."},
 		{name: textMemory, kind: KindSystem,
 			when: "A part of the system prompt only when the session has the gnovm_run tool: how to use mem and the Gno machines."},
+		{name: textMemoryFull, kind: KindSystem,
+			when: "Sent in place of memory when the system prompt is built with MemoryFull: the same, with every item the mem spec lists, where memory leaves some to mem's own receipts."},
 		{name: textGno, kind: KindSystem,
 			when: "A part of the system prompt only in a project that holds Gno code: new Gno code gets an audit todo."},
 		{name: textDeliver, kind: KindSystem,

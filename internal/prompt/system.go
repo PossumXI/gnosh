@@ -12,6 +12,23 @@ const (
 	toolDeliver  = "Deliver"
 )
 
+// MemoryForm chooses between the two texts gnosh has about mem. Which of
+// them serves a model better is to be settled by measurement on the
+// person's own machine, the same tasks run with each; until it is, the
+// lean one is sent.
+type MemoryForm int
+
+const (
+	// MemoryLean is the text "memory", and the default. It is under 1,500
+	// tokens, and leaves to mem's own receipts and refusals, and to the
+	// frame line, what they say at the moment it matters.
+	MemoryLean MemoryForm = iota
+	// MemoryFull is the text "memory-full": the lean text with every item
+	// the mem spec lists for the system prompt said in it, about 250
+	// tokens more.
+	MemoryFull
+)
+
 // SystemInput is what the system prompt of a session depends on. Nothing
 // in it is the date, the working directory, the model or the session:
 // those go with the first prompt (Environment), so that the system prompt
@@ -22,6 +39,10 @@ type SystemInput struct {
 	// deliverables when Deliver is, and with no tools at all the model is
 	// told that it has none.
 	Tools []core.ToolSpec
+
+	// Memory chooses which text about mem is sent when the session has
+	// gnovm_run. The zero value is MemoryLean.
+	Memory MemoryForm
 
 	// GnoProject says the working directory holds Gno code: a gnomod.toml,
 	// a gno.mod, a gnowork.toml or a .gno file.
@@ -51,7 +72,8 @@ type SystemInput struct {
 //  1. the fixed core, with the security rule as its last lines: the same
 //     bytes whatever is in SystemInput;
 //  2. the note that there are no tools, when there are none;
-//  3. the part about mem, when the session has gnovm_run;
+//  3. the part about mem, when the session has gnovm_run: the lean text,
+//     or with Memory set to MemoryFull the full one;
 //  4. the Gno rule, in a project with Gno code;
 //  5. the project's and the person's instructions;
 //  6. the part about deliverables, when the session has Deliver. It stands
@@ -78,7 +100,11 @@ func (s *Set) System(in SystemInput) []string {
 		add(s.fill(textNoTools, nil))
 	}
 	if own && hasTool(in.Tools, toolGnovmRun) {
-		add(s.fill(textMemory, nil))
+		if in.Memory == MemoryFull {
+			add(s.fill(textMemoryFull, nil))
+		} else {
+			add(s.fill(textMemory, nil))
+		}
 	}
 	if own && in.GnoProject {
 		add(s.fill(textGno, nil))
