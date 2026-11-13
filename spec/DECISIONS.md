@@ -94,3 +94,24 @@ both are silent, the builder chooses, and says so in its report.
     (PRIN-3); the two agree here. Jae's unattended runs on the AI box keep
     working without touching each script by setting the mode once in that
     machine's own user settings, at switch-over and with his say.
+
+## From the core spec (`spec/gnosh/open-questions.md`)
+
+12. **Every reading taken in that file is adopted: build it as it landed.**
+    Holds are soft for plans and hard for leaves (Q1); a pop spares the
+    prompts of the turn it is made in (Q2); the slide is built as specified
+    and tested against a server whose window really is 32K (Q3); the root
+    lists todos in the order made and `mem.Next()` works there (Q13, Q14);
+    stock sub-agents have no gnovm tools (Q15); the goal judge reads the
+    full conversation (Q16); the mem reminder is not muted by a goal (Q18);
+    a reviewed close is not judged twice (Q19); reminders go in as
+    user-side rows (Q20); the fresh guard stays (Q21). The swarm bridge and
+    frames on gno.land are not built in this rewrite (Q5, Q6). The questions
+    marked "For Jae" there stay his.
+13. **How the earlier harness's rows map onto the new transcript.** Where
+    the core spec says "row" it means a transcript entry; "flag the rows"
+    means appending an entry that names the entries it marks, since nothing
+    in a transcript is rewritten; "hidden parts of a prompt" are user-side
+    entries of their own, stored in the order sent and joined into one
+    message when the request is built, so what is rebuilt from the
+    transcript is byte-identical to what went out.
