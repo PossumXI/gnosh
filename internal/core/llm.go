@@ -1,0 +1,176 @@
+package core
+
+import (
+	"context"
+	"encoding/json"
+	"iter"
+)
+
+// ToolSpec is what a model is told about a tool: its name, what it is for,
+// and the JSON Schema of the arguments it takes.
+type ToolSpec struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"input_schema"`
+}
+
+// Thinking says how much a model should reason before it answers. The zero
+// value leaves it to the model.
+type Thinking struct {
+	// Mode is "" (the model's default), "off" or "on".
+	Mode string
+	// BudgetTokens caps the reasoning, for providers that take a budget.
+	// Zero means the provider's default.
+	BudgetTokens int
+	// Effort is "low", "medium" or "high", for providers that take a level.
+	// Empty means the provider's default.
+	Effort string
+}
+
+// Request is one call to a model.
+type Request struct {
+	// Model is the provider's name for the model.
+	Model string
+
+	// System is the system prompt, in parts ordered from the part that
+	// changes least to the part that changes most. A provider with prompt
+	// caching may cache up to a part boundary; others join the parts with
+	// blank lines.
+	System []string
+
+	// Messages is the conversation so far. It starts with a user message,
+	// roles alternate, and every tool_use block in an assistant message is
+	// answered by a tool_result block in the user message that follows.
+	Messages []Message
+
+	// Tools is what the model may call.
+	Tools []ToolSpec
+
+	// MaxTokens caps the answer. Zero means the provider's default.
+	MaxTokens int
+
+	// Temperature and TopP are left to the provider when nil.
+	Temperature *float64
+	TopP        *float64
+
+	// Stop lists strings that end the answer when the model writes one.
+	Stop []string
+
+	Thinking Thinking
+
+	// Extra holds provider-specific fields, merged into the request body as
+	// they are. Fields set here win over the ones the provider would write.
+	Extra map[string]any
+}
+
+// EventType says what a stream Event carries.
+type EventType string
+
+const (
+	// EventTextDelta carries the next piece of the answer in Text.
+	EventTextDelta EventType = "text_delta"
+	// EventThinkingDelta carries the next piece of reasoning in Text.
+	EventThinkingDelta EventType = "thinking_delta"
+	// EventThinkingSignature closes the reasoning that came before it and
+	// carries its Signature, its Opaque payload, or both.
+	EventThinkingSignature EventType = "thinking_signature"
+	// EventToolUseStart opens a tool call: ID and Name are set.
+	EventToolUseStart EventType = "tool_use_start"
+	// EventToolUseDelta carries, in Text, the next piece of the JSON
+	// arguments of the call named by ID.
+	EventToolUseDelta EventType = "tool_use_delta"
+	// EventToolUseStop says the arguments of the call named by ID are
+	// complete. A provider may leave it out; the end of the stream closes
+	// every open call.
+	EventToolUseStop EventType = "tool_use_stop"
+	// EventUsage carries the request's token counts so far in Usage. Each
+	// one replaces the one before.
+	EventUsage EventType = "usage"
+	// EventStop is the last event of a stream that ended well. StopReason
+	// says why the model stopped.
+	EventStop EventType = "stop"
+)
+
+// Event is one step of a streamed answer.
+type Event struct {
+	Type       EventType
+	Text       string
+	ID         string
+	Name       string
+	Signature  string
+	Opaque     string
+	Usage      Usage
+	StopReason StopReason
+}
+
+// StopReason says why a model stopped writing.
+type StopReason string
+
+const (
+	// StopEndTurn: the model finished what it had to say.
+	StopEndTurn StopReason = "end_turn"
+	// StopToolUse: the model asked for tools and waits for their results.
+	StopToolUse StopReason = "tool_use"
+	// StopMaxTokens: the answer hit the token cap and is cut short.
+	StopMaxTokens StopReason = "max_tokens"
+	// StopSequence: the model wrote one of the request's stop strings.
+	StopSequence StopReason = "stop_sequence"
+	// StopRefusal: the provider withheld the answer.
+	StopRefusal StopReason = "refusal"
+)
+
+// Usage counts the tokens of one request. The whole prompt is
+// InputTokens + CacheReadTokens + CacheWriteTokens.
+type Usage struct {
+	// InputTokens is the part of the prompt the provider read fresh.
+	InputTokens int `json:"input_tokens"`
+	// OutputTokens is what the model wrote, reasoning included.
+	OutputTokens int `json:"output_tokens"`
+	// CacheReadTokens is the part of the prompt served from the provider's
+	// cache.
+	CacheReadTokens int `json:"cache_read_tokens,omitempty"`
+	// CacheWriteTokens is the part of the prompt newly written to the cache.
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+}
+
+// PromptTokens is the size of the whole prompt.
+func (u Usage) PromptTokens() int {
+	return u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens
+}
+
+// Provider is a model service: something that takes a Request and streams
+// back an answer.
+type Provider interface {
+	// Name is the name the provider was configured under.
+	Name() string
+
+	// Stream sends req and yields the answer's events in order. The
+	// sequence ends after an EventStop, or by yielding a non-nil error (a
+	// *ProviderError where the provider is at fault) as its last pair.
+	// Cancelling ctx stops the request and ends the sequence with ctx's
+	// error. Stream does not retry; the caller decides that.
+	Stream(ctx context.Context, req *Request) iter.Seq2[Event, error]
+}
+
+// ModelInfo describes one model a provider serves.
+type ModelInfo struct {
+	// ID is the provider's name for the model.
+	ID string
+	// ContextWindow is how many tokens the model can read at once. Zero
+	// means unknown.
+	ContextWindow int
+	// MaxOutput is the most tokens the model writes in one answer. Zero
+	// means unknown.
+	MaxOutput int
+}
+
+// ModelLister is a Provider that can say which models it serves.
+type ModelLister interface {
+	Models(ctx context.Context) ([]ModelInfo, error)
+}
+
+// TokenCounter is a Provider that can count a request's prompt tokens
+// without running it.
+type TokenCounter interface {
+	CountTokens(ctx context.Context, req *Request) (int, error)
+}

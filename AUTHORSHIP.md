@@ -1,0 +1,58 @@
+# Authorship
+
+gnosh is Jae Kwon's. The idea (an agent whose context is a call stack, with
+its plan kept in Gno), the name, the direction and the rulings are his. The
+code and the documents in this repository were typed by Claude (Anthropic's
+model, working as a set of agents) at his direction, from the prompts below.
+This file keeps his words so that it stays clear what came from him and what
+Claude chose on its own.
+
+## Jae's prompts, in order
+
+Night of 12 to 13 November 2026 (Pacific time):
+
+> ok so how about we just implement a Go harness from scratch and remove crush entirely? one liner
+
+Set: gnosh is rewritten from an empty repository, with no Crush code.
+
+> i don't know about weeks. use subagents and do it now. remember that the main thing besides gnovm integration (and mem.* etc) is that i tried to make crush more claude code like. so, what's the plan? where do we start? I want it in Go.
+
+Set: the build runs as parallel agents, starting at once; the language is Go;
+the three things that matter are the GnoVM integration, `mem`, and being like
+Claude Code.
+
+## Standing rules of his that shaped the build
+
+- "in terms of naming conventions and such i want it to be more like claude
+  code whereever reasonable, because i'm familiar with claude code the most."
+  (22 October 2026)
+- "keep in mind that any software/library dependencies must be assessed in
+  their security by measure of how stable/finalized/annealed they are; e.g.
+  active projects can't be good candidates because they may be compromised in
+  commits." (1 November 2026)
+- "no, if it's not done, it's not done. after 10 not dones, say, the harness
+  should have ai think and see if there is a good reason to stop, before
+  stopping, but otherwise it should generally keep going." (22 October 2026)
+- "stop doing work on this laptop you're killing cpu ... use digital ocean
+  figure it out" (20 October 2026): builds and tests run on a server.
+- "just remove this kind of stuff. nobody has downloaded except me. this is
+  bloatware." (23 October 2026): no code for users who do not exist.
+- Three times he asked why he could not select and copy text in the earlier
+  gnosh (20 and 21 October, 9 November 2026).
+- The earlier gnosh's design rulings on `mem`, frames, peers and the swarm,
+  recorded with their dates in `spec/gnosh/`.
+
+## What Claude decided on its own
+
+Each of these is Claude's choice, made because it follows from the rules
+above. Jae can overrule any of them.
+
+- No Charm libraries at all, and no third-party libraries beyond the Go
+  team's `x/term` and `x/sys`: the terminal layer, the provider clients, the
+  Markdown renderer and the search tools are gnosh's own code.
+- An inline interface in the terminal's own scrollback instead of a
+  full-screen one, so that selection and copy are the terminal's.
+- The split into a spec side and a build side (PROVENANCE.md), and the cut
+  of the packages (ARCHITECTURE.md).
+- Sessions as append-only JSONL files rather than a database.
+- The shapes in `internal/core`.
