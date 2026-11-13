@@ -122,3 +122,21 @@ both are silent, the builder chooses, and says so in its report.
     entries of their own, stored in the order sent and joined into one
     message when the request is built, so what is rebuilt from the
     transcript is byte-identical to what went out.
+
+## From the similarity audit (`tools/audit/similarity/`)
+
+14. **`AskUserQuestion` takes Claude Code's documented arguments**
+    (`spec/cc/tools.md`), not the argument names `harness-tools.md` TOOL-1
+    gives it, which were the earlier program's question tool's and so
+    Crush's design. gnosh follows Claude Code's conventions (PRIN-3), and
+    nothing of Jae's depends on the other names.
+15. **Agent definitions and skills are read from gnosh's own folders first**
+    (`<config>/gnosh/agents`, `.gnosh/agents`), and from Claude Code's
+    (`~/.claude/agents`, a trusted project's `.claude/agents`) after them,
+    so that what Jae already has keeps working. They are text for a model
+    and run nothing; a project's are read only when the folder is trusted.
+16. **The config file's language** (`provider add …`, `option …`) is the
+    earlier program's, and so Crush's design; the code that reads it is
+    gnosh's own. It is kept so that Jae's existing files load, as he ruled
+    for his own files (PRIN-5). Whether gnosh gets a config syntax of its
+    own before it is published is his to decide.
