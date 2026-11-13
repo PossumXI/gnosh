@@ -39,8 +39,10 @@ type Request struct {
 	System []string
 
 	// Messages is the conversation so far. It starts with a user message,
-	// roles alternate, and every tool_use block in an assistant message is
-	// answered by a tool_result block in the user message that follows.
+	// roles alternate, no message or text block is empty, and every
+	// tool_use block in an assistant message is answered by exactly one
+	// tool_result block in the user message that follows, where the
+	// tool_result blocks come before any other block.
 	Messages []Message
 
 	// Tools is what the model may call.
@@ -117,6 +119,14 @@ const (
 	StopSequence StopReason = "stop_sequence"
 	// StopRefusal: the provider withheld the answer.
 	StopRefusal StopReason = "refusal"
+	// StopCancelled: the reply was cut off by the person or by gnosh being
+	// stopped. No provider sends this; the harness records it for a reply
+	// it did not let finish.
+	StopCancelled StopReason = "cancelled"
+	// StopError: the provider failed while the reply was being written. No
+	// provider sends this either; the harness records it beside what had
+	// arrived.
+	StopError StopReason = "error"
 )
 
 // Usage counts the tokens of one request. The whole prompt is
