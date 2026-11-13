@@ -58,13 +58,28 @@
 // changes from session to session; texts.go makes text harmless on its way
 // to a model and back; slash.go is the registry of slash commands.
 //
+// subagent.go is the Agent tool. A sub-agent is a second session run by
+// the same loop, with a context of its own: the tool gives it a session
+// file of its own inside the folder of the session the person is in, the
+// tools its kind allows, and the features' part in it, and waits for its
+// report. Its tool calls go through the person's gate, rules and hooks
+// like the session's own. The kinds of sub-agent are definitions, read by
+// the package agentdef: gnosh's own two, the person's files in
+// ~/.claude/agents, and, in a folder that is trusted, the project's.
+//
 // Whoever watches a session, a person or a script, is a Frontend
-// (frontend.go). It is told everything that happens and drives the
-// session through a handful of calls. There are three: the writer of a
-// run's output in its three formats (print.go), the plain session that
-// reads lines and writes lines (plain.go), and whatever is attached in its
-// place through Options.Interactive, which is where the full interface
-// goes.
+// (frontend.go). It is told everything that happens, the session's task
+// list and the facts for a status line among it, and drives the session
+// through a handful of calls (Controls, and the rest of them in
+// SessionControls: a command of the person's own, moving a running
+// command to the background, the prompts of earlier sessions, taking one
+// queued prompt back). There are three: the writer of a run's output in
+// its three formats (print.go), the plain session that reads lines and
+// writes lines (plain.go), and whatever is attached in its place through
+// Options.Interactive, which is where the full interface goes
+// (internal/ui, attached in main.go). The maker of the full interface
+// declines where there is no terminal it could draw on, and the session
+// is then the plain one.
 //
 // # The order at startup
 //

@@ -463,7 +463,7 @@ func (a *Agent) settle() error {
 		}
 		tail = append(tail, e)
 	}
-	a.logMu.Unlock()
+	a.unlockLog()
 	if readErr != nil {
 		return readErr
 	}

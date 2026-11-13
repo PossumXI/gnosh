@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -52,6 +53,7 @@ type live struct {
 	texts     *prompt.Set
 	instr     *instructions.Set
 	tools     []core.Tool
+	own       []core.Tool // gnosh's own tools that are offered, without the Agent tool
 	toolStore *sync.Map
 	roots     []string
 	agent     *agent.Agent
@@ -84,6 +86,28 @@ type live struct {
 	// lastSummary is how the last summary ended.
 	lastSummary atomic.Pointer[agent.SummaryEvent]
 
+	// tasks is the session's task list, as a feature last set it.
+	tasksMu sync.Mutex
+	tasks   []Task
+
+	// featureSources are the sources of the notices the features raised.
+	featureSources sync.Map
+
+	// status holds the named facts for a front end's status line.
+	statusMu sync.Mutex
+	status   map[string]string
+
+	// shellStop stops the command of the person's own that is running
+	// (SessionControls.Shell), or is nil when none is.
+	shellMu   sync.Mutex
+	shellStop context.CancelFunc
+
+	// subs are the sub-agents that are running, and agentCalls counts the
+	// sub-agents the session has started.
+	subMu      sync.Mutex
+	subs       map[*subSession]struct{}
+	agentCalls int
+
 	// evMu makes the events a front end is given arrive one at a time.
 	evMu sync.Mutex
 
@@ -92,6 +116,13 @@ type live struct {
 	capMu        sync.Mutex
 	roundsBefore int
 	capped       bool
+
+	// toldMu guards told, the last few turns whose end the features have
+	// been told of (TurnEnded), and toldCh, which is closed and made anew
+	// each time one is added.
+	toldMu sync.Mutex
+	told   []string
+	toldCh chan struct{}
 
 	closeOnce sync.Once
 	closing   atomic.Bool
@@ -131,8 +162,14 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		return l, err
 	}
 	l.flog = openFileLog(p, l)
+	if l.flog != nil {
+		l.flog.fromFeature = func(source string) bool {
+			_, ok := l.featureSources.Load(source)
+			return ok
+		}
+	}
 	l.crash = openCrashFile(p, l)
-	l.flog.logf("startup", "gnosh %s, session %s (%s), in %s", cli.VersionLine(p.o.Build), l.ts.ID(), l.source, l.cfg.Paths.Cwd)
+	l.flog.logf("startup", "gnosh %s, session %s (%s), in %s", p.versionLine(), l.ts.ID(), l.source, l.cfg.Paths.Cwd)
 	for _, pr := range st.problems {
 		l.flog.logf("config", "%s: %s", pr.Severity, pr.String())
 	}
@@ -236,6 +273,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	if err := l.loadInstructions(ctx); err != nil {
 		return l, err
 	}
+	l.agentNotices()
 	system, err := l.systemPrompt()
 	if err != nil {
 		return l, err
@@ -326,6 +364,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	if l.cfg.Switches.Profile.V {
 		l.profile = startProfile(l)
+	}
+	if name := strings.TrimSpace(l.inv.Name); name != "" && l.source != "clear" {
+		l.setStatus("session", name)
 	}
 	for _, c := range l.contribs {
 		if c.c.Ready != nil {
@@ -515,10 +556,174 @@ func (l *live) sessionFacts() *Session {
 		Env:         l.env,
 		Offered:     func(tool string) bool { return l.engine.ToolEnabled(tool) },
 		Agent:       func() *agent.Agent { return l.agent },
-		Notice:      l.notice,
+		Notice:      l.featureNotice,
+		Tasks:       l.setTasks,
+		Status:      l.setStatus,
+		Mode:        func() string { return string(l.engine.Mode()) },
 		Getenv:      l.p.getenv,
 		Now:         l.p.now,
 	}
+}
+
+// setStatus is Session.Status: a named fact for a front end's status line
+// is set, or with an empty value taken off, and the front end is told when
+// it changed.
+func (l *live) setStatus(name, value string) {
+	if name == "" {
+		return
+	}
+	l.statusMu.Lock()
+	if l.status == nil {
+		l.status = map[string]string{}
+	}
+	same := l.status[name] == value
+	if value == "" {
+		delete(l.status, name)
+	} else {
+		l.status[name] = value
+	}
+	l.statusMu.Unlock()
+	if !same {
+		l.deliver(&StatusEvent{Facts: map[string]string{name: value}})
+	}
+}
+
+// statusFacts returns the facts for a status line as they stand.
+func (l *live) statusFacts() map[string]string {
+	l.statusMu.Lock()
+	defer l.statusMu.Unlock()
+	out := make(map[string]string, len(l.status))
+	for k, v := range l.status {
+		out[k] = v
+	}
+	return out
+}
+
+// noteBackground keeps the count of commands that run in the background
+// among the facts for a status line.
+func (l *live) noteBackground() {
+	if l.shell == nil {
+		return
+	}
+	running := 0
+	for _, t := range l.shell.Tasks() {
+		if t.Running {
+			running++
+		}
+	}
+	value := ""
+	if running > 0 {
+		value = strconv.Itoa(running)
+	}
+	l.setStatus("background", value)
+}
+
+// markTold records that the features have been told how a turn ended.
+func (l *live) markTold(turn string) {
+	l.toldMu.Lock()
+	defer l.toldMu.Unlock()
+	if turn != "" {
+		l.told = append(l.told, turn)
+		if len(l.told) > 8 {
+			l.told = l.told[len(l.told)-8:]
+		}
+	}
+	if l.toldCh != nil {
+		close(l.toldCh)
+	}
+	l.toldCh = make(chan struct{})
+}
+
+// awaitTold waits until the features have been told how a turn ended, or
+// until ctx ends. The loop tells the front end of a turn's end first
+// (TurnEndEvent) and the features a moment after (TurnEnded), so a front
+// end that acts on the event the moment it has it could be ahead of them.
+func (l *live) awaitTold(ctx context.Context, turn string) {
+	if turn == "" {
+		// No turn ran: there was nothing to tell.
+		return
+	}
+	tick := time.NewTicker(20 * time.Millisecond)
+	defer tick.Stop()
+	past := false
+	for {
+		l.toldMu.Lock()
+		told := slices.Contains(l.told, turn)
+		if l.toldCh == nil {
+			l.toldCh = make(chan struct{})
+		}
+		ch := l.toldCh
+		l.toldMu.Unlock()
+		if told || past {
+			return
+		}
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			// A session that has gone idle, or on to another turn, is
+			// past this turn's end. The features are told before either,
+			// so if they have not been by now they will not be: the
+			// writing of the turn's end crashed.
+			st := l.agent.State()
+			past = !st.Busy || (st.Turn != "" && st.Turn != turn)
+		}
+	}
+}
+
+// featureNotice is Session.Notice: a line a feature has for the person.
+// It is shown and kept in the session's file like any notice; the log is
+// told only that there was one.
+func (l *live) featureNotice(level agent.Level, source, text string) {
+	l.featureSources.Store(source, true)
+	l.notice(level, source, text)
+}
+
+// setTasks is Session.Tasks: the session's task list is replaced, and the
+// front end is told when it changed.
+func (l *live) setTasks(tasks []Task) {
+	tasks = slices.Clone(tasks)
+	l.tasksMu.Lock()
+	same := slices.Equal(l.tasks, tasks)
+	l.tasks = tasks
+	l.tasksMu.Unlock()
+	if !same {
+		l.deliver(&TasksEvent{Tasks: slices.Clone(tasks)})
+	}
+}
+
+// taskList returns the session's task list as it stands.
+func (l *live) taskList() []Task {
+	l.tasksMu.Lock()
+	defer l.tasksMu.Unlock()
+	return slices.Clone(l.tasks)
+}
+
+// setMode changes the permission mode and tells the features.
+func (l *live) setMode(m permission.Mode) error {
+	before := l.engine.Mode()
+	if err := l.engine.SetMode(m); err != nil {
+		return err
+	}
+	if now := l.engine.Mode(); now != before {
+		l.flog.logf("permission", "the permission mode is now %s (it was %s)", now, before)
+		told := slices.Clone(l.contribs)
+		l.subMu.Lock()
+		for s := range l.subs {
+			told = append(told, s.contribs...)
+		}
+		l.subMu.Unlock()
+		for _, c := range told {
+			if c.c.ModeChanged != nil {
+				func() {
+					defer func() { _ = recover() }()
+					c.c.ModeChanged(string(now))
+				}()
+			}
+		}
+	}
+	return nil
 }
 
 // cwd is the session's working directory as it stands.
@@ -653,11 +858,16 @@ func (l *live) repeatPolicy() agent.RepeatPolicy {
 // of it in the log.
 func (l *live) deliver(ev any) {
 	l.evMu.Lock()
-	defer l.evMu.Unlock()
 	l.summaryEnd(ev)
 	l.flog.event(ev)
 	if l.front != nil {
 		l.front.Event(ev)
+	}
+	l.evMu.Unlock()
+	// A command may have moved to the background, or one there may have
+	// been stopped.
+	if te, ok := ev.(*agent.ToolEndEvent); ok && (te.Name == shelltool.BashName || te.Name == shelltool.StopName) {
+		l.noteBackground()
 	}
 }
 
@@ -718,6 +928,7 @@ func (l *live) info() SessionInfo {
 		Tools:       l.toolNames(),
 		Mode:        string(l.engine.Mode()),
 		Commands:    l.slash.names(),
+		CommandList: l.slash.list(),
 		Version:     l.p.o.BuildID,
 		Interactive: l.interactive,
 		Resume:      "gnosh -r " + l.ts.ID(),
@@ -797,6 +1008,8 @@ func waitGroup(wg *sync.WaitGroup, limit time.Duration) {
 
 // controls is a session as its front end drives it. In an interactive
 // session /clear puts a new session behind the same controls.
+var _ SessionControls = (*controls)(nil)
+
 type controls struct {
 	p     *program
 	st    *startup
@@ -816,8 +1029,18 @@ func (c *controls) cur() *live {
 // Submit sends a prompt.
 func (c *controls) Submit(p agent.Prompt) (string, error) { return c.cur().agent.Submit(p) }
 
-// Interrupt stops the turn that is running.
-func (c *controls) Interrupt() { c.cur().agent.Interrupt() }
+// Interrupt stops the turn that is running, and the command of the
+// person's own that is running, if one is.
+func (c *controls) Interrupt() {
+	l := c.cur()
+	l.shellMu.Lock()
+	stop := l.shellStop
+	l.shellMu.Unlock()
+	if stop != nil {
+		stop()
+	}
+	l.agent.Interrupt()
+}
 
 // Answer gives the person's answer to a question.
 func (c *controls) Answer(question string, a agent.Answer) error {
@@ -845,7 +1068,7 @@ func (c *controls) SetMode(mode string) error {
 	case m == permission.ModeBypass && !l.cfg.Permissions.BypassAvailable:
 		return errors.New("skipping permissions can only be switched to in a session that was started with it within reach (-y, or --allow-dangerously-skip-permissions)")
 	}
-	return l.engine.SetMode(m)
+	return l.setMode(m)
 }
 
 // Command runs a line that begins with a slash as a command.
@@ -906,11 +1129,15 @@ func (c *controls) Notify(kind, title, message string) {
 	l.background(func(ctx context.Context) { _, _ = l.hooks.run(ctx, in) })
 }
 
-// RunEnd asks the features whether a run's exit code should be raised.
+// RunEnd asks the features whether a run's exit code should be raised. It
+// asks once they have been told how the run's last turn ended, and it
+// returns once the front end has been told everything they had to say:
+// what the front end prints next comes after it.
 func (c *controls) RunEnd(res agent.TurnResult, exit int) int {
 	l := c.cur()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	l.awaitTold(ctx, res.Turn)
 	for _, j := range l.contribs {
 		if j.c.RunEnd == nil {
 			continue
@@ -919,6 +1146,7 @@ func (c *controls) RunEnd(res agent.TurnResult, exit int) int {
 			exit = code
 		}
 	}
+	_ = l.agent.Drain(ctx)
 	return exit
 }
 
@@ -930,6 +1158,41 @@ func (c *controls) Wait(ctx context.Context) error {
 		return err
 	}
 	return l.agent.Drain(ctx)
+}
+
+// Tasks returns the session's task list.
+func (c *controls) Tasks() []Task { return c.cur().taskList() }
+
+// Status returns the facts for a status line.
+func (c *controls) Status() map[string]string { return c.cur().statusFacts() }
+
+// Background moves the command a tool call waits for to the background.
+func (c *controls) Background(callID string) bool {
+	l := c.cur()
+	return l.shell != nil && callID != "" && l.shell.Background(callID)
+}
+
+// Withdraw takes one of the person's queued prompts off the queue.
+func (c *controls) Withdraw(id string) (agent.Prompt, bool) { return c.cur().agent.Withdraw(id) }
+
+// History returns the prompts the person sent from this folder.
+func (c *controls) History() []string { return c.cur().promptHistory() }
+
+// Shell runs a command line of the person's own.
+func (c *controls) Shell(command string) error { return c.cur().shellLine(command) }
+
+// RunPrompt asks the features for the first prompt of a run that was given
+// none.
+func (c *controls) RunPrompt(ctx context.Context) (agent.Prompt, bool) {
+	for _, j := range c.cur().contribs {
+		if j.c.RunPrompt == nil {
+			continue
+		}
+		if p, ok := j.c.RunPrompt(ctx); ok {
+			return p, true
+		}
+	}
+	return agent.Prompt{}, false
 }
 
 // Quit says why the session ends. The front end then returns from Run.
@@ -957,8 +1220,14 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 	case !interactive:
 		front = newPrinter(p, inv)
 	case p.o.Interactive != nil:
-		front = p.o.Interactive(FrontendInfo{Stdin: p.o.Stdin, Stdout: p.stdout, Stderr: p.stderr, Getenv: p.getenv})
-	default:
+		info := FrontendInfo{Stdin: p.o.Stdin, Stdout: p.stdout, Stderr: p.stderr, Prompt: inv.Prompt, Getenv: p.getenv}
+		info.In, _ = p.o.Stdin.(*os.File)
+		info.Out, _ = p.o.Stdout.(*os.File)
+		front = p.o.Interactive(info)
+	}
+	if front == nil {
+		// No other interface was attached, or the one that was declined:
+		// it has no terminal it could draw on.
 		front = newPlain(p, inv)
 	}
 

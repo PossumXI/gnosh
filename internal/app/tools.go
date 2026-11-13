@@ -77,6 +77,14 @@ func (l *live) buildTools() error {
 	}
 	l.shell = shelltool.New(so)
 	all = append(all, l.shell.Tools()...)
+	// gnosh's own tools, as a sub-agent starts from them.
+	l.own = l.own[:0]
+	for _, t := range all {
+		if l.engine.ToolEnabled(t.Spec().Name) {
+			l.own = append(l.own, t)
+		}
+	}
+	all = append(all, &agentTool{l: l})
 
 	claimed := map[string]string{}
 	for _, f := range l.p.o.Features {

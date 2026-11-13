@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,14 @@ type plain struct {
 	in    *lineReader
 	piped io.Reader
 	term  io.Closer
+	// inputFd is the terminal the lines are typed at, as a file
+	// descriptor, or -1 when it is not known to be one. restoreEcho, when
+	// not nil, puts back the showing of what is typed, which is off while
+	// a secret is being asked for.
+	inputFd     int
+	restoreEcho func()
+	// shownTasks is the task list as it was last printed.
+	shownTasks []Task
 	// profile is how much colour the terminal takes, and width how wide a
 	// change is drawn when a question shows one: the terminal's width when
 	// the environment gives it (COLUMNS), and 80 otherwise.
@@ -115,19 +124,58 @@ func newPlain(p *program, inv cli.Invocation) *plain {
 	if n, err := strconv.Atoi(p.env["COLUMNS"]); err == nil && n >= 40 && n <= 400 {
 		f.width = n
 	}
+	f.inputFd = -1
+	var typed io.Reader
 	switch {
 	case p.o.StdinIsTerminal:
+		typed = p.o.Stdin
 		f.in = &lineReader{r: p.o.Stdin, lines: make(chan string)}
 	default:
 		f.piped = p.o.Stdin
 		if p.o.OpenTerminal != nil {
 			if term, err := p.o.OpenTerminal(); err == nil {
+				typed = term
 				f.term = term
 				f.in = &lineReader{r: term, lines: make(chan string)}
 			}
 		}
 	}
+	if file, ok := typed.(interface{ Fd() uintptr }); ok {
+		f.inputFd = int(file.Fd())
+	}
 	return f
+}
+
+// secretKind is the kind of a question whose answer is a secret: a
+// passphrase, a key. What is typed for it is not shown while it is typed,
+// and is never printed or logged afterwards.
+const secretKind = "secret"
+
+// hideTyping stops the terminal from showing what is typed, for a secret.
+// It reports whether it could. The caller holds the lock.
+func (f *plain) hideTyping() bool {
+	if f.restoreEcho != nil {
+		return true
+	}
+	if f.inputFd < 0 {
+		// Not a terminal that gnosh can ask: a pipe shows nothing of what
+		// passes through it.
+		return false
+	}
+	restore, ok := echoOff(f.inputFd)
+	if ok {
+		f.restoreEcho = restore
+	}
+	return ok
+}
+
+// showTyping puts the showing of what is typed back. The caller holds the
+// lock.
+func (f *plain) showTyping() {
+	if f.restoreEcho != nil {
+		f.restoreEcho()
+		f.restoreEcho = nil
+	}
 }
 
 // canAsk reports whether somebody can type an answer.
@@ -281,9 +329,18 @@ func (f *plain) printQuestion(q agent.Question) {
 	for i, c := range q.Choices {
 		fmt.Fprintf(f.out, "  %d. %s\n", i+1, visible(c.Label))
 	}
-	if len(q.Choices) > 0 {
+	switch {
+	case q.Kind == secretKind:
+		if f.hideTyping() {
+			fmt.Fprintln(f.out, "Type it and Enter. What you type is not shown, and gnosh keeps it nowhere.")
+		} else if f.inputFd >= 0 {
+			fmt.Fprintln(f.out, "Type it and Enter. This terminal cannot be told to hide it: what you type will show on this screen. gnosh keeps it nowhere.")
+		} else {
+			fmt.Fprintln(f.out, "Type it and Enter. gnosh keeps it nowhere.")
+		}
+	case len(q.Choices) > 0:
 		fmt.Fprintln(f.out, "Type a number and Enter. Words after the number go with the answer.")
-	} else {
+	default:
 		fmt.Fprintln(f.out, "Type your answer and Enter.")
 	}
 }
@@ -375,7 +432,7 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 	if f.in != nil {
 		f.in.start()
 		lines = f.in.lines
-		f.note("Type a prompt and Enter. /help lists the commands. Ctrl+C stops a turn; a second one quits.")
+		f.note("Type a prompt and Enter. /help lists the commands; a line that begins with ! is run as a command of your own. Ctrl+C stops a turn; a second one quits.")
 	} else {
 		ending = true
 		f.setNobody(c)
@@ -538,6 +595,7 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 			return false
 		}
 		f.question = nil
+		f.showTyping()
 		f.mu.Unlock()
 		if err := c.Answer(q.ID, ans); err != nil {
 			f.note("That question is no longer waiting for an answer.")
@@ -546,6 +604,19 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 	}
 	text := strings.TrimSpace(line)
 	if text == "" {
+		return false
+	}
+	if strings.HasPrefix(text, "!") {
+		// A command of the person's own: it is run, shown as a tool call
+		// is, and handed to the model with what it printed.
+		more, ok := c.(SessionControls)
+		if !ok {
+			f.note("The command was not run: this session cannot run a command of your own.")
+			return false
+		}
+		if err := more.Shell(strings.TrimPrefix(text, "!")); err != nil {
+			f.note("The command was not run: %v", err)
+		}
 		return false
 	}
 	if strings.HasPrefix(text, "/") {
@@ -589,12 +660,55 @@ func (f *plain) leave(c Controls, code int) int {
 	return code
 }
 
-// stopTimers stops the timers that would print something later.
+// stopTimers stops the timers that would print something later, and puts
+// the terminal back as it was.
 func (f *plain) stopTimers() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stopWaiting()
 	f.stopNotifyLocked()
+	f.showTyping()
+}
+
+// printTasks writes the task list, when it is not the one last written.
+// The caller holds the lock.
+func (f *plain) printTasks(tasks []Task) {
+	if slices.Equal(tasks, f.shownTasks) {
+		return
+	}
+	f.shownTasks = slices.Clone(tasks)
+	if len(tasks) == 0 {
+		f.say("tasks: none left on the list")
+		return
+	}
+	done := 0
+	for _, t := range tasks {
+		if t.Status == TaskCompleted {
+			done++
+		}
+	}
+	f.say("tasks (%d of %d done):", done, len(tasks))
+	for _, line := range taskLines(tasks) {
+		f.say("  %s", visible(line))
+	}
+}
+
+// taskLines writes a task list as lines: a box for each task, ticked when
+// it is done and pointed at when it is the one in hand, which is written
+// the way it reads while it is being done.
+func taskLines(tasks []Task) []string {
+	out := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		switch t.Status {
+		case TaskCompleted:
+			out = append(out, "[x] "+oneLine(t.Content, 200))
+		case TaskInProgress:
+			out = append(out, "[>] "+oneLine(firstOf(t.ActiveForm, t.Content), 200))
+		default:
+			out = append(out, "[ ] "+oneLine(t.Content, 200))
+		}
+	}
+	return out
 }
 
 // stopNotifyLocked stops the two timers behind the Notification hooks. The
@@ -636,6 +750,16 @@ func (f *plain) statusLine() string {
 	}
 	if st.Queued > 0 {
 		parts = append(parts, fmt.Sprintf("%d queued", st.Queued))
+	}
+	var facts map[string]string
+	if more, ok := f.c.(SessionControls); ok {
+		facts = more.Status()
+	}
+	if v := facts["frame"]; v != "" {
+		parts = append(parts, "in "+visible(oneLine(v, 60)))
+	}
+	if v := facts["background"]; v != "" {
+		parts = append(parts, v+" in the background")
 	}
 	return strings.Join(parts, " | ")
 }
@@ -739,6 +863,7 @@ func (f *plain) Event(ev any) {
 		if f.question != nil && f.question.ID == ev.ID {
 			f.question = nil
 		}
+		f.showTyping()
 		if ev.Withdrawn {
 			f.say("(The question was taken back: the turn was stopped.)")
 		}
@@ -794,6 +919,8 @@ func (f *plain) Event(ev any) {
 		for _, r := range ev.Records {
 			f.say("%s%s", markHook, visible(r.String()))
 		}
+	case *TasksEvent:
+		f.printTasks(ev.Tasks)
 	case *agent.TurnEndEvent:
 		f.stopWaiting()
 		how := "done"

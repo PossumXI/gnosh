@@ -1,0 +1,474 @@
+// Package agentdef reads the definitions of sub-agents: what kinds of
+// sub-agent the Agent tool can start, and what each starts with.
+//
+// A definition is a Markdown file, in the form Claude Code uses, so that a
+// person's own agent files load unchanged: a few settings between two
+// lines of "---" at the top (the frontmatter), and below them the
+// sub-agent's whole system prompt.
+//
+//	---
+//	name: code-reviewer
+//	description: Reviews code for quality and best practices
+//	tools: Read, Glob, Grep
+//	---
+//
+//	You are a code reviewer. ...
+//
+// gnosh's own two kinds, general-purpose and Explore, are definitions of
+// the same form, kept in this package (Builtin). A person's file with the
+// same name takes the place of one of them.
+//
+// The package only reads. It runs nothing, and what a definition asks for
+// is the caller's to grant or refuse.
+package agentdef
+
+import (
+	"embed"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
+
+// Def is one kind of sub-agent.
+type Def struct {
+	// Name is what the Agent tool's subagent_type names, and what hooks
+	// see as agent_type. Description says when to hand a task to it.
+	Name        string
+	Description string
+	// Prompt is the body of the file: the sub-agent's whole system prompt.
+	Prompt string
+
+	// Tools lists the tools the sub-agent may use, by name, when ToolsSet
+	// is true. Without it the sub-agent gets every tool a sub-agent may
+	// have. Disallowed lists tools to take away. A name written with
+	// something in parentheses after it is kept here as the name alone.
+	Tools      []string
+	ToolsSet   bool
+	Disallowed []string
+
+	// Model is the model the definition asks for: "" or "inherit" for the
+	// model of the session that starts the sub-agent.
+	Model string
+	// PermissionMode is the permission mode the definition asks for, or
+	// "" to run in the mode of the session that starts it.
+	PermissionMode string
+	// MaxTurns is the most replies the sub-agent may write, or zero for
+	// no such limit.
+	MaxTurns int
+	// OmitInstructions says the sub-agent starts without the person's and
+	// the project's instruction files (the field omitClaudeMd).
+	OmitInstructions bool
+	// Background says the definition asks to be run in the background
+	// always.
+	Background bool
+	// Other lists the fields of the frontmatter that change what the
+	// sub-agent is or may do and that this package only notes: hooks,
+	// skills, mcpServers, isolation, memory. A caller that cannot honour
+	// one must say so, and not run the agent as if the field were not
+	// there.
+	Other []string
+
+	// Scope is "built-in", "user" or "project", and Source the file the
+	// definition was read from (empty for a built-in).
+	Scope  string
+	Source string
+}
+
+// Skipped is a file that holds no usable definition, with the reason.
+type Skipped struct {
+	Path   string
+	Reason string
+}
+
+//go:embed builtin/*.md
+var builtinFiles embed.FS
+
+// Builtin returns gnosh's own kinds of sub-agent: general-purpose, which
+// has every tool, and Explore, which only reads and searches.
+func Builtin() []Def {
+	var out []Def
+	entries, _ := fs.ReadDir(builtinFiles, "builtin")
+	for _, e := range entries {
+		data, err := fs.ReadFile(builtinFiles, "builtin/"+e.Name())
+		if err != nil {
+			continue
+		}
+		d, reason := Parse(string(data))
+		if reason != "" {
+			panic("agentdef: the built-in definition " + e.Name() + " cannot be read: " + reason)
+		}
+		d.Scope = "built-in"
+		out = append(out, d)
+	}
+	return out
+}
+
+// DefaultType is the kind of sub-agent a call gets that names none.
+const DefaultType = "general-purpose"
+
+// Set is the kinds of sub-agent there are for one session.
+type Set struct {
+	defs    []Def
+	skipped []Skipped
+}
+
+// Load puts the definitions together, the more specific over the more
+// general where two share a name: the project's (projectDirs, the
+// directory closest to the working directory first), then the person's
+// (userDir), then gnosh's own. Each directory is searched with every
+// folder below it; a folder is only a way to keep files apart, and the
+// name in the file is what counts. A directory that is not there holds
+// nothing. Two files of one directory tree with the same name: the first
+// by path is the one that is used, and the other is listed as skipped.
+func Load(userDir string, projectDirs []string) *Set {
+	s := &Set{}
+	have := map[string]bool{}
+	add := func(dir, scope string) {
+		if dir == "" {
+			return
+		}
+		var files []string
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
+				files = append(files, path)
+			}
+			return nil
+		})
+		sort.Strings(files)
+		inTree := map[string]string{}
+		for _, path := range files {
+			data, err := readSmall(path)
+			if err != nil {
+				s.skipped = append(s.skipped, Skipped{path, err.Error()})
+				continue
+			}
+			d, reason := Parse(data)
+			if reason != "" {
+				s.skipped = append(s.skipped, Skipped{path, reason})
+				continue
+			}
+			if first, dup := inTree[d.Name]; dup {
+				s.skipped = append(s.skipped, Skipped{path, fmt.Sprintf("%s also defines an agent named %q, and that one is used", first, d.Name)})
+				continue
+			}
+			inTree[d.Name] = path
+			if have[d.Name] {
+				continue // a more specific definition has the name
+			}
+			d.Scope, d.Source = scope, path
+			s.defs = append(s.defs, d)
+		}
+		for name := range inTree {
+			have[name] = true
+		}
+	}
+	for _, dir := range projectDirs {
+		add(dir, "project")
+	}
+	add(userDir, "user")
+	for _, d := range Builtin() {
+		if !have[d.Name] {
+			have[d.Name] = true
+			s.defs = append(s.defs, d)
+		}
+	}
+	return s
+}
+
+// maxFile is the largest definition file that is read.
+const maxFile = 1 << 20
+
+func readSmall(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("it could not be read (%v)", err)
+	}
+	if info.Size() > maxFile {
+		return "", fmt.Errorf("it is larger than %d bytes, which no agent definition is", maxFile)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("it could not be read (%v)", err)
+	}
+	if !utf8.Valid(data) {
+		return "", fmt.Errorf("it is not text")
+	}
+	return string(data), nil
+}
+
+// Get returns the definition with that name.
+func (s *Set) Get(name string) (Def, bool) {
+	for _, d := range s.defs {
+		if d.Name == name {
+			return d, true
+		}
+	}
+	return Def{}, false
+}
+
+// All returns every definition: gnosh's own first (the general kind
+// before the other), then the person's and the project's, each group by
+// name.
+func (s *Set) All() []Def {
+	out := slices.Clone(s.defs)
+	rank := map[string]int{"built-in": 0, "user": 1, "project": 2}
+	sort.SliceStable(out, func(i, j int) bool {
+		if rank[out[i].Scope] != rank[out[j].Scope] {
+			return rank[out[i].Scope] < rank[out[j].Scope]
+		}
+		// The kind a call gets that names none comes first.
+		if (out[i].Name == DefaultType) != (out[j].Name == DefaultType) {
+			return out[i].Name == DefaultType
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// Names returns the names of every definition, in the order of All.
+func (s *Set) Names() []string {
+	var out []string
+	for _, d := range s.All() {
+		out = append(out, d.Name)
+	}
+	return out
+}
+
+// Skipped returns the files that hold no usable definition.
+func (s *Set) Skipped() []Skipped { return slices.Clone(s.skipped) }
+
+// Parse reads one definition from the text of a file. reason is empty
+// when it could be read, and otherwise says why the file is skipped.
+func Parse(text string) (d Def, reason string) {
+	text = strings.TrimPrefix(text, string(rune(0xFEFF))) // a byte order mark, which some editors put first
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != "---" {
+		return d, `its first line is not "---", so it has no settings`
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimRight(lines[i], " \t") == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return d, `its settings are not closed by a second line of "---"`
+	}
+	fields, err := frontmatter(lines[1:end])
+	if err != nil {
+		return d, "its settings cannot be read: " + err.Error()
+	}
+	d.Prompt = strings.TrimSpace(strings.Join(lines[end+1:], "\n"))
+
+	for _, f := range fields {
+		switch f.key {
+		case "name":
+			d.Name = f.scalar
+		case "description":
+			d.Description = f.scalar
+		case "tools":
+			d.Tools, d.ToolsSet = toolNames(f.list()), true
+		case "disallowedTools":
+			d.Disallowed = toolNames(f.list())
+		case "model":
+			d.Model = f.scalar
+		case "permissionMode":
+			d.PermissionMode = f.scalar
+		case "maxTurns":
+			n, err := strconv.Atoi(f.scalar)
+			if err != nil || n < 1 {
+				return d, fmt.Sprintf("maxTurns is %q, which is not a number of turns", f.scalar)
+			}
+			d.MaxTurns = n
+		case "omitClaudeMd":
+			d.OmitInstructions = f.scalar == "true"
+		case "background":
+			d.Background = f.scalar == "true"
+		case "hooks", "skills", "mcpServers", "isolation", "memory":
+			if f.scalar != "" || len(f.items) > 0 || f.nested {
+				d.Other = append(d.Other, f.key)
+			}
+		}
+	}
+	switch {
+	case d.Name == "":
+		return d, "it has no name"
+	case strings.HasPrefix(d.Name, "-"), strings.Contains(d.Name, ":"), utf8.RuneCountInString(d.Name) > 256:
+		return d, fmt.Sprintf("the name %q cannot be an agent's: a name does not start with a dash, holds no colon, and is at most 256 characters long", clip(d.Name, 80))
+	case d.Description == "":
+		return d, fmt.Sprintf("the agent %q has no description, which is what says when to use it", d.Name)
+	}
+	if d.Model == "inherit" {
+		d.Model = ""
+	}
+	return d, ""
+}
+
+func clip(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:n]) + "..."
+}
+
+// toolNames turns the entries of a tools list into tool names: what is in
+// parentheses after a name is left off.
+func toolNames(entries []string) []string {
+	var out []string
+	for _, e := range entries {
+		if i := strings.IndexByte(e, '('); i >= 0 {
+			e = e[:i]
+		}
+		if e = strings.TrimSpace(e); e != "" && !slices.Contains(out, e) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// field is one setting of the frontmatter.
+type field struct {
+	key    string
+	scalar string   // the value written on the key's own line, or a block of text
+	items  []string // the entries of a list
+	nested bool     // the key holds a map of its own, which is not read
+}
+
+// list returns the field's value as a list: its entries, or the scalar
+// split at commas.
+func (f field) list() []string {
+	if len(f.items) > 0 {
+		return f.items
+	}
+	var out []string
+	for _, part := range strings.Split(f.scalar, ",") {
+		if part = unquote(strings.TrimSpace(part)); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// frontmatter reads the settings: the small part of YAML that agent files
+// use. A key at the start of a line with its value after a colon; a list
+// as "[a, b]" or as indented lines that begin with "- "; a longer text
+// after "|" or ">" on indented lines; and, under a key with no value,
+// anything indented, which is taken as a map of that key and not read.
+func frontmatter(lines []string) ([]field, error) {
+	var out []field
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if line[0] == ' ' || line[0] == '\t' {
+			return nil, fmt.Errorf("line %d is indented and belongs to no setting", i+2)
+		}
+		key, value, ok := strings.Cut(line, ":")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" || strings.ContainsAny(key, " \t\"'{}[]") {
+			return nil, fmt.Errorf("line %d is not a setting of the form \"name: value\"", i+2)
+		}
+		f := field{key: key}
+		value = strings.TrimSpace(value)
+		// The lines that belong to this key: the indented ones that follow.
+		var under []string
+		for i+1 < len(lines) && (strings.TrimSpace(lines[i+1]) == "" || lines[i+1][0] == ' ' || lines[i+1][0] == '\t') {
+			i++
+			under = append(under, lines[i])
+		}
+		for len(under) > 0 && strings.TrimSpace(under[len(under)-1]) == "" {
+			under = under[:len(under)-1]
+		}
+		switch {
+		case value == "|" || value == ">" || strings.HasPrefix(value, "|") && len(value) <= 2 || strings.HasPrefix(value, ">") && len(value) <= 2:
+			var parts []string
+			for _, u := range under {
+				parts = append(parts, strings.TrimSpace(u))
+			}
+			sep := "\n"
+			if value[0] == '>' {
+				sep = " "
+			}
+			f.scalar = strings.TrimSpace(strings.Join(parts, sep))
+		case strings.HasPrefix(value, "["):
+			if !strings.HasSuffix(value, "]") {
+				return nil, fmt.Errorf("the list of %q on line %d is not closed", key, i+2-len(under))
+			}
+			for _, part := range strings.Split(value[1:len(value)-1], ",") {
+				if part = unquote(strings.TrimSpace(part)); part != "" {
+					f.items = append(f.items, part)
+				}
+			}
+		case value != "":
+			f.scalar = unquote(stripComment(value))
+			if len(under) > 0 {
+				// A plain value that runs on over indented lines.
+				for _, u := range under {
+					f.scalar += " " + strings.TrimSpace(u)
+				}
+				f.scalar = strings.TrimSpace(f.scalar)
+			}
+		default:
+			for _, u := range under {
+				t := strings.TrimSpace(u)
+				switch {
+				case t == "":
+				case strings.HasPrefix(t, "- ") || t == "-":
+					if item := unquote(strings.TrimSpace(strings.TrimPrefix(t, "-"))); item != "" {
+						f.items = append(f.items, item)
+					}
+				default:
+					f.nested = true
+				}
+			}
+			if f.nested {
+				f.items = nil
+			}
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+// stripComment takes a trailing " # ..." off a plain value.
+func stripComment(v string) string {
+	if strings.HasPrefix(v, `"`) || strings.HasPrefix(v, `'`) {
+		return v
+	}
+	if i := strings.Index(v, " #"); i >= 0 {
+		return strings.TrimSpace(v[:i])
+	}
+	return v
+}
+
+// unquote takes the quotes off a quoted value.
+func unquote(v string) string {
+	if len(v) >= 2 {
+		switch {
+		case v[0] == '"' && v[len(v)-1] == '"':
+			if s, err := strconv.Unquote(v); err == nil {
+				return s
+			}
+			return v[1 : len(v)-1]
+		case v[0] == '\'' && v[len(v)-1] == '\'':
+			return strings.ReplaceAll(v[1:len(v)-1], "''", "'")
+		}
+	}
+	return v
+}

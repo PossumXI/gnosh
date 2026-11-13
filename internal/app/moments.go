@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 )
@@ -34,8 +36,8 @@ import (
 //	Notification        when the front end says a question or an idle
 //	                    session has waited
 //
-// SubagentStart and SubagentStop are not fired: no tool of this program
-// starts a sub-agent, and a hook configured on either stops startup.
+//	SubagentStart,      when the Agent tool starts a sub-agent, and when
+//	SubagentStop        the sub-agent is about to finish (subagent.go)
 type hookRunner struct {
 	l *live
 	r *hooks.Runner
@@ -142,7 +144,19 @@ func (l *live) firstPromptLines(ctx context.Context, info agent.LineInfo) ([]age
 	if text := l.startInstructions(); text != "" {
 		parts = append(parts, agent.Part{Source: "instructions", Text: text, Before: true})
 	}
+	if text := l.startAgentTypes(); text != "" {
+		parts = append(parts, agent.Part{Source: "agents", Text: text, Before: true})
+	}
 	return append(parts, agent.Part{Source: "environment", Text: l.environment(), Before: true}), nil
+}
+
+// startAgentTypes is the line that names the kinds of sub-agent a person
+// or the project defined, for a session that has the Agent tool.
+func (l *live) startAgentTypes() string {
+	if !slices.Contains(l.toolNames(), agentToolName) {
+		return ""
+	}
+	return l.agentTypesLine()
 }
 
 // turnCap stops a run when the model has written as many replies as
@@ -231,10 +245,17 @@ func firstOf(ss ...string) string {
 // afterTool is what happens after every tool call that ran: gnosh's own
 // effects, then the features', then the person's PostToolUse hooks.
 func (l *live) afterTool(ctx context.Context, done agent.ToolDone) (agent.ToolVerdict, error) {
+	return l.afterToolWith(ctx, done, l.instr, l.contribs, l.env)
+}
+
+// afterToolWith is afterTool for one session: the person's own, or a
+// sub-agent's, each with its own reading of the instruction files, its
+// own part of the features and its own tool environment.
+func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *instructions.Set, contribs []joined, env func() *core.ToolEnv) (agent.ToolVerdict, error) {
 	var v agent.ToolVerdict
 	var errs []error
-	v.Context = append(v.Context, l.lateInstructions(ctx, done)...)
-	for _, c := range l.contribs {
+	v.Context = append(v.Context, l.lateInstructionsFor(ctx, instr, done)...)
+	for _, c := range contribs {
 		if c.c.AfterTool == nil {
 			continue
 		}
@@ -248,7 +269,7 @@ func (l *live) afterTool(ctx context.Context, done agent.ToolDone) (agent.ToolVe
 			v.Halt, v.Reason = true, fv.Reason
 		}
 	}
-	hv, err := l.postToolHooks(ctx, done)
+	hv, err := l.postToolHooks(ctx, done, env)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -263,7 +284,7 @@ func (l *live) afterTool(ctx context.Context, done agent.ToolDone) (agent.ToolVe
 // the PostToolUseFailure hooks on one that returned an error. The call has
 // run, so a block is feedback: its reason goes to the model after the
 // tool's output.
-func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone) (agent.ToolVerdict, error) {
+func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func() *core.ToolEnv) (agent.ToolVerdict, error) {
 	event := hooks.PostToolUse
 	if done.Result.IsError {
 		event = hooks.PostToolUseFailure
@@ -318,7 +339,7 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone) (agent.To
 	}
 	if before != nil {
 		if after, err := os.Stat(path); err == nil && (after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime())) {
-			_ = fstools.MarkRead(l.env(), path)
+			_ = fstools.MarkRead(env(), path)
 			v.Context = append(v.Context, agent.Part{Source: "hook:" + string(event), Text: prompt.Wrap(
 				"A PostToolUse hook the user set up changed " + path + " after your " + done.Call.Name + " call. Read the file again before you edit near what it changed.")})
 		}
@@ -383,6 +404,9 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 		if text := l.startInstructions(); text != "" {
 			parts = append(parts, agent.Part{Source: "instructions", Text: text})
 		}
+	}
+	if text := l.startAgentTypes(); text != "" {
+		parts = append(parts, agent.Part{Source: "agents", Text: text})
 	}
 	if l.shell != nil {
 		var running []string
@@ -460,8 +484,11 @@ func (l *live) turnFailed(ctx context.Context, res agent.TurnResult) {
 	})
 }
 
-// turnEnded is told how every turn ended.
+// turnEnded is told how every turn ended, and tells the features. That
+// it has is recorded whatever becomes of them: the end of a run waits for
+// it (RunEnd).
 func (l *live) turnEnded(ctx context.Context, res agent.TurnResult) {
+	defer l.markTold(res.Turn)
 	l.capMu.Lock()
 	l.roundsBefore += res.Rounds
 	l.capMu.Unlock()

@@ -200,7 +200,9 @@ type Agent struct {
 	wake   chan struct{}   // holds a token when the session's goroutine has something to look at
 
 	modelLock chan struct{} // holds a token while a request to a model is in flight
-	logMu     sync.Mutex    // serialises calls to the Log
+	logMu     sync.Mutex    // serialises calls to the Log; let go with unlockLog
+	lateMu    sync.Mutex    // guards late
+	late      []Entry       // notices raised while the Log was busy, stored when it is free
 	store     *sync.Map     // the tools' own state for the session
 	intakeWG  sync.WaitGroup
 	closeOnce sync.Once
@@ -515,8 +517,41 @@ func (a *Agent) notice(level Level, source, text string) {
 	}
 	a.emit(&NoticeEvent{Level: level, Source: source, Text: text})
 	turn, _ := a.turnNow.Load().(string)
-	// A notice that cannot be stored has still been shown.
-	_ = a.appendLog(Entry{Kind: EntryNotice, Turn: turn, Level: level, Source: source, Text: text})
+	// The person has been shown the line; what is left is to keep it in
+	// the log. A notice may be raised by code that the log itself is
+	// calling (the log's owner telling a feature of an entry it has just
+	// stored, or of a slide), and the log is then busy on this very
+	// goroutine: waiting for it would wait for ever. So the entry is put
+	// on a list, and stored at once if the log is free, or by whoever
+	// holds the log when they let go of it. The list keeps the order the
+	// notices were raised in.
+	a.lateMu.Lock()
+	a.late = append(a.late, Entry{
+		Kind: EntryNotice, ID: a.newID(), Time: a.clock.Now(), Turn: turn,
+		Level: level, Source: source, Text: text,
+	})
+	a.lateMu.Unlock()
+	if a.logMu.TryLock() {
+		a.unlockLog()
+	}
+}
+
+// unlockLog lets go of the Log, and first stores the notices that were
+// raised while it was held. Everything that takes logMu lets go with it.
+func (a *Agent) unlockLog() {
+	for {
+		a.storeLate()
+		a.logMu.Unlock()
+		// One that was raised between the last look and the unlock is
+		// stored now, unless somebody else has taken the Log: they store
+		// it when they let go.
+		a.lateMu.Lock()
+		waiting := len(a.late) > 0
+		a.lateMu.Unlock()
+		if !waiting || !a.logMu.TryLock() {
+			return
+		}
+	}
 }
 
 // panicked reports a panic that the loop caught.
@@ -526,6 +561,24 @@ func (a *Agent) panicked(what string, v any, stack []byte) {
 			defer func() { _ = recover() }()
 			f(what, v, stack)
 		}()
+	}
+}
+
+// storeLate stores the notices that wait. The caller holds logMu. A notice
+// that cannot be stored has still been shown, so neither an error nor a
+// crash of the log over one is passed on: whatever happens here, the
+// caller goes on to let go of the log.
+func (a *Agent) storeLate() {
+	defer func() { _ = recover() }()
+	for {
+		a.lateMu.Lock()
+		late := a.late
+		a.late = nil
+		a.lateMu.Unlock()
+		if len(late) == 0 {
+			return
+		}
+		_ = a.opts.Log.Append(a.bg, late...)
 	}
 }
 
@@ -544,7 +597,7 @@ func (a *Agent) appendLog(entries ...Entry) error {
 		}
 	}
 	a.logMu.Lock()
-	defer a.logMu.Unlock()
+	defer a.unlockLog()
 	if err := a.opts.Log.Append(a.bg, entries...); err != nil {
 		return fmt.Errorf("the session's log could not be written: %w", err)
 	}
@@ -554,7 +607,7 @@ func (a *Agent) appendLog(entries ...Entry) error {
 // view asks the log for what the model is to read.
 func (a *Agent) view() (View, error) {
 	a.logMu.Lock()
-	defer a.logMu.Unlock()
+	defer a.unlockLog()
 	v, err := a.opts.Log.View(a.bg)
 	if err != nil {
 		return View{}, fmt.Errorf("the session's log could not be read: %w", err)
@@ -1079,12 +1132,30 @@ func (a *Agent) emitQueue() {
 // TakeQueued takes every prompt the person has waiting off the queue and
 // returns them, in order, for editing: it is what Up does in an empty
 // input box. Prompts gnosh queued for itself stay where they are.
-func (a *Agent) TakeQueued() []Prompt {
+func (a *Agent) TakeQueued() []Prompt { return a.takeQueued("") }
+
+// Withdraw takes one prompt of the person's off the queue, the one with
+// that id, and returns it. It reports false when no such prompt waits: it
+// has gone out, or was never the person's.
+func (a *Agent) Withdraw(id string) (Prompt, bool) {
+	if id == "" {
+		return Prompt{}, false
+	}
+	taken := a.takeQueued(id)
+	if len(taken) == 0 {
+		return Prompt{}, false
+	}
+	return taken[0], true
+}
+
+// takeQueued takes the person's prompts off the queue: all of them, or
+// with only set, the one with that id.
+func (a *Agent) takeQueued(only string) []Prompt {
 	a.mu.Lock()
 	var taken []*submission
 	keep := a.queue[:0:0]
 	for _, s := range a.queue {
-		if s.prompt.Hidden {
+		if s.prompt.Hidden || (only != "" && s.id != only) {
 			keep = append(keep, s)
 			continue
 		}
@@ -1094,7 +1165,7 @@ func (a *Agent) TakeQueued() []Prompt {
 	a.queue = keep
 	keepIn := a.intake[:0:0]
 	for _, s := range a.intake {
-		if s.prompt.Hidden {
+		if s.prompt.Hidden || (only != "" && s.id != only) {
 			keepIn = append(keepIn, s)
 			continue
 		}

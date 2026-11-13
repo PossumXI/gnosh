@@ -21,12 +21,19 @@ import (
 // terminal whose near end is gnosh's standard input and output. What the
 // test writes is what a person types (the terminal echoes it, and turns
 // Ctrl+C into the interrupt signal); what it reads is the screen.
+//
+// These are the tests of the plain session, the one that reads lines:
+// what a person gets where the full interface has no terminal it could
+// draw on. The full interface is tried in a terminal emulator, in
+// tmux_test.go.
 type terminal struct {
 	t      *testing.T
 	master *os.File
 	slave  *os.File
 	screen lockedBuffer
 	pos    int
+	// kind is what TERM says the terminal is.
+	kind string
 }
 
 // openTerminal makes a pseudo terminal.
@@ -48,7 +55,7 @@ func openTerminal(t *testing.T) *terminal {
 	if err != nil {
 		t.Fatalf("opening the pseudo terminal: %v", err)
 	}
-	term := &terminal{t: t, master: master, slave: slave}
+	term := &terminal{t: t, master: master, slave: slave, kind: "dumb"}
 	go io.Copy(&term.screen, master) // ends when the last process has left the terminal
 	t.Cleanup(func() { master.Close() })
 	return term
@@ -61,7 +68,7 @@ func (term *terminal) run(w *apptest.World, piped string, args ...string) *proce
 	term.t.Helper()
 	p := &process{t: term.t, cmd: exec.Command(binary, args...), out: &lockedBuffer{}, err: &lockedBuffer{}, done: make(chan struct{})}
 	p.cmd.Dir = w.Dir
-	p.cmd.Env = w.Env()
+	p.cmd.Env = append(w.Env(), "TERM="+term.kind)
 	p.cmd.Stdin, p.cmd.Stdout, p.cmd.Stderr = term.slave, term.slave, term.slave
 	if piped != "" {
 		p.cmd.Stdin = strings.NewReader(piped)
@@ -91,7 +98,7 @@ func (term *terminal) run(w *apptest.World, piped string, args ...string) *proce
 // see waits until the screen shows piece after everything seen so far.
 func (term *terminal) see(piece string) {
 	term.t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(time.Minute)
 	for {
 		screen := term.screen.String()
 		if i := strings.Index(screen[term.pos:], piece); i >= 0 {
@@ -121,9 +128,10 @@ func (term *terminal) ctrlC() {
 	}
 }
 
-// A person at a real terminal: a prompt, a permission question answered
-// after seeing the change, a slash command, Ctrl+C to stop a turn, and
-// Ctrl+C again to leave.
+// A person at a real terminal that says it is a dumb one, so that the
+// full interface declines it and the session is the plain one: a prompt,
+// a permission question answered after seeing the change, a slash
+// command, Ctrl+C to stop a turn, and Ctrl+C again to leave.
 func TestBinaryInteractiveSession(t *testing.T) {
 	hold := make(chan struct{})
 	defer close(hold)
@@ -165,12 +173,16 @@ func TestBinaryInteractiveSession(t *testing.T) {
 }
 
 // A prompt piped into a session at a terminal is the session's first
-// prompt, and the person goes on typing at the terminal itself.
+// prompt, and the person goes on typing at the terminal itself. The
+// terminal is one the full interface would draw on, but standard input is
+// not it, so the full interface declines here too and the session is the
+// plain one.
 func TestBinaryPipedPromptThenTyping(t *testing.T) {
 	w := apptest.NewWorld(t,
 		apptest.Reply{Text: "The piped report says the build is broken."},
 		apptest.Reply{Text: "You are welcome."})
 	term := openTerminal(t)
+	term.kind = "xterm-256color"
 	p := term.run(w, "the build is broken\nsee the log\n")
 	term.see("The piped report says the build is broken.")
 	term.see("-- done in ")

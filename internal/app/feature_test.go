@@ -325,7 +325,7 @@ func TestFeatureIsToldOfStoredResultsInOrder(t *testing.T) {
 	s.typeLine("do the three steps")
 	select {
 	case <-started:
-	case <-time.After(20 * time.Second):
+	case <-time.After(patience):
 		t.Fatalf("the slow step never started:\n%s", clip(s.out.String()))
 	}
 	s.signals <- os.Interrupt

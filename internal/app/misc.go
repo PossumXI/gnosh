@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
-	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 )
@@ -40,6 +39,14 @@ type fileLog struct {
 	debug   bool
 	only    []string
 	not     []string
+	// noArgs are the tools whose arguments and results are never written
+	// (ToolName.NoLogArgs).
+	noArgs map[string]bool
+	// fromFeature, when not nil, reports whether notices of that source
+	// are a feature's. Their words are not written: a feature may quote
+	// in a notice what the person later has it erase, and it can erase
+	// that from the session's file, which it knows, but not from here.
+	fromFeature func(source string) bool
 }
 
 // openFileLog opens the log a session writes to: the file --debug-file
@@ -58,7 +65,7 @@ func openFileLog(p *program, l *live) *fileLog {
 		p.warnf("the log %s could not be opened (%v), so this session writes none.", path, err)
 		return nil
 	}
-	g := &fileLog{f: f, now: p.now, session: l.ts.ID(), debug: l.cfg.Options.Debug.V}
+	g := &fileLog{f: f, now: p.now, session: l.ts.ID(), debug: l.cfg.Options.Debug.V, noArgs: p.noLogTools()}
 	for _, word := range strings.Split(l.inv.DebugFilter, ",") {
 		word = strings.TrimSpace(word)
 		switch {
@@ -154,6 +161,10 @@ func (g *fileLog) event(ev any) {
 	case *agent.RetryEvent:
 		g.logf("model", "%s", ev.Message)
 	case *agent.ToolStartEvent:
+		if g.noArgs[ev.Name] {
+			g.debugf("tools", "%s %s starts", ev.Name, ev.CallID)
+			break
+		}
 		g.debugf("tools", "%s %s starts: %s", ev.Name, ev.CallID, firstOf(ev.Action.Summary, string(ev.Input)))
 	case *agent.ToolEndEvent:
 		how := "ok"
@@ -165,13 +176,37 @@ func (g *fileLog) event(ev any) {
 		case ev.Result.IsError:
 			how = "failed"
 		}
+		if g.noArgs[ev.Name] {
+			// What such a tool was given and what it answered may be
+			// something the person later asks to be forgotten: the log
+			// says that the call was made, and no more.
+			g.logf("tools", "%s %s %s after %s", ev.Name, ev.CallID, how, ev.Duration.Round(time.Millisecond))
+			break
+		}
 		g.logf("tools", "%s %s %s after %s: %s", ev.Name, ev.CallID, how, ev.Duration.Round(time.Millisecond), toolLine(ev.Name, ev.Input))
 	case *agent.NoticeEvent:
+		if g.fromFeature != nil && g.fromFeature(ev.Source) {
+			g.logf("notice", "%s (%s): a line of %d characters, shown to the person and kept in the session's file", ev.Level, ev.Source, len(ev.Text))
+			break
+		}
 		g.logf("notice", "%s (%s): %s", ev.Level, ev.Source, ev.Text)
 	case *agent.QuestionEvent:
-		g.logf("question", "asked: %s", firstOf(ev.Question.Title, ev.Question.Text))
+		// A question's heading says what was asked; its full text can
+		// quote a call's arguments, and is not kept.
+		g.logf("question", "asked (%s): %s", firstOf(ev.Question.Kind, "question"), firstOf(ev.Question.Title, "(no heading)"))
 	case *agent.AnswerEvent:
-		g.logf("question", "answered: %s (taken back: %v)", ev.Answer.Choice, ev.Withdrawn)
+		// Which choice was taken, and never the words that were typed:
+		// they may be a secret gnosh asked for.
+		g.logf("question", "answered: %s (taken back: %v)", firstOf(ev.Answer.Choice, "(typed)"), ev.Withdrawn)
+	case *TasksEvent:
+		done := 0
+		for _, t := range ev.Tasks {
+			if t.Status == TaskCompleted {
+				done++
+			}
+		}
+		// How long the list is, and not what it says.
+		g.logf("turn", "the task list has %d lines, %d of them done", len(ev.Tasks), done)
 	case *agent.DriverEvent:
 		g.logf("turn", "the check %s holds the turn open (%d in a row, checkpoint %v): %s", ev.Name, ev.Streak, ev.Checkpoint, ev.Objection)
 	case *agent.SummaryEvent:
@@ -300,7 +335,7 @@ func (p *program) crashed(dir string, v any, stack []byte) int {
 		dir = os.TempDir()
 	}
 	path := filepath.Join(dir, "crash-"+p.now().UTC().Format("20060102T150405")+"-"+strconv.Itoa(os.Getpid())+".log")
-	text := fmt.Sprintf("%s gnosh %s panicked: %v\n%s\n", p.now().UTC().Format(time.RFC3339), cli.VersionLine(p.o.Build), v, stack)
+	text := fmt.Sprintf("%s gnosh %s panicked: %v\n%s\n", p.now().UTC().Format(time.RFC3339), p.versionLine(), v, stack)
 	where := "It could not write down what happened (" + path + " could not be written)."
 	if err := os.MkdirAll(dir, 0o700); err == nil {
 		if err := os.WriteFile(path, []byte(text), 0o600); err == nil {
@@ -338,7 +373,7 @@ func startProfile(l *live) *profileServer {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		st, ctx := l.agent.State(), l.agent.Context()
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "gnosh %s\nsession %s\nstarted %s\n\n", cli.VersionLine(l.p.o.Build), l.ts.ID(), l.p.start.Format(time.RFC3339))
+		fmt.Fprintf(w, "gnosh %s\nsession %s\nstarted %s\n\n", l.p.versionLine(), l.ts.ID(), l.p.start.Format(time.RFC3339))
 		fmt.Fprintf(w, "busy: %v\nphase: %s\nwaiting for: %s\nsince: %s\nturn: %s, round %d\nqueued prompts: %d\n", st.Busy, st.Phase, st.Waiting, st.Since.Format(time.RFC3339), st.Turn, st.Round, st.Queued)
 		for _, c := range st.Running {
 			fmt.Fprintf(w, "running: %s %s since %s\n", c.Name, c.CallID, c.Since.Format(time.RFC3339))
@@ -400,7 +435,7 @@ func toolLine(name string, input []byte) string {
 	if json.Unmarshal(input, &args) != nil {
 		return name
 	}
-	for _, key := range []string{"command", "file_path", "pattern", "path", "url", "task_id", "code", "name"} {
+	for _, key := range []string{"command", "file_path", "pattern", "path", "url", "task_id", "code", "description", "name"} {
 		if v, ok := args[key].(string); ok && v != "" {
 			return name + ": " + oneLine(v, 200)
 		}

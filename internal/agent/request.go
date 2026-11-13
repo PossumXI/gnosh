@@ -474,7 +474,7 @@ func (a *Agent) slide(ctx context.Context, t *turn, moment RoomMoment, need int)
 	}
 	room, err, done := await(ctx, a, "making room in the log", func(ctx context.Context) (Room, error) {
 		a.logMu.Lock()
-		defer a.logMu.Unlock()
+		defer a.unlockLog()
 		return r.MakeRoom(ctx, req)
 	})
 	if !done || ctx.Err() != nil {

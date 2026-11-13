@@ -23,6 +23,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/buildinfo"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/gnovm"
+	"github.com/gnosh-ai/gnosh/internal/ui"
 )
 
 func main() {
@@ -55,10 +56,15 @@ func main() {
 		Environ:          os.Environ(),
 		Cwd:              cwd,
 		Features:         features(),
-		OpenTerminal:     func() (io.ReadCloser, error) { return os.Open("/dev/tty") },
-		Signals:          signals,
-		Exit:             os.Exit,
-		Build:            cli.BuildFromInfo(info),
-		BuildID:          buildinfo.BuildID,
+		// The full interface, where there is a terminal it can draw on.
+		// Where there is none (standard input or output is not a terminal,
+		// or TERM says the terminal is dumb) this is nil, and an
+		// interactive session is the plain one that reads lines.
+		Interactive:  ui.New(ui.Options{In: os.Stdin, Out: os.Stdout, Getenv: os.Getenv}),
+		OpenTerminal: func() (io.ReadCloser, error) { return os.Open("/dev/tty") },
+		Signals:      signals,
+		Exit:         os.Exit,
+		Build:        cli.BuildFromInfo(info),
+		BuildID:      buildinfo.BuildID,
 	}))
 }

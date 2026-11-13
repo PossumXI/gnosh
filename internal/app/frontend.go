@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
@@ -26,6 +27,9 @@ type Frontend interface {
 	// goroutine, when the session is ready. It returns promptly when ctx
 	// ends. Stopping what runs, the SessionEnd hooks and closing the
 	// session's file are done by the session code after Run returns.
+	//
+	// The Controls it is handed are always SessionControls too, which
+	// have a few calls more.
 	Run(ctx context.Context, c Controls) int
 
 	// Event is told everything that happens in the session, in order and
@@ -33,8 +37,8 @@ type Frontend interface {
 	// pointer to one of the loop's events (*agent.TextEvent,
 	// *agent.ToolStartEvent, *agent.ToolEndEvent, *agent.NoticeEvent,
 	// *agent.TurnEndEvent and the rest of that package's list) or to one
-	// of this package's (*HookEvent, *CapEvent). A front end passes over
-	// the kinds it does not know.
+	// of this package's (*HookEvent, *CapEvent, *TasksEvent,
+	// *StatusEvent). A front end passes over the kinds it does not know.
 	//
 	// A question for the person arrives as an *agent.QuestionEvent and is
 	// answered with Controls.Answer; an *agent.AnswerEvent says that it is
@@ -56,12 +60,22 @@ type Asker interface {
 }
 
 // FrontendInfo is what the maker of an interactive front end is given
-// (Options.Interactive).
+// (Options.Interactive). The maker may decline, by returning nil: there is
+// no terminal it could draw on. The session is then given the plain front
+// end, which reads lines and works anywhere. (Options.Interactive may be
+// nil itself, for the same reason and with the same result.)
 type FrontendInfo struct {
 	// Stdin, Stdout and Stderr are the process's streams.
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+	// In and Out are standard input and standard output as the files they
+	// are, when they are files: what an interface that takes the terminal
+	// over opens it on. Either is nil when the stream is not a file.
+	In, Out *os.File
+	// Prompt is the prompt the command line gave (gnosh "fix the test"),
+	// or empty. The front end sends it as the session's first prompt.
+	Prompt string
 	// Getenv looks up an environment variable of the process.
 	Getenv func(string) string
 }
@@ -110,9 +124,19 @@ type Controls interface {
 	// Usage returns what the session has cost so far.
 	Usage() agent.Totals
 
-	// Signals delivers the SIGINT and SIGTERM the process receives. What
-	// each means is the front end's to say: a run stops and exits, an
-	// interactive session stops the turn at the first Ctrl+C.
+	// Signals delivers the SIGINT, SIGTERM and SIGHUP the process
+	// receives. What each means is the front end's to say: a run stops and
+	// exits, an interactive session stops the turn at the first Ctrl+C.
+	//
+	// The channel is the program's, and the program reads it again once
+	// Run has returned: from then on the program is shutting down, and the
+	// next signal on the channel ends the process at once, without the
+	// rest of the shutdown (the second signal of the specs). That is so
+	// whether the signal arrived after Run returned or was still waiting
+	// on the channel when it did. So a front end takes off the channel
+	// every signal it acts on, and returns from Run promptly once it has
+	// decided to leave; a signal it leaves there is one that cuts the
+	// shutdown short.
 	Signals() <-chan os.Signal
 	// Notify fires the person's Notification hooks: kind is
 	// "permission_prompt" (a question has waited a while) or "idle_prompt"
@@ -121,16 +145,77 @@ type Controls interface {
 	Notify(kind, title, message string)
 	// RunEnd is called by the front end of a non-interactive run when its
 	// last turn has ended, with the exit code the run would end with, and
-	// returns the code it ends with: a feature may raise it.
+	// returns the code it ends with: a feature may raise it. The features
+	// are asked once they have been told how that turn ended, and RunEnd
+	// returns when the front end has been told everything they said, so
+	// that what it prints next comes last. It waits for the front end's
+	// Event, and so must be called from Run and never from Event.
 	RunEnd(res agent.TurnResult, exit int) int
 	// Wait waits until the session has nothing in hand and the front end
 	// has been told everything that happened so far, or until ctx ends.
 	// It must be called from Run and never from Event.
 	Wait(ctx context.Context) error
+	// Tasks returns the session's task list as it stands: what a feature
+	// last set (a *TasksEvent says when it changes). It is empty when the
+	// session has none.
+	Tasks() []Task
+	// RunPrompt asks the features for the first prompt of a run that was
+	// given none. It reports false when none of them has one.
+	RunPrompt(ctx context.Context) (agent.Prompt, bool)
 	// Quit says why the session is ending, in the SessionEnd hooks' words:
 	// "prompt_input_exit" when the person left, "other" otherwise. The
 	// front end then returns from Run, and the session is closed.
 	Quit(reason string)
+}
+
+// SessionControls is all that a session's controls can do: Controls, and
+// the calls that were added after front ends were first written against
+// it. The Controls this package hands a front end is always one, so a
+// front end reaches the rest by asking the value it was given, for all of
+// it or for one call:
+//
+//	if more, ok := c.(app.SessionControls); ok { ... }
+//	if sh, ok := c.(interface{ Shell(string) error }); ok { ... }
+//
+// The two are kept apart so that whatever stands in for a session in a
+// front end's own tests remains a Controls, and a front end can say what
+// it does without each of these calls.
+type SessionControls interface {
+	Controls
+
+	// Status returns the named facts the session has for a status line,
+	// as they stand (a *StatusEvent says when one changes): "frame", the
+	// frame the session is in; "background", how many commands run in the
+	// background; "goal"; "session", the session's name. A fact that is
+	// not there has no value now.
+	Status() map[string]string
+
+	// Shell runs a command line of the person's own: what they typed
+	// behind "!". It is theirs, so nothing is asked and no rule is looked
+	// at. It returns at once, with an error when the command could not be
+	// started (another of the person's commands is still running). The
+	// command is shown as a tool call is: a *agent.ToolStartEvent, its
+	// output as *agent.ToolProgressEvents, and a *agent.ToolEndEvent,
+	// under a call id of its own. When it ends, the command and what it
+	// printed are handed to the model, which answers them; one that was
+	// stopped with Interrupt is put in front of the model with the next
+	// prompt instead.
+	Shell(command string) error
+	// Background moves the command that the tool call with that id is
+	// waiting for to the background, where it keeps running, and reports
+	// whether there was such a command. The call returns at once with the
+	// command's task id. It works for a call of the model's and for a
+	// command started with Shell.
+	Background(callID string) bool
+	// History returns the prompts the person sent from this folder, in
+	// earlier sessions and in this one, the oldest first: what Up and a
+	// search of the history reach. It reads the folder's most recent
+	// sessions and may take a moment, so it is asked once.
+	History() []string
+	// Withdraw takes one prompt of the person's that waits for its turn
+	// off the queue, by the id Submit returned, and returns it for
+	// editing. It reports false when the prompt no longer waits.
+	Withdraw(id string) (agent.Prompt, bool)
 }
 
 // CommandResult is what running a slash command came to.
@@ -163,8 +248,10 @@ type SessionInfo struct {
 	Tools []string
 	// Mode is the permission mode in force.
 	Mode string
-	// Commands are the slash commands, by name.
-	Commands []string
+	// Commands are the slash commands, by name, and CommandList says of
+	// each what a front end needs to complete it and to show it.
+	Commands    []string
+	CommandList []CommandInfo
 	// Version names the build.
 	Version string
 	// Interactive says a person is there to be asked.
@@ -189,6 +276,68 @@ type HookEvent struct {
 	// Records has one entry for every hook that ran, in the order they
 	// are configured.
 	Records []hooks.Record
+}
+
+// CommandInfo describes a slash command to a front end.
+type CommandInfo struct {
+	// Name is the command's name without its slash, and Aliases its other
+	// spellings.
+	Name    string
+	Aliases []string
+	// Args says what may follow the name, as help shows it
+	// ("[instructions]"); it is empty for a command that takes nothing.
+	Args string
+	// Summary says in a line what the command does.
+	Summary string
+	// Sensitive lists the first words of the command's arguments after
+	// which what is typed is a text the person wants kept nowhere: for
+	// /mem it holds "redact". A front end shows such a line, and keeps it
+	// in its history, only as far as that word. An entry of "" means
+	// everything after the command's name.
+	Sensitive []string
+	// InRun says the command may be the prompt of a non-interactive run.
+	InRun bool
+}
+
+// StatusEvent says that named facts for a status line have changed: see
+// SessionControls.Status for the names. A fact with an empty value is taken off.
+type StatusEvent struct {
+	// Facts are the facts that changed, by name.
+	Facts map[string]string
+}
+
+// StatusFacts returns the facts that changed.
+func (e *StatusEvent) StatusFacts() map[string]string { return e.Facts }
+
+// QuestionData is what a permission question carries in
+// agent.Question.Data, for a front end that draws more than a list of
+// choices.
+type QuestionData struct {
+	// Until is when the question is taken back unanswered, or the zero
+	// time when it waits for as long as the person takes. It is set on
+	// the question about a removal that is asked even while permissions
+	// are skipped.
+	Until time.Time
+	// Modes names, by the key of a choice, the permission mode that the
+	// choice switches the session to: "acceptEdits" for the yes that also
+	// accepts edits from then on.
+	Modes map[string]string
+	// CommentOnYes says that words given with a yes (Answer.Text) are
+	// passed on to the model, as words given with a no are.
+	CommentOnYes bool
+}
+
+// Deadline is when the question is taken back unanswered, or the zero
+// time.
+func (d QuestionData) Deadline() time.Time { return d.Until }
+
+// TasksEvent says the session's task list has changed, and carries all of
+// it: the list a front end shows under the prompt, in order. An empty list
+// means there is none now. One is sent when a session that already has a
+// list is opened, too.
+type TasksEvent struct {
+	// Tasks is the whole list as it now stands.
+	Tasks []Task
 }
 
 // CapEvent says a non-interactive run reached the number of replies it was

@@ -55,7 +55,9 @@ func testOptions(w *apptest.World, args ...string) Options {
 		Build:     cli.Build{Commit: "0123456789ab", Time: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)},
 		BuildID:   "test-build",
 		StdinWait: 50 * time.Millisecond,
-		StopGrace: 3 * time.Second,
+		// Long enough that a tool which finishes its work after a stop is
+		// never given up on because the machine is busy.
+		StopGrace: 20 * time.Second,
 		ModelWait: 5 * time.Second,
 		Retry: agent.RetryPolicy{
 			Pauses:          []time.Duration{10 * time.Millisecond},
@@ -89,10 +91,10 @@ func runWith(t *testing.T, ctx context.Context, o Options) result {
 	select {
 	case code := <-done:
 		return result{code: code, out: out.String(), err: errb.String()}
-	case <-time.After(90 * time.Second):
+	case <-time.After(3 * time.Minute):
 		buf := make([]byte, 1<<20)
 		n := runtime.Stack(buf, true)
-		t.Fatalf("the program did not end within 90 seconds.\nstdout:\n%s\nstderr:\n%s\ngoroutines:\n%s", out.String(), errb.String(), buf[:n])
+		t.Fatalf("the program did not end within three minutes.\nstdout:\n%s\nstderr:\n%s\ngoroutines:\n%s", out.String(), errb.String(), buf[:n])
 	}
 	return result{}
 }

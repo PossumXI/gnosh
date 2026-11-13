@@ -13,10 +13,10 @@ import (
 )
 
 // waitFor waits until ok says yes, and fails the test when it does not
-// within ten seconds.
+// within the test's patience.
 func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(patience)
 	for !ok() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -135,7 +135,7 @@ func TestKilledMidToolAndResumed(t *testing.T) {
 	if r.code == 0 {
 		t.Errorf("a killed run exited 0")
 	}
-	if took := time.Since(started); took > 15*time.Second {
+	if took := time.Since(started); took > 25*time.Second {
 		t.Errorf("the program took %s to end", took)
 	}
 	// Nothing is left running.

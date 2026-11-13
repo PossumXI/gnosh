@@ -55,14 +55,20 @@ import (
 //     released: Feature.Shutdown, features in reverse order. This is where
 //     a client that the whole process shares is closed.
 //
-// A sub-agent's session is to go through steps 5 to 8 on its own, with
-// Session.SubAgent set. No tool of this program starts a sub-agent yet, so
-// today Session.SubAgent is never set; the fields are here so that a
-// feature written now need not change when one does. A tool call a
-// sub-agent makes is given the sub-agent's own id as its session
-// (core.ToolEnv.SessionID) and the id of the session that started it
-// beside it (ParentSessionID), and agent.FromContext inside the call
-// returns the sub-agent.
+// A sub-agent's session goes through the same steps in small. When the
+// Agent tool starts a sub-agent (subagent.go), every feature's Session is
+// called again for it, with Session.SubAgent set, Session.ID the
+// sub-agent's own id, Session.Parent the session the person is in and
+// Session.AgentType its kind, before the sub-agent exists. Of what the
+// feature returns for it, these are joined to the sub-agent: Tools,
+// System, PromptLines, BeforeRequest, Busy, Drivers and LateDrivers,
+// AfterTool, BeforeSummary and AfterSummary, TurnEnded, Stored,
+// AfterStored and Slid, ModeChanged, Ready and Close (called when the
+// sub-agent has handed back its report). The rest belong to the session the person is
+// in and are not used. A tool call a sub-agent makes is given the
+// sub-agent's own id as its session (core.ToolEnv.SessionID) and the id
+// of the session that started it beside it (ParentSessionID), and
+// agent.FromContext inside the call returns the sub-agent.
 //
 // # Order, where several hands add to the same thing
 //
@@ -71,11 +77,12 @@ import (
 // except where a field below says otherwise. In particular:
 //
 //	tools           gnosh's own (Read, Write, Edit, Glob, Grep, Bash,
-//	                TaskStop), then the features'. The order is the order
-//	                the model is told of them, and it never changes
+//	                TaskStop, Agent), then the features'. The order is the
+//	                order the model is told of them, and it never changes
 //	                between two sessions with the same config.
-//	prompt lines    gnosh's own (the instruction files and then the
-//	                environment block, ahead of a session's first
+//	prompt lines    gnosh's own (the instruction files, the kinds of
+//	                sub-agent a person or the project defined, and then
+//	                the environment block, ahead of a session's first
 //	                prompt), then the features'. Before all of them the
 //	                loop has placed what the SessionStart and
 //	                UserPromptSubmit hooks added. So a feature's last
@@ -170,6 +177,13 @@ type ToolName struct {
 	// A hook that fits only this way can block the call and never approve
 	// it.
 	Guards []string
+	// NoLogArgs says the tool's arguments and results are never written to
+	// gnosh's log or shown in debugging output (gnosh.log, --debug-file,
+	// --verbose): such a line names the tool and how the call went, and
+	// nothing more. It is for a tool whose arguments may hold what the
+	// person later asks to be forgotten. The session's own file still
+	// holds the call, which is the feature's to erase.
+	NoLogArgs bool
 }
 
 // Command is a subcommand of the gnosh command line that a feature runs.
@@ -194,10 +208,13 @@ type CommandContext struct {
 	Config   *config.Config
 	Problems []config.Problem
 	// Dirs are the directories in use. Dirs.Session is empty: there is no
-	// session. With a nil Config, Dirs is empty too.
+	// session. With a nil Config they are worked out from the environment
+	// and the folder alone, so that a command which needs no config still
+	// knows where things are; Dirs.Project, which a setting can move, is
+	// then empty.
 	Dirs Dirs
-	// Sessions is the store the folder's sessions are kept in, or nil
-	// with a nil Config.
+	// Sessions is the store the folder's sessions are kept in. It is
+	// never nil.
 	Sessions *transcript.Store
 	// Stdin, Stdout and Stderr are the process's own.
 	Stdin  io.Reader
@@ -239,9 +256,10 @@ type Dirs struct {
 // called for as long as the session lives, from any goroutine.
 type Session struct {
 	// ID is the id of this session's own log. For a main session that is
-	// the session the person is in. For a sub-agent's session Parent is
-	// the session the person is in, and AgentType says what kind of
-	// sub-agent it is.
+	// the session the person is in. For a sub-agent's session SubAgent is
+	// set, Parent is the session the person is in, and AgentType says
+	// what kind of sub-agent it is ("general-purpose", "Explore", or the
+	// name of a definition).
 	ID        string
 	Parent    string
 	SubAgent  bool
@@ -251,7 +269,8 @@ type Session struct {
 	// opened in a terminal. It is false in a run (-p, gnosh run).
 	Interactive bool
 	// Source is how the session came to be, in the SessionStart hook's
-	// words: "startup", "resume", "fork" or "clear".
+	// words: "startup", "resume", "fork" or "clear"; and "subagent" for a
+	// sub-agent's.
 	Source string
 	// Trusted says the folder's own settings are in force.
 	Trusted bool
@@ -295,14 +314,61 @@ type Session struct {
 
 	// Notice puts a line in front of the person: in the conversation of an
 	// interactive session, on stderr in a run. It works before the agent
-	// exists; such a line is not kept in the session's file.
+	// exists; such a line is not kept in the session's file. It never
+	// waits for the session, so it may be called from anywhere, the
+	// callbacks that run while the loop is storing something (Stored,
+	// AfterStored, Slid) included: the person is shown the line at once,
+	// and it is kept in the session's file right after what was being
+	// stored. The words of a feature's notice are not written to gnosh's
+	// log, which only notes that there was one: what a notice quotes, the
+	// feature can later erase from the session's file and from nowhere
+	// else.
 	Notice func(level agent.Level, source, text string)
+
+	// Tasks sets the session's task list: the short list of what the
+	// session is working through, which the front end shows under the
+	// prompt. The list given replaces the one before; an empty one clears
+	// it. It may be called from any goroutine, at any time after
+	// Feature.Session has returned.
+	Tasks func(tasks []Task)
+
+	// Status sets a named fact for the front end's status line: "frame",
+	// the frame the session is in; "goal", the goal it works towards. An
+	// empty value takes the fact off. It may be called from any goroutine
+	// and from any callback.
+	Status func(name, value string)
+
+	// Mode returns the permission mode in force right now: "default",
+	// "acceptEdits", "plan", "dontAsk" or "bypassPermissions". The mode
+	// can change while a session runs (the person switches it, or answers
+	// a question with "switch to acceptEdits"), so a feature that acts on
+	// it reads it when it acts. Contribution.ModeChanged is told of every
+	// change.
+	Mode func() string
 
 	// Getenv looks up an environment variable of the process, and Now
 	// reads the clock the program was given.
 	Getenv func(string) string
 	Now    func() time.Time
 }
+
+// Task is one line of a session's task list.
+type Task struct {
+	// Content says what is to be done, as an order: "Run the tests".
+	// ActiveForm says the same as it reads while it is being done:
+	// "Running the tests". An empty ActiveForm is shown as Content.
+	Content    string
+	ActiveForm string
+	// Status is "pending", "in_progress" or "completed".
+	Status string
+}
+
+// The values of Task.Status.
+const (
+	TaskPending    = "pending"
+	TaskInProgress = "in_progress"
+	TaskCompleted  = "completed"
+)
 
 // Contribution is what a feature adds to one session. Every field may be
 // left out. The comment on each says when it is used; where several
@@ -382,6 +448,15 @@ type Contribution struct {
 	// are recorded beside the result of the call that made them. It is
 	// called while the log is being written, so it must not append to the
 	// transcript itself, and must not wait on anything.
+	//
+	// Stored, AfterStored and Slid all run while the loop holds its log.
+	// From inside them a feature may read the transcript, raise a notice
+	// (Session.Notice, or the agent's Notice: neither waits for the log),
+	// set the task list (Session.Tasks), hand the agent a note or a prompt
+	// (Tell, Submit: both only queue), and ask for the session's state.
+	// It must not call anything of the agent's that waits for the session
+	// or takes a prompt back (Run, Wait, Drain, TakeQueued, Close): the
+	// session is waiting for the callback.
 	Stored func(e agent.Entry) []transcript.Entry
 
 	// AfterStored, when not nil, is told of every entry the loop appended
@@ -394,13 +469,16 @@ type Contribution struct {
 	// each after it is stored and before the next call that runs alone is
 	// started. It is where a feature does what must follow a stored
 	// result, such as applying a pop it recorded and telling the person.
-	// The log is free again: it may read the transcript and append to it.
-	// It must return promptly.
+	// The session's file is written, so it may read the transcript and
+	// append entries of its own to it. The loop still holds its log while
+	// it runs: see Stored for what may be called from here. It must
+	// return promptly.
 	AfterStored func(ctx context.Context, e agent.Entry, written []transcript.Entry)
 
 	// Slid, when not nil, is told what a slide took out of the model's
 	// view (transcript.Slide), after the slide is recorded: the reads to
-	// forget, the tokens that left.
+	// forget, the tokens that left. The loop holds its log while it runs:
+	// see Stored for what may be called from here.
 	Slid func(ctx context.Context, cuts []transcript.Cut)
 
 	// StopGrace, when more than the loop's own ten seconds, is how long a
@@ -438,6 +516,21 @@ type Contribution struct {
 	// itself has, or that an earlier feature added, is refused.
 	Slash []SlashCommand
 
+	// RunPrompt, when not nil, is asked for the first prompt of a
+	// non-interactive run that was given none, on its command line or on
+	// standard input. The features are asked in order, and the first that
+	// reports true supplies it; the run then answers that prompt as it
+	// would one that was typed. It is how a flag a feature claims can be a
+	// run's whole command line: gnosh run --goal "the tests pass". With no
+	// feature supplying one, a run without a prompt is refused as before.
+	RunPrompt func(ctx context.Context) (agent.Prompt, bool)
+
+	// ModeChanged, when not nil, is told the permission mode that has just
+	// come into force, each time it changes while the session runs. It is
+	// not called for the mode the session starts in: Session.Mode says
+	// that.
+	ModeChanged func(mode string)
+
 	// Ready, when not nil, is called once the session's agent exists and
 	// before its first prompt is sent. From here on the feature may use
 	// the agent's side requests (Side), notes (Tell), notices (Notice),
@@ -449,7 +542,8 @@ type Contribution struct {
 	// the run's exit code: the largest code any feature returns wins over
 	// the run's own when it is larger. A goal that is still unmet is the
 	// case it is for. Lines it has for the person go through
-	// Session.Notice.
+	// Session.Notice. It is called after every feature's TurnEnded has
+	// been told of that last turn.
 	RunEnd func(ctx context.Context, end RunEnd) (exit int)
 
 	// Close, when not nil, is called when the session ends, after the
@@ -482,6 +576,13 @@ type SlashCommand struct {
 	// InRun says the command may be the prompt of a non-interactive run.
 	// What it says is then the run's result.
 	InRun bool
+	// Sensitive lists the first words of the command's arguments after
+	// which what is typed is a text the person wants kept nowhere: for a
+	// command whose "redact <text>" takes a secret out of everything, it
+	// holds "redact". A front end shows such a line and remembers it only
+	// as far as that word, and gnosh's log never holds a command's
+	// arguments at all. An entry of "" means everything after the name.
+	Sensitive []string
 	// Run does it. An error is shown to the person as the command's
 	// failure, in its own words.
 	Run func(ctx context.Context, c *SlashContext) error

@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/filelock"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
@@ -153,12 +154,21 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	}
 
 	askCtx := ctx
+	q := l.permissionQuestion(call, action, d)
+	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true}
+	for i, s := range d.Suggestions {
+		if s.Mode != "" {
+			data.Modes["always:"+strconv.Itoa(i)] = string(s.Mode)
+		}
+	}
 	if d.Critical && d.Mode == permission.ModeBypass {
 		var cancel context.CancelFunc
 		askCtx, cancel = context.WithTimeout(ctx, criticalWait)
 		defer cancel()
+		data.Until = l.p.now().Add(criticalWait)
 	}
-	ans, err := req.Ask(askCtx, l.permissionQuestion(call, action, d))
+	q.Data = data
+	ans, err := req.Ask(askCtx, q)
 	switch {
 	case errors.Is(err, agent.ErrNobodyToAsk):
 		return agent.Decision{Reason: unattended(d), Unattended: true}, nil
@@ -169,12 +179,14 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	}
 	switch {
 	case ans.Choice == "yes":
+		yesWith(ctx, call, ans)
 		return agent.Decision{Allow: true, Input: changed}, nil
 	case strings.HasPrefix(ans.Choice, "always:"):
 		i, _ := strconv.Atoi(strings.TrimPrefix(ans.Choice, "always:"))
 		if i >= 0 && i < len(d.Suggestions) {
 			l.keepApproval(d.Suggestions[i])
 		}
+		yesWith(ctx, call, ans)
 		return agent.Decision{Allow: true, Input: changed}, nil
 	}
 	// No. With words, the model reads them and carries on; without, the
@@ -183,6 +195,20 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 		return agent.Decision{Reason: "This call did not run: the user refused it, and said: " + comment}, nil
 	}
 	return agent.Decision{Halt: true, Reason: "This call did not run: the user refused it."}, nil
+}
+
+// yesWith passes on what the person said with a yes: the call runs, and
+// the model reads their words with its result.
+func yesWith(ctx context.Context, call core.ToolCall, ans agent.Answer) {
+	comment := strings.TrimSpace(ans.Text)
+	a := agent.FromContext(ctx)
+	if comment == "" || a == nil {
+		return
+	}
+	_ = a.Tell(agent.Note{
+		Source: "permission",
+		Text:   prompt.Wrap("The user approved your " + call.Name + " call, and said with it: " + comment),
+	})
 }
 
 // describe asks a tool what a call would do, and survives a tool that
@@ -278,7 +304,7 @@ func showLines(s string) string {
 // written to the settings file the config names for that.
 func (l *live) keepApproval(s permission.Suggestion) {
 	if s.Mode != "" {
-		if err := l.engine.SetMode(s.Mode); err != nil {
+		if err := l.setMode(s.Mode); err != nil {
 			l.notice(agent.LevelWarning, "permission", fmt.Sprintf("The permission mode could not be changed (%v).", err))
 			return
 		}

@@ -26,6 +26,26 @@ func (p *program) stateDir() string {
 	return filepath.Join(p.home, ".local", "share", "gnosh")
 }
 
+// configDir and cacheDir are the user's config directory and gnosh's cache
+// directory, worked out from the environment alone as stateDir is: what
+// the config loader calls Paths.ConfigDir and Paths.CacheDir.
+func (p *program) configDir() string {
+	if v := p.env["GNOSH_GLOBAL_CONFIG"]; filepath.IsAbs(v) {
+		return filepath.Clean(v)
+	}
+	if v := p.env["XDG_CONFIG_HOME"]; filepath.IsAbs(v) {
+		return filepath.Join(filepath.Clean(v), "gnosh")
+	}
+	return filepath.Join(p.home, ".config", "gnosh")
+}
+
+func (p *program) cacheDir() string {
+	if v := p.env["XDG_CACHE_HOME"]; filepath.IsAbs(v) {
+		return filepath.Join(filepath.Clean(v), "gnosh")
+	}
+	return filepath.Join(p.home, ".cache", "gnosh")
+}
+
 // trustCommand is `gnosh trust`: it records a folder as trusted, so that
 // its own settings are in force from the next start on, and says what
 // those settings do; with --list it shows the record, and with --forget

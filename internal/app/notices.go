@@ -20,6 +20,7 @@ func (l *live) backgroundEnded(e shelltool.Ended) {
 	if a == nil || l.closing.Load() {
 		return
 	}
+	l.noteBackground()
 	end := prompt.BackgroundEnd{
 		ID:      e.ID,
 		Command: firstOf(e.Description, firstLine(e.Command)),

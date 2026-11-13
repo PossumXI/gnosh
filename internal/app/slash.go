@@ -11,7 +11,6 @@ import (
 	"unicode"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
-	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
@@ -74,6 +73,19 @@ func (s *slashSet) names() []string {
 	out := make([]string, len(s.cmds))
 	for i, c := range s.cmds {
 		out[i] = c.Name
+	}
+	return out
+}
+
+// list describes the commands to a front end, in the order they were
+// added.
+func (s *slashSet) list() []CommandInfo {
+	out := make([]CommandInfo, len(s.cmds))
+	for i, c := range s.cmds {
+		out[i] = CommandInfo{
+			Name: c.Name, Aliases: slices.Clone(c.Aliases), Args: c.Args, Summary: c.Summary,
+			Sensitive: slices.Clone(c.Sensitive), InRun: c.InRun,
+		}
 	}
 	return out
 }
@@ -433,7 +445,7 @@ func thinkingLevelsOf(cfg *config.Config, pc config.Provider, id string) []strin
 // now, and then every setting with where it came from.
 func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 	a := c.Agent
-	c.Say("gnosh %s", cli.VersionLine(l.p.o.Build))
+	c.Say("gnosh %s", l.p.versionLine())
 	c.Say("session      %s (%s)", l.ts.ID(), l.source)
 	c.Say("file         %s", l.ts.Path())
 	c.Say("folder       %s on %s", l.cwd(), hostName())
@@ -498,6 +510,21 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 	if st.Loop {
 		c.Say("/loop        on")
 	}
+	facts := l.statusFacts()
+	for _, name := range []string{"frame", "goal"} {
+		if v := facts[name]; v != "" {
+			c.Say("%-12s %s", name, v)
+		}
+	}
+	if tasks := l.taskList(); len(tasks) > 0 {
+		for i, line := range taskLines(tasks) {
+			if i == 0 {
+				c.Say("tasks        %s", line)
+			} else {
+				c.Say("             %s", line)
+			}
+		}
+	}
 	if l.shell != nil {
 		running := 0
 		for _, t := range l.shell.Tasks() {
@@ -511,6 +538,20 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		}
 	}
 	c.Say("tools        %s", firstOf(strings.Join(l.toolNames(), ", "), "none"))
+	if slices.Contains(l.toolNames(), agentToolName) {
+		var kinds []string
+		for _, d := range l.agentDefs().All() {
+			if d.Scope == "built-in" {
+				kinds = append(kinds, d.Name)
+			} else {
+				kinds = append(kinds, d.Name+" ("+d.Source+")")
+			}
+		}
+		l.subMu.Lock()
+		running, started := len(l.subs), l.agentCalls
+		l.subMu.Unlock()
+		c.Say("sub-agents   kinds: %s; %d started in this session, %d running now", strings.Join(kinds, ", "), started, running)
+	}
 	for _, j := range l.contribs {
 		if j.f.Name != "" {
 			c.Say("feature      %s", j.f.Name)

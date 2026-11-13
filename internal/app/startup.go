@@ -62,7 +62,7 @@ type startup struct {
 // names; the features' names are the second.
 func ownTools() []string {
 	d := fstools.Defaults()
-	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName}
+	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, agentToolName}
 }
 
 // toolNames returns the one list of tool names of this program: gnosh's
@@ -102,16 +102,27 @@ func (p *program) featureTools() (known, quiet []string, guards map[string][]str
 	return known, quiet, guards
 }
 
+// noLogTools is the set of tools whose arguments and results are never
+// written to the log or shown in debugging output (ToolName.NoLogArgs).
+func (p *program) noLogTools() map[string]bool {
+	out := map[string]bool{}
+	for _, f := range p.o.Features {
+		for _, t := range f.Tools {
+			if t.NoLogArgs && t.Name != "" {
+				out[t.Name] = true
+			}
+		}
+	}
+	return out
+}
+
 // firedEvents lists the hook events this program fires: the loop's own
-// moments, less the two that belong to sub-agents (no tool of this program
-// starts one yet, so a hook on them could never run), and the two that the
-// wiring fires itself.
+// moments (those of a sub-agent among them, now that the Agent tool starts
+// one), and the two that the wiring fires itself.
 func firedEvents() []hooks.Event {
 	var out []hooks.Event
 	for _, name := range agent.Fires() {
-		if e := hooks.Event(name); e != hooks.SubagentStart && e != hooks.SubagentStop {
-			out = append(out, e)
-		}
+		out = append(out, hooks.Event(name))
 	}
 	return append(out, hooks.InstructionsLoaded, hooks.Notification)
 }

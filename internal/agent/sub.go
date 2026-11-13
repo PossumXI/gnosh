@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"slices"
+	"sync"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -43,6 +44,10 @@ type SubOptions struct {
 	// Cwd and Roots default to the parent's.
 	Cwd   string
 	Roots []string
+	// Store, when not nil, is the Store in which the sub-agent's tools keep
+	// their own state (core.ToolEnv.Store). Nil makes a new one. It is
+	// never the parent's: what a sub-agent has read, its parent has not.
+	Store *sync.Map
 }
 
 // Spawn makes a sub-agent: a session of its own, run by this same loop,
@@ -88,7 +93,7 @@ func (a *Agent) Spawn(sub SubOptions) (*Agent, error) {
 	}
 	opts.Drivers = sub.Drivers
 	opts.OnEvent = nil
-	opts.Store = nil
+	opts.Store = sub.Store
 	opts.StartSource = sub.Type
 	opts.CompactAt = su.compactAt
 	opts.NoAutoCompact = su.noAuto

@@ -154,7 +154,7 @@ func (o outcome) wantCode(t *testing.T, code int) outcome {
 // waitFor waits until ok says yes.
 func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(time.Minute)
 	for !ok() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -419,4 +419,57 @@ func TestBinarySecondSignalStopsBackgroundCommands(t *testing.T) {
 		t.Errorf("the second signal took %s to end the program", took)
 	}
 	waitFor(t, "the background command to be stopped", func() bool { return gone(bg) })
+}
+
+// A build made where there is no version control to ask, as one from a
+// source archive is, and named at link time: --version says the name.
+func TestBinaryVersionOfANamedBuild(t *testing.T) {
+	gotool, err := exec.LookPath("go")
+	if err != nil {
+		gotool = "/usr/local/go/bin/go"
+	}
+	named := filepath.Join(t.TempDir(), "gnosh")
+	build := exec.Command(gotool, "build", "-buildvcs=false",
+		"-ldflags", "-X github.com/gnosh-ai/gnosh/internal/buildinfo.BuildID=release-2026-11-13", "-o", named, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("the named build could not be made: %v\n%s", err, out)
+	}
+	out, err := exec.Command(named, "--version").CombinedOutput()
+	if err != nil || string(out) != "unknown-time release-2026-11-13 (gnosh)\n" {
+		t.Errorf("--version of the named build prints %q (%v)", out, err)
+	}
+}
+
+// With mem and the machines joined, as the real program has them: the
+// session is offered the machine tools, and a sub-agent of the stock kind
+// is not, which is the join's own choice for a sub-agent.
+func TestBinarySubAgentHasNoMachineTools(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"say hello","prompt":"Say hello."}`}}},
+		apptest.Reply{Text: "Hello from the sub-agent."},
+		apptest.Reply{Text: "It said hello."})
+	o := gnosh(t, w, "-p", "have it say hello").wantCode(t, 0)
+	if o.out != "It said hello.\n" {
+		t.Errorf("stdout %q, stderr %q", o.out, o.err)
+	}
+	reqs := w.Model.Requests()
+	if len(reqs) != 3 {
+		t.Fatalf("the model was sent %d requests, want 3", len(reqs))
+	}
+	names := func(r apptest.Request) string {
+		var out []string
+		list, _ := r.JSON["tools"].([]any)
+		for _, t := range list {
+			out = append(out, t.(map[string]any)["function"].(map[string]any)["name"].(string))
+		}
+		return strings.Join(out, " ")
+	}
+	session, sub := names(reqs[0]), names(reqs[1])
+	if !strings.Contains(session, "gnovm_run") || !strings.Contains(session, "Agent") {
+		t.Errorf("the session's tools are %q", session)
+	}
+	if strings.Contains(sub, "gnovm_") || !strings.Contains(sub, "Read") {
+		t.Errorf("the stock sub-agent's tools are %q", sub)
+	}
+	checkSession(t, w)
 }

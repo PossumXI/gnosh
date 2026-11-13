@@ -24,6 +24,22 @@ import (
 // that is not trusted has its files read too; what they import stays
 // inside the project either way.
 func (l *live) loadInstructions(ctx context.Context) error {
+	set, err := l.readInstructions(ctx)
+	if err != nil {
+		return err
+	}
+	l.instr = set
+	for _, w := range set.Warnings() {
+		l.notice(agent.LevelWarning, "instructions", w.Text)
+	}
+	l.instructionsLoaded(set.Files(), "")
+	return nil
+}
+
+// readInstructions reads the instruction files as the config says to. A
+// sub-agent has a reading of its own: which of the files that load along
+// the way it has been given is its own business, not its parent's.
+func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) {
 	c := l.cfg.Context
 	o := instructions.Options{
 		Cwd:          c.Cwd,
@@ -48,14 +64,9 @@ func (l *live) loadInstructions(ctx context.Context) error {
 	}
 	set, err := instructions.Load(ctx, o)
 	if err != nil {
-		return fmt.Errorf("the instruction files could not be read: %w", err)
+		return nil, fmt.Errorf("the instruction files could not be read: %w", err)
 	}
-	l.instr = set
-	for _, w := range set.Warnings() {
-		l.notice(agent.LevelWarning, "instructions", w.Text)
-	}
-	l.instructionsLoaded(set.Files(), "")
-	return nil
+	return set, nil
 }
 
 // instructionsLoaded fires the InstructionsLoaded hooks for files that
@@ -84,7 +95,13 @@ func (l *live) instructionsLoaded(files []instructions.File, trigger string) {
 // results. Each is given once, until the part of the conversation that
 // held it is cut away.
 func (l *live) lateInstructions(ctx context.Context, done agent.ToolDone) []agent.Part {
-	if l.instr == nil || done.Result.IsError {
+	return l.lateInstructionsFor(ctx, l.instr, done)
+}
+
+// lateInstructionsFor is lateInstructions for one reading of the
+// instruction files: the session's own, or a sub-agent's.
+func (l *live) lateInstructionsFor(ctx context.Context, instr *instructions.Set, done agent.ToolDone) []agent.Part {
+	if instr == nil || done.Result.IsError {
 		return nil
 	}
 	names := fstools.Defaults()
@@ -97,7 +114,7 @@ func (l *live) lateInstructions(ctx context.Context, done agent.ToolDone) []agen
 	if path == "" {
 		return nil
 	}
-	files, warnings := l.instr.ForPath(ctx, path)
+	files, warnings := instr.ForPath(ctx, path)
 	for _, w := range warnings {
 		l.notice(agent.LevelWarning, "instructions", w.Text)
 	}

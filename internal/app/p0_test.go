@@ -28,9 +28,13 @@ func TestBusySessionCanBeExamined(t *testing.T) {
 	go func() { s.done <- Main(t.Context(), o) }()
 	defer func() { pw.Close(); <-s.done }()
 
-	s.see("the debugging page is at http://127.0.0.1:")
+	// The notice about the page is raised by the session as it starts and
+	// shown by a goroutine of its own: it may stand before or after the
+	// lines the front end writes first, so neither is looked for after
+	// the other.
+	s.seeAnywhere("the debugging page is at http://127.0.0.1:")
 	page := regexp.MustCompile(`http://127\.0\.0\.1:\d+/`).FindString(s.out.String())
-	s.see("Type a prompt and Enter.")
+	s.seeAnywhere("Type a prompt and Enter.")
 	s.typeLine("the first prompt")
 	s.see("This first answer")
 

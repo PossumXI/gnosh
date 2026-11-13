@@ -15,6 +15,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
 // Options is what the process hands the program: its arguments, its three
@@ -272,7 +273,7 @@ func (p *program) run(ctx context.Context) int {
 		}
 		return cli.ExitOK
 	case cli.CmdVersion:
-		fmt.Fprintln(p.stdout, cli.VersionLine(p.o.Build))
+		fmt.Fprintln(p.stdout, p.versionLine())
 		return cli.ExitOK
 	case cli.CmdDoctor:
 		return p.doctorCommand(ctx, inv)
@@ -348,6 +349,18 @@ func (p *program) setLastStop(stop func()) {
 	p.lastMu.Unlock()
 }
 
+// versionLine is what --version prints, and what the log and /status name
+// the build by. A build made from a source archive has no commit recorded
+// in it; when it was given a name at link time (buildinfo.BuildID), the
+// name stands where the commit would.
+func (p *program) versionLine() string {
+	b := p.o.Build
+	if b.Commit == "" && p.o.BuildID != "" && p.o.BuildID != "devel" {
+		b.Commit = p.o.BuildID
+	}
+	return cli.VersionLine(b)
+}
+
 // signalExit is the exit code of a program that a signal stopped: 130 for
 // SIGINT, 143 for SIGTERM, and 128 plus the signal's number for another.
 func signalExit(sig os.Signal) int {
@@ -382,11 +395,29 @@ func (p *program) featureCommand(ctx context.Context, c Command, inv cli.Invocat
 	}
 	// With mistakes in the configuration the command still runs: Config is
 	// then nil and Problems says why, and what the command does about it
-	// is its own business.
+	// is its own business. The directories are filled in either way, from
+	// the environment and the folder alone when there is no config to
+	// read them from: a command that needs no model (gnosh mem) works
+	// with a config that has a mistake in it.
 	cc.Config, cc.Problems = st.cfg, st.problems
 	if st.cfg != nil {
 		cc.Dirs = st.dirs("")
 		cc.Sessions = st.sessions()
+	} else {
+		sessions := p.stateDir()
+		if inv.DataDir != "" {
+			sessions = p.absFrom(inv.DataDir)
+		}
+		cc.Dirs = Dirs{
+			Home:        p.home,
+			Cwd:         st.folder.Start,
+			ProjectRoot: st.folder.Root,
+			Config:      p.configDir(),
+			State:       p.stateDir(),
+			Cache:       p.cacheDir(),
+			Sessions:    sessions,
+		}
+		cc.Sessions = &transcript.Store{Dir: sessions, Clock: p.now}
 	}
 	return c.Run(ctx, cc)
 }

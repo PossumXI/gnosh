@@ -636,3 +636,51 @@ func TestPromptLinesAndStablePrefix(t *testing.T) {
 	}
 	r.checkLog()
 }
+
+// One prompt of the person's is taken off the queue by its id, and the
+// others go out as they would have.
+func TestWithdrawOneQueuedPrompt(t *testing.T) {
+	r := newRig(t, nil)
+	if _, ok := r.a.Withdraw("no-such-prompt"); ok {
+		t.Error("Withdraw found a prompt in an empty queue")
+	}
+	wait := make(chan struct{})
+	r.model.push(step{wait: wait, evs: say("one").evs}, say("two"))
+	if _, err := r.a.Submit(Prompt{Text: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent[*RequestEvent](t, r.rec, nil)
+	idA, _ := r.a.Submit(Prompt{Text: "a"})
+	idB, _ := r.a.Submit(Prompt{Text: "b"})
+	idOwn, _ := r.a.Submit(Prompt{Text: "<job>3 ended</job>", Hidden: true, Source: "task-notification"})
+	waitQueue(t, r, "a", "b", "<job>3 ended</job>")
+
+	got, ok := r.a.Withdraw(idA)
+	if !ok || got.Text != "a" {
+		t.Fatalf("Withdraw(a) = %+v, %v", got, ok)
+	}
+	if _, ok := r.a.Withdraw(idA); ok {
+		t.Error("the same prompt was withdrawn twice")
+	}
+	if _, ok := r.a.Withdraw(idOwn); ok {
+		t.Error("a prompt of gnosh's own was withdrawn as the person's")
+	}
+	if q := r.a.Queued(); len(q) != 2 || q[0].ID != idB {
+		t.Errorf("left in the queue: %+v", q)
+	}
+	close(wait)
+	r.idle()
+	for _, req := range r.model.requests() {
+		for _, m := range req.Messages {
+			for _, b := range m.Blocks {
+				if m.Role == core.RoleUser && b.Text == "a" {
+					t.Errorf("a prompt that was withdrawn reached the model")
+				}
+			}
+		}
+	}
+	if last := r.model.requests(); !strings.Contains(lastUserText(last[len(last)-1]), "b") {
+		t.Errorf("the prompt that stayed did not go out")
+	}
+	r.checkLog()
+}

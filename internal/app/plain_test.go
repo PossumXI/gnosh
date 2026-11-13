@@ -39,17 +39,37 @@ func sit(t *testing.T, w *apptest.World, args ...string) *seat {
 		pw.Close()
 		select {
 		case <-s.done:
-		case <-time.After(20 * time.Second):
+		case <-time.After(patience):
 			t.Errorf("the session did not end when its input was closed.\nscreen:\n%s", s.out.String())
 		}
 	})
 	return s
 }
 
+// patience is how long a test waits for something to show before it calls
+// it missing. It is a bound for a broken program, not a measure of a
+// working one: the tests run beside others on a loaded machine.
+const patience = 60 * time.Second
+
+// seeAnywhere waits until the screen shows piece, wherever it stands. It
+// is for a line whose place among the others is not fixed: a notice that
+// the session raises as it starts is shown by a goroutine of its own, and
+// may come before or after the lines the front end writes itself.
+func (s *seat) seeAnywhere(piece string) {
+	s.t.Helper()
+	deadline := time.Now().Add(patience)
+	for !strings.Contains(s.out.String(), piece) {
+		if time.Now().After(deadline) {
+			s.t.Fatalf("the screen never showed %q.\nthe screen:\n%s\nstderr:\n%s", piece, clip(s.out.String()), s.errs.String())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // see waits until the screen shows piece after everything seen so far.
 func (s *seat) see(piece string) {
 	s.t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(patience)
 	for {
 		screen := s.out.String()
 		if i := strings.Index(screen[s.pos:], piece); i >= 0 {
@@ -78,7 +98,7 @@ func (s *seat) exit() int {
 	case code := <-s.done:
 		s.done <- code
 		return code
-	case <-time.After(20 * time.Second):
+	case <-time.After(patience):
 		s.t.Fatalf("the session did not end.\nscreen:\n%s", clip(s.out.String()))
 	}
 	return -1

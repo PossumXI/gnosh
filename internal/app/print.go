@@ -66,7 +66,10 @@ type printer struct {
 	capped bool
 	// toldUnattended says the person has been told why calls are refused.
 	toldUnattended bool
-	results        chan agent.TurnResult
+	// noArgs are the tools whose arguments and results --verbose does not
+	// show (ToolName.NoLogArgs).
+	noArgs  map[string]bool
+	results chan agent.TurnResult
 }
 
 // newPrinter makes the front end of a run.
@@ -78,6 +81,7 @@ func newPrinter(p *program, inv cli.Invocation) *printer {
 		quiet:   inv.Quiet,
 		live:    p.o.StdoutIsTerminal,
 		results: make(chan agent.TurnResult, 64),
+		noArgs:  p.noLogTools(),
 	}
 }
 
@@ -92,6 +96,14 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	f.mu.Unlock()
 
 	text, err := f.readPrompt(ctx)
+	first := agent.Prompt{Text: text}
+	if errors.Is(err, errNoPrompt) {
+		// Nothing was typed and nothing was piped in. A feature may still
+		// have something for the run to do: a flag it claims.
+		if p, ok := c.RunPrompt(ctx); ok {
+			first, text, err = p, "", nil
+		}
+	}
 	if err != nil {
 		f.p.errf("%v", err)
 		return cli.ExitFailure
@@ -102,7 +114,7 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 			return f.reportCommand(c, res, err)
 		}
 	}
-	id, err := c.Submit(agent.Prompt{Text: text})
+	id, err := c.Submit(first)
 	if err != nil {
 		f.p.errf("the prompt could not be sent: %v", err)
 		return cli.ExitFailure
@@ -148,10 +160,13 @@ func (f *printer) readPrompt(ctx context.Context) (string, error) {
 	}
 	text := joinPrompt(piped, arg)
 	if strings.TrimSpace(text) == "" {
-		return "", errors.New("the prompt is empty, so nothing was sent. Put the prompt on the command line, or pipe it in")
+		return "", errNoPrompt
 	}
 	return text, nil
 }
+
+// errNoPrompt means a run was given no prompt.
+var errNoPrompt = errors.New("the prompt is empty, so nothing was sent. Put the prompt on the command line, or pipe it in")
 
 // joinPrompt puts what was piped in before the prompt of the command line,
 // with a blank line between the two.
@@ -234,7 +249,6 @@ func (p *program) readPiped(ctx context.Context, havePrompt, quiet bool) (string
 // the run then exits without printing a result.
 func (f *printer) await(ctx context.Context, c Controls, id string) (agent.TurnResult, os.Signal) {
 	var sig os.Signal
-	var giveUp <-chan time.Time
 	signals := c.Signals()
 	for {
 		select {
@@ -243,12 +257,12 @@ func (f *printer) await(ctx context.Context, c Controls, id string) (agent.TurnR
 				return res, sig
 			}
 		case s := <-signals:
-			sig, signals = s, nil
+			// The run is over: no result is printed after a signal, so
+			// there is nothing to wait for here. The turn is stopped, and
+			// the rest (its commands, the SessionEnd hooks, the session's
+			// file) is the shutdown's, which a second signal cuts short.
 			c.Interrupt()
-			// The turn's end follows; if it does not, the run still exits.
-			giveUp = time.After(30 * time.Second)
-		case <-giveUp:
-			return agent.TurnResult{Reason: agent.EndStopped}, sig
+			return agent.TurnResult{Reason: agent.EndStopped}, s
 		case <-ctx.Done():
 			return agent.TurnResult{Reason: agent.EndStopped}, sig
 		}
@@ -295,7 +309,12 @@ func (f *printer) Event(ev any) {
 			if ev.Agent != "" {
 				indent = "  "
 			}
-			f.stderr("%s%s (%s)%s", indent, toolLine(ev.Name, ev.Input), resultLine(ev.Result, ev.Denied, ev.Interrupted), mark)
+			if f.noArgs[ev.Name] {
+				// Neither its arguments nor its answer are shown here.
+				f.stderr("%s%s%s", indent, ev.Name, mark)
+			} else {
+				f.stderr("%s%s (%s)%s", indent, toolLine(ev.Name, ev.Input), resultLine(ev.Result, ev.Denied, ev.Interrupted), mark)
+			}
 		}
 		if ev.Denied && ev.Unattended && !f.toldUnattended {
 			// Said once: the person who started the run is the one who

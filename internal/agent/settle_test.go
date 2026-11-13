@@ -230,6 +230,9 @@ func TestLogThatCrashes(t *testing.T) {
 	if len(crashes) != 1 || crashes[0] != "the turn's end" {
 		t.Errorf("OnPanic was told %v", crashes)
 	}
+	// The session says it is idle a moment after the turn's result is
+	// handed over.
+	r.idle()
 	checkEvents(t, r.rec.all())
 	r.checkLog()
 }
