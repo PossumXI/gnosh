@@ -46,11 +46,14 @@ Every carried file keeps the path it had.
 repository root, to check that the words it quotes are the words the code
 says. It was staged, and is the earlier gnosh's own.
 
+Seven more staged files came after these, and are not in the table above:
+`internal/gnovm/tools/`, the agent's `gnovm_*` tools and their tests. They
+were written against the earlier harness's tool interface, so they could not
+come over with their import paths changed and nothing more. "The tools,
+carried with larger changes" below is their record.
+
 Nothing else that was staged was brought. In particular:
 
-- `internal/gnovm/tools/` (7 staged files: the agent's `gnovm_*` and mem
-  tools) is the earlier harness's side of the join. It is to be built again
-  against this harness.
 - `internal/testenv/` (2 staged files) was offered in case the carried tests
   used it. None does.
 
@@ -84,7 +87,8 @@ The table is written and checked by `tools/audit/carried.py`:
 hashes every file below as it stands in the tree, with the listed edits
 undone, and compares it with the checksum in its row; it also fails if the
 carried directories hold a file that is neither in the table nor listed
-under "Files written fresh".
+under "Files written fresh". The files of `internal/gnovm/tools/` are held
+to their own section instead, in the ways that section gives.
 
 <!-- carried-table:begin (written by tools/audit/carried.py; do not edit by hand) -->
 
@@ -508,6 +512,152 @@ history, or names the code still reads, or not the porter's to change:
 - `klashlibs` and the import path `klash/gnomem/v2` keep an earlier name of
   gnosh: mem's journals on disk import the library by that path.
 
+## The tools, carried with larger changes
+
+`internal/gnovm/tools/` is the four tools a model calls to use the GnoVM
+subsystem: `gnovm_run`, `gnovm_new`, `gnovm_list` and `gnovm_drop`.
+`gnovm_run` is how a model reaches `mem`. Its seven staged files are the
+earlier gnosh's own work, as the scan found (no run of lines shared with
+Charm's code in any of them). Five of the seven were ADAPT in the scan: they
+call into the earlier harness, which is not here. The porter read those
+seven staged files, the inventory's record for the package (words and
+numbers) and its lists of the symbols they used (names only), and nothing
+else of the earlier tree: not the code those calls led to, and not the
+library the earlier harness's tool interface came from. Each call into the
+earlier harness was replaced by this harness's way of doing the same thing,
+from `internal/core` and from `spec/gnosh/machines.md` and
+`spec/gnosh/integration-contract.md`.
+
+So these files are carried with changes, and the changes are larger than an
+import path. Every file keeps its path and its name. What a model or a
+person reads of the tools was kept word for word: the tools' names, their
+descriptions and their arguments' names, types and descriptions, every
+result and every error.
+
+<!-- carried-tools:begin (written by tools/audit/carried.py; do not edit by hand) -->
+
+| file | made from the staged | the scan's verdict | symbols of the earlier harness it used | bytes | line share | longest run | SHA-256 of the staged original | what it is now |
+|---|---|---|---:|---:|---:|---:|---|---|
+| `internal/gnovm/tools/closecheck_test.go` | `internal/gnovm/tools/closecheck_test.go` | CARRY | 0 | 5,714 | 0.0% | 0 | `3ac02e4070c3bcb544e598f79d87d37f37487b3f7be7f41d7a41e0a271d7ed2c` | the same test, on this harness's tool interface |
+| `internal/gnovm/tools/docs_test.go` | `internal/gnovm/tools/docs_test.go` | ADAPT | 1 | 32,330 | 1.2% | 0 | `81eef8d1b8885aff0281ff77897b102ae2a0f9da21fca1d7a946bc7e1d0c4635` | the same tests for GNOMEM.md; those of the earlier README and of the earlier harness's goal file are left out |
+| `internal/gnovm/tools/memtodos.go` | `internal/gnovm/tools/memtodos.go` | ADAPT | 8 | 2,618 | 0.0% | 0 | `fb57a815625b4c138ba695831f1bb82afe5e1dd58d1f0d5916a8ba7b5d2742ed` | the same mapping of a goal to a task list, onto a task-list type of its own |
+| `internal/gnovm/tools/memtodos_test.go` | `internal/gnovm/tools/memtodos_test.go` | ADAPT | 11 | 2,557 | 0.0% | 0 | `6005bda8ef20fb1ebdec2f94545bcbb6777a8bb2c7c58a1327df0b20fdada54a` | the same test, on that type |
+| `internal/gnovm/tools/namer_test.go` | `internal/gnovm/tools/namer_test.go` | CARRY | 0 | 1,724 | 0.0% | 0 | `1615ddf3667a042b56b172730584f3f5f1611acc3b0b645aa6b437e462581359` | the same test |
+| `internal/gnovm/tools/tools.go` | `internal/gnovm/tools/tools.go` | ADAPT | 11 | 28,001 | 1.7% | 0 | `d4383a347d7da6d8db3a30b5ec0ba7b271f2fc141a8a43d3ae80f991bbef73ed` | the four tools as core.Tool values; the permission prompt is gone from it |
+| `internal/gnovm/tools/tools_test.go` | `internal/gnovm/tools/tools_test.go` | ADAPT | 2 | 4,986 | 3.2% | 0 | `ec451fe095b039bb559fd7fe2e36585f784ad8d85819fd6706754324741749d0` | the same tests, on this harness's tool interface |
+
+<!-- carried-tools:end -->
+
+**bytes**, **SHA-256**, **line share** and **longest run** are of the staged
+original, as in the table of files; the scan's **verdict** is CARRY for a
+file that used nothing of the earlier harness and ADAPT for one that did,
+and the count beside it is how many of that harness's symbols the file used
+(the scan's `n_crush_syms`; `adapter-surface.tsv` names them).
+
+### What was kept, and what was replaced
+
+How much of each staged file stands in the file made from it, counting its
+lines that are not blank and that are here in the same order, indentation
+aside: `tools.go` 486 of 662, `memtodos.go` 49 of 66, `tools_test.go` 81 of
+103, `closecheck_test.go` 129 of 137, `memtodos_test.go` 37 of 57,
+`namer_test.go` 22 of 26, `docs_test.go` 708 of 791.
+
+**`tools.go`.** Kept, with their texts and their logic as they were: the
+four descriptions; the four argument structs with their tags; the rendering
+of a run's result (the value and output, the two error prefixes, the `Next:`
+hints, the status line, the notes, the cut at 30,000); the rendering of
+`gnovm_new`'s answer and of `gnovm_list`'s; the finding of the texts a call
+keeps in mem without naming them; the gas argument's conversion; the
+close-check loop; what is said of a call whose worker died before it
+replied; and the order in which a kept call's frames, goals, erasure and
+rules are handed on, with a context that cancellation does not reach.
+Replaced:
+
+| the staged file's call into the earlier harness | here |
+|---|---|
+| the tool constructor of the earlier harness's tool library, called with a name, a description and a function over a typed argument struct whose tags name and describe the arguments | four types that implement `core.Tool`; `params.go` makes the JSON schema from the same structs and tags, and reads a call's arguments into them |
+| that library's text, error and with-metadata responses | `core.TextResult`, `core.ErrorResult`, and `ToolResult.Meta` under the key `frames` |
+| the calling session's id, read out of the context | `core.ToolEnv.SessionID`, or the `Session` function of `Options` |
+| the `*gnovm.Lazy` and the project given to each constructor | `Options.Client`, an interface that `*gnovm.Client` satisfies, and `Options.Project` |
+| the functional options of `gnovm_run` (`MemStack`, `BoundGoal`, `MemFresh`, `Namer`, `CheckCloses`, `ClosesKept`, `SubAgent`, `OnMemFrames`, `OnMemGoals`, `OnMemErased`, `OnMemRules`) | fields of `Options` with the same names and the same function types; `SubAgent` is a function now, since one set of tools may serve several sessions |
+| the permission service asked, inside `gnovm_drop`, before a delete, and its answer "the user did not allow deleting VM x" | `Describe`, which every tool has now: it says in one line what a call would do, and the harness's permission rules decide and ask. The line for a delete is the one the person was asked with. The refusal's old words are kept as `DeleteRefused`, which nothing here calls |
+
+Added, with no counterpart in the staged file: `Describe` for all four
+tools; what a `gnovm_run` call shows a person (`core.Display`); `FramesOf`;
+and checks of what the harness hands the tool (a way to the GnoVM, a
+`ToolEnv`, a project, a session id, an answer from the client), whose
+failure is the harness's and not a result for the model. What a call is
+told when its arguments are not of the types the schema gives (`gas must be
+a number`) is worded here: the staged file left that to the tool library.
+`Describe` fails only for a delete that could not run, so that nobody is
+asked about one; every other call whose arguments cannot be used is told so
+by `Run`, in the staged words, and not in the sentence the loop wraps a
+`Describe` error in. One thing was changed on purpose: the cut at 30,000 is
+made between characters and never inside one, where the staged code cut at
+the byte.
+
+**`memtodos.go`.** It turned a goal of mem's into the earlier harness's
+session task list. Kept: which line is in progress, which are pending or
+completed, and which are left out. Replaced: the earlier harness's todo type and its three statuses, by `Todo`
+and `TodoStatus` declared in the file itself (this harness has no task-list
+type yet); and the setter, which returned the earlier harness's session and
+an error that this file logged. The setter returns nothing now, and the log
+line is gone: a list that cannot be written is the setter's to tell the
+person of.
+
+**`tools_test.go`, `closecheck_test.go`, `memtodos_test.go`,
+`namer_test.go`** are the same tests. The tools are made with `New` and
+called through `core.Tool`; the session id is given in the `ToolEnv`; the
+assertions are the same lines, checked by `check_test.go` on the standard
+library instead of by the testify module. `tools_test.go` no longer makes a
+permission service for the delete, and `memtodos_test.go` no longer runs in
+parallel with the others.
+
+**`docs_test.go`** replays the examples of `GNOMEM.md` through the real
+tool, as it did, and checks its links, its quoted prompts and its table of
+runs. Left out, because what they read is not in this repository: the same
+checks of the earlier gnosh's `README.md` and of three documents under
+`docs/`; the test that ran the README's install lines; and
+`TestDocUserWordVerdict`, which tied the words GNOMEM quotes before the
+reason of a goal met on the user's word to a constant of the earlier
+harness's goal driver. That tie has no home until this harness has a goal
+driver. `TestDocLoopNote` held the README's quotation of the scratch
+machine's note to the note; it now holds the note to its words as
+`spec/gnosh/machines.md` records them.
+
+### What the check can and cannot hold these files to
+
+`tools/audit/carried.py check` cannot undo these changes to get the staged
+originals back, as it does for the table of files. For this directory it
+checks instead that:
+
+- the directory holds exactly the seven files above and the four listed
+  under "Files written fresh", and each of the seven staged files is the
+  source of one;
+- the table above is the one the script writes from its own record of the
+  staged originals, so that a size, a checksum or a number cannot be changed
+  in one place alone;
+- every string the staged `tools.go` and `memtodos.go` held is still, byte
+  for byte, a string of the files here that are not tests. That is 109
+  strings: the descriptions, the argument structs' tags, every format and
+  every fixed text of a result or an error. Three more are gone, and are
+  listed in the script with the reason: `memtodos.go`'s log line and the
+  key of its attribute, and the tag of the one-field struct that held a
+  result's frames, which are kept under the same key, `frames`, in the
+  result's `Meta`. The strings are in
+  `tools/audit/gnovm-tools-strings.json`.
+
+`tools/audit/carried.py tools --staged DIR --scan FILE`, run with the
+staging folder at hand, checks the script's record against the staged files
+themselves (size, SHA-256, the scan's verdict and numbers) and that every
+string of the staged `tools.go` and `memtodos.go` is either kept or listed
+as dropped, and writes the table and the list of strings.
+
+What no script checks: that the code around those strings does what the
+staged code did. The package's tests are for that. They run the tools
+against the real host, in the process, and against a scripted client, and
+hold each result to the text `spec/gnosh/machines.md` gives.
+
 ## Files written fresh
 
 These were written for this repository, from what the carried code needs of
@@ -527,7 +677,12 @@ race-detector tag files.
 | `internal/gnovm/sqlite.go` | `openSQLite(path, pragmas)`, the one opener for mem's index and vectors, on `modernc.org/sqlite` (SQLite in pure Go; there is no second driver and no build tag). Its comment gives the reason for each setting, from SQLite's documentation. |
 | `internal/gnovm/sqlite_test.go` | Tests of the opener: the path it opens, pragmas on every connection, transactions that take the write lock at `BEGIN`. |
 | `internal/gnovm/racedetector_on_test.go`, `internal/gnovm/racedetector_off_test.go` | `raceEnabled`, true or false by the `race` build tag, which two carried tests read to drop their timing checks under the race detector. |
+| `internal/gnovm/tools/options.go` | `Options`, everything the four tools are given from outside, each field with what it must return and when it is called; `Client`, the interface the tools reach the GnoVM through, and `Lazy`, which makes one of the program's `*gnovm.Lazy`; `New`, which makes the four. It takes the place of the earlier constructors' arguments and functional options. |
+| `internal/gnovm/tools/params.go` | The JSON schema of a tool's arguments, read off the argument struct and its tags, and the reading of a call's arguments into the struct. The earlier harness's tool library did both; this is written from what the structs' tags say and from JSON Schema's and `encoding/json`'s documentation. |
+| `internal/gnovm/tools/check_test.go` | The checks the tools' tests make (`require` and `assert`, on the standard library alone, with the few methods those tests use), and the helpers that call a tool as a session. |
+| `internal/gnovm/tools/run_test.go` | Tests written for this harness: every result form of `machines.md` section 9 against the real host, the request of `integration-contract.md` section 5.2, the order in which a kept call's frames, goals, erasure and rules are handed on, the close-check loop and a worker's death against a scripted client, `Describe`, what a call shows, the cut at 30,000, cancellation, and the parsers under fuzzing. |
 | `tools/audit/carried.py` | Writes and checks the tables in this file. |
+| `tools/audit/gnovm-tools-strings.json` | The strings of the staged `tools.go` and `memtodos.go` that the files here keep, written by `carried.py tools` and read by `carried.py check`. |
 
 ## Licences and notices
 
@@ -565,6 +720,31 @@ linux/amd64) on 13 November 2026.
 | `go test -count=1 -v ./internal/gnovm/` | ok in 269 s: of 218 tests, 210 pass and 8 skip themselves |
 | `go test -race -count=1 -v ./internal/gnovm/` | ok in 1,256 s: the same 210 pass and 8 skip, and no data race is reported |
 | `gno test -v .` in `gno/r/gnosh/mem`, with the gno tool built at the pinned version and `GNOROOT` pointing at gno's module | ok: 24 tests pass. Nothing in `go test` runs these; they need that tool. |
+
+### The tools' tests
+
+`internal/gnovm/tools` was brought later the same day. Of the 20 tests in
+its staged files, 18 were brought. Two were not: the one that ran the
+earlier README's install lines, and the one that tied GNOMEM to a constant
+of the earlier harness's goal driver. Five of the 18 read `GNOMEM.md` only,
+where they read the earlier README too ("The tools, carried with larger
+changes" above). 25 tests were written for this harness, two of them fuzz
+tests of the parsers.
+
+| what ran | result |
+|---|---|
+| `go vet ./internal/gnovm/tools/`, and the same for darwin/arm64 and windows/amd64 | pass |
+| `tools/dev/remote-test.sh -race -timeout 60m internal/gnovm/tools internal/gnovm internal/filelock internal/buildinfo` | ok, with no data race reported: the tools' 43 tests in 207 s, `internal/gnovm` in 1,675 s, `internal/filelock` and `internal/buildinfo` in 1 s each. Other builders' tests and fuzzers kept the machine's load average between 7 and 46 meanwhile, and the timing checks below held all the same; an earlier run of the same command, half an hour before and on the files as they then stood, also passed |
+| `go test -run '^$' -fuzz` of `FuzzDecodeParams` and of `FuzzUnnamedTexts`, 40 s each | pass, after 495,282 and 263,983 inputs |
+
+The tools' tests start no worker: the client runs its host in the test
+process (`ClientOptions.InProcess`), or is a scripted one. They read
+`GNOMEM.md` at the repository root, as `internal/gnovm`'s
+`TestDocMemKeepsWhatAnEarlierBuildKept` does. `tools/dev/remote-test.sh`
+copies package directories and not that file, so it was copied to the
+devbox by hand for these runs. Without `-timeout` the script's `go test`
+stops a package after ten minutes, which `internal/gnovm` outlasts under
+the race detector.
 
 ### The timing checks need a quiet machine
 
