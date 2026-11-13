@@ -1,0 +1,143 @@
+What Render draws, as a person can read it. A style is written ⟨like this⟩:
+⟨1⟩ is the escape sequence ESC [ 1 m, and ⟨0⟩ turns every style off. A space
+at the end of a row is written ␠.
+
+=== width 40, colour profile none ===
+
+cmd/hello/main.go  +14 -10
+ 1  1   package main
+ 2  2
+ 3    - import "fmt"
+    3 + import (
+    4 +     "fmt"
+    5 +     "strings"
+    6 + )
+ 4  7
+ 5    - // greet says hello.
+ 6    - func greet(name string) string {
+    8 + // greet says hello to someone,␠
+      ↳ by name.
+    9 + func greet(name, greeting␠
+      ↳ string) string {
+ 7    -     return "Hello, " + name
+   10 +     return greeting + ", " +␠
+      ↳ strings.TrimSpace(name)
+ 8 11   }
+ 9 12
+   13 + // shout says it louder.
+   14 + func shout(s string) string {
+   15 +     return strings.ToUpper(s) +␠
+      ↳ "!"
+   16 + }
+   17 +
+10 18   func main() {
+11    -     fmt.Println(greet("world"))
+12    -     fmt.Println("a line that is␠
+      ↳ long enough to need wrapping␠
+      ↳ when the terminal is narrow,␠
+      ↳ with words to break between")
+   19 +     fmt.Println(greet("world",␠
+      ↳ "Hello"))
+   20 +     fmt.Println("a line that is␠
+      ↳ long enough to need wrapping␠
+      ↳ when the terminal is narrow,␠
+      ↳ with words to break up between")
+13 21   }
+14 22
+15 23   // The lines below are here to␠
+      ↳ put some distance between two␠
+      ↳ changes.
+      ⋮ 5 unchanged lines
+21 29       five  = 5
+22 30       six   = 6
+23 31   )
+24    -
+25    - func unused() {
+26    -     return
+27    - }
+
+=== width 80, colour profile none ===
+
+cmd/hello/main.go  +14 -10
+ 1  1   package main
+ 2  2
+ 3    - import "fmt"
+    3 + import (
+    4 +     "fmt"
+    5 +     "strings"
+    6 + )
+ 4  7
+ 5    - // greet says hello.
+ 6    - func greet(name string) string {
+    8 + // greet says hello to someone, by name.
+    9 + func greet(name, greeting string) string {
+ 7    -     return "Hello, " + name
+   10 +     return greeting + ", " + strings.TrimSpace(name)
+ 8 11   }
+ 9 12
+   13 + // shout says it louder.
+   14 + func shout(s string) string {
+   15 +     return strings.ToUpper(s) + "!"
+   16 + }
+   17 +
+10 18   func main() {
+11    -     fmt.Println(greet("world"))
+12    -     fmt.Println("a line that is long enough to need wrapping when the␠
+      ↳ terminal is narrow, with words to break between")
+   19 +     fmt.Println(greet("world", "Hello"))
+   20 +     fmt.Println("a line that is long enough to need wrapping when the␠
+      ↳ terminal is narrow, with words to break up between")
+13 21   }
+14 22
+15 23   // The lines below are here to put some distance between two changes.
+      ⋮ 5 unchanged lines
+21 29       five  = 5
+22 30       six   = 6
+23 31   )
+24    -
+25    - func unused() {
+26    -     return
+27    - }
+
+=== width 120, colour profile none ===
+
+cmd/hello/main.go  +14 -10
+ 1  1   package main
+ 2  2
+ 3    - import "fmt"
+    3 + import (
+    4 +     "fmt"
+    5 +     "strings"
+    6 + )
+ 4  7
+ 5    - // greet says hello.
+ 6    - func greet(name string) string {
+    8 + // greet says hello to someone, by name.
+    9 + func greet(name, greeting string) string {
+ 7    -     return "Hello, " + name
+   10 +     return greeting + ", " + strings.TrimSpace(name)
+ 8 11   }
+ 9 12
+   13 + // shout says it louder.
+   14 + func shout(s string) string {
+   15 +     return strings.ToUpper(s) + "!"
+   16 + }
+   17 +
+10 18   func main() {
+11    -     fmt.Println(greet("world"))
+12    -     fmt.Println("a line that is long enough to need wrapping when the terminal is narrow, with words to break␠
+      ↳ between")
+   19 +     fmt.Println(greet("world", "Hello"))
+   20 +     fmt.Println("a line that is long enough to need wrapping when the terminal is narrow, with words to break␠
+      ↳ up between")
+13 21   }
+14 22
+15 23   // The lines below are here to put some distance between two changes.
+      ⋮ 5 unchanged lines
+21 29       five  = 5
+22 30       six   = 6
+23 31   )
+24    -
+25    - func unused() {
+26    -     return
+27    - }

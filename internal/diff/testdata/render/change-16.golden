@@ -1,0 +1,143 @@
+What Render draws, as a person can read it. A style is written ⟨like this⟩:
+⟨1⟩ is the escape sequence ESC [ 1 m, and ⟨0⟩ turns every style off. A space
+at the end of a row is written ␠.
+
+=== width 40, colour profile 16 ===
+
+⟨1⟩cmd/hello/main.go⟨0⟩  ⟨32⟩+14⟨0⟩ ⟨31⟩-10⟨0⟩
+ ⟨2⟩1  1⟨0⟩   package main
+ ⟨2⟩2  2⟨0⟩
+ ⟨2⟩3⟨0⟩    ⟨31⟩- import ⟨0⟩⟨4;31⟩"fmt"⟨0⟩
+    ⟨2⟩3⟨0⟩ ⟨32⟩+ import ⟨0⟩⟨4;32⟩(⟨0⟩
+    ⟨2⟩4⟨0⟩ ⟨32⟩+     "fmt"⟨0⟩
+    ⟨2⟩5⟨0⟩ ⟨32⟩+     "strings"⟨0⟩
+    ⟨2⟩6⟨0⟩ ⟨32⟩+ )⟨0⟩
+ ⟨2⟩4  7⟨0⟩
+ ⟨2⟩5⟨0⟩    ⟨31⟩- // greet says hello.⟨0⟩
+ ⟨2⟩6⟨0⟩    ⟨31⟩- func greet(name string) string {⟨0⟩
+    ⟨2⟩8⟨0⟩ ⟨32⟩+ // greet says hello⟨0⟩⟨4;32⟩ to someone, ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ ⟨0⟩⟨4;32⟩by name⟨0⟩⟨32⟩.⟨0⟩
+    ⟨2⟩9⟨0⟩ ⟨32⟩+ func greet(name⟨0⟩⟨4;32⟩, greeting⟨0⟩⟨32⟩ ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ string) string {⟨0⟩
+ ⟨2⟩7⟨0⟩    ⟨31⟩-     return "Hello, " + name⟨0⟩
+   ⟨2⟩10⟨0⟩ ⟨32⟩+     return greeting + ", " + ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ strings.TrimSpace(name)⟨0⟩
+ ⟨2⟩8 11⟨0⟩   }
+ ⟨2⟩9 12⟨0⟩
+   ⟨2⟩13⟨0⟩ ⟨32⟩+ // shout says it louder.⟨0⟩
+   ⟨2⟩14⟨0⟩ ⟨32⟩+ func shout(s string) string {⟨0⟩
+   ⟨2⟩15⟨0⟩ ⟨32⟩+     return strings.ToUpper(s) + ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ "!"⟨0⟩
+   ⟨2⟩16⟨0⟩ ⟨32⟩+ }⟨0⟩
+   ⟨2⟩17⟨0⟩ ⟨32⟩+⟨0⟩
+⟨2⟩10 18⟨0⟩   func main() {
+⟨2⟩11⟨0⟩    ⟨31⟩-     fmt.Println(greet("world"))⟨0⟩
+⟨2⟩12⟨0⟩    ⟨31⟩-     fmt.Println("a line that is ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨31⟩ long enough to need wrapping ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨31⟩ when the terminal is narrow, ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨31⟩ with words to break between")⟨0⟩
+   ⟨2⟩19⟨0⟩ ⟨32⟩+     fmt.Println(greet("world"⟨0⟩⟨4;32⟩, ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ ⟨0⟩⟨4;32⟩"Hello"⟨0⟩⟨32⟩))⟨0⟩
+   ⟨2⟩20⟨0⟩ ⟨32⟩+     fmt.Println("a line that is ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ long enough to need wrapping ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ when the terminal is narrow, ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ with words to break ⟨0⟩⟨4;32⟩up ⟨0⟩⟨32⟩between")⟨0⟩
+⟨2⟩13 21⟨0⟩   }
+⟨2⟩14 22⟨0⟩
+⟨2⟩15 23⟨0⟩   // The lines below are here to␠
+      ⟨2⟩↳⟨0⟩ put some distance between two␠
+      ⟨2⟩↳⟨0⟩ changes.
+      ⟨2⟩⋮⟨0⟩ ⟨2⟩5 unchanged lines⟨0⟩
+⟨2⟩21 29⟨0⟩       five  = 5
+⟨2⟩22 30⟨0⟩       six   = 6
+⟨2⟩23 31⟨0⟩   )
+⟨2⟩24⟨0⟩    ⟨31⟩-⟨0⟩
+⟨2⟩25⟨0⟩    ⟨31⟩- func unused() {⟨0⟩
+⟨2⟩26⟨0⟩    ⟨31⟩-     return⟨0⟩
+⟨2⟩27⟨0⟩    ⟨31⟩- }⟨0⟩
+
+=== width 80, colour profile 16 ===
+
+⟨1⟩cmd/hello/main.go⟨0⟩  ⟨32⟩+14⟨0⟩ ⟨31⟩-10⟨0⟩
+ ⟨2⟩1  1⟨0⟩   package main
+ ⟨2⟩2  2⟨0⟩
+ ⟨2⟩3⟨0⟩    ⟨31⟩- import ⟨0⟩⟨4;31⟩"fmt"⟨0⟩
+    ⟨2⟩3⟨0⟩ ⟨32⟩+ import ⟨0⟩⟨4;32⟩(⟨0⟩
+    ⟨2⟩4⟨0⟩ ⟨32⟩+     "fmt"⟨0⟩
+    ⟨2⟩5⟨0⟩ ⟨32⟩+     "strings"⟨0⟩
+    ⟨2⟩6⟨0⟩ ⟨32⟩+ )⟨0⟩
+ ⟨2⟩4  7⟨0⟩
+ ⟨2⟩5⟨0⟩    ⟨31⟩- // greet says hello.⟨0⟩
+ ⟨2⟩6⟨0⟩    ⟨31⟩- func greet(name string) string {⟨0⟩
+    ⟨2⟩8⟨0⟩ ⟨32⟩+ // greet says hello⟨0⟩⟨4;32⟩ to someone, by name⟨0⟩⟨32⟩.⟨0⟩
+    ⟨2⟩9⟨0⟩ ⟨32⟩+ func greet(name⟨0⟩⟨4;32⟩, greeting⟨0⟩⟨32⟩ string) string {⟨0⟩
+ ⟨2⟩7⟨0⟩    ⟨31⟩-     return "Hello, " + name⟨0⟩
+   ⟨2⟩10⟨0⟩ ⟨32⟩+     return greeting + ", " + strings.TrimSpace(name)⟨0⟩
+ ⟨2⟩8 11⟨0⟩   }
+ ⟨2⟩9 12⟨0⟩
+   ⟨2⟩13⟨0⟩ ⟨32⟩+ // shout says it louder.⟨0⟩
+   ⟨2⟩14⟨0⟩ ⟨32⟩+ func shout(s string) string {⟨0⟩
+   ⟨2⟩15⟨0⟩ ⟨32⟩+     return strings.ToUpper(s) + "!"⟨0⟩
+   ⟨2⟩16⟨0⟩ ⟨32⟩+ }⟨0⟩
+   ⟨2⟩17⟨0⟩ ⟨32⟩+⟨0⟩
+⟨2⟩10 18⟨0⟩   func main() {
+⟨2⟩11⟨0⟩    ⟨31⟩-     fmt.Println(greet("world"))⟨0⟩
+⟨2⟩12⟨0⟩    ⟨31⟩-     fmt.Println("a line that is long enough to need wrapping when the ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨31⟩ terminal is narrow, with words to break between")⟨0⟩
+   ⟨2⟩19⟨0⟩ ⟨32⟩+     fmt.Println(greet("world"⟨0⟩⟨4;32⟩, "Hello"⟨0⟩⟨32⟩))⟨0⟩
+   ⟨2⟩20⟨0⟩ ⟨32⟩+     fmt.Println("a line that is long enough to need wrapping when the ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ terminal is narrow, with words to break ⟨0⟩⟨4;32⟩up ⟨0⟩⟨32⟩between")⟨0⟩
+⟨2⟩13 21⟨0⟩   }
+⟨2⟩14 22⟨0⟩
+⟨2⟩15 23⟨0⟩   // The lines below are here to put some distance between two changes.
+      ⟨2⟩⋮⟨0⟩ ⟨2⟩5 unchanged lines⟨0⟩
+⟨2⟩21 29⟨0⟩       five  = 5
+⟨2⟩22 30⟨0⟩       six   = 6
+⟨2⟩23 31⟨0⟩   )
+⟨2⟩24⟨0⟩    ⟨31⟩-⟨0⟩
+⟨2⟩25⟨0⟩    ⟨31⟩- func unused() {⟨0⟩
+⟨2⟩26⟨0⟩    ⟨31⟩-     return⟨0⟩
+⟨2⟩27⟨0⟩    ⟨31⟩- }⟨0⟩
+
+=== width 120, colour profile 16 ===
+
+⟨1⟩cmd/hello/main.go⟨0⟩  ⟨32⟩+14⟨0⟩ ⟨31⟩-10⟨0⟩
+ ⟨2⟩1  1⟨0⟩   package main
+ ⟨2⟩2  2⟨0⟩
+ ⟨2⟩3⟨0⟩    ⟨31⟩- import ⟨0⟩⟨4;31⟩"fmt"⟨0⟩
+    ⟨2⟩3⟨0⟩ ⟨32⟩+ import ⟨0⟩⟨4;32⟩(⟨0⟩
+    ⟨2⟩4⟨0⟩ ⟨32⟩+     "fmt"⟨0⟩
+    ⟨2⟩5⟨0⟩ ⟨32⟩+     "strings"⟨0⟩
+    ⟨2⟩6⟨0⟩ ⟨32⟩+ )⟨0⟩
+ ⟨2⟩4  7⟨0⟩
+ ⟨2⟩5⟨0⟩    ⟨31⟩- // greet says hello.⟨0⟩
+ ⟨2⟩6⟨0⟩    ⟨31⟩- func greet(name string) string {⟨0⟩
+    ⟨2⟩8⟨0⟩ ⟨32⟩+ // greet says hello⟨0⟩⟨4;32⟩ to someone, by name⟨0⟩⟨32⟩.⟨0⟩
+    ⟨2⟩9⟨0⟩ ⟨32⟩+ func greet(name⟨0⟩⟨4;32⟩, greeting⟨0⟩⟨32⟩ string) string {⟨0⟩
+ ⟨2⟩7⟨0⟩    ⟨31⟩-     return "Hello, " + name⟨0⟩
+   ⟨2⟩10⟨0⟩ ⟨32⟩+     return greeting + ", " + strings.TrimSpace(name)⟨0⟩
+ ⟨2⟩8 11⟨0⟩   }
+ ⟨2⟩9 12⟨0⟩
+   ⟨2⟩13⟨0⟩ ⟨32⟩+ // shout says it louder.⟨0⟩
+   ⟨2⟩14⟨0⟩ ⟨32⟩+ func shout(s string) string {⟨0⟩
+   ⟨2⟩15⟨0⟩ ⟨32⟩+     return strings.ToUpper(s) + "!"⟨0⟩
+   ⟨2⟩16⟨0⟩ ⟨32⟩+ }⟨0⟩
+   ⟨2⟩17⟨0⟩ ⟨32⟩+⟨0⟩
+⟨2⟩10 18⟨0⟩   func main() {
+⟨2⟩11⟨0⟩    ⟨31⟩-     fmt.Println(greet("world"))⟨0⟩
+⟨2⟩12⟨0⟩    ⟨31⟩-     fmt.Println("a line that is long enough to need wrapping when the terminal is narrow, with words to break ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨31⟩ between")⟨0⟩
+   ⟨2⟩19⟨0⟩ ⟨32⟩+     fmt.Println(greet("world"⟨0⟩⟨4;32⟩, "Hello"⟨0⟩⟨32⟩))⟨0⟩
+   ⟨2⟩20⟨0⟩ ⟨32⟩+     fmt.Println("a line that is long enough to need wrapping when the terminal is narrow, with words to break ⟨0⟩
+      ⟨2⟩↳⟨0⟩⟨32⟩ ⟨0⟩⟨4;32⟩up ⟨0⟩⟨32⟩between")⟨0⟩
+⟨2⟩13 21⟨0⟩   }
+⟨2⟩14 22⟨0⟩
+⟨2⟩15 23⟨0⟩   // The lines below are here to put some distance between two changes.
+      ⟨2⟩⋮⟨0⟩ ⟨2⟩5 unchanged lines⟨0⟩
+⟨2⟩21 29⟨0⟩       five  = 5
+⟨2⟩22 30⟨0⟩       six   = 6
+⟨2⟩23 31⟨0⟩   )
+⟨2⟩24⟨0⟩    ⟨31⟩-⟨0⟩
+⟨2⟩25⟨0⟩    ⟨31⟩- func unused() {⟨0⟩
+⟨2⟩26⟨0⟩    ⟨31⟩-     return⟨0⟩
+⟨2⟩27⟨0⟩    ⟨31⟩- }⟨0⟩

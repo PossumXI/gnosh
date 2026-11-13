@@ -1,0 +1,133 @@
+What Render draws, as a person can read it. A style is written ⟨like this⟩:
+⟨1⟩ is the escape sequence ESC [ 1 m, and ⟨0⟩ turns every style off. A space
+at the end of a row is written ␠.
+
+=== a new file ===
+
+docs/new.md  new file  +3
+1 + # Title
+2 +
+3 + Some text.
+
+=== a file emptied ===
+
+docs/old.md  emptied  -3
+1 - # Title
+2 -
+3 - Some text.
+
+=== a file deleted ===
+
+docs/old.md  deleted file  -3
+1 - # Title
+2 -
+3 - Some text.
+
+=== no changes ===
+
+docs/same.md  no changes
+
+=== binary content ===
+
+img/logo.png  binary or not UTF-8 text: not shown (5 bytes before, 6 after)
+
+=== line endings changed throughout ===
+
+win/readme.txt  +1 -1
+line endings changed: CRLF to LF
+1 1   one
+2   - two
+  2 + 2
+3 3   three
+
+=== line endings mixed ===
+
+win/mixed.txt
+line endings changed on 1 line
+1 1   one
+2   - two
+  2 + two␍
+3 3   three
+
+=== the final newline removed ===
+
+a.txt  +1 -1
+newline removed from end of file
+1 1   one
+2   - two
+  2 + 2
+
+=== only spaces changed ===
+
+ws.go  +2 -2
+1   - →   x := 1
+2   - y := 2
+  1 + ····x := 1
+  2 + y := 2··
+
+=== what a file must not do to a terminal ===
+
+evil.txt  +1 -1
+1   - plain
+  1 + ␛[2J␛[31mred␇ <U+202E>gnp.exe z<U+200B>w
+
+=== wide characters at the edge ===
+
+ja.txt  +1 -1
+1   - 日本語のテキストを折り返
+    ↳ す位置で確認します。絵文
+    ↳ 字🎉も👨‍👩‍👧含めます。
+  1 + 日本語のテキストを折り返
+    ↳ す位置で確認する。絵文字
+    ↳ 🎉も👨‍👩‍👧含めます。
+
+=== a cap on the lines shown ===
+
+cmd/hello/main.go  +14 -10
+ 1  1   package main
+ 2  2
+ 3    - import "fmt"
+    3 + import (
+    4 +     "fmt"
+    5 +     "strings"
+    6 + )
+ 4  7
+ 5    - // greet says hello.
+ 6    - func greet(name string) string {
+    8 + // greet says hello to someone, by name.
+    9 + func greet(name, greeting string) string {
+      ⋮ 15 more changed lines in 2 hunks not shown
+
+=== no context ===
+
+cmd/hello/main.go  +14 -10
+ 3    - import "fmt"
+    3 + import (
+    4 +     "fmt"
+    5 +     "strings"
+    6 + )
+      ⋮ 1 unchanged line
+ 5    - // greet says hello.
+ 6    - func greet(name string) string {
+    8 + // greet says hello to someone, by name.
+    9 + func greet(name, greeting string) string {
+ 7    -     return "Hello, " + name
+   10 +     return greeting + ", " + strings.TrimSpace(name)
+      ⋮ 2 unchanged lines
+   13 + // shout says it louder.
+   14 + func shout(s string) string {
+   15 +     return strings.ToUpper(s) + "!"
+   16 + }
+   17 +
+      ⋮ 1 unchanged line
+11    -     fmt.Println(greet("world"))
+12    -     fmt.Println("a line that is long enough to need wrapping when the␠
+      ↳ terminal is narrow, with words to break between")
+   19 +     fmt.Println(greet("world", "Hello"))
+   20 +     fmt.Println("a line that is long enough to need wrapping when the␠
+      ↳ terminal is narrow, with words to break up between")
+      ⋮ 11 unchanged lines
+24    -
+25    - func unused() {
+26    -     return
+27    - }
