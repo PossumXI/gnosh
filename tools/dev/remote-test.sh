@@ -6,13 +6,17 @@
 #                            [-fuzz NAME -fuzztime D] DIR...
 #
 # DIR is a package directory relative to the repo root, such as internal/llm.
-# The script copies go.mod, go.sum, internal/core and each DIR to the devbox
-# (inside those directories, files gone here are deleted there; nothing else
-# on the devbox is touched), then runs gofmt -l, go vet and go test for
-# ./DIR/... there. Its exit status is the remote one.
+# The script copies go.mod, go.sum, internal/core and each DIR to the devbox,
+# one directory at a time, so that inside a copied directory files gone here
+# are deleted there and nothing outside those directories is touched: several
+# people can run it at once on different directories. It then runs gofmt -l,
+# go vet and go test for ./DIR/... there. Its exit status is the remote one.
 #
 # A package under test may import only internal/core and packages inside the
 # DIRs named in the same run.
+#
+# To replace this file, write the new one beside it and rename it into place:
+# a shell that is running the old one keeps reading the old one.
 set -eu
 cd "$(dirname "$0")/../.."
 
@@ -38,6 +42,7 @@ while [ $# -gt 0 ]; do
 		;;
 	*)
 		d=${1%/}
+		d=${d#./}
 		[ -d "$d" ] || {
 			echo "remote-test: no such directory: $d" >&2
 			exit 2
@@ -54,16 +59,29 @@ done
 
 SSH="ssh -i $KEY -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"
 
-paths="./go.mod ./internal/core"
-[ -f go.sum ] && paths="$paths ./go.sum"
+mk=""
 pkgs=""
+for d in internal/core $dirs; do
+	mk="$mk $REMOTE/$d"
+done
 for d in $dirs; do
-	paths="$paths ./$d"
 	pkgs="$pkgs ./$d/..."
 done
 
+# shellcheck disable=SC2086,SC2029
+$SSH "$HOST" "mkdir -p $mk"
+
+mods="go.mod"
+[ -f go.sum ] && mods="$mods go.sum"
 # shellcheck disable=SC2086
-rsync -az --delete --relative -e "$SSH" $paths "$HOST:$REMOTE/"
+rsync -az -e "$SSH" $mods "$HOST:$REMOTE/"
+
+# One directory at a time, each onto its own place: --delete then reaches
+# only inside that directory. (Copying them in one go with --relative made
+# rsync treat internal/ itself as copied and delete its other children.)
+for d in internal/core $dirs; do
+	rsync -az --delete -e "$SSH" "$d/" "$HOST:$REMOTE/$d/"
+done
 
 # shellcheck disable=SC2086,SC2029
 $SSH "$HOST" "cd $REMOTE && export PATH=/usr/local/go/bin:\$PATH && bad=\$(gofmt -l $dirs) && { [ -z \"\$bad\" ] || { echo 'gofmt -w needed for:'; echo \"\$bad\"; exit 1; }; } && go vet $pkgs && go test -count=1 $flags $pkgs"

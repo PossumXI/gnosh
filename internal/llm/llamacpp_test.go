@@ -1,0 +1,474 @@
+package llm
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/gnosh-ai/gnosh/internal/core"
+)
+
+// The timings object as llama.cpp's server documentation shows it.
+const llamaTimings = `{"cache_n":236,"prompt_n":1,"prompt_ms":30.958,"prompt_per_token_ms":30.958,"prompt_per_second":32.301828283480845,"predicted_n":35,"predicted_ms":661.064,"predicted_per_token_ms":18.887542857142858,"predicted_per_second":52.94494935437416}`
+
+func TestLlamaCppStreams(t *testing.T) {
+	runStreamCases(t, TypeLlamaCpp, []streamCase{
+		{
+			name: "text, with timings and a usage chunk",
+			stream: events(
+				delta(`{"role":"assistant","content":null}`),
+				delta(`{"content":"Hi"}`),
+				chunk(`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"timings":`+llamaTimings),
+				chunk(`"choices":[],"usage":{"completion_tokens":35,"prompt_tokens":237,"total_tokens":272,"prompt_tokens_details":{"cached_tokens":236}},"timings":`+llamaTimings),
+				doneLine,
+			),
+			events:  []string{`text "Hi"`, `usage in=1 out=35 read=236 write=0`, `stop end_turn`},
+			message: []string{`text "Hi"`},
+		},
+		{
+			name: "timings alone give the usage",
+			stream: events(
+				delta(`{"content":"Hi"}`),
+				chunk(`"choices":[{"index":0,"delta":{},"finish_reason":"length"}],"timings":`+llamaTimings),
+				doneLine,
+			),
+			events:  []string{`text "Hi"`, `usage in=1 out=35 read=236 write=0`, `stop max_tokens`},
+			message: []string{`text "Hi"`},
+		},
+		{
+			name: "a usage chunk that does not say what was cached",
+			stream: events(
+				delta(`{"content":"Hi"}`),
+				chunk(`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"timings":`+llamaTimings),
+				usageChunk(`{"completion_tokens":36,"prompt_tokens":237,"total_tokens":273}`),
+				doneLine,
+			),
+			events:  []string{`text "Hi"`, `usage in=1 out=36 read=236 write=0`, `stop end_turn`},
+			message: []string{`text "Hi"`},
+		},
+		{
+			name: "an older server's timings, with no count of what was cached",
+			stream: events(
+				delta(`{"content":"Hi"}`),
+				chunk(`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"timings":{"prompt_n":12,"prompt_ms":30.9,"predicted_n":35,"predicted_ms":661.0}`),
+				usageChunk(`{"completion_tokens":35,"prompt_tokens":237,"total_tokens":272}`),
+				doneLine,
+			),
+			events:  []string{`text "Hi"`, `usage in=12 out=35 read=225 write=0`, `stop end_turn`},
+			message: []string{`text "Hi"`},
+		},
+		{
+			name: "an older server's timings and nothing else",
+			stream: events(
+				delta(`{"content":"Hi"}`),
+				chunk(`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"timings":{"prompt_n":12,"predicted_n":35}`),
+				doneLine,
+			),
+			events:  []string{`text "Hi"`, `usage in=12 out=35 read=0 write=0`, `stop end_turn`},
+			message: []string{`text "Hi"`},
+		},
+		{
+			name: "reasoning in its own field",
+			stream: events(
+				delta(`{"role":"assistant","content":null}`),
+				delta(`{"reasoning_content":"The user"}`),
+				delta(`{"reasoning_content":" greets me."}`),
+				delta(`{"content":"Hello!"}`),
+				finish("stop"),
+				doneLine,
+			),
+			events:  []string{`thinking "The user"`, `thinking " greets me."`, `text "Hello!"`, `stop end_turn`},
+			message: []string{`thinking "The user greets me."`, `text "Hello!"`},
+		},
+		{
+			name: "inline think tags, cut across chunks",
+			stream: events(
+				delta(`{"content":"<th"}`),
+				delta(`{"content":"ink>\nThe user"}`),
+				delta(`{"content":" greets me.\n</thi"}`),
+				delta(`{"content":"nk>\n\nHel"}`),
+				delta(`{"content":"lo!"}`),
+				finish("stop"),
+				doneLine,
+			),
+			events:  []string{`thinking "The user"`, `thinking " greets me."`, `text "Hel"`, `text "lo!"`, `stop end_turn`},
+			message: []string{`thinking "The user greets me."`, `text "Hello!"`},
+		},
+		{
+			name: "inline think tags, then a tool call: what is held back comes first",
+			stream: events(
+				delta(`{"content":"<think>plan</think>\n<thi"}`),
+				delta(`{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"Read","arguments":"{}"}}]}`),
+				finish("tool_calls"),
+				doneLine,
+			),
+			events: []string{
+				`thinking "plan"`, `text "<thi"`,
+				`tool call_1 Read`, `args call_1 "{}"`, `done call_1`,
+				`stop tool_use`,
+			},
+			message: []string{`thinking "plan"`, `text "<thi"`, `tool_use call_1 Read {}`},
+		},
+		{
+			name: "half a tag held back when the answer ends",
+			stream: events(
+				delta(`{"content":"  <thi"}`),
+				finish("stop"),
+				doneLine,
+			),
+			events:  []string{`text "  <thi"`, `stop end_turn`},
+			message: []string{`text "  <thi"`},
+		},
+		{
+			name: "a think block that never closes",
+			stream: events(
+				delta(`{"content":"<think>still thinking"}`),
+				finish("length"),
+				doneLine,
+			),
+			events:  []string{`thinking "still thinking"`, `stop max_tokens`},
+			message: []string{`thinking "still thinking"`},
+		},
+		{
+			name: "reasoning in its own field and in tags as well: read once",
+			stream: events(
+				delta(`{"reasoning_content":"plan","content":"<think>plan"}`),
+				delta(`{"content":"</think>Done."}`),
+				finish("stop"),
+				doneLine,
+			),
+			events:  []string{`thinking "plan"`, `text "Done."`, `stop end_turn`},
+			message: []string{`thinking "plan"`, `text "Done."`},
+		},
+		{
+			name:   "think tags left alone when switched off",
+			change: func(c *Config) { c.ThinkTags = "off" },
+			stream: events(
+				delta(`{"content":"<think>plan</think>Done."}`),
+				finish("stop"),
+				doneLine,
+			),
+			events:  []string{`text "<think>plan</think>Done."`, `stop end_turn`},
+			message: []string{`text "<think>plan</think>Done."`},
+		},
+		{
+			name: "pings while the prompt is read, and progress reports",
+			stream: ": ping\n\n: ping\n\n" + events(
+				chunk(`"choices":[{"index":0,"delta":{"role":"assistant","content":null},"finish_reason":null}],"prompt_progress":{"total":900,"cache":100,"processed":500,"time_ms":1200}`),
+				delta(`{"content":"Hi"}`),
+				finish("stop"),
+				doneLine,
+			),
+			events:  []string{`text "Hi"`, `stop end_turn`},
+			message: []string{`text "Hi"`},
+		},
+	})
+}
+
+func TestLlamaCppHeldTextComesBeforeAnError(t *testing.T) {
+	f := newFake(t, playing(events(
+		delta(`{"content":"<thi"}`),
+		`data: {"error":{"code":500,"message":"slot failed","type":"server_error"}}`,
+	)))
+	res := ask(f.provider(TypeLlamaCpp, nil))
+	wantFailure(t, res.err, core.ErrServer)
+	wantLines(t, "events", res.events, []string{`text "<thi"`})
+	wantLines(t, "message", res.message, []string{`text "<thi"`})
+
+	// The same when the connection breaks while half a tag is held.
+	f = newFake(t, playing(events(delta(`{"content":"\n<thi"}`)), cut{}))
+	res = ask(f.provider(TypeLlamaCpp, nil))
+	wantFailure(t, res.err, core.ErrNetwork)
+	wantLines(t, "events", res.events, []string{`text "\n<thi"`})
+}
+
+func TestLlamaCppRequest(t *testing.T) {
+	f := newFake(t, playing(okStream))
+	p := f.provider(TypeLlamaCpp, nil)
+	wantOK(t, drain(p.Stream(context.Background(), fullRequest())))
+	if got := f.last(); got.Path != "/v1/chat/completions" || got.Header.Get("Authorization") != "" {
+		t.Errorf("sent to %s with Authorization %q", got.Path, got.Header.Get("Authorization"))
+	}
+	wantJSON(t, "request body", f.last().Body, `{
+		"model": "gpt-test",
+		"stream": true,
+		"stream_options": {"include_usage": true},
+		"cache_prompt": true,
+		"chat_template_kwargs": {"enable_thinking": true, "reasoning_effort": "high"},
+		"parallel_tool_calls": true,
+		"max_tokens": 1000,
+		"temperature": 0.5,
+		"top_p": 0.9,
+		"stop": ["END"],
+		"messages": [
+			{"role": "system", "content": "You are gnosh.\n\nThe project is a compiler."},
+			{"role": "user", "content": "Read main.go\n\nand <b>fix</b> it."},
+			{"role": "assistant", "content": "I'll read it.", "tool_calls": [
+				{"id": "call_1", "type": "function", "function": {"name": "Read", "arguments": "{\"file_path\":\"main.go\"}"}},
+				{"id": "call_2", "type": "function", "function": {"name": "Glob", "arguments": "{}"}}
+			]},
+			{"role": "tool", "tool_call_id": "call_1", "content": "package main"},
+			{"role": "tool", "tool_call_id": "call_2", "content": "no matches"},
+			{"role": "user", "content": "Go on."},
+			{"role": "assistant", "content": "Done."},
+			{"role": "user", "content": "Thanks."}
+		],
+		"tools": [
+			{"type": "function", "function": {"name": "Read", "description": "Reads a file.", "parameters": {"type":"object","properties":{"file_path":{"type":"string"}},"required":["file_path"]}}},
+			{"type": "function", "function": {"name": "Glob", "parameters": {"type":"object","properties":{}}}}
+		]
+	}`)
+
+	// Thinking off, no tools, no cap; and the template's own switches can
+	// ride along through Extra.
+	req := &core.Request{
+		Model:    "qwen",
+		Messages: []core.Message{core.UserText("hi")},
+		Thinking: core.Thinking{Mode: "off"},
+		Extra:    map[string]any{"chat_template_kwargs": map[string]any{"reasoning_effort": "low"}, "cache_prompt": false},
+	}
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	wantJSON(t, "request body, thinking off", f.last().Body, `{
+		"model": "qwen", "stream": true, "stream_options": {"include_usage": true},
+		"cache_prompt": false,
+		"chat_template_kwargs": {"enable_thinking": false, "reasoning_effort": "low"},
+		"messages": [{"role": "user", "content": "hi"}]
+	}`)
+
+	// Thinking left to the model: the template is not told anything.
+	req = &core.Request{Model: "qwen", Messages: []core.Message{core.UserText("hi")}, Thinking: core.Thinking{BudgetTokens: 500}}
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	wantJSON(t, "request body, thinking left alone", f.last().Body, `{
+		"model": "qwen", "stream": true, "stream_options": {"include_usage": true}, "cache_prompt": true,
+		"messages": [{"role": "user", "content": "hi"}]
+	}`)
+}
+
+func TestLlamaCppTimingsTrace(t *testing.T) {
+	var got []TraceRecord
+	f := newFake(t, playing(events(
+		delta(`{"content":"Hi"}`),
+		chunk(`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"timings":`+llamaTimings),
+		doneLine,
+	)))
+	p := f.provider(TypeLlamaCpp, func(c *Config) { c.Trace = func(r TraceRecord) { got = append(got, r) } })
+	wantOK(t, ask(p))
+	var timings *Timings
+	for _, r := range got {
+		if r.Kind == TraceTimings {
+			timings = r.Timings
+		}
+	}
+	want := Timings{CacheN: 236, PromptN: 1, PromptMS: 30.958, PromptPerSecond: 32.301828283480845, PredictedN: 35, PredictedMS: 661.064, PredictedPerSecond: 52.94494935437416}
+	if timings == nil || *timings != want {
+		t.Errorf("timings = %+v, want %+v", timings, want)
+	}
+}
+
+func TestLlamaCppModels(t *testing.T) {
+	t.Run("one model", func(t *testing.T) {
+		f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.URL.Path {
+			case "/v1/models":
+				io.WriteString(w, `{"object":"list","data":[{"id":"qwen3","object":"model","created":1,"owned_by":"llamacpp","meta":{"vocab_type":2,"n_vocab":151936,"n_ctx_train":262144,"n_embd":5120,"n_params":27000000000,"size":17000000000}}]}`)
+			case "/props":
+				io.WriteString(w, `{"default_generation_settings":{"id":0,"n_ctx":65536,"params":{"n_predict":-1}},"total_slots":1,"model_path":"/models/qwen3.gguf","chat_template":"...","is_sleeping":false}`)
+			default:
+				http.Error(w, `{"error":{"code":404,"message":"File Not Found","type":"not_found_error"}}`, 404)
+			}
+		})
+		p := f.provider(TypeLlamaCpp, nil)
+		got, err := p.(core.ModelLister).Models(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The context is the one the server runs with, not the one the
+		// model was trained with.
+		if len(got) != 1 || got[0] != (core.ModelInfo{ID: "qwen3", ContextWindow: 65536}) {
+			t.Errorf("got %+v", got)
+		}
+		reqs := f.requests()
+		if len(reqs) != 2 || reqs[1].Path != "/props" || reqs[1].Query != "" {
+			t.Errorf("requests: %+v", reqs)
+		}
+		f.waitClosed()
+	})
+
+	t.Run("several models: the list is all that is asked for", func(t *testing.T) {
+		// A server that holds one model at a time loads whichever model
+		// a request names. Listing must name none, not even the one
+		// that is loaded.
+		f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Path != "/v1/models" {
+				t.Errorf("unexpected request %s?%s", r.URL.Path, r.URL.RawQuery)
+				http.Error(w, "no", 500)
+				return
+			}
+			io.WriteString(w, `{"object":"list","data":[
+				{"id":"org/qwen:Q4","object":"model","status":{"value":"loaded","args":["llama-server","-ctx","4096"]}},
+				{"id":"gpt-oss","object":"model","status":{"value":"unloaded"}},
+				{"id":"sleepy","object":"model","status":{"value":"sleeping","args":[]}},
+				{"id":"busy","object":"model","status":{"value":"loading"}}
+			]}`)
+		})
+		p := f.provider(TypeLlamaCpp, nil)
+		got, err := p.(core.ModelLister).Models(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []core.ModelInfo{{ID: "org/qwen:Q4"}, {ID: "gpt-oss"}, {ID: "sleepy"}, {ID: "busy"}}
+		if len(got) != len(want) {
+			t.Fatalf("got %+v", got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("model %d = %+v, want %+v", i, got[i], want[i])
+			}
+		}
+		if reqs := f.requests(); len(reqs) != 1 || reqs[0].Query != "" {
+			t.Errorf("requests: %+v", reqs)
+		}
+	})
+
+	t.Run("several models and no word on which is loaded", func(t *testing.T) {
+		f := newFake(t, answering(200, nil, `{"object":"list","data":[{"id":"a"},{"id":"b"}]}`))
+		got, err := f.provider(TypeLlamaCpp, nil).(core.ModelLister).Models(context.Background())
+		if err != nil || len(got) != 2 || got[0] != (core.ModelInfo{ID: "a"}) || got[1] != (core.ModelInfo{ID: "b"}) || len(f.requests()) != 1 {
+			t.Errorf("got %+v, %v, %d requests", got, err, len(f.requests()))
+		}
+	})
+
+	t.Run("no models", func(t *testing.T) {
+		f := newFake(t, answering(200, nil, `{"object":"list","data":[]}`))
+		got, err := f.provider(TypeLlamaCpp, nil).(core.ModelLister).Models(context.Background())
+		if err != nil || len(got) != 0 || len(f.requests()) != 1 {
+			t.Errorf("got %+v, %v, %d requests", got, err, len(f.requests()))
+		}
+	})
+
+	t.Run("a server without /props", func(t *testing.T) {
+		f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				io.WriteString(w, `{"data":[{"id":"m"}]}`)
+				return
+			}
+			http.Error(w, `{"error":{"code":404,"message":"File Not Found","type":"not_found_error"}}`, 404)
+		})
+		got, err := f.provider(TypeLlamaCpp, nil).(core.ModelLister).Models(context.Background())
+		if err != nil || len(got) != 1 || got[0] != (core.ModelInfo{ID: "m"}) {
+			t.Errorf("got %+v, %v", got, err)
+		}
+	})
+
+	t.Run("a failure is passed on", func(t *testing.T) {
+		f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				io.WriteString(w, `{"data":[{"id":"m"}]}`)
+				return
+			}
+			http.Error(w, `{"error":{"code":401,"message":"Invalid API Key","type":"authentication_error"}}`, 401)
+		})
+		_, err := f.provider(TypeLlamaCpp, nil).(core.ModelLister).Models(context.Background())
+		wantFailure(t, err, core.ErrAuth)
+	})
+}
+
+func TestLlamaCppCountTokens(t *testing.T) {
+	req := &core.Request{
+		Model:    "qwen",
+		System:   []string{"Be brief."},
+		Messages: []core.Message{core.UserText("hi")},
+		Tools:    []core.ToolSpec{{Name: "Read"}},
+		Thinking: core.Thinking{Mode: "off"},
+	}
+	const chatBody = `{
+		"model": "qwen", "cache_prompt": true, "parallel_tool_calls": true,
+		"chat_template_kwargs": {"enable_thinking": false},
+		"messages": [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "hi"}],
+		"tools": [{"type": "function", "function": {"name": "Read", "parameters": {"type":"object","properties":{}}}}]
+	}`
+
+	t.Run("the server's own counter", func(t *testing.T) {
+		f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/chat/completions/input_tokens" {
+				t.Errorf("unexpected request %s", r.URL.Path)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"object":"response.input_tokens","input_tokens":1234}`)
+		})
+		p := f.provider(TypeLlamaCpp, nil)
+		n, err := p.(core.TokenCounter).CountTokens(context.Background(), req)
+		if err != nil || n != 1234 {
+			t.Fatalf("got %d, %v", n, err)
+		}
+		got := f.last()
+		if got.Method != "POST" || got.Header.Get("Accept") != "application/json" {
+			t.Errorf("sent %s with Accept %q", got.Method, got.Header.Get("Accept"))
+		}
+		wantJSON(t, "count body", got.Body, chatBody)
+		f.waitClosed()
+	})
+
+	t.Run("an older server: the template and the tokenizer", func(t *testing.T) {
+		f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.URL.Path {
+			case "/v1/chat/completions/input_tokens":
+				http.Error(w, `{"error":{"code":404,"message":"File Not Found","type":"not_found_error"}}`, 404)
+			case "/apply-template":
+				io.WriteString(w, `{"prompt":"<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n"}`)
+			case "/tokenize":
+				io.WriteString(w, `{"tokens":[151644,8948,198,3430,9491,13,151645]}`)
+			default:
+				t.Errorf("unexpected request %s", r.URL.Path)
+			}
+		})
+		p := f.provider(TypeLlamaCpp, nil)
+		n, err := p.(core.TokenCounter).CountTokens(context.Background(), req)
+		if err != nil || n != 7 {
+			t.Fatalf("got %d, %v", n, err)
+		}
+		reqs := f.requests()
+		if len(reqs) != 3 {
+			t.Fatalf("%d requests", len(reqs))
+		}
+		wantJSON(t, "apply-template body", reqs[1].Body, chatBody)
+		wantJSON(t, "tokenize body", reqs[2].Body, `{"content":"<|im_start|>system\nBe brief.<|im_end|>\n<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n","model":"qwen"}`)
+		f.waitClosed()
+	})
+
+	t.Run("failures", func(t *testing.T) {
+		f := newFake(t, answering(503, nil, `{"error":{"code":503,"message":"Loading model","type":"unavailable_error"}}`))
+		_, err := f.provider(TypeLlamaCpp, nil).(core.TokenCounter).CountTokens(context.Background(), req)
+		wantFailure(t, err, core.ErrOverloaded)
+
+		f = newFake(t, answering(200, nil, `{"object":"response.input_tokens"}`))
+		_, err = f.provider(TypeLlamaCpp, nil).(core.TokenCounter).CountTokens(context.Background(), req)
+		wantFailure(t, err, core.ErrBadResponse)
+
+		f = newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/apply-template" {
+				io.WriteString(w, `{"nothing":"here"}`)
+				return
+			}
+			http.Error(w, `{"error":{"code":404,"message":"File Not Found","type":"not_found_error"}}`, 404)
+		})
+		_, err = f.provider(TypeLlamaCpp, nil).(core.TokenCounter).CountTokens(context.Background(), req)
+		wantFailure(t, err, core.ErrBadResponse)
+
+		_, err = f.provider(TypeLlamaCpp, nil).(core.TokenCounter).CountTokens(context.Background(), nil)
+		wantFailure(t, err, core.ErrInvalidRequest)
+
+		bad := &core.Request{Model: "m", Tools: []core.ToolSpec{{Name: "Broken", InputSchema: json.RawMessage(`{"type":`)}}}
+		_, err = f.provider(TypeLlamaCpp, nil).(core.TokenCounter).CountTokens(context.Background(), bad)
+		e := wantFailure(t, err, core.ErrInvalidRequest)
+		if !strings.Contains(e.Message, "Broken") {
+			t.Errorf("the error does not name the tool: %v", e)
+		}
+	})
+}
