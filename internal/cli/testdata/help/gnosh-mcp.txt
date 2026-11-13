@@ -1,0 +1,22 @@
+gnosh mcp
+
+  Manage MCP servers.
+
+  None of these commands is built yet in this build of gnosh: typing one stops
+  with a message that says so.
+
+Usage
+  gnosh mcp <command> [flags] [arguments]
+
+Commands
+  add <name> <command>    Add a server: a name, then the command that starts
+                          it, or its URL. (Not built yet.)
+  add-json <name> <json>  Add a server from its description in JSON. (Not
+                          built yet.)
+  get <name>              Show one server. (Not built yet.)
+  list                    List the servers. (Not built yet.)
+  remove <name>           Remove a server. (Not built yet.)
+
+Flags
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

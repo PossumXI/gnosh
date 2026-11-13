@@ -1,0 +1,22 @@
+gnosh logs
+
+  Print the end of the project's log, or follow it.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh logs [flags]
+
+Flags
+  -f, --follow
+      Keep printing as the log grows. (Not built yet.)
+  -t, --tail <n>
+      Print the last n lines: 1000 unless this is given. (Not built yet.)
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -D, --data-dir <dir>
+      Keep sessions and data in this folder instead of the project's own.
+      Commands that read them look there too.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

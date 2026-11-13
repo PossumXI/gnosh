@@ -1,0 +1,20 @@
+gnosh trust
+
+  Trust a folder's own settings, list the trusted folders, or forget one. With
+  no folder, the current one. --list takes no folder.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh trust [flags] [folder]
+
+Flags
+  --list
+      List the trusted folders. (Not built yet.)
+  --forget
+      Forget the folder instead of trusting it. (Not built yet.)
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

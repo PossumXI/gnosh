@@ -1,0 +1,20 @@
+gnosh doctor
+
+  Check that a turn could run here. Reads the config for this folder and
+  prints one line per check. Exits 1 when a turn could not run. Starts no
+  model.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh doctor [flags]
+
+Flags
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -D, --data-dir <dir>
+      Keep sessions and data in this folder instead of the project's own.
+      Commands that read them look there too.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

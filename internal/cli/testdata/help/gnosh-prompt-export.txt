@@ -1,0 +1,17 @@
+gnosh prompt export
+
+  Write the built-in instructions to that folder, as a file to edit.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh prompt export [flags] [name]
+
+Flags
+  --force
+      Write the file even if one is already there. (Not built yet.)
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

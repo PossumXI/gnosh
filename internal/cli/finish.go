@@ -1,0 +1,212 @@
+package cli
+
+import (
+	"fmt"
+	"strings"
+)
+
+// takePrompt records the arguments of a session command as its prompt: the
+// words joined by single spaces, and otherwise exactly as typed.
+func takePrompt(inv *Invocation, args []string) {
+	inv.Prompt = strings.Join(args, " ")
+}
+
+// finishSession does what `gnosh` and `gnosh run` need once their flags are
+// recorded: it decides between a session and print mode, and checks what
+// the flags mean together.
+func finishSession(inv *Invocation, p *parsed, env Env) *Error {
+	explicit := p.explicitPrint()
+	printing := explicit || !env.StdoutIsTerminal
+	inv.Command = CmdInteractive
+	if printing {
+		inv.Command = CmdPrint
+		inv.PrintImplied = !explicit
+	}
+	// implied goes into messages about print mode when nobody typed -p.
+	implied := ""
+	if inv.PrintImplied {
+		implied = " (gnosh's output is not going to a terminal, so it answers once and exits, as with -p.)"
+	}
+	fail := func(kind ErrorKind, typed, format string, a ...any) *Error {
+		return &Error{Kind: kind, Typed: typed, Message: fmt.Sprintf(format, a...)}
+	}
+
+	// Which conversation: one way of choosing at most.
+	inv.Conversation = ConversationNew
+	var chosen *occurrence
+	for k := range p.occs {
+		o := &p.occs[k]
+		var kind Conversation
+		switch o.f.id {
+		case idContinue:
+			kind = ConversationContinue
+		case idResume:
+			kind = ConversationResume
+		case idSession:
+			kind = ConversationSession
+		default:
+			continue
+		}
+		if chosen != nil && chosen.f != o.f {
+			return fail(ErrConflict, o.typed,
+				"%s and %s each say which conversation to work in, and only one can, so nothing was started. Keep one of them.",
+				chosen.typed, o.typed)
+		}
+		chosen = o
+		inv.Conversation = kind
+	}
+	if inv.Conversation == ConversationResume {
+		inv.ResumeIsFile = strings.HasPrefix(inv.Resume, "/") && strings.HasSuffix(inv.Resume, ".jsonl")
+	}
+	if o := p.given(idFork); o != nil && chosen == nil {
+		return fail(ErrUsage, o.typed,
+			"%s goes on in a copy of an earlier session, and this line starts a new one, so nothing was started. Add -c, -r or -s to say which session to copy.",
+			o.typed)
+	}
+	if o := p.given(idSessionID); o != nil && chosen != nil && !inv.ForkSession {
+		return fail(ErrConflict, o.typed,
+			"%s gives a new conversation its ID, and %s goes on with an earlier one, so nothing was started. Add --fork-session to go on in a copy that has the new ID, or drop one of the two.",
+			o.typed, chosen.typed)
+	}
+	if printing && inv.Conversation == ConversationResume && inv.Resume == "" {
+		return fail(ErrUsage, chosen.typed,
+			"%s needs a session's ID or name after it in print mode, where nobody is there to pick from a list, so nothing was started.%s",
+			chosen.typed, implied)
+	}
+
+	// Permissions: -y is a permission mode, so it cannot sit beside another.
+	if y := p.given(idYolo); y != nil {
+		if m := p.given(idMode); m != nil && inv.PermissionMode != ModeBypassPermissions {
+			return fail(ErrConflict, y.typed,
+				"%s skips every permission question and %s %s starts in another mode, so nothing was started. Keep one of them. To start in %s with skipping still within reach, write --allow-dangerously-skip-permissions in place of %s.",
+				y.typed, m.typed, inv.PermissionMode, inv.PermissionMode, y.typed)
+		}
+		inv.PermissionMode = ModeBypassPermissions
+	}
+
+	// Flags that only print mode acts on.
+	if !printing {
+		for k := range p.occs {
+			o := &p.occs[k]
+			if !o.f.printOnly {
+				continue
+			}
+			inside := ""
+			if o.f.id == "--goal" {
+				inside = " Inside a session, type /goal."
+			}
+			return fail(ErrUsage, o.typed,
+				"%s only does something in print mode, and this line opens a session, so nothing was started. Add -p (or use gnosh run) to answer once and exit.%s",
+				o.typed, inside)
+		}
+	}
+	if printing {
+		if inv.OutputFormat == "" {
+			inv.OutputFormat = FormatText
+		}
+		if inv.InputFormat == "" {
+			inv.InputFormat = FormatText
+		}
+	}
+	if o := p.given(idPartial); o != nil && inv.OutputFormat != FormatStreamJSON {
+		return fail(ErrUsage, o.typed,
+			"%s adds lines to a stream-json run, and this run prints %s, so nothing was started. Add --output-format stream-json.",
+			o.typed, inv.OutputFormat)
+	}
+	if o := p.given(idReplay); o != nil && (inv.InputFormat != FormatStreamJSON || inv.OutputFormat != FormatStreamJSON) {
+		return fail(ErrUsage, o.typed,
+			"%s prints back the messages of a run that both reads and prints stream-json, and this run reads %s and prints %s, so nothing was started. Add --input-format stream-json and --output-format stream-json.",
+			o.typed, inv.InputFormat, inv.OutputFormat)
+	}
+
+	inv.SettingsInline = strings.HasPrefix(strings.TrimSpace(inv.Settings), "{")
+
+	// The prompt.
+	if len(p.args) > 0 && blank(inv.Prompt) {
+		return fail(ErrBadValue, "",
+			"The prompt on the command line is empty, so nothing was started. Give it some words, or leave it out.")
+	}
+	inv.ReadStdin = !env.StdinIsTerminal
+	if printing && inv.Prompt == "" && env.StdinIsTerminal && inv.Goal == "" && inv.InputFormat != FormatStreamJSON {
+		msg := "Print mode answers one prompt, and none was given, so nothing was started. Put the prompt on the command line, or pipe it in."
+		if inv.PrintImplied {
+			msg = "No prompt was given, so nothing was started. gnosh's output is not going to a terminal, so it would answer one prompt and exit, as with -p: put the prompt on the command line, or pipe it in."
+		}
+		// A one-word prompt right after a list flag joins the list. Say so,
+		// since that is the likeliest way to end up here with a prompt typed.
+		for k := len(p.occs) - 1; k >= 0; k-- {
+			if o := &p.occs[k]; o.f.kind == kindList && len(o.raw) > 1 {
+				msg += fmt.Sprintf(" (%s took %s as part of its list. If that was the prompt, put it before %s or after --.)",
+					o.typed, shown(o.raw[len(o.raw)-1]), o.typed)
+				break
+			}
+		}
+		return fail(ErrUsage, "", "%s", msg)
+	}
+	return nil
+}
+
+// finishTrust checks `gnosh trust`: listing and forgetting are two things,
+// and listing takes no folder.
+func finishTrust(inv *Invocation, p *parsed, _ Env) *Error {
+	list, forget := p.given("trust --list"), p.given("trust --forget")
+	if list != nil && forget != nil {
+		return &Error{Kind: ErrConflict, Typed: forget.typed, Message: fmt.Sprintf(
+			"%s and %s ask for two different things, so nothing was done. Give one of them.", list.typed, forget.typed)}
+	}
+	if list != nil && len(inv.Args) > 0 {
+		return &Error{Kind: ErrUsage, Typed: inv.Args[0], Message: fmt.Sprintf(
+			"%s shows every trusted folder and takes no folder, and %s was typed with it, so nothing was done.",
+			list.typed, shown(inv.Args[0]))}
+	}
+	return nil
+}
+
+// takeRename records `gnosh session rename <id> <title...>`: the ID, then
+// the rest of the words as one title.
+func takeRename(inv *Invocation, args []string) {
+	inv.Args = []string{args[0], strings.Join(args[1:], " ")}
+}
+
+// finishContext checks `gnosh prompt context`, which shows a new session's
+// context, the most recent session's (-C) or one session's (-s).
+func finishContext(inv *Invocation, p *parsed, _ Env) *Error {
+	s, c := p.given(idSession), p.given(idContinue)
+	inv.Conversation = ConversationNew
+	switch {
+	case s != nil && c != nil:
+		return &Error{Kind: ErrConflict, Typed: c.typed, Message: fmt.Sprintf(
+			"%s and %s each say which session's context to show, and only one can, so nothing was done. Keep one of them.",
+			s.typed, c.typed)}
+	case s != nil:
+		inv.Conversation = ConversationSession
+	case c != nil:
+		inv.Conversation = ConversationContinue
+	}
+	return nil
+}
+
+// finishHelp turns `gnosh help [command...]` into a request for that
+// command's help.
+func finishHelp(inv *Invocation, p *parsed, _ Env) *Error {
+	c, err := p.t.find(inv.Args)
+	if err != nil {
+		return err
+	}
+	inv.HelpFor = c.path()
+	inv.Args = nil
+	return nil
+}
+
+// find returns the command the words lead to.
+func (t *Table) find(words []string) (*command, *Error) {
+	c := t.root
+	for _, w := range words {
+		sub := c.sub(w)
+		if sub == nil {
+			return nil, (&parsed{t: t, cmd: c}).unknownCommand(w)
+		}
+		c = sub
+	}
+	return c, nil
+}

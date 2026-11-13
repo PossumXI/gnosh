@@ -1,0 +1,25 @@
+gnosh prompt
+
+  See what the model is sent, and where to change it. These start no session.
+
+  None of these commands is built yet in this build of gnosh: typing one stops
+  with a message that says so.
+
+Usage
+  gnosh prompt <command> [flags] [arguments]
+
+Commands
+  show [name]             Print the instructions in effect, and where they
+                          came from. (Not built yet.)
+  path                    Print the folder where your own versions of the
+                          instructions go. (Not built yet.)
+  export [name]           Write the built-in instructions to that folder, as a
+                          file to edit. (Not built yet.)
+  tools                   Print what the model is told about each tool, with
+                          sizes. (Not built yet.)
+  context                 Print what fills the context window, by category.
+                          (Not built yet.)
+
+Flags
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

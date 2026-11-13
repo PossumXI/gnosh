@@ -1,0 +1,10 @@
+gnosh version
+
+  Print which build of gnosh this is.
+
+Usage
+  gnosh version [flags]
+
+Flags
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

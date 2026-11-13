@@ -1,0 +1,20 @@
+gnosh prompt tools
+
+  Print what the model is told about each tool, with sizes.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh prompt tools [flags]
+
+Flags
+  --json
+      Print the exact objects the model is sent. (Not built yet.)
+  --export
+      Write each tool's description to a file you can edit, with a list for
+      turning tools off. (Not built yet.)
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

@@ -1,0 +1,20 @@
+gnosh session show
+
+  Print one session.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh session show [flags] <id>
+
+Flags
+  --json
+      Print JSON instead of text. (Not built yet.)
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -D, --data-dir <dir>
+      Keep sessions and data in this folder instead of the project's own.
+      Commands that read them look there too.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.
