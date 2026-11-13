@@ -91,3 +91,9 @@ did not open its Crush-derived source.
 |---|---|---|---|
 | `golang.org/x/term` | v0.46.0 | 2026-09-08 | The Go team's own; raw mode and terminal size only. Pinned two months back rather than at the newest release. |
 | `golang.org/x/sys` | v0.48.0 | 2026-08-31 | The Go team's own; needed by `x/term`. |
+
+## Data that is not gnosh's
+
+| what | where | whose | terms |
+|---|---|---|---|
+| Unicode Character Database 17.0.0: the tables generated from it, and two of its test files | `internal/text/tables.go`, `internal/text/testdata/` | Unicode, Inc. | Unicode License V3 (`internal/text/LICENSE-UNICODE.txt`) |

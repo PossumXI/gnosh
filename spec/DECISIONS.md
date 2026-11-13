@@ -19,12 +19,18 @@ both are silent, the builder chooses, and says so in its report.
    which suits Claude and not a local model with a 64K window. Approvals a
    person saves go to gnosh's own project-local file. (Exact file names and
    how they sit beside `gnoshrc`: `spec/gnosh/harness-config.md`.)
-2. **An untrusted folder gets nothing of its own, in every mode.** Until a
-   folder is trusted, its project settings, hooks, `env`, skills and rule
-   files do not apply, in print mode as much as interactively.
-   `--trust-folder` trusts it for one run. This is stricter than Claude Code
-   and is what the earlier gnosh's trust gate already did. (Rule: security
-   first.)
+2. **An untrusted folder can only restrict, in every mode.** Until a folder
+   is trusted, nothing of its own that runs or grants applies, in print
+   mode as much as interactively: its `gnoshrc`, hooks, `env`, allow rules,
+   providers, hosts, servers and options all wait. What only takes
+   something away still applies (its deny rules, its lists of tools and
+   skills to turn off), and so does what is only text for the model and
+   runs nothing: its instruction files, with imports confined to the
+   project, the skills and commands inside it, and its sessions
+   (`spec/gnosh/harness-trust-and-safety.md` SAFE-2 and SAFE-3, which are
+   Jae's design of 1 November 2026 and win here). `--trust-folder` trusts
+   it for one run. This is stricter than Claude Code, which runs an
+   untrusted folder's hooks and applies its `env`.
 3. **`Glob` and `Grep` stay in the default tool set.** They are gnosh's own
    code with no outside program behind them, and a local model does better
    with a search tool than with a shell pipeline.
