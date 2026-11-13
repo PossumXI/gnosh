@@ -1,0 +1,68 @@
+=== width 80, no colour ===
+A paragraph, then code set in by four spaces:
+
+  first line
+    indented further
+
+  after a blank line
+  a tab works too
+
+Back to prose. Four spaces here do not start code: this continues the paragraph.
+=== width 48, no colour ===
+A paragraph, then code set in by four spaces:
+
+  first line
+    indented further
+
+  after a blank line
+  a tab works too
+
+Back to prose. Four spaces here do not start
+code: this continues the paragraph.
+=== width 24, no colour ===
+A paragraph, then code
+set in by four spaces:
+
+  first line
+    indented further
+
+  after a blank line
+  a tab works too
+
+Back to prose. Four
+spaces here do not start
+code: this continues the
+paragraph.
+=== width 48, 16 colours ===
+A paragraph, then code set in by four spaces:
+
+  «a6»first line«/»
+  «a6»  indented further«/»
+
+  «a6»after a blank line«/»
+  «a6»a tab works too«/»
+
+Back to prose. Four spaces here do not start
+code: this continues the paragraph.
+=== width 48, 256 colours ===
+A paragraph, then code set in by four spaces:
+
+  «c103»first line«/»
+  «c103»  indented further«/»
+
+  «c103»after a blank line«/»
+  «c103»a tab works too«/»
+
+Back to prose. Four spaces here do not start
+code: this continues the paragraph.
+=== width 48, true colour, hyperlinks ===
+A paragraph, then code set in by four spaces:
+
+  «#8b7fb8»first line«/»
+  «#8b7fb8»  indented further«/»
+
+  «#8b7fb8»after a blank line«/»
+  «#8b7fb8»a tab works too«/»
+
+Back to prose. Four spaces here do not start
+code: this continues the paragraph.

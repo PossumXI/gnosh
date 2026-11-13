@@ -1,0 +1,132 @@
+=== width 80, no colour ===
+Inline <span class="x">tags</span> are shown as <em>the text they are</em>, and
+so are <!-- comments -->, but a tag
+that breaks the line does.
+
+  <div align="center">
+    <b>An HTML block</b> is *not* parsed.
+  </div>
+
+  <details>
+  <summary>Summary</summary>
+
+Markdown between the tags is.
+
+  </details>
+
+  <!--
+  a comment
+  over several lines
+  -->
+=== width 48, no colour ===
+Inline <span class="x">tags</span> are shown as
+<em>the text they are</em>, and so are <!--
+comments -->, but a tag
+that breaks the line does.
+
+  <div align="center">
+    <b>An HTML block</b> is *not* parsed.
+  </div>
+
+  <details>
+  <summary>Summary</summary>
+
+Markdown between the tags is.
+
+  </details>
+
+  <!--
+  a comment
+  over several lines
+  -->
+=== width 24, no colour ===
+Inline <span
+class="x">tags</span>
+are shown as <em>the
+text they are</em>, and
+so are <!-- comments
+-->, but a tag
+that breaks the line
+does.
+
+  <div align="center">
+    <b>An HTML block</b>
+↪  is *not* parsed.
+  </div>
+
+  <details>
+  <summary>Summary</summ
+↪ ary>
+
+Markdown between the
+tags is.
+
+  </details>
+
+  <!--
+  a comment
+  over several lines
+  -->
+=== width 48, 16 colours ===
+Inline «a6»<span class="x">«/»tags«a6»</span>«/» are shown as
+«a6»<em>«/»the text they are«a6»</em>«/», and so are «a6»<!--«/»
+«a6»comments -->«/», but a tag
+that breaks the line does.
+
+  «a6»<div align="center">«/»
+  «a6»  <b>An HTML block</b> is *not* parsed.«/»
+  «a6»</div>«/»
+
+  «a6»<details>«/»
+  «a6»<summary>Summary</summary>«/»
+
+Markdown «bold»between«/» the tags is.
+
+  «a6»</details>«/»
+
+  «a6»<!--«/»
+  «a6»a comment«/»
+  «a6»over several lines«/»
+  «a6»-->«/»
+=== width 48, 256 colours ===
+Inline «c103»<span class="x">«/»tags«c103»</span>«/» are shown as
+«c103»<em>«/»the text they are«c103»</em>«/», and so are «c103»<!--«/»
+«c103»comments -->«/», but a tag
+that breaks the line does.
+
+  «c103»<div align="center">«/»
+  «c103»  <b>An HTML block</b> is *not* parsed.«/»
+  «c103»</div>«/»
+
+  «c103»<details>«/»
+  «c103»<summary>Summary</summary>«/»
+
+Markdown «bold»between«/» the tags is.
+
+  «c103»</details>«/»
+
+  «c103»<!--«/»
+  «c103»a comment«/»
+  «c103»over several lines«/»
+  «c103»-->«/»
+=== width 48, true colour, hyperlinks ===
+Inline «#8b7fb8»<span class="x">«/»tags«#8b7fb8»</span>«/» are shown as
+«#8b7fb8»<em>«/»the text they are«#8b7fb8»</em>«/», and so are «#8b7fb8»<!--«/»
+«#8b7fb8»comments -->«/», but a tag
+that breaks the line does.
+
+  «#8b7fb8»<div align="center">«/»
+  «#8b7fb8»  <b>An HTML block</b> is *not* parsed.«/»
+  «#8b7fb8»</div>«/»
+
+  «#8b7fb8»<details>«/»
+  «#8b7fb8»<summary>Summary</summary>«/»
+
+Markdown «bold»between«/» the tags is.
+
+  «#8b7fb8»</details>«/»
+
+  «#8b7fb8»<!--«/»
+  «#8b7fb8»a comment«/»
+  «#8b7fb8»over several lines«/»
+  «#8b7fb8»-->«/»

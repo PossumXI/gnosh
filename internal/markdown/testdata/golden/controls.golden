@@ -1,0 +1,56 @@
+=== width 80, no colour ===
+Control characters are shown, not sent: an escape ␛[31m sequence, a bell ␇, a
+NUL ␀, a backspace ␈ and a DEL ␡.
+
+  code with an escape ␛[2J in it
+
+Bytes that are not UTF-8: ��. A C1 control: �31m.
+=== width 48, no colour ===
+Control characters are shown, not sent: an
+escape ␛[31m sequence, a bell ␇, a NUL ␀, a
+backspace ␈ and a DEL ␡.
+
+  code with an escape ␛[2J in it
+
+Bytes that are not UTF-8: ��. A C1 control:
+�31m.
+=== width 24, no colour ===
+Control characters are
+shown, not sent: an
+escape ␛[31m sequence, a
+bell ␇, a NUL ␀, a
+backspace ␈ and a DEL ␡.
+
+  code with an escape ␛[
+↪ 2J in it
+
+Bytes that are not
+UTF-8: ��. A C1 control:
+�31m.
+=== width 48, 16 colours ===
+Control characters are shown, not sent: an
+escape ␛[31m sequence, a bell ␇, a NUL ␀, a
+backspace ␈ and a DEL ␡.
+
+  «a6»code with an escape ␛[2J in it«/»
+
+Bytes that are not UTF-8: ��. A C1 control:
+�31m.
+=== width 48, 256 colours ===
+Control characters are shown, not sent: an
+escape ␛[31m sequence, a bell ␇, a NUL ␀, a
+backspace ␈ and a DEL ␡.
+
+  «c103»code with an escape ␛[2J in it«/»
+
+Bytes that are not UTF-8: ��. A C1 control:
+�31m.
+=== width 48, true colour, hyperlinks ===
+Control characters are shown, not sent: an
+escape ␛[31m sequence, a bell ␇, a NUL ␀, a
+backspace ␈ and a DEL ␡.
+
+  «#8b7fb8»code with an escape ␛[2J in it«/»
+
+Bytes that are not UTF-8: ��. A C1 control:
+�31m.

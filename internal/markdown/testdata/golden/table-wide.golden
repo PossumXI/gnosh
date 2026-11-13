@@ -1,0 +1,138 @@
+=== width 80, no colour ===
+Package            Purpose      Depends on      Status     Owner      Notes
+─────────────────  ───────────  ──────────────  ─────────  ─────────  ──────────
+internal/text      Text for     standard        finished   text       Unicode
+                   terminals:   library                    builder    tables are
+                   width,                                             generated
+                   wrapping,
+                   colour
+─────────────────  ───────────  ──────────────  ─────────  ─────────  ──────────
+internal/markdown  Streaming    internal/text   in         markdown   tables are
+                   Markdown to                  progress   builder    the hard
+                   styled                                             case
+                   lines
+─────────────────  ───────────  ──────────────  ─────────  ─────────  ──────────
+internal/term      The          x/term, x/sys   in         term       no
+                   terminal                     progress   builder    alternate
+                   itself                                             screen
+=== width 48, no colour ===
+Package: internal/text
+Purpose: Text for terminals: width, wrapping,
+  colour
+Depends on: standard library
+Status: finished
+Owner: text builder
+Notes: Unicode tables are generated
+────────────────────────
+Package: internal/markdown
+Purpose: Streaming Markdown to styled lines
+Depends on: internal/text
+Status: in progress
+Owner: markdown builder
+Notes: tables are the hard case
+────────────────────────
+Package: internal/term
+Purpose: The terminal itself
+Depends on: x/term, x/sys
+Status: in progress
+Owner: term builder
+Notes: no alternate screen
+=== width 24, no colour ===
+Package: internal/text
+Purpose: Text for
+  terminals: width,
+  wrapping, colour
+Depends on: standard
+  library
+Status: finished
+Owner: text builder
+Notes: Unicode tables
+  are generated
+────────────────────────
+Package:
+  internal/markdown
+Purpose: Streaming
+  Markdown to styled
+  lines
+Depends on:
+  internal/text
+Status: in progress
+Owner: markdown builder
+Notes: tables are the
+  hard case
+────────────────────────
+Package: internal/term
+Purpose: The terminal
+  itself
+Depends on: x/term,
+  x/sys
+Status: in progress
+Owner: term builder
+Notes: no alternate
+  screen
+=== width 48, 16 colours ===
+«bold»Package: «/»internal/text
+«bold»Purpose: «/»Text for terminals: width, wrapping,
+  colour
+«bold»Depends on: «/»standard library
+«bold»Status: «/»finished
+«bold»Owner: «/»text builder
+«bold»Notes: «/»Unicode tables are generated
+«a6»────────────────────────«/»
+«bold»Package: «/»internal/markdown
+«bold»Purpose: «/»Streaming Markdown to styled lines
+«bold»Depends on: «/»internal/text
+«bold»Status: «/»in progress
+«bold»Owner: «/»markdown builder
+«bold»Notes: «/»tables are the hard case
+«a6»────────────────────────«/»
+«bold»Package: «/»internal/term
+«bold»Purpose: «/»The terminal itself
+«bold»Depends on: «/»x/term, x/sys
+«bold»Status: «/»in progress
+«bold»Owner: «/»term builder
+«bold»Notes: «/»no alternate screen
+=== width 48, 256 colours ===
+«bold»Package: «/»internal/text
+«bold»Purpose: «/»Text for terminals: width, wrapping,
+  colour
+«bold»Depends on: «/»standard library
+«bold»Status: «/»finished
+«bold»Owner: «/»text builder
+«bold»Notes: «/»Unicode tables are generated
+«c103»────────────────────────«/»
+«bold»Package: «/»internal/markdown
+«bold»Purpose: «/»Streaming Markdown to styled lines
+«bold»Depends on: «/»internal/text
+«bold»Status: «/»in progress
+«bold»Owner: «/»markdown builder
+«bold»Notes: «/»tables are the hard case
+«c103»────────────────────────«/»
+«bold»Package: «/»internal/term
+«bold»Purpose: «/»The terminal itself
+«bold»Depends on: «/»x/term, x/sys
+«bold»Status: «/»in progress
+«bold»Owner: «/»term builder
+«bold»Notes: «/»no alternate screen
+=== width 48, true colour, hyperlinks ===
+«bold»Package: «/»internal/text
+«bold»Purpose: «/»Text for terminals: width, wrapping,
+  colour
+«bold»Depends on: «/»standard library
+«bold»Status: «/»finished
+«bold»Owner: «/»text builder
+«bold»Notes: «/»Unicode tables are generated
+«#8b7fb8»────────────────────────«/»
+«bold»Package: «/»internal/markdown
+«bold»Purpose: «/»Streaming Markdown to styled lines
+«bold»Depends on: «/»internal/text
+«bold»Status: «/»in progress
+«bold»Owner: «/»markdown builder
+«bold»Notes: «/»tables are the hard case
+«#8b7fb8»────────────────────────«/»
+«bold»Package: «/»internal/term
+«bold»Purpose: «/»The terminal itself
+«bold»Depends on: «/»x/term, x/sys
+«bold»Status: «/»in progress
+«bold»Owner: «/»term builder
+«bold»Notes: «/»no alternate screen

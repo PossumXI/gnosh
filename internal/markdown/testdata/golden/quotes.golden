@@ -1,0 +1,99 @@
+=== width 80, no colour ===
+│ A block quote with a line long enough that it has to be wrapped in a narrow
+│ terminal. Its second line.
+
+│ First paragraph of a quote.
+│
+│ Second paragraph, with a list:
+│
+│ • one
+│ • two
+│
+│ │ A quote inside the quote. Still inside, and back out lazily.
+
+│   code in a quote
+=== width 48, no colour ===
+│ A block quote with a line long enough that it
+│ has to be wrapped in a narrow terminal. Its
+│ second line.
+
+│ First paragraph of a quote.
+│
+│ Second paragraph, with a list:
+│
+│ • one
+│ • two
+│
+│ │ A quote inside the quote. Still inside, and
+│ │ back out lazily.
+
+│   code in a quote
+=== width 24, no colour ===
+│ A block quote with a
+│ line long enough that
+│ it has to be wrapped
+│ in a narrow terminal.
+│ Its second line.
+
+│ First paragraph of a
+│ quote.
+│
+│ Second paragraph, with
+│ a list:
+│
+│ • one
+│ • two
+│
+│ │ A quote inside the
+│ │ quote. Still inside,
+│ │ and back out lazily.
+
+│   code in a quote
+=== width 48, 16 colours ===
+«a5»│«/» A block quote with a line long enough that it
+«a5»│«/» has to be wrapped in a narrow terminal. Its
+«a5»│«/» second line.
+
+«a5»│«/» First paragraph of a quote.
+«a5»│«/»
+«a5»│«/» Second paragraph, with a list:
+«a5»│«/»
+«a5»│«/» «a5»•«/» one
+«a5»│«/» «a5»•«/» two
+«a5»│«/»
+«a5»│«/» «a5»│«/» A quote inside the quote. Still inside, and
+«a5»│«/» «a5»│«/» back out lazily.
+
+«a5»│«/»   «a6»code in a quote«/»
+=== width 48, 256 colours ===
+«c135»│«/» A block quote with a line long enough that it
+«c135»│«/» has to be wrapped in a narrow terminal. Its
+«c135»│«/» second line.
+
+«c135»│«/» First paragraph of a quote.
+«c135»│«/»
+«c135»│«/» Second paragraph, with a list:
+«c135»│«/»
+«c135»│«/» «c135»•«/» one
+«c135»│«/» «c135»•«/» two
+«c135»│«/»
+«c135»│«/» «c135»│«/» A quote inside the quote. Still inside, and
+«c135»│«/» «c135»│«/» back out lazily.
+
+«c135»│«/»   «c103»code in a quote«/»
+=== width 48, true colour, hyperlinks ===
+«#9d5cff»│«/» A block quote with a line long enough that it
+«#9d5cff»│«/» has to be wrapped in a narrow terminal. Its
+«#9d5cff»│«/» second line.
+
+«#9d5cff»│«/» First paragraph of a quote.
+«#9d5cff»│«/»
+«#9d5cff»│«/» Second paragraph, with a list:
+«#9d5cff»│«/»
+«#9d5cff»│«/» «#9d5cff»•«/» one
+«#9d5cff»│«/» «#9d5cff»•«/» two
+«#9d5cff»│«/»
+«#9d5cff»│«/» «#9d5cff»│«/» A quote inside the quote. Still inside, and
+«#9d5cff»│«/» «#9d5cff»│«/» back out lazily.
+
+«#9d5cff»│«/»   «#8b7fb8»code in a quote«/»

@@ -1,0 +1,155 @@
+=== width 80, no colour ===
+# The first level
+
+## The second level
+
+### A third level heading that is long enough to need more than one line in a
+    narrow terminal
+
+#### Level four with emphasis and `code`
+
+##### Level five
+
+###### Level six
+
+####### Seven is no heading
+
+#NoSpace is no heading
+
+# Setext one
+
+## Setext two
+
+#
+
+##
+=== width 48, no colour ===
+# The first level
+
+## The second level
+
+### A third level heading that is long enough to
+    need more than one line in a narrow terminal
+
+#### Level four with emphasis and `code`
+
+##### Level five
+
+###### Level six
+
+####### Seven is no heading
+
+#NoSpace is no heading
+
+# Setext one
+
+## Setext two
+
+#
+
+##
+=== width 24, no colour ===
+# The first level
+
+## The second level
+
+### A third level
+    heading that is long
+    enough to need more
+    than one line in a
+    narrow terminal
+
+#### Level four with
+     emphasis and `code`
+
+##### Level five
+
+###### Level six
+
+####### Seven is no
+heading
+
+#NoSpace is no heading
+
+# Setext one
+
+## Setext two
+
+#
+
+##
+=== width 48, 16 colours ===
+«a5»#«/» «bold a13»The first level«/»
+
+«a5»##«/» «bold a13»The second level«/»
+
+«a5»###«/» «bold a13»A third level heading that is long enough to«/»
+    «bold a13»need more than one line in a narrow terminal«/»
+
+«a5»####«/» «bold a13»Level four with «/»«bold a13»«italic»emphasis«/»«bold a13» and «/»«bold a13»«a6»code«/»
+
+«a5»#####«/» «bold a13»Level five«/»
+
+«a5»######«/» «bold a13»Level six«/»
+
+####### Seven is no heading
+
+#NoSpace is no heading
+
+«a5»#«/» «bold a13»Setext one«/»
+
+«a5»##«/» «bold a13»Setext two«/»
+
+«a5»#«/»
+
+«a5»##«/»
+=== width 48, 256 colours ===
+«c135»#«/» «bold c198»The first level«/»
+
+«c135»##«/» «bold c198»The second level«/»
+
+«c135»###«/» «bold c198»A third level heading that is long enough to«/»
+    «bold c198»need more than one line in a narrow terminal«/»
+
+«c135»####«/» «bold c198»Level four with «/»«bold c198»«italic»emphasis«/»«bold c198» and «/»«bold c198»«c103»code«/»
+
+«c135»#####«/» «bold c198»Level five«/»
+
+«c135»######«/» «bold c198»Level six«/»
+
+####### Seven is no heading
+
+#NoSpace is no heading
+
+«c135»#«/» «bold c198»Setext one«/»
+
+«c135»##«/» «bold c198»Setext two«/»
+
+«c135»#«/»
+
+«c135»##«/»
+=== width 48, true colour, hyperlinks ===
+«#9d5cff»#«/» «bold #f0257f»The first level«/»
+
+«#9d5cff»##«/» «bold #f0257f»The second level«/»
+
+«#9d5cff»###«/» «bold #f0257f»A third level heading that is long enough to«/»
+    «bold #f0257f»need more than one line in a narrow terminal«/»
+
+«#9d5cff»####«/» «bold #f0257f»Level four with «/»«bold #f0257f»«italic»emphasis«/»«bold #f0257f» and «/»«bold #f0257f»«#8b7fb8»code«/»
+
+«#9d5cff»#####«/» «bold #f0257f»Level five«/»
+
+«#9d5cff»######«/» «bold #f0257f»Level six«/»
+
+####### Seven is no heading
+
+#NoSpace is no heading
+
+«#9d5cff»#«/» «bold #f0257f»Setext one«/»
+
+«#9d5cff»##«/» «bold #f0257f»Setext two«/»
+
+«#9d5cff»#«/»
+
+«#9d5cff»##«/»

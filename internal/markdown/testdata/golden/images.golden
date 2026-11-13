@@ -1,0 +1,58 @@
+=== width 80, no colour ===
+An image [a diagram of the parser] (https://example.com/parser.png) in a
+sentence.
+
+[image] (https://example.com/untitled.png)
+
+A linked image: [build status] (https://example.com/badge.svg)
+(https://example.com/ci)
+=== width 48, no colour ===
+An image [a diagram of the parser]
+(https://example.com/parser.png) in a sentence.
+
+[image] (https://example.com/untitled.png)
+
+A linked image: [build status]
+(https://example.com/badge.svg)
+(https://example.com/ci)
+=== width 24, no colour ===
+An image [a diagram of
+the parser]
+(https://example.com/par
+ser.png) in a sentence.
+
+[image]
+(https://example.com/unt
+itled.png)
+
+A linked image: [build
+status]
+(https://example.com/bad
+ge.svg)
+(https://example.com/ci)
+=== width 48, 16 colours ===
+An image «italic»[a diagram of the parser]«/»
+«a6»(https://example.com/parser.png)«/» in a sentence.
+
+«italic»[image]«/»«a6» (https://example.com/untitled.png)«/»
+
+A linked image: «under a5»«italic»[build status]«/»
+«under a5»«a6»(https://example.com/badge.svg)«/»
+«a6»(https://example.com/ci)«/»
+=== width 48, 256 colours ===
+An image «italic»[a diagram of the parser]«/»
+«c103»(https://example.com/parser.png)«/» in a sentence.
+
+«italic»[image]«/»«c103» (https://example.com/untitled.png)«/»
+
+A linked image: «under c135»«italic»[build status]«/»
+«under c135»«c103»(https://example.com/badge.svg)«/»
+«c103»(https://example.com/ci)«/»
+=== width 48, true colour, hyperlinks ===
+An image «italic»«@https://example.com/parser.png»[a diagram of the parser]«/»«/@»
+«#8b7fb8»(https://example.com/parser.png)«/» in a sentence.
+
+«italic»«@https://example.com/untitled.png»[image]«/»«/@»«#8b7fb8» (https://example.com/untitled.png)«/»
+
+A linked image: «under #9d5cff»«italic»«@https://example.com/ci»[build status]«/»«/@»
+«under #9d5cff»«#8b7fb8»«@https://example.com/ci»(https://example.com/badge.svg)«/»«/@»

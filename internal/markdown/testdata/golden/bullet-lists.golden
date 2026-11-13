@@ -1,0 +1,149 @@
+=== width 80, no colour ===
+• a tight list
+• of three items, the second of which is long enough to be wrapped onto a second
+  line
+• the third
+
+• a loose list
+
+• its items are a blank line apart
+
+  This item has a second paragraph.
+
+• nested:
+  ◦ second level
+    ▪ third level
+      • fourth level
+  ◦ back on the second
+• an item with code:
+    code in an item
+• last
+
+• a
+• b
+• c
+=== width 48, no colour ===
+• a tight list
+• of three items, the second of which is long
+  enough to be wrapped onto a second line
+• the third
+
+• a loose list
+
+• its items are a blank line apart
+
+  This item has a second paragraph.
+
+• nested:
+  ◦ second level
+    ▪ third level
+      • fourth level
+  ◦ back on the second
+• an item with code:
+    code in an item
+• last
+
+• a
+• b
+• c
+=== width 24, no colour ===
+• a tight list
+• of three items, the
+  second of which is
+  long enough to be
+  wrapped onto a second
+  line
+• the third
+
+• a loose list
+
+• its items are a blank
+  line apart
+
+  This item has a second
+  paragraph.
+
+• nested:
+  ◦ second level
+    ▪ third level
+      • fourth level
+  ◦ back on the second
+• an item with code:
+    code in an item
+• last
+
+• a
+• b
+• c
+=== width 48, 16 colours ===
+«a5»•«/» a tight list
+«a5»•«/» of three items, the second of which is long
+  enough to be wrapped onto a second line
+«a5»•«/» the third
+
+«a5»•«/» a loose list
+
+«a5»•«/» its items are a blank line apart
+
+  This item has a second paragraph.
+
+«a5»•«/» nested:
+  «a5»◦«/» second level
+    «a5»▪«/» third level
+      «a5»•«/» fourth level
+  «a5»◦«/» back on the second
+«a5»•«/» an item with code:
+    «a6»code in an item«/»
+«a5»•«/» last
+
+«a5»•«/» a
+«a5»•«/» b
+«a5»•«/» c
+=== width 48, 256 colours ===
+«c135»•«/» a tight list
+«c135»•«/» of three items, the second of which is long
+  enough to be wrapped onto a second line
+«c135»•«/» the third
+
+«c135»•«/» a loose list
+
+«c135»•«/» its items are a blank line apart
+
+  This item has a second paragraph.
+
+«c135»•«/» nested:
+  «c135»◦«/» second level
+    «c135»▪«/» third level
+      «c135»•«/» fourth level
+  «c135»◦«/» back on the second
+«c135»•«/» an item with code:
+    «c103»code in an item«/»
+«c135»•«/» last
+
+«c135»•«/» a
+«c135»•«/» b
+«c135»•«/» c
+=== width 48, true colour, hyperlinks ===
+«#9d5cff»•«/» a tight list
+«#9d5cff»•«/» of three items, the second of which is long
+  enough to be wrapped onto a second line
+«#9d5cff»•«/» the third
+
+«#9d5cff»•«/» a loose list
+
+«#9d5cff»•«/» its items are a blank line apart
+
+  This item has a second paragraph.
+
+«#9d5cff»•«/» nested:
+  «#9d5cff»◦«/» second level
+    «#9d5cff»▪«/» third level
+      «#9d5cff»•«/» fourth level
+  «#9d5cff»◦«/» back on the second
+«#9d5cff»•«/» an item with code:
+    «#8b7fb8»code in an item«/»
+«#9d5cff»•«/» last
+
+«#9d5cff»•«/» a
+«#9d5cff»•«/» b
+«#9d5cff»•«/» c

@@ -1,0 +1,75 @@
+=== width 80, no colour ===
+Sources are cited like this [1] and like this [2].
+
+[1]: https://example.com/first
+[2]: https://example.com/second "The Second Source"
+[local]: /a/relative/path
+
+After the definitions, 1 (https://example.com/first) and local
+(/a/relative/path) are links.
+=== width 48, no colour ===
+Sources are cited like this [1] and like this
+[2].
+
+[1]: https://example.com/first
+[2]: https://example.com/second "The Second
+    Source"
+[local]: /a/relative/path
+
+After the definitions, 1
+(https://example.com/first) and local
+(/a/relative/path) are links.
+=== width 24, no colour ===
+Sources are cited like
+this [1] and like this
+[2].
+
+[1]:
+    https://example.com/
+    first
+[2]:
+    https://example.com/
+    second "The Second
+    Source"
+[local]:
+    /a/relative/path
+
+After the definitions, 1
+(https://example.com/fir
+st) and local
+(/a/relative/path) are
+links.
+=== width 48, 16 colours ===
+Sources are cited like this [1] and like this
+[2].
+
+«a6»[1]:«/» «under a5»https://example.com/first«/»
+«a6»[2]:«/» «under a5»https://example.com/second«/»«a6» "The Second«/»
+    «a6»Source"«/»
+«a6»[local]:«/» «under a5»/a/relative/path«/»
+
+After the definitions, «under a5»1«/»
+«a6»(https://example.com/first)«/» and «under a5»local«/»
+«a6»(/a/relative/path)«/» are links.
+=== width 48, 256 colours ===
+Sources are cited like this [1] and like this
+[2].
+
+«c103»[1]:«/» «under c135»https://example.com/first«/»
+«c103»[2]:«/» «under c135»https://example.com/second«/»«c103» "The Second«/»
+    «c103»Source"«/»
+«c103»[local]:«/» «under c135»/a/relative/path«/»
+
+After the definitions, «under c135»1«/»
+«c103»(https://example.com/first)«/» and «under c135»local«/»
+«c103»(/a/relative/path)«/» are links.
+=== width 48, true colour, hyperlinks ===
+Sources are cited like this [1] and like this
+[2].
+
+«#8b7fb8»[1]:«/» «under #9d5cff»«@https://example.com/first»https://example.com/first«/»«/@»
+«#8b7fb8»[2]:«/» «under #9d5cff»«@https://example.com/second»https://example.com/second«/»«/@»«#8b7fb8» "The Second«/»
+    «#8b7fb8»Source"«/»
+«#8b7fb8»[local]:«/» «under #9d5cff»/a/relative/path«/»
+
+After the definitions, «under #9d5cff»«@https://example.com/first»1«/»«/@» and «under #9d5cff»«@/a/relative/path»local«/»«/@» are links.

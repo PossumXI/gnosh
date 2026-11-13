@@ -114,3 +114,5 @@ selected.
 | what | where | whose | terms |
 |---|---|---|---|
 | Unicode Character Database 17.0.0: the tables generated from it, and two of its test files | `internal/text/tables.go`, `internal/text/testdata/` | Unicode, Inc. | Unicode License V3 (`internal/text/LICENSE-UNICODE.txt`) |
+| The numbered examples of the CommonMark Spec 0.31.2 and the GitHub Flavored Markdown Spec 0.29, used by tests only | `internal/markdown/testdata/spec/` | John MacFarlane; GitHub | CC BY-SA 4.0 (`internal/markdown/testdata/spec/NOTICE.md`) |
+| The HTML 4 named character references (names and code points), from Python's `html.entities` table | `internal/markdown/entity.go` | facts from the HTML standard | none needed; the generator is beside it |

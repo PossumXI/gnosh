@@ -1,0 +1,168 @@
+=== width 80, no colour ===
+An inline link (https://example.com/page), one with a title (https://example.com
+"The Title"), and one whose text has `styles` (https://example.com/styled).
+
+Autolinks: https://example.com/auto, mailto:someone@example.com,
+someone@example.com, and bare ones: https://example.com/bare?q=1,
+www.example.org/path, someone@example.net.
+
+A link that shows its own address: https://example.com.
+
+An empty link https://example.com/empty and brackets [that are not a link].
+
+[ref]: https://example.com/reference "Reference Title"
+
+A reference link (https://example.com/reference "Reference Title"), a collapsed
+one ref (https://example.com/reference "Reference Title"), a shortcut ref
+(https://example.com/reference "Reference Title"), and one with no definition
+[nowhere][none].
+=== width 48, no colour ===
+An inline link (https://example.com/page), one
+with a title (https://example.com "The Title"),
+and one whose text has `styles`
+(https://example.com/styled).
+
+Autolinks: https://example.com/auto,
+mailto:someone@example.com, someone@example.com,
+and bare ones: https://example.com/bare?q=1,
+www.example.org/path, someone@example.net.
+
+A link that shows its own address:
+https://example.com.
+
+An empty link https://example.com/empty and
+brackets [that are not a link].
+
+[ref]: https://example.com/reference "Reference
+    Title"
+
+A reference link (https://example.com/reference
+"Reference Title"), a collapsed one ref
+(https://example.com/reference "Reference
+Title"), a shortcut ref
+(https://example.com/reference "Reference
+Title"), and one with no definition
+[nowhere][none].
+=== width 24, no colour ===
+An inline link
+(https://example.com/pag
+e), one with a title
+(https://example.com
+"The Title"), and one
+whose text has `styles`
+(https://example.com/sty
+led).
+
+Autolinks:
+https://example.com/auto
+,
+mailto:someone@example.c
+om, someone@example.com,
+and bare ones:
+https://example.com/bare
+?q=1,
+www.example.org/path,
+someone@example.net.
+
+A link that shows its
+own address:
+https://example.com.
+
+An empty link
+https://example.com/empt
+y and brackets [that are
+not a link].
+
+[ref]:
+    https://example.com/
+    reference "Reference
+    Title"
+
+A reference link
+(https://example.com/ref
+erence "Reference
+Title"), a collapsed one
+ref
+(https://example.com/ref
+erence "Reference
+Title"), a shortcut ref
+(https://example.com/ref
+erence "Reference
+Title"), and one with no
+definition
+[nowhere][none].
+=== width 48, 16 colours ===
+An «under a5»inline link«/»«a6» (https://example.com/page)«/», one
+with a «under a5»title«/»«a6» (https://example.com "The Title")«/»,
+and one whose «under a5»«bold»text«/»«under a5» has «/»«under a5»«a6»styles«/»
+«a6»(https://example.com/styled)«/».
+
+Autolinks: «under a5»https://example.com/auto«/»,
+«under a5»mailto:someone@example.com«/», «under a5»someone@example.com«/»,
+and bare ones: «under a5»https://example.com/bare?q=1«/»,
+«under a5»www.example.org/path«/», «under a5»someone@example.net«/».
+
+A link that shows its own address:
+«under a5»https://example.com«/».
+
+An empty link «under a5»https://example.com/empty«/» and
+brackets [that are not a link].
+
+«a6»[ref]:«/» «under a5»https://example.com/reference«/»«a6» "Reference«/»
+    «a6»Title"«/»
+
+A «under a5»reference link«/»«a6» (https://example.com/reference«/»
+«a6»"Reference Title")«/», a collapsed one «under a5»ref«/»
+«a6»(https://example.com/reference "Reference«/»
+«a6»Title")«/», a shortcut «under a5»ref«/»
+«a6»(https://example.com/reference "Reference«/»
+«a6»Title")«/», and one with no definition
+[nowhere][none].
+=== width 48, 256 colours ===
+An «under c135»inline link«/»«c103» (https://example.com/page)«/», one
+with a «under c135»title«/»«c103» (https://example.com "The Title")«/»,
+and one whose «under c135»«bold»text«/»«under c135» has «/»«under c135»«c103»styles«/»
+«c103»(https://example.com/styled)«/».
+
+Autolinks: «under c135»https://example.com/auto«/»,
+«under c135»mailto:someone@example.com«/», «under c135»someone@example.com«/»,
+and bare ones: «under c135»https://example.com/bare?q=1«/»,
+«under c135»www.example.org/path«/», «under c135»someone@example.net«/».
+
+A link that shows its own address:
+«under c135»https://example.com«/».
+
+An empty link «under c135»https://example.com/empty«/» and
+brackets [that are not a link].
+
+«c103»[ref]:«/» «under c135»https://example.com/reference«/»«c103» "Reference«/»
+    «c103»Title"«/»
+
+A «under c135»reference link«/»«c103» (https://example.com/reference«/»
+«c103»"Reference Title")«/», a collapsed one «under c135»ref«/»
+«c103»(https://example.com/reference "Reference«/»
+«c103»Title")«/», a shortcut «under c135»ref«/»
+«c103»(https://example.com/reference "Reference«/»
+«c103»Title")«/», and one with no definition
+[nowhere][none].
+=== width 48, true colour, hyperlinks ===
+An «under #9d5cff»«@https://example.com/page»inline link«/»«/@», one with a «under #9d5cff»«@https://example.com»title«/»«/@», and one whose
+«under #9d5cff»«bold»«@https://example.com/styled»text«/»«/@»«under #9d5cff»«@https://example.com/styled» has «/»«/@»«under #9d5cff»«#8b7fb8»«@https://example.com/styled»styles«/»«/@».
+
+Autolinks: «under #9d5cff»«@https://example.com/auto»https://example.com/auto«/»«/@»,
+«under #9d5cff»«@mailto:someone@example.com»mailto:someone@example.com«/»«/@», «under #9d5cff»«@mailto:someone@example.com»someone@example.com«/»«/@»,
+and bare ones: «under #9d5cff»«@https://example.com/bare?q=1»https://example.com/bare?q=1«/»«/@»,
+«under #9d5cff»«@http://www.example.org/path»www.example.org/path«/»«/@», «under #9d5cff»«@mailto:someone@example.net»someone@example.net«/»«/@».
+
+A link that shows its own address:
+«under #9d5cff»«@https://example.com»https://example.com«/»«/@».
+
+An empty link «under #9d5cff»«@https://example.com/empty»https://example.com/empty«/»«/@» and
+brackets [that are not a link].
+
+«#8b7fb8»[ref]:«/» «under #9d5cff»«@https://example.com/reference»https://example.com/reference«/»«/@»«#8b7fb8» "Reference«/»
+    «#8b7fb8»Title"«/»
+
+A «under #9d5cff»«@https://example.com/reference»reference link«/»«/@», a collapsed one «under #9d5cff»«@https://example.com/reference»ref«/»«/@», a
+shortcut «under #9d5cff»«@https://example.com/reference»ref«/»«/@», and one with no definition
+[nowhere][none].

@@ -1,0 +1,155 @@
+=== width 80, no colour ===
+An *emphasis that never closes, a `code span that never closes, and a [link that
+never](closes.
+
+| a table | without |
+| a delimiter | row |
+
+• a list
+• that changes
+• its marker
+1. and then
+2) its numbering
+
+Text right under a list item with odd indentation.
+
+│ a quote that is continued lazily
+
+#NotAHeading and ####### neither
+
+  ```
+  a fence that is indented too far is code
+
+  a fence that never closes
+=== width 48, no colour ===
+An *emphasis that never closes, a `code span
+that never closes, and a [link that
+never](closes.
+
+| a table | without |
+| a delimiter | row |
+
+• a list
+• that changes
+• its marker
+1. and then
+2) its numbering
+
+Text right under a list item with odd
+indentation.
+
+│ a quote that is continued lazily
+
+#NotAHeading and ####### neither
+
+  ```
+  a fence that is indented too far is code
+
+  a fence that never closes
+=== width 24, no colour ===
+An *emphasis that never
+closes, a `code span
+that never closes, and a
+[link that
+never](closes.
+
+| a table | without |
+| a delimiter | row |
+
+• a list
+• that changes
+• its marker
+1. and then
+2) its numbering
+
+Text right under a list
+item with odd
+indentation.
+
+│ a quote that is
+│ continued lazily
+
+#NotAHeading and #######
+neither
+
+  ```
+  a fence that is indent
+↪ ed too far is code
+
+  a fence that never clo
+↪ ses
+=== width 48, 16 colours ===
+An *emphasis that never closes, a `code span
+that never closes, and a [link that
+never](closes.
+
+| a table | without |
+| a delimiter | row |
+
+«a5»•«/» a list
+«a5»•«/» that changes
+«a5»•«/» its marker
+«a5»1.«/» and then
+«a5»2)«/» its numbering
+
+Text right under a list item with odd
+indentation.
+
+«a5»│«/» a quote that is continued lazily
+
+#NotAHeading and ####### neither
+
+  «a6»```«/»
+  «a6»a fence that is indented too far is code«/»
+
+  «a6»a fence that never closes«/»
+=== width 48, 256 colours ===
+An *emphasis that never closes, a `code span
+that never closes, and a [link that
+never](closes.
+
+| a table | without |
+| a delimiter | row |
+
+«c135»•«/» a list
+«c135»•«/» that changes
+«c135»•«/» its marker
+«c135»1.«/» and then
+«c135»2)«/» its numbering
+
+Text right under a list item with odd
+indentation.
+
+«c135»│«/» a quote that is continued lazily
+
+#NotAHeading and ####### neither
+
+  «c103»```«/»
+  «c103»a fence that is indented too far is code«/»
+
+  «c103»a fence that never closes«/»
+=== width 48, true colour, hyperlinks ===
+An *emphasis that never closes, a `code span
+that never closes, and a [link that
+never](closes.
+
+| a table | without |
+| a delimiter | row |
+
+«#9d5cff»•«/» a list
+«#9d5cff»•«/» that changes
+«#9d5cff»•«/» its marker
+«#9d5cff»1.«/» and then
+«#9d5cff»2)«/» its numbering
+
+Text right under a list item with odd
+indentation.
+
+«#9d5cff»│«/» a quote that is continued lazily
+
+#NotAHeading and ####### neither
+
+  «#8b7fb8»```«/»
+  «#8b7fb8»a fence that is indented too far is code«/»
+
+  «#8b7fb8»a fence that never closes«/»

@@ -1,0 +1,189 @@
+=== width 80, no colour ===
+1. one
+2. two
+3. three
+
+Some text between two lists.
+
+7. starts at seven
+8. eight
+9. nine
+10. ten
+11. eleven
+
+Numbers are shown as they were written:
+
+1. one
+1. one again
+5. five
+
+1) with parentheses
+2) second
+
+1. an item
+
+   with a second paragraph
+
+     and indented code
+
+2. and a nested list:
+   ◦ bullet
+   ◦ bullet
+=== width 48, no colour ===
+1. one
+2. two
+3. three
+
+Some text between two lists.
+
+7. starts at seven
+8. eight
+9. nine
+10. ten
+11. eleven
+
+Numbers are shown as they were written:
+
+1. one
+1. one again
+5. five
+
+1) with parentheses
+2) second
+
+1. an item
+
+   with a second paragraph
+
+     and indented code
+
+2. and a nested list:
+   ◦ bullet
+   ◦ bullet
+=== width 24, no colour ===
+1. one
+2. two
+3. three
+
+Some text between two
+lists.
+
+7. starts at seven
+8. eight
+9. nine
+10. ten
+11. eleven
+
+Numbers are shown as
+they were written:
+
+1. one
+1. one again
+5. five
+
+1) with parentheses
+2) second
+
+1. an item
+
+   with a second
+   paragraph
+
+     and indented code
+
+2. and a nested list:
+   ◦ bullet
+   ◦ bullet
+=== width 48, 16 colours ===
+«a5»1.«/» one
+«a5»2.«/» two
+«a5»3.«/» three
+
+Some text between two lists.
+
+«a5»7.«/» starts at seven
+«a5»8.«/» eight
+«a5»9.«/» nine
+«a5»10.«/» ten
+«a5»11.«/» eleven
+
+Numbers are shown as they were written:
+
+«a5»1.«/» one
+«a5»1.«/» one again
+«a5»5.«/» five
+
+«a5»1)«/» with parentheses
+«a5»2)«/» second
+
+«a5»1.«/» an item
+
+   with a second paragraph
+
+     «a6»and indented code«/»
+
+«a5»2.«/» and a nested list:
+   «a5»◦«/» bullet
+   «a5»◦«/» bullet
+=== width 48, 256 colours ===
+«c135»1.«/» one
+«c135»2.«/» two
+«c135»3.«/» three
+
+Some text between two lists.
+
+«c135»7.«/» starts at seven
+«c135»8.«/» eight
+«c135»9.«/» nine
+«c135»10.«/» ten
+«c135»11.«/» eleven
+
+Numbers are shown as they were written:
+
+«c135»1.«/» one
+«c135»1.«/» one again
+«c135»5.«/» five
+
+«c135»1)«/» with parentheses
+«c135»2)«/» second
+
+«c135»1.«/» an item
+
+   with a second paragraph
+
+     «c103»and indented code«/»
+
+«c135»2.«/» and a nested list:
+   «c135»◦«/» bullet
+   «c135»◦«/» bullet
+=== width 48, true colour, hyperlinks ===
+«#9d5cff»1.«/» one
+«#9d5cff»2.«/» two
+«#9d5cff»3.«/» three
+
+Some text between two lists.
+
+«#9d5cff»7.«/» starts at seven
+«#9d5cff»8.«/» eight
+«#9d5cff»9.«/» nine
+«#9d5cff»10.«/» ten
+«#9d5cff»11.«/» eleven
+
+Numbers are shown as they were written:
+
+«#9d5cff»1.«/» one
+«#9d5cff»1.«/» one again
+«#9d5cff»5.«/» five
+
+«#9d5cff»1)«/» with parentheses
+«#9d5cff»2)«/» second
+
+«#9d5cff»1.«/» an item
+
+   with a second paragraph
+
+     «#8b7fb8»and indented code«/»
+
+«#9d5cff»2.«/» and a nested list:
+   «#9d5cff»◦«/» bullet
+   «#9d5cff»◦«/» bullet

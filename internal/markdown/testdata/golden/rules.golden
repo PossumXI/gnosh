@@ -1,0 +1,103 @@
+=== width 80, no colour ===
+Above the first rule.
+
+────────────────────────────────────────────────
+
+────────────────────────────────────────────────
+
+────────────────────────────────────────────────
+
+Below. Dashes right under one line of text make it a heading:
+
+## Like this
+
+Under two lines of text they are a rule:
+
+────────────────────────────────────────────────
+=== width 48, no colour ===
+Above the first rule.
+
+────────────────────────────────────────────────
+
+────────────────────────────────────────────────
+
+────────────────────────────────────────────────
+
+Below. Dashes right under one line of text make
+it a heading:
+
+## Like this
+
+Under two lines of text they are a rule:
+
+────────────────────────────────────────────────
+=== width 24, no colour ===
+Above the first rule.
+
+────────────────────────
+
+────────────────────────
+
+────────────────────────
+
+Below. Dashes right
+under one line of text
+make it a heading:
+
+## Like this
+
+Under two lines of text
+they are a rule:
+
+────────────────────────
+=== width 48, 16 colours ===
+Above the first rule.
+
+«a6»────────────────────────────────────────────────«/»
+
+«a6»────────────────────────────────────────────────«/»
+
+«a6»────────────────────────────────────────────────«/»
+
+Below. Dashes right under one line of text make
+it a heading:
+
+«a5»##«/» «bold a13»Like this«/»
+
+Under two lines of text they are a rule:
+
+«a6»────────────────────────────────────────────────«/»
+=== width 48, 256 colours ===
+Above the first rule.
+
+«c103»────────────────────────────────────────────────«/»
+
+«c103»────────────────────────────────────────────────«/»
+
+«c103»────────────────────────────────────────────────«/»
+
+Below. Dashes right under one line of text make
+it a heading:
+
+«c135»##«/» «bold c198»Like this«/»
+
+Under two lines of text they are a rule:
+
+«c103»────────────────────────────────────────────────«/»
+=== width 48, true colour, hyperlinks ===
+Above the first rule.
+
+«#8b7fb8»────────────────────────────────────────────────«/»
+
+«#8b7fb8»────────────────────────────────────────────────«/»
+
+«#8b7fb8»────────────────────────────────────────────────«/»
+
+Below. Dashes right under one line of text make
+it a heading:
+
+«#9d5cff»##«/» «bold #f0257f»Like this«/»
+
+Under two lines of text they are a rule:
+
+«#8b7fb8»────────────────────────────────────────────────«/»

@@ -1,0 +1,213 @@
+=== width 80, no colour ===
+The bug is in `flush`: it writes the header before checking whether the buffer
+is empty.
+
+## What happens
+
+1. `Write` appends to the buffer.
+2. `flush` is called from two places:
+   ◦ the timer, every 50 ms
+   ◦ `Close`
+3. On an empty buffer the header goes out alone, and the peer sees a truncated
+   frame.
+
+## The fix
+
+  func (w *writer) flush() error {
+      if w.buf.Len() == 0 {
+          return nil // nothing to send, and no header either
+      }
+      return w.send(w.header(), w.buf.Bytes())
+  }
+
+Case          Before         After
+────────────  ─────────────  ─────────────
+empty buffer  header only    nothing
+one byte      header + byte  header + byte
+
+│ Note: the test in `writer_test.go` only covered the second row.
+
+See https://example.com/issues/42 for the report.
+=== width 48, no colour ===
+The bug is in `flush`: it writes the header
+before checking whether the buffer is empty.
+
+## What happens
+
+1. `Write` appends to the buffer.
+2. `flush` is called from two places:
+   ◦ the timer, every 50 ms
+   ◦ `Close`
+3. On an empty buffer the header goes out alone,
+   and the peer sees a truncated frame.
+
+## The fix
+
+  func (w *writer) flush() error {
+      if w.buf.Len() == 0 {
+          return nil // nothing to send, and no 
+↪ header either
+      }
+      return w.send(w.header(), w.buf.Bytes())
+  }
+
+Case          Before         After
+────────────  ─────────────  ─────────────
+empty buffer  header only    nothing
+one byte      header + byte  header + byte
+
+│ Note: the test in `writer_test.go` only
+│ covered the second row.
+
+See https://example.com/issues/42 for the
+report.
+=== width 24, no colour ===
+The bug is in `flush`:
+it writes the header
+before checking whether
+the buffer is empty.
+
+## What happens
+
+1. `Write` appends to
+   the buffer.
+2. `flush` is called
+   from two places:
+   ◦ the timer, every 50
+     ms
+   ◦ `Close`
+3. On an empty buffer
+   the header goes out
+   alone, and the peer
+   sees a truncated
+   frame.
+
+## The fix
+
+  func (w *writer) flush
+↪ () error {
+      if w.buf.Len() == 
+↪ 0 {
+          return nil // 
+↪ nothing to send, and n
+↪ o header either
+      }
+      return w.send(w.he
+↪ ader(), w.buf.Bytes())
+  }
+
+Case: empty buffer
+Before: header only
+After: nothing
+────────────────────────
+Case: one byte
+Before: header + byte
+After: header + byte
+
+│ Note: the test in
+│ `writer_test.go` only
+│ covered the second
+│ row.
+
+See
+https://example.com/issu
+es/42 for the report.
+=== width 48, 16 colours ===
+The bug is in «a6»flush«/»: it writes the header «bold»before«/»
+checking whether the buffer is empty.
+
+«a5»##«/» «bold a13»What happens«/»
+
+«a5»1.«/» «a6»Write«/» appends to the buffer.
+«a5»2.«/» «a6»flush«/» is called from two places:
+   «a5»◦«/» the timer, every 50 ms
+   «a5»◦«/» «a6»Close«/»
+«a5»3.«/» On an empty buffer the header goes out alone,
+   and the peer sees a truncated frame.
+
+«a5»##«/» «bold a13»The fix«/»
+
+  «a6»func (w *writer) flush() error {«/»
+  «a6»    if w.buf.Len() == 0 {«/»
+  «a6»        return nil // nothing to send, and no «/»
+«a5»↪«/» «a6»header either«/»
+  «a6»    }«/»
+  «a6»    return w.send(w.header(), w.buf.Bytes())«/»
+  «a6»}«/»
+
+«bold»Case«/»          «bold»Before«/»         «bold»After«/»
+«a6»────────────«/»  «a6»─────────────«/»  «a6»─────────────«/»
+empty buffer  header only    nothing
+one byte      header + byte  header + byte
+
+«a5»│«/» «bold»Note:«/» the test in «a6»writer_test.go«/» only covered
+«a5»│«/» the second row.
+
+See «under a5»https://example.com/issues/42«/» for the
+report.
+=== width 48, 256 colours ===
+The bug is in «c103»flush«/»: it writes the header «bold»before«/»
+checking whether the buffer is empty.
+
+«c135»##«/» «bold c198»What happens«/»
+
+«c135»1.«/» «c103»Write«/» appends to the buffer.
+«c135»2.«/» «c103»flush«/» is called from two places:
+   «c135»◦«/» the timer, every 50 ms
+   «c135»◦«/» «c103»Close«/»
+«c135»3.«/» On an empty buffer the header goes out alone,
+   and the peer sees a truncated frame.
+
+«c135»##«/» «bold c198»The fix«/»
+
+  «c103»func (w *writer) flush() error {«/»
+  «c103»    if w.buf.Len() == 0 {«/»
+  «c103»        return nil // nothing to send, and no «/»
+«c135»↪«/» «c103»header either«/»
+  «c103»    }«/»
+  «c103»    return w.send(w.header(), w.buf.Bytes())«/»
+  «c103»}«/»
+
+«bold»Case«/»          «bold»Before«/»         «bold»After«/»
+«c103»────────────«/»  «c103»─────────────«/»  «c103»─────────────«/»
+empty buffer  header only    nothing
+one byte      header + byte  header + byte
+
+«c135»│«/» «bold»Note:«/» the test in «c103»writer_test.go«/» only covered
+«c135»│«/» the second row.
+
+See «under c135»https://example.com/issues/42«/» for the
+report.
+=== width 48, true colour, hyperlinks ===
+The bug is in «#8b7fb8»flush«/»: it writes the header «bold»before«/»
+checking whether the buffer is empty.
+
+«#9d5cff»##«/» «bold #f0257f»What happens«/»
+
+«#9d5cff»1.«/» «#8b7fb8»Write«/» appends to the buffer.
+«#9d5cff»2.«/» «#8b7fb8»flush«/» is called from two places:
+   «#9d5cff»◦«/» the timer, every 50 ms
+   «#9d5cff»◦«/» «#8b7fb8»Close«/»
+«#9d5cff»3.«/» On an empty buffer the header goes out alone,
+   and the peer sees a truncated frame.
+
+«#9d5cff»##«/» «bold #f0257f»The fix«/»
+
+  «#8b7fb8»func (w *writer) flush() error {«/»
+  «#8b7fb8»    if w.buf.Len() == 0 {«/»
+  «#8b7fb8»        return nil // nothing to send, and no «/»
+«#9d5cff»↪«/» «#8b7fb8»header either«/»
+  «#8b7fb8»    }«/»
+  «#8b7fb8»    return w.send(w.header(), w.buf.Bytes())«/»
+  «#8b7fb8»}«/»
+
+«bold»Case«/»          «bold»Before«/»         «bold»After«/»
+«#8b7fb8»────────────«/»  «#8b7fb8»─────────────«/»  «#8b7fb8»─────────────«/»
+empty buffer  header only    nothing
+one byte      header + byte  header + byte
+
+«#9d5cff»│«/» «bold»Note:«/» the test in «#8b7fb8»writer_test.go«/» only covered
+«#9d5cff»│«/» the second row.
+
+See «under #9d5cff»«@https://example.com/issues/42»https://example.com/issues/42«/»«/@» for the
+report.

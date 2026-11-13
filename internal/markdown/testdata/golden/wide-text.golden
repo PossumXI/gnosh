@@ -1,0 +1,100 @@
+=== width 80, no colour ===
+日本語のテキストは単語の間に空白がありません。それでも行は正しい幅で折り返され、
+句読点が行頭に来ることはありません。
+
+Mixed 中文 and English words, with emoji 👍🏽 and 👨‍👩‍👧 and flags 🇯🇵 🇰🇷, each two
+cells wide.
+
+• 項目一：説明文がここに入ります
+• 項目二：もっと長い説明文がここに入りますので折り返されます
+
+名前   説明
+─────  ────────────────
+幅     全角文字は二セル
+emoji  👍 works
+=== width 48, no colour ===
+日本語のテキストは単語の間に空白がありません。そ
+れでも行は正しい幅で折り返され、句読点が行頭に来
+ることはありません。
+
+Mixed 中文 and English words, with emoji 👍🏽 and
+👨‍👩‍👧 and flags 🇯🇵 🇰🇷, each two cells wide.
+
+• 項目一：説明文がここに入ります
+• 項目二：もっと長い説明文がここに入りますので折
+  り返されます
+
+名前   説明
+─────  ────────────────
+幅     全角文字は二セル
+emoji  👍 works
+=== width 24, no colour ===
+日本語のテキストは単語の
+間に空白がありません。そ
+れでも行は正しい幅で折り
+返され、句読点が行頭に来
+ることはありません。
+
+Mixed 中文 and English
+words, with emoji 👍🏽 and
+👨‍👩‍👧 and flags 🇯🇵 🇰🇷, each
+two cells wide.
+
+• 項目一：説明文がここに
+  入ります
+• 項目二：もっと長い説明
+  文がここに入りますので
+  折り返されます
+
+名前   説明
+─────  ────────────────
+幅     全角文字は二セル
+emoji  👍 works
+=== width 48, 16 colours ===
+日本語のテキストは単語の間に空白がありません。そ
+れでも行は正しい幅で折り返され、句読点が行頭に来
+ることはありません。
+
+Mixed 中文 and English words, with emoji 👍🏽 and
+👨‍👩‍👧 and flags 🇯🇵 🇰🇷, each two cells wide.
+
+«a5»•«/» 項目一：説明文がここに入ります
+«a5»•«/» 項目二：もっと長い説明文がここに入りますので折
+  り返されます
+
+«bold»名前«/»   «bold»説明«/»
+«a6»─────«/»  «a6»────────────────«/»
+幅     全角文字は二セル
+emoji  👍 works
+=== width 48, 256 colours ===
+日本語のテキストは単語の間に空白がありません。そ
+れでも行は正しい幅で折り返され、句読点が行頭に来
+ることはありません。
+
+Mixed 中文 and English words, with emoji 👍🏽 and
+👨‍👩‍👧 and flags 🇯🇵 🇰🇷, each two cells wide.
+
+«c135»•«/» 項目一：説明文がここに入ります
+«c135»•«/» 項目二：もっと長い説明文がここに入りますので折
+  り返されます
+
+«bold»名前«/»   «bold»説明«/»
+«c103»─────«/»  «c103»────────────────«/»
+幅     全角文字は二セル
+emoji  👍 works
+=== width 48, true colour, hyperlinks ===
+日本語のテキストは単語の間に空白がありません。そ
+れでも行は正しい幅で折り返され、句読点が行頭に来
+ることはありません。
+
+Mixed 中文 and English words, with emoji 👍🏽 and
+👨‍👩‍👧 and flags 🇯🇵 🇰🇷, each two cells wide.
+
+«#9d5cff»•«/» 項目一：説明文がここに入ります
+«#9d5cff»•«/» 項目二：もっと長い説明文がここに入りますので折
+  り返されます
+
+«bold»名前«/»   «bold»説明«/»
+«#8b7fb8»─────«/»  «#8b7fb8»────────────────«/»
+幅     全角文字は二セル
+emoji  👍 works

@@ -1,0 +1,181 @@
+=== width 80, no colour ===
+Name         Type                      Notes
+───────  ────────────  ─────────────────────
+width        int                       cells
+profile  text.Profile        how much colour
+theme       Theme      the look, with `code`
+
+Left                Right
+──────────────────  ─────
+no outer pipes          1
+a | pipe in a cell     22
+short                 333
+
+Option    What it does
+────────  ──────────────────────────────────────────────────────────────────────
+Reach     How far back later text may change the look of earlier text. This cell
+          is long enough to be wrapped.
+────────  ──────────────────────────────────────────────────────────────────────
+TabWidth  The distance between tab stops.
+Width     The width of the terminal.
+
+only  a header
+────  ────────
+
+| not | a table |
+| because | there is no delimiter row |
+=== width 48, no colour ===
+Name         Type                      Notes
+───────  ────────────  ─────────────────────
+width        int                       cells
+profile  text.Profile        how much colour
+theme       Theme      the look, with `code`
+
+Left                Right
+──────────────────  ─────
+no outer pipes          1
+a | pipe in a cell     22
+short                 333
+
+Option    What it does
+────────  ──────────────────────────────────────
+Reach     How far back later text may change the
+          look of earlier text. This cell is
+          long enough to be wrapped.
+────────  ──────────────────────────────────────
+TabWidth  The distance between tab stops.
+Width     The width of the terminal.
+
+only  a header
+────  ────────
+
+| not | a table |
+| because | there is no delimiter row |
+=== width 24, no colour ===
+Name: width
+Type: int
+Notes: cells
+────────────────────────
+Name: profile
+Type: text.Profile
+Notes: how much colour
+────────────────────────
+Name: theme
+Type: Theme
+Notes: the look, with
+  `code`
+
+Left               Right
+─────────────────  ─────
+no outer pipes         1
+─────────────────  ─────
+a | pipe in a         22
+cell
+─────────────────  ─────
+short                333
+
+Option    What it does
+────────  ──────────────
+Reach     How far back
+          later text may
+          change the
+          look of
+          earlier text.
+          This cell is
+          long enough to
+          be wrapped.
+────────  ──────────────
+TabWidth  The distance
+          between tab
+          stops.
+────────  ──────────────
+Width     The width of
+          the terminal.
+
+only  a header
+────  ────────
+
+| not | a table |
+| because | there is no
+delimiter row |
+=== width 48, 16 colours ===
+«bold»Name«/»         «bold»Type«/»                    «bold»Notes«/»
+«a6»───────«/»  «a6»────────────«/»  «a6»───────────────────«/»
+width        int                     cells
+profile  text.Profile      how much colour
+theme       Theme      «italic»the«/» look, with «a6»code«/»
+
+«bold»Left«/»                «bold»Right«/»
+«a6»──────────────────«/»  «a6»─────«/»
+no outer pipes          1
+a | pipe in a cell     22
+short                 333
+
+«bold»Option«/»    «bold»What it does«/»
+«a6»────────«/»  «a6»──────────────────────────────────────«/»
+Reach     How far back later text may change the
+          look of earlier text. This cell is
+          long enough to be wrapped.
+«a6»────────«/»  «a6»──────────────────────────────────────«/»
+TabWidth  The distance between tab stops.
+Width     The width of the terminal.
+
+«bold»only«/»  «bold»a header«/»
+«a6»────«/»  «a6»────────«/»
+
+| not | a table |
+| because | there is no delimiter row |
+=== width 48, 256 colours ===
+«bold»Name«/»         «bold»Type«/»                    «bold»Notes«/»
+«c103»───────«/»  «c103»────────────«/»  «c103»───────────────────«/»
+width        int                     cells
+profile  text.Profile      how much colour
+theme       Theme      «italic»the«/» look, with «c103»code«/»
+
+«bold»Left«/»                «bold»Right«/»
+«c103»──────────────────«/»  «c103»─────«/»
+no outer pipes          1
+a | pipe in a cell     22
+short                 333
+
+«bold»Option«/»    «bold»What it does«/»
+«c103»────────«/»  «c103»──────────────────────────────────────«/»
+Reach     How far back later text may change the
+          look of earlier text. This cell is
+          long enough to be wrapped.
+«c103»────────«/»  «c103»──────────────────────────────────────«/»
+TabWidth  The distance between tab stops.
+Width     The width of the terminal.
+
+«bold»only«/»  «bold»a header«/»
+«c103»────«/»  «c103»────────«/»
+
+| not | a table |
+| because | there is no delimiter row |
+=== width 48, true colour, hyperlinks ===
+«bold»Name«/»         «bold»Type«/»                    «bold»Notes«/»
+«#8b7fb8»───────«/»  «#8b7fb8»────────────«/»  «#8b7fb8»───────────────────«/»
+width        int                     cells
+profile  text.Profile      how much colour
+theme       Theme      «italic»the«/» look, with «#8b7fb8»code«/»
+
+«bold»Left«/»                «bold»Right«/»
+«#8b7fb8»──────────────────«/»  «#8b7fb8»─────«/»
+no outer pipes          1
+a | pipe in a cell     22
+short                 333
+
+«bold»Option«/»    «bold»What it does«/»
+«#8b7fb8»────────«/»  «#8b7fb8»──────────────────────────────────────«/»
+Reach     How far back later text may change the
+          look of earlier text. This cell is
+          long enough to be wrapped.
+«#8b7fb8»────────«/»  «#8b7fb8»──────────────────────────────────────«/»
+TabWidth  The distance between tab stops.
+Width     The width of the terminal.
+
+«bold»only«/»  «bold»a header«/»
+«#8b7fb8»────«/»  «#8b7fb8»────────«/»
+
+| not | a table |
+| because | there is no delimiter row |

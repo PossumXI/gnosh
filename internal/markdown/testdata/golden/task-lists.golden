@@ -1,0 +1,55 @@
+=== width 80, no colour ===
+[ ] not done yet
+[x] done
+[x] done, with a capital
+• [ ]no space, so no box
+• a plain item among them
+
+1. [ ] numbered and open
+2. [x] numbered and done
+=== width 48, no colour ===
+[ ] not done yet
+[x] done
+[x] done, with a capital
+• [ ]no space, so no box
+• a plain item among them
+
+1. [ ] numbered and open
+2. [x] numbered and done
+=== width 24, no colour ===
+[ ] not done yet
+[x] done
+[x] done, with a capital
+• [ ]no space, so no box
+• a plain item among
+  them
+
+1. [ ] numbered and open
+2. [x] numbered and done
+=== width 48, 16 colours ===
+«a5»[ ]«/» not done yet
+«bold a13»[x]«/» done
+«bold a13»[x]«/» done, with a capital
+«a5»•«/» [ ]no space, so no box
+«a5»•«/» a plain item among them
+
+«a5»1.«/» «a5»[ ]«/» numbered and open
+«a5»2.«/» «bold a13»[x]«/» numbered and done
+=== width 48, 256 colours ===
+«c135»[ ]«/» not done yet
+«bold c198»[x]«/» done
+«bold c198»[x]«/» done, with a capital
+«c135»•«/» [ ]no space, so no box
+«c135»•«/» a plain item among them
+
+«c135»1.«/» «c135»[ ]«/» numbered and open
+«c135»2.«/» «bold c198»[x]«/» numbered and done
+=== width 48, true colour, hyperlinks ===
+«#9d5cff»[ ]«/» not done yet
+«bold #f0257f»[x]«/» done
+«bold #f0257f»[x]«/» done, with a capital
+«#9d5cff»•«/» [ ]no space, so no box
+«#9d5cff»•«/» a plain item among them
+
+«#9d5cff»1.«/» «#9d5cff»[ ]«/» numbered and open
+«#9d5cff»2.«/» «bold #f0257f»[x]«/» numbered and done

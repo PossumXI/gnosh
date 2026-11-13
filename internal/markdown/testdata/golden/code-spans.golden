@@ -1,0 +1,78 @@
+=== width 80, no colour ===
+Inline `code` in a sentence, ``code with a ` backtick``, and ```ticks at both
+ends```.
+
+In code, `*nothing* is [parsed](x) &amp; \escaped`.
+
+A backtick ` on its own, and ``two that never close.
+
+A long one: `the quick brown fox jumps over the lazy dog and keeps on running`
+wraps like words.
+=== width 48, no colour ===
+Inline `code` in a sentence, ``code with a `
+backtick``, and ```ticks at both ends```.
+
+In code, `*nothing* is [parsed](x) &amp;
+\escaped`.
+
+A backtick ` on its own, and ``two that never
+close.
+
+A long one: `the quick brown fox jumps over the
+lazy dog and keeps on running` wraps like words.
+=== width 24, no colour ===
+Inline `code` in a
+sentence, ``code with a
+` backtick``, and
+```ticks at both
+ends```.
+
+In code, `*nothing* is
+[parsed](x) &amp;
+\escaped`.
+
+A backtick ` on its own,
+and ``two that never
+close.
+
+A long one: `the quick
+brown fox jumps over the
+lazy dog and keeps on
+running` wraps like
+words.
+=== width 48, 16 colours ===
+Inline «a6»code«/» in a sentence, «a6»code with a `«/»
+«a6»backtick«/», and «a6»`ticks at both ends`«/».
+
+In code, «a6»*nothing* is [parsed](x) &amp;«/»
+«a6»\escaped«/».
+
+A backtick ` on its own, and ``two that never
+close.
+
+A long one: «a6»the quick brown fox jumps over the«/»
+«a6»lazy dog and keeps on running«/» wraps like words.
+=== width 48, 256 colours ===
+Inline «c103»code«/» in a sentence, «c103»code with a `«/»
+«c103»backtick«/», and «c103»`ticks at both ends`«/».
+
+In code, «c103»*nothing* is [parsed](x) &amp;«/»
+«c103»\escaped«/».
+
+A backtick ` on its own, and ``two that never
+close.
+
+A long one: «c103»the quick brown fox jumps over the«/»
+«c103»lazy dog and keeps on running«/» wraps like words.
+=== width 48, true colour, hyperlinks ===
+Inline «#8b7fb8»code«/» in a sentence, «#8b7fb8»code with a `«/»
+«#8b7fb8»backtick«/», and «#8b7fb8»`ticks at both ends`«/».
+
+In code, «#8b7fb8»*nothing* is [parsed](x) &amp;«/»
+«#8b7fb8»\escaped«/».
+
+A backtick ` on its own, and ``two that never
+close.
+
+A long one: «#8b7fb8»the quick brown fox jumps over the«/»
+«#8b7fb8»lazy dog and keeps on running«/» wraps like words.

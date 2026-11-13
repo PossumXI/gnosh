@@ -1,0 +1,64 @@
+=== width 80, no colour ===
+Escaped: *not emphasis*, `not code`, [not a link](x), # not a heading, 1. not a
+list.
+
+A backslash before a letter stays: C:\path\to\file.
+
+Entities: & < > " © — …  | A ☺ �
+
+Not entities: &unknown; & alone, AT&T, &#xZZ;
+=== width 48, no colour ===
+Escaped: *not emphasis*, `not code`, [not a
+link](x), # not a heading, 1. not a list.
+
+A backslash before a letter stays:
+C:\path\to\file.
+
+Entities: & < > " © — …  | A ☺ �
+
+Not entities: &unknown; & alone, AT&T, &#xZZ;
+=== width 24, no colour ===
+Escaped: *not emphasis*,
+`not code`, [not a
+link](x), # not a
+heading, 1. not a list.
+
+A backslash before a
+letter stays:
+C:\path\to\file.
+
+Entities: & < > " © — …
+ | A ☺ �
+
+Not entities: &unknown;
+& alone, AT&T, &#xZZ;
+=== width 48, 16 colours ===
+Escaped: *not emphasis*, `not code`, [not a
+link](x), # not a heading, 1. not a list.
+
+A backslash before a letter stays:
+C:\path\to\file.
+
+Entities: & < > " © — …  | A ☺ �
+
+Not entities: &unknown; & alone, AT&T, &#xZZ;
+=== width 48, 256 colours ===
+Escaped: *not emphasis*, `not code`, [not a
+link](x), # not a heading, 1. not a list.
+
+A backslash before a letter stays:
+C:\path\to\file.
+
+Entities: & < > " © — …  | A ☺ �
+
+Not entities: &unknown; & alone, AT&T, &#xZZ;
+=== width 48, true colour, hyperlinks ===
+Escaped: *not emphasis*, `not code`, [not a
+link](x), # not a heading, 1. not a list.
+
+A backslash before a letter stays:
+C:\path\to\file.
+
+Entities: & < > " © — …  | A ☺ �
+
+Not entities: &unknown; & alone, AT&T, &#xZZ;

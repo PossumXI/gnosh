@@ -1,0 +1,132 @@
+=== width 80, no colour ===
+  package main
+
+  func main() {
+      fmt.Println("tabs become spaces")
+  }
+
+  ```
+  a fence inside a longer fence
+  ```
+  # not a heading, - not a list, *not emphasis*
+
+  $ gnosh --version
+
+  a line that is much too long for a narrow terminal: 0123456789 0123456789 0123
+↪ 456789 0123456789 0123456789 0123456789 end
+
+  def never_closed():
+      return "the block runs to the end of the text"
+=== width 48, no colour ===
+  package main
+
+  func main() {
+      fmt.Println("tabs become spaces")
+  }
+
+  ```
+  a fence inside a longer fence
+  ```
+  # not a heading, - not a list, *not emphasis*
+
+  $ gnosh --version
+
+  a line that is much too long for a narrow term
+↪ inal: 0123456789 0123456789 0123456789 0123456
+↪ 789 0123456789 0123456789 end
+
+  def never_closed():
+      return "the block runs to the end of the t
+↪ ext"
+=== width 24, no colour ===
+  package main
+
+  func main() {
+      fmt.Println("tabs 
+↪ become spaces")
+  }
+
+  ```
+  a fence inside a longe
+↪ r fence
+  ```
+  # not a heading, - not
+↪  a list, *not emphasis
+↪ *
+
+  $ gnosh --version
+
+  a line that is much to
+↪ o long for a narrow te
+↪ rminal: 0123456789 012
+↪ 3456789 0123456789 012
+↪ 3456789 0123456789 012
+↪ 3456789 end
+
+  def never_closed():
+      return "the block 
+↪ runs to the end of the
+↪  text"
+=== width 48, 16 colours ===
+  «a6»package main«/»
+
+  «a6»func main() {«/»
+  «a6»    fmt.Println("tabs become spaces")«/»
+  «a6»}«/»
+
+  «a6»```«/»
+  «a6»a fence inside a longer fence«/»
+  «a6»```«/»
+  «a6»# not a heading, - not a list, *not emphasis*«/»
+
+  «a6»$ gnosh --version«/»
+
+  «a6»a line that is much too long for a narrow term«/»
+«a5»↪«/» «a6»inal: 0123456789 0123456789 0123456789 0123456«/»
+«a5»↪«/» «a6»789 0123456789 0123456789 end«/»
+
+  «a6»def never_closed():«/»
+  «a6»    return "the block runs to the end of the t«/»
+«a5»↪«/» «a6»ext"«/»
+=== width 48, 256 colours ===
+  «c103»package main«/»
+
+  «c103»func main() {«/»
+  «c103»    fmt.Println("tabs become spaces")«/»
+  «c103»}«/»
+
+  «c103»```«/»
+  «c103»a fence inside a longer fence«/»
+  «c103»```«/»
+  «c103»# not a heading, - not a list, *not emphasis*«/»
+
+  «c103»$ gnosh --version«/»
+
+  «c103»a line that is much too long for a narrow term«/»
+«c135»↪«/» «c103»inal: 0123456789 0123456789 0123456789 0123456«/»
+«c135»↪«/» «c103»789 0123456789 0123456789 end«/»
+
+  «c103»def never_closed():«/»
+  «c103»    return "the block runs to the end of the t«/»
+«c135»↪«/» «c103»ext"«/»
+=== width 48, true colour, hyperlinks ===
+  «#8b7fb8»package main«/»
+
+  «#8b7fb8»func main() {«/»
+  «#8b7fb8»    fmt.Println("tabs become spaces")«/»
+  «#8b7fb8»}«/»
+
+  «#8b7fb8»```«/»
+  «#8b7fb8»a fence inside a longer fence«/»
+  «#8b7fb8»```«/»
+  «#8b7fb8»# not a heading, - not a list, *not emphasis*«/»
+
+  «#8b7fb8»$ gnosh --version«/»
+
+  «#8b7fb8»a line that is much too long for a narrow term«/»
+«#9d5cff»↪«/» «#8b7fb8»inal: 0123456789 0123456789 0123456789 0123456«/»
+«#9d5cff»↪«/» «#8b7fb8»789 0123456789 0123456789 end«/»
+
+  «#8b7fb8»def never_closed():«/»
+  «#8b7fb8»    return "the block runs to the end of the t«/»
+«#9d5cff»↪«/» «#8b7fb8»ext"«/»
