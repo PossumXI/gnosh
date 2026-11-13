@@ -93,6 +93,12 @@ type Action struct {
 	// Preview shows the change in full, such as the diff an edit would
 	// make. It may be nil.
 	Preview *Display
+	// Confirm says a person must be asked before this call runs, even
+	// where the rules or the mode would let it run without asking: the
+	// call throws away something that cannot be got back, such as a
+	// machine's saved state. A deny rule still refuses it outright, and
+	// where nobody can be asked it does not run.
+	Confirm bool
 }
 
 // Describer is a Tool that can say what a call would do. A tool that does
