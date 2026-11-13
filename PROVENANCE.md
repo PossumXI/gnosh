@@ -45,6 +45,32 @@ A builder who recognises that it has seen another program's implementation of
 the thing it is writing designs from the spec and from first principles, and
 does not rebuild that implementation.
 
+## How files are carried over
+
+The spec side compared every file the earlier gnosh had added against Charm's
+code: the tree at the point the fork began, upstream's tree today, and every
+line upstream has added since. It measured the share of a file's significant
+lines that also stand in Charm's code and the longest run of consecutive
+lines the two share, and it took git's own copy and rename detection as a
+second opinion. A file with no meaningful overlap was staged, byte for byte.
+A file with overlap was not staged, and what it did is written again from
+the spec.
+
+A porter on the build side reads the staged files and nothing else of the
+earlier tree. It brings a file in with its import paths changed and nothing
+more, except where the file leaned on a helper of the earlier harness: such
+a helper is written again from what its callers need.
+
+Twenty files were their author's own work except for one block of four to
+seven lines that also stands in Crush. They come over, if at all, only as
+copies with that block cut out.
+
+Gno's standard library and gno's B+tree package come under gno's own licence,
+with its notices beside them.
+
+`CARRIED.md` lists every file brought over with its old path, its numbers
+from the scan, the checksum of the staged original, and what was changed.
+
 The session that directs the work wrote `internal/core` and the build
 briefs. It read the earlier tree's file names and sizes and its licence, and
 did not open its Crush-derived source.
