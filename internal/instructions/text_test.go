@@ -101,8 +101,8 @@ func TestPlain(t *testing.T) {
 		"/p/Design Docs/é.md": "/p/Design Docs/é.md",
 		"a\nb":                `a\u{a}b`,
 		"a\x1b[31mb":          `a\u{1b}[31mb`,
-		"a\u202eb":                 `a\u{202e}b`,
-		"a\u2028b":                 `a\u{2028}b`,
+		"a\u202eb":            `a\u{202e}b`,
+		"a\u2028b":            `a\u{2028}b`,
 		"bad\xffbyte":         `bad\xffbyte`,
 		"kept � as it is":     "kept � as it is",
 	} {
