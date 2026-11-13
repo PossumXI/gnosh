@@ -88,6 +88,7 @@ func (a *Agent) Spawn(sub SubOptions) (*Agent, error) {
 	}
 	opts.Drivers = sub.Drivers
 	opts.OnEvent = nil
+	opts.Store = nil
 	opts.StartSource = sub.Type
 	opts.CompactAt = su.compactAt
 	opts.NoAutoCompact = su.noAuto

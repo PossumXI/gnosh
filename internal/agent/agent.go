@@ -149,6 +149,23 @@ type Options struct {
 	// OnPanic, when not nil, is told when a tool, a port or the loop
 	// itself panicked, with the stack. The loop carries on either way.
 	OnPanic func(what string, v any, stack []byte)
+
+	// Store, when not nil, is the Store in which the session's tools keep
+	// their own state (core.ToolEnv.Store). Nil makes a new one. The
+	// wiring gives its own when code other than a tool call has to reach
+	// that state, such as what a session has read. A sub-agent always
+	// gets a Store of its own.
+	Store *sync.Map
+
+	// CallID, when not nil, makes the id every tool call goes by, in place
+	// of the id the provider gave it. The wiring gives one when the ids
+	// must be unique beyond this session: a model server may number the
+	// calls of every reply from zero, and what one session calls "call_0"
+	// another does too. It must return an id it has not returned before,
+	// of letters, digits, "_" and "-", at most 40 characters long: that is
+	// what every provider takes back. Nil keeps the provider's own id
+	// wherever this session has not seen it before.
+	CallID func() string
 }
 
 // Agent is one session: a conversation with a model that is kept going by
@@ -323,7 +340,7 @@ func newAgent(opts Options, parent *Agent, sub SubOptions) (*Agent, error) {
 		ready:     make(chan struct{}),
 		wake:      make(chan struct{}, 1),
 		modelLock: make(chan struct{}, 1),
-		store:     new(sync.Map),
+		store:     opts.Store,
 		model:     opts.Model,
 		small:     opts.Small,
 		system:    slices.Clone(opts.System),
@@ -333,6 +350,9 @@ func newAgent(opts Options, parent *Agent, sub SubOptions) (*Agent, error) {
 		roots:     slices.Clone(opts.Roots),
 		questions: make(map[string]chan Answer),
 		calib:     1,
+	}
+	if a.store == nil {
+		a.store = new(sync.Map)
 	}
 	if a.clock == nil {
 		a.clock = systemClock{}
@@ -773,16 +793,26 @@ func (a *Agent) setup() setup {
 	}
 }
 
-// toolEnv makes what one tool call is given to work with.
+// toolEnv makes what one tool call is given to work with. A sub-agent's
+// calls are given the sub-agent's own id as their session, and the id of
+// the session that started it beside it.
 func (a *Agent) toolEnv(callID string) *core.ToolEnv {
 	a.mu.Lock()
 	cwd, roots := a.cwd, slices.Clone(a.roots)
 	a.mu.Unlock()
+	session, parent := a.session, ""
+	if a.parent != nil {
+		session, parent = a.agentID, a.parent.agentID
+		if parent == "" {
+			parent = a.parent.session
+		}
+	}
 	return &core.ToolEnv{
-		Cwd:       cwd,
-		Roots:     roots,
-		SessionID: a.session,
-		Store:     a.store,
+		Cwd:             cwd,
+		Roots:           roots,
+		SessionID:       session,
+		ParentSessionID: parent,
+		Store:           a.store,
 		Progress: func(p core.Progress) {
 			if p.CallID == "" {
 				p.CallID = callID
@@ -1152,6 +1182,18 @@ func (a *Agent) Wait(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+// Drain waits until every event the session has made so far has been
+// handed to its consumer, or until ctx ends. A front end calls it when it
+// has to know that it has been told everything before it goes on, such as
+// before it takes the next line of a script. It must not be called from
+// inside the OnEvent function, which it would wait for.
+func (a *Agent) Drain(ctx context.Context) error {
+	if a.parent != nil {
+		return a.parent.Drain(ctx)
+	}
+	return a.sink.drain(ctx)
 }
 
 // Close ends the session with the reason "other". See End.

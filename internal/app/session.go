@@ -1,0 +1,1037 @@
+package app
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/config"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/instructions"
+	"github.com/gnosh-ai/gnosh/internal/permission"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
+	"github.com/gnosh-ai/gnosh/internal/trust"
+)
+
+// live is one session as the wiring holds it: the session's file, the
+// rules it runs under, its tools, its model and its agent, joined
+// together. Nothing in it is global: a second session of the same process
+// (after /clear) is a second live.
+type live struct {
+	p   *program
+	st  *startup
+	inv cli.Invocation
+	cfg *config.Config
+
+	// interactive says a person is there to be asked. source is how the
+	// session came to be, in the SessionStart hook's words.
+	interactive bool
+	source      string
+
+	store     *transcript.Store
+	ts        *transcript.Session
+	log       *sessionLog
+	engine    *permission.Engine
+	hooks     *hookRunner
+	shell     *shelltool.Manager
+	texts     *prompt.Set
+	instr     *instructions.Set
+	tools     []core.Tool
+	toolStore *sync.Map
+	roots     []string
+	agent     *agent.Agent
+	facts     *Session
+	contribs  []joined
+	slash     *slashSet
+	front     Frontend
+	flog      *fileLog
+	crash     *crashFile
+	profile   *profileServer
+
+	// ctx ends when the session is closed. What runs beside the session
+	// and is not waited for (a hook nobody reads the answer of) runs
+	// under it.
+	ctx    context.Context
+	cancel context.CancelFunc
+	bg     sync.WaitGroup
+
+	// The session's models, and the client of every provider it has used.
+	large     *modelUse
+	small     *modelUse
+	providers map[string]*providerUse
+	typeMu    sync.Mutex
+	types     map[string]string // a model's id -> its provider's type
+	// modelMu guards large once the session is open, and switchMu makes
+	// /model one switch at a time.
+	modelMu  sync.Mutex
+	switchMu sync.Mutex
+
+	// lastSummary is how the last summary ended.
+	lastSummary atomic.Pointer[agent.SummaryEvent]
+
+	// evMu makes the events a front end is given arrive one at a time.
+	evMu sync.Mutex
+
+	// The count behind --max-turns.
+	maxTurns     int
+	capMu        sync.Mutex
+	roundsBefore int
+	capped       bool
+
+	closeOnce sync.Once
+	closing   atomic.Bool
+	killed    atomic.Bool
+}
+
+// joined is a feature with what it added to this session.
+type joined struct {
+	f Feature
+	c *Contribution
+}
+
+// openSession builds a session: its file, its rules, its tools, its model
+// and its agent, in that order. source is "clear" for the session /clear
+// starts, and empty for the one the command line asks for.
+func (p *program) openSession(ctx context.Context, st *startup, front Frontend, source string) (l *live, err error) {
+	l = &live{
+		p: p, st: st, inv: st.inv, cfg: st.cfg,
+		interactive: st.attended,
+		source:      source,
+		front:       front,
+		store:       st.sessions(),
+		toolStore:   new(sync.Map),
+		providers:   map[string]*providerUse{},
+		types:       map[string]string{},
+		maxTurns:    st.inv.MaxTurns,
+	}
+	l.ctx, l.cancel = context.WithCancel(context.Background())
+	defer func() {
+		if err != nil {
+			l.close("other")
+			l = nil
+		}
+	}()
+
+	if err := l.openTranscript(ctx); err != nil {
+		return l, err
+	}
+	l.flog = openFileLog(p, l)
+	l.crash = openCrashFile(p, l)
+	l.flog.logf("startup", "gnosh %s, session %s (%s), in %s", cli.VersionLine(p.o.Build), l.ts.ID(), l.source, l.cfg.Paths.Cwd)
+	for _, pr := range st.problems {
+		l.flog.logf("config", "%s: %s", pr.Severity, pr.String())
+	}
+	for _, w := range l.ts.Warnings() {
+		l.notice(agent.LevelWarning, "session", "The session's file needed mending when it was opened: "+w.String())
+	}
+
+	// The texts gnosh says to a model: its own, with the person's
+	// replacements. Safe mode leaves the replacements out.
+	l.texts = prompt.Builtin()
+	if !l.cfg.Switches.SafeMode.V {
+		dir := filepath.Join(l.cfg.Paths.ConfigDir, "prompts")
+		set, replaced, err := prompt.Load(dir)
+		if err != nil {
+			return l, fmt.Errorf("your own prompt texts in %s cannot be used, so nothing was started:\n%w", dir, err)
+		}
+		l.texts = set
+		var mine, stale []string
+		for _, r := range replaced {
+			if r.InForce {
+				mine = append(mine, r.Name)
+				if r.Stale {
+					stale = append(stale, r.Name)
+				}
+			}
+		}
+		if len(mine) > 0 {
+			text := fmt.Sprintf("%d of gnosh's prompt texts are replaced by your own files in %s: %s.", len(mine), dir, strings.Join(mine, ", "))
+			if len(stale) > 0 {
+				text += fmt.Sprintf(" gnosh's own text has changed since these were written: %s.", strings.Join(stale, ", "))
+			}
+			l.notice(agent.LevelWarning, "prompt", text)
+		}
+	} else {
+		l.notice(agent.LevelWarning, "config", fmt.Sprintf(
+			"Safe mode is on (%s): hooks, instruction files and your own prompt texts are off. Start without it to turn them back on.",
+			l.cfg.Switches.SafeMode.Origin))
+	}
+	if l.cfg.HooksOff != "" && !l.cfg.Switches.SafeMode.V {
+		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("%d hooks are configured and none runs: %s.", len(l.cfg.AllHooks), l.cfg.HooksOff))
+	}
+
+	// The rules. The engine is made once to say which tools are offered,
+	// which the features may ask, and again once they have said which of
+	// their own files are never changed without a question.
+	if l.engine, err = permission.New(st.permissionOptions(l.cfg, nil)); err != nil {
+		return l, fmt.Errorf("the permission rules cannot be applied:\n%w", err)
+	}
+	l.facts = l.sessionFacts()
+	var protected []string
+	for _, f := range p.o.Features {
+		if f.Session == nil {
+			continue
+		}
+		c, err := f.Session(ctx, l.facts)
+		if err != nil {
+			return l, fmt.Errorf("%s could not start for this session: %w", firstOf(f.Name, "a feature"), err)
+		}
+		if c == nil {
+			c = &Contribution{}
+		}
+		l.contribs = append(l.contribs, joined{f: f, c: c})
+		protected = append(protected, c.Protected...)
+	}
+	if len(protected) > 0 {
+		if l.engine, err = permission.New(st.permissionOptions(l.cfg, protected)); err != nil {
+			return l, fmt.Errorf("the permission rules cannot be applied:\n%w", err)
+		}
+	}
+	for _, note := range l.engine.Explain().Notes {
+		l.notice(agent.LevelWarning, "permission", note)
+	}
+	l.roots = []string{l.cfg.Paths.ProjectRoot}
+	for _, d := range l.engine.Dirs() {
+		if !slices.Contains(l.roots, d) {
+			l.roots = append(l.roots, d)
+		}
+	}
+
+	// The hooks.
+	hc, _ := hooksConfig(l.cfg)
+	ho := st.hookOptions(l.cfg)
+	for _, c := range l.contribs {
+		if c.c.Hooks != nil {
+			fires := ho.Fires
+			c.c.Hooks(&ho)
+			ho.Fires = fires
+		}
+	}
+	runner, err := hooks.NewRunner(hc, ho)
+	if err != nil {
+		return l, fmt.Errorf("the hooks cannot be run as they are configured:\n%w", err)
+	}
+	l.hooks = &hookRunner{l: l, r: runner}
+
+	// The tools, the instruction files and the system prompt.
+	if err := l.buildTools(); err != nil {
+		return l, err
+	}
+	l.allowSpool()
+	if err := l.loadInstructions(ctx); err != nil {
+		return l, err
+	}
+	system, err := l.systemPrompt()
+	if err != nil {
+		return l, err
+	}
+
+	// The models.
+	var pick func([]string) (string, bool)
+	if asker, ok := front.(Asker); ok && l.interactive {
+		pick = func(models []string) (string, bool) {
+			q := agent.Question{Kind: "model", Title: "Which model?",
+				Text: "Several models are available and none is chosen. gnosh does not guess: naming the wrong one makes a model server unload the one in use."}
+			for _, m := range models {
+				q.Choices = append(q.Choices, agent.Choice{Key: m, Label: m})
+			}
+			ans, err := asker.AskBefore(q)
+			return ans.Choice, err == nil && slices.Contains(models, ans.Choice)
+		}
+	}
+	if err := l.setupModels(ctx, pick); err != nil {
+		return l, err
+	}
+
+	// The log, and the agent.
+	l.log = newSessionLog(l.ts, l.texts)
+	for _, c := range l.contribs {
+		if c.c.Stored != nil {
+			l.log.stored = append(l.log.stored, c.c.Stored)
+		}
+		if c.c.Slid != nil {
+			l.log.slid = append(l.log.slid, c.c.Slid)
+		}
+		if c.c.AfterStored != nil {
+			l.log.afterStored = append(l.log.afterStored, c.c.AfterStored)
+		}
+	}
+	l.log.onCut = func() {
+		if l.instr != nil {
+			l.instr.Forget()
+		}
+	}
+	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), "gnovm_run"))
+	if err != nil {
+		return l, err
+	}
+	opts := agent.Options{
+		SessionID:     l.ts.ID(),
+		Cwd:           l.cfg.Paths.Cwd,
+		Roots:         l.roots,
+		Interactive:   l.interactive,
+		StartSource:   l.source,
+		Model:         l.large.model,
+		System:        system,
+		Tools:         l.tools,
+		Log:           l.log,
+		Gate:          &gate{l: l},
+		Moments:       l.moments(),
+		Drivers:       l.drivers(),
+		OnEvent:       func(ev agent.Event) { l.deliver(ev) },
+		Retry:         p.o.Retry,
+		Repeat:        l.repeatPolicy(),
+		CompactAt:     l.compactAt(),
+		NoAutoCompact: !l.cfg.Options.AutoSummarize.V,
+		StopGrace:     l.stopGrace(),
+		LoopMax:       max(l.cfg.Options.LoopMaxTurns.V, 0),
+		Texts:         texts,
+		Mark:          prompt.Wrap,
+		CleanInput:    cleanInput,
+		CleanResult:   cleanResult,
+		Outgoing:      l.outgoing,
+		OnPanic:       l.onPanic,
+		Store:         l.toolStore,
+		CallID:        newCallID,
+	}
+	if l.small != nil {
+		small := l.small.model
+		opts.Small = &small
+	}
+	if l.agent, err = agent.New(opts); err != nil {
+		return l, fmt.Errorf("the session could not be put together: %w", err)
+	}
+	l.slash = newSlashSet(l)
+	for _, c := range l.contribs {
+		for _, cmd := range c.c.Slash {
+			if err := l.slash.add(cmd); err != nil {
+				return l, fmt.Errorf("the feature %q: %w", c.f.Name, err)
+			}
+		}
+	}
+	if l.cfg.Switches.Profile.V {
+		l.profile = startProfile(l)
+	}
+	for _, c := range l.contribs {
+		if c.c.Ready != nil {
+			c.c.Ready(l.agent)
+		}
+	}
+	return l, nil
+}
+
+// openTranscript opens the session's file: a new one, or the one the
+// command line names, or a copy of it.
+func (l *live) openTranscript(ctx context.Context) error {
+	inv, cwd := l.inv, l.cfg.Paths.Cwd
+	if l.source == "clear" || inv.Conversation == cli.ConversationNew || inv.Conversation == "" {
+		var err error
+		if inv.SessionID != "" && l.source != "clear" {
+			l.ts, err = l.store.CreateWithID(cwd, inv.SessionID)
+		} else {
+			l.ts, err = l.store.Create(cwd)
+		}
+		if l.source == "" {
+			l.source = "startup"
+		}
+		if err != nil {
+			return fmt.Errorf("a new session could not be started: %w", err)
+		}
+		return l.nameSession()
+	}
+	if inv.ForkSession && inv.SessionID != "" {
+		return errors.New("--session-id cannot name the copy --fork-session makes yet: the copy gets an id of its own. Leave --session-id out, and nothing was started")
+	}
+
+	path, id := "", ""
+	switch inv.Conversation {
+	case cli.ConversationContinue:
+		info, ok, err := l.store.Latest(ctx, cwd)
+		if err != nil {
+			return fmt.Errorf("the sessions of this folder could not be listed: %w", err)
+		}
+		if !ok {
+			return fmt.Errorf("there is no session to continue: none was started in %s (sessions are kept under %s). Start one without -c", cwd, l.store.Dir)
+		}
+		id = info.ID
+	case cli.ConversationSession:
+		id = inv.Session
+	case cli.ConversationResume:
+		switch {
+		case inv.ResumeIsFile:
+			path = inv.Resume
+		case inv.Resume == "":
+			picked, err := l.pickSession(ctx)
+			if err != nil {
+				return err
+			}
+			id = picked
+		default:
+			found, err := l.findSession(ctx, inv.Resume)
+			if err != nil {
+				return err
+			}
+			id = found
+		}
+	}
+
+	open := func(write bool) (*transcript.Session, error) {
+		switch {
+		case path != "":
+			return l.store.OpenPath(ctx, path, !write)
+		case write:
+			return l.store.Open(ctx, id)
+		}
+		return l.store.OpenReadOnly(ctx, id)
+	}
+	ts, err := open(!inv.ForkSession)
+	if err != nil {
+		var locked *transcript.LockedError
+		switch {
+		case errors.As(err, &locked):
+			return fmt.Errorf("the session %s is open in another gnosh, and one session has one writer. Close that one, or add --fork-session to go on in a copy", locked.ID)
+		case errors.Is(err, transcript.ErrNotFound):
+			return fmt.Errorf("no session matches %q (sessions are kept under %s), so nothing was started", firstOf(id, path), l.store.Dir)
+		}
+		return fmt.Errorf("the session could not be opened: %w", err)
+	}
+	l.source = "resume"
+	if inv.ForkSession {
+		copied, err := l.store.Branch(ts, "")
+		ts.Close()
+		if err != nil {
+			return fmt.Errorf("the session could not be copied: %w", err)
+		}
+		ts, l.source = copied, "fork"
+	}
+	l.ts = ts
+	return l.nameSession()
+}
+
+// nameSession gives the session the name -n asks for. A name the person
+// gave is never replaced by a generated one.
+func (l *live) nameSession() error {
+	if l.inv.Name == "" || l.source == "clear" {
+		return nil
+	}
+	if _, err := l.ts.Append(transcript.TitleEntry(l.inv.Name, transcript.SourceUser)); err != nil {
+		return fmt.Errorf("the session could not be named: %w", err)
+	}
+	return nil
+}
+
+// findSession finds the session -r names: by its id or the start of it,
+// or by its name, ignoring letter case and the blanks around it.
+func (l *live) findSession(ctx context.Context, word string) (string, error) {
+	if _, err := l.store.Path(word); err == nil {
+		return word, nil
+	} else {
+		var ambiguous *transcript.AmbiguousError
+		if errors.As(err, &ambiguous) {
+			return "", fmt.Errorf("%q is the start of more than one session's id (%s). Give more of it", word, strings.Join(ambiguous.IDs, ", "))
+		}
+	}
+	list, err := l.store.List(ctx, l.cfg.Paths.Cwd)
+	if err != nil {
+		return "", fmt.Errorf("the sessions of this folder could not be listed: %w", err)
+	}
+	var matches []transcript.Info
+	for _, info := range list {
+		if info.Title != "" && strings.EqualFold(strings.TrimSpace(info.Title), strings.TrimSpace(word)) {
+			matches = append(matches, info)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no session has the id or the name %q (sessions are kept under %s), so nothing was started", word, l.store.Dir)
+	case 1:
+		return matches[0].ID, nil
+	}
+	var lines []string
+	for _, m := range matches {
+		lines = append(lines, fmt.Sprintf("  %s  (last written %s)", m.ID, m.Modified.Local().Format("2006-01-02 15:04")))
+	}
+	return "", fmt.Errorf("%d sessions are named %q. Resume one by its id:\n%s", len(matches), word, strings.Join(lines, "\n"))
+}
+
+// pickSession shows the folder's sessions to pick from, for -r with
+// nothing after it.
+func (l *live) pickSession(ctx context.Context) (string, error) {
+	asker, ok := l.front.(Asker)
+	if !ok {
+		return "", errors.New("-r needs a session's id or name after it here, where nobody can pick from a list")
+	}
+	list, err := l.store.List(ctx, l.cfg.Paths.Cwd)
+	if err != nil {
+		return "", fmt.Errorf("the sessions of this folder could not be listed: %w", err)
+	}
+	if len(list) == 0 {
+		return "", fmt.Errorf("there is no session to resume: none was started in %s", l.cfg.Paths.Cwd)
+	}
+	q := agent.Question{Kind: "session", Title: "Which session?", Text: "The sessions of this folder, the one written to last first."}
+	for i, info := range list {
+		if i == 20 {
+			break
+		}
+		what := firstOf(info.Title, info.FirstPrompt, "(no prompt yet)")
+		q.Choices = append(q.Choices, agent.Choice{Key: info.ID, Label: fmt.Sprintf("%s  %s  %s", info.ID[:8], info.Modified.Local().Format("2006-01-02 15:04"), oneLine(what, 80))})
+	}
+	ans, err := asker.AskBefore(q)
+	if err != nil || ans.Choice == "" {
+		return "", errors.New("no session was picked, so nothing was started")
+	}
+	return ans.Choice, nil
+}
+
+// sessionFacts is the session as a feature sees it.
+func (l *live) sessionFacts() *Session {
+	return &Session{
+		ID:          l.ts.ID(),
+		Interactive: l.interactive,
+		Source:      l.source,
+		Trusted:     l.st.trusted,
+		Config:      l.cfg,
+		Invocation:  l.inv,
+		Dirs:        l.st.dirs(l.ts.ID()),
+		Build:       l.p.o.BuildID,
+		Sessions:    l.store,
+		Transcript:  l.ts,
+		Texts:       l.texts,
+		Env:         l.env,
+		Offered:     func(tool string) bool { return l.engine.ToolEnabled(tool) },
+		Agent:       func() *agent.Agent { return l.agent },
+		Notice:      l.notice,
+		Getenv:      l.p.getenv,
+		Now:         l.p.now,
+	}
+}
+
+// cwd is the session's working directory as it stands.
+func (l *live) cwd() string {
+	if l.agent != nil {
+		return l.agent.Cwd()
+	}
+	return l.cfg.Paths.Cwd
+}
+
+// env is what a tool call of the session is given to work with, as it
+// stands now.
+func (l *live) env() *core.ToolEnv {
+	return &core.ToolEnv{Cwd: l.cwd(), Roots: slices.Clone(l.roots), SessionID: l.ts.ID(), Store: l.toolStore}
+}
+
+// spoolDir is where the session's commands keep their output: a folder of
+// the session's own, beside its file.
+func (l *live) spoolDir() string {
+	return filepath.Join(l.st.dirs(l.ts.ID()).Session, "tool-results")
+}
+
+// allowSpool lets the model read the output files of its own commands
+// without a question: a command that moved to the background, or printed
+// more than the model is shown, leaves its output in such a file, which
+// lies outside the project.
+func (l *live) allowSpool() {
+	dir := l.spoolDir()
+	rule := "Read(/" + filepath.ToSlash(dir) + "/**)"
+	err := l.engine.AddLayer(permission.Layer{
+		Scope: permission.ScopeSession,
+		Name:  "the output files of the session's own commands",
+		Allow: []string{rule},
+	})
+	if err != nil {
+		l.flog.logf("permission", "the rule %s could not be added (%v); reading a command's output file will ask", rule, err)
+	}
+}
+
+// newCallID makes the id a tool call goes by: "call_" and 24 hex digits
+// drawn at random. No two calls ever share one, in this session, in
+// another session of the project, or on another machine, which is what
+// lets what is kept beside a project (its mem, its frames) name a call by
+// its id alone. Every provider takes such an id back.
+func newCallID() string {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// The loop then keeps the provider's own id, made unique within
+		// the session.
+		return ""
+	}
+	return "call_" + hex.EncodeToString(b[:])
+}
+
+// stopGrace is how long a stopped turn waits for a tool call that has not
+// come back: what the program was started with, or the longest time a
+// feature asks for its own tools, whichever is longer. Zero leaves it to
+// the loop's own ten seconds.
+func (l *live) stopGrace() time.Duration {
+	grace := l.p.o.StopGrace
+	for _, c := range l.contribs {
+		if c.c.StopGrace > 10*time.Second && c.c.StopGrace > grace {
+			grace = c.c.StopGrace
+		}
+	}
+	return grace
+}
+
+// compactAt is where room is made in the model's window when the person
+// asked for it earlier than gnosh's own point: the auto-compact window,
+// and a percentage of it.
+func (l *live) compactAt() int {
+	at := 0
+	if w := l.cfg.Options.AutoCompactWindow; w.Set {
+		at = w.V
+	}
+	if pct := l.cfg.Limits.AutoCompactPct; pct.Set {
+		base := at
+		if base == 0 {
+			base = l.large.model.Info.ContextWindow
+		}
+		if base > 0 {
+			at = base * pct.V / 100
+		}
+	}
+	return at
+}
+
+// repeatPolicy lets the features say how their tools' calls are compared
+// when the loop looks for a model repeating itself, and what the model is
+// told then.
+func (l *live) repeatPolicy() agent.RepeatPolicy {
+	var keys []func(core.ToolCall, core.ToolResult) (string, bool)
+	var nudges []func(agent.Repetition) string
+	for _, c := range l.contribs {
+		if c.c.RepeatKey != nil {
+			keys = append(keys, c.c.RepeatKey)
+		}
+		if c.c.RepeatNudge != nil {
+			nudges = append(nudges, c.c.RepeatNudge)
+		}
+	}
+	var pol agent.RepeatPolicy
+	if len(keys) > 0 {
+		pol.Key = func(call core.ToolCall, res core.ToolResult) string {
+			for _, key := range keys {
+				if k, ok := key(call, res); ok {
+					return k
+				}
+			}
+			failed := "ok"
+			if res.IsError {
+				failed = "error"
+			}
+			return call.Name + "\x00" + string(call.Input) + "\x00" + failed + "\x00" + core.TextOf(res.Content)
+		}
+	}
+	if len(nudges) > 0 {
+		pol.Nudge = func(rep agent.Repetition) string {
+			for _, nudge := range nudges {
+				if text := nudge(rep); text != "" {
+					return text
+				}
+			}
+			return ""
+		}
+	}
+	return pol
+}
+
+// deliver hands an event to the front end, one at a time, and keeps a line
+// of it in the log.
+func (l *live) deliver(ev any) {
+	l.evMu.Lock()
+	defer l.evMu.Unlock()
+	l.summaryEnd(ev)
+	l.flog.event(ev)
+	if l.front != nil {
+		l.front.Event(ev)
+	}
+}
+
+// notice puts a line in front of the person. Once the agent exists the
+// line is kept in the session's file too.
+func (l *live) notice(level agent.Level, source, text string) {
+	if text == "" {
+		return
+	}
+	if a := l.agent; a != nil && !l.closing.Load() {
+		a.Notice(level, source, text)
+		return
+	}
+	l.deliver(&agent.NoticeEvent{Meta: agent.Meta{Time: l.p.now(), Session: l.sessionID()}, Level: level, Source: source, Text: text})
+}
+
+// sessionID is the session's id, or "" before its file is open.
+func (l *live) sessionID() string {
+	if l.ts == nil {
+		return ""
+	}
+	return l.ts.ID()
+}
+
+// background runs f beside the session, under a context that ends when the
+// session is closed. It is for what nobody waits for.
+func (l *live) background(f func(ctx context.Context)) {
+	if l.closing.Load() {
+		return
+	}
+	l.bg.Add(1)
+	go func() {
+		defer l.bg.Done()
+		defer func() { _ = recover() }()
+		f(l.ctx)
+	}()
+}
+
+// onPanic is told when a tool, a port or the loop itself panicked. The
+// loop carries on; what happened is kept in the crash file.
+func (l *live) onPanic(what string, v any, stack []byte) {
+	l.flog.logf("crash", "%s panicked: %v", what, v)
+	if path := l.crash.record(what, v, stack); path != "" {
+		l.notice(agent.LevelError, "crash", fmt.Sprintf("%s crashed (%v). gnosh goes on; the details are in %s.", what, v, path))
+	}
+}
+
+// info describes the session to its front end.
+func (l *live) info() SessionInfo {
+	m := l.agent.Model()
+	info := SessionInfo{
+		ID:          l.ts.ID(),
+		Path:        l.ts.Path(),
+		Cwd:         l.cfg.Paths.Cwd,
+		Model:       m.Info.ID,
+		Address:     m.Address,
+		Thinking:    m.Level,
+		Tools:       l.toolNames(),
+		Mode:        string(l.engine.Mode()),
+		Commands:    l.slash.names(),
+		Version:     l.p.o.BuildID,
+		Interactive: l.interactive,
+		Resume:      "gnosh -r " + l.ts.ID(),
+	}
+	if m.Provider != nil {
+		info.Provider = m.Provider.Name()
+	}
+	if l.inv.DataDir != "" {
+		info.Resume = "gnosh -D " + l.st.sessionsDir() + " -r " + l.ts.ID()
+	}
+	info.NotifyHooks = l.hooks.has(hooks.Notification)
+	return info
+}
+
+// kill leaves the session's file exactly as a killed process would: it is
+// closed at once, so that nothing more is written, whatever was under
+// way.
+func (l *live) kill() {
+	l.killed.Store(true)
+	if l.ts != nil {
+		_ = l.ts.Close()
+	}
+}
+
+// close ends the session, in the order the specs give: the turn is
+// stopped; every command the session started is stopped, with what those
+// commands started; the SessionEnd hooks run; the features are told, in
+// reverse order; and the session's file is flushed to disk and its lock
+// let go. It is safe to call more than once.
+func (l *live) close(reason string) {
+	l.closeOnce.Do(func() {
+		l.closing.Store(true)
+		if l.agent != nil {
+			// End stops the turn and then tells the SessionEnd moment,
+			// which closes the shell and runs the hooks.
+			_ = l.agent.End(reason)
+		}
+		l.closeShell()
+		l.cancel()
+		waitGroup(&l.bg, 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		for _, c := range slices.Backward(l.contribs) {
+			if c.c.Close == nil {
+				continue
+			}
+			func() {
+				defer func() { _ = recover() }()
+				c.c.Close(ctx)
+			}()
+		}
+		cancel()
+		if l.profile != nil {
+			l.profile.close()
+		}
+		if l.ts != nil {
+			_ = l.ts.Sync()
+			_ = l.ts.Close()
+		}
+		l.flog.logf("shutdown", "session %s closed (%s)", l.sessionID(), reason)
+		l.crash.close()
+		l.flog.close()
+	})
+}
+
+// waitGroup waits for wg, but not for ever.
+func waitGroup(wg *sync.WaitGroup, limit time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(limit):
+	}
+}
+
+// controls is a session as its front end drives it. In an interactive
+// session /clear puts a new session behind the same controls.
+type controls struct {
+	p     *program
+	st    *startup
+	front Frontend
+
+	mu     sync.Mutex
+	l      *live
+	reason string
+}
+
+func (c *controls) cur() *live {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.l
+}
+
+// Submit sends a prompt.
+func (c *controls) Submit(p agent.Prompt) (string, error) { return c.cur().agent.Submit(p) }
+
+// Interrupt stops the turn that is running.
+func (c *controls) Interrupt() { c.cur().agent.Interrupt() }
+
+// Answer gives the person's answer to a question.
+func (c *controls) Answer(question string, a agent.Answer) error {
+	return c.cur().agent.Answer(question, a)
+}
+
+// Queued lists the prompts that wait for their turn.
+func (c *controls) Queued() []agent.QueuedPrompt { return c.cur().agent.Queued() }
+
+// TakeQueued takes the person's own prompts off the queue.
+func (c *controls) TakeQueued() []agent.Prompt { return c.cur().agent.TakeQueued() }
+
+// Mode returns the permission mode in force.
+func (c *controls) Mode() string { return string(c.cur().engine.Mode()) }
+
+// SetMode changes the permission mode.
+func (c *controls) SetMode(mode string) error {
+	l := c.cur()
+	m, fell, err := permission.ParseMode(mode)
+	switch {
+	case err != nil:
+		return err
+	case fell:
+		return errors.New("gnosh has no auto mode: it needs a second model to review each action")
+	case m == permission.ModeBypass && !l.cfg.Permissions.BypassAvailable:
+		return errors.New("skipping permissions can only be switched to in a session that was started with it within reach (-y, or --allow-dangerously-skip-permissions)")
+	}
+	return l.engine.SetMode(m)
+}
+
+// Command runs a line that begins with a slash as a command.
+func (c *controls) Command(ctx context.Context, line string) (CommandResult, error) {
+	l := c.cur()
+	if l.inv.DisableSlashCommands {
+		return CommandResult{}, nil
+	}
+	res, err := l.slash.run(ctx, line)
+	if err == nil && res.Handled && res.Name == "clear" {
+		if cerr := c.clear(ctx); cerr != nil {
+			res.Quit = true
+			return res, cerr
+		}
+		res.Text = "A new session is open: " + c.cur().ts.ID() + ". The one before is kept; " + l.info().Resume + " opens it again."
+	}
+	return res, err
+}
+
+// clear ends the session with the reason "clear" and opens a new one
+// behind the same controls.
+func (c *controls) clear(ctx context.Context) error {
+	old := c.cur()
+	old.close("clear")
+	next, err := c.p.openSession(ctx, c.st, c.front, "clear")
+	if err != nil {
+		return fmt.Errorf("the session was closed, and a new one could not be opened: %w", err)
+	}
+	c.mu.Lock()
+	c.l = next
+	c.mu.Unlock()
+	return nil
+}
+
+// State says what the session is doing right now.
+func (c *controls) State() agent.State { return c.cur().agent.State() }
+
+// Context says how full the model's window is.
+func (c *controls) Context() agent.ContextStatus { return c.cur().agent.Context() }
+
+// Info describes the session.
+func (c *controls) Info() SessionInfo { return c.cur().info() }
+
+// Usage returns what the session has cost so far.
+func (c *controls) Usage() agent.Totals { return c.cur().agent.Usage() }
+
+// Signals delivers the signals the process receives.
+func (c *controls) Signals() <-chan os.Signal { return c.p.o.Signals }
+
+// Notify fires the person's Notification hooks, and does not wait for
+// them.
+func (c *controls) Notify(kind, title, message string) {
+	l := c.cur()
+	if !l.hooks.has(hooks.Notification) || (kind != "permission_prompt" && kind != "idle_prompt") {
+		return
+	}
+	in := hooks.Input{Event: hooks.Notification, NotificationType: kind, Title: title, Message: message}
+	l.background(func(ctx context.Context) { _, _ = l.hooks.run(ctx, in) })
+}
+
+// RunEnd asks the features whether a run's exit code should be raised.
+func (c *controls) RunEnd(res agent.TurnResult, exit int) int {
+	l := c.cur()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	for _, j := range l.contribs {
+		if j.c.RunEnd == nil {
+			continue
+		}
+		if code := j.c.RunEnd(ctx, RunEnd{Result: res, Exit: exit}); code > exit {
+			exit = code
+		}
+	}
+	return exit
+}
+
+// Wait waits until the session has nothing in hand and the front end has
+// been told everything that happened so far.
+func (c *controls) Wait(ctx context.Context) error {
+	l := c.cur()
+	if err := l.agent.Wait(ctx); err != nil {
+		return err
+	}
+	return l.agent.Drain(ctx)
+}
+
+// Quit says why the session ends. The front end then returns from Run.
+func (c *controls) Quit(reason string) {
+	c.mu.Lock()
+	c.reason = reason
+	c.mu.Unlock()
+}
+
+// close ends the session behind the controls.
+func (c *controls) close() {
+	c.mu.Lock()
+	l, reason := c.l, c.reason
+	c.mu.Unlock()
+	l.close(reason)
+}
+
+// sessionCommand is `gnosh`, `gnosh "prompt"`, `gnosh -p` and `gnosh run`:
+// it settles the folder and its config, opens the session, hands it to its
+// front end, and closes it.
+func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code int) {
+	interactive := inv.Command == cli.CmdInteractive
+	var front Frontend
+	switch {
+	case !interactive:
+		front = newPrinter(p, inv)
+	case p.o.Interactive != nil:
+		front = p.o.Interactive(FrontendInfo{Stdin: p.o.Stdin, Stdout: p.stdout, Stderr: p.stderr, Getenv: p.getenv})
+	default:
+		front = newPlain(p, inv)
+	}
+
+	// A front end that cannot be typed into is treated as having nobody
+	// to ask: the session then runs as one nobody attends.
+	if pl, ok := front.(*plain); ok && !pl.canAsk() {
+		interactive = false
+	}
+	var ask []func(trust.Question) (yes, quit bool)
+	if asker, ok := front.(Asker); ok && interactive {
+		ask = append(ask, func(q trust.Question) (bool, bool) {
+			ans, err := asker.AskBefore(agent.Question{
+				Kind:  "trust",
+				Title: "Trust this folder?",
+				Text:  q.String(),
+				Choices: []agent.Choice{
+					{Key: "no", Label: "No: start with my own settings only"},
+					{Key: "yes", Label: "Yes: use this folder's settings"},
+				},
+			})
+			return ans.Choice == "yes", err != nil
+		})
+	}
+	st, code := p.prepare(ctx, inv, interactive, ask...)
+	if st == nil {
+		return code
+	}
+	st.attended = interactive
+	if st.printProblems() {
+		return cli.ExitFailure
+	}
+	if st.decision.Notice != "" {
+		fmt.Fprintln(p.stderr, st.decision.Notice)
+	}
+
+	l, err := p.openSession(ctx, st, front, "")
+	if err != nil {
+		p.errf("%v", err)
+		return cli.ExitFailure
+	}
+	c := &controls{p: p, st: st, front: front, l: l, reason: "other"}
+	p.setLastStop(func() { c.cur().closeShell() })
+	defer func() {
+		if v := recover(); v != nil {
+			code = p.crashed(c.cur().crashDir(), v, debug.Stack())
+			c.cur().kill()
+		}
+		p.beginClosing(code)
+		c.close()
+	}()
+
+	done := make(chan int, 1)
+	go func() {
+		defer func() {
+			if v := recover(); v != nil {
+				done <- p.crashed(c.cur().crashDir(), v, debug.Stack())
+			}
+		}()
+		done <- front.Run(ctx, c)
+	}()
+	select {
+	case code = <-done:
+	case <-ctx.Done():
+		// The process is being torn down: the session's file is left as a
+		// kill would leave it, and then everything is stopped.
+		c.cur().kill()
+		select {
+		case code = <-done:
+		case <-time.After(30 * time.Second):
+		}
+		if code == cli.ExitOK {
+			code = cli.ExitFailure
+		}
+	}
+	return code
+}

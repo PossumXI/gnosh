@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -326,4 +327,92 @@ func TestSpawnNeedsALog(t *testing.T) {
 		t.Error("FromContext found a session in an empty context")
 	}
 	child.Close()
+}
+
+// A tool call a sub-agent makes is given the sub-agent's own id as its
+// session, and beside it the id of the session that started it: to a tool
+// that keeps things by session, a sub-agent is a session of its own.
+func TestSubAgentToolCallsNameTheirOwnSession(t *testing.T) {
+	var logs []*memLog
+	var mu sync.Mutex
+	seen := map[string]*core.ToolEnv{}
+	note := func(name string) *fakeTool {
+		return tool(name, func(_ context.Context, _ core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+			mu.Lock()
+			seen[name] = env
+			mu.Unlock()
+			return core.TextResult("noted"), nil
+		})
+	}
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{note("Mine"), agentTool(&logs, func(sub *SubOptions) {
+			sub.ID = "child-session"
+			sub.Tools = []core.Tool{note("Theirs")}
+		})}
+	})
+	r.model.push(
+		use(tc("m1", "Mine", `{}`)),
+		use(tc("a1", "Agent", `{"prompt":"note it"}`)),
+		use(tc("t1", "Theirs", `{}`)),
+		say("noted by the sub-agent"),
+		say("both noted"),
+	)
+	if res := r.run("note it twice"); res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	r.idle()
+	mu.Lock()
+	defer mu.Unlock()
+	mine, theirs := seen["Mine"], seen["Theirs"]
+	if mine == nil || theirs == nil {
+		t.Fatalf("the tools ran with %v", seen)
+	}
+	if mine.SessionID != r.a.SessionID() || mine.ParentSessionID != "" {
+		t.Errorf("the session's own call: session %q, parent %q", mine.SessionID, mine.ParentSessionID)
+	}
+	if theirs.SessionID != "child-session" || theirs.ParentSessionID != r.a.SessionID() {
+		t.Errorf("the sub-agent's call: session %q, parent %q; want child-session and %q", theirs.SessionID, theirs.ParentSessionID, r.a.SessionID())
+	}
+	if theirs.Store == mine.Store {
+		t.Error("the sub-agent's tools share the parent's Store")
+	}
+}
+
+// With Options.CallID set, every tool call goes by an id the wiring makes,
+// whatever the provider called it, and the model is sent its results under
+// those ids.
+func TestToolCallIDsFromTheWiring(t *testing.T) {
+	n := 0
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{look("Read", nil)}
+		o.CallID = func() string {
+			n++
+			return fmt.Sprintf("call_w%d", n)
+		}
+	})
+	r.model.push(use(tc("call_0", "Read", `{"n":0}`), tc("call_0", "Read", `{"n":1}`)), use(tc("call_0", "Read", `{"n":2}`)), say("done"))
+	if res := r.run("read"); res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	var ids []string
+	for _, e := range r.log.of(EntryAssistant) {
+		for _, u := range e.Message.ToolUses() {
+			ids = append(ids, u.ID)
+		}
+	}
+	if got := strings.Join(ids, " "); got != "call_w1 call_w2 call_w3" {
+		t.Errorf("the calls go by %q", got)
+	}
+	var answered []string
+	for _, e := range r.log.of(EntryResult) {
+		answered = append(answered, e.ToolUseID)
+	}
+	if got := strings.Join(answered, " "); got != "call_w1 call_w2 call_w3" {
+		t.Errorf("the results answer %q", got)
+	}
+	for i, req := range r.model.requests() {
+		if err := checkView(req.Messages); err != nil {
+			t.Errorf("request %d: %v", i, err)
+		}
+	}
 }

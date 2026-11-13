@@ -124,8 +124,16 @@ type ToolEnv struct {
 	// any added to it. Tools use them to tell inside from outside.
 	Roots []string
 
-	// SessionID names the session the call belongs to.
+	// SessionID names the session the call belongs to. For a call a
+	// sub-agent makes it is the sub-agent's own id, not the id of the
+	// session that started it: a sub-agent is a session of its own.
 	SessionID string
+
+	// ParentSessionID is empty for a call of a session a person is in.
+	// For a call a sub-agent makes it names the session that started the
+	// sub-agent: the person's session, or, for a sub-agent started by a
+	// sub-agent, that sub-agent's own id.
+	ParentSessionID string
 
 	// Store keeps a tool's own state for the length of a session, such as
 	// which files the model has read. Tools key it by an unexported type

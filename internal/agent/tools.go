@@ -234,7 +234,9 @@ func (r *round) group(g []*callState) {
 		if c.cannot != nil {
 			// The gate had nothing against what the call was aimed at, so
 			// the model may now read why it cannot run.
-			c.res = core.ErrorResult(fmt.Sprintf(r.a.texts.BadDescribe, c.cannot))
+			// A tool's own sentence may end in a full stop, and the text
+			// around it ends in one too.
+			c.res = core.ErrorResult(fmt.Sprintf(r.a.texts.BadDescribe, strings.TrimSuffix(c.cannot.Error(), ".")))
 			r.record(c)
 			continue
 		}

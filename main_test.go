@@ -1,0 +1,422 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
+)
+
+// These tests run the real program: TestMain builds the binary from this
+// directory, and each test starts it as a process of its own, in a world
+// with its own home directory and a scripted model server. They are the
+// same handful that internal/app runs through app.Main, here with a real
+// process, real signals and a real terminal.
+
+// binary is the gnosh binary the tests run.
+var binary string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "gnosh-binary-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	binary = filepath.Join(dir, "gnosh")
+	gotool, err := exec.LookPath("go")
+	if err != nil {
+		gotool = "/usr/local/go/bin/go"
+	}
+	args := []string{"build", "-o", binary}
+	if raceEnabled {
+		args = append(args, "-race")
+	}
+	build := exec.Command(gotool, append(args, ".")...)
+	if out, err := build.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "the gnosh binary could not be built: %v\n%s", err, out)
+		os.RemoveAll(dir)
+		os.Exit(1)
+	}
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+// outcome is how one run of the binary ended.
+type outcome struct {
+	code     int
+	out, err string
+}
+
+// process is a gnosh that is running.
+type process struct {
+	t        *testing.T
+	cmd      *exec.Cmd
+	out, err *lockedBuffer
+	done     chan struct{}
+	state    error
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// start starts the binary in the world's folder with the world's
+// environment and nothing on standard input.
+func start(t *testing.T, w *apptest.World, args ...string) *process {
+	t.Helper()
+	p := &process{t: t, cmd: exec.Command(binary, args...), out: &lockedBuffer{}, err: &lockedBuffer{}, done: make(chan struct{})}
+	p.cmd.Dir = w.Dir
+	p.cmd.Env = w.Env()
+	p.cmd.Stdout, p.cmd.Stderr = p.out, p.err
+	if err := p.cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		p.state = p.cmd.Wait()
+		close(p.done)
+	}()
+	t.Cleanup(func() {
+		select {
+		case <-p.done:
+		default:
+			p.cmd.Process.Kill()
+			<-p.done
+		}
+	})
+	return p
+}
+
+// wait waits for the process to end, and fails the test when it does not
+// within the limit.
+func (p *process) wait(limit time.Duration) outcome {
+	p.t.Helper()
+	select {
+	case <-p.done:
+	case <-time.After(limit):
+		p.cmd.Process.Kill()
+		<-p.done
+		p.t.Fatalf("gnosh did not end within %s.\nstdout:\n%s\nstderr:\n%s", limit, p.out.String(), p.err.String())
+	}
+	code := 0
+	var exit *exec.ExitError
+	if errors.As(p.state, &exit) {
+		code = exit.ExitCode()
+		if ws, ok := exit.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			code = -int(ws.Signal())
+		}
+	} else if p.state != nil {
+		p.t.Fatalf("gnosh could not be waited for: %v", p.state)
+	}
+	return outcome{code: code, out: p.out.String(), err: p.err.String()}
+}
+
+// gnosh runs the binary to its end.
+func gnosh(t *testing.T, w *apptest.World, args ...string) outcome {
+	t.Helper()
+	return start(t, w, args...).wait(60 * time.Second)
+}
+
+func (o outcome) wantCode(t *testing.T, code int) outcome {
+	t.Helper()
+	if o.code != code {
+		t.Fatalf("exit code %d, want %d\nstdout:\n%s\nstderr:\n%s", o.code, code, o.out, o.err)
+	}
+	return o
+}
+
+// waitFor waits until ok says yes.
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// gone reports whether no process has the id any more.
+func gone(pid int) bool { return syscall.Kill(pid, 0) == syscall.ESRCH }
+
+// readPid reads the process id a command wrote to a file.
+func readPid(t *testing.T, w *apptest.World, name string) int {
+	t.Helper()
+	waitFor(t, "the command to start", func() bool { return w.Exists(name) && strings.TrimSpace(w.Read(name)) != "" })
+	pid, err := strconv.Atoi(strings.TrimSpace(w.Read(name)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pid
+}
+
+// checkSession fails the test unless the world's one session file reads
+// back as a whole conversation, without mending.
+func checkSession(t *testing.T, w *apptest.World) {
+	t.Helper()
+	sessions := w.Sessions()
+	if len(sessions) != 1 {
+		t.Fatalf("session files: %v", sessions)
+	}
+	s, err := transcript.New(w.DataDir()).OpenPath(context.Background(), sessions[0], true)
+	if err != nil {
+		t.Fatalf("the session cannot be opened: %v", err)
+	}
+	defer s.Close()
+	msgs, _ := s.View(transcript.ViewOptions{})
+	if err := transcript.Check(msgs); err != nil {
+		t.Errorf("the session does not hold a conversation a provider accepts: %v", err)
+	}
+}
+
+// The worker dispatch comes before everything: with a command line gnosh
+// would refuse, an environment it would refuse and no home directory, the
+// word gnovm-worker still reaches the worker, which ends for want of the
+// pipes its parent hands it.
+func TestWorkerDispatchComesFirst(t *testing.T) {
+	cmd := exec.Command(binary, "gnovm-worker", "--no-such-flag")
+	cmd.Env = []string{"GNOSH_NO_SUCH_VARIABLE=1"}
+	out, err := cmd.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 2 {
+		t.Fatalf("gnovm-worker ended with %v, want exit code 2\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "gnovm-worker:") || !strings.Contains(string(out), "handshake") {
+		t.Errorf("the worker did not speak: %s", out)
+	}
+	if strings.Contains(string(out), "gnosh:") {
+		t.Errorf("gnosh's own startup ran before the worker: %s", out)
+	}
+	// The same words to the program itself are refused, as they must be.
+	out, err = exec.Command(binary, "--no-such-flag").CombinedOutput()
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(string(out), "--no-such-flag is not a flag of gnosh") {
+		t.Errorf("gnosh --no-such-flag: %v\n%s", err, out)
+	}
+}
+
+// What needs no model.
+func TestVersionHelpDoctor(t *testing.T) {
+	w := apptest.NewWorld(t)
+	if o := gnosh(t, w, "version").wantCode(t, 0); !strings.HasSuffix(o.out, "(gnosh)\n") {
+		t.Errorf("version: %q", o.out)
+	}
+	if o := gnosh(t, w, "--help").wantCode(t, 0); !strings.Contains(o.out, "gnosh -p [flags] [prompt]") || o.err != "" {
+		t.Errorf("help: %q %q", o.out, o.err)
+	}
+	// The model server is there: doctor looks without disturbing it, and
+	// says a turn can run.
+	o := gnosh(t, w, "doctor").wantCode(t, 0)
+	for _, piece := range []string{"local at " + w.Model.URL, "large model: local/test-model", "A turn can run."} {
+		if !strings.Contains(o.out, piece) {
+			t.Errorf("doctor does not say %q:\n%s", piece, o.out)
+		}
+	}
+	for _, path := range w.Model.Paths() {
+		if path != "GET /v1/models" {
+			t.Errorf("doctor asked the model server for %q: a look sends one GET of the models list and nothing else", path)
+		}
+	}
+	// With no provider at all it says so and exits 1.
+	bare := apptest.NewWorld(t)
+	os.Remove(filepath.Join(bare.ConfigDir(), "gnoshrc"))
+	o = gnosh(t, bare, "doctor").wantCode(t, 1)
+	if !strings.Contains(o.out, "no provider is configured") || !strings.Contains(o.out, "A turn cannot run") {
+		t.Errorf("doctor with no provider:\n%s", o.out)
+	}
+}
+
+// A prompt is answered, in the text and in the json format.
+func TestBinaryAnswers(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "The answer is 4."}, apptest.Reply{Text: "Still 4."})
+	o := gnosh(t, w, "-p", "what is 2+2?").wantCode(t, 0)
+	if o.out != "The answer is 4.\n" || o.err != "" {
+		t.Errorf("stdout %q, stderr %q", o.out, o.err)
+	}
+	o = gnosh(t, w, "-c", "-p", "--output-format", "json", "sure?").wantCode(t, 0)
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(o.out), &obj); err != nil {
+		t.Fatalf("stdout is not one JSON object: %v\n%s", err, o.out)
+	}
+	if obj["type"] != "result" || obj["subtype"] != "success" || obj["result"] != "Still 4." || obj["is_error"] != false {
+		t.Errorf("result: %s", o.out)
+	}
+	// -c went on in the first run's session: the model was sent the
+	// earlier messages again.
+	second := string(w.Model.Requests()[1].Body)
+	for _, piece := range []string{"what is 2+2?", "The answer is 4.", "sure?"} {
+		if !strings.Contains(second, piece) {
+			t.Errorf("the continued session's request does not hold %q", piece)
+		}
+	}
+	w.Model.Done()
+	checkSession(t, w)
+}
+
+// A turn that reads, changes and runs: with -y the files are changed;
+// without it the change is refused, the model is told why, and the result
+// lists the refusal.
+func TestBinaryToolsAndPermissions(t *testing.T) {
+	script := func() []apptest.Reply {
+		return []apptest.Reply{
+			{Calls: []apptest.Call{{ID: "c1", Name: "Read", Args: `{"file_path":"a.txt"}`}}},
+			{Calls: []apptest.Call{
+				{ID: "c2", Name: "Edit", Args: `{"file_path":"a.txt","old_string":"two plus","new_string":"three plus"}`},
+				{ID: "c3", Name: "Bash", Args: `{"command":"echo made by bash > b.txt"}`},
+			}},
+			{Text: "Over."},
+		}
+	}
+	w := apptest.NewWorld(t, script()...)
+	w.Write("a.txt", "two plus two\n")
+	gnosh(t, w, "-y", "-p", "change it").wantCode(t, 0)
+	if w.Read("a.txt") != "three plus two\n" || w.Read("b.txt") != "made by bash\n" {
+		t.Errorf("a.txt = %q, b.txt = %q", w.Read("a.txt"), w.Read("b.txt"))
+	}
+	checkSession(t, w)
+
+	w = apptest.NewWorld(t, script()...)
+	w.Write("a.txt", "two plus two\n")
+	o := gnosh(t, w, "-p", "--output-format", "json", "change it").wantCode(t, 0)
+	if w.Read("a.txt") != "two plus two\n" || w.Exists("b.txt") {
+		t.Errorf("without -y: a.txt = %q, b.txt exists = %v", w.Read("a.txt"), w.Exists("b.txt"))
+	}
+	if !strings.Contains(o.out, `"tool_name":"Edit"`) || !strings.Contains(o.out, `"tool_name":"Bash"`) {
+		t.Errorf("the result does not list the refusals: %s", o.out)
+	}
+	if !strings.Contains(o.err, "--allowedTools") {
+		t.Errorf("the person is not told how to let a run act: %s", o.err)
+	}
+	if third := string(w.Model.Requests()[2].Body); !strings.Contains(third, "nobody is here to give it") {
+		t.Errorf("the model was not told why its calls did not run")
+	}
+}
+
+// longJob is a reply that starts a command which writes its process id
+// and then sleeps.
+func longJob() apptest.Reply {
+	return apptest.Reply{Text: "Starting.", Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo $$ > pid.txt; sleep 300"}`}}}
+}
+
+// sessionEndHook makes a SessionEnd hook that writes the reason it was
+// given to a file.
+func sessionEndHook(w *apptest.World) {
+	hook := w.Script(w.Home+"/hooks/end.sh", `cat > /dev/null; echo "$GNOSH_SESSION_END_REASON" > "$HOME/ended"`)
+	w.RC("hook add SessionEnd --command " + hook)
+}
+
+// Ctrl-C in the middle of a turn: the turn is cancelled, the command it
+// started is stopped with everything under it, the SessionEnd hooks run,
+// the session's file is whole, nothing is printed on standard output, and
+// the exit code is 130.
+func TestBinarySIGINT(t *testing.T) {
+	w := apptest.NewWorld(t, longJob())
+	sessionEndHook(w)
+	p := start(t, w, "-y", "-p", "run the long job")
+	pid := readPid(t, w, "pid.txt")
+	p.cmd.Process.Signal(os.Interrupt)
+	o := p.wait(30*time.Second).wantCode(t, 130)
+	if o.out != "Starting.\n" && o.out != "" {
+		t.Errorf("stdout after Ctrl-C: %q", o.out)
+	}
+	if strings.Contains(strings.ToLower(o.out+o.err), "context canceled") {
+		t.Errorf("Ctrl-C printed an internal error: %q %q", o.out, o.err)
+	}
+	waitFor(t, "the command to be stopped", func() bool { return gone(pid) })
+	if got := strings.TrimSpace(w.Read(w.Home + "/ended")); got != "other" {
+		t.Errorf("the SessionEnd hook was told %q, want other", got)
+	}
+	checkSession(t, w)
+}
+
+// SIGTERM in the middle of a turn: the same, with exit code 143.
+func TestBinarySIGTERM(t *testing.T) {
+	w := apptest.NewWorld(t, longJob())
+	sessionEndHook(w)
+	p := start(t, w, "-y", "-p", "--output-format", "stream-json", "run the long job")
+	pid := readPid(t, w, "pid.txt")
+	p.cmd.Process.Signal(syscall.SIGTERM)
+	p.wait(30*time.Second).wantCode(t, 143)
+	waitFor(t, "the command to be stopped", func() bool { return gone(pid) })
+	if got := strings.TrimSpace(w.Read(w.Home + "/ended")); got != "other" {
+		t.Errorf("the SessionEnd hook was told %q, want other", got)
+	}
+	checkSession(t, w)
+}
+
+// Only the first signal is handled in order. A second one, while the
+// program is still shutting down, ends it at once.
+func TestBinarySecondSignalDoesNotWait(t *testing.T) {
+	w := apptest.NewWorld(t, longJob())
+	hook := w.Script(w.Home+"/hooks/slow-end.sh", `cat > /dev/null; echo $$ > "$HOME/ending"; sleep 40`)
+	w.RC("hook add SessionEnd --timeout 60 --command " + hook)
+	p := start(t, w, "-y", "-p", "run the long job")
+	pid := readPid(t, w, "pid.txt")
+	p.cmd.Process.Signal(os.Interrupt)
+	hookPid := readPid(t, w, w.Home+"/ending")
+	// The hook runs in a process group of its own. The program is about to
+	// leave it behind, which is what "at once" costs; the test does not.
+	defer syscall.Kill(-hookPid, syscall.SIGKILL)
+	began := time.Now()
+	p.cmd.Process.Signal(os.Interrupt)
+	p.wait(10*time.Second).wantCode(t, 130)
+	if took := time.Since(began); took > 5*time.Second {
+		t.Errorf("the second signal took %s to end the program", took)
+	}
+	// The command the turn had started was stopped by the first signal.
+	waitFor(t, "the command to be stopped", func() bool { return gone(pid) })
+}
+
+// A second signal ends the program at once, and on its way out the
+// commands the session started are still told to stop: a command in the
+// background is not left running with nobody to stop it.
+func TestBinarySecondSignalStopsBackgroundCommands(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Calls: []apptest.Call{
+		{ID: "c1", Name: "Bash", Args: `{"command":"echo $$ > bg.pid; sleep 300","run_in_background":true}`},
+		// A command that ignores the signal that asks it to stop: the
+		// first Ctrl-C then has to wait for it, and that is when the
+		// second one arrives.
+		{ID: "c2", Name: "Bash", Args: `{"command":"trap '' TERM INT HUP; echo $$ > fg.pid; sleep 300"}`},
+	}})
+	p := start(t, w, "-y", "-p", "start both")
+	bg := readPid(t, w, "bg.pid")
+	fg := readPid(t, w, "fg.pid")
+	// Whatever the program leaves behind, the test does not.
+	defer syscall.Kill(-fg, syscall.SIGKILL)
+	defer syscall.Kill(-bg, syscall.SIGKILL)
+	p.cmd.Process.Signal(os.Interrupt)
+	time.Sleep(300 * time.Millisecond)
+	began := time.Now()
+	p.cmd.Process.Signal(os.Interrupt)
+	p.wait(10*time.Second).wantCode(t, 130)
+	if took := time.Since(began); took > 3*time.Second {
+		t.Errorf("the second signal took %s to end the program", took)
+	}
+	waitFor(t, "the background command to be stopped", func() bool { return gone(bg) })
+}

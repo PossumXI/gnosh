@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -278,4 +279,27 @@ func (s *sink) close() {
 			last = seq
 		}
 	}()
+}
+
+// drain waits until every event put in so far has been handed to the
+// consumer, or until ctx ends.
+func (s *sink) drain(ctx context.Context) error {
+	for {
+		s.mu.Lock()
+		empty := !s.started || (len(s.q) == 0 && !s.busy)
+		s.mu.Unlock()
+		if empty {
+			return nil
+		}
+		t := time.NewTimer(2 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-s.done:
+			t.Stop()
+			return nil
+		case <-t.C:
+		}
+	}
 }

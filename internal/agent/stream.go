@@ -554,10 +554,23 @@ func (a *Agent) stream(ctx context.Context, t *turn, purpose string, req *core.R
 
 // callID returns the id a tool call goes by: the provider's own, unless
 // it gave none or one that the session has seen before. Some model
-// servers number the calls of every reply from zero.
+// servers number the calls of every reply from zero. With Options.CallID
+// set, every call goes by an id the wiring makes.
 func (a *Agent) callID(id string) string {
 	if a.calls == nil {
 		a.calls = map[string]bool{}
+	}
+	if f := a.opts.CallID; f != nil {
+		// An id the session has seen is not taken twice, whatever the
+		// wiring's function returns; after a few tries the loop makes one
+		// itself rather than ask for ever.
+		for range 8 {
+			if made := f(); made != "" && !a.calls[made] {
+				a.calls[made] = true
+				return made
+			}
+		}
+		id = ""
 	}
 	if id == "" {
 		id = "call_" + a.newID()

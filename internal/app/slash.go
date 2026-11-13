@@ -1,0 +1,620 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/config"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/permission"
+)
+
+// slashSet is the registry of a session's slash commands: gnosh's own, and
+// the ones the features add. A command is found by its exact name or one
+// of its aliases, and by nothing else: there is no fuzzy matching, so that
+// a word can never run the wrong command.
+type slashSet struct {
+	l    *live
+	cmds []SlashCommand
+}
+
+// slashName is what a command's name and its aliases look like.
+var slashName = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+
+// newSlashSet makes the registry of a session, with gnosh's own commands
+// in it.
+func newSlashSet(l *live) *slashSet {
+	s := &slashSet{l: l}
+	for _, cmd := range s.own() {
+		if err := s.add(cmd); err != nil {
+			panic("app: " + err.Error())
+		}
+	}
+	return s
+}
+
+// add puts a command in the registry. A name that is taken is refused, so
+// that no feature can quietly replace another's command or one of gnosh's.
+func (s *slashSet) add(cmd SlashCommand) error {
+	if cmd.Run == nil {
+		return fmt.Errorf("the slash command %q has nothing to run", cmd.Name)
+	}
+	for _, name := range append([]string{cmd.Name}, cmd.Aliases...) {
+		if !slashName.MatchString(name) {
+			return fmt.Errorf("%q cannot be the name of a slash command: a name is lower-case letters, digits, - and _, and begins with a letter", name)
+		}
+		if s.find(name) != nil {
+			return fmt.Errorf("there is already a slash command named /%s", name)
+		}
+	}
+	s.cmds = append(s.cmds, cmd)
+	return nil
+}
+
+// find returns the command with that name or alias, or nil.
+func (s *slashSet) find(name string) *SlashCommand {
+	for i := range s.cmds {
+		if s.cmds[i].Name == name || slices.Contains(s.cmds[i].Aliases, name) {
+			return &s.cmds[i]
+		}
+	}
+	return nil
+}
+
+// names lists the commands by name, in the order they were added.
+func (s *slashSet) names() []string {
+	out := make([]string, len(s.cmds))
+	for i, c := range s.cmds {
+		out[i] = c.Name
+	}
+	return out
+}
+
+// run runs a line as a slash command. A line that names no command is not
+// handled, and the front end then sends it as a prompt or gives it back.
+func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err error) {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "/") {
+		return CommandResult{}, nil
+	}
+	word, args := line[1:], ""
+	if i := strings.IndexFunc(word, unicode.IsSpace); i >= 0 {
+		word, args = word[:i], strings.TrimSpace(word[i:])
+	}
+	cmd := s.find(strings.ToLower(word))
+	if cmd == nil {
+		return CommandResult{}, nil
+	}
+	res = CommandResult{Handled: true, Name: cmd.Name}
+	if !s.l.interactive && !cmd.InRun {
+		return res, fmt.Errorf("/%s works in an interactive session and does nothing as the prompt of a run, so nothing was done", cmd.Name)
+	}
+	var out strings.Builder
+	c := &SlashContext{
+		Args:    args,
+		Session: s.l.facts,
+		Agent:   s.l.agent,
+		Say: func(format string, a ...any) {
+			text := format
+			if len(a) > 0 {
+				text = fmt.Sprintf(format, a...)
+			}
+			out.WriteString(strings.TrimRight(text, "\n"))
+			out.WriteString("\n")
+		},
+	}
+	func() {
+		defer func() {
+			if v := recover(); v != nil {
+				err = fmt.Errorf("/%s crashed (%v). This is a fault in gnosh, not in what you typed", cmd.Name, v)
+			}
+		}()
+		err = cmd.Run(ctx, c)
+	}()
+	res.Text = strings.TrimRight(out.String(), "\n")
+	res.Quit = err == nil && cmd.Name == "exit"
+	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments): %v", cmd.Name, len(args), err)
+	return res, err
+}
+
+// own lists gnosh's own slash commands.
+func (s *slashSet) own() []SlashCommand {
+	l := s.l
+	return []SlashCommand{
+		{Name: "help", Summary: "List the commands.", InRun: true, Run: s.help},
+		{Name: "exit", Aliases: []string{"quit"}, Summary: "End the session. It is kept, and can be resumed.",
+			Run: func(context.Context, *SlashContext) error { return nil }},
+		{Name: "clear", Aliases: []string{"new", "reset"}, Summary: "Start a fresh session. The one before is kept.",
+			Run: func(context.Context, *SlashContext) error { return nil }},
+		{Name: "compact", Args: "[instructions]", Summary: "Summarize the conversation now, to make room.", InRun: true, Run: l.slashCompact},
+		{Name: "think", Summary: "The most thinking the model has, for every later request. It sticks.", InRun: true,
+			Run: func(ctx context.Context, c *SlashContext) error { return l.slashThink(c, true) }},
+		{Name: "no_think", Aliases: []string{"nothink", "no-think"}, Summary: "The least thinking the model has, for every later request. It sticks.", InRun: true,
+			Run: func(ctx context.Context, c *SlashContext) error { return l.slashThink(c, false) }},
+		{Name: "model", Args: "[provider/model [level]]", Summary: "List the models, or switch to one. The choice is saved.", InRun: true, Run: l.slashModel},
+		{Name: "status", Summary: "What this session is, what it is doing, and every setting with where it came from.", InRun: true, Run: l.slashStatus},
+		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done.", Run: l.slashLoop},
+		{Name: "noloop", Aliases: []string{"no_loop", "no-loop"}, Summary: "Turn /loop off.",
+			Run: func(ctx context.Context, c *SlashContext) error {
+				if !c.Agent.Loop() {
+					c.Say("/loop is not on.")
+					return nil
+				}
+				c.Agent.SetLoop(false)
+				c.Say("/loop is off. The turn that is running, if any, finishes and nothing follows it.")
+				return nil
+			}},
+		{Name: "permissions", Summary: "The permission mode, the folders, and every rule with where it came from.", InRun: true, Run: l.slashPermissions},
+		{Name: "hooks", Summary: "Every hook that is configured, by the moment it runs at.", InRun: true, Run: l.slashHooks},
+		{Name: "doctor", Summary: "Check that a turn can run: config, providers, models, hooks.", InRun: true,
+			Run: func(ctx context.Context, c *SlashContext) error {
+				findings := l.p.doctor(ctx, l.cfg, l.st.problems)
+				for _, f := range findings {
+					c.Say("%s", f.String())
+				}
+				if !config.CanRun(findings) {
+					return errors.New("a turn cannot run until what is marked FAIL is put right")
+				}
+				c.Say("A turn can run.")
+				return nil
+			}},
+	}
+}
+
+// help lists the commands.
+func (s *slashSet) help(ctx context.Context, c *SlashContext) error {
+	c.Say("The commands of this session:")
+	for _, cmd := range s.cmds {
+		if !s.l.interactive && !cmd.InRun {
+			continue
+		}
+		name := "/" + cmd.Name
+		if cmd.Args != "" {
+			name += " " + cmd.Args
+		}
+		also := ""
+		if len(cmd.Aliases) > 0 {
+			also = " (also /" + strings.Join(cmd.Aliases, ", /") + ")"
+		}
+		c.Say("  %-32s %s%s", name, cmd.Summary, also)
+	}
+	if s.l.interactive {
+		c.Say("Anything else you type is sent to the model. Ctrl+C stops the turn; a second one quits.")
+	}
+	return nil
+}
+
+// modelRef returns the session's large model as provider/id, and whether
+// there is one.
+func (l *live) modelRef() (config.ModelRef, bool) {
+	l.modelMu.Lock()
+	defer l.modelMu.Unlock()
+	if l.large == nil || l.large.pu == nil {
+		return config.ModelRef{}, false
+	}
+	return l.large.ref, true
+}
+
+// saveState keeps a choice made inside gnosh for later sessions, in the
+// user's state file. A choice that cannot be saved still holds for this
+// session, and the person is told.
+func (l *live) saveState(c *SlashContext, change func(*config.State) error) {
+	var inner error
+	err := config.UpdateState(config.OS{}, l.cfg.Paths.StateFile, func(st *config.State) { inner = change(st) })
+	if err == nil {
+		err = inner
+	}
+	if err != nil {
+		c.Say("The choice holds for this session, but it could not be saved for later ones: %v", err)
+	}
+}
+
+// slashThink is /think and /no_think: the model's most or least thinking,
+// for every later request, in this session and later ones.
+func (l *live) slashThink(c *SlashContext, most bool) error {
+	ref, ok := l.modelRef()
+	if !ok {
+		return errors.New("this session has no model, so there is no thinking level to set. Choose a model with /model")
+	}
+	var level string
+	if most {
+		level, ok = c.Agent.Think()
+	} else {
+		level, ok = c.Agent.NoThink()
+	}
+	if !ok {
+		c.Say("gnosh knows of no thinking switch for %s, so nothing changed. If the model has levels, declare them in gnoshrc: model add %s --reasoning-levels low,medium,high", ref, ref)
+		return nil
+	}
+	l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, level) })
+	levels := c.Agent.Model().Levels
+	c.Say("Thinking is %s for %s, from the next request on, in this session and in later ones.", level, ref)
+	if len(levels) > 2 {
+		c.Say("Its levels are %s; /model %s <level> sets one in between.", strings.Join(levels, ", "), ref)
+	}
+	return nil
+}
+
+// slashCompact is /compact: a summary of the conversation now. In a
+// session a person attends it is asked for and reported as it happens; as
+// the prompt of a run it is waited for, and how it went is the result.
+func (l *live) slashCompact(ctx context.Context, c *SlashContext) error {
+	l.lastSummary.Store(nil)
+	if err := c.Agent.Compact(c.Args); err != nil {
+		return fmt.Errorf("no summary was asked for: %w", err)
+	}
+	if l.interactive {
+		if c.Agent.State().Turn != "" {
+			c.Say("A summary will be made when the turn that is running has ended.")
+		}
+		return nil
+	}
+	if err := c.Agent.Wait(ctx); err != nil {
+		return err
+	}
+	if err := c.Agent.Drain(ctx); err != nil {
+		return err
+	}
+	ev := l.lastSummary.Load()
+	switch {
+	case ev == nil:
+		return errors.New("no summary was made: see the lines above for why")
+	case ev.Err != nil:
+		return fmt.Errorf("no summary was made: %w", ev.Err)
+	}
+	c.Say("The conversation was summarized: about %s tokens before, about %s after.", tokenCount(ev.PreTokens), tokenCount(ev.PostTokens))
+	return nil
+}
+
+// slashLoop is /loop.
+func (l *live) slashLoop(ctx context.Context, c *SlashContext) error {
+	if c.Args != "" {
+		return errors.New("/loop takes nothing after it: it keeps the session working on the task it already has. Send the task as a prompt first, then /loop")
+	}
+	if _, ok := l.modelRef(); !ok {
+		return errors.New("this session has no model, so there is nothing to keep working. Choose a model with /model")
+	}
+	if c.Agent.Loop() {
+		c.Say("/loop is already on. /noloop turns it off.")
+		return nil
+	}
+	c.Agent.SetLoop(true)
+	return nil
+}
+
+// slashModel is /model: with nothing after it, the models there are; with
+// a name, a switch to that model, saved for later sessions.
+func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
+	fields := strings.Fields(c.Args)
+	if len(fields) > 2 {
+		return errors.New("/model takes a model, as provider/model, and then at most a thinking level")
+	}
+	l.switchMu.Lock()
+	defer l.switchMu.Unlock()
+	if len(fields) == 0 {
+		return l.listModelsFor(ctx, c)
+	}
+
+	name, level := fields[0], ""
+	if len(fields) == 2 {
+		level = fields[1]
+	}
+	ref := config.ModelRef{ID: name}
+	if prov, id, ok := strings.Cut(name, "/"); ok {
+		if _, known := l.cfg.Provider(prov); known {
+			ref = config.ModelRef{Provider: prov, ID: id}
+		}
+	}
+	ref, err := l.resolveRef(ctx, ref, true, nil)
+	if err != nil {
+		return err
+	}
+	// The thinking level saved for this model, if any, comes back with it.
+	slot := l.cfg.Large
+	slot.Thinking = config.Value[string]{}
+	if st, probs := config.ReadState(config.OS{}, l.cfg.Paths.StateFile); len(probs) == 0 {
+		if saved, ok := st.Thinking[ref.String()]; ok {
+			slot.Thinking = config.Value[string]{V: saved, Set: true, Origin: config.Origin{Layer: config.LayerState, File: l.cfg.Paths.StateFile}}
+		}
+	}
+	mu, err := l.buildModel(ctx, ref, slot, true)
+	if err != nil {
+		return err
+	}
+	if level != "" {
+		if !slices.Contains(mu.model.Levels, level) {
+			if len(mu.model.Levels) == 0 {
+				return fmt.Errorf("gnosh knows of no thinking levels for %s, so %q cannot be set. Nothing changed", ref, level)
+			}
+			return fmt.Errorf("%q is not one of the thinking levels of %s (%s). Nothing changed", level, ref, strings.Join(mu.model.Levels, ", "))
+		}
+		mu.model.Level = level
+	}
+	if err := c.Agent.SetModel(mu.model); err != nil {
+		return fmt.Errorf("the model was not changed: %w", err)
+	}
+	l.modelMu.Lock()
+	l.large = mu
+	l.modelMu.Unlock()
+	l.saveState(c, func(st *config.State) error {
+		if err := st.SetModel("large", ref); err != nil {
+			return err
+		}
+		if level != "" {
+			return st.SetThinking(ref, level)
+		}
+		return nil
+	})
+	thinking := ""
+	if mu.model.Level != "" {
+		thinking = ", thinking " + mu.model.Level
+	}
+	window := "its context window is not known yet"
+	if w := mu.model.Info.ContextWindow; w > 0 {
+		window = "context window " + tokenCount(w) + " tokens"
+	}
+	c.Say("The model is %s at %s (%s%s), from the next request on. The choice is saved for later sessions; -m names another for one run.", ref, mu.model.Address, window, thinking)
+	return nil
+}
+
+// listModelsFor lists the models of every provider that can be used, and
+// says which providers were left out and why.
+func (l *live) listModelsFor(ctx context.Context, c *SlashContext) error {
+	cur, has := l.modelRef()
+	m := c.Agent.Model()
+	if has {
+		thinking := ""
+		if m.Level != "" {
+			thinking = ", thinking " + m.Level
+		}
+		c.Say("In use: %s at %s%s.", cur, m.Address, thinking)
+	} else {
+		c.Say("No model is in use.")
+	}
+	usable := l.cfg.Usable()
+	for _, pc := range usable {
+		ids, note := l.offered(ctx, pc)
+		where := ""
+		if pu := l.providers[pc.ID]; pu != nil {
+			where = " at " + pu.endpoint.Display
+		}
+		c.Say("%s%s:", pc.ID, where)
+		for _, id := range ids {
+			mark := "  "
+			if has && cur.Provider == pc.ID && cur.ID == id {
+				mark = "* "
+			}
+			line := "  " + mark + pc.ID + "/" + id
+			if cm, ok := l.cfg.Model(config.ModelRef{Provider: pc.ID, ID: id}); ok && cm.ContextWindow.Set {
+				line += "  (window " + tokenCount(cm.ContextWindow.V) + ")"
+			}
+			if levels := thinkingLevelsOf(l.cfg, pc, id); len(levels) > 0 {
+				line += "  thinking: " + strings.Join(levels, ", ")
+			}
+			c.Say("%s", line)
+		}
+		if len(ids) == 0 {
+			c.Say("    (no model is known: none is registered in gnoshrc, and the server lists none)")
+		}
+		if note != "" {
+			c.Say("    note: %s", note)
+		}
+	}
+	for _, pc := range l.cfg.Providers {
+		switch {
+		case pc.Disabled:
+			c.Say("%s: disabled (%s).", pc.ID, pc.Origin)
+		case pc.LeftOut != "":
+			c.Say("%s: left out: %s.", pc.ID, pc.LeftOut)
+		}
+	}
+	if len(usable) == 0 {
+		c.Say("No provider can be used. Add one to gnoshrc in %s, for example: provider add local --type llamacpp --base-url http://127.0.0.1:8080", l.cfg.Paths.ConfigDir)
+	}
+	c.Say("To switch: /model provider/model, and a thinking level after it if you want one. The choice is saved.")
+	return nil
+}
+
+// thinkingLevelsOf returns the thinking levels of a model of a provider.
+func thinkingLevelsOf(cfg *config.Config, pc config.Provider, id string) []string {
+	cm, registered := cfg.Model(config.ModelRef{Provider: pc.ID, ID: id})
+	return thinkingLevels(pc, cm, registered, id)
+}
+
+// slashStatus is /status: what the session is and what it is doing right
+// now, and then every setting with where it came from.
+func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
+	a := c.Agent
+	c.Say("gnosh %s", cli.VersionLine(l.p.o.Build))
+	c.Say("session      %s (%s)", l.ts.ID(), l.source)
+	c.Say("file         %s", l.ts.Path())
+	c.Say("folder       %s on %s", l.cwd(), hostName())
+	trust := firstOf(l.st.decision.Reason, "not trusted")
+	if l.st.trusted && !l.st.decision.Trusted {
+		trust = "trusted: you answered yes when this session asked"
+	}
+	c.Say("project      %s (%s)", l.cfg.Paths.ProjectRoot, trust)
+
+	m := a.Model()
+	if ref, ok := l.modelRef(); ok {
+		origin := l.cfg.Large.Model.Origin.String()
+		if !l.cfg.Large.Model.Set || l.cfg.Large.Model.V != ref {
+			origin = "chosen in this session"
+		}
+		c.Say("model        %s at %s (%s)", ref, m.Address, origin)
+		level := firstOf(m.Level, "the model's own default")
+		if len(m.Levels) == 0 {
+			level = "no switch known for this model"
+		}
+		c.Say("thinking     %s", level)
+	} else {
+		c.Say("model        none: prompts fail until one is chosen with /model")
+	}
+	if l.small != nil {
+		c.Say("small model  %s at %s (the short side jobs)", l.small.ref, l.small.model.Address)
+	}
+	c.Say("permissions  mode %s", l.engine.Mode())
+
+	cs := a.Context()
+	if cs.Window > 0 {
+		known := "learned from the server or the config"
+		if !cs.Known {
+			known = "assumed: nobody could say how large it is"
+		}
+		c.Say("context      about %s of %s tokens (%d%%); the window is %s; room is made at %s",
+			tokenCount(cs.Used), tokenCount(cs.Window), cs.Used*100/cs.Window, known, tokenCount(cs.Point))
+		if cs.AutoOff {
+			c.Say("             automatic summaries are off for this session: one did not help. /compact makes one by hand.")
+		}
+	}
+	st := a.State()
+	switch {
+	case !st.Busy:
+		c.Say("state        idle: waiting for your prompt")
+	default:
+		line := string(st.Phase)
+		if st.Waiting != "" {
+			line += ": " + st.Waiting
+		}
+		if !st.Since.IsZero() {
+			line += fmt.Sprintf(" (for %s)", l.p.now().Sub(st.Since).Round(time.Second))
+		}
+		c.Say("state        %s", line)
+		for _, r := range st.Running {
+			c.Say("             running %s for %s", r.Name, l.p.now().Sub(r.Since).Round(time.Second))
+		}
+	}
+	if st.Queued > 0 {
+		c.Say("queued       %d prompt(s) wait for their turn", st.Queued)
+	}
+	if st.Loop {
+		c.Say("/loop        on")
+	}
+	if l.shell != nil {
+		running := 0
+		for _, t := range l.shell.Tasks() {
+			if t.Running {
+				running++
+				c.Say("background   %s: %s (running for %s, output in %s)", t.ID, oneLine(t.Command, 80), t.Duration.Round(time.Second), t.OutputFile)
+			}
+		}
+		if running == 0 {
+			c.Say("background   no command is running in the background")
+		}
+	}
+	c.Say("tools        %s", firstOf(strings.Join(l.toolNames(), ", "), "none"))
+	for _, j := range l.contribs {
+		if j.f.Name != "" {
+			c.Say("feature      %s", j.f.Name)
+		}
+	}
+	u := a.Usage()
+	c.Say("usage        %d requests; %s tokens in, %s out", u.Requests, tokenCount(u.Main.InputTokens), tokenCount(u.Main.OutputTokens))
+	c.Say("")
+	c.Say("The configuration in force, each setting with where it came from:")
+	c.Say("%s", strings.TrimRight(l.cfg.String(), "\n"))
+	return nil
+}
+
+// slashPermissions is /permissions: the mode, the folders and every rule,
+// each with where it came from. It only shows; rules are changed in the
+// settings files.
+func (l *live) slashPermissions(ctx context.Context, c *SlashContext) error {
+	x := l.engine.Explain()
+	c.Say("Permission mode: %s", x.Mode)
+	if x.Trusted {
+		c.Say("The folder is trusted: its own rules are in force.")
+	} else {
+		c.Say("The folder is not trusted: of its own rules, only the ones that restrict are in force.")
+	}
+	c.Say("Folders the tools work in without a question:")
+	for _, d := range x.Dirs {
+		c.Say("  %s", d)
+	}
+	for _, d := range x.HeldDirs {
+		c.Say("  %s  (waits for the folder to be trusted)", d)
+	}
+	for _, list := range []permission.List{permission.ListDeny, permission.ListAsk, permission.ListAllow} {
+		var lines []string
+		for _, r := range x.Rules {
+			if r.List != list {
+				continue
+			}
+			held := ""
+			if r.Held {
+				held = "  (waits for the folder to be trusted)"
+			}
+			lines = append(lines, fmt.Sprintf("  %s    from %s%s", r.Rule, r.Source, held))
+		}
+		if len(lines) == 0 {
+			c.Say("No %s rules.", list)
+			continue
+		}
+		c.Say("%s rules, in the order they are looked at:", strings.ToUpper(string(list)[:1])+string(list)[1:])
+		for _, line := range lines {
+			c.Say("%s", line)
+		}
+	}
+	for _, n := range x.Notes {
+		c.Say("note: %s", n)
+	}
+	c.Say("Rules are written in the settings files; an approval you save goes to %s.", l.cfg.Paths.LocalSettings)
+	return nil
+}
+
+// slashHooks is /hooks: every hook in force, by the moment it runs at.
+func (l *live) slashHooks(ctx context.Context, c *SlashContext) error {
+	switch {
+	case l.cfg.Switches.SafeMode.V:
+		c.Say("Safe mode is on, so no hook runs.")
+	case l.cfg.HooksOff != "":
+		c.Say("No hook runs: %s.", l.cfg.HooksOff)
+	}
+	n := 0
+	for _, e := range hooks.Events() {
+		list := l.hooks.r.Hooks(e)
+		if len(list) == 0 {
+			continue
+		}
+		c.Say("%s:", e)
+		for _, h := range list {
+			n++
+			line := "  "
+			if h.Name != "" {
+				line += h.Name + ": "
+			}
+			line += oneLine(h.Command, 200)
+			if h.Matcher != "" && h.Matcher != "*" {
+				line += "  [matches " + h.Matcher + "]"
+			}
+			if h.Timeout > 0 {
+				line += "  [timeout " + h.Timeout.String() + "]"
+			}
+			c.Say("%s", line)
+			c.Say("      from %s", h.Source)
+		}
+	}
+	if n == 0 {
+		c.Say("No hook is in force in this session.")
+	}
+	if held := len(l.cfg.AllHooks) - n; held > 0 && l.cfg.HooksOff == "" && !l.cfg.Switches.SafeMode.V {
+		c.Say("%d more are configured and not in force (a folder that is not trusted, or an event this build does not fire); gnosh doctor says which.", held)
+	}
+	return nil
+}
+
+// summaryEnd keeps how the last summary went, for /compact as the prompt
+// of a run.
+func (l *live) summaryEnd(ev any) {
+	if s, ok := ev.(*agent.SummaryEvent); ok && s.Phase == "end" {
+		l.lastSummary.Store(s)
+	}
+}
