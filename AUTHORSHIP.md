@@ -56,3 +56,10 @@ above. Jae can overrule any of them.
   of the packages (ARCHITECTURE.md).
 - Sessions as append-only JSONL files rather than a database.
 - The shapes in `internal/core`.
+- A non-interactive run does not approve its own tool calls unless told to
+  (`spec/DECISIONS.md` item 11), where the earlier gnosh did.
+- An independent audit of the frame rule against its spec, and an attack on
+  the permission engine with a real shell as the judge, before either was
+  relied on.
+- The rest of `spec/DECISIONS.md`: each item there says which of his rules
+  it follows from.

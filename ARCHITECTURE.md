@@ -32,21 +32,32 @@ on disk. It is written in Go, from scratch (see PROVENANCE.md).
 
 ## Packages
 
+`main.go` dispatches the GnoVM worker and hands everything else to
+`internal/app`. `features.go` is the one place a feature is registered.
+
 | package | what it is |
 |---|---|
 | `internal/core` | The shared vocabulary: messages and blocks, provider and tool interfaces, stream events, errors. Standard library only. |
-| `internal/llm` | Model services: the OpenAI-compatible chat-completions wire format, llama.cpp's extras, Anthropic's messages format. HTTP and server-sent events on `net/http`. Time limits. No retries (the agent loop decides those). |
+| `internal/llm` | Model services: the OpenAI-compatible chat-completions wire format, llama.cpp's extras, Anthropic's messages format. HTTP and server-sent events on `net/http`. Time limits. No retries (the loop decides those). |
+| `internal/agent` | The loop: send, stream, ask the gate, run tools, feed results back, repeat. It imports only `internal/core`; the model, the tools, the log, the gate, the moments and the turn-end drivers are ports. |
+| `internal/transcript` | Sessions as append-only JSONL files, and the view the model is sent: rewinds, summaries, the frame rule, the slide, repair. `CONFORMANCE.md` ties it to `spec/gnosh/frames.md`. |
+| `internal/permission` | The decision engine: modes, rules, its own reader of shell command lines, path rules, the read-only command table, protected paths. |
+| `internal/hooks` | Hook events and their protocol, strict configuration, failing closed. |
+| `internal/config`, `internal/trust` | `gnoshrc` (a list of settings), the JSON settings files, the state file, `doctor`; the folder-trust record and what an untrusted folder may still do. |
+| `internal/cli` | The argument parser and the table of commands and flags. |
+| `internal/instructions` | The instruction files a project and a person keep for the model. |
+| `internal/prompt` | Every word gnosh says to a model, one text per file, and the defusing of control tokens. |
 | `internal/tools/fstools` | Read, Write, Edit, Glob, Grep, and the gitignore matching they share. |
-| `internal/tools/shelltool` | Bash, background shells, their output and stopping them. |
+| `internal/tools/shelltool` | Bash, background commands, stopping them. |
 | `internal/text` | Text for terminals: grapheme clusters, display width, ANSI-aware wrapping and truncation, styles, colour profiles, gradients. Pure functions. |
-| `internal/term` | The terminal itself: raw mode, key decoding, resize, capabilities. `internal/term/vtest` is a small screen emulator for tests. |
-| `internal/transcript` | Sessions as append-only JSONL files, and the view the model is sent. |
-| *next* `internal/agent` | The loop: send, stream, ask permission, run hooks, run tools, repeat. |
-| *next* `internal/permission`, `internal/hooks`, `internal/config` | Rules and modes; hook events; `gnoshrc` and settings. |
-| *next* `internal/markdown`, `internal/ui` | Streaming Markdown to styled lines; the live region, the editor, prompts. |
-| *carried* `internal/gnovm`, `internal/gnochain`, `internal/swarm`, `gno/` | The GnoVM machines, `mem`, the chain client and the swarm, brought over from the earlier gnosh (see PROVENANCE.md). |
-
-`main.go` and the command line come with the agent loop.
+| `internal/term` | The terminal itself: raw mode, key decoding, resize, capabilities, the live-region renderer. `internal/term/vtest` is a screen emulator for tests. |
+| `internal/markdown` | Streaming Markdown to styled lines, with a rule for which lines are final. |
+| `internal/diff` | Line and word differences, the unified format, a terminal rendering. |
+| `internal/ui`, `internal/ui/editor`, `internal/ui/menu` | The interactive session: committed scrollback above, a small live region below; the prompt box; the questions put to a person. |
+| `internal/app` | The program: startup and shutdown, the session, the adapters that attach the loop's ports to the packages above, print mode, the plain session, sub-agents, the feature seam. |
+| `internal/memjoin` | A feature: the GnoVM machines, `mem` and frames joined to the program, as `spec/gnosh/integration-contract.md` lists it. |
+| `internal/gnovm`, `internal/gnovm/tools`, `internal/gnochain`, `internal/swarm`, `gno/` | Carried from the earlier gnosh (see `CARRIED.md`): the GnoVM machines, `mem`, the four tools a model calls, the chain client, the swarm demo, the shared realm. |
+| `internal/filelock`, `internal/buildinfo` | Small helpers the carried code needs, written fresh. |
 
 ## Rules for every package
 
