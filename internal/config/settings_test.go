@@ -1,0 +1,391 @@
+package config
+
+import (
+	"slices"
+	"strings"
+	"testing"
+	"time"
+)
+
+// ruleTexts lists the rules of one list across every layer.
+func ruleTexts(cfg *Config, which string) []string {
+	var out []string
+	for _, r := range cfg.Permissions.Rules(which) {
+		out = append(out, r.Text)
+	}
+	return out
+}
+
+// envOf returns the env block as name=value pairs.
+func envOf(cfg *Config) []string {
+	var out []string
+	for _, v := range cfg.Env {
+		out = append(out, v.Name+"="+v.Value.Reveal())
+	}
+	return out
+}
+
+// A block as it would be copied out of a Claude Code settings file.
+const pastedSettings = `{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": ["Read", "Bash(git diff *)"],
+    "ask": ["Bash(git push *)"],
+    "deny": ["WebFetch", "Read(./.env)"],
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": ["../shared", "~/notes"],
+    "disableAutoMode": "disable"
+  },
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash",
+        "hooks": [ { "type": "command", "command": "./hooks/no-force-push.sh", "timeout": 10,
+                     "statusMessage": "checking", "once": false, "shell": "bash", "async": false,
+                     "asyncRewake": false, "onFailure": "continue" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh" },
+                   { "type": "command", "command": "./second.sh" } ] }
+    ]
+  },
+  "env": { "NODE_ENV": "test", "EMPTY": "" },
+  "disableAllHooks": false
+}
+`
+
+func TestSettingsFile(t *testing.T) {
+	cfg := mustLoad(t, inputs(newFS().put(userJSON, pastedSettings)))
+	if got := ruleTexts(cfg, "allow"); !slices.Equal(got, []string{"Read", "Bash(git diff *)"}) {
+		t.Errorf("allow: %q", got)
+	}
+	if got := ruleTexts(cfg, "ask"); !slices.Equal(got, []string{"Bash(git push *)"}) {
+		t.Errorf("ask: %q", got)
+	}
+	if got := ruleTexts(cfg, "deny"); !slices.Equal(got, []string{"WebFetch", "Read(./.env)"}) {
+		t.Errorf("deny: %q", got)
+	}
+	l := cfg.Permissions.Layers[0]
+	if l.Scope != "user" || l.File != userJSON || l.BaseDir != userDir {
+		t.Errorf("layer source: %+v", l)
+	}
+	if r := l.Deny[1]; r.Origin.File != userJSON || r.Origin.Line != 6 || r.Origin.Layer != LayerUser {
+		t.Errorf("a rule's origin is its own line: %+v", r.Origin)
+	}
+	if m := cfg.Permissions.Mode; m.V != "acceptEdits" || m.Origin.Line != 7 {
+		t.Errorf("mode: %+v", m)
+	}
+	var dirs []string
+	for _, d := range cfg.Permissions.Dirs {
+		dirs = append(dirs, d.V)
+	}
+	if !slices.Equal(dirs, []string{"/work/shared", testHome + "/notes"}) {
+		t.Errorf("additional directories: %q", dirs)
+	}
+
+	if len(cfg.Hooks) != 3 {
+		t.Fatalf("hooks: %+v", cfg.Hooks)
+	}
+	h := cfg.Hooks[0]
+	if h.Event != "PreToolUse" || h.Matcher != "Bash" || h.Command != "./hooks/no-force-push.sh" || h.Timeout != 10*time.Second ||
+		h.Scope != "user" || h.BaseDir != userDir || h.Origin.File != userJSON || h.Origin.Line != 14 {
+		t.Errorf("hook: %+v", h)
+	}
+	if cfg.Hooks[1].Event != "Stop" || cfg.Hooks[1].Command != "${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh" || cfg.Hooks[2].Command != "./second.sh" {
+		t.Errorf("stop hooks: %+v", cfg.Hooks[1:])
+	}
+	if got := envOf(cfg); !slices.Equal(got, []string{"EMPTY=", "NODE_ENV=test"}) {
+		t.Errorf("env: %q", got)
+	}
+	if got := cfg.CommandEnv(); !slices.Equal(got, []string{"EMPTY", "NODE_ENV=test"}) {
+		t.Errorf("CommandEnv: an empty value takes the variable away: %q", got)
+	}
+}
+
+// Every way a settings file can be wrong, with the words the message must
+// hold and the line it must name.
+func TestSettingsRefusals(t *testing.T) {
+	tests := []struct {
+		name   string
+		json   string
+		line   int
+		pieces []string
+	}{
+		{"not JSON", `{"permissions": `, 1, []string{"not JSON gnosh can read", "none of it is in force"}},
+		{"a comment", "{\n  // why\n  \"env\": {}\n}", 2, []string{"not JSON gnosh can read", "no comments"}},
+		{"a trailing comma", "{\n  \"env\": {},\n}", 2, []string{"not JSON gnosh can read", "no comma after the last item"}},
+		{"text after the end", "{}\n{}", 2, []string{"more text after the end"}},
+		{"a bare list", `["Bash"]`, 1, []string{"holds one JSON object", "a list", "none of it is in force"}},
+		{"a bare string", `"x"`, 1, []string{"holds one JSON object", "a string"}},
+		{"an unknown key", "{\n  \"permisions\": {}\n}", 2, []string{`"permisions"`, "not a key gnosh reads in a settings file", "permissions, hooks, env, disableAllHooks", "gnoshrc"}},
+		{"a Claude Code key gnosh does not read", "{\n  \"model\": \"opus\"\n}", 2, []string{`"model"`, "not a key gnosh reads", "model large <provider>/<id>"}},
+		{"the earlier gnosh's shape", "{\n  \"providers\": {}\n}", 2, []string{`"providers"`, "everything else is set in gnoshrc"}},
+		{"a key given twice", "{\n  \"env\": {},\n  \"env\": {}\n}", 3, []string{`"env"`, "given twice", "line 2"}},
+		{"hooks of the wrong shape", "{\n  \"hooks\": \"x\"\n}", 2, []string{`"hooks" is an object`, "a string", "none of the file's hooks is in force"}},
+		{"permissions of the wrong shape", `{"permissions": ["Bash"]}`, 1, []string{`"permissions" is an object`, "a list"}},
+		{"env of the wrong shape", `{"env": "PATH=/x"}`, 1, []string{`"env" is an object`}},
+		{"an env value that is not a string", "{\"env\": {\n \"N\": 5}}", 2, []string{`"env.N" is a string`, "a number"}},
+		{"an env name that is not one", `{"env": {"A B": "c"}}`, 1, []string{"not a usable variable name"}},
+		{"disableAllHooks that is not a truth value", `{"disableAllHooks": "yes"}`, 1, []string{`"disableAllHooks" is true or false`}},
+
+		{"an unknown permissions key", "{\"permissions\": {\n \"alow\": []}}", 2, []string{`"alow"`, `not a key gnosh reads under "permissions"`, "allow, ask, deny"}},
+		{"rules that are not a list", `{"permissions": {"allow": "Bash"}}`, 1, []string{`"permissions.allow" is a list of rules`}},
+		{"a rule that is not a string", `{"permissions": {"deny": [1]}}`, 1, []string{`"permissions.deny" is a list of rules`}},
+		{"a tool gnosh does not have", "{\"permissions\": {\"deny\": [\n \"websearch\"]}}", 2, []string{`"websearch"`, "not a tool gnosh has", "Did you mean WebSearch?"}},
+		{"a rule gnosh cannot apply", `{"permissions": {"allow": ["B*"]}}`, 1, []string{"cannot be used", "cannot use * in the tool's name"}},
+		{"a mode gnosh does not have", `{"permissions": {"defaultMode": "yolo"}}`, 1, []string{`"yolo"`, "not a permission mode", "default, plan, acceptEdits, dontAsk, bypassPermissions"}},
+		{"a mode that is not a string", `{"permissions": {"defaultMode": true}}`, 1, []string{`"permissions.defaultMode" is one of`}},
+		{"a switch with another value", `{"permissions": {"disableBypassPermissionsMode": true}}`, 1, []string{`takes the one value "disable"`}},
+		{"a guard that is not built", `{"permissions": {"blockReadsOutsideWorkingDirectories": true}}`, 1, []string{"planned and not built yet", "would not hold anything back"}},
+		{"directories that are not a list", `{"permissions": {"additionalDirectories": "/x"}}`, 1, []string{"is a list of directories"}},
+
+		{"an event gnosh does not fire", "{\"hooks\": {\n \"pre_tool_use\": []}}", 2, []string{`"pre_tool_use"`, "Did you mean PreToolUse?"}},
+		{"an event's value that is not a list", `{"hooks": {"Stop": {}}}`, 1, []string{`"hooks.Stop" is a list of matcher groups`}},
+		{"a group that is not an object", `{"hooks": {"Stop": ["x"]}}`, 1, []string{"an object with a \"hooks\" list"}},
+		{"a group with no hooks", `{"hooks": {"Stop": [{}]}}`, 1, []string{"has no \"hooks\" list"}},
+		{"a group with another key", `{"hooks": {"Stop": [{"hooks": [], "if": "x"}]}}`, 1, []string{`"if"`, "not a key of an entry"}},
+		{"a matcher that is a list", `{"hooks": {"PreToolUse": [{"matcher": ["Bash"], "hooks": []}]}}`, 1, []string{`a "matcher" is one string`}},
+		{"a matcher on an event that takes none", `{"hooks": {"Stop": [{"matcher": "Bash", "hooks": []}]}}`, 1, []string{"Stop has nothing for a matcher to match"}},
+		{"a matcher that cannot be compiled", `{"hooks": {"PreToolUse": [{"matcher": "(?=x)", "hooks": []}]}}`, 1, []string{"regular expression", "cannot be compiled"}},
+		{"a handler that is not an object", `{"hooks": {"Stop": [{"hooks": ["./x.sh"]}]}}`, 1, []string{"a hook handler is an object"}},
+		{"a handler with no type", `{"hooks": {"Stop": [{"hooks": [{"command": "x"}]}]}}`, 1, []string{`has no "type"`}},
+		{"a handler with no command", `{"hooks": {"Stop": [{"hooks": [{"type": "command"}]}]}}`, 1, []string{`has no "command"`}},
+		{"an http hook", `{"hooks": {"Stop": [{"hooks": [{"type": "http", "url": "https://example.com"}]}]}}`, 1, []string{`"type": "http"`, `"command" only`, "not run some other way"}},
+		{"a prompt hook", `{"hooks": {"Stop": [{"hooks": [{"type": "prompt", "prompt": "ok?"}]}]}}`, 1, []string{`"type": "prompt"`}},
+		{"a hook with an if filter", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "if": "Bash(rm *)"}]}]}}`, 1, []string{`this hook has "if"`, "may let through what it was meant to stop"}},
+		{"a hook with args", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "args": []}]}]}}`, 1, []string{`this hook has "args"`, "through the shell"}},
+		{"a background hook", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "async": true}]}]}}`, 1, []string{`this hook sets "async"`, "false"}},
+		{"a hook that wakes the model", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "asyncRewake": true}]}]}}`, 1, []string{`this hook sets "asyncRewake"`}},
+		{"a powershell hook", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "shell": "powershell"}]}]}}`, 1, []string{`this hook sets "shell"`, `"bash"`}},
+		{"a hook with another failure rule", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "onFailure": "block"}]}]}}`, 1, []string{`this hook sets "onFailure"`, `"continue"`}},
+		{"a hook field gnosh does not know", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "retries": 3}]}]}}`, 1, []string{`"retries"`, "not a field of a hook handler"}},
+		{"a timeout that is not a number", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "timeout": "10"}]}]}}`, 1, []string{`"timeout" is a number of seconds above zero`}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, problems := load(t, inputs(newFS().put(userJSON, tt.json)))
+			if cfg != nil {
+				t.Fatalf("the file loaded; it should have been refused")
+			}
+			wantProblem(t, problems, Error, userJSON, tt.line, tt.pieces...)
+			for _, p := range Errors(problems) {
+				if p.File != userJSON || p.Line == 0 {
+					t.Errorf("a mistake in a settings file names the file and a line: %+v", p)
+				}
+			}
+		})
+	}
+}
+
+// The scopes, weakest first: the user's file, the project's, the local
+// one in the data folder, then --settings. A single value comes from the
+// strongest file that sets it.
+func TestSettingsPrecedence(t *testing.T) {
+	scopes := []struct {
+		name, path string
+	}{
+		{"user", userJSON},
+		{"project", projJSON},
+		{"local", localJSON},
+		{"command line", "/tmp/extra.json"},
+	}
+	body := func(i int) string {
+		return `{"permissions": {"defaultMode": "` + []string{"plan", "acceptEdits", "dontAsk", "default"}[i] + `"},
+  "env": {"WHO": "` + scopes[i].name + `", "ONLY_` + strings.ToUpper(strings.ReplaceAll(scopes[i].name, " ", "_")) + `": "1"},
+  "disableAllHooks": ` + []string{"true", "false", "true", "false"}[i] + `}`
+	}
+	// Each pair of neighbours: with files up to and including scope i,
+	// scope i wins.
+	for i := range scopes {
+		fsys := newFS()
+		in := inputs(fsys)
+		for j := 0; j <= i; j++ {
+			fsys.put(scopes[j].path, body(j))
+		}
+		if i == 3 {
+			in.Flags.Settings = scopes[3].path
+		}
+		cfg := mustLoad(t, in)
+		wantMode := []string{"plan", "acceptEdits", "dontAsk", "default"}[i]
+		if cfg.Permissions.Mode.V != wantMode || cfg.Permissions.Mode.Origin.File != scopes[i].path {
+			t.Errorf("with files up to %s: mode %q from %s, want %q from %s", scopes[i].name, cfg.Permissions.Mode.V, cfg.Permissions.Mode.Origin, wantMode, scopes[i].path)
+		}
+		var who EnvVar
+		for _, v := range cfg.Env {
+			if v.Name == "WHO" {
+				who = v
+			}
+		}
+		if who.Value.Reveal() != scopes[i].name || who.Origin.File != scopes[i].path {
+			t.Errorf("with files up to %s: env WHO is %q from %s", scopes[i].name, who.Value.Reveal(), who.Origin)
+		}
+		if len(cfg.Env) != i+2 {
+			t.Errorf("with files up to %s: variables set in one file each are all kept; got %q", scopes[i].name, envOf(cfg))
+		}
+	}
+}
+
+// disableAllHooks follows the same order: a project's false overrides the
+// user's true, and --settings wins over both.
+func TestDisableAllHooks(t *testing.T) {
+	hook := `"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./x.sh"}]}]}`
+	fsys := newFS().put(userJSON, `{"disableAllHooks": true, `+hook+`}`)
+	cfg := mustLoad(t, inputs(fsys))
+	if len(cfg.Hooks) != 0 || len(cfg.AllHooks) != 1 || !strings.Contains(cfg.HooksOff, "disableAllHooks") || !strings.Contains(cfg.HooksOff, userJSON) {
+		t.Errorf("user true: hooks %d, all %d, off %q", len(cfg.Hooks), len(cfg.AllHooks), cfg.HooksOff)
+	}
+	fsys.put(projJSON, `{"disableAllHooks": false}`)
+	cfg = mustLoad(t, inputs(fsys))
+	if len(cfg.Hooks) != 1 || cfg.HooksOff != "" {
+		t.Errorf("project false over user true: hooks %d, off %q", len(cfg.Hooks), cfg.HooksOff)
+	}
+	in := inputs(fsys)
+	in.Flags.Settings = `{"disableAllHooks": true}`
+	cfg = mustLoad(t, in)
+	if len(cfg.Hooks) != 0 || !strings.Contains(cfg.HooksOff, "--settings") {
+		t.Errorf("--settings true over both: hooks %d, off %q", len(cfg.Hooks), cfg.HooksOff)
+	}
+}
+
+// Lists add up across files instead of replacing each other, and a rule
+// given twice in one file is kept once.
+func TestSettingsListsMerge(t *testing.T) {
+	fsys := newFS().
+		put(userJSON, `{"permissions": {"allow": ["Read", "Read"], "deny": ["WebFetch"], "additionalDirectories": ["/a"]},
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./user.sh"}]}]}}`).
+		put(userRC, "permissions allow Grep\npermissions deny WebSearch\nhook add Stop --command ./rc.sh\n").
+		put(projJSON, `{"permissions": {"allow": ["Read", "Glob"], "deny": ["Bash(rm *)"], "additionalDirectories": ["/a", "/b"]},
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./project.sh"}]}]}}`).
+		put(projRC, "permissions allow 'Bash(go test *)'\n").
+		put(localJSON, `{"permissions": {"allow": ["Bash(npm test *)"]}}`)
+	in := inputs(fsys)
+	in.Flags.Settings = `{"permissions": {"deny": ["Agent"]}}`
+	in.Flags.AllowedTools = []string{"Edit, Write"}
+	in.Flags.DisallowedTools = []string{"TaskStop"}
+	cfg := mustLoad(t, in)
+
+	if got := ruleTexts(cfg, "allow"); !slices.Equal(got, []string{"Read", "Grep", "Read", "Glob", "Bash(go test *)", "Bash(npm test *)", "Edit", "Write"}) {
+		t.Errorf("allow rules of every file, weakest first: %q", got)
+	}
+	if got := ruleTexts(cfg, "deny"); !slices.Equal(got, []string{"WebFetch", "WebSearch", "Bash(rm *)", "Agent", "TaskStop"}) {
+		t.Errorf("deny rules of every file: %q", got)
+	}
+	var layers []string
+	for _, l := range cfg.Permissions.Layers {
+		layers = append(layers, l.Scope+" "+l.File+" "+l.BaseDir)
+	}
+	want := []string{
+		"user " + userJSON + " " + userDir,
+		"user " + userRC + " " + userDir,
+		"project " + projJSON + " " + testCwd,
+		"project " + projRC + " " + testCwd,
+		"local " + localJSON + " " + testCwd,
+		"command line --settings " + testCwd,
+		"command line  " + testCwd,
+	}
+	if !slices.Equal(layers, want) {
+		t.Errorf("layers:\n got %q\nwant %q", layers, want)
+	}
+	var hooks []string
+	for _, h := range cfg.Hooks {
+		hooks = append(hooks, h.Scope+":"+h.Command)
+	}
+	if !slices.Equal(hooks, []string{"user:./user.sh", "user:./rc.sh", "project:./project.sh"}) {
+		t.Errorf("hooks of every file run: %q", hooks)
+	}
+	var dirs []string
+	for _, d := range cfg.Permissions.Dirs {
+		dirs = append(dirs, d.V)
+	}
+	if !slices.Equal(dirs, []string{"/a", "/b"}) {
+		t.Errorf("directories add up, each once: %q", dirs)
+	}
+}
+
+func TestSettingsFlag(t *testing.T) {
+	// As a path: relative to the working directory, and a rule's "/path"
+	// is under the file's own directory.
+	fsys := newFS().put("/work/proj/ci/settings.json", `{"permissions": {"deny": ["Bash"]}}`)
+	in := inputs(fsys)
+	in.Flags.Settings = "ci/settings.json"
+	cfg := mustLoad(t, in)
+	if l := cfg.Permissions.Layers[0]; l.Scope != "command line" || l.File != "/work/proj/ci/settings.json" || l.BaseDir != "/work/proj/ci" || l.Deny[0].Origin.Layer != LayerFlag {
+		t.Errorf("--settings as a path: %+v", l)
+	}
+
+	// As the JSON itself.
+	in = inputs(newFS())
+	in.Flags.Settings = `  {"env": {"CI": "1"}}`
+	cfg = mustLoad(t, in)
+	if got := envOf(cfg); !slices.Equal(got, []string{"CI=1"}) || cfg.Env[0].Origin.File != "--settings" {
+		t.Errorf("--settings as JSON: %q from %+v", got, cfg.Env)
+	}
+
+	// A file that is not there, and JSON that is wrong, are mistakes.
+	in.Flags.Settings = "nope.json"
+	_, problems := load(t, in)
+	wantProblem(t, problems, Error, "--settings", 0, "/work/proj/nope.json is not there", "the JSON itself")
+	in.Flags.Settings = "{\n\"nope\": 1}"
+	_, problems = load(t, in)
+	wantProblem(t, problems, Error, "--settings", 2, `"nope"`, "not a key gnosh reads")
+}
+
+// A repository cannot switch the questions off: bypassPermissions as a
+// project's default mode is not put in force, and that is said. The auto
+// mode does not exist; asking for it in a file starts the session in the
+// default mode, with a word.
+func TestSettingsModesThatAreNotHonoured(t *testing.T) {
+	fsys := newFS().put(projJSON, `{"permissions": {"defaultMode": "bypassPermissions", "denyInsteadOfPrompting": true}}`)
+	cfg, problems := load(t, inputs(fsys))
+	if cfg == nil || cfg.Permissions.Mode.V != "default" || cfg.Permissions.BypassAvailable || cfg.Permissions.DenyInsteadOfPrompting.V {
+		t.Fatalf("a project's bypassPermissions must not be in force: %+v", cfg)
+	}
+	wantProblem(t, problems, Warning, projJSON, 1, "bypassPermissions", "a project cannot switch the questions off")
+	wantProblem(t, problems, Warning, projJSON, 1, "denyInsteadOfPrompting", "not taken from a project's file")
+
+	cfg, problems = load(t, inputs(newFS().put(userJSON, `{"permissions": {"defaultMode": "auto"}}`)))
+	if cfg == nil || cfg.Permissions.Mode.V != "default" {
+		t.Fatalf("auto in a file starts the session in default: %+v", cfg)
+	}
+	wantProblem(t, problems, Warning, userJSON, 1, "auto", "asks more, not less")
+
+	// In the user's own file both are honoured.
+	cfg = mustLoad(t, inputs(newFS().put(userJSON, `{"permissions": {"defaultMode": "bypassPermissions", "denyInsteadOfPrompting": true}}`)))
+	if cfg.Permissions.Mode.V != "bypassPermissions" || !cfg.Permissions.BypassAvailable || !cfg.Permissions.DenyInsteadOfPrompting.V {
+		t.Errorf("the user's own bypassPermissions: %+v", cfg.Permissions)
+	}
+	cfg = mustLoad(t, inputs(newFS().put(userJSON, `{"permissions": {"defaultMode": "manual"}}`)))
+	if cfg.Permissions.Mode.V != "default" {
+		t.Errorf("manual is another word for default: %+v", cfg.Permissions.Mode)
+	}
+}
+
+// The one old-named project file: klash.json is read for its hooks block
+// only, and only when there is no gnosh.json.
+func TestOldProjectSettingsName(t *testing.T) {
+	old := `{"providers": {"x": {}}, "options": {"debug": true},
+ "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./video-exists.sh"}]}]}}`
+	fsys := newFS().put("/work/proj/klash.json", old)
+	cfg, problems := load(t, inputs(fsys))
+	if cfg == nil {
+		t.Fatalf("klash.json should load for its hooks:\n%s", showProblems(problems))
+	}
+	if len(problems) != 0 {
+		t.Errorf("no warning is printed about an old name:\n%s", showProblems(problems))
+	}
+	if len(cfg.Hooks) != 1 || cfg.Hooks[0].Command != "./video-exists.sh" || cfg.Hooks[0].Scope != "project" {
+		t.Errorf("hooks from klash.json: %+v", cfg.Hooks)
+	}
+	if f := cfg.Files[0]; f.Path != "/work/proj/klash.json" || !f.OldName {
+		t.Errorf("files: %+v", cfg.Files)
+	}
+
+	fsys.put(projJSON, `{"env": {"A": "b"}}`)
+	cfg = mustLoad(t, inputs(fsys))
+	if len(cfg.Hooks) != 0 {
+		t.Errorf("with a gnosh.json there, klash.json is not read: %+v", cfg.Hooks)
+	}
+
+	// Its hooks block is held to the same rules as any other.
+	_, problems = load(t, inputs(newFS().put("/work/proj/klash.json", `{"hooks": {"stop": []}}`)))
+	wantProblem(t, problems, Error, "/work/proj/klash.json", 1, "Did you mean Stop?")
+}
