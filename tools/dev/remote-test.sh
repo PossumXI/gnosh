@@ -12,6 +12,9 @@
 # people can run it at once on different directories. It then runs gofmt -l,
 # go vet and go test for ./DIR/... there. Its exit status is the remote one.
 #
+# With -fuzz only the named directory itself is tested, not what is below it,
+# because go test fuzzes one package at a time.
+#
 # A package under test may import only internal/core and packages inside the
 # DIRs named in the same run.
 #
@@ -65,7 +68,7 @@ for d in internal/core $dirs; do
 	mk="$mk $REMOTE/$d"
 done
 for d in $dirs; do
-	pkgs="$pkgs ./$d/..."
+	case "$flags" in *-fuzz*) pkgs="$pkgs ./$d" ;; *) pkgs="$pkgs ./$d/..." ;; esac
 done
 
 # shellcheck disable=SC2086,SC2029

@@ -99,8 +99,13 @@ type Action struct {
 // not implement it is treated as ActionOther with no details.
 type Describer interface {
 	// Describe reports what running call would do, without doing it. An
-	// error means the arguments are not usable; the call will fail the
-	// same way if run.
+	// error means the call cannot run as asked (the arguments are not
+	// usable, the file was not read first); it will fail the same way if
+	// run. The Action returned beside an error still names what the call
+	// was aimed at, as far as that could be worked out: its kind, paths,
+	// command or URL. A caller checks its deny rules against that Action
+	// before it tells the model about the error, so that a refused path
+	// does not give away whether it exists.
 	Describe(call ToolCall, env *ToolEnv) (Action, error)
 }
 
