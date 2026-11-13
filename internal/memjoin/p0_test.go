@@ -273,10 +273,11 @@ func TestP0PlanPushPopAndTheContextShrinks(t *testing.T) {
 		t.Errorf("NOTES.md = %q: the edit after a new read did not go in, or the refused one did", got)
 	}
 
-	// The person was told what each pop took out of the model's context.
-	has(t, "stderr", r.err,
+	// The person was told what each pop took out of the model's context,
+	// in the order the pops were made.
+	inOrder(t, "stderr", r.err,
 		"popped `"+todo1+"`: about ", " tokens out of the model's context",
-		"popped `"+todo2+"`: about ")
+		"popped `"+todo2+"`: about ", " tokens out of the model's context")
 	w.script.done()
 
 	// Read from disk again, the stack and the cuts are what they were:

@@ -59,6 +59,8 @@ type reminderState struct {
 // is running, and what it returns is stored after the prompt's text and
 // after what the hooks added, in this order:
 //
+//   - the directive of a goal that `gnosh run --goal` bound as the run
+//     began, with the run's own prompt;
 //   - the digest of mem, with the first prompt a session ever sends (a
 //     hidden one too: a /goal directive), and again with a typed prompt
 //     when mem was changed elsewhere since the session last spoke;
@@ -67,11 +69,21 @@ type reminderState struct {
 //     has gnovm_run;
 //   - the frame line after it, while the session stands in a todo.
 //
+// In plan mode the last two are left out: the model may look and not
+// change, and is given the digest and what is recalled alone. The mode is
+// asked as each prompt goes out, since the person may switch it between
+// two prompts.
+//
 // Nothing of this is in the system prompt, which is the same bytes in
 // every session.
 func (j *join) promptLines(ctx context.Context, info agent.LineInfo) ([]agent.Part, error) {
 	var parts []agent.Part
 	typed := !info.Prompt.Hidden
+	if typed {
+		if text := j.takeDirective(); text != "" {
+			parts = append(parts, agent.Part{Source: srcGoal, Text: prompt.Wrap(text)})
+		}
+	}
 
 	block := ""
 	switch {
@@ -92,15 +104,13 @@ func (j *join) promptLines(ctx context.Context, info agent.LineInfo) ([]agent.Pa
 	// A session left open overnight tells the person what is due when
 	// they are back.
 	if day := j.now().Format(time.DateOnly); j.newDay(day) {
-		if text := j.vms.MemNotice(j.project); text != "" {
-			j.notify.tell(agent.LevelWarning, "mem", text)
-		}
+		j.tell(agent.LevelWarning, "mem", j.vms.MemNotice(j.project))
 	}
 
 	if recall := j.vms.MemRecall(ctx, j.project, j.id, info.Prompt.Text); recall != "" {
 		parts = append(parts, agent.Part{Source: srcRecall, Text: recall})
 	}
-	if !j.run {
+	if !j.run || j.planMode() {
 		// Plan mode, and a session without the tool: the digest and what
 		// is recalled still go with the prompt, the lines do not.
 		return parts, nil
@@ -128,9 +138,7 @@ func (j *join) newDay(day string) bool {
 // what waits on them.
 func (j *join) memNotice() {
 	j.newDay(j.now().Format(time.DateOnly))
-	if text := j.vms.MemNotice(j.project); text != "" && j.s.Notice != nil {
-		j.s.Notice(agent.LevelWarning, "mem", text)
-	}
+	j.tell(agent.LevelWarning, "mem", j.vms.MemNotice(j.project))
 }
 
 // newestMessage is the time of the session's newest message: the moment
@@ -192,9 +200,11 @@ func (j *join) liveSlides() []prompt.Slide {
 }
 
 // beforeRequest is the join's BeforeRequest provider: it is asked before
-// every request of a turn for reminders to put in front of the model.
+// every request of a turn for reminders to put in front of the model. In
+// plan mode there is none: both reminders ask for something mem would
+// have to be changed for.
 func (j *join) beforeRequest(_ context.Context, info agent.RequestInfo) ([]agent.Part, error) {
-	if !j.run {
+	if !j.run || j.planMode() {
 		return nil, nil
 	}
 	var parts []agent.Part
@@ -288,15 +298,24 @@ func usesMem(m core.Message) bool {
 	return false
 }
 
-// count is the join's bookkeeping on what the loop stores: the count of
-// replies for the reminder, and how the closes of the turn went. It is
-// called while the log is being written, so it only reads the entry and
-// writes the join's own memory.
+// count is the join's bookkeeping on what the loop stores: the calls on
+// a machine whose result is still to come, the count of replies for the
+// reminder, and how the closes of the turn went. It is called while the
+// log is being written, so it only reads the entry and writes the join's
+// own memory.
 func (j *join) count(e agent.Entry) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	switch e.Kind {
 	case agent.EntryAssistant:
+		for _, b := range e.Message.Blocks {
+			if b.Type == core.BlockToolUse && b.Name == gnovmtools.RunToolName {
+				if j.inflight == nil {
+					j.inflight = map[string]bool{}
+				}
+				j.inflight[b.ID] = true
+			}
+		}
 		switch {
 		case e.Silent:
 		case usesMem(e.Message):
@@ -314,6 +333,7 @@ func (j *join) count(e agent.Entry) {
 		j.turn.prompt(e)
 	case agent.EntryResult:
 		if e.ToolName == gnovmtools.RunToolName {
+			delete(j.inflight, e.ToolUseID)
 			j.turn.result(e)
 		}
 	}

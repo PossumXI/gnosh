@@ -50,9 +50,7 @@ type scrubbed struct {
 // onMemErased is the tools' OnMemErased slot: a kept call of the agent
 // erased something.
 func (j *join) onMemErased(ctx context.Context, _ string, e gnovm.MemErasure) {
-	if text := j.scrub(ctx, e).told(); text != "" {
-		j.notify.tell(agent.LevelWarning, "mem", text)
-	}
+	j.tell(agent.LevelWarning, "mem", j.scrub(ctx, e).told())
 }
 
 // told is what the person is told after an erasure, or "" when there is
@@ -167,15 +165,17 @@ func startCwd(path string) string {
 }
 
 // reload reads the goal's binding and the task list from the session's
-// log again, after a redaction changed them there.
+// log again, after a redaction changed them there, and hands the front
+// end what they now are.
 func (j *join) reload() {
 	entries := transcript.Conversation(j.ts.Entries())
 	j.mu.Lock()
-	defer j.mu.Unlock()
 	j.goal.raw = ""
 	j.goal.load(j.id, entries)
 	j.tasks.list = nil
 	j.tasks.load(entries)
+	j.mu.Unlock()
+	j.show()
 }
 
 // scrubber is the edit a redaction is given: it takes what was erased out

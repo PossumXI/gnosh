@@ -562,7 +562,7 @@ func (j *join) reviewClose(ctx context.Context, w window, callID string, cl gnov
 	}
 
 	unchecked := func(why string) string {
-		j.notify.tell(agent.LevelWarning, "mem", fmt.Sprintf("The close of `%s` could not be checked, so it was kept unchecked: %s", cl.Id, why))
+		j.tell(agent.LevelWarning, "mem", fmt.Sprintf("The close of `%s` could not be checked, so it was kept unchecked: %s", cl.Id, why))
 		return ""
 	}
 	if ctx.Err() != nil {
@@ -703,7 +703,9 @@ func (j *join) closeDriver() agent.Driver {
 
 func (j *join) closeSendBack(context.Context, agent.TurnEnd) (agent.Verdict, error) {
 	stack := j.ts.Stack()
-	if len(stack) == 0 {
+	if len(stack) == 0 || j.planMode() {
+		// At the root there is nothing to go back to; and in plan mode the
+		// model cannot close anything, so it is not sent back to try.
 		return agent.Verdict{Action: agent.End}, nil
 	}
 	top := stack[len(stack)-1].ID

@@ -117,7 +117,6 @@ func TestCloseCheckOfAStoppedTurn(t *testing.T) {
 	if got := j.checkCloses(context.Background(), j.id, "closing", closes); got != "" {
 		t.Errorf("a close whose review cannot run was refused: %q", got)
 	}
-	b.wait()
 	has(t, "what the person was told", b.told(), "The close of `fix-flaky-test/find-cause` could not be checked, so it was kept unchecked: there is no model to ask")
 }
 

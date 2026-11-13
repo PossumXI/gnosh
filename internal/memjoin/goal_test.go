@@ -133,10 +133,82 @@ func TestRunGoalMet(t *testing.T) {
 		"Goal set: greeting says hi (`"+goalName+"` in mem)",
 		"Goal met: greeting says hi (the conversation shows it)")
 	hasNot(t, "stderr", r.err, "still set")
-	// The run's own prompt joined the directive's turn.
+	// The goal was bound before the run's prompt was composed: the
+	// prompt went out as one message, the person's words first, then the
+	// goal's directive, the digest of mem, which holds the goal by then,
+	// and the mem line last.
 	reqs := w.script.requests()
-	has(t, "the first prompt", lastUser(t, reqs[0]), "Goal `"+goalName+"` \"greeting says hi\" is set: greeting says hi")
-	has(t, "the request after the first round", string(reqs[1].Body), "the file is greet.txt")
+	first := messagesOf(reqs[0])
+	if len(first) != 2 {
+		t.Fatalf("the run's first request holds %d messages, want the system prompt and one prompt:\n%s", len(first), conversation(reqs[0]))
+	}
+	text := first[1].text
+	bound := gnovm.GoalBinding{Condition: "greeting says hi", Name: goalName, Title: "greeting says hi"}
+	directive := prompt.Wrap(gnovm.GoalDirective(bound))
+	has(t, "the run's prompt", text, "Goal `"+goalName+"` \"greeting says hi\" is set: greeting says hi")
+	words, dir, digest, line := strings.Index(text, "the file is greet.txt"), strings.Index(text, directive), strings.Index(text, "<mem>"), strings.Index(text, prompt.Builtin().MemLine())
+	if !(words >= 0 && words < dir && dir < digest && digest < line) || !strings.HasSuffix(text, prompt.Builtin().MemLine()) {
+		t.Errorf("the run's prompt is not its words, the directive, the digest and the mem line, in that order:\n%s", text)
+	}
+	if n := strings.Count(string(reqs[len(reqs)-1].Body), "is set: greeting says hi"); n != 1 {
+		t.Errorf("the directive stands %d times in the conversation, want once", n)
+	}
+}
+
+// gnosh run --goal with nothing else: the goal's directive is the run's
+// prompt, sent as /goal sends it in a session.
+func TestRunGoalAlone(t *testing.T) {
+	w := newWorld(t,
+		reply(call("c1", "Read", map[string]any{"file_path": "greet.txt"})),
+		reply(call("c2", "Edit", map[string]any{"file_path": "greet.txt", "old_string": "hello", "new_string": "hi"})),
+		reply(memCall("c3", `mem.Done("`+goalName+`", "greet.txt now says hi")`)),
+		says("The greeting says hi now."),
+	)
+	w.Write("greet.txt", "hello, world\n")
+	r := w.run("run", "-y", "--goal", "greeting says hi")
+	r.wantCode(t, 0)
+	w.script.done()
+	if r.out != "The greeting says hi now.\n" {
+		t.Errorf("stdout = %q", r.out)
+	}
+	has(t, "stderr", r.err,
+		"Goal set: greeting says hi (`"+goalName+"` in mem)",
+		"Goal met: greeting says hi (the conversation shows it)")
+	hasNot(t, "stderr", r.err, "the prompt is empty", "still set")
+	if got := w.Read("greet.txt"); got != "hi, world\n" {
+		t.Errorf("greet.txt = %q", got)
+	}
+
+	// The directive is the prompt: gnosh's own words, with the digest of
+	// mem after them and no mem line, since nobody typed anything.
+	reqs := w.script.requests()
+	first := messagesOf(reqs[0])
+	if len(first) != 2 {
+		t.Fatalf("the run's first request holds %d messages, want the system prompt and one prompt:\n%s", len(first), conversation(reqs[0]))
+	}
+	bound := gnovm.GoalBinding{Condition: "greeting says hi", Name: goalName, Title: "greeting says hi"}
+	text := first[1].text
+	dir, digest := strings.Index(text, prompt.Wrap(gnovm.GoalDirective(bound))), strings.Index(text, "<mem>")
+	if !(dir >= 0 && dir < digest) {
+		t.Errorf("the run's prompt is not the goal's directive and then the digest:\n%s", text)
+	}
+	hasNot(t, "the run's prompt", text, prompt.Builtin().MemLine())
+	for i, req := range w.memRequests() {
+		if req.Goal != goalName {
+			t.Errorf("mem call %d was not told the goal the run is bound to: %q", i, req.Goal)
+		}
+	}
+
+	// With no goal and no prompt a run is refused, as before.
+	r = w.run("run")
+	r.wantCode(t, 1)
+	has(t, "stderr of a run with nothing to do", r.err, "the prompt is empty")
+
+	// A goal that could not be bound is no prompt: the run says why no
+	// goal was set, and that it was given nothing to do.
+	r = w.run("run", "--tools", "Read", "--goal", "greeting says hi")
+	r.wantCode(t, 1)
+	has(t, "stderr of a run whose goal could not be set", r.err, "--goal needs the gnovm_run tool, which this run does not have, so no goal was set.", "the prompt is empty")
 }
 
 // A run whose goal is not met keeps being sent back: no count ends the

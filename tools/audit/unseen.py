@@ -27,6 +27,8 @@ def main():
     for f in files:
         if f.startswith(SKIP) or f.startswith(allow) or "/testdata/" in f:
             continue
+        if not os.path.exists(os.path.join(root, f)):
+            continue  # deleted in the working tree, not yet committed
         with open(os.path.join(root, f), encoding="utf-8") as fh:
             for n, line in enumerate(fh, 1):
                 bad = [c for c in line if c not in "\t\n" and

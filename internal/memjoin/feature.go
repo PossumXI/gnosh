@@ -24,12 +24,6 @@ type Options struct {
 	// unless a binary is named here, and it must not be the test binary.
 	Binary string
 
-	// SubAgentTools says whether a sub-agent of this kind is given the
-	// gnovm tools. Nil means none is: the stock sub-agent has no gnovm
-	// tools (spec/DECISIONS.md, item 12). A sub-agent that is given them
-	// is a session of its own to mem, and its mem.Next() never waits.
-	SubAgentTools func(agentType string) bool
-
 	// watch, when not nil, is shown every request the tools send to the
 	// GnoVM, before it is sent. It is for the package's own tests.
 	watch func(req gnovm.RunRequest)
@@ -74,7 +68,16 @@ func New(o Options) app.Feature {
 			// but what this feature keeps, so none of them asks. Deleting
 			// a machine is the one thing a person must be asked about, and
 			// the tool says so itself (core.Action.Confirm).
-			{Name: gnovmtools.RunToolName, Quiet: true},
+			//
+			// gnovm_run is the one tool mem's text passes through, in both
+			// directions: the code of a call holds what the model keeps,
+			// and its answer what mem holds. An erasure takes a text out
+			// of mem and out of the sessions' files (erase.go); it cannot
+			// reach gnosh's log. So the arguments and results of this tool
+			// are kept out of the log and out of debugging output. The
+			// other three name machines and never carry mem's text, and
+			// stay in the log as they are.
+			{Name: gnovmtools.RunToolName, Quiet: true, NoLogArgs: true},
 			{Name: gnovmtools.NewToolName, Quiet: true},
 			{Name: gnovmtools.ListToolName, Quiet: true},
 			{Name: gnovmtools.DropToolName, Quiet: true},

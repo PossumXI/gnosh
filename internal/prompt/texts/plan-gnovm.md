@@ -1,0 +1,1 @@
+plan mode is on, and {{tool}} does not run in it: nothing in a Gno machine or in mem changes while you plan. gnovm_list still lists the machines. Once the user approves the plan, put it on mem first, as a todo with its steps, and then work it

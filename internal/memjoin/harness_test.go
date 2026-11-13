@@ -59,22 +59,16 @@ type world struct {
 	mu sync.Mutex
 	// sent holds every request the tools sent to the GnoVM, in order.
 	sent []gnovm.RunRequest
-	// subAgents, when set, gives sub-agents the gnovm tools.
-	subAgents bool
 }
 
 // feature is the join as the tests run it: its machines in this process,
 // and every request to them noted.
 func (w *world) feature() app.Feature {
-	o := Options{InProcess: true, watch: func(req gnovm.RunRequest) {
+	return New(Options{InProcess: true, watch: func(req gnovm.RunRequest) {
 		w.mu.Lock()
 		w.sent = append(w.sent, req)
 		w.mu.Unlock()
-	}}
-	if w.subAgents {
-		o.SubAgentTools = func(string) bool { return true }
-	}
-	return New(o)
+	}})
 }
 
 // memRequests returns the requests on mem that the tools sent, in order.
@@ -390,6 +384,21 @@ func hasNot(t *testing.T, what, text string, pieces ...string) {
 	}
 }
 
+// inOrder fails the test unless text holds every one of the pieces, each
+// after the one before it.
+func inOrder(t *testing.T, what, text string, pieces ...string) {
+	t.Helper()
+	at := 0
+	for _, p := range pieces {
+		i := strings.Index(text[at:], p)
+		if i < 0 {
+			t.Errorf("%s does not hold %q after what comes before it:\n%s", what, p, clip(text))
+			return
+		}
+		at += i + len(p)
+	}
+}
+
 // clip shortens a long text for a failure message: its start and its end.
 func clip(s string) string {
 	if len(s) <= 3000 {
@@ -469,6 +478,135 @@ func (s *seat) exit() int {
 		s.t.Fatalf("the program did not end.\nscreen:\n%s", clip(s.out.String()))
 	}
 	return -1
+}
+
+// front is a front end as another interface would be attached to a
+// session (app.Options.Interactive): it keeps the events it is told, and
+// what it does with the session's controls is the test's to say.
+type front struct {
+	t   *testing.T
+	run func(ctx context.Context, c app.SessionControls, f *front) int
+
+	mu     sync.Mutex
+	events []any
+}
+
+// Event keeps an event.
+func (f *front) Event(ev any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, ev)
+}
+
+// Run hands the test the session's controls.
+func (f *front) Run(ctx context.Context, c app.Controls) int {
+	more, ok := c.(app.SessionControls)
+	if !ok {
+		f.t.Errorf("the front end was handed controls of type %T, which are not SessionControls", c)
+		return 1
+	}
+	return f.run(ctx, more, f)
+}
+
+// attach runs an interactive session of the world with a scripted front
+// end attached, and waits for it to end.
+func (w *world) attach(run func(ctx context.Context, c app.SessionControls, f *front) int, args ...string) (*front, result) {
+	w.t.Helper()
+	f := &front{t: w.t, run: run}
+	o := w.options(args...)
+	o.StdinIsTerminal, o.StdoutIsTerminal = true, true
+	o.Signals = make(chan os.Signal, 4)
+	o.Interactive = func(app.FrontendInfo) app.Frontend { return f }
+	return f, w.runWith(o)
+}
+
+// say sends a prompt as the person would type it and waits until the
+// session has nothing in hand and the front end has been told everything.
+func (f *front) say(ctx context.Context, c app.SessionControls, text string) {
+	f.t.Helper()
+	if _, err := c.Submit(agent.Prompt{Text: text}); err != nil {
+		f.t.Errorf("the prompt %q could not be sent: %v", text, err)
+		return
+	}
+	if err := c.Wait(ctx); err != nil {
+		f.t.Errorf("waiting for the turn of %q: %v", text, err)
+	}
+}
+
+// mark returns how many events the front end has been told so far, so
+// that a test can read what came after.
+func (f *front) mark() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.events)
+}
+
+// facts returns the status facts the front end was told from the event
+// numbered from on, each as "name=value", in order.
+func (f *front) facts(from int) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, ev := range f.events[from:] {
+		if se, ok := ev.(*app.StatusEvent); ok {
+			for _, name := range []string{"frame", "goal"} {
+				if v, has := se.Facts[name]; has {
+					out = append(out, name+"="+v)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// taskLists returns the task lists the front end was told from the event
+// numbered from on, each as one line.
+func (f *front) taskLists(from int) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, ev := range f.events[from:] {
+		if te, ok := ev.(*app.TasksEvent); ok {
+			out = append(out, taskLine(te.Tasks))
+		}
+	}
+	return out
+}
+
+// noticed returns the lines the person was told from the event numbered
+// from on, in order.
+func (f *front) noticed(from int) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, ev := range f.events[from:] {
+		if ne, ok := ev.(*agent.NoticeEvent); ok {
+			out = append(out, ne.Text)
+		}
+	}
+	return out
+}
+
+// taskLine writes a task list as a front end shows it, on one line: a
+// line that is done, the one in progress as it reads while it is being
+// done, and the ones still to come.
+func taskLine(tasks []app.Task) string {
+	var parts []string
+	for _, t := range tasks {
+		switch t.Status {
+		case app.TaskCompleted:
+			parts = append(parts, "[x] "+t.Content)
+		case app.TaskInProgress:
+			text := t.ActiveForm
+			if text == "" {
+				text = t.Content
+			}
+			parts = append(parts, "[>] "+text)
+		default:
+			parts = append(parts, "[ ] "+t.Content)
+		}
+	}
+	return strings.Join(parts, " | ")
 }
 
 // results returns the text of every tool result of a request, by the code

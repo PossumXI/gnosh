@@ -41,21 +41,17 @@ type join struct {
 	texts   *prompt.Set
 
 	// main says a person is in this session: it is not a sub-agent's.
-	// run says gnovm_run is among its tools, and plan that it began in
-	// plan mode, where the model may look and not change.
+	// run says gnovm_run is among its tools.
 	main bool
 	run  bool
-	plan bool
-
-	notify *notifier
 
 	mu sync.Mutex
 	// kept holds, by tool call id, what the frames of a kept mem call
 	// did, from the moment mem hands them back until the call's result is
-	// in the log. stored names the gnovm_run calls whose result has been
-	// handed to the log already.
-	kept   map[string]*keptCall
-	stored map[string]bool
+	// in the log. inflight names the gnovm_run calls the model has made
+	// whose result is not in the log yet.
+	kept     map[string]*keptCall
+	inflight map[string]bool
 	// agent is the session's agent once it exists.
 	agent *agent.Agent
 	// noticeDay is the day the person was last told what is due in mem.
@@ -70,7 +66,8 @@ type join struct {
 }
 
 // session is Feature.Session: it is called once for every session, when
-// its facts are known and before its agent exists.
+// its facts are known and before its agent exists; and again for every
+// sub-agent the session starts, with the sub-agent's own facts.
 func (p *process) session(ctx context.Context, s *app.Session) (*app.Contribution, error) {
 	dir := DataDir(s.Dirs.State)
 	embeddings := ""
@@ -78,17 +75,17 @@ func (p *process) session(ctx context.Context, s *app.Session) (*app.Contributio
 		embeddings = s.Config.Options.MemEmbeddingsURL.V
 	}
 	j := &join{
-		p:       p,
-		s:       s,
-		vms:     p.client(dir, embeddings),
-		dir:     dir,
-		project: s.Dirs.ProjectRoot,
-		id:      s.ID,
-		ts:      s.Transcript,
-		texts:   s.Texts,
-		main:    !s.SubAgent,
-		kept:    map[string]*keptCall{},
-		stored:  map[string]bool{},
+		p:        p,
+		s:        s,
+		vms:      p.client(dir, embeddings),
+		dir:      dir,
+		project:  s.Dirs.ProjectRoot,
+		id:       s.ID,
+		ts:       s.Transcript,
+		texts:    s.Texts,
+		main:     !s.SubAgent,
+		kept:     map[string]*keptCall{},
+		inflight: map[string]bool{},
 	}
 	if j.project == "" {
 		j.project = s.Dirs.Cwd
@@ -99,12 +96,17 @@ func (p *process) session(ctx context.Context, s *app.Session) (*app.Contributio
 	if j.texts == nil {
 		j.texts = prompt.Builtin()
 	}
-	j.plan = s.Config != nil && s.Config.Permissions.Mode.V == "plan"
-	j.notify = newNotifier(s.Notice)
 	j.load()
 
+	tools := j.tools()
+	if !j.main && len(tools) == 0 {
+		// A sub-agent that is given no gnovm tool has nothing of the join:
+		// no machine, no mem, none of mem's context, and no turn lock,
+		// since it can hold no todo.
+		return &app.Contribution{}, nil
+	}
 	c := &app.Contribution{
-		Tools:       j.tools(),
+		Tools:       tools,
 		Protected:   []string{dir},
 		Hooks:       func(o *hooks.Options) { o.MemStatus = j.vms.MemStatusPath(j.project) },
 		Stored:      j.onStored,
@@ -115,6 +117,12 @@ func (p *process) session(ctx context.Context, s *app.Session) (*app.Contributio
 		Ready:       j.ready,
 		Close:       j.close,
 	}
+	if j.run {
+		// Whoever has gnovm_run can close a todo, and a turn that would
+		// end on a refused close is sent back to it, once: a sub-agent's
+		// too, whose report would otherwise claim what mem refused.
+		c.Drivers = []agent.Driver{j.closeDriver()}
+	}
 	if j.main {
 		// A sub-agent gets none of what follows: no digest, no mem line,
 		// no frame line, no reminder, no goal and no task list.
@@ -123,12 +131,13 @@ func (p *process) session(ctx context.Context, s *app.Session) (*app.Contributio
 		c.AfterSummary = j.afterSummary
 		c.TurnEnded = j.turnEnded
 		c.RunEnd = j.runEnd
+		c.RunPrompt = j.runPrompt
 		c.Slash = j.slash()
 		if j.run {
 			// The order is the contract's: a refused close sends the
 			// model back first, then the goal; the person's Stop hooks
 			// come after both.
-			c.Drivers = []agent.Driver{j.closeDriver(), j.goalDriver()}
+			c.Drivers = append(c.Drivers, j.goalDriver())
 			c.RepeatKey = j.repeatKey
 			c.RepeatNudge = j.repeatNudge
 		}
@@ -140,9 +149,8 @@ func (p *process) session(ctx context.Context, s *app.Session) (*app.Contributio
 	return c, nil
 }
 
-// tools makes the session's gnovm tools. The main agent gets all four; a
-// session that began in plan mode may only look, so it gets gnovm_list;
-// a sub-agent gets none unless the program was told otherwise.
+// tools makes the session's gnovm tools, with every slot filled, and
+// returns the ones this session is given (given, in plan.go).
 func (j *join) tools() []core.Tool {
 	set := gnovmtools.New(gnovmtools.Options{
 		Client:      j.client(),
@@ -160,17 +168,9 @@ func (j *join) tools() []core.Tool {
 		OnMemErased: j.onMemErased,
 		OnMemRules:  j.onMemRules,
 	})
-	offered := func(name string) bool { return j.s.Offered == nil || j.s.Offered(name) }
-	switch {
-	case !j.main:
-		if f := j.p.opts.SubAgentTools; f == nil || !f(j.s.AgentType) {
-			return nil
-		}
-	case j.plan:
-		return []core.Tool{set.Tool(gnovmtools.ListToolName)}
-	}
-	j.run = offered(gnovmtools.RunToolName)
-	return set.Tools()
+	tools, run := j.given(set)
+	j.run = run
+	return tools
 }
 
 // client is the tools' way to the GnoVM: the process's client, acquired
@@ -204,7 +204,9 @@ func (w watched) Run(ctx context.Context, req gnovm.RunRequest) (*gnovm.RunResul
 
 // ready is Contribution.Ready: the session's agent exists, and no prompt
 // has gone out yet. The person is told what is due in mem and what waits
-// on them, whether or not the model brings it up.
+// on them, whether or not the model brings it up, and the front end is
+// handed where the session stands: a session that is opened again stands
+// where its file says.
 func (j *join) ready(a *agent.Agent) {
 	j.mu.Lock()
 	j.agent = a
@@ -212,6 +214,7 @@ func (j *join) ready(a *agent.Agent) {
 	if j.main {
 		j.memNotice()
 		j.armGoalFlag()
+		j.show()
 	}
 }
 
@@ -227,11 +230,59 @@ func (j *join) busy(ctx context.Context) func() {
 	return release
 }
 
-// close is Contribution.Close: the session is ending. What was still to
-// be told is told first.
+// close is Contribution.Close: the session is ending.
 func (j *join) close(context.Context) {
-	j.notify.wait()
 	j.p.remove(j)
+}
+
+// tell puts a line in front of the person: in the conversation of an
+// interactive session, on stderr in a run. It never waits. The wiring
+// shows the line at once and keeps it in the session's file as soon as
+// the log is free, so a line may be told from anywhere, the callbacks
+// that run while the loop is storing something included. It is not to be
+// called with the join's lock held: the line is shown to the join again
+// when it is kept (onStored).
+func (j *join) tell(level agent.Level, source, text string) {
+	if text == "" || j.s.Notice == nil {
+		return
+	}
+	j.s.Notice(level, source, text)
+}
+
+// show hands the front end where the session stands: for its status
+// line, the frame the session is in (nothing at the root) and the goal it
+// is bound to; and the task list, whose line in progress reads the frame.
+// It is called whenever one of them may have changed: when the result of
+// a call on a machine is in the log, when a goal is bound or let go, and
+// when a session starts or is opened again. What has not changed is not
+// sent again: the wiring compares.
+func (j *join) show() {
+	if !j.main {
+		return
+	}
+	stack := j.ts.Stack()
+	if j.s.Status != nil {
+		frame := ""
+		if n := len(stack); n > 0 {
+			frame = stack[n-1].ID
+		}
+		j.s.Status("frame", frame)
+	}
+	j.showGoal()
+	j.showTasks(stack)
+}
+
+// showGoal hands the front end the name of the goal the session is bound
+// to, or nothing.
+func (j *join) showGoal() {
+	if !j.main || j.s.Status == nil {
+		return
+	}
+	name := ""
+	if b, _, ok := j.binding(); ok {
+		name = b.Name
+	}
+	j.s.Status("goal", name)
 }
 
 // now reads the clock the program was given.

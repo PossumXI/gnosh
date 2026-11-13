@@ -19,7 +19,11 @@
 // gnovm_list, gnovm_drop: IC 5.1), says that none of them asks before it
 // runs (they touch nothing but what the machines keep; deleting a
 // machine asks through the tool's own Describe), claims the command
-// `gnosh mem` and the flag --goal, and starts nothing.
+// `gnosh mem` and the flag --goal, and starts nothing. It also says that
+// what gnovm_run is given and what it answers is kept out of gnosh's log:
+// that tool is the one way mem's text travels, and an erasure, which
+// takes a text out of mem and out of the sessions' files, could not take
+// it out of a log.
 //
 // The GnoVM worker dispatch is not here: the program's main does it
 // before anything else (IC 3.1).
@@ -35,14 +39,24 @@
 //
 // # Once for each session
 //
-// Feature.Session is called when a session's facts are known. It returns
-// what the join adds to that session, each piece through one field of
-// app.Contribution. In the order things happen:
+// Feature.Session is called when a session's facts are known, and again
+// for every sub-agent the session starts. It returns what the join adds
+// to that session, each piece through one field of app.Contribution. In
+// the order things happen:
 //
-// Tools (IC 5.1, 5.2). The main agent gets all four tools; a session that
-// begins in plan mode gets gnovm_list alone; a sub-agent gets none unless
-// Options.SubAgentTools says otherwise. The tools are the carried ones,
-// with every slot filled: the session's project and its id; the stack,
+// Tools (IC 5.1, 5.2; plan.go). The session a person is in gets all four
+// tools. A sub-agent gets the ones its definition names, so the stock
+// kinds, which name none, get none, and nothing else of the join either
+// (IC 7.2, open-questions Q15). Plan mode does not change the list: a
+// session's tools are fixed when it starts, and a model server keeps the
+// list as part of the prompt it has read. In plan mode gnovm_list alone
+// runs, and a call of one of the other three is answered with what plan
+// mode means for the machines and for mem (prompt.PlanRefusal). The mode
+// is asked at each call, each prompt and each turn's end, so entering or
+// leaving plan mode while a session runs takes effect at once (IC 4.12).
+//
+// The tools are the carried ones, with every slot filled: the session's
+// project and its id; the stack,
 // read off the session's own log before every call on mem (memStack: IC
 // 6.1, 7.3); the todo the session's /goal binds (boundGoal: IC 9.4);
 // whether the todo the session stands in is fresh (memFresh: IC 6.6); the
@@ -57,8 +71,16 @@
 // status.json as GNOSH_MEM_STATUS, which is set before mem exists.
 //
 // Ready. The agent exists and no prompt has gone out. The person is told
-// what in mem is due and what waits on them (IC 4.10), and a run started
-// with --goal binds its goal and sends the directive first (IC 9.3).
+// what in mem is due and what waits on them (IC 4.10), a run started with
+// --goal binds its goal (IC 9.3), and the front end is handed where the
+// session stands (see "What the front end is handed" below): a session
+// that is opened again stands where its file says.
+//
+// RunPrompt (IC 9.3). A run that was given no prompt asks for one. A run
+// started with --goal has one, the goal's directive, sent as /goal sends
+// it: `gnosh run --goal "the tests pass"` is a whole command line. A run
+// that was given a prompt carries the directive with it, as a hidden
+// part.
 //
 // Busy (IC 7.1). A prompt has made the idle session busy: the session's
 // turn lock is held until it goes idle again, after every queued prompt
@@ -75,7 +97,8 @@
 // that has gnovm_run; and after it the frame line, while the session
 // stands in a todo, written from the stack as it stands at that moment
 // and carrying the line of every slide that concerns a todo still on the
-// stack. The loop stores them in that order, so a conversation rebuilt
+// stack. In plan mode the mem line and the frame line are left out. The
+// loop stores them in that order, so a conversation rebuilt
 // from the file is the bytes that went out. Nothing is added to the
 // system prompt: the part about mem is there whenever gnovm_run is among
 // the tools (IC 4.1), and it is the same bytes in every session (IC 4.2).
@@ -104,9 +127,10 @@
 // since mem was last used, and how the closes of the turn went.
 //
 // AfterStored. The entries are in the file. The person is told "popped
-// `x`: about N tokens out of the model's context" (IC 6.2.8). The loop
-// still holds the log at this moment, so the line goes through a queue of
-// the join's own and is told as soon as the log is free.
+// `x`: about N tokens out of the model's context" (IC 6.2.8), and the
+// front end is handed where the session now stands. The loop still holds
+// its log at this moment; a notice does not wait for it, and neither does
+// what the front end is handed.
 //
 // Every request after that is built from the view, which leaves the
 // popped work out, says on the answer that entered the todo what was
@@ -130,12 +154,14 @@
 //
 // Drivers (IC 8.5, 9.5). As a turn would end, before the person's Stop
 // hooks: first the close check's send-back, once a turn, when the session
-// stands in a todo whose last close was refused; then the goal. The goal
-// driver judges every top-level todo the session closed as done in the
-// turn, then asks the goal table that came with mem what to do about the
-// bound goal: go on, ask whether there is a real reason to stop (every
-// tenth time in a row, and when the goal waits for something said), end
-// the turn, judge, bind again, or clear. No count ends the work.
+// stands in a todo whose last close was refused (a sub-agent that has
+// gnovm_run is sent back the same way, and has no goal); then the goal.
+// The goal driver judges every top-level todo the session closed as done
+// in the turn, then asks the goal table that came with mem what to do
+// about the bound goal: go on, ask whether there is a real reason to stop
+// (every tenth time in a row, and when the goal waits for something
+// said), end the turn, judge, bind again, or clear. No count ends the
+// work. In plan mode neither sends anything.
 //
 // RepeatKey and RepeatNudge (IC 8.6). The loop's guard against a model
 // repeating itself compares mem's answers with their numbers blanked, and
@@ -145,14 +171,35 @@
 // the digest is given back with what the session is handed afterwards.
 //
 // Slash (IC 9.2, 12). /mem passes what the person typed to mem and shows
-// the answer; its arguments are never logged or put in an error. /goal
-// binds, shows and clears the session's goal.
+// the answer; its arguments are never logged or put in an error, and the
+// command says of itself that what follows "redact" and "forget" is what
+// the person wants gone, so that an interface shows and remembers such a
+// line only as far as the word. /goal binds, shows and clears the
+// session's goal.
 //
 // RunEnd (IC 9.3). A run that ends with its goal still set says so and
 // exits non-zero.
 //
-// Close. What was still to be told is told, and the session is taken off
-// the process's list.
+// Close. The session is taken off the process's list.
+//
+// # What the front end is handed
+//
+// Two things, through the session's facts, whenever one of them may have
+// changed: when the result of a call on a machine is in the log, when a
+// goal is bound or let go, when an erasure changed either, and when a
+// session starts or is opened again. What has not changed is not sent
+// twice: the wiring compares.
+//
+// The task list (IC 10, 6.7; mem.md section 15): mem's todos for the last
+// task a call of the session changed, each with where it stands. While
+// the session stands in a frame, the line in progress reads the frame: in
+// `id` "purpose".
+//
+// The status line: "frame", the frame the session stands in, or nothing
+// at the root; and "goal", the name of the todo the session's /goal
+// binds, or nothing.
+//
+// A sub-agent has neither.
 //
 // # The checks on a close
 //
@@ -188,5 +235,7 @@
 // memcmd.go also runs `gnosh mem [show|find|log]` (IC 12): the project's
 // mem read from a shell, with no session, no model and no provider, the
 // machines run in the command's own process. It only reads, and in a
-// project with no mem it says so and makes no file.
+// project with no mem it says so and makes no file. A mistake in the
+// config does not stop it: where mem is kept does not depend on the
+// config.
 package memjoin

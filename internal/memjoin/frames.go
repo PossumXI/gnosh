@@ -97,17 +97,18 @@ func (j *join) onMemFrames(_ context.Context, _ string, callID string, frames []
 	// stored for it already, which said that it did not stop; its frames
 	// are then written here, late, because the stack must have them.
 	j.mu.Lock()
-	late := j.stored[callID]
+	late := !j.inflight[callID]
 	if !late {
 		j.kept[callID] = k
 	}
 	j.mu.Unlock()
 	if late {
 		if _, err := j.ts.AppendAll(entries...); err != nil {
-			j.notify.tell(agent.LevelError, "mem", fmt.Sprintf(
+			j.tell(agent.LevelError, "mem", fmt.Sprintf(
 				"mem kept a call that entered or left a todo, and that could not be written to the session's file (%v). mem.Show() says where the session stands.", err))
 		}
 		j.tellPopped(k)
+		j.show()
 	}
 	return strings.Join(lines, "\n")
 }
@@ -290,7 +291,6 @@ func (j *join) onStored(e agent.Entry) []transcript.Entry {
 	}
 	j.mu.Lock()
 	k := j.kept[e.ToolUseID]
-	j.stored[e.ToolUseID] = true
 	j.mu.Unlock()
 	if k != nil {
 		return slices.Clone(k.entries)
@@ -300,12 +300,13 @@ func (j *join) onStored(e agent.Entry) []transcript.Entry {
 }
 
 // afterStored is Contribution.AfterStored: an entry of the loop's is in
-// the session's file, with what was written beside it. A pop that was
-// recorded with a call's result is now in force, and the person is told
-// what it took out of the model's context.
+// the session's file, with what was written beside it. A push or a pop
+// that was recorded with a call's result is now in force: the person is
+// told what a pop took out of the model's context, and the front end
+// where the session now stands.
 //
-// It runs under the loop's hold on the log, so nothing here may write to
-// the log or wait for it: what is told goes through the join's own queue.
+// It runs under the loop's hold on the log. A notice does not wait for
+// the log, and neither does anything else done here.
 func (j *join) afterStored(_ context.Context, e agent.Entry, _ []transcript.Entry) {
 	if e.Kind != agent.EntryResult || e.ToolName != gnovmtools.RunToolName {
 		return
@@ -317,13 +318,14 @@ func (j *join) afterStored(_ context.Context, e agent.Entry, _ []transcript.Entr
 	if k != nil {
 		j.tellPopped(k)
 	}
+	j.show()
 }
 
 // tellPopped tells the person what each pop of a call took out of the
 // model's context. The model itself is given no number.
 func (j *join) tellPopped(k *keptCall) {
 	for _, p := range k.pops {
-		j.notify.tell(agent.LevelInfo, "mem", fmt.Sprintf("popped `%s`: about %s tokens out of the model's context", p.frame, tokenCount(p.tokens)))
+		j.tell(agent.LevelInfo, "mem", fmt.Sprintf("popped `%s`: about %s tokens out of the model's context", p.frame, tokenCount(p.tokens)))
 	}
 }
 

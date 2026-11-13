@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/gnovm"
 	gnovmtools "github.com/gnosh-ai/gnosh/internal/gnovm/tools"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
@@ -36,14 +38,25 @@ func (t *taskState) load(entries []transcript.Entry) {
 
 // onMemGoals is the tools' OnMemGoals slot: a kept call changed top-level
 // todos, and mem hands them back as the calling session sees them. The
-// last of them becomes the session's task list. While the session stands
-// in a todo, the line in progress reads where it stands.
+// last of them becomes the session's task list.
+//
+// The front end is handed the list once the call's result is in the log
+// (afterStored), when the frames the call pushed and popped are in force:
+// the line in progress reads the frame the session then stands in. A call
+// whose result the loop stored before the call came back has no such
+// moment to come, and its list is handed over here.
 func (j *join) onMemGoals(_ context.Context, _ string, goals []gnovm.MemGoal) {
 	if len(goals) == 0 || !j.main {
 		return
 	}
 	list := gnovmtools.MemTodos(goals[len(goals)-1], j.id)
 	j.setTasks(list)
+	j.mu.Lock()
+	waiting := len(j.inflight) > 0
+	j.mu.Unlock()
+	if !waiting {
+		j.show()
+	}
 }
 
 // setTasks keeps a task list for the session and writes it to its log, so
@@ -75,31 +88,27 @@ func sameTasks(a, b []gnovmtools.Todo) bool {
 	return true
 }
 
-// taskLines is the task list as lines for a person: each todo with where
-// it stands, and the frame the session is in on the line in progress. The
-// wiring has no place to show a task list yet; this is what it is handed
-// when it has one.
-func (j *join) taskLines() []string {
-	j.mu.Lock()
-	list := append([]gnovmtools.Todo(nil), j.tasks.list...)
-	j.mu.Unlock()
-	stack := j.ts.Stack()
-	var out []string
-	for _, t := range list {
-		mark := "[ ]"
-		text := t.Content
-		switch t.Status {
-		case gnovmtools.TodoStatusCompleted:
-			mark = "[x]"
-		case gnovmtools.TodoStatusInProgress:
-			mark = "[>]"
-			if n := len(stack); n > 0 {
-				text = fmt.Sprintf("in `%s` %q", stack[n-1].ID, stack[n-1].Label)
-			}
-		}
-		out = append(out, mark+" "+text)
+// showTasks hands the front end the session's task list, which it shows
+// under the prompt: mem's todos for the last task a call of the session
+// changed, each with where it stands. While the session stands in a
+// frame, the line in progress reads the frame: in `id` "purpose". stack
+// is the session's stack as it stands.
+func (j *join) showTasks(stack []transcript.Frame) {
+	if !j.main || j.s.Tasks == nil {
+		return
 	}
-	return out
+	j.mu.Lock()
+	list := slices.Clone(j.tasks.list)
+	j.mu.Unlock()
+	tasks := make([]app.Task, 0, len(list))
+	for _, t := range list {
+		task := app.Task{Content: t.Content, ActiveForm: t.ActiveForm, Status: string(t.Status)}
+		if n := len(stack); n > 0 && t.Status == gnovmtools.TodoStatusInProgress {
+			task.ActiveForm = fmt.Sprintf("in `%s` %q", stack[n-1].ID, stack[n-1].Label)
+		}
+		tasks = append(tasks, task)
+	}
+	j.s.Tasks(tasks)
 }
 
 // onMemRules is the tools' OnMemRules slot: a kept call set, changed or
@@ -109,7 +118,7 @@ func (j *join) taskLines() []string {
 // later sessions unseen.
 func (j *join) onMemRules(_ context.Context, _ string, rules []gnovm.MemRule) {
 	for _, r := range rules {
-		j.notify.tell(agent.LevelWarning, "mem", ruleWarning(r))
+		j.tell(agent.LevelWarning, "mem", ruleWarning(r))
 	}
 }
 

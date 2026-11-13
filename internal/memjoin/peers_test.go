@@ -83,6 +83,80 @@ func TestTurnLockAndThePlanAnotherSessionHolds(t *testing.T) {
 	}
 }
 
+// Where a sub-agent's mem.Next() answers at once (TestSubAgentsAndMem),
+// another session's waits. The same plan and the same moment: one session
+// holds a todo of a group and is at work, and a second session has just
+// done the other todo of the group and asks for the next. A session a
+// person is in waits for the one at work, since the group's own work
+// could be its own once that one is done; when the session at work goes
+// idle, the wait ends and the waiter is told that nothing is free. It is
+// the sub-agent flag, which only a sub-agent's requests carry, that makes
+// the same call answer at once there.
+func TestNextOfAnotherSessionWaitsForTheOneAtWork(t *testing.T) {
+	const (
+		group  = "build-shapes"
+		circle = "build-shapes/circle"
+		square = "build-shapes/square"
+	)
+	w := newWorld(t)
+	w.Write("square.txt", "+--+\n|  |\n|  |\n+--+\n")
+	arrived, release := make(chan struct{}), make(chan struct{})
+	slow := says("The circle is drawn.")
+	slow.Arrived = func() { close(arrived) }
+	slow.Hold = release
+	w.script.add(
+		// The first session: the plan, a step into the circle, and work
+		// that takes a while.
+		reply(memCall("a1", `mem.Todo("build the shapes", "circle", "square").Parallel()`)),
+		reply(memCall("a2", `mem.Next()`)),
+		slow,
+		// The second session, meanwhile: the square, and then the next.
+		reply(memCall("b1", `mem.Next()`)),
+		reply(call("b2", "Read", map[string]any{"file_path": "square.txt"})),
+		reply(memCall("b3", "mem.Pop(\"square.txt holds a square of four lines\")\nmem.Next()")),
+		says("The square is done."),
+	)
+	first := make(chan result, 1)
+	go func() { first <- w.runWith(w.options("-y", "-p", "build the shapes")) }()
+	<-arrived
+
+	second := make(chan result, 1)
+	go func() { second <- w.runWith(w.options("-y", "-p", "take the next todo")) }()
+	// The second session's third call reaches mem, pops the square, and
+	// then waits: its result does not come while the first session works.
+	deadline := time.Now().Add(60 * time.Second)
+	for len(w.script.requests()) < 6 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the second session made %d requests in a minute, want 3 (after the first session's 3)", len(w.script.requests())-3)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	select {
+	case r := <-second:
+		t.Fatalf("the second session ended while the first was at work: its mem.Next() did not wait.\nstdout:\n%s\nstderr:\n%s", r.out, r.err)
+	case <-time.After(1500 * time.Millisecond):
+	}
+	if n := len(w.script.requests()); n != 6 {
+		t.Fatalf("%d requests were made while the second session's call should have been waiting, want 6", n)
+	}
+	for i, req := range w.memRequests() {
+		if req.SubAgent {
+			t.Errorf("mem call %d of a session a person is in carries the sub-agent flag", i)
+		}
+	}
+
+	// The first session goes idle: the wait ends, and the second session
+	// reads that nothing is free.
+	close(release)
+	(<-first).wantCode(t, 0)
+	(<-second).wantCode(t, 0)
+	w.script.done()
+	reqs := w.script.requests()
+	has(t, "what the waiting session read when the wait ended", lastResult(t, reqs[len(reqs)-1]),
+		"done `"+square+"` \"square\" → square.txt holds a square of four lines",
+		"`"+circle+"` is held by session ")
+}
+
 // mem's digest reaches a resumed session again when mem was changed
 // elsewhere since the session last spoke, and not otherwise.
 func TestDigestAgainWhenMemChangedElsewhere(t *testing.T) {

@@ -132,6 +132,16 @@ func (s *Set) PopReceipt(p PopReceipt) string {
 	return s.fill(textPopReceipt, vals)
 }
 
+// PlanRefusal returns what a call of a gnovm tool that runs or changes
+// something is answered with while the session is in plan mode: that
+// nothing in a machine or in mem changes while a plan is being made, which
+// tool still runs, and that the plan goes on mem first once it is
+// approved. It ends without a full stop: the loop puts it after "This
+// call did not run: " and ends the sentence.
+func (s *Set) PlanRefusal(tool string) string {
+	return s.fill(textPlanGnovm, values{"tool": oneLine(tool, maxName)})
+}
+
 // NoResult says why a tool call has no result of its own.
 type NoResult int
 

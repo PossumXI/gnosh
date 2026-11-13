@@ -3,6 +3,7 @@ package memjoin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,12 @@ type bench struct {
 	notices []string
 	sent    []gnovm.RunRequest
 	calls   int
+	// mode is the permission mode the session is in, which a test may
+	// change; lists holds every task list the join set, and facts every
+	// status fact, as "name=value", in order.
+	mode  string
+	lists []string
+	facts []string
 }
 
 // newBench makes a session's facts in a temporary directory and joins it.
@@ -83,6 +90,24 @@ func newBench(t *testing.T, o Options, edit func(*app.Session)) *bench {
 			b.mu.Lock()
 			b.notices = append(b.notices, text)
 			b.mu.Unlock()
+		},
+		Tasks: func(tasks []app.Task) {
+			b.mu.Lock()
+			b.lists = append(b.lists, taskLine(tasks))
+			b.mu.Unlock()
+		},
+		Status: func(name, value string) {
+			b.mu.Lock()
+			b.facts = append(b.facts, name+"="+value)
+			b.mu.Unlock()
+		},
+		Mode: func() string {
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			if b.mode == "" {
+				return "default"
+			}
+			return b.mode
 		},
 		Now: time.Now,
 	}
@@ -220,11 +245,34 @@ func (b *bench) lastSent() gnovm.RunRequest {
 	return b.sent[len(b.sent)-1]
 }
 
-// wait lets what the join has to tell the person be told.
-func (b *bench) wait() {
-	if j := b.join(); j != nil {
-		j.notify.wait()
+// setMode switches the session's permission mode, as the person would.
+func (b *bench) setMode(mode string) {
+	b.mu.Lock()
+	b.mode = mode
+	b.mu.Unlock()
+}
+
+// fact returns the status fact called name as the join last set it, and
+// whether it ever set it.
+func (b *bench) fact(name string) (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i := len(b.facts) - 1; i >= 0; i-- {
+		if v, ok := strings.CutPrefix(b.facts[i], name+"="); ok {
+			return v, true
+		}
 	}
+	return "", false
+}
+
+// list returns the task list as the join last set it.
+func (b *bench) list() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.lists) == 0 {
+		return ""
+	}
+	return b.lists[len(b.lists)-1]
 }
 
 // join returns the bench's session as the join holds it.
@@ -295,25 +343,106 @@ func TestLifecycle(t *testing.T) {
 	}
 }
 
-// A sub-agent's session: the stock one has no gnovm tools. One that is
-// given them is a session of its own to mem, its requests are marked as a
+// A sub-agent's session. The stock kinds are given no gnovm tools, and
+// nothing else of the join either; so is a kind a person defined that
+// names none. A kind whose definition names gnovm tools is given exactly
+// those: it is a session of its own to mem, its requests are marked as a
 // sub-agent's, it holds a turn lock of its own, and it gets none of the
 // lines, the reminder, the goal or the commands.
 func TestSubAgent(t *testing.T) {
-	sub := func(s *app.Session) { s.SubAgent, s.Parent, s.AgentType = true, "the-parent-session", "helper" }
-
-	stock := newBench(t, Options{}, sub)
-	if len(stock.c.Tools) != 0 {
-		t.Errorf("the stock sub-agent was given %d gnovm tools", len(stock.c.Tools))
+	define := func(home, name, front string) {
+		t.Helper()
+		dir := filepath.Join(home, ".claude", "agents")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		text := "---\nname: " + name + "\ndescription: A helper for the test.\n" + front + "---\n\nYou are a helper.\n"
+		if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	stock.feature.Shutdown(context.Background())
-
-	b := newBench(t, Options{SubAgentTools: func(kind string) bool { return kind == "helper" }}, sub)
-	if len(b.c.Tools) != 4 {
-		t.Fatalf("a sub-agent that is given the tools has %d of them", len(b.c.Tools))
+	sub := func(kind string) func(s *app.Session) {
+		return func(s *app.Session) {
+			s.SubAgent, s.Parent, s.AgentType, s.Source = true, "the-parent-session", kind, "subagent"
+			define(s.Dirs.Home, "plain-helper", "")
+			define(s.Dirs.Home, "reader", "tools: Read, gnovm_list\n")
+			define(s.Dirs.Home, "planner", "tools: Read, gnovm_run\n")
+			define(s.Dirs.Home, "keeper", "tools: gnovm_run, gnovm_new, gnovm_list, gnovm_drop\ndisallowedTools: gnovm_drop\n")
+		}
 	}
-	if b.c.PromptLines != nil || b.c.BeforeRequest != nil || b.c.Drivers != nil || b.c.Slash != nil || b.c.AfterSummary != nil {
-		t.Errorf("a sub-agent was given lines, reminders, turn-end checks or commands")
+	names := func(b *bench) string {
+		var out []string
+		for _, tool := range b.c.Tools {
+			out = append(out, tool.Spec().Name)
+		}
+		return strings.Join(out, " ")
+	}
+
+	// The stock kinds, a kind that names no gnovm tool, and a kind nobody
+	// defined: nothing of the join.
+	for _, kind := range []string{"general-purpose", "Explore", "plain-helper", "no-such-kind"} {
+		b := newBench(t, Options{}, sub(kind))
+		if len(b.c.Tools) != 0 || b.c.Stored != nil || b.c.Busy != nil || b.c.PromptLines != nil || b.c.Ready != nil {
+			t.Errorf("a %s sub-agent was given something of the join: tools %q", kind, names(b))
+		}
+		b.feature.Shutdown(context.Background())
+	}
+	// A kind is given the gnovm tools its definition names, and no other.
+	reader := newBench(t, Options{}, sub("reader"))
+	if got := names(reader); got != "gnovm_list" {
+		t.Errorf("the tools of a kind that names gnovm_list: %q", got)
+	}
+	reader.feature.Shutdown(context.Background())
+	keeper := newBench(t, Options{}, sub("keeper"))
+	if got := names(keeper); got != "gnovm_run gnovm_new gnovm_list" {
+		t.Errorf("the tools of a kind that names all four and disallows one: %q", got)
+	}
+	keeper.feature.Shutdown(context.Background())
+
+	// A kind the project defines counts in a folder the person trusts,
+	// and not otherwise, as it does for the Agent tool itself; in safe
+	// mode only gnosh's own kinds count.
+	project := func(trusted, safe bool) func(s *app.Session) {
+		return func(s *app.Session) {
+			s.SubAgent, s.Parent, s.AgentType, s.Source = true, "the-parent-session", "builder", "subagent"
+			s.Trusted = trusted
+			define(s.Dirs.ProjectRoot, "builder", "tools: gnovm_run, gnovm_list\n")
+			define(s.Dirs.Home, "planner", "tools: Read, gnovm_run\n")
+			if safe {
+				cfg := &config.Config{}
+				cfg.Switches.SafeMode.V = true
+				s.Config = cfg
+				s.AgentType = "planner"
+			}
+		}
+	}
+	for _, c := range []struct {
+		what          string
+		trusted, safe bool
+		want          string
+	}{
+		{"a project's kind in a trusted folder", true, false, "gnovm_run gnovm_list"},
+		{"a project's kind in a folder that is not trusted", false, false, ""},
+		{"a person's kind in safe mode", true, true, ""},
+	} {
+		b := newBench(t, Options{}, project(c.trusted, c.safe))
+		if got := names(b); got != c.want {
+			t.Errorf("the gnovm tools of %s: %q, want %q", c.what, got, c.want)
+		}
+		b.feature.Shutdown(context.Background())
+	}
+
+	b := newBench(t, Options{}, sub("planner"))
+	if got := names(b); got != "gnovm_run" {
+		t.Fatalf("the tools of a kind that names gnovm_run: %q", got)
+	}
+	if b.c.PromptLines != nil || b.c.BeforeRequest != nil || b.c.Slash != nil || b.c.AfterSummary != nil || b.c.RunPrompt != nil {
+		t.Errorf("a sub-agent was given lines, reminders or commands")
+	}
+	// It can close a todo, so a turn of its that would end on a refused
+	// close is sent back, as the session's own is; it has no goal.
+	if len(b.c.Drivers) != 1 || b.c.Drivers[0].Name != "mem-close" {
+		t.Errorf("the turn-end checks of a sub-agent that has gnovm_run: %+v", b.c.Drivers)
 	}
 
 	out := b.mem(`mem.Todo("check the links").Push()`)
@@ -327,6 +456,10 @@ func TestSubAgent(t *testing.T) {
 	if got := stackIDs(b.ts.Stack()); got != "check-links" {
 		t.Errorf("the sub-agent's own stack: %q", got)
 	}
+	// A sub-agent has no task list and no status line of its own.
+	if len(b.lists) != 0 || len(b.facts) != 0 {
+		t.Errorf("a sub-agent set a task list or a status fact: %q %q", b.lists, b.facts)
+	}
 
 	// Its own turn lock, held while it is busy.
 	turns := filepath.Join(DataDir(b.state), "turns")
@@ -338,9 +471,13 @@ func TestSubAgent(t *testing.T) {
 	release()
 }
 
-// A session that begins in plan mode may look and not change: it is given
-// gnovm_list alone, and its prompts carry the digest but not the mem
-// line.
+// Plan mode, in which the model may look and not change. The session
+// keeps its four gnovm tools, so that its fixed prompt is the same in and
+// out of plan mode, and while the mode lasts gnovm_list alone runs: the
+// others are refused with what plan mode means. Its prompts carry the
+// digest and no mem line, it is not reminded of mem, and nothing sends it
+// back as a turn ends. The person may switch the mode at any moment, and
+// each of these follows at once.
 func TestPlanMode(t *testing.T) {
 	// Another session keeps a fact first, so that there is a digest.
 	maker := newBench(t, Options{}, nil)
@@ -355,16 +492,193 @@ func TestPlanMode(t *testing.T) {
 		cfg.Options.AutoSummarize.V = true
 		s.Config = cfg
 	})
-	if len(b.c.Tools) != 1 || b.c.Tools[0].Spec().Name != gnovmtools.ListToolName {
-		t.Fatalf("the plan agent's gnovm tools: %d", len(b.c.Tools))
+	b.setMode("plan")
+	var names []string
+	for _, tool := range b.c.Tools {
+		names = append(names, tool.Spec().Name)
 	}
-	if b.c.Drivers != nil {
-		t.Errorf("plan mode was given turn-end checks")
+	if got := strings.Join(names, " "); got != "gnovm_run gnovm_new gnovm_list gnovm_drop" {
+		t.Fatalf("the gnovm tools of a session that begins in plan mode: %q", got)
 	}
-	parts, err := b.c.PromptLines[0](context.Background(), agent.LineInfo{Prompt: agent.Prompt{Text: "plan the release"}, First: true})
-	if err != nil || len(parts) != 1 || parts[0].Source != srcDigest || !strings.Contains(parts[0].Text, "`cmd/test` = go test ./...") {
-		t.Errorf("the hidden parts of a prompt in plan mode: %+v, %v", parts, err)
+	if len(b.c.Drivers) != 2 {
+		t.Fatalf("the session has %d turn-end checks, want the two it has in every mode", len(b.c.Drivers))
 	}
+	lines := func(first bool) []agent.Part {
+		t.Helper()
+		parts, err := b.c.PromptLines[0](context.Background(), agent.LineInfo{Prompt: agent.Prompt{Text: "plan the release"}, First: first})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parts
+	}
+	if parts := lines(true); len(parts) != 1 || parts[0].Source != srcDigest || !strings.Contains(parts[0].Text, "`cmd/test` = go test ./...") {
+		t.Errorf("the hidden parts of a prompt in plan mode: %+v", parts)
+	}
+
+	// The three tools that run or change something are refused, at the
+	// gate's question and at the call; gnovm_list runs.
+	refusal := func(tool string) string { return prompt.Builtin().PlanRefusal(tool) }
+	has(t, "the refusal", refusal("gnovm_run"), "plan mode is on, and gnovm_run does not run in it", "gnovm_list still lists the machines", "put it on mem first")
+	for _, name := range []string{"gnovm_run", "gnovm_new", "gnovm_drop"} {
+		call := core.ToolCall{ID: "p-" + name, Name: name, Input: json.RawMessage(`{"name":"mem","code":"mem.Show()","action":"delete"}`)}
+		act, err := b.tool(name).(core.Describer).Describe(call, b.env())
+		if err == nil || err.Error() != refusal(name) {
+			t.Errorf("%s in plan mode, asked what it would do: %v, want the refusal", name, err)
+		}
+		if act.Kind == "" {
+			t.Errorf("%s in plan mode does not say what the call was aimed at", name)
+		}
+		res, err := b.tool(name).Run(context.Background(), call, b.env())
+		if err != nil || !res.IsError || core.TextOf(res.Content) != refusal(name) {
+			t.Errorf("%s in plan mode, run: %q, %v", name, core.TextOf(res.Content), err)
+		}
+	}
+	if n := len(b.sent); n != 0 {
+		t.Errorf("%d requests reached the GnoVM in plan mode", n)
+	}
+	if _, isGated := b.tool("gnovm_list").(gated); isGated {
+		t.Errorf("gnovm_list is gated, and it only looks")
+	}
+	if out := core.TextOf(b.call("gnovm_list", map[string]any{}).Content); !strings.Contains(out, "VM budget") {
+		t.Errorf("gnovm_list in plan mode: %s", out)
+	}
+
+	// No reminder of mem while the model cannot use it, and no send-back.
+	for i := 0; i < 12; i++ {
+		b.say("planning")
+	}
+	if parts, _ := b.c.BeforeRequest[0](context.Background(), agent.RequestInfo{}); len(parts) != 0 {
+		t.Errorf("reminded of mem in plan mode: %+v", parts)
+	}
+	for _, d := range b.c.Drivers {
+		if v, err := d.Decide(context.Background(), agent.TurnEnd{}); err != nil || v.Action != agent.End {
+			t.Errorf("the turn-end check %s in plan mode: %+v, %v", d.Name, v, err)
+		}
+	}
+
+	// The person leaves plan mode: the same session's next prompt carries
+	// the mem line, the reminder is due, and the tools run.
+	b.setMode("acceptEdits")
+	parts := lines(false)
+	if len(parts) != 1 || parts[0].Source != srcMemLine {
+		t.Errorf("the hidden parts of a prompt after plan mode: %+v", parts)
+	}
+	if parts, _ := b.c.BeforeRequest[0](context.Background(), agent.RequestInfo{}); len(parts) != 1 || parts[0].Source != srcReminder {
+		t.Errorf("not reminded of mem after twelve replies, once plan mode was left: %+v", parts)
+	}
+	if out := b.mem(`mem.Todo("release v2", "tag it").Push()`); !strings.Contains(out, "in `release-v2`") {
+		t.Errorf("gnovm_run after plan mode: %s", out)
+	}
+	if got, _ := b.fact("frame"); got != "release-v2" {
+		t.Errorf("the status line's frame after the push: %q", got)
+	}
+
+	// And enters it again, standing in a todo: no frame line and no mem
+	// line, and the call is refused again.
+	b.setMode("plan")
+	if parts := lines(false); len(parts) != 0 {
+		t.Errorf("the hidden parts of a prompt back in plan mode: %+v", parts)
+	}
+	res, _ := b.tool("gnovm_run").Run(context.Background(), core.ToolCall{ID: "again", Name: "gnovm_run", Input: json.RawMessage(`{"name":"mem","code":"mem.Next()"}`)}, b.env())
+	if !res.IsError || core.TextOf(res.Content) != refusal("gnovm_run") {
+		t.Errorf("gnovm_run back in plan mode: %q", core.TextOf(res.Content))
+	}
+}
+
+// A goal in plan mode. The goal is the person's to set in any mode: it is
+// bound, and the status line names it. What plan mode holds back is the
+// work: as a turn ends the model is not sent back to the goal, and once
+// the person leaves plan mode it is.
+func TestGoalInPlanMode(t *testing.T) {
+	b := newBench(t, Options{}, nil)
+	b.setMode("plan")
+	var goal *app.SlashCommand
+	for i := range b.c.Slash {
+		if b.c.Slash[i].Name == "goal" {
+			goal = &b.c.Slash[i]
+		}
+	}
+	if goal == nil {
+		t.Fatal("the session has no /goal")
+	}
+	var said []string
+	err := goal.Run(context.Background(), &app.SlashContext{Args: "the notes say hi", Session: b.s, Say: func(format string, args ...any) {
+		said = append(said, fmt.Sprintf(format, args...))
+	}})
+	// The bench has no agent to send the directive to; the goal is set
+	// all the same, and the command says both.
+	if err == nil || !strings.Contains(err.Error(), "the goal is set, and the agent could not be told of it") {
+		t.Errorf("/goal in a session with no agent: %v", err)
+	}
+	if got, want := strings.Join(said, "\n"), "Goal set: the notes say hi (`notes-say-hi` in mem)\nPlan mode is on: the agent may plan for the goal, and is not sent back to it until you leave plan mode."; got != want {
+		t.Errorf("/goal in plan mode said:\n%s\nwant:\n%s", got, want)
+	}
+	if got, _ := b.fact("goal"); got != "notes-say-hi" {
+		t.Errorf("the status line's goal: %q", got)
+	}
+
+	// As a turn ends in plan mode, nothing is sent.
+	var driver agent.Driver
+	for _, d := range b.c.Drivers {
+		if d.Name == "mem-goal" {
+			driver = d
+		}
+	}
+	b.prompt("plan for the goal")
+	b.say("Here is the plan.")
+	if v, err := driver.Decide(context.Background(), agent.TurnEnd{Text: "Here is the plan."}); err != nil || v.Action != agent.End || v.Prompt != "" || v.Notice != "" {
+		t.Errorf("the goal's turn-end check in plan mode: %+v, %v", v, err)
+	}
+	// Out of plan mode, the model is sent back to the goal.
+	b.setMode("default")
+	v, err := driver.Decide(context.Background(), agent.TurnEnd{Text: "Here is the plan."})
+	if err != nil || v.Action != agent.Continue || !strings.Contains(v.Prompt, "`notes-say-hi`") {
+		t.Errorf("the goal's turn-end check after plan mode: %+v, %v", v, err)
+	}
+
+	// The goal is let go: the status line names none.
+	said = nil
+	if err := goal.Run(context.Background(), &app.SlashContext{Args: "clear", Session: b.s, Say: func(format string, args ...any) {
+		said = append(said, fmt.Sprintf(format, args...))
+	}}); err != nil {
+		t.Errorf("/goal clear: %v", err)
+	}
+	if got, ok := b.fact("goal"); !ok || got != "" {
+		t.Errorf("the status line's goal after /goal clear: %q", got)
+	}
+}
+
+// A session that is opened again is handed where it stands as it starts:
+// its frame, its goal and its task list, read from its file.
+func TestStatusOfASessionOpenedAgain(t *testing.T) {
+	b := newBench(t, Options{}, nil)
+	b.mem(`mem.Todo("rename the project", "rename it in the code", "rename it in the tests").Push()`)
+	b.mem(`mem.Next()`)
+	bound := gnovm.GoalBinding{Condition: "the project is renamed", Name: "project-renamed", Title: "the project is renamed"}
+	if !b.join().swapGoal("", encodeGoal(bound)) {
+		t.Fatal("the binding could not be stored")
+	}
+
+	// The same session's facts, joined again, as a new process would.
+	var facts, lists []string
+	again := *b.s
+	again.Status = func(name, value string) { facts = append(facts, name+"="+value) }
+	again.Tasks = func(tasks []app.Task) { lists = append(lists, taskLine(tasks)) }
+	c, err := b.feature.Session(context.Background(), &again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != 0 || len(lists) != 0 {
+		t.Errorf("the front end was handed %q and %q before the session was ready", facts, lists)
+	}
+	c.Ready(nil)
+	if got, want := strings.Join(facts, " "), "frame=rename-project/rename-code goal=project-renamed"; got != want {
+		t.Errorf("the status facts of a session opened again: %q, want %q", got, want)
+	}
+	if got, want := strings.Join(lists, "\n"), "[>] in `rename-project/rename-code` \"rename it in the code\" | [ ] rename it in the tests"; got != want {
+		t.Errorf("the task list of a session opened again:\n%s\nwant:\n%s", got, want)
+	}
+	c.Close(context.Background())
 }
 
 // The mem reminder: after ten replies with no call on mem and no reminder

@@ -36,6 +36,10 @@ type goalState struct {
 	// goal waits for has happened: a reply to it that ends with the stop
 	// marker ends the turn with the goal still set.
 	asked bool
+	// directive is the directive of the goal that `gnosh run --goal`
+	// bound as the run began, until it has gone out with the run's first
+	// prompt or as that prompt.
+	directive string
 }
 
 // load reads the binding in force from the session's log: the newest one
@@ -70,17 +74,20 @@ func (j *join) binding() (gnovm.GoalBinding, string, bool) {
 // no other write of the session touches.
 func (j *join) swapGoal(old, next string) bool {
 	j.mu.Lock()
-	defer j.mu.Unlock()
 	if j.goal.raw != old {
+		j.mu.Unlock()
 		return false
 	}
-	if old == next {
-		return true
+	if old != next {
+		if _, err := j.ts.Append(transcript.MetaEntry(metaGoal, next)); err != nil {
+			j.mu.Unlock()
+			return false
+		}
+		j.goal.raw = next
 	}
-	if _, err := j.ts.Append(transcript.MetaEntry(metaGoal, next)); err != nil {
-		return false
-	}
-	j.goal.raw = next
+	j.mu.Unlock()
+	// The front end's status line names the goal the session is bound to.
+	j.showGoal()
 	return true
 }
 
@@ -112,7 +119,12 @@ func (j *join) slash() []app.SlashCommand {
 			Args:    "[show <name> | find <words> | log [n] | undo [entry] | forget <name> | redact <text> | repair [vm] | help]",
 			Summary: "See and correct what mem holds for this project.",
 			InRun:   true,
-			Run:     j.memSlash,
+			// What follows these two words is what the person wants
+			// gone: a secret's own text, and the name of what is erased
+			// with its history. A front end shows and remembers such a
+			// line only as far as the word.
+			Sensitive: []string{"redact", "forget"},
+			Run:       j.memSlash,
 		},
 		{
 			Name:    "goal",
@@ -173,6 +185,12 @@ func (j *join) goalSlash(ctx context.Context, c *app.SlashContext) error {
 		return err
 	}
 	c.Say("Goal set: %s (`%s` in mem)", b.Condition, b.Name)
+	if j.planMode() {
+		// The goal is the person's to set in any mode. What plan mode
+		// holds back is the work: the model may plan for the goal, and
+		// is not sent back to it as its turns end (mem.md section 17).
+		c.Say("Plan mode is on: the agent may plan for the goal, and is not sent back to it until you leave plan mode.")
+	}
 	return j.sendDirective(c.Agent, directive)
 }
 
@@ -217,17 +235,15 @@ func (j *join) sendDirective(a *agent.Agent, directive string) error {
 }
 
 // armGoalFlag is `gnosh run --goal`: the goal is bound before the run's
-// prompt is sent, and the agent is sent the directive first.
+// prompt is composed. Its directive then goes out with that prompt
+// (promptLines), or, when the run was given no prompt at all, as the
+// prompt (runPrompt).
 func (j *join) armGoalFlag() {
 	condition := strings.TrimSpace(j.s.Invocation.Goal)
 	if condition == "" || j.s.Invocation.Command != cli.CmdPrint {
 		return
 	}
-	notice := func(text string) {
-		if j.s.Notice != nil {
-			j.s.Notice(agent.LevelWarning, "goal", text)
-		}
-	}
+	notice := func(text string) { j.tell(agent.LevelWarning, "goal", text) }
 	switch {
 	case !j.run:
 		notice("--goal needs the gnovm_run tool, which this run does not have, so no goal was set.")
@@ -242,15 +258,37 @@ func (j *join) armGoalFlag() {
 		return
 	}
 	notice(fmt.Sprintf("Goal set: %s (`%s` in mem)", b.Condition, b.Name))
-	if err := j.sendDirective(nil, directive); err != nil {
-		notice(err.Error())
+	j.mu.Lock()
+	j.goal.directive = directive
+	j.mu.Unlock()
+}
+
+// takeDirective returns the directive of the goal that --goal bound, if
+// it has not gone out yet, and from then on it has.
+func (j *join) takeDirective() string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	text := j.goal.directive
+	j.goal.directive = ""
+	return text
+}
+
+// runPrompt is Contribution.RunPrompt: a run that was given no prompt, on
+// its command line or on standard input, asks for one. A run started
+// with --goal has one: the goal's directive, sent as /goal sends it in a
+// session, as a prompt of gnosh's own. So `gnosh run --goal "the tests
+// pass"` is a whole command line.
+func (j *join) runPrompt(context.Context) (agent.Prompt, bool) {
+	text := j.takeDirective()
+	if text == "" {
+		return agent.Prompt{}, false
 	}
+	return agent.Prompt{Text: prompt.Wrap(text), Hidden: true, Source: srcGoal}, true
 }
 
 // runEnd is Contribution.RunEnd: a run that ends while its goal is still
 // set says so and exits non-zero.
 func (j *join) runEnd(context.Context, app.RunEnd) int {
-	j.notify.wait()
 	b, _, ok := j.binding()
 	if !ok || strings.TrimSpace(j.s.Invocation.Goal) == "" {
 		return cli.ExitOK
@@ -259,9 +297,7 @@ func (j *join) runEnd(context.Context, app.RunEnd) int {
 	if b.Verdict != "" {
 		text += " The check last said: " + b.Verdict
 	}
-	if j.s.Notice != nil {
-		j.s.Notice(agent.LevelWarning, "goal", text)
-	}
+	j.tell(agent.LevelWarning, "goal", text)
 	return cli.ExitFailure
 }
 
@@ -281,7 +317,9 @@ func (j *join) goalDriver() agent.Driver {
 // clear.
 func (j *join) goalDecide(ctx context.Context, end agent.TurnEnd) (agent.Verdict, error) {
 	b, raw, bound := j.binding()
-	if j.plan {
+	if j.planMode() {
+		// In plan mode /goal sends no continuations, and nothing is
+		// judged: the model could not act on either.
 		return agent.Verdict{Action: agent.End}, nil
 	}
 	// A session that is bound to no goal and called mem in this turn not
@@ -423,7 +461,7 @@ func (j *join) judgeClosed(ctx context.Context, client *gnovm.Client, except str
 		}
 	}
 	for _, line := range told {
-		j.notify.tell(agent.LevelWarning, "goal", line)
+		j.tell(agent.LevelWarning, "goal", line)
 	}
 	return agent.Verdict{}, false
 }

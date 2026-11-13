@@ -50,6 +50,18 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 	)
 	w.run("-y", "-p", "keep the deploy token").wantCode(t, 0)
 
+	// The call that kept it is in the first session's file and in mem,
+	// and not in gnosh's log: what gnovm_run is given and what it answers
+	// is kept out of the log, because no erasure could take it out again.
+	// The log still says that the tool was called.
+	logs, _ := filepath.Glob(filepath.Join(w.DataDir(), "projects", "*", "gnosh.log"))
+	if len(logs) != 1 {
+		t.Fatalf("the project's logs: %v", logs)
+	}
+	logged, _ := os.ReadFile(logs[0])
+	has(t, "the log", string(logged), "gnovm_run")
+	hasNot(t, "the log", string(logged), token, "deploy/token", "mem.Fact")
+
 	// The second session is told it with its first prompt.
 	w.script.add(says("Hello."))
 	w.run("-p", "hello there").wantCode(t, 0)
@@ -88,23 +100,11 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 	}
 
 	// The secret stands in one place only: the first session's file,
-	// where the person saw it. Not in mem, not in a log, not in a
-	// leftover of the rewrite.
-	// (The project's log, which the program keeps beside the sessions,
-	// has one line for each tool call, and so it holds the call that kept
-	// the secret, as the first session's file does. No line of it is
-	// about the redaction.)
+	// where the person saw it. Not in mem, not in the log, which holds
+	// neither the call that kept it nor what was typed after /mem
+	// redact, and not in a leftover of the rewrite.
 	for _, name := range holders(t, w.Root, token) {
-		switch {
-		case filepath.Join(w.Root, name) == one:
-		case filepath.Base(name) == "gnosh.log":
-			data, _ := os.ReadFile(filepath.Join(w.Root, name))
-			for _, line := range strings.Split(string(data), "\n") {
-				if strings.Contains(line, token) && !strings.Contains(line, "gnovm_run: mem.Fact(") {
-					t.Errorf("the log holds the secret in a line that is not the first session's own call: %s", line)
-				}
-			}
-		default:
+		if filepath.Join(w.Root, name) != one {
 			t.Errorf("%s holds the secret after the redaction", name)
 		}
 	}

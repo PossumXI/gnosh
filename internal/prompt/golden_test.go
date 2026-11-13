@@ -268,6 +268,16 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "plan-gnovm",
+			texts: []string{textPlanGnovm},
+			cases: func(s *Set) []goldenCase {
+				return []goldenCase{
+					{"gnovm_run in plan mode", s.PlanRefusal("gnovm_run")},
+					{"gnovm_drop in plan mode", s.PlanRefusal("gnovm_drop")},
+				}
+			},
+		},
+		{
 			file:  "cut-notes",
 			texts: []string{textPopNote, textSlideNote, textMissingResult},
 			cases: func(s *Set) []goldenCase {

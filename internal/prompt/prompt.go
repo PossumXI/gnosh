@@ -71,6 +71,7 @@ const (
 	textPopNote          = "pop-note"
 	textSlideNote        = "slide-note"
 	textPopReceipt       = "pop-receipt"
+	textPlanGnovm        = "plan-gnovm"
 	textMissingResult    = "missing-result"
 	textCloseEnteredHere = "close-entered-here"
 	textCloseUnbacked    = "close-unbacked"
@@ -183,6 +184,8 @@ func specs() []spec {
 		{name: textPopReceipt, kind: KindResult, need: []string{"id"},
 			may:  []string{"nothing", "spared", "one_thought", "thoughts", "files", "changes", "reads"},
 			when: "In the result of the call that pops a todo, after mem's own lines: what the pop removed from the context, and what that changed."},
+		{name: textPlanGnovm, kind: KindResult, need: []string{"tool"},
+			when: "As the answer to a gnovm tool that runs or changes something, called while the session is in plan mode."},
 		{name: textMissingResult, kind: KindResult,
 			may:  []string{"not_started", "stopped", "ended", "why", "cut_off", "killed", "still", "waited"},
 			when: "As the result of a tool call that never ran or never returned, because the turn was stopped or gnosh was."},

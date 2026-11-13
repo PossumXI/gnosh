@@ -274,6 +274,12 @@
 //     "removed from your context", never "left", and gives no number of
 //     tokens. Read at the moment of the pop, it is what keeps a model from
 //     looking for what is gone, or from editing a file it no longer sees.
+//   - plan-gnovm (PlanRefusal) answers gnovm_run, gnovm_new and gnovm_drop
+//     while the session is in plan mode, where the model may look and not
+//     change: the tools stay in the list, so that the fixed prompt is the
+//     same bytes in and out of plan mode, and the call is refused with
+//     what plan mode means for the machines and for mem, and what to do
+//     once the plan is approved.
 //   - missing-result (MissingResult) stands for the result of a call that
 //     has none: it never started, it was stopped, its reply was cut off,
 //     or gnosh itself was stopped. It says whether the call ran at all,

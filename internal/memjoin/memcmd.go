@@ -128,8 +128,11 @@ func sessionTitles(ctx context.Context, store *transcript.Store, cwd string) map
 // would change mem is refused, with a pointer to /mem. In a project with
 // no mem it says so and makes no file.
 func (p *process) memCommand(ctx context.Context, c *app.CommandContext) int {
-	if c.Config == nil || c.Dirs.State == "" {
-		fmt.Fprintln(c.Stderr, "gnosh mem: the configuration of this folder has mistakes, so gnosh cannot tell which mem to read:")
+	// Where mem is kept does not depend on the config: the wiring hands
+	// over the directories even when the config has mistakes, and mem is
+	// read all the same. Reading it needs nothing the config holds.
+	if c.Dirs.State == "" {
+		fmt.Fprintln(c.Stderr, "gnosh mem: gnosh could not work out where its data is kept, so it cannot tell which mem to read:")
 		for _, pr := range c.Problems {
 			fmt.Fprintln(c.Stderr, "  "+pr.String())
 		}

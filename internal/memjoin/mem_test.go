@@ -22,7 +22,7 @@ func TestRulesNoticeAndMemCommand(t *testing.T) {
 	)
 	r := w.run("-y", "-p", "always run gofumpt before committing; and ask me about the release day")
 	r.wantCode(t, 0)
-	has(t, "stderr of the session that set the rule", r.err,
+	inOrder(t, "stderr of the session that set the rule", r.err,
 		"mem: this session set a rule every session will follow as yours: `gofumpt` = \"always run gofumpt before committing\". If you did not ask for it, /mem forget gofumpt removes it",
 		"mem: this session changed the rule `gofumpt`, which every session follows as yours, to \"run gofumpt -l . before committing\" (it was \"always run gofumpt before committing\"). If you did not ask for it, /mem log shows the change and /mem undo reverses it")
 
@@ -117,6 +117,19 @@ func TestGnoshMem(t *testing.T) {
 	r.wantCode(t, 0)
 	has(t, "the fact after a refused forget", r.out, "go test -race ./...")
 
+	// A mistake in the config stops a session from starting, and not
+	// this: where mem is kept does not depend on the config, and reading
+	// it needs nothing the config holds.
+	if err := os.WriteFile(filepath.Join(w.ConfigDir(), "gnoshrc"), []byte("frobnicate yes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = w.run("mem")
+	r.wantCode(t, 0)
+	has(t, "gnosh mem with a mistake in the config", r.out, "`ship-release` \"ship the release\"", "`cmd/test`")
+	if r = w.run("-p", "hello"); r.code == 0 {
+		t.Errorf("a session started though the config has a mistake")
+	}
+
 	if n := len(w.Model.Paths()); n != asked {
 		t.Errorf("gnosh mem asked the model server %d times", n-asked)
 	}
@@ -195,10 +208,15 @@ func TestDigestAfterASummary(t *testing.T) {
 }
 
 // The task list is mem's: after a kept call it is the todos of the last
-// task the call changed, and the session's file holds it.
+// task the call changed, the front end is handed it with the frame the
+// session stands in on the line in progress, and the session's file holds
+// it.
 func TestTaskListFromMem(t *testing.T) {
 	b := newBench(t, Options{}, nil)
 	j := b.join()
+	if b.list() != "" || len(b.facts) != 0 {
+		t.Errorf("a task list or a status fact was set before the session was ready: %q %q", b.lists, b.facts)
+	}
 	b.mem(`mem.Todo("rename the project", "rename it in the code", "rename it in the tests").Push()`)
 	want := []gnovmtools.Todo{
 		{Content: "rename it in the code", Status: gnovmtools.TodoStatusInProgress, ActiveForm: "rename it in the code"},
@@ -214,9 +232,20 @@ func TestTaskListFromMem(t *testing.T) {
 		}
 	}
 	check("after the plan", want)
+	// The session stands in the task: the line in progress reads the
+	// frame, and the status line names it.
+	if got, want := b.list(), "[>] in `rename-project` \"rename the project\" | [ ] rename it in the tests"; got != want {
+		t.Errorf("the task list the front end was handed after the plan:\n%s\nwant:\n%s", got, want)
+	}
+	if got, _ := b.fact("frame"); got != "rename-project" {
+		t.Errorf("the status line's frame after the plan: %q", got)
+	}
 	b.mem(`mem.Next()`)
-	if got := strings.Join(j.taskLines(), "\n"); got != "[>] in `rename-project/rename-code` \"rename it in the code\"\n[ ] rename it in the tests" {
-		t.Errorf("the task list as lines, standing in the first todo:\n%s", got)
+	if got, want := b.list(), "[>] in `rename-project/rename-code` \"rename it in the code\" | [ ] rename it in the tests"; got != want {
+		t.Errorf("the task list, standing in the first todo:\n%s\nwant:\n%s", got, want)
+	}
+	if got, _ := b.fact("frame"); got != "rename-project/rename-code" {
+		t.Errorf("the status line's frame, standing in the first todo: %q", got)
 	}
 	b.call("Read", map[string]any{"file_path": filepath.Join(b.project, "nothing.txt")})
 	os.WriteFile(filepath.Join(b.project, "main.go"), []byte("package gnosh\n"), 0o644)
@@ -224,6 +253,25 @@ func TestTaskListFromMem(t *testing.T) {
 	b.mem("mem.Pop(\"looked at main.go: it says gnosh\")\nmem.Next()")
 	want[0].Status, want[1].Status = gnovmtools.TodoStatusCompleted, gnovmtools.TodoStatusInProgress
 	check("after the first todo was popped", want)
+	if got, want := b.list(), "[x] rename it in the code | [>] in `rename-project/rename-tests` \"rename it in the tests\""; got != want {
+		t.Errorf("the task list, standing in the second todo:\n%s\nwant:\n%s", got, want)
+	}
+	// The second todo and then the task are popped: at the root no line
+	// reads a frame, and the status line names none.
+	os.WriteFile(filepath.Join(b.project, "main_test.go"), []byte("package gnosh\n"), 0o644)
+	b.call("Read", map[string]any{"file_path": filepath.Join(b.project, "main_test.go")})
+	b.mem(`mem.Pop("looked at main_test.go: it says gnosh")`)
+	if got, _ := b.fact("frame"); got != "rename-project" {
+		t.Errorf("the status line's frame, back in the task: %q", got)
+	}
+	b.mem(`mem.Pop("both files say gnosh")`)
+	if got, ok := b.fact("frame"); !ok || got != "" {
+		t.Errorf("the status line's frame at the root: %q", got)
+	}
+	if got, want := b.list(), "[x] rename it in the code | [x] rename it in the tests"; got != want {
+		t.Errorf("the task list once the task is done:\n%s\nwant:\n%s", got, want)
+	}
+	want[1].Status = gnovmtools.TodoStatusCompleted
 
 	// The session's file holds the list, so that a session opened again,
 	// or a copy of it, has it.
