@@ -1,0 +1,240 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+	"runtime/debug"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/core"
+)
+
+// SideRequest is a short question to a model, outside the conversation: a
+// name for a todo, a verdict on a goal, a review of a close, a title. It
+// is sent with no tools and with as little thinking as the model has.
+type SideRequest struct {
+	// Purpose says what the request is for: "title", "name", "goal-judge",
+	// "close-review". Side requests are counted by it.
+	Purpose string
+	// System, when not empty, is the request's system prompt.
+	System string
+	// Messages, when not empty, is a conversation to show the model, and
+	// Prompt is the question. With both, the question follows the
+	// conversation.
+	Messages []core.Message
+	Prompt   string
+	// MaxTokens caps the answer. Leave headroom: a cap that is too tight
+	// makes a model that does think look broken.
+	MaxTokens int
+	// Temperature is sent when not nil. A judging request wants zero.
+	Temperature *float64
+	// Timeout is how long each model is given to answer, in real time.
+	// Zero means two minutes.
+	Timeout time.Duration
+}
+
+// SideResult is the answer to a SideRequest.
+type SideResult struct {
+	// Text is the answer, read past any thinking tags.
+	Text string
+	// Provider and Model say who answered.
+	Provider string
+	Model    string
+	// Usage is what the provider counted and Duration how long it took.
+	Usage    core.Usage
+	Duration time.Duration
+	// Fallback says the small model failed or was cut off, and the large
+	// one answered.
+	Fallback bool
+}
+
+// ErrCutOff means a side request's answer hit its cap before the model had
+// finished. The result then holds what arrived.
+var ErrCutOff = errors.New("the answer was cut off at its length limit")
+
+// Side asks a model a short question and returns the answer. The small
+// model is asked first, and the large one if the small one fails or is cut
+// off; with no small model the large one is asked alone, so that a session
+// never names a model the person did not choose.
+//
+// Side requests are kept off a model server while the session's own
+// request is being answered: Side waits for that request to end, and the
+// session's next request waits for Side. Every one is counted (Usage) and
+// reported as a SideEvent, because on a local model server each is a new
+// prompt that may push a saved conversation out of the cache. Keep them
+// few.
+//
+// Side may be called from any goroutine: from inside a tool, a driver or
+// a moment, or from the front end.
+func (a *Agent) Side(ctx context.Context, sr SideRequest) (SideResult, error) {
+	if strings.TrimSpace(sr.Prompt) == "" && len(sr.Messages) == 0 {
+		return SideResult{}, errors.New("agent: a side request needs a prompt")
+	}
+	su := a.setup()
+	models := []Model{su.model}
+	if su.small != nil && su.small.Provider != nil && modelKey(*su.small) != modelKey(su.model) {
+		models = []Model{*su.small, su.model}
+	}
+	purpose := sr.Purpose
+	if purpose == "" || purpose == "main" || purpose == "summary" {
+		purpose = "side"
+	}
+	timeout := sr.Timeout
+	if timeout <= 0 {
+		timeout = 2 * time.Minute
+	}
+
+	var res SideResult
+	var err error
+	for i, m := range models {
+		res, err = a.sideOnce(ctx, sr, purpose, m, timeout)
+		res.Fallback = i > 0
+		a.emit(&SideEvent{
+			Purpose: purpose, Provider: res.Provider, Model: res.Model,
+			Usage: res.Usage, Duration: res.Duration, Fallback: res.Fallback, Err: err,
+		})
+		if err == nil || ctx.Err() != nil {
+			break
+		}
+	}
+	return res, err
+}
+
+// sideOnce asks one model.
+func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m Model, timeout time.Duration) (SideResult, error) {
+	res := SideResult{Provider: m.Provider.Name(), Model: m.Info.ID}
+	tctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	stop := context.AfterFunc(a.root, cancel) // a closed session asks nothing more
+	defer stop()
+
+	fail := func(what string, err error) error {
+		switch {
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case a.root.Err() != nil:
+			return ErrClosed
+		case tctx.Err() != nil:
+			return fmt.Errorf("%s did not answer the %s request within %s", m.label(), purpose, span(timeout))
+		}
+		return fmt.Errorf("%s %s the %s request: %w", m.label(), what, purpose, err)
+	}
+
+	select {
+	case a.modelLock <- struct{}{}:
+	case <-tctx.Done():
+		return res, fail("could not be sent", tctx.Err())
+	}
+	defer func() { <-a.modelLock }()
+
+	msgs := slices.Clone(sr.Messages)
+	if sr.Prompt != "" {
+		if n := len(msgs); n > 0 && msgs[n-1].Role == core.RoleUser {
+			last := msgs[n-1]
+			last.Blocks = append(slices.Clone(last.Blocks), core.Text(sr.Prompt))
+			msgs[n-1] = last
+		} else {
+			msgs = append(msgs, core.UserText(sr.Prompt))
+		}
+	}
+	req := &core.Request{
+		Model:       m.Info.ID,
+		Messages:    msgs,
+		MaxTokens:   sr.MaxTokens,
+		Temperature: sr.Temperature,
+		Thinking:    m.lowestThinking(),
+		Extra:       maps.Clone(m.Extra),
+	}
+	if sr.System != "" {
+		req.System = []string{sr.System}
+	}
+	if f := a.opts.Outgoing; f != nil {
+		req = cloneRequest(req)
+		f(req)
+	}
+	a.emit(&RequestEvent{Purpose: purpose, Attempt: 1, Provider: res.Provider, Model: res.Model, Messages: len(req.Messages)})
+
+	type answer struct {
+		msg   core.Message
+		usage core.Usage
+		stop  core.StopReason
+		err   error
+	}
+	began := a.clock.Now()
+	ch := make(chan answer, 1)
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				a.panicked("the provider", p, debug.Stack())
+				ch <- answer{err: fmt.Errorf("the provider crashed: %v", p)}
+			}
+		}()
+		msg, usage, stop, err := core.Collect(m.Provider.Stream(tctx, req))
+		ch <- answer{msg, usage, stop, err}
+	}()
+	var ans answer
+	select {
+	case ans = <-ch:
+	case <-tctx.Done():
+		// The provider is given a moment to end its answer, and is then
+		// left behind.
+		t := time.NewTimer(a.grace)
+		select {
+		case ans = <-ch:
+		case <-t.C:
+			ans.err = tctx.Err()
+		}
+		t.Stop()
+	}
+	res.Usage, res.Duration = ans.usage, a.clock.Now().Sub(began)
+	a.mu.Lock()
+	a.totals.add(purpose, m, ans.usage, res.Duration)
+	a.mu.Unlock()
+
+	if ans.err != nil {
+		return res, fail("could not answer", ans.err)
+	}
+	res.Text = AnswerText(ans.msg.Text())
+	switch {
+	case ans.stop == core.StopMaxTokens:
+		return res, fmt.Errorf("%s answering the %s request: %w", m.label(), purpose, ErrCutOff)
+	case res.Text == "":
+		return res, fmt.Errorf("%s answered the %s request with nothing", m.label(), purpose)
+	}
+	return res, nil
+}
+
+// AnswerText returns a model's short answer read past any thinking it
+// wrote into the text between <think> tags. A thought that never closes
+// leaves no answer.
+func AnswerText(s string) string {
+	const open, shut = "<think>", "</think>"
+	if i := strings.LastIndex(s, shut); i >= 0 {
+		s = s[i+len(shut):]
+	}
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, open) {
+		return ""
+	}
+	return s
+}
+
+// JSONObject returns the JSON object in a model's answer: everything from
+// the first "{" to the last "}", if that is valid JSON. Models wrap a
+// verdict in words and code fences; this reads past them.
+func JSONObject(s string) (string, bool) {
+	i, j := strings.IndexByte(s, '{'), strings.LastIndexByte(s, '}')
+	if i < 0 || j < i {
+		return "", false
+	}
+	obj := s[i : j+1]
+	if !json.Valid([]byte(obj)) {
+		return "", false
+	}
+	return obj, true
+}

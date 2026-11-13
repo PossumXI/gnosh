@@ -1,0 +1,278 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/core"
+)
+
+func ptr[T any](v T) *T { return &v }
+
+// sideRig is a session with a small model beside the large one.
+func sideRig(t *testing.T) (*rig, *fakeModel) {
+	small := &fakeModel{name: "small"}
+	r := newRig(t, func(o *Options) {
+		o.Small = &Model{
+			Provider: small, Info: core.ModelInfo{ID: "tiny"},
+			Levels: []string{"low", "medium", "high"}, Level: "high",
+			Extra: map[string]any{"id_slot": 1},
+		}
+		o.Model.Levels = []string{"off", "on"}
+		o.Model.Level = "on"
+		o.System = []string{"the session's own system prompt"}
+		o.Tools = []core.Tool{tool("Bash", nil)}
+	})
+	return r, small
+}
+
+// A side request is a short question with no tools, a cap on the answer,
+// and as little thinking as the model has. The small model is asked
+// first, and the answer is read past any thinking tags.
+func TestSideRequest(t *testing.T) {
+	r, small := sideRig(t)
+	small.push(say("<think>\nwhat is this about? a release.\n</think>\n\n release-notes \n"))
+
+	res, err := r.a.Side(context.Background(), SideRequest{
+		Purpose: "name", System: "Name the text.", Prompt: "write the release notes",
+		MaxTokens: 24, Temperature: ptr(0.0),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Text != "release-notes" || res.Fallback || res.Model != "tiny" || res.Provider != "small" {
+		t.Errorf("result = %+v", res)
+	}
+	reqs := small.requests()
+	if len(reqs) != 1 || r.model.count() != 0 {
+		t.Fatalf("%d requests to the small model, %d to the large", len(reqs), r.model.count())
+	}
+	req := reqs[0]
+	if req.Model != "tiny" || len(req.Tools) != 0 || req.MaxTokens != 24 || req.Temperature == nil || *req.Temperature != 0 {
+		t.Errorf("request = %+v", req)
+	}
+	if len(req.System) != 1 || req.System[0] != "Name the text." {
+		t.Errorf("system = %q", req.System)
+	}
+	if req.Thinking != (core.Thinking{Effort: "low"}) {
+		t.Errorf("a side request must think as little as the model can: %+v", req.Thinking)
+	}
+	if req.Extra["id_slot"] != 1 {
+		t.Errorf("the model's extra fields were not sent: %v", req.Extra)
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Text() != "write the release notes" {
+		t.Errorf("messages = %+v", req.Messages)
+	}
+
+	// It is counted, so that what the small jobs cost can be watched.
+	r.drain()
+	u := r.a.Usage()
+	if u.Side.Requests != 1 || u.Side.ByPurpose["name"] != 1 || u.ByModel["tiny"].Requests != 1 || u.Requests != 0 {
+		t.Errorf("totals = %+v", u)
+	}
+	evs := eventsOf[*SideEvent](r.rec)
+	if len(evs) != 1 || evs[0].Purpose != "name" || evs[0].Err != nil || evs[0].Model != "tiny" {
+		t.Errorf("side events = %+v", evs)
+	}
+}
+
+// When the small model fails, answers with nothing or is cut off, the
+// large one is asked.
+func TestSideFallsBackToTheLargeModel(t *testing.T) {
+	cases := map[string]step{
+		"fails":                broken(core.ErrServer, 500),
+		"answers with nothing": silence(),
+		"only thinks":          say("<think>I wonder"),
+		"is cut off":           {evs: []core.Event{{Type: core.EventTextDelta, Text: "release-no"}, usageEv(5, 5), stopEv(core.StopMaxTokens)}},
+	}
+	for name, st := range cases {
+		t.Run(name, func(t *testing.T) {
+			r, small := sideRig(t)
+			small.push(st)
+			r.model.push(say("release-notes"))
+			res, err := r.a.Side(context.Background(), SideRequest{Purpose: "name", Prompt: "write the release notes", MaxTokens: 24})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Text != "release-notes" || !res.Fallback || res.Model != "big" {
+				t.Errorf("result = %+v", res)
+			}
+			large := r.model.requests()
+			if len(large) != 1 || len(large[0].Tools) != 0 || len(large[0].System) != 0 {
+				t.Fatalf("the large model was sent %+v", large)
+			}
+			// The large model's least thinking is "off".
+			if large[0].Thinking != (core.Thinking{Mode: "off"}) {
+				t.Errorf("thinking = %+v", large[0].Thinking)
+			}
+			r.drain()
+			evs := eventsOf[*SideEvent](r.rec)
+			if len(evs) != 2 || evs[0].Err == nil || evs[0].Fallback || evs[1].Err != nil || !evs[1].Fallback {
+				t.Errorf("side events = %+v", evs)
+			}
+			if u := r.a.Usage(); u.Side.Requests != 2 || u.Requests != 0 {
+				t.Errorf("totals = %+v", u)
+			}
+		})
+	}
+}
+
+// When the large model is cut off too, the caller gets what arrived and
+// is told that it was cut.
+func TestSideCutOffEverywhere(t *testing.T) {
+	r, small := sideRig(t)
+	cut := step{evs: []core.Event{{Type: core.EventTextDelta, Text: `{"ok": tr`}, usageEv(5, 5), stopEv(core.StopMaxTokens)}}
+	small.push(cut)
+	r.model.push(cut)
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "goal-judge", Prompt: "is it met?", MaxTokens: 5})
+	if !errors.Is(err, ErrCutOff) {
+		t.Fatalf("err = %v", err)
+	}
+	if res.Text != `{"ok": tr` || !res.Fallback {
+		t.Errorf("result = %+v", res)
+	}
+}
+
+// With no small model the large one is asked alone, and a model with no
+// known thinking switch is still sent the plain "off".
+func TestSideWithoutASmallModel(t *testing.T) {
+	r := newRig(t, nil)
+	r.model.push(say("a title"))
+	conversation := []core.Message{core.UserText("fix the flaky test"), core.AssistantText("I fixed it.")}
+	res, err := r.a.Side(context.Background(), SideRequest{Messages: conversation, Prompt: "Give this session a title."})
+	if err != nil || res.Text != "a title" || res.Fallback {
+		t.Fatalf("result = %+v, %v", res, err)
+	}
+	req := r.model.requests()[0]
+	if req.Thinking != (core.Thinking{Mode: "off"}) {
+		t.Errorf("thinking = %+v", req.Thinking)
+	}
+	if len(req.Messages) != 3 || req.Messages[2].Text() != "Give this session a title." {
+		t.Errorf("messages = %+v", req.Messages)
+	}
+	if u := r.a.Usage(); u.Side.ByPurpose["side"] != 1 {
+		t.Errorf("totals = %+v", u.Side)
+	}
+	// A question that follows the user's own words joins them.
+	r.model.push(say("yes"))
+	if _, err := r.a.Side(context.Background(), SideRequest{Messages: conversation[:1], Prompt: "Is this about tests?"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := r.model.requests()[1]; len(req.Messages) != 1 || len(req.Messages[0].Blocks) != 2 {
+		t.Errorf("messages = %+v", req.Messages)
+	}
+	if _, err := r.a.Side(context.Background(), SideRequest{}); err == nil {
+		t.Error("a side request with nothing to ask was accepted")
+	}
+}
+
+// A model that does not answer in time is given up on, and the other is
+// asked.
+func TestSideTimeout(t *testing.T) {
+	r, small := sideRig(t)
+	small.push(step{stall: true})
+	r.model.push(say("release-notes"))
+	began := time.Now()
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "name", Prompt: "name it", Timeout: 20 * time.Millisecond})
+	if err != nil || res.Text != "release-notes" || !res.Fallback {
+		t.Fatalf("result = %+v, %v", res, err)
+	}
+	if took := time.Since(began); took > 2*time.Second {
+		t.Errorf("it took %s", took)
+	}
+	r.drain()
+	evs := eventsOf[*SideEvent](r.rec)
+	if len(evs) != 2 || evs[0].Err == nil || !strings.Contains(evs[0].Err.Error(), "did not answer the name request within 20ms") {
+		t.Errorf("side events = %+v", evs)
+	}
+}
+
+// A side request is not sent while the session's own request is being
+// answered, so that it cannot push the conversation out of a model
+// server's cache; and the caller can give up on it.
+func TestSideWaitsForTheMainRequest(t *testing.T) {
+	r, small := sideRig(t)
+	wait := make(chan struct{})
+	reached := make(chan struct{})
+	r.model.push(step{at: once(reached), wait: wait, evs: say("the answer").evs})
+	small.push(say("a name"))
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("a long question") }()
+	<-reached
+
+	// One caller gives up while it waits.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	_, err := r.a.Side(ctx, SideRequest{Purpose: "name", Prompt: "name it"})
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v", err)
+	}
+	if small.count() != 0 {
+		t.Fatal("the side request was sent while the main request was out")
+	}
+
+	// Another waits, and is sent once the reply is in.
+	side := make(chan SideResult, 1)
+	go func() {
+		res, _ := r.a.Side(context.Background(), SideRequest{Purpose: "name", Prompt: "name it"})
+		side <- res
+	}()
+	time.Sleep(10 * time.Millisecond)
+	if small.count() != 0 {
+		t.Fatal("the side request was sent while the main request was out")
+	}
+	close(wait)
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("turn = %+v", res)
+	}
+	select {
+	case res := <-side:
+		if res.Text != "a name" {
+			t.Errorf("side result = %+v", res)
+		}
+	case <-time.After(bound):
+		t.Fatal("the side request never went out")
+	}
+}
+
+func TestAnswerText(t *testing.T) {
+	cases := map[string]string{
+		"plain":                                "plain",
+		"  spaced \n":                          "spaced",
+		"<think>hmm</think>answer":             "answer",
+		"<think>a</think><think>b</think>\nok": "ok",
+		"reasoning that leaked</think>\n\nok":  "ok",
+		"<think>never closed":                  "",
+		"":                                     "",
+		"keep <b>tags</b> in the answer":       "keep <b>tags</b> in the answer",
+	}
+	for in, want := range cases {
+		if got := AnswerText(in); got != want {
+			t.Errorf("AnswerText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestJSONObject(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{`{"ok": true}`, `{"ok": true}`, true},
+		{"Here is my verdict:\n```json\n{\"ok\": false, \"reason\": \"no {braces} run\"}\n```\nThanks.", `{"ok": false, "reason": "no {braces} run"}`, true},
+		{`no object here`, "", false},
+		{`} backwards {`, "", false},
+		{`{"cut": tr`, "", false},
+		{``, "", false},
+	}
+	for _, c := range cases {
+		got, ok := JSONObject(c.in)
+		if got != c.want || ok != c.ok {
+			t.Errorf("JSONObject(%q) = %q, %v; want %q, %v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}

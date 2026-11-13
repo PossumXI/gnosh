@@ -35,8 +35,9 @@ both are silent, the builder chooses, and says so in its report.
    code with no outside program behind them, and a local model does better
    with a search tool than with a shell pipeline.
 4. **No cap on Stop-hook continuations.** A count never ends the work. After
-   a run of forced continuations with no tool call between them (8 by
-   default, an option), the model is asked to judge whether there is a real
+   every tenth forced continuation in a row (`harness-hooks.md` HOOK-21 and
+   `harness-agent-loop.md` LOOP-20, which win over Claude Code's figure of
+   8; an option), the model is asked to judge whether there is a real
    reason to stop; if it stops, the person is shown that it did and why.
    Jae, 22 October 2026: "no, if it's not done, it's not done. after 10 not
    dones, say, the harness should have ai think and see if there is a good
