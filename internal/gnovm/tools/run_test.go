@@ -489,6 +489,9 @@ func TestDescribe(t *testing.T) {
 		require.Equal(t, c.summary, act.Summary, c.input)
 		require.Empty(t, act.Paths, c.input)
 		require.Equal(t, "", act.Command+act.URL, c.input)
+		// Only a delete throws away what cannot be got back, so only a
+		// delete says that a person must be asked whatever the rules allow.
+		require.Equal(t, strings.HasPrefix(c.summary, "Delete "), act.Confirm, c.input)
 	}
 
 	// A delete that could not run says so before anyone is asked about it,
@@ -503,6 +506,7 @@ func TestDescribe(t *testing.T) {
 		require.Equal(t, want, err.Error(), input)
 		require.Equal(t, core.ActionOther, act.Kind, input)
 		require.Equal(t, "Delete a Gno VM and its saved state", act.Summary, input)
+		require.True(t, act.Confirm, input)
 	}
 	// Nobody is asked about any other call, so whatever is wrong with its
 	// arguments is Run's to say, in the words the model has always read.
@@ -512,6 +516,7 @@ func TestDescribe(t *testing.T) {
 			require.NoError(t, err, tool+" "+input)
 			require.Equal(t, core.ActionOther, act.Kind, tool+" "+input)
 			require.True(t, act.Summary != "", tool+" "+input)
+			require.False(t, act.Confirm, tool+" "+input)
 		}
 	}
 

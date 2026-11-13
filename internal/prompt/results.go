@@ -60,6 +60,78 @@ func (s *Set) cutNote(name string, calls map[string]int, messages int) string {
 	return s.fill(name, vals)
 }
 
+// maxPopChanges is how many changes to mem a pop's receipt names before it
+// counts the rest.
+const maxPopChanges = 4
+
+// PopReceipt is what the pop of a todo did to the model's context, for
+// the result of the call that popped it.
+type PopReceipt struct {
+	// Frame is the todo that was popped.
+	Frame string
+	// Nothing says nothing came between entering the todo and popping it,
+	// so that nothing was removed. The other fields are then not used.
+	Nothing bool
+	// Spared says what the user said in this turn stayed.
+	Spared bool
+	// Thoughts is how many thoughts the todo holds. Mem's own lines, just
+	// above, list them.
+	Thoughts int
+	// Files are the files the removed work changed, each once, as the
+	// model would name them.
+	Files []string
+	// Changes are the other changes the removed work made to mem, each as
+	// the call's word and the name it was given: "Fact `port`". The first
+	// four are named and the rest counted.
+	Changes []string
+	// Reads says the files read in the removed work must be read again
+	// before they are changed.
+	Reads bool
+}
+
+// PopReceipt returns what the result of a call that pops a todo says
+// after mem's own lines: that everything since the todo was entered was
+// removed from the model's context, what stays, which files the removed
+// work changed, what else it changed in mem, and that its reads are
+// forgotten. It says "removed from your context" and never "left", which
+// reads as "nothing is left"; and it gives no number of tokens, which is
+// for the person and not for the model.
+func (s *Set) PopReceipt(p PopReceipt) string {
+	vals := values{}
+	if p.Nothing {
+		vals.flag("nothing", true)
+		return s.fill(textPopReceipt, vals)
+	}
+	vals["id"] = oneLine(p.Frame, maxName)
+	vals.flag("spared", p.Spared)
+	switch {
+	case p.Thoughts == 1:
+		vals.flag("one_thought", true)
+	case p.Thoughts > 1:
+		vals["thoughts"] = strconv.Itoa(p.Thoughts)
+	}
+	var files []string
+	for _, f := range p.Files {
+		if f = oneLine(f, maxName); f != "" {
+			files = append(files, f)
+		}
+	}
+	vals["files"] = clip(strings.Join(files, ", "), maxReason)
+	var changes []string
+	for _, c := range p.Changes {
+		if c = oneLine(c, maxName); c != "" {
+			changes = append(changes, c)
+		}
+	}
+	if more := len(changes) - maxPopChanges; more > 0 {
+		vals["changes"] = strings.Join(changes[:maxPopChanges], ", ") + " and " + strconv.Itoa(more) + " more"
+	} else {
+		vals["changes"] = strings.Join(changes, ", ")
+	}
+	vals.flag("reads", p.Reads)
+	return s.fill(textPopReceipt, vals)
+}
+
 // NoResult says why a tool call has no result of its own.
 type NoResult int
 

@@ -1,0 +1,15 @@
+=== a pop with everything to say ===
+Everything since you entered `fix-flaky/find-cause` was removed from your context: this result stays, and so do its 2 thoughts, listed above and kept in mem; the user still sees all of it. In it you edited internal/net/listen_test.go. In it you also changed mem: Fact `port`. Your reads inside it are forgotten: read a file again before you edit it.
+
+=== the least ===
+Everything since you entered `fix-flaky/find-cause` was removed from your context: this result stays; the user still sees all of it.
+
+=== the user's words of this turn stayed, and one thought ===
+Everything since you entered `fix-flaky` was removed from your context, but for what the user said in this turn: this result stays, and so does its thought, listed above and kept in mem; the user still sees all of it.
+
+=== several files and more changes than are named ===
+Everything since you entered `release-v2/bump-version` was removed from your context: this result stays; the user still sees all of it. In it you edited go.mod, main.go, docs/install.md. In it you also changed mem: Fact `port`, Done `x/y`, Rule `gofumpt`, Later and 2 more.
+
+=== nothing came between ===
+nothing came between, so nothing was removed from your context.
+

@@ -1,6 +1,9 @@
 package main
 
-import "github.com/gnosh-ai/gnosh/internal/app"
+import (
+	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/memjoin"
+)
 
 // features lists the parts of gnosh that are joined to the wiring, in the
 // order they are joined in. It is the one place a feature is registered:
@@ -12,5 +15,7 @@ import "github.com/gnosh-ai/gnosh/internal/app"
 // The order matters where two features speak at the same moment: see the
 // ordering table at the top of internal/app/feature.go.
 func features() []app.Feature {
-	return nil
+	return []app.Feature{
+		memjoin.New(memjoin.Options{}), // the GnoVM machines, mem and frames
+	}
 }

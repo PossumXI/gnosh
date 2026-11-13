@@ -244,6 +244,30 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "pop-receipt",
+			texts: []string{textPopReceipt},
+			cases: func(s *Set) []goldenCase {
+				return []goldenCase{
+					{"a pop with everything to say", s.PopReceipt(PopReceipt{
+						Frame: "fix-flaky/find-cause", Thoughts: 2,
+						Files:   []string{"internal/net/listen_test.go"},
+						Changes: []string{"Fact `port`"},
+						Reads:   true,
+					})},
+					{"the least", s.PopReceipt(PopReceipt{Frame: "fix-flaky/find-cause"})},
+					{"the user's words of this turn stayed, and one thought", s.PopReceipt(PopReceipt{
+						Frame: "fix-flaky", Spared: true, Thoughts: 1,
+					})},
+					{"several files and more changes than are named", s.PopReceipt(PopReceipt{
+						Frame:   "release-v2/bump-version",
+						Files:   []string{"go.mod", "main.go", "docs/install.md"},
+						Changes: []string{"Fact `port`", "Done `x/y`", "Rule `gofumpt`", "Later", "Wait `x`", "Ask `x`"},
+					})},
+					{"nothing came between", s.PopReceipt(PopReceipt{Frame: "fix-flaky/rerun", Nothing: true, Thoughts: 3, Reads: true})},
+				}
+			},
+		},
+		{
 			file:  "cut-notes",
 			texts: []string{textPopNote, textSlideNote, textMissingResult},
 			cases: func(s *Set) []goldenCase {

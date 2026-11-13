@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -276,5 +277,61 @@ func TestSessionLock(t *testing.T) {
 	case <-got:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the lock was not handed on")
+	}
+}
+
+// A session that is made to forget a file must read it again before it
+// may change it: that is what keeps a model from editing a file from a
+// copy it can no longer see.
+func TestForget(t *testing.T) {
+	f := newFixture(t, Options{})
+	a := f.file("a.txt", "one\ntwo\n")
+	b := f.file("sub/b.txt", "three\n")
+	c := f.file("c.txt", "four\n")
+	for _, p := range []string{a, b, c} {
+		f.ok(f.read, in{"file_path": p})
+	}
+	// The session wrote d itself.
+	d := f.path("d.txt")
+	f.ok(f.write, in{"file_path": d, "content": "five\n"})
+
+	// A relative path is taken from the working directory; a path the
+	// session knows nothing of, an empty one and one given twice are
+	// passed over.
+	got := Forget(f.env, "sub/b.txt", a, f.path("never-read.txt"), "", a, d)
+	want := []string{a, d, b}
+	sort.Strings(want)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Forget dropped %v, want %v", got, want)
+	}
+	if st := States(f.env); len(st) != 1 || st[0].Path != c {
+		t.Errorf("States after Forget = %+v, want c.txt alone", st)
+	}
+
+	// What was forgotten is refused until it is read again; what was not
+	// is changed as before.
+	f.fails(f.edit, in{"file_path": a, "old_string": "two", "new_string": "2"}, "has not read")
+	f.fails(f.write, in{"file_path": d, "content": "six\n"}, "has not read")
+	f.ok(f.edit, in{"file_path": c, "old_string": "four", "new_string": "4"})
+	f.ok(f.read, in{"file_path": a})
+	f.ok(f.edit, in{"file_path": a, "old_string": "two", "new_string": "2"})
+	if got := f.content(a); got != "one\n2\n" {
+		t.Errorf("a.txt = %q", got)
+	}
+
+	// Through a link it is the target that is forgotten.
+	link := f.symlink("c.txt", "link-to-c")
+	if got := Forget(f.env, link); len(got) != 1 || got[0] != c {
+		t.Errorf("Forget through a link dropped %v, want %v", got, c)
+	}
+	f.fails(f.edit, in{"file_path": c, "old_string": "4", "new_string": "four"}, "has not read")
+
+	// Nothing to forget is nil, and a relative path with no working
+	// directory is passed over.
+	if got := Forget(f.env); got != nil {
+		t.Errorf("Forget of nothing = %v", got)
+	}
+	if got := Forget(&core.ToolEnv{Store: f.env.Store}, "a.txt"); got != nil {
+		t.Errorf("Forget of a relative path with no working directory = %v", got)
 	}
 }

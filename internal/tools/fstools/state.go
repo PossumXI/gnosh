@@ -390,3 +390,44 @@ func MarkRead(env *core.ToolEnv, path string) error {
 	sessionOf(env).saw(real, sighting{info: info, lines: -1, whole: true})
 	return nil
 }
+
+// Forget makes the session forget what it has seen of the files at paths,
+// as if it had never read them: Edit and Write then refuse to change such
+// a file until Read has shown it again. It is for a caller that takes out
+// of the model's context the part of the conversation in which the files
+// were read (a finished frame, the oldest rounds when room was made): the
+// model must not change a file from a copy it can no longer see. That the
+// session itself wrote a file is forgotten with the rest, since what it
+// wrote is no longer in front of it either.
+//
+// A relative path is taken from env.Cwd. A path the session knows nothing
+// of, or that cannot be followed, is passed over. Forget returns the files
+// whose record it dropped, each as the path its links lead to, sorted and
+// each once; nil when there were none.
+func Forget(env *core.ToolEnv, paths ...string) []string {
+	s := sessionOf(env)
+	var dropped []string
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		if !filepath.IsAbs(path) {
+			if env.Cwd == "" {
+				continue
+			}
+			path = filepath.Join(env.Cwd, path)
+		}
+		real, _, err := followLinks(filepath.Clean(path))
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		if _, known := s.files[real]; known {
+			delete(s.files, real)
+			dropped = append(dropped, real)
+		}
+		s.mu.Unlock()
+	}
+	sort.Strings(dropped)
+	return dropped
+}

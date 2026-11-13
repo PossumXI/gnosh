@@ -90,7 +90,11 @@
 //
 // States lists a session's files for a caller that wants to show or
 // record them. MarkRead tells the package that the model has seen a whole
-// file some other way, such as a shell command that printed it.
+// file some other way, such as a shell command that printed it. Forget
+// does the opposite: the session no longer knows the files it names, and
+// must read each again before it may change it. It is for a caller that
+// has taken the part of the conversation in which they were read out of
+// what the model is sent.
 //
 // Calls that change the same file in one session take turns, so that two
 // edits made at once are both kept. Calls on different files do not wait

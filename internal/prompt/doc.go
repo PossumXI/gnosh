@@ -266,6 +266,14 @@
 //     how many tool calls or messages went, and why. Without the note a
 //     long session reads as todos entered and popped at once, and a model
 //     copies that.
+//   - pop-receipt (PopReceipt) follows mem's own lines in the result of
+//     the call that pops a todo: everything since the todo was entered was
+//     removed from the context, the result and the thoughts stay, these
+//     files were changed in it, this else was changed in mem, and the files
+//     read in it must be read again before they are changed. It says
+//     "removed from your context", never "left", and gives no number of
+//     tokens. Read at the moment of the pop, it is what keeps a model from
+//     looking for what is gone, or from editing a file it no longer sees.
 //   - missing-result (MissingResult) stands for the result of a call that
 //     has none: it never started, it was stopped, its reply was cut off,
 //     or gnosh itself was stopped. It says whether the call ran at all,

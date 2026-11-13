@@ -34,6 +34,20 @@
 // next entry starts on a line of its own. A corrupt line in the middle is
 // left out the same way, with a warning that names the line.
 //
+// # The one exception
+//
+// One thing, and only one, writes a session's file again: a redaction
+// (Session.Redact, Store.Redact). mem can erase a secret that was kept by
+// mistake, from itself and from its own history, and the copies of mem's
+// text that gnosh holds in its sessions must not keep it: the digest sent
+// with a first prompt, a summary, a goal's binding, a task list. The file
+// is then written again with the erased text taken out of the entries the
+// caller names, every entry in its place with its id, its parent and its
+// time, and renamed over the old file in one step, the writer's lock
+// passing from the old file to the new. What was erased is never logged
+// and never stored. Nothing else uses it: a rewind, a summary, a pop and
+// a slide all append.
+//
 // # The file
 //
 // Every line has seven fields: "type"; "uuid", the entry's own id;

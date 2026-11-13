@@ -773,10 +773,12 @@ func (t dropTool) Spec() core.ToolSpec {
 }
 
 // Describe says what a call would do to which VM. For a delete it is the
-// line a person is asked with before the VM is deleted. It fails only for a
-// delete that could not run, with Run's own words, so that nobody is asked
-// about one; any other call whose arguments cannot be used is told so by
-// Run.
+// line a person is asked with before the VM is deleted, and the Action says
+// that a person must be asked (Confirm), whatever the rules or the mode
+// would let run: a deleted VM's saved state cannot be got back. It fails
+// only for a delete that could not run, with Run's own words, so that
+// nobody is asked about one; any other call whose arguments cannot be used
+// is told so by Run.
 func (t dropTool) Describe(call core.ToolCall, _ *core.ToolEnv) (core.Action, error) {
 	var p DropParams
 	err := decodeParams(call.Input, &p)
@@ -787,9 +789,11 @@ func (t dropTool) Describe(call core.ToolCall, _ *core.ToolEnv) (core.Action, er
 	switch {
 	case p.Action == "delete" && err != nil:
 		act.Summary = "Delete a Gno VM and its saved state"
+		act.Confirm = true
 		return act, err
 	case p.Action == "delete":
 		act.Summary = fmt.Sprintf("Delete Gno VM %s and its saved state", p.Name)
+		act.Confirm = true
 	case p.Action == "evict" && err == nil:
 		act.Summary = fmt.Sprintf("Evict Gno VM %s from memory; it keeps its state", p.Name)
 	}

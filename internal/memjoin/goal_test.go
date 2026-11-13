@@ -1,0 +1,177 @@
+package memjoin
+
+import (
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/gnovm"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
+)
+
+const goalName = "greeting-says-hi"
+
+// /goal, end to end, in a session a person types into: the goal is bound
+// and the agent is sent its directive; the agent closes the goal without
+// doing the work, a judge finds it not met, the todo is opened again and
+// the agent is sent back; it does the work, closes the goal again, the
+// judge finds it met, and the session is bound to nothing.
+func TestGoalBoundJudgedSentBackAndMet(t *testing.T) {
+	w := newWorld(t,
+		// The directive's turn: the agent claims the goal holds.
+		reply(memCall("c1", `mem.Done("`+goalName+`", "greet.txt says hi")`)),
+		says("The greeting says hi."),
+		// Sent back by the judge: it does the work and closes again.
+		reply(call("c2", "Read", map[string]any{"file_path": "greet.txt"})),
+		reply(call("c3", "Edit", map[string]any{"file_path": "greet.txt", "old_string": "hello", "new_string": "hi"})),
+		reply(memCall("c4", `mem.Done("`+goalName+`", "greet.txt now says hi")`)),
+		says("Now it does."),
+	)
+	w.Write("greet.txt", "hello, world\n")
+	judged := 0
+	w.script.onSide = func(kind string, r apptest.Request) *apptest.Reply {
+		if kind != sideJudge {
+			return nil
+		}
+		judged++
+		if judged == 1 {
+			return &apptest.Reply{Text: `{"ok": false, "reason": "greet.txt was never read or changed, so nothing shows that it says hi."}`}
+		}
+		return &apptest.Reply{Text: `{"ok": true, "basis": "conversation", "reason": "the edit of greet.txt put hi in place of hello"}`}
+	}
+
+	s := w.sit("-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/goal")
+	s.see("No goal is set.")
+	s.typeLine("/goal greeting says hi")
+	s.see("Goal set: greeting says hi (`" + goalName + "` in mem)")
+	s.see("Goal not met yet: greet.txt was never read or changed, so nothing shows that it says hi. The agent goes back to it.")
+	s.see("Now it does.")
+	s.see("Goal met: greeting says hi (the edit of greet.txt put hi in place of hello)")
+	s.see("-- done in ")
+	s.typeLine("/goal")
+	s.see("No goal is set.")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Fatalf("exit code %d\n%s", code, s.out.String())
+	}
+	w.script.done()
+	if got := w.Read("greet.txt"); got != "hi, world\n" {
+		t.Errorf("greet.txt = %q", got)
+	}
+
+	reqs := w.script.requests()
+	// The directive went out as a prompt of gnosh's own, with the digest
+	// of mem (the goal is in it by then) and no mem line: nobody typed
+	// it.
+	directive := lastUser(t, reqs[0])
+	bound := gnovm.GoalBinding{Condition: "greeting says hi", Name: goalName, Title: "greeting says hi"}
+	has(t, "the directive's prompt", directive,
+		prompt.Wrap(gnovm.GoalDirective(bound)),
+		"<mem>", "`"+goalName+"` \"greeting says hi\"")
+	hasNot(t, "the directive's prompt", directive, prompt.Builtin().MemLine())
+
+	// The bound name went with every call on mem.
+	for i, req := range w.memRequests() {
+		if req.Goal != goalName {
+			t.Errorf("mem call %d was not told the goal the session is bound to: %q", i, req.Goal)
+		}
+	}
+
+	// The judge found the first close not met: the agent was sent back
+	// with what the check found, the goal restated, and what to do.
+	back := lastUser(t, reqs[2])
+	if want := prompt.Builtin().GoalNotMet(goalName, "greeting says hi", "greet.txt was never read or changed, so nothing shows that it says hi."); back != want {
+		t.Errorf("the send-back after a goal was judged not met:\n%s\nwant:\n%s", back, want)
+	}
+
+	// What the judge was shown: the condition, what mem shows of the
+	// todo, and the conversation in full.
+	judges := w.script.sides(sideJudge)
+	if len(judges) != 2 {
+		t.Fatalf("the judge was asked %d times, want twice", len(judges))
+	}
+	shown := lastUser(t, judges[1])
+	has(t, "what the judge was shown", shown,
+		"The goal:\ngreeting says hi",
+		"`"+goalName+"`",
+		"the agent called Edit: {\"file_path\":\"greet.txt\"",
+		"the tool returned: Edited ",
+		"Does the conversation show that the goal holds?")
+	if got := judges[0].JSON["max_tokens"]; got != float64(300) {
+		t.Errorf("the judge was given room for %v tokens, want 300", got)
+	}
+
+	// The session's file holds the binding, and then that it was cleared.
+	var bindings []string
+	for _, e := range w.session(w.Sessions()[0]).Entries() {
+		if e.Key == metaGoal {
+			bindings = append(bindings, e.Value)
+		}
+	}
+	if len(bindings) < 2 || !strings.Contains(bindings[0], `"name":"`+goalName+`"`) || bindings[len(bindings)-1] != "" {
+		t.Errorf("the bindings written to the session's file: %q", bindings)
+	}
+}
+
+// gnosh run --goal: the goal is bound before the run's prompt goes out.
+// A run whose goal is met ends well.
+func TestRunGoalMet(t *testing.T) {
+	w := newWorld(t,
+		reply(call("c1", "Read", map[string]any{"file_path": "greet.txt"})),
+		reply(call("c2", "Edit", map[string]any{"file_path": "greet.txt", "old_string": "hello", "new_string": "hi"})),
+		reply(memCall("c3", `mem.Done("`+goalName+`", "greet.txt now says hi")`)),
+		says("The greeting says hi now."),
+	)
+	w.Write("greet.txt", "hello, world\n")
+	r := w.run("-y", "-p", "--goal", "greeting says hi", "the file is greet.txt")
+	r.wantCode(t, 0)
+	w.script.done()
+	has(t, "stderr", r.err,
+		"Goal set: greeting says hi (`"+goalName+"` in mem)",
+		"Goal met: greeting says hi (the conversation shows it)")
+	hasNot(t, "stderr", r.err, "still set")
+	// The run's own prompt joined the directive's turn.
+	reqs := w.script.requests()
+	has(t, "the first prompt", lastUser(t, reqs[0]), "Goal `"+goalName+"` \"greeting says hi\" is set: greeting says hi")
+	has(t, "the request after the first round", string(reqs[1].Body), "the file is greet.txt")
+}
+
+// A run whose goal is not met keeps being sent back: no count ends the
+// work. Every tenth time in a row the agent is asked whether there is a
+// real reason to stop, and when it says so the run ends, with the goal
+// still set and a failing exit code.
+func TestRunGoalStillSet(t *testing.T) {
+	replies := []apptest.Reply{reply(call("c1", "Read", map[string]any{"file_path": "greet.txt"}))}
+	for i := 0; i < 10; i++ {
+		replies = append(replies, says("The file is read-only, so I cannot change it."))
+	}
+	replies = append(replies, says("The goal cannot be reached as set: greet.txt is read-only here.\n"+prompt.StopMarker))
+	w := newWorld(t, replies...)
+	w.Write("greet.txt", "hello, world\n")
+	r := w.run("-y", "-p", "--goal", "greeting says hi", "the file is greet.txt")
+	r.wantCode(t, 1)
+	w.script.done()
+	has(t, "stderr", r.err,
+		"Goal set: greeting says hi (`"+goalName+"` in mem)",
+		"The goal is still set: greeting says hi (`"+goalName+"` in mem).",
+		"The model chose to stop. Its reason: The goal cannot be reached as set: greet.txt is read-only here.")
+
+	reqs := w.script.requests()
+	bound := gnovm.GoalBinding{Condition: "greeting says hi", Name: goalName, Title: "greeting says hi"}
+	// A plain continuation names the goal and how to close it.
+	has(t, "a continuation", lastUser(t, reqs[2]),
+		"<gnosh>The goal `"+goalName+"` \"greeting says hi\" is not closed, and none of its todos is open. Once it holds, close it with `mem.Done(\""+goalName+"\", \"<command> → <result>\")`")
+	// The tenth in a row is the question.
+	if got, want := lastUser(t, reqs[11]), prompt.Wrap(gnovm.GoalCheckpoint(bound, 10, prompt.StopMarker)); got != want {
+		t.Errorf("the tenth continuation in a row:\n%s\nwant:\n%s", got, want)
+	}
+	if n := len(reqs); n != 12 {
+		t.Errorf("the run made %d requests, want 12", n)
+	}
+	if regexp.MustCompile(`GNOSH_STOP`).MatchString(r.out) {
+		t.Errorf("the stop marker was shown to the person:\n%s", r.out)
+	}
+}
