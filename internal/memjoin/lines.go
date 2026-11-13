@@ -261,15 +261,15 @@ func (j *join) memReminder() string {
 		return ""
 	}
 	var todos []prompt.Todo
-	for _, t := range list {
+	for _, l := range list {
 		status := "pending"
-		switch t.Status {
-		case gnovmtools.TodoStatusCompleted:
+		switch l.State {
+		case gnovmtools.LineDone:
 			status = "completed"
-		case gnovmtools.TodoStatusInProgress:
+		case gnovmtools.LineWorking:
 			status = "in progress"
 		}
-		todos = append(todos, prompt.Todo{Title: t.Content, Status: status})
+		todos = append(todos, prompt.Todo{Title: l.Title, Status: status})
 	}
 	return j.texts.MemReminder(j.frames(), todos)
 }

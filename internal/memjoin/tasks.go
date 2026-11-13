@@ -19,7 +19,7 @@ import (
 // ever written from what mem hands back. It is guarded by the join's
 // lock.
 type taskState struct {
-	list []gnovmtools.Todo
+	list []gnovmtools.TaskLine
 }
 
 // load reads the task list from the session's log: the newest one, the
@@ -27,13 +27,80 @@ type taskState struct {
 func (t *taskState) load(entries []transcript.Entry) {
 	for i := len(entries) - 1; i >= 0; i-- {
 		if e := &entries[i]; e.Type == transcript.TypeMeta && e.Key == metaTasks {
-			var list []gnovmtools.Todo
-			if json.Unmarshal([]byte(e.Value), &list) == nil {
+			if list, ok := decodeTasks(e.Value); ok {
 				t.list = list
 			}
 			return
 		}
 	}
+}
+
+// keptLine is a line of the task list as a session's file keeps it, in
+// the meta entry mem.tasks: the todo's words, how the line reads while it
+// is the one being worked where that is something else, and its state as
+// the word the state gives itself.
+type keptLine struct {
+	Title  string `json:"title"`
+	AtWork string `json:"at_work,omitempty"`
+	State  string `json:"state"`
+}
+
+// encodeTasks writes a task list as a session's file keeps it.
+func encodeTasks(list []gnovmtools.TaskLine) string {
+	kept := make([]keptLine, len(list))
+	for i, l := range list {
+		kept[i] = keptLine{Title: l.Title, State: l.State.String()}
+		if l.AtWork != l.Title {
+			kept[i].AtWork = l.AtWork
+		}
+	}
+	raw, _ := json.Marshal(kept) // strings and nothing else: it cannot fail
+	return string(raw)
+}
+
+// decodeTasks reads a task list as a session's file keeps it. ok is false
+// for a value that is not one: a line with no words, or a state that is
+// none of the three. A list that is not read is not shown; the session's
+// list comes back with its next kept call on mem, which holds it.
+func decodeTasks(value string) (list []gnovmtools.TaskLine, ok bool) {
+	var kept []keptLine
+	if json.Unmarshal([]byte(value), &kept) != nil {
+		return nil, false
+	}
+	list = make([]gnovmtools.TaskLine, 0, len(kept))
+	for _, k := range kept {
+		state, known := lineState(k.State)
+		if k.Title == "" || !known {
+			return nil, false
+		}
+		l := gnovmtools.TaskLine{Title: k.Title, AtWork: k.AtWork, State: state}
+		if l.AtWork == "" {
+			l.AtWork = l.Title
+		}
+		list = append(list, l)
+	}
+	return list, true
+}
+
+// lineState reads a line's state from the word the state gives itself.
+func lineState(word string) (gnovmtools.LineState, bool) {
+	for _, s := range []gnovmtools.LineState{gnovmtools.LineOpen, gnovmtools.LineWorking, gnovmtools.LineDone} {
+		if s.String() == word {
+			return s, true
+		}
+	}
+	return 0, false
+}
+
+// taskStatus is a line's state in the words of the front end's task.
+func taskStatus(s gnovmtools.LineState) string {
+	switch s {
+	case gnovmtools.LineWorking:
+		return app.TaskInProgress
+	case gnovmtools.LineDone:
+		return app.TaskCompleted
+	}
+	return app.TaskPending
 }
 
 // onMemGoals is the tools' OnMemGoals slot: a kept call changed top-level
@@ -61,11 +128,7 @@ func (j *join) onMemGoals(_ context.Context, _ string, goals []gnovm.MemGoal) {
 
 // setTasks keeps a task list for the session and writes it to its log, so
 // that a session that is opened again, or copied, has it.
-func (j *join) setTasks(list []gnovmtools.Todo) {
-	raw, err := json.Marshal(list)
-	if err != nil {
-		return
-	}
+func (j *join) setTasks(list []gnovmtools.TaskLine) {
 	j.mu.Lock()
 	same := sameTasks(j.tasks.list, list)
 	j.tasks.list = list
@@ -73,10 +136,10 @@ func (j *join) setTasks(list []gnovmtools.Todo) {
 	if same {
 		return
 	}
-	_, _ = j.ts.Append(transcript.MetaEntry(metaTasks, string(raw)))
+	_, _ = j.ts.Append(transcript.MetaEntry(metaTasks, encodeTasks(list)))
 }
 
-func sameTasks(a, b []gnovmtools.Todo) bool {
+func sameTasks(a, b []gnovmtools.TaskLine) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -92,7 +155,8 @@ func sameTasks(a, b []gnovmtools.Todo) bool {
 // under the prompt: mem's todos for the last task a call of the session
 // changed, each with where it stands. While the session stands in a
 // frame, the line in progress reads the frame: in `id` "purpose". stack
-// is the session's stack as it stands.
+// is the session's stack as it stands. The front end's task has names of
+// its own for the three parts of a line, and they are filled here.
 func (j *join) showTasks(stack []transcript.Frame) {
 	if !j.main || j.s.Tasks == nil {
 		return
@@ -101,9 +165,9 @@ func (j *join) showTasks(stack []transcript.Frame) {
 	list := slices.Clone(j.tasks.list)
 	j.mu.Unlock()
 	tasks := make([]app.Task, 0, len(list))
-	for _, t := range list {
-		task := app.Task{Content: t.Content, ActiveForm: t.ActiveForm, Status: string(t.Status)}
-		if n := len(stack); n > 0 && t.Status == gnovmtools.TodoStatusInProgress {
+	for _, l := range list {
+		task := app.Task{Content: l.Title, ActiveForm: l.AtWork, Status: taskStatus(l.State)}
+		if n := len(stack); n > 0 && l.State == gnovmtools.LineWorking {
 			task.ActiveForm = fmt.Sprintf("in `%s` %q", stack[n-1].ID, stack[n-1].Label)
 		}
 		tasks = append(tasks, task)
@@ -135,20 +199,20 @@ func ruleWarning(r gnovm.MemRule) string {
 
 // scrubTasks takes what was erased out of a task list. A line left with
 // nothing but the word that stands for what was forgotten goes.
-func scrubTasks(list []gnovmtools.Todo, e gnovm.MemErasure) ([]gnovmtools.Todo, bool) {
+func scrubTasks(list []gnovmtools.TaskLine, e gnovm.MemErasure) ([]gnovmtools.TaskLine, bool) {
 	changed := false
 	out := list[:0:0]
-	for _, t := range list {
-		content, active := e.Scrub(t.Content), e.Scrub(t.ActiveForm)
-		if content != t.Content || active != t.ActiveForm {
+	for _, l := range list {
+		title, atWork := e.Scrub(l.Title), e.Scrub(l.AtWork)
+		if title != l.Title || atWork != l.AtWork {
 			changed = true
 		}
-		if strings.TrimSpace(content) == "(forgotten)" || strings.TrimSpace(content) == "" {
+		if strings.TrimSpace(title) == "(forgotten)" || strings.TrimSpace(title) == "" {
 			changed = true
 			continue
 		}
-		t.Content, t.ActiveForm = content, active
-		out = append(out, t)
+		l.Title, l.AtWork = title, atWork
+		out = append(out, l)
 	}
 	return out, changed
 }

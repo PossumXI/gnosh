@@ -564,6 +564,14 @@ aside: `tools.go` 486 of 662, `memtodos.go` 49 of 66, `tools_test.go` 81 of
 103, `closecheck_test.go` 129 of 137, `memtodos_test.go` 37 of 57,
 `namer_test.go` 22 of 26, `docs_test.go` 708 of 791.
 
+The counts for `memtodos.go` and `memtodos_test.go` were taken before the
+task-list type was written anew (see `memtodos.go` below). That change
+touched, besides the declaration itself, the ten lines of `memtodos.go` and
+the fifteen of `memtodos_test.go` that name the type, its states or its
+fields. The staging folder was not at hand to count again: any of those
+lines that stood as it was staged no longer does, so the two counts may be
+lower by as many.
+
 **`tools.go`.** Kept, with their texts and their logic as they were: the
 four descriptions; the four argument structs with their tags; the rendering
 of a run's result (the value and output, the two error prefixes, the `Next:`
@@ -600,12 +608,32 @@ the byte.
 
 **`memtodos.go`.** It turned a goal of mem's into the earlier harness's
 session task list. Kept: which line is in progress, which are pending or
-completed, and which are left out. Replaced: the earlier harness's todo type and its three statuses, by `Todo`
-and `TodoStatus` declared in the file itself (this harness has no task-list
-type yet); and the setter, which returned the earlier harness's session and
-an error that this file logged. The setter returns nothing now, and the log
-line is gone: a list that cannot be written is the setter's to tell the
+completed, and which are left out. Replaced: the earlier harness's todo type
+and its three statuses, by a task-list type that is gnosh's own, declared in
+the file itself; and the setter, which returned the earlier harness's session
+and an error that this file logged. The setter returns nothing now, and the
+log line is gone: a list that cannot be written is the setter's to tell the
 person of.
+
+The task-list type is `TaskLine`: a line's `Title` (the todo's words, as mem
+holds them), `AtWork` (how the line reads while it is the one being worked)
+and `State`. `LineState` is a small integer, `LineOpen`, `LineWorking` or
+`LineDone`, with a `String` method that names it in a word. The type was
+written twice. As the file was first ported it declared a string type with
+three string constants and a three-field struct, under the names the staged
+file's call sites had used for the earlier harness's type; the similarity
+audit (`tools/audit/similarity/README.md`, finding 1) found those eleven
+lines to be, token for token but for one struct tag, a declaration of the
+earlier harness's Crush-derived code. They were taken out, and the type was
+written anew after the audit, without looking at Crush or at the earlier
+tree: none of the old type's, constants' or fields' names is kept, and no
+alias stands in for them. What `MemTodos` decides is as it was, and every
+string the staged file held is still here: the three status words and the
+three struct tags of the first declaration were the porter's, never among
+the staged strings the check holds, and went with it. `internal/memjoin`
+fills the front end's task from a `TaskLine` (the front end's published
+names are its own, in `internal/app`), and keeps a session's task list in
+the session's file in words of its own.
 
 **`tools_test.go`, `closecheck_test.go`, `memtodos_test.go`,
 `namer_test.go`** are the same tests. The tools are made with `New` and

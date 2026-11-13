@@ -747,7 +747,7 @@ func TestReminderCount(t *testing.T) {
 	if fresh.remind.replies != 10 {
 		t.Errorf("a session opened again counts %d replies since mem was last used, want 10", fresh.remind.replies)
 	}
-	if len(fresh.tasks.list) != 1 || fresh.tasks.list[0].Content != "find the cause" {
+	if len(fresh.tasks.list) != 1 || fresh.tasks.list[0].Title != "find the cause" || fresh.tasks.list[0].State != gnovmtools.LineWorking {
 		t.Errorf("a session opened again has the task list %+v", fresh.tasks.list)
 	}
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/gnovm"
-	gnovmtools "github.com/gnosh-ai/gnosh/internal/gnovm/tools"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -353,24 +352,27 @@ func (sc *scrubber) binding(value *string) bool {
 	return changed
 }
 
-// tasks takes what was erased out of a task list as it is stored.
+// tasks takes what was erased out of a task list as it is kept. A list
+// kept in a shape this build does not read loses the erased text all the
+// same, string by string: an erasure must not depend on which build wrote
+// the file.
 func (sc *scrubber) tasks(value *string) bool {
-	var list []gnovmtools.Todo
-	if *value == "" || json.Unmarshal([]byte(*value), &list) != nil {
+	if *value == "" {
 		return false
+	}
+	list, ok := decodeTasks(*value)
+	if !ok {
+		out, changed := sc.raw(json.RawMessage(*value))
+		if changed {
+			*value = string(out)
+		}
+		return changed
 	}
 	out, changed := scrubTasks(list, sc.e)
 	if !changed {
 		return false
 	}
-	if out == nil {
-		out = []gnovmtools.Todo{}
-	}
-	raw, err := json.Marshal(out)
-	if err != nil {
-		return false
-	}
-	*value = string(raw)
+	*value = encodeTasks(out)
 	return true
 }
 

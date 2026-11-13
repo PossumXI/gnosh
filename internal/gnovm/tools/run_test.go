@@ -1374,8 +1374,8 @@ func TestDecodeParams(t *testing.T) {
 // one line for each that is not dropped or forgotten; one with none is
 // itself.
 func TestMemTodos(t *testing.T) {
-	line := func(content string, status TodoStatus) Todo {
-		return Todo{Content: content, Status: status, ActiveForm: content}
+	line := func(title string, state LineState) TaskLine {
+		return TaskLine{Title: title, AtWork: title, State: state}
 	}
 	steps := []gnovm.MemStep{
 		{Name: "ship/build", Title: "build", Status: "done"},
@@ -1386,24 +1386,30 @@ func TestMemTodos(t *testing.T) {
 	}
 	g := gnovm.MemGoal{Name: "ship", Title: "ship it", Next: "ship/test", Steps: steps}
 	// The one this session holds is in progress.
-	require.Equal(t, []Todo{line("build", TodoStatusCompleted), line("test", TodoStatusPending), line("docs", TodoStatusInProgress)}, MemTodos(g, "s1"))
+	require.Equal(t, []TaskLine{line("build", LineDone), line("test", LineOpen), line("docs", LineWorking)}, MemTodos(g, "s1"))
 	// A session that holds none: the one next is in, or is under.
-	require.Equal(t, []Todo{line("build", TodoStatusCompleted), line("test", TodoStatusInProgress), line("docs", TodoStatusPending)}, MemTodos(g, "s2"))
+	require.Equal(t, []TaskLine{line("build", LineDone), line("test", LineWorking), line("docs", LineOpen)}, MemTodos(g, "s2"))
 	g.Next = "ship/docs/intro"
-	require.Equal(t, []Todo{line("build", TodoStatusCompleted), line("test", TodoStatusPending), line("docs", TodoStatusInProgress)}, MemTodos(g, "s2"))
+	require.Equal(t, []TaskLine{line("build", LineDone), line("test", LineOpen), line("docs", LineWorking)}, MemTodos(g, "s2"))
 
-	require.Equal(t, []Todo{line("tag it", TodoStatusInProgress)}, MemTodos(gnovm.MemGoal{Name: "tag", Title: "tag it"}, "s1"))
-	require.Equal(t, []Todo{line("tag it", TodoStatusCompleted)}, MemTodos(gnovm.MemGoal{Name: "tag", Title: "tag it", Status: "done"}, "s1"))
+	require.Equal(t, []TaskLine{line("tag it", LineWorking)}, MemTodos(gnovm.MemGoal{Name: "tag", Title: "tag it"}, "s1"))
+	require.Equal(t, []TaskLine{line("tag it", LineDone)}, MemTodos(gnovm.MemGoal{Name: "tag", Title: "tag it", Status: "done"}, "s1"))
 
 	// SessionTodos shows the last goal a call changed, and nothing for no
 	// session or no goal.
-	setter := &todoSetter{todos: map[string][]Todo{}}
+	setter := &todoSetter{todos: map[string][]TaskLine{}}
 	show := SessionTodos(setter)
 	show(context.Background(), "s1", []gnovm.MemGoal{g, {Name: "tag", Title: "tag it"}})
-	require.Equal(t, map[string][]Todo{"s1": {line("tag it", TodoStatusInProgress)}}, setter.todos)
+	require.Equal(t, map[string][]TaskLine{"s1": {line("tag it", LineWorking)}}, setter.todos)
 	show(context.Background(), "", []gnovm.MemGoal{g})
 	show(context.Background(), "s2", nil)
 	require.Equal(t, 1, len(setter.todos))
+
+	// A line's state reads as a word, and a line with nothing said of its
+	// state is open.
+	require.Equal(t, "open working done", LineOpen.String()+" "+LineWorking.String()+" "+LineDone.String())
+	require.Equal(t, "LineState(7)", LineState(7).String())
+	require.Equal(t, LineOpen, TaskLine{Title: "docs"}.State)
 }
 
 // The parsers take anything a model may write without failing.

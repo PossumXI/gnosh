@@ -18,10 +18,10 @@ import (
 // todoSetter keeps what SessionTodos writes.
 type todoSetter struct {
 	mu    sync.Mutex
-	todos map[string][]Todo
+	todos map[string][]TaskLine
 }
 
-func (s *todoSetter) SetTodos(_ context.Context, sessionID string, todos []Todo) {
+func (s *todoSetter) SetTodos(_ context.Context, sessionID string, todos []TaskLine) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.todos[sessionID] = todos
@@ -31,23 +31,23 @@ func (s *todoSetter) SetTodos(_ context.Context, sessionID string, todos []Todo)
 // the session's todos show, its next step in progress; a read changes
 // nothing, and dropped steps are left out.
 func TestMemGoalIsTheSessionsTodos(t *testing.T) {
-	setter := &todoSetter{todos: map[string][]Todo{}}
+	setter := &todoSetter{todos: map[string][]TaskLine{}}
 	run := toolsOver(newLazy(t), Options{OnMemGoals: SessionTodos(setter)}).Tool(RunToolName)
-	todo := func(content string, status TodoStatus) Todo {
-		return Todo{Content: content, Status: status, ActiveForm: content}
+	todo := func(title string, state LineState) TaskLine {
+		return TaskLine{Title: title, AtWork: title, State: state}
 	}
 
 	call(t, run, `{"name": "mem", "code": "s := mem.Todo(\"ship it\"); s.Todo(\"build\"); s.Todo(\"test\"); s.Todo(\"tag\")"}`)
-	require.Equal(t, []Todo{
-		todo("build", TodoStatusInProgress),
-		todo("test", TodoStatusPending),
-		todo("tag", TodoStatusPending),
+	require.Equal(t, []TaskLine{
+		todo("build", LineWorking),
+		todo("test", LineOpen),
+		todo("tag", LineOpen),
 	}, setter.todos["session-1"])
 
 	call(t, run, `{"name": "mem", "code": "mem.Done(\"ship/build\", \"built\")\nmem.Drop(\"ship/tag\", \"no tag this time\")"}`)
-	require.Equal(t, []Todo{
-		todo("build", TodoStatusCompleted),
-		todo("test", TodoStatusInProgress),
+	require.Equal(t, []TaskLine{
+		todo("build", LineDone),
+		todo("test", LineWorking),
 	}, setter.todos["session-1"])
 
 	delete(setter.todos, "session-1")
@@ -55,8 +55,8 @@ func TestMemGoalIsTheSessionsTodos(t *testing.T) {
 	require.Empty(t, setter.todos, "a read changes nothing")
 
 	call(t, run, `{"name": "mem", "code": "mem.Done(\"ship/test\", \"ok\")\nmem.Done(\"ship\", \"shipped\")"}`)
-	require.Equal(t, []Todo{
-		todo("build", TodoStatusCompleted),
-		todo("test", TodoStatusCompleted),
+	require.Equal(t, []TaskLine{
+		todo("build", LineDone),
+		todo("test", LineDone),
 	}, setter.todos["session-1"])
 }

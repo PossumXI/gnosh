@@ -218,14 +218,14 @@ func TestTaskListFromMem(t *testing.T) {
 		t.Errorf("a task list or a status fact was set before the session was ready: %q %q", b.lists, b.facts)
 	}
 	b.mem(`mem.Todo("rename the project", "rename it in the code", "rename it in the tests").Push()`)
-	want := []gnovmtools.Todo{
-		{Content: "rename it in the code", Status: gnovmtools.TodoStatusInProgress, ActiveForm: "rename it in the code"},
-		{Content: "rename it in the tests", Status: gnovmtools.TodoStatusPending, ActiveForm: "rename it in the tests"},
+	want := []gnovmtools.TaskLine{
+		{Title: "rename it in the code", AtWork: "rename it in the code", State: gnovmtools.LineWorking},
+		{Title: "rename it in the tests", AtWork: "rename it in the tests", State: gnovmtools.LineOpen},
 	}
-	check := func(what string, want []gnovmtools.Todo) {
+	check := func(what string, want []gnovmtools.TaskLine) {
 		t.Helper()
 		j.mu.Lock()
-		got := append([]gnovmtools.Todo(nil), j.tasks.list...)
+		got := append([]gnovmtools.TaskLine(nil), j.tasks.list...)
 		j.mu.Unlock()
 		if fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Errorf("the task list %s:\n%v\nwant:\n%v", what, got, want)
@@ -251,7 +251,7 @@ func TestTaskListFromMem(t *testing.T) {
 	os.WriteFile(filepath.Join(b.project, "main.go"), []byte("package gnosh\n"), 0o644)
 	b.call("Read", map[string]any{"file_path": filepath.Join(b.project, "main.go")})
 	b.mem("mem.Pop(\"looked at main.go: it says gnosh\")\nmem.Next()")
-	want[0].Status, want[1].Status = gnovmtools.TodoStatusCompleted, gnovmtools.TodoStatusInProgress
+	want[0].State, want[1].State = gnovmtools.LineDone, gnovmtools.LineWorking
 	check("after the first todo was popped", want)
 	if got, want := b.list(), "[x] rename it in the code | [>] in `rename-project/rename-tests` \"rename it in the tests\""; got != want {
 		t.Errorf("the task list, standing in the second todo:\n%s\nwant:\n%s", got, want)
@@ -271,7 +271,7 @@ func TestTaskListFromMem(t *testing.T) {
 	if got, want := b.list(), "[x] rename it in the code | [x] rename it in the tests"; got != want {
 		t.Errorf("the task list once the task is done:\n%s\nwant:\n%s", got, want)
 	}
-	want[1].Status = gnovmtools.TodoStatusCompleted
+	want[1].State = gnovmtools.LineDone
 
 	// The session's file holds the list, so that a session opened again,
 	// or a copy of it, has it.
@@ -281,8 +281,30 @@ func TestTaskListFromMem(t *testing.T) {
 			stored = append(stored, e.Value)
 		}
 	}
-	if len(stored) == 0 || stored[len(stored)-1] != mustJSON(t, want) {
+	if len(stored) == 0 || stored[len(stored)-1] != encodeTasks(want) {
 		t.Errorf("the task lists written to the session's file: %q", stored)
+	}
+	// It is kept in words of the join's own, and reads back as it was. A
+	// value that is no list of this build's is not read.
+	if got, want := stored[len(stored)-1], `[{"title":"rename it in the code","state":"done"},{"title":"rename it in the tests","state":"done"}]`; got != want {
+		t.Errorf("the task list as the session's file keeps it:\n%s\nwant:\n%s", got, want)
+	}
+	if back, ok := decodeTasks(stored[len(stored)-1]); !ok || fmt.Sprint(back) != fmt.Sprint(want) {
+		t.Errorf("the kept task list read back: %v, %v", back, ok)
+	}
+	working := []gnovmtools.TaskLine{{Title: "tag it", AtWork: "in `release-v2/tag` \"tag it\"", State: gnovmtools.LineWorking}}
+	if kept := encodeTasks(working); kept != `[{"title":"tag it","at_work":"in `+"`release-v2/tag`"+` \"tag it\"","state":"working"}]` {
+		t.Errorf("a line that reads otherwise while it is worked, as it is kept: %s", kept)
+	} else if back, ok := decodeTasks(kept); !ok || fmt.Sprint(back) != fmt.Sprint(working) {
+		t.Errorf("that line read back: %v, %v", back, ok)
+	}
+	for _, value := range []string{``, `{}`, `[{"title":"tag it","state":"paused"}]`, `[{"state":"open"}]`, `[{"words":"tag it","where":"waiting"}]`} {
+		if list, ok := decodeTasks(value); ok {
+			t.Errorf("%q was read as a task list: %v", value, list)
+		}
+	}
+	if list, ok := decodeTasks(`[]`); !ok || len(list) != 0 {
+		t.Errorf("an empty list was not read as one: %v, %v", list, ok)
 	}
 	if got := b.feature.Name; got != "mem" {
 		t.Errorf("the feature is named %q", got)

@@ -190,10 +190,19 @@ func TestScrubberEdit(t *testing.T) {
 		t.Errorf("the binding after the erasure: %s", binding.Value)
 	}
 
-	list := []gnovmtools.Todo{{Content: "ship the release on friday", Status: gnovmtools.TodoStatusPending}, {Content: "tag it", Status: gnovmtools.TodoStatusInProgress}}
-	tasks := transcript.MetaEntry(metaTasks, mustJSON(t, list))
-	if !sc.edit(&tasks) || tasks.Value != mustJSON(t, list[1:]) {
+	list := []gnovmtools.TaskLine{
+		{Title: "ship the release on friday", AtWork: "ship the release on friday"},
+		{Title: "tag it", AtWork: "tag it", State: gnovmtools.LineWorking},
+	}
+	tasks := transcript.MetaEntry(metaTasks, encodeTasks(list))
+	if !sc.edit(&tasks) || tasks.Value != encodeTasks(list[1:]) {
 		t.Errorf("the task list after the erasure: %s", tasks.Value)
+	}
+	// A list kept in a shape this build does not read loses the erased
+	// text all the same.
+	other := transcript.MetaEntry(metaTasks, `[{"words":"we ship the release on friday","where":"waiting"},{"words":"tag it"}]`)
+	if !sc.edit(&other) || other.Value != `[{"where":"waiting","words":"we (forgotten)"},{"words":"tag it"}]` {
+		t.Errorf("a task list of another shape after the erasure: %s", other.Value)
 	}
 
 	frame := transcript.PopEntry("deploy-secret/rotate", "rotate "+token, "rotated "+token, "c1")
@@ -201,8 +210,8 @@ func TestScrubberEdit(t *testing.T) {
 		t.Errorf("the frame entry after the erasure: %+v", frame)
 	}
 
-	other := transcript.MetaEntry("model", "a model named "+token)
-	if sc.edit(&other) {
+	foreign := transcript.MetaEntry("model", "a model named "+token)
+	if sc.edit(&foreign) {
 		t.Errorf("a note that is not the join's own was changed")
 	}
 }
