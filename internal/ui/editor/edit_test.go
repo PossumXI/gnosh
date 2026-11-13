@@ -346,6 +346,17 @@ func TestDraftsKeepPastes(t *testing.T) {
 	if got := g.e.Draft(); fmt.Sprint(got.Pastes) != fmt.Sprint(d.Pastes) || got.Text != text {
 		t.Errorf("draft came back as %v", got.Pastes)
 	}
+	// The same words the box shows, for whoever shows the prompt once it
+	// is sent.
+	if got, want := d.Collapsed(), "look: [pasted 20 lines] and [pasted 900 characters]!"; got != want {
+		t.Errorf("Collapsed() = %q, want %q", got, want)
+	}
+	if got := (Draft{Text: "plain\ntext"}).Collapsed(); got != "plain\ntext" {
+		t.Errorf("Collapsed() of a draft without pastes = %q", got)
+	}
+	if got := (Draft{Text: "0123456789", Pastes: []Span{{5, 3}}}).Collapsed(); got != "0123456789" {
+		t.Errorf("Collapsed() with spans that make no sense = %q", got)
+	}
 	// Through the history and back.
 	g.do(`<Enter>`)
 	g.e.AddHistory(Draft{Text: g.last.Text, Pastes: g.last.Pastes})

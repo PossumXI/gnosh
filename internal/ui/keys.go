@@ -1,0 +1,693 @@
+package ui
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/term"
+	"github.com/gnosh-ai/gnosh/internal/ui/editor"
+)
+
+// What the keys do. The table is in doc.go; this file is where it is
+// carried out.
+//
+// The prompt box has the keys whenever no question is on the screen, also
+// while a turn runs: the editor takes each key and says what it did and
+// what it asks for (send, stop, leave, help), and the session acts on
+// that. A question takes the keys while it is on the screen, once the
+// person has stopped typing (see the guard in question.go). A few keys
+// are the session's own and work in every state.
+
+// sheller is what a session's controls may also be: able to run a line the
+// person typed behind "!" as a command of their own. The app's own
+// controls are (app.SessionControls), and so are a backgrounder and a
+// historian; what stands in for them in a test need not be.
+type sheller interface {
+	Shell(command string) error
+}
+
+// backgrounder is what a session's controls may also be: able to move the
+// running command of a tool call to the background, as Ctrl+B asks.
+type backgrounder interface {
+	Background(callID string) bool
+}
+
+// historian is what a session's controls may also be: able to give the
+// prompts sent from this folder in earlier sessions, oldest first, for Up
+// and Ctrl+R to reach.
+type historian interface {
+	History() []string
+}
+
+// atOnce are the commands that run while a turn runs. Every other command
+// typed meanwhile waits for the session to go idle (spec/cc
+// interactive.md, 2.8).
+var atOnce = map[string]bool{
+	"status": true, "tasks": true, "model": true, "permissions": true,
+	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
+	"think": true, "no_think": true, "nothink": true, "no-think": true,
+	"loop": true, "noloop": true, "no_loop": true, "no-loop": true,
+	"exit": true, "quit": true,
+}
+
+// commandWord matches a word that reads as a slash command: a slash and a
+// plain name. A path, such as /usr/local, does not.
+var commandWord = regexp.MustCompile(`^/[a-z][a-z0-9_-]*$`)
+
+// input takes in one thing the terminal reported.
+func (s *session) input(ev term.Event) {
+	switch ev := ev.(type) {
+	case term.Resize:
+		s.resize(ev.Cols, ev.Rows)
+	case term.Resume:
+		// The terminal is gnosh's again after the process was stopped:
+		// what was on the screen is no longer what the renderer left.
+		s.r.Reset()
+		s.dirty = true
+	case term.Key:
+		s.typed(ev, &ev)
+	case term.Paste:
+		s.typed(ev, nil)
+	}
+}
+
+// typed takes in a key or a paste. k is the key, or nil for a paste.
+func (s *session) typed(ev term.Event, k *term.Key) {
+	now := s.now()
+	defer func() { s.lastInput = now }()
+	s.dirty = true
+	if k != nil && s.global(*k) {
+		return
+	}
+	q := s.q
+	if q == nil {
+		s.box(ev, k)
+		return
+	}
+	if q.guarded && now.Before(q.quiet) {
+		// Typed before the question could have been read: the key was
+		// meant for the prompt box, and goes there. The question waits
+		// for a pause.
+		q.quiet = now.Add(guardPause)
+		s.box(ev, k)
+		return
+	}
+	q.guarded = false
+	s.lock()
+	if k != nil && k.IsKey(term.KeyTab, term.ModShift) && s.allowEdits(q) {
+		return
+	}
+	res := q.ui.Handle(ev)
+	if !res.Done {
+		return
+	}
+	ans, record, how := q.answer(res)
+	s.record(q, record)
+	q.answered = true
+	if how == endLeft {
+		// Esc on a question that has no "no": the turn is stopped, in
+		// plain words, and the session takes its question back.
+		s.interrupt()
+	} else if err := s.c.Answer(q.q.ID, ans); err != nil {
+		s.say("That question is no longer waiting for an answer.")
+	}
+	s.closeQuestion()
+}
+
+// global carries out the keys that are the session's own in every state,
+// and reports whether k was one.
+func (s *session) global(k term.Key) bool {
+	switch {
+	case k.Is('l', term.ModCtrl):
+		// Draw the live region again, in case something else wrote over
+		// it. The scrollback is the terminal's and is left alone.
+		if cols, rows, ok := s.host.size(); ok {
+			s.resize(cols, rows)
+		}
+		s.keep(s.r.Clear())
+	case k.Is('z', term.ModCtrl):
+		// The shell has the screen while gnosh is stopped. When it is
+		// continued the live region is drawn afresh, at the cursor.
+		s.keep(s.r.Clear())
+		if err := s.host.suspend(); err != nil {
+			// Nothing was stopped, and nothing else has written to the
+			// terminal: the region is drawn again where it was.
+			s.flash("Ctrl+Z: " + err.Error() + ".")
+		} else {
+			s.r.Reset()
+		}
+	case k.Is('o', term.ModCtrl):
+		s.toggleDetail()
+	case k.Is('t', term.ModCtrl):
+		switch {
+		case len(s.tasks) == 0:
+			s.flash("There is no task list to show: the session has none.")
+		case s.hideTasks:
+			s.hideTasks = false
+		default:
+			s.hideTasks = true
+			s.flash("The task list is out of sight. Ctrl+T shows it again.")
+		}
+	case k.Is('b', term.ModCtrl):
+		s.background()
+	default:
+		return false
+	}
+	s.dirty = true
+	return true
+}
+
+// box gives a key or a paste to the prompt box and acts on what the box
+// asks for.
+func (s *session) box(ev term.Event, k *term.Key) {
+	if k != nil {
+		switch {
+		case s.chord:
+			// The key after Ctrl+X.
+			s.chord = false
+			switch {
+			case k.Is('e', term.ModCtrl):
+				s.external()
+			case k.Is('b', 0), k.Is('b', term.ModCtrl):
+				// Ctrl+B is tmux's own key, where it has to be pressed
+				// twice; this is the same without it.
+				s.background()
+			default:
+				s.flash("Ctrl+X " + k.String() + " does nothing here. Ctrl+X Ctrl+E opens your editor.")
+			}
+			return
+		case k.Is('x', term.ModCtrl):
+			s.chord = true
+			return
+		case k.IsKey(term.KeyTab, term.ModShift):
+			s.cycleMode()
+			return
+		}
+	}
+	s.ed.SetBusy(s.busy || s.cmdRun != "")
+	res := s.ed.Handle(ev)
+	if res.Truncated {
+		s.flash("The terminal cut that paste short. What arrived is in the box.")
+	}
+	if res.Hint == editor.HintStashed {
+		// The warnings of a first press show for as long as they are in
+		// force (see hintLines); this one is said once.
+		s.flash(res.Hint.String())
+	}
+	switch res.Action {
+	case editor.ActionSubmit:
+		d := editor.Draft{Text: res.Text, Pastes: res.Pastes}
+		switch res.Mode {
+		case editor.ModeShell:
+			s.shell(d)
+		case editor.ModeCommand:
+			s.command(d)
+		default:
+			s.send(d)
+		}
+	case editor.ActionInterrupt:
+		s.interrupt()
+	case editor.ActionExit:
+		s.leave(0, "prompt_input_exit")
+	case editor.ActionRewind:
+		s.flash("Going back to an earlier prompt (Esc Esc) is not joined to this build yet.")
+	case editor.ActionHelp:
+		s.help()
+	case editor.ActionEditor:
+		s.external()
+	case editor.ActionQueue:
+		s.takeBack()
+	}
+}
+
+// send hands a prompt to the session. While a turn runs the session
+// queues it. Either way it shows as queued until it is seen going out,
+// so it is never out of sight.
+func (s *session) send(d editor.Draft) {
+	p := agent.Prompt{Text: d.Text, Attachments: s.attach}
+	if len(d.Pastes) > 0 {
+		p.Meta = map[string]any{metaPastes: d.Pastes}
+	}
+	id, err := s.c.Submit(p)
+	if err != nil {
+		s.restore(d)
+		s.notice(agent.LevelWarning, "The prompt was not sent: "+err.Error()+"\nIt is back in the prompt box.")
+		return
+	}
+	s.attach = nil
+	s.sending = append(s.sending, sent{id: id, draft: d})
+	s.queued()
+}
+
+// shell runs a line typed behind "!" as a command of the person's own,
+// when the session can do that.
+func (s *session) shell(d editor.Draft) {
+	sh, ok := s.c.(sheller)
+	if !ok {
+		s.restore(d)
+		s.notice(agent.LevelWarning, "Shell lines (a line that begins with !) are not joined to this build yet, so the command was not run.\nIt is back in the prompt box.")
+		return
+	}
+	if err := sh.Shell(strings.TrimPrefix(d.Text, "!")); err != nil {
+		s.restore(d)
+		s.notice(agent.LevelWarning, "The command was not run: "+err.Error()+"\nIt is back in the prompt box.")
+		return
+	}
+	s.ed.AddHistory(d)
+}
+
+// command takes a line that begins with a slash. While a turn runs it
+// waits for the session to go idle, unless it is one of the few commands
+// that act at once.
+func (s *session) command(d editor.Draft) {
+	line := strings.TrimSpace(d.Text)
+	word, _, _ := strings.Cut(strings.TrimPrefix(line, "/"), " ")
+	if s.busy && !atOnce[strings.ToLower(word)] {
+		s.cmdq = append(s.cmdq, line)
+		s.queued()
+		return
+	}
+	s.run(line)
+}
+
+// shownCommand is a slash command's line as the interface shows it and
+// remembers it, and whether something was left out of it. What follows
+// "/mem redact" is a text the person wants gone from everywhere: the
+// session keeps it out of its log, and the interface keeps it out of the
+// scrollback, the live region and the history. (Nothing in the session's
+// controls says which commands carry such a text, so this one is named
+// here.)
+func shownCommand(line string) (shown string, held bool) {
+	words := strings.Fields(line)
+	if len(words) > 2 && strings.EqualFold(words[0], "/mem") && strings.EqualFold(words[1], "redact") {
+		return words[0] + " " + words[1] + " (what was typed after it is not shown)", true
+	}
+	return line, false
+}
+
+// run runs a slash command. The session code runs it and may take its
+// time, so it runs away from the loop: the box stays usable meanwhile,
+// and Esc stops it.
+func (s *session) run(line string) {
+	if s.cmdRun != "" {
+		s.cmdq = append(s.cmdq, line)
+		s.queued()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cmdRun, s.cmdStop = line, cancel
+	c := s.c
+	s.host.spawn(func() func() {
+		res, err := c.Command(ctx, line)
+		return func() {
+			cancel()
+			s.ran(line, res, err)
+		}
+	})
+}
+
+// ran takes in what a slash command came to.
+func (s *session) ran(line string, res app.CommandResult, err error) {
+	s.cmdRun, s.cmdStop = "", nil
+	s.dirty = true
+	word, _, _ := strings.Cut(line, " ")
+	switch {
+	case !res.Handled && err == nil && commandWord.MatchString(strings.ToLower(word)):
+		// No such command. The line goes back into the box.
+		s.restore(editor.Draft{Text: line})
+		s.notice(agent.LevelWarning, "There is no command "+oneLine(word)+". /help lists the commands. To send a prompt that begins with a slash, put a space in front of it.\nWhat you typed is back in the prompt box.")
+	case !res.Handled && err == nil:
+		// A prompt that happens to begin with a slash, such as a path.
+		s.send(editor.Draft{Text: line})
+	default:
+		th := &s.th
+		shown, held := shownCommand(line)
+		s.begin(blkPrompt)
+		s.put(wrap(s.m, th.PromptText.Render(oneLine(shown)), s.cols, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", s.m.Width(th.PromptMark)))...)
+		for _, l := range safeLines(res.Text) {
+			s.put(wrap(s.m, l, s.cols, "", "")...)
+		}
+		if !held {
+			s.ed.AddHistory(editor.Draft{Text: line})
+		}
+		if err != nil {
+			s.notice(agent.LevelError, err.Error())
+		}
+		if res.Quit {
+			s.leave(0, "prompt_input_exit")
+			return
+		}
+		if res.Name == "clear" {
+			// A new session stands behind the same controls: nothing of
+			// the old one is under way any more.
+			s.busy, s.stopping, s.ph = false, false, phIdle
+			s.reply, s.calls, s.queue, s.sending = reply{}, nil, nil, nil
+			s.q, s.qwait = nil, nil
+			s.lastThinking, s.loop = "", false
+			s.facts = map[string]string{}
+			s.lock()
+		}
+		s.refresh()
+		// A command may have put another session behind the controls,
+		// with a task list of its own or none.
+		s.tasks = s.c.Tasks()
+	}
+	s.queued()
+	s.nextCommand()
+}
+
+// nextCommand runs the next slash command that waited for the session to
+// go idle.
+func (s *session) nextCommand() {
+	if s.busy || s.cmdRun != "" || len(s.cmdq) == 0 || s.done {
+		return
+	}
+	line := s.cmdq[0]
+	s.cmdq = s.cmdq[1:]
+	s.queued()
+	s.run(line)
+}
+
+// interrupt stops the turn that is running, all of it and at once, and a
+// slash command that is running. The line above the box says so until
+// the turn's end arrives.
+func (s *session) interrupt() {
+	if s.cmdStop != nil {
+		s.cmdStop()
+	}
+	if s.busy {
+		s.stopping = true
+	}
+	s.c.Interrupt()
+	s.dirty = true
+}
+
+// takeBack brings the prompts that wait for their turn back into the box
+// for editing, and off the queue: what Up does in an empty box. Slash
+// commands that waited come back after them. Enter then sends all of it
+// as one prompt.
+func (s *session) takeBack() {
+	var d editor.Draft
+	add := func(text string, pastes []editor.Span) {
+		if strings.TrimSpace(text) == "" {
+			return
+		}
+		if d.Text != "" {
+			d.Text += "\n\n"
+		}
+		at := len(d.Text)
+		d.Text += text
+		for _, sp := range pastes {
+			d.Pastes = append(d.Pastes, editor.Span{Start: sp.Start + at, End: sp.End + at})
+		}
+	}
+	for _, p := range s.c.TakeQueued() {
+		spans, _ := p.Meta[metaPastes].([]editor.Span)
+		add(p.Text, spans)
+		s.attach = append(s.attach, p.Attachments...)
+		for i, x := range s.sending {
+			if x.draft.Text == p.Text {
+				s.sending = append(s.sending[:i], s.sending[i+1:]...)
+				break
+			}
+		}
+	}
+	for _, line := range s.cmdq {
+		add(line, nil)
+	}
+	s.cmdq = nil
+	// The session's own list of what waits follows as an event; until
+	// then, what was just taken back is not shown as waiting.
+	kept := s.queue[:0:0]
+	for _, q := range s.queue {
+		if q.Prompt.Hidden {
+			kept = append(kept, q)
+		}
+	}
+	s.queue = kept
+	if d.Text == "" {
+		s.flash("Nothing waits in the queue any more.")
+	}
+	s.restore(d)
+	s.queued()
+}
+
+// external opens the box's text in the person's own editor.
+func (s *session) external() {
+	edited, err := s.host.edit(s.ed.Text())
+	s.dirty = true
+	if err != nil {
+		s.flash(err.Error())
+		return
+	}
+	s.ed.SetText(strings.TrimRight(edited, "\n"))
+}
+
+// modeOrder is the order Shift+Tab goes through the permission modes in.
+// Skipping permissions is part of it only in a session that was started
+// with it within reach: the session refuses it otherwise, and it is
+// passed over.
+var modeOrder = []string{"default", "acceptEdits", "plan", "bypassPermissions"}
+
+// cycleMode moves to the next permission mode.
+func (s *session) cycleMode() {
+	cur := s.c.Mode()
+	at := -1
+	for i, m := range modeOrder {
+		if m == cur {
+			at = i
+		}
+	}
+	for step := 1; step <= len(modeOrder); step++ {
+		next := modeOrder[(at+step+len(modeOrder))%len(modeOrder)]
+		if next == cur {
+			break
+		}
+		if err := s.c.SetMode(next); err != nil {
+			continue
+		}
+		s.mode = next
+		if next == "bypassPermissions" {
+			s.notice(agent.LevelWarning, "The permission mode is now BYPASS PERMISSIONS: nothing asks before it runs, except what a deny rule or an ask rule names and the removals gnosh always asks about. Shift+Tab leaves it.")
+		} else {
+			s.flash("Permission mode: " + modeNames[next] + ". Shift+Tab goes on to the next.")
+		}
+		s.dirty = true
+		return
+	}
+	s.flash("The permission mode stays " + firstNonEmpty(modeNames[cur], cur) + ": there is no other to go to.")
+}
+
+// allowEdits is Shift+Tab on a question about an edit: it answers yes and
+// accepts edits for the rest of the session, when the question offers
+// that. It reports whether it did.
+func (s *session) allowEdits(q *question) bool {
+	if q.q.Kind != "permission" || q.q.Action == nil || q.q.Action.Kind != core.ActionEdit {
+		return false
+	}
+	for i, key := range q.keys {
+		// The gate offers the change of mode as one of its "yes, and
+		// don't ask again" answers, and names the mode in it.
+		if strings.HasPrefix(key, "always:") && strings.Contains(q.labels[i], "acceptEdits") {
+			s.record(q, q.labels[i])
+			q.answered = true
+			if err := s.c.Answer(q.q.ID, agent.Answer{Choice: key}); err != nil {
+				s.say("That question is no longer waiting for an answer.")
+			}
+			s.closeQuestion()
+			return true
+		}
+	}
+	return false
+}
+
+// toggleDetail turns detail on or off: with it on, the model's reasoning
+// and every tool's whole output are written into the scrollback from then
+// on. What is in the scrollback already is never drawn again, so the
+// reasoning that was folded last is written out now.
+func (s *session) toggleDetail() {
+	s.detail = !s.detail
+	if !s.detail {
+		s.flash("Detail off: reasoning is folded and outputs are shortened again.")
+		return
+	}
+	s.flash("Detail on: reasoning and whole outputs are written out from here on. Ctrl+O turns it off.")
+	rp := &s.reply
+	if rp.thinking {
+		// Reasoning that is arriving right now: all of it so far.
+		rp.thinkRest = rp.think.String()
+		if i := strings.LastIndexByte(rp.thinkRest, '\n'); i >= 0 {
+			s.thought(rp.thinkRest[:i])
+			rp.thinkRest = rp.thinkRest[i+1:]
+		}
+		return
+	}
+	if rows := s.thinkRows(s.lastThinking, s.cols); len(rows) > 0 {
+		s.begin(blkThinking)
+		s.put(s.th.Thinking.Render(s.th.ThinkMark + " thinking, of the reply before"))
+		s.put(rows...)
+	}
+	s.lastThinking = ""
+}
+
+// background moves the commands that are running to the background, when
+// the session can do that.
+func (s *session) background() {
+	b, ok := s.c.(backgrounder)
+	if !ok {
+		s.flash("Moving a running command to the background (Ctrl+B) is not joined to this build yet.")
+		return
+	}
+	moved := 0
+	for _, c := range s.calls {
+		if c.started && b.Background(c.id) {
+			moved++
+		}
+	}
+	if moved == 0 {
+		s.flash("No command is running that could move to the background.")
+	}
+}
+
+// ask puts a question on the screen, or behind the one that is there.
+// sub is the id of the sub-agent that asks, if one does.
+func (s *session) ask(q agent.Question, sub string) {
+	qs := newQuestion(&s.th, s.m, s.cols, q, -1)
+	qs.sub = sub
+	if s.q != nil {
+		s.qwait = append(s.qwait, qs)
+		return
+	}
+	s.open(qs)
+}
+
+// open makes qs the question on the screen. It takes no key until the
+// person has had time to see it and has stopped typing.
+func (s *session) open(qs *question) {
+	now := s.now()
+	qs.opened, qs.guarded = now, true
+	qs.quiet = now.Add(guardShown)
+	if t := s.lastInput.Add(guardPause); t.After(qs.quiet) {
+		qs.quiet = t
+	}
+	s.q = qs
+	s.dirty = true
+}
+
+// closeQuestion takes the question off the screen. The prompt box has the
+// keys again, with whatever was in it, unless another question waits.
+func (s *session) closeQuestion() {
+	s.q = nil
+	if len(s.qwait) > 0 {
+		next := s.qwait[0]
+		s.qwait = s.qwait[1:]
+		s.open(next)
+	}
+	s.lock()
+	s.dirty = true
+}
+
+// answered takes in the session's word that a question is over.
+func (s *session) answered(ev *agent.AnswerEvent) {
+	if q := s.q; q != nil && q.q.ID == ev.ID {
+		if !q.answered {
+			words := "answered elsewhere"
+			switch {
+			case ev.Withdrawn && !q.deadline.IsZero() && !s.now().Before(q.deadline):
+				words = "taken back unanswered: nobody answered in time"
+			case ev.Withdrawn:
+				words = "taken back unanswered: the turn was stopped"
+			}
+			s.record(q, words)
+		}
+		s.closeQuestion()
+		return
+	}
+	for i, q := range s.qwait {
+		if q.q.ID == ev.ID {
+			s.qwait = append(s.qwait[:i], s.qwait[i+1:]...)
+			return
+		}
+	}
+}
+
+// record writes a question and what became of it into the scrollback, so
+// that what was decided can be read back.
+func (s *session) record(q *question, words string) {
+	th := &s.th
+	title := oneLine(firstNonEmpty(q.q.Title, q.q.Kind, "question"))
+	if q.sub != "" {
+		title = "(for a sub-agent) " + title
+	}
+	lines := safeLines(words)
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	s.begin(blkAsk)
+	for i, l := range lines {
+		first := "  "
+		if i == 0 {
+			first = th.Ask.Render(th.AskMark) + " " + title + " "
+		}
+		s.put(wrap(s.m, th.Answer.Render(l), s.cols, first, "  ")...)
+	}
+}
+
+// help writes the keys into the scrollback, where they can be read and
+// scrolled like anything else. What this build cannot do yet is said
+// under them.
+func (s *session) help() {
+	th := &s.th
+	rows := [][2]string{
+		{"Enter", "send; while a turn runs, queue the prompt behind it"},
+		{"\\ then Enter, Ctrl+J", "new line (Shift+Enter too, where the terminal reports it)"},
+		{"Esc", "stop the turn; idle, twice: clear the box (Up brings it back)"},
+		{"Ctrl+C", "stop the turn; idle: clear the box, and again to leave"},
+		{"Ctrl+D", "on an empty box, twice: leave"},
+		{"Up, Down", "history; Up in an empty box takes the queue back for editing"},
+		{"Ctrl+R", "search the history"},
+		{"/ at the start", "a command, completed as you type (/help lists them)"},
+		{"@", "a file to mention, completed as you type"},
+		{"Tab", "take a completion; on a folded paste, unfold it"},
+		{"Shift+Tab", "the next permission mode; it is always on the status line"},
+		{"Ctrl+O", "more detail, or less: reasoning and whole outputs"},
+		{"Ctrl+B, Ctrl+X b", "move the running command to the background"},
+		{"Ctrl+T", "hide or show the task list"},
+		{"Ctrl+G", "edit the prompt in your editor (also Ctrl+X Ctrl+E)"},
+		{"Ctrl+S", "put the prompt aside, and bring it back"},
+		{"Ctrl+L", "draw the bottom of the screen again"},
+		{"Ctrl+Z", "suspend gnosh; fg brings it back"},
+		{"?", "in an empty box: this list"},
+	}
+	wide := 0
+	for _, r := range rows {
+		wide = max(wide, s.m.Width(r[0]))
+	}
+	s.begin(blkText)
+	s.put(th.ToolName.Render("Keys"))
+	for _, r := range rows {
+		key := r[0] + strings.Repeat(" ", wide-s.m.Width(r[0]))
+		rest := strings.Repeat(" ", wide+4)
+		if s.cols < wide+24 {
+			rest = "    "
+		}
+		s.put(wrap(s.m, th.Quiet.Render(r[1]), s.cols, "  "+key+"  ", rest)...)
+	}
+	var missing []string
+	if _, ok := s.c.(sheller); !ok {
+		missing = append(missing, "shell lines that begin with !")
+	}
+	if _, ok := s.c.(backgrounder); !ok {
+		missing = append(missing, "moving a running command to the background")
+	}
+	if _, ok := s.c.(historian); !ok {
+		missing = append(missing, "the prompts of earlier sessions in the history")
+	}
+	missing = append(missing, "going back to an earlier prompt (Esc Esc in an empty box)")
+	s.put(wrap(s.m, th.Quiet.Render(fmt.Sprintf("Not joined to this build yet: %s.", strings.Join(missing, "; "))), s.cols, "", "  ")...)
+}

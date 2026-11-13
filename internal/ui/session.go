@@ -1,0 +1,581 @@
+package ui
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/markdown"
+	"github.com/gnosh-ai/gnosh/internal/term"
+	"github.com/gnosh-ai/gnosh/internal/text"
+	"github.com/gnosh-ai/gnosh/internal/ui/editor"
+)
+
+// host is what a session asks of whoever owns the terminal and the
+// goroutines: the interface's loop when gnosh runs, the tests' own when it
+// is tested.
+type host interface {
+	// spawn runs job away from the loop, and then runs what job returns on
+	// the loop, where the session's state may be touched.
+	spawn(job func() (then func()))
+	// suspend gives the terminal back to the shell and stops the process,
+	// as Ctrl+Z does to any program. It returns when the shell has
+	// continued the process and the terminal is the interface's again;
+	// the caller erases the live region before and draws it afresh after.
+	suspend() error
+	// edit lets the person edit text in their own editor (VISUAL, EDITOR)
+	// and returns what they saved. When it has given the terminal to the
+	// editor, it has erased the live region first and made the renderer
+	// start afresh afterwards.
+	edit(text string) (string, error)
+	// size is the terminal's size as it stands, when it can be told.
+	size() (cols, rows int, ok bool)
+}
+
+// config is what a session is made with.
+type config struct {
+	theme    Theme
+	metrics  text.Metrics
+	now      func() time.Time
+	controls app.Controls
+	renderer *term.Renderer
+	host     host
+	cols     int
+	rows     int
+	home     string
+	// branch reads the git branch of a directory, or returns "".
+	branch func(dir string) string
+	// list lists a directory for file completion.
+	files func(dir string) []fileEntry
+}
+
+// phase is what the session is doing, as the line above the prompt box
+// says it.
+type phase int
+
+const (
+	phIdle     phase = iota // nothing
+	phStarting              // a prompt is being taken in
+	phRequest               // a request is out and nothing has come back
+	phThinking              // the model's reasoning is arriving
+	phWriting               // the answer is arriving
+	phCall                  // the model is writing a tool call
+	phTools                 // tool calls are running
+	phRetry                 // waiting to send a failed request again
+	phSummary               // a summary of the conversation is being written
+	phWorking               // between two of the above; the session says what
+)
+
+// blockKind is a kind of thing written into the scrollback. Two blocks
+// stand a blank line apart, except two of a kind that is one line long.
+type blockKind int
+
+const (
+	blkNone blockKind = iota
+	blkHeader
+	blkPrompt
+	blkAnswer
+	blkThinking
+	blkTool     // a tool call with something under its heading
+	blkToolLine // a tool call that is its heading alone
+	blkNotice
+	blkAsk
+	blkTurn
+	blkText // what a command said
+)
+
+// sent is a prompt the person sent that has not been seen going out to
+// the model yet.
+type sent struct {
+	id    string
+	draft editor.Draft
+}
+
+// reply is the reply the model is writing.
+type reply struct {
+	// md renders the answer; it is nil until the answer's first piece.
+	md *markdown.Renderer
+	// begun says the answer has a line in the scrollback already.
+	begun bool
+	// fed is how many bytes of the answer md has been given, and lossy
+	// says pieces after them were lost on the way: the rest then comes
+	// with the reply's end.
+	fed   int
+	lossy bool
+	// chars counts everything the reply holds so far, for the estimate
+	// of how much has been written.
+	chars int
+
+	// thinking says reasoning is arriving, since thinkSince. think holds
+	// all of it, thinkRest the part of it not yet in the scrollback when
+	// detail is on, and thinkBegun whether that block has begun.
+	thinking   bool
+	thinkSince time.Time
+	think      strings.Builder
+	thinkRest  string
+	thinkBegun bool
+}
+
+// session is the interactive session as the person sees it: everything
+// that decides what is written into the scrollback and what the live
+// region holds. It has no goroutine and no terminal of its own: the loop
+// (or a test) hands it what the session and the terminal report, one
+// thing at a time, and asks it to draw.
+type session struct {
+	th   Theme
+	m    text.Metrics
+	now  func() time.Time
+	c    app.Controls
+	r    *term.Renderer
+	host host
+
+	cols, rows int
+	cwd, home  string
+	branchOf   func(string) string
+	listDir    func(string) []fileEntry
+
+	// pending are the lines that wait to be committed at the next frame,
+	// last is the kind of block the last of them ends, and dirty says
+	// the live region may have changed.
+	pending []string
+	last    blockKind
+	dirty   bool
+	// werr is the first error the terminal gave on a write.
+	werr error
+
+	// What the tests watch: every line committed, and every live region
+	// set.
+	onCommit func(lines []string)
+	onLive   func(lines []string, row, col int)
+
+	ed *editor.Editor
+	// attach are attachments that came back with a prompt and go out
+	// with the next one.
+	attach []core.Block
+	// sending are the prompts sent and not yet seen going out.
+	sending []sent
+	// lastInput is when a key was last pressed.
+	lastInput time.Time
+	// chord says Ctrl+X was pressed and the key after it is awaited.
+	chord bool
+
+	// q is the question on the screen and qwait the ones behind it.
+	q     *question
+	qwait []*question
+
+	// busy says the session has work in hand: from its BusyEvent to its
+	// IdleEvent. ph is what it is doing and since when.
+	busy  bool
+	ph    phase
+	since time.Time
+	// heard is when the session last reported anything.
+	heard time.Time
+	// stopping says the person stopped the turn and its end has not
+	// come yet.
+	stopping bool
+	// model is the model main requests go to, estimate about how many
+	// tokens the request that is out holds, and attempt which try it is.
+	model    string
+	estimate int
+	attempt  int
+	// The wait before a failed request is sent again: until when, the
+	// kind of failure, and how many waits there have been since the
+	// provider last answered, the first of them at retrySince.
+	retryUntil time.Time
+	retryKind  string
+	retries    int
+	retrySince time.Time
+
+	reply reply
+	// lastThinking is the reasoning of the last reply that was shown
+	// folded, kept so that Ctrl+O can show it afterwards.
+	lastThinking string
+	calls        []*call
+	// queue is the prompts that wait for their turn, as the session
+	// reports them, and loop whether /loop is on.
+	queue []agent.QueuedPrompt
+	loop  bool
+
+	// cmdq are slash commands that wait for the turn to end, cmdRun the
+	// one that is running, and cmdStop what stops it.
+	cmdq    []string
+	cmdRun  string
+	cmdStop context.CancelFunc
+
+	// What the status line says.
+	info   app.SessionInfo
+	mode   string
+	ctxs   agent.ContextStatus
+	branch string
+	facts  map[string]string
+	detail bool
+	// tasks is the session's task list as it stands, and hideTasks says
+	// Ctrl+T has put it out of sight.
+	tasks     []app.Task
+	hideTasks bool
+	// tipped says the key that shows more has been named once.
+	tipped bool
+
+	// hint is a short notice under the status line, until hintUntil.
+	hint      string
+	hintUntil time.Time
+
+	// idleSince is when the session last went idle, and idleTold whether
+	// the Notification hooks were told of it.
+	idleSince time.Time
+	idleTold  bool
+
+	// done says the session is over; code is the exit code and why the
+	// reason, in the SessionEnd hooks' words.
+	done bool
+	code int
+	why  string
+}
+
+// newSession makes a session. Nothing is drawn until start.
+func newSession(cfg config) *session {
+	s := &session{
+		th: cfg.theme, m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, host: cfg.host,
+		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), home: cfg.home,
+		branchOf: cfg.branch, listDir: cfg.files,
+		facts: map[string]string{},
+	}
+	if s.now == nil {
+		s.now = time.Now
+	}
+	s.ed = editor.New(editor.Options{
+		Theme:    s.th.Editor,
+		Complete: s.complete,
+		Now:      s.now,
+		Metrics:  s.m,
+	})
+	return s
+}
+
+// start writes the header and takes in what the session is.
+func (s *session) start() {
+	s.refresh()
+	s.tasks = s.c.Tasks()
+	s.header()
+	if h, ok := s.c.(historian); ok {
+		var drafts []editor.Draft
+		for _, p := range h.History() {
+			drafts = append(drafts, editor.Draft{Text: p})
+		}
+		s.ed.SetHistory(drafts)
+	}
+	s.dirty = true
+}
+
+// refresh reads again what the status line shows and the session can
+// change behind the interface's back: its model, its mode, how full the
+// model's window is, the git branch.
+func (s *session) refresh() {
+	s.info = s.c.Info()
+	s.mode = s.c.Mode()
+	s.ctxs = s.c.Context()
+	s.cwd = s.info.Cwd
+	if s.model == "" || !s.busy {
+		s.model = s.info.Model
+	}
+	if s.branchOf != nil && s.cwd != "" {
+		s.branch = s.branchOf(s.cwd)
+	}
+	s.dirty = true
+}
+
+// header writes the wordmark and what the session is, once.
+func (s *session) header() {
+	th := &s.th
+	s.begin(blkHeader)
+	line := th.wordmark()
+	if v := oneLine(s.info.Version); v != "" {
+		line += " " + th.Quiet.Render(v)
+	}
+	s.put(fit(s.m, line, s.cols))
+	model := oneLine(s.info.Model)
+	if s.info.Provider != "" && model != "" {
+		model = oneLine(s.info.Provider) + "/" + model
+	}
+	if model == "" {
+		model = "no model"
+	}
+	what := th.Quiet.Render("model ") + model
+	if lvl := oneLine(s.info.Thinking); lvl != "" {
+		what += th.Quiet.Render(th.Sep+"thinking ") + lvl
+	}
+	s.put(wrap(s.m, what, s.cols, "", "  ")...)
+	where := th.Quiet.Render("folder ") + showPath("", s.home, s.cwd)
+	if s.branch != "" {
+		where += th.Quiet.Render(" (" + s.branch + ")")
+	}
+	s.put(wrap(s.m, where, s.cols, "", "  ")...)
+	s.put(wrap(s.m, th.Quiet.Render("? shows the keys"+th.Sep+"/help lists the commands"+th.Sep+"Esc stops a turn"), s.cols, "", "")...)
+}
+
+// begin starts a block of the given kind in the scrollback: a blank line
+// goes first where the block before it should stand apart.
+func (s *session) begin(kind blockKind) {
+	packed := kind == s.last && (kind == blkNotice || kind == blkToolLine || kind == blkAsk)
+	if s.last != blkNone && !packed {
+		s.pending = append(s.pending, "")
+	}
+	s.last = kind
+}
+
+// put adds lines to the block that was begun. They are committed at the
+// next frame, in order, and never drawn again. Every line is laid out
+// for the terminal's width by whoever made it; a line that is wider all
+// the same (the terminal is narrower than the narrowest layout there is)
+// is wrapped once more here, so that what is committed is what the
+// terminal shows and nothing of it is cut off.
+func (s *session) put(lines ...string) {
+	for _, l := range lines {
+		s.pending = append(s.pending, s.asRows(l)...)
+	}
+	s.dirty = true
+}
+
+// asRows returns a line as the rows it takes at the terminal's width: the
+// line itself when it fits, as nearly every line does.
+func (s *session) asRows(l string) []string {
+	l = strings.TrimRight(l, " ")
+	if s.m.VisibleWidth(l) <= s.cols {
+		return []string{l}
+	}
+	rows := wrap(s.m, l, s.cols, "", "")
+	for i, r := range rows {
+		rows[i] = strings.TrimRight(r, " ")
+	}
+	return rows
+}
+
+// The words that lead a notice.
+const (
+	labelNote  = "note: "
+	labelWarn  = "warning: "
+	labelError = "error: "
+)
+
+// notice writes one notice into the scrollback: a quiet line, a warning or
+// an error. The words are outside text and are made safe here.
+func (s *session) notice(level agent.Level, words string) {
+	th := &s.th
+	label, style := th.NoteLabel.Render(labelNote), th.NoteText
+	switch level {
+	case agent.LevelWarning:
+		label, style = th.WarnLabel.Render(labelWarn), text.Style{}
+	case agent.LevelError:
+		label, style = th.ErrorLabel.Render(labelError), text.Style{}
+	}
+	lines := safeLines(words)
+	if len(lines) == 0 {
+		return
+	}
+	s.begin(blkNotice)
+	for i, l := range lines {
+		first := "  "
+		if i == 0 {
+			first = label
+		}
+		s.put(wrap(s.m, style.Render(l), s.cols, first, "  ")...)
+	}
+}
+
+// say writes a quiet line of gnosh's own into the scrollback.
+func (s *session) say(words string) { s.notice(agent.LevelInfo, words) }
+
+// flash shows a short notice under the status line for a few seconds. It
+// is for what a key press calls for and nobody needs to read later.
+func (s *session) flash(words string) {
+	s.hint, s.hintUntil = words, s.now().Add(4*time.Second)
+	s.dirty = true
+}
+
+// setPhase notes what the session is doing now.
+func (s *session) setPhase(p phase) {
+	if s.ph != p {
+		s.ph, s.since = p, s.now()
+	}
+	s.dirty = true
+}
+
+// leave ends the session: the loop stops, erases the live region and
+// returns code. why is the reason in the SessionEnd hooks' words.
+func (s *session) leave(code int, why string) {
+	s.done, s.code, s.why = true, code, why
+}
+
+// frame writes what is waiting: first the lines to commit, for good, and
+// then the live region as it stands now. It is the only place the session
+// writes to the terminal.
+func (s *session) frame() {
+	if len(s.pending) > 0 {
+		if s.onCommit != nil {
+			s.onCommit(s.pending)
+		}
+		s.keep(s.r.Commit(s.pending...))
+		s.pending = s.pending[:0]
+	}
+	lines, row, col := s.compose()
+	if s.onLive != nil {
+		s.onLive(lines, row, col)
+	}
+	s.keep(s.r.SetLive(lines, row, col))
+	s.dirty = false
+}
+
+// keep remembers the first error a write to the terminal gave. A terminal
+// that cannot be written to is gone, and the session ends.
+func (s *session) keep(err error) {
+	if err != nil && s.werr == nil {
+		s.werr = err
+	}
+}
+
+// resize takes in the terminal's new size. The renderer finds the live
+// region again and draws it for the new size; what the session draws next
+// is laid out for it, and what is in the scrollback stays as the terminal
+// left it.
+func (s *session) resize(cols, rows int) {
+	if cols < 1 || rows < 1 || (cols == s.cols && rows == s.rows) {
+		return
+	}
+	s.cols, s.rows = cols, rows
+	// Lines that wait to be committed were laid out for the old width.
+	// In a narrower terminal they are wrapped again, so that the
+	// terminal does not cut them off.
+	waiting := s.pending
+	s.pending = nil
+	for _, l := range waiting {
+		s.pending = append(s.pending, s.asRows(l)...)
+	}
+	if s.reply.md != nil {
+		s.reply.md.SetWidth(cols)
+	}
+	if s.q != nil {
+		s.q.rebuild(&s.th, s.m, cols)
+	}
+	s.keep(s.r.Resize(cols, rows))
+	s.dirty = true
+}
+
+// tick lets time pass: what is shown with a clock on it is drawn again,
+// what waited for a moment happens, and the session is asked whether it
+// is still busy, so that the screen never says it is when it is not.
+func (s *session) tick() {
+	now := s.now()
+	if s.q != nil && s.q.guarded && !now.Before(s.q.quiet) {
+		s.q.guarded = false
+		s.dirty = true
+	}
+	if s.hint != "" && !now.Before(s.hintUntil) {
+		s.hint = ""
+		s.dirty = true
+	}
+	if s.busy || s.cmdRun != "" || s.q != nil || s.ed.Hint() != editor.HintNone {
+		// Something on the screen counts seconds.
+		s.dirty = true
+	}
+	if s.busy && now.Sub(s.heard) > 3*time.Second {
+		// Nothing may look busy with nothing in flight. The session
+		// tells of going idle with an event; should that ever fail to
+		// arrive, so that nothing has been heard for a while, its own
+		// word decides.
+		if st := s.c.State(); !st.Busy && st.Phase == agent.PhaseIdle {
+			s.endReply()
+			s.goIdle()
+		}
+	}
+	s.notify(now)
+}
+
+// wake is when the loop should next call tick with nothing else going on,
+// or the zero time when nothing on the screen waits for the clock.
+func (s *session) wake() time.Time {
+	now := s.now()
+	var at time.Time
+	soon := func(t time.Time) {
+		if t.IsZero() {
+			return
+		}
+		if t.Before(now) {
+			t = now
+		}
+		if at.IsZero() || t.Before(at) {
+			at = t
+		}
+	}
+	if s.q != nil && s.q.guarded {
+		soon(s.q.quiet)
+	}
+	if s.hint != "" {
+		soon(s.hintUntil)
+	}
+	if s.busy || s.cmdRun != "" || s.q != nil || s.ed.Hint() != editor.HintNone {
+		soon(now.Add(time.Second).Truncate(time.Second))
+	}
+	if s.info.NotifyHooks {
+		if q := s.q; q != nil && !q.notified {
+			soon(later(q.opened, s.lastInput).Add(askNotifyAfter))
+		}
+		if s.idleWaits() {
+			soon(s.idleSince.Add(idleNotifyAfter))
+		}
+	}
+	return at
+}
+
+// How long a question waits, and how long the session sits idle after a
+// turn, before the person's Notification hooks are told (spec/cc
+// interactive.md, section 6).
+const (
+	askNotifyAfter  = 6 * time.Second
+	idleNotifyAfter = 60 * time.Second
+)
+
+// notify tells the Notification hooks that a question has waited a while
+// with no key pressed, or that a turn ended a while ago and nothing was
+// typed since.
+func (s *session) notify(now time.Time) {
+	if !s.info.NotifyHooks {
+		return
+	}
+	if q := s.q; q != nil && !q.notified && !now.Before(later(q.opened, s.lastInput).Add(askNotifyAfter)) {
+		q.notified = true
+		title := firstNonEmpty(q.q.Title, "gnosh")
+		s.c.Notify("permission_prompt", title, "gnosh is waiting for an answer: "+title)
+	}
+	if s.idleWaits() && !now.Before(s.idleSince.Add(idleNotifyAfter)) {
+		s.idleTold = true
+		s.c.Notify("idle_prompt", "gnosh", "gnosh has finished and waits for your next prompt")
+	}
+}
+
+// idleWaits reports whether the hooks are still to be told that the
+// session sits idle: a turn has ended, nothing was typed since, and they
+// have not been told.
+func (s *session) idleWaits() bool {
+	return !s.busy && !s.idleTold && !s.idleSince.IsZero() && !s.lastInput.After(s.idleSince)
+}
+
+// later returns the later of two moments.
+func later(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
+}
+
+// goIdle notes that the session has nothing in hand.
+func (s *session) goIdle() {
+	s.busy, s.stopping = false, false
+	s.ph, s.since = phIdle, s.now()
+	s.idleSince, s.idleTold = s.now(), false
+	s.retries = 0
+	s.refresh()
+	s.nextCommand()
+}

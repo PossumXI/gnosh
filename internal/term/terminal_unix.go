@@ -16,9 +16,9 @@ import (
 	xterm "golang.org/x/term"
 )
 
-// suspendWait is how long Suspend gives the process to be stopped after it
-// asks. A process the system will not stop (one with no shell to wake it)
-// carries on after this long.
+// suspendWait is how long Suspend, once the process runs again, waits to
+// be told that it was continued, before it takes the terminal back
+// anyway. It waits that long at most twice.
 const suspendWait = 200 * time.Millisecond
 
 // Terminal is a terminal in raw mode: every key arrives as it is pressed,
@@ -338,31 +338,76 @@ func (t *Terminal) Resume() error {
 // terminal back, stops the process (and its process group) so that the
 // shell takes over, and when the shell continues the process it takes the
 // terminal back as Resume does. The interface should erase its live region
-// before calling it. A process with no shell to continue it is not
-// stopped; Suspend then returns after a moment.
+// before calling it.
+//
+// A process with no shell behind it, that is, one that nothing would
+// continue, is not stopped: Suspend then does nothing at all and returns
+// ErrNoShell, so that the interface can say so.
+//
+// The process is stopped with SIGSTOP, not with the SIGTSTP that the
+// terminal itself would send. A Go program that has once asked to be told
+// of SIGTSTP, as a Terminal does so that a stop asked for from outside
+// finds the terminal put back first, cannot be stopped by it again: the
+// runtime keeps its own handler for the signal after os/signal.Reset, and
+// that handler drops a SIGTSTP nobody listens for. SIGSTOP cannot be
+// caught, and a shell treats a job stopped by either the same way. The
+// system stops a process with SIGSTOP even when nothing could continue it,
+// which SIGTSTP never does, and that is why the shell is looked for
+// first.
 func (t *Terminal) Suspend() error {
-	if err := t.Release(); err != nil {
-		return err
+	if !shellBehind() {
+		return ErrNoShell
 	}
 	t.mu.Lock()
+	if t.suspending {
+		// One stop is under way already: Ctrl+Z and a request from
+		// outside came together. It serves for both.
+		t.mu.Unlock()
+		return nil
+	}
 	t.suspending = true
 	t.mu.Unlock()
+	if err := t.Release(); err != nil {
+		t.mu.Lock()
+		t.suspending = false
+		t.mu.Unlock()
+		return err
+	}
 	select {
 	case <-t.cont:
 	default:
 	}
-	// With gnosh's own handler out of the way, SIGTSTP stops the process.
-	signal.Reset(syscall.SIGTSTP)
-	unix.Kill(0, unix.SIGTSTP)
-	timer := time.NewTimer(suspendWait)
-	select {
-	case <-t.cont:
-	case <-timer.C:
-	case <-t.done:
+	// The stop takes hold as this call returns, or a moment after it when
+	// another thread of the process is told first. Either way, what
+	// follows runs when the shell has continued the process.
+	if err := unix.Kill(0, unix.SIGSTOP); err != nil {
+		t.mu.Lock()
+		t.suspending = false
+		t.mu.Unlock()
+		if rerr := t.Resume(); rerr != nil {
+			return rerr
+		}
+		return fmt.Errorf("stop the process: %w", err)
 	}
-	timer.Stop()
+	// The signal that says the process was continued is on its way to
+	// signalLoop, which is let take it while suspending still says whose
+	// stop this was. The clock went on while the process was stopped, so
+	// a first wait that began before the stop took hold is over the
+	// moment the process runs again. A second one cannot be.
 	if t.sigs != nil {
-		signal.Notify(t.sigs, syscall.SIGTSTP)
+	wait:
+		for range 2 {
+			timer := time.NewTimer(suspendWait)
+			select {
+			case <-t.cont:
+				timer.Stop()
+				break wait
+			case <-t.done:
+				timer.Stop()
+				break wait
+			case <-timer.C:
+			}
+		}
 	}
 	t.mu.Lock()
 	t.suspending = false
@@ -616,6 +661,12 @@ func (t *Terminal) signalLoop() {
 				t.wg.Add(1)
 				go func() {
 					defer t.wg.Done()
+					// A request to stop a process that nothing would
+					// continue is dropped, as the system itself drops
+					// it for a program that does not listen for it.
+					if !shellBehind() {
+						return
+					}
 					if t.opts.OnStop != nil {
 						t.opts.OnStop()
 					}

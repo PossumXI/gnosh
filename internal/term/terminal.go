@@ -18,6 +18,11 @@ var ErrClipboardOff = errors.New("writing to the clipboard through the terminal 
 // ErrClosed is returned by a Terminal's methods after Close.
 var ErrClosed = errors.New("the terminal is closed")
 
+// ErrNoShell is returned by Suspend when nothing would continue the
+// process once it was stopped: it was not started as a job of a shell.
+// Nothing was stopped and the terminal was not touched.
+var ErrNoShell = errors.New("gnosh was not started from a shell that could bring it back, so it was not stopped")
+
 // Options adjust a Terminal. The zero value is what gnosh uses.
 type Options struct {
 	// EscTimeout replaces DefaultEscTimeout when it is positive.
@@ -40,7 +45,10 @@ type Options struct {
 	// outside (SIGTSTP sent by another program; Ctrl+Z is a key here and
 	// sends nothing), before the terminal is given back. It is the
 	// interface's chance to erase its live region, as it does itself
-	// before calling Suspend.
+	// before calling Suspend. The Terminal then stops the process as
+	// Suspend does, and a Resume event follows when the shell continues
+	// it. When nothing would continue the process (see ErrNoShell) the
+	// request is dropped and OnStop is not called.
 	OnStop func()
 
 	// NoSignals stops the Terminal from listening for signals at all:

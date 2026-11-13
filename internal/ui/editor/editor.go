@@ -621,6 +621,35 @@ func (e *Editor) again(was press, cmd command) bool {
 	return e.now == nil || e.now().Sub(was.at) <= e.pair
 }
 
+// Collapsed returns the draft as the box shows it: its text, with each
+// collapsed paste standing as its label ("[pasted 120 lines]"). It is for
+// showing a prompt that was sent without filling the screen with what was
+// pasted into it.
+func (d Draft) Collapsed() string {
+	s := internalOf(d)
+	if !strings.Contains(s, pasteOpen) {
+		return plain(s)
+	}
+	var b strings.Builder
+	for {
+		i := strings.Index(s, pasteOpen)
+		if i < 0 {
+			appendPlain(&b, s)
+			break
+		}
+		appendPlain(&b, s[:i])
+		end := strings.Index(s[i:], pasteClose)
+		if end < 0 {
+			appendPlain(&b, s[i:])
+			break
+		}
+		end += len(pasteClose)
+		b.WriteString(pasteLabel(s[i : i+end]))
+		s = s[i+end:]
+	}
+	return b.String()
+}
+
 // draftOf turns text as the editor keeps it into a Draft.
 func draftOf(s string) Draft {
 	if !strings.Contains(s, pasteOpen) {

@@ -1,0 +1,284 @@
+// Package ui is the interactive session a person sees and types into:
+// gnosh's full front end.
+//
+// It draws in the terminal's own scrollback. There is no alternate screen
+// and no mouse capture, so scrolling back, selecting and copying are the
+// terminal's own and work as they do for any command's output. The screen
+// has two parts, and the whole design is about keeping them apart.
+//
+// # What is committed, and when
+//
+// Everything that is finished is committed: written once, above, through
+// term.Renderer.Commit, and never touched again. A thing is committed at
+// the moment it can no longer change:
+//
+//	the header             once, when the session starts: the wordmark, the
+//	                       version, the model, the folder
+//	a prompt of the        when it goes out to the model (PromptEvent), not
+//	person's               when Enter is pressed: until then it is "queued"
+//	the model's answer     line by line, as the Markdown renderer declares
+//	                       each line final; the rest when the reply ends
+//	the model's reasoning  one line when it is over ("thought for 12s"); with
+//	                       detail on, all of it, line by line
+//	a tool call            when it ends, as one block: what it did, as the
+//	                       model wrote it, and what came of it
+//	a question             when it is answered or taken back: the question
+//	                       and the answer, on a line
+//	a notice, a warning,   when it is given
+//	an error, a hook
+//	a wait for a failed    the first of a run of them, and each whose reason
+//	model server           is new; and a line when the server answers again
+//	a turn's end           when it ends: how, how long it took, what it cost
+//	a slash command        when it has run: the line typed, and what it said
+//	                       (but for what follows "/mem redact", which the
+//	                       person wants gone: it is shown nowhere and kept
+//	                       in no history)
+//
+// Blocks stand a blank line apart, except one-line tool calls and
+// notices, which stand under each other.
+//
+// A tool call's block is headed by what the call does, not by a name and a
+// spinner: a command line behind "$" (behind the machine's name, when it
+// runs on another), a file's path for a read or an edit, the pattern for a
+// search, and for a Gno call its code, whole. Under the heading: an edit's
+// diff (internal/diff); the end of a command's output, with a count of the
+// lines left out and the exit code; a count for a read or a search; the
+// receipt of a Gno call; the reason for a call that was refused or failed.
+// The hooks that ran on the call stand under it. Output, code and diffs
+// carry nothing of gnosh's own but an indentation, so what is selected in
+// the terminal is the text.
+//
+// Lines are laid out for the width the terminal has when they are
+// committed. A terminal draws one line of text per row, and the renderer
+// relies on that, so prose is wrapped by gnosh and not by the terminal.
+//
+// # The live region
+//
+// Below the committed text are a few rows that are redrawn in place
+// (term.Renderer.SetLive). From its first row to its last:
+//
+//	a blank row
+//	what is still being written: the lines of the answer that may still
+//	  change, the last rows of the reasoning while it is folded, and each
+//	  call that is being written or is running, with the last rows of its
+//	  output
+//	a blank row
+//	one line that says what gnosh is doing or waiting for, while it is busy
+//	the prompts and commands that wait for their turn
+//	the question, when one is put; otherwise the prompt box
+//	the session's task list, unless Ctrl+T has put it out of sight
+//	the status line
+//	a short notice that a key called for, for a few seconds, wrapped
+//
+// The line that says what gnosh is doing is always the truth as the
+// session reports it, in plain words with the time that state has lasted:
+// waiting for the model to start its reply (and about how many tokens it
+// has to read), the model is thinking, is writing, is writing a call;
+// running a command, by its own words, or several tools, by their names;
+// waiting for the person; waiting so many seconds to try a failed request
+// again; writing a summary; stopping. Nothing in it moves but the clock.
+// It is there only while the session is busy: there is never a "working"
+// line with nothing in flight, and should the event that says the session
+// went idle ever be missed, the session's own word is asked. When it is
+// idle the status line says so. While a question waits the line says that
+// gnosh is waiting for the answer, and for how long.
+//
+// The status line is one row that never wraps: "idle" when nothing runs;
+// the permission mode, always and in words ("manual mode", "accept edits",
+// "plan mode", "don't ask", and "[BYPASS PERMISSIONS]" in capitals and
+// brackets); the model and its thinking level; how full its window is
+// (the figure follows the session, so it drops after a pop); "/loop on";
+// the folder and its git branch; how far the task list has come ("tasks
+// 2/5", and the task in hand when the list is out of sight); and what
+// the session tells of beyond that, when it does: the frame, commands in
+// the background. In a narrow terminal its parts go one by one, the least
+// needed first and the permission mode last.
+//
+// The task list is the session's own (app.TasksEvent: what mem holds as
+// the frame's tasks). It stands under the prompt box, a row a task:
+// "[x]" for one that is done, "[>]" for the one in hand, in the words it
+// has while it is being done, "[ ]" for one still to do. It takes eight
+// rows at most; a longer list shows the tasks around the one in hand and
+// counts the rest. It is never written into the scrollback.
+//
+// The region is bounded: it takes at most one row less than the terminal
+// has (and never more than sixty), the question and the prompt box scroll
+// inside their share, and what is still being written is cut from its top
+// when room runs out, since those are the rows that reach the scrollback
+// anyway. A command that floods shows its last three rows.
+//
+// Something moves from the live region to the scrollback in one step: the
+// lines are committed and the next live region no longer holds them, in
+// the same frame. Nothing is in both, and nothing is in neither.
+//
+// # Typing while the model works
+//
+// The prompt box always has the keys, unless a question is on the screen.
+// Enter during a turn hands the prompt to the session, which queues it and
+// gives it to the model between two rounds; it is listed above the box
+// until it goes out. Up in an empty box takes everything that waits back
+// into the box for editing, and Enter sends it again as one prompt. A
+// slash command typed during a turn waits for the session to go idle,
+// unless it is one of the few that act at once (/status, /model,
+// /permissions, /think and the like). A prompt that comes back (a hook
+// refused it, the session was stopped while it was being checked) is put
+// in the box again, in front of anything typed since, with the reason in
+// the scrollback.
+//
+// When a question appears, what is in the box stays in the box, in sight
+// under the question, and has the keys back when the question is over. A
+// question takes no key until it has been on the screen for 0.4 s and the
+// keyboard has been quiet for 0.6 s: keys typed before it could be read
+// were meant for the box, and go there.
+//
+// # Keys
+//
+// Where each binding comes from: "cc" is spec/cc/interactive.md with its
+// section, "ui" is spec/gnosh/harness-ui.md with its item, "perm" is
+// spec/cc/permissions.md, "editor" and "menu" are the tables in those
+// packages' doc.go (which name their own sources), and "own" is a choice
+// made here.
+//
+//	In every state
+//	Ctrl+L                 draw the live region again; the scrollback is left alone (cc 1, 3)
+//	Ctrl+Z                 suspend gnosh; fg brings it back. Where no shell could bring it
+//	                       back, nothing is stopped and the key says so (cc 3)
+//	Ctrl+O                 detail on or off: reasoning and whole outputs are written out from then
+//	                       on, and the reasoning that was folded last is written out now (cc 3; ui UI-22)
+//	Ctrl+T                 hide or show the session's task list (cc 3)
+//	Ctrl+B                 move the running command to the background, when the session's controls
+//	                       can do that; they cannot yet, and the key says so (cc 3). In the prompt
+//	                       box Ctrl+X b does the same: Ctrl+B is tmux's own key (ui UI-31)
+//
+//	The prompt box has the keys (idle, or while a turn runs)
+//	Enter                  idle: send. Busy: queue the prompt (cc 2.1, 2.8)
+//	Ctrl+Enter             as Enter; sending at once is not built (cc 2.8, there P2)
+//	Esc                    busy: stop the turn, at once (ui UI-31, LOOP-5)
+//	Esc Esc                idle, text in the box: clear it; Up brings it back (ui UI-31)
+//	Esc Esc                idle, empty box: go back to an earlier prompt; not built, and says so (cc 3)
+//	Ctrl+C                 busy: stop the turn. Idle: clear the box, and again to leave (cc 3)
+//	Ctrl+D                 empty box, twice: leave (cc 3)
+//	Up                     empty box, prompts queued: take the queue back for editing (ui UI-31)
+//	Up, Down, Ctrl+R       history, as in the editor (cc 2.4)
+//	Shift+Tab              the next permission mode: default, acceptEdits, plan, and
+//	                       bypassPermissions when the session was started with it in reach (cc 3; perm 2.1)
+//	/ at the start         a command; its name is completed from the session's list (cc 2.2; ui UI-30)
+//	@                      a file to mention, completed a directory at a time, leaving out what
+//	                       the ignore rules leave out (cc 2.5)
+//	! at the start         a shell line; the session's controls cannot run one yet, so the line
+//	                       comes back into the box with a line that says so (cc 2.6)
+//	?                      in an empty box: write the keys into the scrollback (cc 2.2)
+//	Ctrl+G, Ctrl+X Ctrl+E  edit the box's text in the person's own editor (cc 2.3)
+//	every other key        as in the editor: see its table
+//
+//	A question has the keys
+//	Enter, 1 to 9, arrows  choose, as in the menu: see its table
+//	Tab                    on "No": open a note for the model (cc 4)
+//	Esc, Ctrl+C            on a permission question: no, which stops the turn (cc 4; perm 12).
+//	                       On any other question: stop the turn; the session takes the question
+//	                       back (ui UI-31; TOOL-40)
+//	Shift+Tab              on a question about an edit: yes, and accept edits for the rest of the
+//	                       session (cc 3); on any other, up one row, as in the menu
+//	PgUp, PgDn             scroll what the question is about (menu)
+//
+//	A question before the session (trust, which model, which session)
+//	Esc                    the trust question: no. The others: leave it unanswered, which ends the
+//	                       start (spec/gnosh/harness-trust-and-safety.md SAFE-4)
+//	Ctrl+C                 leave gnosh (SAFE-4)
+//
+// # Questions
+//
+// A permission question shows what it is about and never hides it: the
+// command, or the change drawn as a diff to the width of the terminal,
+// scrolling inside the question when it is long, then why gnosh asks, then
+// the answers the gate offers: yes this once; yes, and don't ask again,
+// with the rule; no, which stops the turn; and no with words, which the
+// model reads before it carries on. The model's own questions are a form
+// with a tab each and a review at the end; a secret is a masked line whose
+// answer is kept nowhere here. question.go says how each kind is told
+// apart and how the answers go back.
+//
+// # The terminal
+//
+// The terminal is opened for a question before the session and again for
+// the session, and is put back as it was found on every way out: a
+// return, a signal, a panic in the loop or in one of its helpers. Keys
+// send no signals here, so a signal comes from outside: SIGINT while
+// something runs stops the turn, as Ctrl+C does, and the session goes on;
+// SIGINT with nothing running, SIGTERM and SIGHUP end the session in
+// order, with the exit code a signal gives (130, 143, 129). A Ctrl+C
+// typed into the person's own editor while it has the terminal is the
+// editor's, and does not end the session. On the way out the live region
+// is erased and a line says how to resume the session; what the session
+// still reports after that (its last hooks, a warning) is written as
+// plain lines where errors go.
+//
+// Bracketed paste is turned on only for a terminal that answers
+// questions at all, the kitty keyboard level and synchronized output only
+// for one that said it has them; an answer that arrives late still
+// counts. The interface begins on a line of its own even when the command
+// before it left the cursor in the middle of one. Inside tmux, tmux is
+// asked whether the terminal it is shown in takes 24-bit colour, because
+// the environment cannot say.
+//
+// On a resize the renderer finds the live region again and erases it, and
+// the session lays it out afresh for the new size; what is committed is
+// the terminal's to rearrange and is not drawn again (see
+// term.Renderer.Resize for the limits of that).
+//
+// Drawing is batched. What the session reports is put in line by Event,
+// which never waits, with pieces of live output joined while they wait;
+// the loop takes it in and draws at most once per frame (10 ms unless
+// told otherwise). A key is answered at once.
+//
+// Everything that reaches the screen from the model, a tool or a file is
+// made safe first. The answer goes through the Markdown renderer, which
+// lets no control character out. Everything else goes through safe.go,
+// which shows a control character as a stand-in ("^[" for Esc). Text from
+// a tool can never move the cursor, set a title or repaint the screen.
+//
+// # The look
+//
+// Theme holds every mark and every style, with the looks of the prompt
+// box, the questions, Markdown and diffs inside it, all made from one
+// Palette. The default is gnosh's own: prose and output in the terminal's
+// own colour, purple for the marks gnosh draws itself, hot pink as the one
+// accent, grey for what is not the text itself, and nothing filled in,
+// blurred or dimmed into a background. The text colours are middle tones
+// that read on a dark and on a light background. The wordmark fades
+// through mint, purple, pink and gold with full colour, is "GNO" in green
+// and the rest from purple to pink with fewer colours, and is plain
+// letters with none. Nothing is said by colour alone: every kind of line
+// has a mark or a word of its own, so the screen reads the same with no
+// colour at all. The purple and the pink are placeholders until Jae picks
+// his own; NewTheme makes the whole look from another Palette.
+//
+// # What is asked of the session beyond app.Controls
+//
+// A few things the specs list need more than app.Controls has. Each is
+// built here as far as it goes and switches itself on when the session
+// can do its part. The app's session does its part in each of them
+// (app.SessionControls, app.FrontendInfo, app.StatusEvent,
+// app.QuestionData), except that it has no question tool for the model
+// and no way back to an earlier prompt:
+//
+//   - the prompt the command line gave (`gnosh "fix the test"`): sent as
+//     the session's first prompt when app.FrontendInfo has a field named
+//     Prompt.
+//   - shell lines ("!"): run when the controls have a method
+//     Shell(command string) error.
+//   - Ctrl+B: works when the controls have a method
+//     Background(callID string) bool.
+//   - the prompts of earlier sessions in the history: loaded when the
+//     controls have a method History() []string (oldest first). Without
+//     it, Up and Ctrl+R reach this session's prompts only.
+//   - the frame and the count of background commands on the status
+//     line: shown when the session reports an event that has a method
+//     StatusFacts() map[string]string (events.go names the facts).
+//   - the countdown on a question the session takes back by itself: shown
+//     when the question's Data has a method Deadline() time.Time.
+//   - the model's question tool and secrets: Question.Kind "question" with
+//     the tool's arguments in Data, and Kind "secret" (question.go).
+//   - going back to an earlier prompt (Esc Esc on an empty box): not
+//     built; the key says so.
+package ui

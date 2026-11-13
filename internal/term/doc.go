@@ -72,7 +72,9 @@
 // level) are turned off, on every way out: Close, a panic in a goroutine
 // that deferred Terminal.RestoreOnPanic, and the signals SIGTERM, SIGHUP,
 // SIGINT and SIGQUIT. SIGTSTP gives the terminal back, stops the process,
-// and takes the terminal again when the shell continues it.
+// and takes the terminal again when the shell continues it; a process
+// that no shell would continue is not stopped, by the signal or by
+// Terminal.Suspend, which then returns ErrNoShell.
 //
 // Keys are keys. In raw mode Ctrl+C, Ctrl+Z and Ctrl+\ send no signals;
 // they arrive as Key events and mean what the interface decides. Only the
