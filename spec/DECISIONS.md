@@ -53,3 +53,44 @@ both are silent, the builder chooses, and says so in its report.
 9. **Messages are gnosh's own words.** Error lines, notices, prompts and tool
    descriptions are written fresh, in plain English. What gnosh takes from
    Claude Code is names: flags, tools, fields, values, file names.
+
+## From the harness spec (`spec/gnosh/harness-open-questions.md`)
+
+10. **Every recommended reading in that file is adopted**, with the one
+    change in item 11. The ones that shape the build most:
+    - `gnoshrc` is a list of settings, not a script; a shell construct in it
+      is a startup error that names the replacement; `--base-url` may be
+      given more than once and the first that answers wins (OQ-1). Jae's
+      three old-named files are read in place until he moves them.
+    - `-c` and `-C` both mean continue; `--cwd` has no short form (OQ-9).
+    - For a local model server there is no limit before the first piece of
+      a reply and 900 seconds between pieces; for a remote one, ten minutes
+      to start and 60 seconds between pieces; `request-timeout` overrides
+      both (OQ-13).
+    - Thinking is on by default and `/no_think` sticks (OQ-18).
+    - No general list of banned commands; with hosts declared, a command
+      that starts with `ssh` or `scp` is refused with a pointer to hosts
+      (OQ-5).
+    - `/loop` keeps Jae's meaning, "keep working until done" (OQ-17).
+    - No counter ends work on empty replies: gnosh keeps asking and tells
+      the person at every third one (OQ-7).
+    - The JSON settings file has Claude Code's shape only (`permissions`,
+      `hooks`, `env`); everything gnosh-specific is in `gnoshrc`; an unknown
+      key is an error (OQ-8).
+    - Claude Code's tool names everywhere. gnosh's deliverables tool is
+      called `Deliver`, never `Artifact` (OQ-10).
+    - Hook variables are `GNOSH_*` plus Claude Code's two; `AGENT=gnosh`
+      (OQ-21). Of the inherited hook-protocol extras only exit 3 is kept
+      (OQ-24).
+    - No tool reaches a site without asking; no analytics; no client/server
+      mode; no import of old state or old sessions (OQ-6, 22, 23, 25).
+    - The colours are gnosh's own purple and hot pink, not the earlier
+      program's; Jae picks from rendered options later (OQ-26).
+11. **A non-interactive run does not approve its own tool calls** (OQ-2;
+    this overrides `harness-cli.md` CLI-31). `gnosh -p` and `gnosh run`
+    refuse what would have asked, as Claude Code does, unless the run is
+    given `-y` / `--dangerously-skip-permissions`, a permission mode, or
+    allow rules. gnosh starts closed (PRIN-1) and follows Claude Code
+    (PRIN-3); the two agree here. Jae's unattended runs on the AI box keep
+    working without touching each script by setting the mode once in that
+    machine's own user settings, at switch-over and with his say.
