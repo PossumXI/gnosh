@@ -1,0 +1,1 @@
+[[{{undone?}}mem refused to close `{{todo}}`: nothing was done in it, and it is still open.]][[The close of `{{todo}}` was refused, and it is still open: {{refusal}}]] Do its work, then pop it with what came of it; or, if it cannot be done now, tell the user plainly that it is not done. Do not tell the user it is done.

@@ -1,0 +1,6 @@
+[[{{not_started?}}This call did not run: the user stopped the turn first.]]
+[[{{stopped?}}The user stopped the turn while this call was running. It may have run in part: check before you rely on it.]]
+[[{{ended?}}This call did not run: the turn was ended first]][[ ({{why}})]][[{{ended?}}.]]
+[[{{cut_off?}}This call did not run: the reply that asked for it was cut off before it was whole.]]
+[[{{killed?}}gnosh itself was stopped before this call returned. It may have run in part or not at all: check before you rely on it.]]
+[[{{still?}}The user stopped the turn, and this call had still not stopped]][[ {{waited}} later]][[{{still?}}. gnosh went on without it: it may still be running, and it may have run in part.]]

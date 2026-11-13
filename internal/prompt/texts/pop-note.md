@@ -1,0 +1,1 @@
+[Then came [[{{messages}} messages of work in it]][[{{one_message?}}1 message of work in it]][[the work in it, {{calls}} tool calls ({{tools}})]][[{{one_call?}}the work in it, 1 tool call ({{tools}})]], removed from your context when you popped it.]

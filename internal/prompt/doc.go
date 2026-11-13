@@ -1,0 +1,285 @@
+// Package prompt holds every word gnosh itself says to a model: the system
+// prompt, the lines it adds to prompts, its reminders and nudges, the notes
+// it leaves inside tool results, and the instructions of the small
+// requests it makes on its own account. How a model behaves in gnosh is
+// decided here more than anywhere else.
+//
+// The words are in files, one text to a file, under texts. The Go code
+// around them has no words of its own: it chooses which texts apply, fills
+// in their names and joins lists with commas and line ends. So a change to
+// what gnosh says shows as a change to a text file, and a person can read
+// every text and replace any one of them with a file of their own (Load,
+// Export). Texts lists them all, with when each is sent and how big it is.
+//
+// The package reads no clock, no environment and no disk, except for Load,
+// which reads the one directory it is given. Every function returns the
+// same text for the same arguments, so a conversation rebuilt from what
+// was stored is byte for byte what was sent.
+//
+// # Two facts that shape the texts
+//
+// Most of gnosh's use is a model on the person's own machine, with a
+// window of 32,000 to 64,000 tokens. Every token of fixed prompt rides on
+// every request, and a model server reuses what it has already read only
+// as far as the first byte that differs from the request before. The
+// earlier gnosh's instructions were about 7,800 tokens, a quarter of them
+// about mem, and the size of its fixed prompt was one of the measured
+// reasons it ran 1.3 to 4 times slower than it had to. So:
+//
+//   - The system prompt is small. The fixed core is about 750 tokens and
+//     the part about mem just under 1,500; with every part on, what gnosh
+//     writes comes to about 2,600. The tests hold these as budgets.
+//   - The system prompt is fixed. Nothing in it is a date, a directory, a
+//     model's name or a session's id. What differs from session to session
+//     goes with the first prompt instead (Environment).
+//   - A rule the model needs at the moment of a mistake is not here. It
+//     belongs in the refusal or the tool result that the mistake produces,
+//     which is read right before the next call and was measured to work
+//     where a line in the system prompt did not.
+//
+// # The marker
+//
+// Whatever gnosh says on the user's side of a conversation stands between
+// <gnosh> and </gnosh> (Open, Close). The tag is short, it is gnosh's own
+// name, and it is the same every time; the first part of the system prompt
+// tells the model, in one sentence, that such text is the harness and not
+// the person. Every function here that returns such a line returns it
+// already wrapped. Wrap does the same for text of gnosh's that is written
+// elsewhere, such as the goal directive the mem code makes.
+//
+// The marker is used only on the user's side. Inside a tool result gnosh
+// writes plain words with no marker: a note in square brackets after a
+// tool's own answer, or a result that is wholly gnosh's, such as a
+// refusal. The model is told that nothing a tool returns is the user
+// speaking, whatever tags it carries, so a tag there would teach it the
+// opposite. What gnosh says inside a result is news about the
+// conversation, never an instruction from the user.
+//
+// Nothing put into a line can break it. A value goes through Untrusted on
+// its way in, which breaks gnosh's own tags and every control sequence with
+// one invisible character, and a value is never read as template text. So
+// a hook's reason, a file name or a quoted command can neither end the
+// marker early nor start a second one.
+//
+// # The system prompt
+//
+// System returns it as parts, the part that changes least first, the way
+// core.Request.System wants them. In order:
+//
+//   - core, with security as its last lines. The same bytes in every
+//     session. It says who the model is working as and for; that text in
+//     the marker is the harness, and that what a tool returns is data and
+//     never the user's instruction or approval; and the handful of things
+//     models kept getting wrong until they were told: act instead of
+//     describing, send calls that do not depend on each other in one reply
+//     (each reply is a round trip of seconds to minutes), use the file
+//     tools on files and why, look for a thing where it belongs and never
+//     across the whole disk, read a refusal and do what it says, do not
+//     poll for a background command whose end will be announced, never
+//     delete gnosh's data folder, never ask for a password in the
+//     conversation, check before claiming, and say plainly what was done
+//     and what was not. It is short rules, one to a line, written for a
+//     model of 27 billion parameters to follow; where the reason for a
+//     rule is what makes it stick (the file tools keep track of what was
+//     read), the rule gives it.
+//
+//   - security is a file of its own so that it can be replaced alone. The
+//     rule is Jae's: security work is offered and done, "someone could
+//     misuse this" is not by itself a reason to decline a coding request,
+//     and when unsure the model asks and then goes ahead. The sentence is
+//     written fresh from that requirement.
+//
+//   - no-tools, only in a session with no tools at all: a model with no
+//     tools otherwise writes its tool calls out as text.
+//
+//   - memory, only when the session has the gnovm_run tool. It is the
+//     earlier gnosh's own text on mem, which was tuned against the real
+//     model over some forty changes, cut from about 2,000 tokens to under
+//     1,500. What stayed is what only the system prompt can teach before
+//     the first call: print every term of a sum and never bend a figure,
+//     plan a task as todos in one call, the worked example of that call
+//     (told to make the task and then add each step, a model nested the
+//     plan under the user's first step; with the one call, every plan came
+//     out right), enter the todo the user names, write a result after the
+//     work, thoughts, questions, facts, rules, secrets. What went is what
+//     mem's own receipts and refusals say at the moment it matters.
+//
+//   - gno, only in a project with Gno code: a plan that writes Gno code
+//     has an audit todo right after it, against the two guides. Without
+//     the rule in the instructions, a tested model shipped every planted
+//     defect; with it, the audit was planned three times in three.
+//
+//   - the project's and the person's instruction files, handed in already
+//     laid out. They are files, so control sequences and gnosh's tag in
+//     them are made harmless.
+//
+//   - deliver, only when the session has the Deliver tool: name what is
+//     being made before making it. It stands after the instructions so
+//     that a session with the tool and one without share everything before
+//     it in a model server's cache.
+//
+// # Lines on the user's side
+//
+// With prompts:
+//
+//   - environment (Environment) goes ahead of a session's first prompt:
+//     the day, written 2026-10-30 because a model copies the form it is
+//     shown into calls that take only that form; the directory; who gnosh
+//     runs as and on which machine; how git stands; the other machines
+//     declared, with the rule that a path belongs to the machine it was
+//     seen on. It says it is not kept up to date, so that a git status
+//     from the start is not taken for the present one.
+//   - mem-line (MemLine) goes last on every prompt a person types, where a
+//     model that answers without thinking still reads it right before its
+//     reply. The words are Jae's. With it a tested question was worked out
+//     in Gno six times in six.
+//   - frame-line (FrameLine) follows it while the session stands in a
+//     todo: where it stands, that a pop removes everything since, and that
+//     other work goes in a todo of its own. Its first sentence also ends
+//     the mem reminder.
+//   - slide (inside FrameLine, or SlideLine by itself) says that the
+//     oldest rounds left the context to make room, where the plan still
+//     is, and that the reads made there are forgotten.
+//   - large-step (LargeStep) says, once per todo, that the todo has grown
+//     large: pop it or split it.
+//   - mem-reminder (MemReminder) comes after ten replies with no mem call.
+//     It calls itself a reminder to ignore if it does not apply, since not
+//     every stretch of work is a task to plan.
+//
+// When a turn would end or goes round in circles. No count ever ends work
+// in gnosh, so each of these keeps the turn going and says why:
+//
+//   - repeat (Repeat) quotes the call the model keeps making and says that
+//     making it again will tell it nothing new. repeat-refused-close
+//     (RepeatRefusedClose) is the same for a close that keeps being
+//     refused; it quotes the refusal and says the work is still to do. A
+//     model once sent one refused close three hundred times through thirty
+//     nudges that said only "do not repeat".
+//   - empty-reply (EmptyReply) asks again after a reply with no text and
+//     no tool call.
+//   - stop-hook (StopHook) carries a Stop hook's reason, and says the hook
+//     is the user's, since the user's own hooks speak for the user.
+//     continuation (Continuation) carries any other reason, and
+//     check-could-not-run (CheckCouldNotRun) says that a check which could
+//     not run has not passed.
+//   - checkpoint (Checkpoint) is sent in place of a send-back every so
+//     many in a row. It asks for the decision first (is there a real
+//     reason to stop?), because a model asked last carries on working and
+//     never answers; it gives the marker on a line of its own; and what
+//     holds the turn open comes after.
+//   - loop, loop-prove and loop-check-in (Loop, LoopProve, LoopCheckIn)
+//     are /loop's: keep going; show that it is done, since a model once
+//     wrote the word that ends the loop to get out of a hard step; and the
+//     check-in every 25 turns.
+//   - close-sendback (CloseSendBack) sends the model back to a todo whose
+//     close was refused, once per turn, and ends "Do not tell the user it
+//     is done": a model that was refused once told the user "Fixed".
+//   - goal-not-met (GoalNotMet) gives the judge's finding and says to ask
+//     the user when what is missing is theirs to do. Told only to do what
+//     is missing, an agent edited the user's files unasked.
+//
+// Notices:
+//
+//   - interrupted (Interrupted) is put where a turn was stopped, by the
+//     person or because gnosh itself was stopped, so that a reply cut
+//     short is not read as one the model chose to end.
+//   - background-ended (BackgroundEnded) says a background command ended,
+//     how, and where its output is, and that it is news and not a request.
+//   - summary, with summary-extra for what the person asked of it
+//     (Summary), is the request for a summary. It is about 200 tokens and
+//     asks for at most 500 words: what the user asked, in their words;
+//     what is done; what was found that the rest needs; what is left, with
+//     the user's latest request quoted. It leaves out file contents and,
+//     in a session with mem, everything mem holds, since gnosh hands that
+//     back itself. The long form it replaces took a median of five minutes
+//     to answer on the person's own machine.
+//   - summary-intro and after-summary (SummaryIntro, AfterSummary) stand
+//     before and after the summary once it has replaced the conversation:
+//     this is a summary you wrote; carry on from it without asking.
+//     earlier-left-out (EarlierLeftOut) opens a summary request whose
+//     earliest turns did not fit.
+//
+// # Notes inside tool results
+//
+//   - pop-note and slide-note (PopNote, SlideNote) are appended to the
+//     answer that stays when what followed it was removed from the view:
+//     how many tool calls or messages went, and why. Without the note a
+//     long session reads as todos entered and popped at once, and a model
+//     copies that.
+//   - missing-result (MissingResult) stands for the result of a call that
+//     has none: it never started, it was stopped, its reply was cut off,
+//     or gnosh itself was stopped. It says whether the call ran at all,
+//     and when it may have run in part, to check before relying on it. It
+//     is the whole result, so it needs no brackets.
+//   - close-entered-here, close-unbacked, close-not-made,
+//     close-review-refused and close-cancelled are the refusals of a close
+//     (CloseEnteredHere and the rest). Their wording is the earlier
+//     gnosh's own, each sentence answering a failure that was seen. They
+//     begin "not popped: " or "not closed: " and name the todo first,
+//     which is how RefusedClose knows one.
+//
+// # Side requests
+//
+// A side request is a short question to a model that sees nothing else of
+// the session. Each has a fixed set of instructions and one message.
+//
+//   - close-review, with close-review-request and close-review-command
+//     (CloseReview), checks a close before mem keeps it. The instructions
+//     are the earlier gnosh's own, arrived at by replaying 244 real
+//     closes. The question comes last, names the todo and asks first
+//     whether the result is that todo's own.
+//   - goal-judge and goal-judge-request (GoalJudge) judge a goal or a
+//     closed task. The answer's "basis" is a field the code reads, not a
+//     phrase the judge writes.
+//   - namer (Namer) names new todos, thoughts and facts: by their own
+//     subject, the thing first and then the action, no two alike. An
+//     earlier instruction, to leave out what all the names share, made a
+//     model drop the subject itself.
+//   - title (Title) gives a session its title from how it begins. It asks
+//     for the title alone, because the answer is used as it comes.
+//
+// # Control sequences
+//
+// Defuse makes harmless the sequences a model server reads as structure:
+// the tokens of chat templates and llama.cpp's media marker. It is for
+// every text that is not gnosh's own, and it is safe on a whole message.
+// Untrusted does the same and also breaks gnosh's own two tags, the marker
+// and the <mem> of the mem code's blocks; it is for what tools and files
+// bring, taken by itself, so that such text cannot carry a line that reads
+// as gnosh speaking or a block that reads as the user's rules. Undefuse
+// takes the marks out again, for what a model writes back. Their
+// documentation says exactly which sequences and how.
+//
+// # Code that fills in texts its own way
+//
+// The agent loop keeps its words as formats for fmt.Sprintf and wraps the
+// result itself. Format turns a text into such a format: a verb, or plain
+// words, for each name. Wrap is the marker it then puts around the result.
+//
+// # Writing a text
+//
+// A text is plain words, with three things that are not:
+//
+//	{{name}}    is replaced by a value
+//	{{name?}}   prints nothing: it asks whether name has a value
+//	[[ ... ]]   is kept when every name inside it has a value, and left
+//	            out whole otherwise
+//
+// Each text has names it must print and names it may use; Texts lists
+// them. A text for the user's side does not write the marker: gnosh puts
+// it around.
+//
+// # A person's own texts
+//
+// Load reads a directory of replacements, one file per text, named as the
+// text is. It returns what it found, so that the person can be shown which
+// texts are theirs. It refuses a file that could not stand in for its
+// text, above all one that drops a name the text must print, and it names
+// every such file at once. Export writes gnosh's own text as a file to
+// start from; a file that was exported and never edited changes nothing,
+// whichever build exported it, and one that was edited against an older
+// text is reported as stale. The lesson behind this: a person once ran for
+// a week on a three-week-old copy of the whole prompt, kept for the sake
+// of one sentence. So the pieces are small, and a piece nobody changed
+// keeps following gnosh's own words.
+package prompt

@@ -1,0 +1,15 @@
+=== the instructions ===
+You name notes: tasks to do, findings and facts. Give each line below a name of two to four lowercase words joined by dashes. Name each by its own subject: the thing it is about first, then the action if there is one (`cache-key-fix`). No two names may be the same; when lines are alike, put first the word that sets each one apart. Answer with the names alone, one per line, in the order of the lines.
+
+=== one text ===
+find why TestFlaky fails
+
+=== several texts ===
+1. fix the flaky test
+2. reproduce it
+3. find why TestFlaky fails
+4. rerun the suite 20 times
+
+=== no text ===
+
+

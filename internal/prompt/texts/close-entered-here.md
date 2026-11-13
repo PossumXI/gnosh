@@ -1,0 +1,1 @@
+this call entered `{{todo}}` and closed it with nothing done in it, so nothing from the call was kept and you are not in `{{todo}}`. If its work is still to do, enter it, do the work, then pop it with what came of it. If you already did its work where you are now, close it by its name without entering it: mem.Done("{{todo}}", "what came of it").

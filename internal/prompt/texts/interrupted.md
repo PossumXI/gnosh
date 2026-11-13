@@ -1,0 +1,2 @@
+[[{{user?}}The user stopped the turn here, before it was finished. Whatever was running was stopped where it stood: a reply may be cut short and a tool call may not have finished. Do not take that work up again unless the user asks; go by what they say next.]]
+[[{{exit?}}gnosh itself was stopped here, in the middle of the turn (a crash, a kill or a restart). A reply may be cut short and a tool call may not have finished: check how things stand before you rely on them.]]

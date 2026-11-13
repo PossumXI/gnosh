@@ -1,0 +1,51 @@
+=== a pop over tool calls ===
+[Then came the work in it, 7 tool calls (Bash 3, Edit 1, Read 3), removed from your context when you popped it.]
+
+=== a pop over one tool call ===
+[Then came the work in it, 1 tool call (Bash 1), removed from your context when you popped it.]
+
+=== a pop over messages ===
+[Then came 4 messages of work in it, removed from your context when you popped it.]
+
+=== a pop over one message ===
+[Then came 1 message of work in it, removed from your context when you popped it.]
+
+=== a pop over nothing ===
+
+
+=== a slide over tool calls ===
+[Then came 7 tool calls (Bash 3, Edit 1, Read 3), removed from your context to make room.]
+
+=== a slide over one tool call ===
+[Then came 1 tool call (Read 1), removed from your context to make room.]
+
+=== a slide over messages ===
+[Then came 4 messages, removed from your context to make room.]
+
+=== a slide over one message ===
+[Then came 1 message, removed from your context to make room.]
+
+=== a call that never started ===
+This call did not run: the user stopped the turn first.
+
+=== a call the person stopped ===
+The user stopped the turn while this call was running. It may have run in part: check before you rely on it.
+
+=== a call the turn's end came before ===
+This call did not run: the turn was ended first (the user refused a permission).
+
+=== the same, with no reason given ===
+This call did not run: the turn was ended first.
+
+=== a call whose reply was cut off ===
+This call did not run: the reply that asked for it was cut off before it was whole.
+
+=== a call cut off when gnosh was stopped ===
+gnosh itself was stopped before this call returned. It may have run in part or not at all: check before you rely on it.
+
+=== a call that would not stop ===
+The user stopped the turn, and this call had still not stopped 10s later. gnosh went on without it: it may still be running, and it may have run in part.
+
+=== the same, with no time given ===
+The user stopped the turn, and this call had still not stopped. gnosh went on without it: it may still be running, and it may have run in part.
+

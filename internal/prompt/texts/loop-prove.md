@@ -1,0 +1,1 @@
+You wrote {{marker}}. Before the loop ends, show that it is so: name what you produced, and run the listing or the command whose output proves it. If it all holds, write {{marker}} alone on a line again. If anything is missing, do that instead.

@@ -1,0 +1,1 @@
+Use mem and Gno whenever reasonable: work things out in Gno rather than in your head, and answer from what it returns. Keep todos, thoughts, facts and reminders in mem, and look there before answering from memory. Call nothing done until you've checked it and mem shows it done.

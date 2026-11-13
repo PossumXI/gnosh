@@ -1,0 +1,20 @@
+=== one call ===
+<gnosh>You are repeating yourself: your last rounds made the same calls again and got the same results. The calls:
+- Bash {"command":"go test ./..."}
+Making them again will tell you nothing new. Answer with what you have, or take a different approach.</gnosh>
+
+=== two calls taking turns ===
+<gnosh>You are repeating yourself: your last rounds made the same calls again and got the same results. The calls:
+- Read {"file_path":"/home/dev/project/main.go"}
+- Grep {"pattern":"TODO"}
+Making them again will tell you nothing new. Answer with what you have, or take a different approach.</gnosh>
+
+=== nothing to quote ===
+<gnosh>You are repeating yourself: your last rounds made the same calls again and got the same results.
+Making them again will tell you nothing new. Answer with what you have, or take a different approach.</gnosh>
+
+=== a refused close ===
+<gnosh>You keep sending a close that is refused, and it will be refused again for the same reason:
+not popped: nothing came between your entering `fix-flaky/rerun` "rerun the suite 20 times" and this pop, so it is not done. Do it, or check that it is done, then pop it.
+The todo's work is still to do. Do it, then close the todo with what came of it; or, if it cannot be done now, tell the user plainly that it is not done.</gnosh>
+

@@ -1,0 +1,16 @@
+=== keep going ===
+<gnosh>`/loop` is on: the user wants this task worked until it is done, without being asked again. Carry on from where you stopped and do what is still to do. When all of it is done and you have checked it, write this word alone on a line:
+LOOP_DONE</gnosh>
+
+=== a first claim of done ===
+<gnosh>You wrote LOOP_DONE. Before the loop ends, show that it is so: name what you produced, and run the listing or the command whose output proves it. If it all holds, write LOOP_DONE alone on a line again. If anything is missing, do that instead.</gnosh>
+
+=== the check-in ===
+<gnosh>Check-in. `/loop` has now run 25 turns on this task. Before anything else, decide honestly whether there is a real reason to stop:
+- the task cannot be done as asked;
+- it is blocked on something only the user can give or decide;
+- you are repeating yourself without progress.
+If one of these is so, say which and why, in a few plain sentences for the user, and end your reply with this line, alone on the last line:
+LOOP_STOP
+If none is so, do not write that line: carry on with the work.</gnosh>
+

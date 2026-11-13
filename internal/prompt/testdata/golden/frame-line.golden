@@ -1,0 +1,21 @@
+=== in one todo ===
+<gnosh>You are in `fix-flaky` "fix the flaky test": pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo("rename the port flag").Push(), popped when done.</gnosh>
+
+=== in a todo under a todo ===
+<gnosh>You are in `fix-flaky/find-cause` "find why TestFlaky fails" (your stack, bottom to top: `fix-flaky`, `fix-flaky/find-cause`): pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo("rename the port flag").Push(), popped when done.</gnosh>
+
+=== a todo with no title ===
+<gnosh>You are in `port-env`: pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo("rename the port flag").Push(), popped when done.</gnosh>
+
+=== after a slide ===
+<gnosh>You are in `fix-flaky/find-cause` "find why TestFlaky fails" (your stack, bottom to top: `fix-flaky`, `fix-flaky/find-cause`): pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo("rename the port flag").Push(), popped when done. The start of `fix-flaky/find-cause` left your context to make room; mem.Show("fix-flaky/find-cause") has the plan, the results so far and the thoughts. Your reads there are forgotten: read a file again before you edit it.</gnosh>
+
+=== after two slides ===
+<gnosh>You are in `fix-flaky/find-cause` "find why TestFlaky fails" (your stack, bottom to top: `fix-flaky`, `fix-flaky/find-cause`): pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo("rename the port flag").Push(), popped when done. Your rounds before `fix-flaky` left your context to make room; mem.Show("fix-flaky") has the plan, the results so far and the thoughts. Your reads there are forgotten: read a file again before you edit it. The start of `fix-flaky` left your context to make room; mem.Show("fix-flaky") has the plan, the results so far and the thoughts. Your reads there are forgotten: read a file again before you edit it.</gnosh>
+
+=== a slide told of by itself ===
+<gnosh>Your rounds before `fix-flaky` left your context to make room; mem.Show("fix-flaky") has the plan, the results so far and the thoughts. Your reads there are forgotten: read a file again before you edit it.</gnosh>
+
+=== at the root ===
+
+

@@ -1,0 +1,54 @@
+=== a Stop hook ===
+<gnosh>The turn cannot end yet: a Stop hook the user set up objects. Do what it asks before you end your reply. It says:
+The reply names renders/final.mp4, and there is no such file in /root/renders.</gnosh>
+
+=== another driver ===
+<gnosh>The turn cannot end yet. gnosh sends you back to work:
+The tests of ./internal/net have not been run since the last edit.</gnosh>
+
+=== a check that could not run ===
+<gnosh>The check stop-hook could not run: fork/exec ./hooks/check-renders.sh: no such file or directory. A check that could not run has not passed, so the turn goes on. Carry on with the work; if this check cannot run here, say so.</gnosh>
+
+=== a checkpoint ===
+<gnosh>Checkpoint. You have been sent back to work 10 times in a row, and the turn still may not end. Before anything else, decide honestly whether there is a real reason to stop:
+- the task cannot be done as asked;
+- it is blocked on something only the user can give or decide;
+- the check cannot pass in this environment;
+- you are repeating yourself without progress.
+If one of these is so, say which and why, in a few plain sentences for the user, and end your reply with this line, alone on the last line:
+<!-- GNOSH_STOP -->
+If none is so, do not write that line: carry on with the work. What holds the turn open:
+The reply names renders/final.mp4, and there is no such file in /root/renders.</gnosh>
+
+=== a checkpoint with its own marker and no count ===
+<gnosh>Checkpoint. Before anything else, decide honestly whether there is a real reason to stop:
+- the task cannot be done as asked;
+- it is blocked on something only the user can give or decide;
+- the check cannot pass in this environment;
+- you are repeating yourself without progress.
+If one of these is so, say which and why, in a few plain sentences for the user, and end your reply with this line, alone on the last line:
+GOAL_STOP
+If none is so, do not write that line: carry on with the work. What holds the turn open:
+The goal `release-v2` waits for the tag.</gnosh>
+
+=== a checkpoint whose objection follows by itself ===
+<gnosh>Checkpoint. You have been sent back to work 20 times in a row, and the turn still may not end. Before anything else, decide honestly whether there is a real reason to stop:
+- the task cannot be done as asked;
+- it is blocked on something only the user can give or decide;
+- the check cannot pass in this environment;
+- you are repeating yourself without progress.
+If one of these is so, say which and why, in a few plain sentences for the user, and end your reply with this line, alone on the last line:
+<!-- GNOSH_STOP -->
+If none is so, do not write that line: carry on with the work.</gnosh>
+
+=== a close refused as never worked on ===
+<gnosh>mem refused to close `fix-flaky/rerun`: nothing was done in it, and it is still open. Do its work, then pop it with what came of it; or, if it cannot be done now, tell the user plainly that it is not done. Do not tell the user it is done.</gnosh>
+
+=== a close the check refused ===
+<gnosh>The close of `fix-flaky/rerun` was refused, and it is still open: not popped: the check of `fix-flaky/rerun` found: the suite was run once, not 20 times. Do its work, then pop it with what came of it; or, if it cannot be done now, tell the user plainly that it is not done. Do not tell the user it is done.</gnosh>
+
+=== a goal the judge found not met ===
+<gnosh>The check of `release-v2` found it not met: the conversation shows the tag pushed, but no CI run
+The goal: release v2: the tag is pushed and CI is green
+Do what is missing, then close it again: `mem.Done("release-v2", "<command> → <result>")`. If what is missing is the user's to do or decide, do not do it for them: ask with `mem.Ask("release-v2", "…")`. Either way, tell the user what the check found.</gnosh>
+

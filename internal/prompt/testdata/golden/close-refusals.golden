@@ -1,0 +1,27 @@
+=== entered and closed in one call ===
+not popped: this call entered `fix-flaky/rerun` and closed it with nothing done in it, so nothing from the call was kept and you are not in `fix-flaky/rerun`. If its work is still to do, enter it, do the work, then pop it with what came of it. If you already did its work where you are now, close it by its name without entering it: mem.Done("fix-flaky/rerun", "what came of it").
+
+=== a file said to have changed, popped ===
+not popped: nothing in `docs/readme` changed or showed `README.md`, which your result says changed. If the change is still to make, make it; if it was made before, read it here so it shows; then close `docs/readme` with what came of it. If you did it before you entered `docs/readme`, step out with mem.Leave("done before") and close it by its name from where you did it: mem.Done("docs/readme", "what came of it").
+
+=== a file said to have changed, closed by name ===
+not closed: nothing in `docs/readme` changed or showed `README.md`, which your result says changed. If the change is still to make, make it; if it was made before, read it here so it shows; then close `docs/readme` with what came of it.
+
+=== a file said to have been made, popped ===
+not popped: nothing in `stats/tests` made `stats_test.go`, which your result says was made, and there is no such file. Make it, then close `stats/tests` with what came of it; or close it with what you did instead.
+
+=== a file said to have been made, closed by name ===
+not closed: nothing in `stats/tests` made `stats_test.go`, which your result says was made, and there is no such file. Make it, then close `stats/tests` with what came of it; or close it with what you did instead.
+
+=== the review said no, popped ===
+not popped: the check of `fix-flaky/rerun` found: the suite was run once, not 20 times. Do what is missing; if it is done already, show it here (read it, or run what checks it); then close `fix-flaky/rerun` with what came of it. If you did it before you entered `fix-flaky/rerun`, step out with mem.Leave("done before") and close it by its name from where you did it: mem.Done("fix-flaky/rerun", "what came of it"). If it cannot be done now, mem.Leave("why") leaves it open; either way, tell the user plainly how it stands.
+
+=== the review said no, closed by name ===
+not closed: the check of `fix-flaky/rerun` found: the suite was run once, not 20 times. Do what is missing; if it is done already, show it here (read it, or run what checks it); then close `fix-flaky/rerun` with what came of it. If it cannot be done now, leave it open; either way, tell the user plainly how it stands.
+
+=== the review was cancelled, popped ===
+not popped: the check of `fix-flaky/rerun` was cancelled, so nothing was kept
+
+=== the review was cancelled, closed by name ===
+not closed: the check of `fix-flaky/rerun` was cancelled, so nothing was kept
+

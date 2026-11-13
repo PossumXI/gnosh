@@ -1,0 +1,18 @@
+=== the person stopped the turn ===
+<gnosh>The user stopped the turn here, before it was finished. Whatever was running was stopped where it stood: a reply may be cut short and a tool call may not have finished. Do not take that work up again unless the user asks; go by what they say next.</gnosh>
+
+=== gnosh was stopped ===
+<gnosh>gnosh itself was stopped here, in the middle of the turn (a crash, a kill or a restart). A reply may be cut short and a tool call may not have finished: check how things stand before you rely on them.</gnosh>
+
+=== a background command finished ===
+<gnosh>A background command has ended: build the site (job bash_3). It finished with exit code 0. Its output is in /home/dev/project/.gnosh/tasks/bash_3.out. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
+
+=== one failed ===
+<gnosh>A background command has ended: go test -race ./... (job bash_4). It failed with exit code 2. Its output is in /home/dev/project/.gnosh/tasks/bash_4.out. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
+
+=== one was stopped ===
+<gnosh>A background command has ended: tail -f server.log. It was stopped. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
+
+=== one could not run ===
+<gnosh>A background command has ended: render the video (job bash_6). It could not run: ffmpeg is not installed here. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
+

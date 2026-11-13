@@ -1,0 +1,10 @@
+=== at the root, no task list ===
+<gnosh>You have not used mem for a while. If you are working on a task of two or more steps, plan it in mem in one call, `mem.Todo("the task", "its first step", "its second step").Push()`, and pop each todo with its result as it finishes. If it is planned already, carry on from its next todo. This is only a reminder: ignore it if it does not apply.</gnosh>
+
+=== in a todo, with a task list ===
+<gnosh>You have not used mem for a while. If you are working on a task of two or more steps, plan it in mem in one call, `mem.Todo("the task", "its first step", "its second step").Push()`, and pop each todo with its result as it finishes. If it is planned already, carry on from its next todo. This is only a reminder: ignore it if it does not apply. You are in `fix-flaky/find-cause` "find why TestFlaky fails" (your stack, bottom to top: `fix-flaky`, `fix-flaky/find-cause`): pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought.
+Where your todos in mem stand:
+1. reproduce it (completed)
+2. find why TestFlaky fails (in progress)
+3. rerun the suite 20 times (pending)</gnosh>
+

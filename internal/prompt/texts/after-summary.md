@@ -1,0 +1,1 @@
+Carry on with the task from where the summary leaves it. Do not ask the user to repeat anything, and do not ask whether to go on.[[ The conversation as it was is in {{path}}: read from it only what you need.]]

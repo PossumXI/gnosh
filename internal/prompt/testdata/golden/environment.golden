@@ -1,0 +1,44 @@
+=== everything known ===
+<gnosh>Where this session runs, as gnosh found it when the session began (this is not kept up to date):
+- Today: `2026-10-30`, a Friday.
+- Working directory: /home/dev/project
+- You run as dev on the machine box.
+- Platform: linux, arm64
+- Git: a repository, on branch main.
+- Git status then:
+ M internal/net/listen.go
+?? notes.txt
+- Added directories you may also read: /home/dev/shared, /srv/data
+- Other machines you may run commands on, by naming one as `host` in a Bash call (never ssh there yourself):
+  - render (root@203.0.113.10): the render box; videos land in /root/renders
+  - spare
+  A path belongs to the machine it was seen on, and the file tools reach only this machine.</gnosh>
+
+=== the least ===
+<gnosh>Where this session runs, as gnosh found it when the session began (this is not kept up to date):
+- Today: `2026-10-30`, a Friday.
+- Working directory: /home/dev/project</gnosh>
+
+=== not a repository ===
+<gnosh>Where this session runs, as gnosh found it when the session began (this is not kept up to date):
+- Today: `2026-10-30`, a Friday.
+- Working directory: /tmp/scratch
+- You run as dev.
+- Git: not a repository.</gnosh>
+
+=== a repository whose status was not read ===
+<gnosh>Where this session runs, as gnosh found it when the session began (this is not kept up to date):
+- Today: `2026-10-30`, a Friday.
+- Working directory: /home/dev/unknown
+- This machine is box.
+- Git: a repository.
+- Git status was not read. The reason: this folder is not trusted yet, and its own git settings name a program that a status would run.</gnosh>
+
+=== no branch, nothing changed ===
+<gnosh>Where this session runs, as gnosh found it when the session began (this is not kept up to date):
+- Today: `2026-10-30`, a Friday.
+- Working directory: /home/dev/project
+- Git: a repository.
+- Git status then:
+clean</gnosh>
+
