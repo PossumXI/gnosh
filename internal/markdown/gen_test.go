@@ -221,7 +221,7 @@ func (g *gen) doc() string {
 // TestStreamGrammar renders random documents whole and in pieces.
 func TestStreamGrammar(t *testing.T) {
 	docs := 3000
-	if testing.Short() || raceEnabled {
+	if testing.Short() || raceDetector {
 		docs = 300
 	}
 	r := rand.New(rand.NewSource(20261113))
@@ -282,7 +282,7 @@ func resized(doc string, opts Options, cuts, at, widths []int) ([]string, string
 // must fit the new width.
 func TestStreamResize(t *testing.T) {
 	docs := 1500
-	if testing.Short() || raceEnabled {
+	if testing.Short() || raceDetector {
 		docs = 150
 	}
 	r := rand.New(rand.NewSource(77))

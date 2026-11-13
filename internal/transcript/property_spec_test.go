@@ -99,7 +99,7 @@ type specCounts struct {
 
 func TestSpecProperties(t *testing.T) {
 	seeds := uint64(250)
-	if testing.Short() || raceEnabled {
+	if testing.Short() || raceDetector {
 		seeds = 50
 	}
 	var n specCounts

@@ -130,7 +130,7 @@ func TestLargeSession(t *testing.T) {
 	const id = "0193267a-7777-7000-8000-000000000007"
 	path := filepath.Join(st.ProjectDir(cwd), id+".jsonl")
 	want, perMB := 50<<20, time.Second/2
-	if raceEnabled {
+	if raceDetector {
 		want, perMB = 8<<20, 5*time.Second
 	}
 	count, size := writeLargeSession(t, path, id, want)

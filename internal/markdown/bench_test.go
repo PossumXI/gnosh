@@ -162,7 +162,7 @@ func TestCostIsLinear(t *testing.T) {
 		{"a tall table", func(n int) string { return "| a | b |\n|---|---|\n" + strings.Repeat("| c | d |\n", n/10) }, 400},
 	}
 	size := 16 << 10
-	if raceEnabled || testing.Short() {
+	if raceDetector || testing.Short() {
 		size = 6 << 10 // the race detector makes everything ten times slower
 	}
 	for _, k := range kinds {

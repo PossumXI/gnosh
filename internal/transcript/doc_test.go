@@ -100,7 +100,7 @@ func TestViewScales(t *testing.T) {
 		t.Skip("builds transcripts of 200,000 entries")
 	}
 	todos, notices := 25_000, 100_000
-	if raceEnabled {
+	if raceDetector {
 		todos, notices = 5_000, 20_000
 	}
 	var entries []Entry

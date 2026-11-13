@@ -164,7 +164,7 @@ func TestSequences(t *testing.T) {
 	if got, want := scr.Lines(), []string{"oXe", "Ywo", "three", "", ""}; !reflect.DeepEqual(got, want) {
 		t.Errorf("cursor movement: screen %q, want %q", got, want)
 	}
-	scr.WriteString(CursorColumn(2) + EraseLineRight + CursorUp(1) + EraseLine + CursorDown(1) + CursorDown(0) + CursorUp(-3) + "\r\n" + CursorColumn(3) + EraseDown)
+	scr.WriteString(CursorColumn(2) + EraseToLineEnd + CursorUp(1) + EraseLine + CursorDown(1) + CursorDown(0) + CursorUp(-3) + "\r\n" + CursorColumn(3) + EraseDown)
 	if got, want := scr.Lines(), []string{"", "Y", "th", "", ""}; !reflect.DeepEqual(got, want) {
 		t.Errorf("erasing: screen %q, want %q", got, want)
 	}
@@ -188,9 +188,9 @@ func TestSequences(t *testing.T) {
 	if flags, depth := scr.KittyFlags(); flags != 0 || depth != 0 {
 		t.Errorf("after KittyKeyboardPop: flags %d, depth %d", flags, depth)
 	}
-	scr.WriteString("\x1b[1;31mx" + ResetStyle + "y" + SaveCursor + CursorUp(2) + RestoreCursor + "z" + Bell)
+	scr.WriteString("\x1b[1;31mx" + StyleReset + "y" + SaveCursor + CursorUp(2) + RestoreCursor + "z" + Bell)
 	if a := scr.Cell(2, 3).Attr; a != (vtest.Attr{}) || !scr.Cell(2, 2).Attr.Bold {
-		t.Errorf("ResetStyle left %+v", a)
+		t.Errorf("StyleReset left %+v", a)
 	}
 	if scr.Line(2) != "thxyz" || scr.Bells() != 1 {
 		t.Errorf("SaveCursor and RestoreCursor or Bell: line %q, bells %d", scr.Line(2), scr.Bells())

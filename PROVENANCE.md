@@ -14,9 +14,11 @@ The work is split in two, and the split is the point.
 
 **The spec side** may read the earlier tree. It writes down, in words, what
 gnosh does: behaviour, formats, option names, worked examples. Its output is
-`spec/`. It writes no code in this repository, and its specs hold no code or
-prompt text taken from Crush-derived files and no account of how Crush is put
-together inside.
+`spec/`. It writes no code in this repository, and its specs hold none of
+Charm's code or prompt text and no account of how Crush is put together
+inside. Where a spec quotes wording a model is to be given, it is the
+earlier gnosh's own (its lines about mem, its receipts and refusals), and
+`CARRIED.md` lists it.
 
 **The build side** writes all the code. It works from:
 
@@ -84,8 +86,13 @@ did not open its Crush-derived source.
 - The git history, which starts empty.
 - `tools/audit/carried.py check`, which re-derives every carried file's
   staged original from the tree and compares checksums.
-- A comparison of this tree against Crush's, to be run before anything is
-  published, with its method and output under `tools/audit/`.
+- `tools/audit/similarity/`: a comparison of this tree against every
+  published version of Crush and against the Charm libraries the earlier
+  gnosh used, by shared lines, shared runs of lines, shared runs of tokens,
+  and shared runs of tokens with every name set aside, calibrated on code
+  that is known to be Crush's and on unrelated Go programs. Its README gives
+  the findings, most serious first, and what such a comparison cannot show.
+  It is to be run again on whatever commit is published.
 
 ## Dependencies
 

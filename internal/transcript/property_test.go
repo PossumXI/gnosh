@@ -293,7 +293,7 @@ func answersAny(e *Entry, ids []string) bool {
 
 func TestViewProperties(t *testing.T) {
 	seeds := uint64(200)
-	if testing.Short() || raceEnabled {
+	if testing.Short() || raceDetector {
 		seeds = 60
 	}
 	slid, popped := 0, 0

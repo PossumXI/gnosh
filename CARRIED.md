@@ -1,6 +1,8 @@
 # Carried files
 
-This file lists every file in this repository that was not written for it:
+This file lists every file in this repository that was not written for it,
+and (under "Words carried into `internal/prompt`") the wording that was
+carried inside files that were:
 the files brought over from the earlier gnosh, the program of the same name
 that was a fork of Charmbracelet's Crush. PROVENANCE.md says how such files
 are chosen ("How files are carried over"); this is the record of what was
@@ -657,6 +659,30 @@ What no script checks: that the code around those strings does what the
 staged code did. The package's tests are for that. They run the tools
 against the real host, in the process, and against a scripted client, and
 hold each result to the text `spec/gnosh/machines.md` gives.
+
+## Words carried into `internal/prompt`
+
+The table above is of files. Some of what gnosh says to a model was carried
+too, as words inside files that were otherwise written here, and an audit
+(`tools/audit/similarity/`, finding 2) found that this file did not say so.
+It does now. None of these words is Charm's: the inventory checked every
+line of them absent from Crush's templates at the fork point and from the
+rest of Charm's code, and the audit, measuring by sentences and by runs of
+words, found none of the 331 sentences of `internal/prompt/texts` in any
+version of Crush.
+
+| text in `internal/prompt/texts/` | where the words come from in the earlier gnosh | how much |
+|---|---|---|
+| `close-review.md` | `internal/agent/templates/close_check.md`, a file the earlier gnosh added (staged) | 22 of 23 sentences |
+| `goal-judge.md` | `internal/agent/templates/goal_check.md`, added (staged) | 8 of 11 sentences |
+| `memory.md`, `memory-full.md` | the block about mem that the earlier gnosh wrote into its coder prompt template. That template was a Crush file the earlier gnosh had modified; the block was the earlier gnosh's own addition, cut out by the inventory as `own-text/coder-prompt-memory-block.md` | most of both texts |
+| `gno.md` | the block about Gno projects in the same template (`own-text/coder-prompt-gno-block.md`) | nearly all |
+| `deliver.md` | the block about deliverables in the same template (`own-text/coder-prompt-artifacts-block.md`) | about three quarters |
+| `mem-line.md`, `frame-line.md`, `close-entered-here.md`, `close-sendback.md` and about ten more short texts (receipts, refusals, send-backs) | messages in Go files the earlier gnosh added (`mem_line.go`, `close_check.go`, `refused_close.go`, `frames.go`, `mem_reminder.go`) and, for two, its hooks documentation; most reached the build side quoted in `spec/gnosh/` | a sentence or two each |
+
+These words were tuned against a real model over weeks of runs, which is why
+they were kept. Everything else in `internal/prompt/texts` was written for
+this repository.
 
 ## Files written fresh
 

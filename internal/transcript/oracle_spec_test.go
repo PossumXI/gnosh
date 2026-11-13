@@ -521,7 +521,7 @@ func againstSpec(entries []Entry, session string) string {
 // at its end.
 func TestSpecOracle(t *testing.T) {
 	seeds := uint64(1500)
-	if testing.Short() || raceEnabled {
+	if testing.Short() || raceDetector {
 		seeds = 300
 	}
 	for seed := range seeds {

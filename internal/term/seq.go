@@ -25,8 +25,8 @@ const (
 	// EraseLine blanks the whole line the cursor is on (EL 2). The cursor
 	// does not move.
 	EraseLine = "\x1b[2K"
-	// EraseLineRight blanks from the cursor to the end of its line (EL 0).
-	EraseLineRight = "\x1b[K"
+	// EraseToLineEnd blanks from the cursor to the end of its line (EL 0).
+	EraseToLineEnd = "\x1b[K"
 	// EraseDown blanks from the cursor to the end of the screen (ED 0).
 	//
 	// Never send it with the cursor in the top left corner of the
@@ -44,8 +44,8 @@ const (
 	SaveCursor    = "\x1b7"
 	RestoreCursor = "\x1b8"
 
-	// ResetStyle turns off every colour and style (SGR 0).
-	ResetStyle = "\x1b[m"
+	// StyleReset turns off every colour and style (SGR 0).
+	StyleReset = "\x1b[m"
 
 	// AutoWrapOff stops text that reaches the right edge from continuing
 	// on the next line (DECAWM reset); AutoWrapOn is the normal state. The

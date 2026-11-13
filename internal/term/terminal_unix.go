@@ -111,7 +111,7 @@ func Open(in, out *os.File, opts Options) (*Terminal, error) {
 	t := &Terminal{
 		in: in, out: out, inFd: int(in.Fd()), outFd: int(out.Fd()),
 		opts:       opts,
-		escTimeout: DefaultEscTimeout,
+		escTimeout: DefaultEscWait,
 		events:     make(chan Event),
 		kick:       make(chan struct{}, 1),
 		done:       make(chan struct{}),

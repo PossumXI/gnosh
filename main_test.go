@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 		gotool = "/usr/local/go/bin/go"
 	}
 	args := []string{"build", "-o", binary}
-	if raceEnabled {
+	if raceDetector {
 		args = append(args, "-race")
 	}
 	build := exec.Command(gotool, append(args, ".")...)

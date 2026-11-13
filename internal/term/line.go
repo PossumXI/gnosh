@@ -187,7 +187,7 @@ func (r *Renderer) prepare(raw string) rline {
 		}
 	}
 	if styled {
-		text.WriteString(ResetStyle)
+		text.WriteString(StyleReset)
 	}
 	if linked {
 		text.WriteString(linkEnd)

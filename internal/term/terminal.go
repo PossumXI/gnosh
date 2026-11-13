@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// DefaultEscTimeout is how long a Terminal waits, after a byte that could
+// DefaultEscWait is how long a Terminal waits, after a byte that could
 // be the Esc key or the start of a longer sequence, for the rest to arrive
 // before it decides it was the key.
-const DefaultEscTimeout = 50 * time.Millisecond
+const DefaultEscWait = 50 * time.Millisecond
 
 // ErrClipboardOff is returned by CopyToClipboard when Options.Clipboard
 // was not set.
@@ -25,7 +25,7 @@ var ErrNoShell = errors.New("gnosh was not started from a shell that could bring
 
 // Options adjust a Terminal. The zero value is what gnosh uses.
 type Options struct {
-	// EscTimeout replaces DefaultEscTimeout when it is positive.
+	// EscTimeout replaces DefaultEscWait when it is positive.
 	EscTimeout time.Duration
 
 	// Clipboard allows CopyToClipboard, which writes to the person's
@@ -108,5 +108,5 @@ func (m Modes) off() string {
 // modes off, and the few things an interrupted update could have left
 // wrong put right (styles, the terminal's line wrapping, the cursor).
 func leaveSequence(m Modes) string {
-	return ResetStyle + AutoWrapOn + ShowCursor + m.off()
+	return StyleReset + AutoWrapOn + ShowCursor + m.off()
 }
