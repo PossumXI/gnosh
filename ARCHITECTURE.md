@@ -8,10 +8,11 @@ on disk. It is written in Go, from scratch (see PROVENANCE.md).
 ## The four decisions everything else follows from
 
 1. **Standard library first.** One Go module (`github.com/gnosh-ai/gnosh`,
-   Go 1.27). Besides the standard library it may use `golang.org/x/term` and
-   `golang.org/x/sys` (pinned to releases at least two months old) and, for
-   the GnoVM, gno's own modules. Nothing else is added without Jae's say:
-   every dependency is something that can be compromised in a commit.
+   Go 1.27). The harness uses the standard library, `golang.org/x/term` and
+   `golang.org/x/sys`, and nothing else. The carried GnoVM subsystem uses
+   gno's own module and a pure-Go SQLite, pinned at the versions it was
+   tested with (PROVENANCE.md lists them). Nothing is added without Jae's
+   say: every dependency is something that can be compromised in a commit.
    No Charm code of any kind, application or library.
 2. **Claude Code's public conventions.** Flag names, tool names and argument
    shapes, permission modes and rule syntax, hook events and their JSON
@@ -79,7 +80,10 @@ on disk. It is written in Go, from scratch (see PROVENANCE.md).
 
 ## Building and testing
 
-Go builds and tests never run on the Mac. From the repo root:
+Go builds and tests never run on the Mac. `tools/dev/remote-ci.sh` sends
+the committed tree to a clean directory on the devbox and builds, vets and
+tests all of it; that is the check a commit is held to. While working on
+one package, from the repo root:
 
     tools/dev/remote-test.sh [-race] [-v] [-run REGEX] internal/yourpkg [more dirs]
 

@@ -82,15 +82,32 @@ did not open its Crush-derived source.
   from the scan that compared it with Crush's code.
 - `AUTHORSHIP.md`: who asked for what, in their own words.
 - The git history, which starts empty.
+- `tools/audit/carried.py check`, which re-derives every carried file's
+  staged original from the tree and compares checksums.
 - A comparison of this tree against Crush's, to be run before anything is
   published, with its method and output under `tools/audit/`.
 
 ## Dependencies
 
-| module | version | released | why it is settled enough |
-|---|---|---|---|
-| `golang.org/x/term` | v0.46.0 | 2026-09-08 | The Go team's own; raw mode and terminal size only. Pinned two months back rather than at the newest release. |
-| `golang.org/x/sys` | v0.48.0 | 2026-08-31 | The Go team's own; needed by `x/term`. |
+The harness itself (everything that is not the carried GnoVM subsystem)
+uses the standard library and two of the Go team's own modules. The carried
+GnoVM subsystem needs gno and a pure-Go SQLite, and those bring what they
+need. Every version is the one the carried code was built and tested with
+in the earlier gnosh, and none is newer than five weeks at the time of
+writing.
+
+| module | version | released | used by | why it is settled enough |
+|---|---|---|---|---|
+| `golang.org/x/term` | v0.47.0 | 2026-10-09 | the terminal, the chain client's password prompt | The Go team's own; raw mode and terminal size only. |
+| `golang.org/x/sys` | v0.49.0 | 2026-10-06 | the terminal, the shell tool, file locks | The Go team's own. |
+| `github.com/gnolang/gno` | v1.5.1-0.20260928125126-5cdbc25fcde0 | 2026-09-28 | `internal/gnovm`, `internal/gnochain` | Gno itself: the VM that `mem` runs in. Pinned to one commit; the embedded standard library is that commit's. |
+| `modernc.org/sqlite` | v1.58.0 | 2026-09-01 | `internal/gnovm` (mem's journal and index) | SQLite translated to Go, no C. The files already on Jae's disks are in its format. |
+| `golang.org/x/mod` | v0.42.0 | 2026-10-09 | `internal/gnovm` | The Go team's own; version comparison. |
+| `github.com/stretchr/testify` | v1.12.1 | 2026-08-17 | tests of the carried code only | Not in the program. |
+
+What those need in turn (cryptography, protobuf, LevelDB and the rest) is
+listed as indirect in `go.mod`, each at the version the earlier gnosh
+selected.
 
 ## Data that is not gnosh's
 
