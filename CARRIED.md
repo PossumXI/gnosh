@@ -28,7 +28,7 @@ Every carried file keeps the path it had.
 
 | what | files | bytes | of which |
 |---|---:|---:|---|
-| `GNOMEM.md`: mem's own documentation, at the repository root: a carried test reads it | 1 | 56,358 | 1 carried |
+| `GNOMEM.md`: mem's own documentation, at the repository root: a carried test reads it | 1 | 56,358 | 1 carried with changes |
 | `gno/r/gnosh/mem/`: the shared mem realm for gno.land | 6 | 68,058 | 6 carried |
 | `internal/gnochain/`: the gno.land client | 9 | 60,682 | 8 carried, 1 carried with changes |
 | `internal/gnovm/internal/syncstdlibs/`: the tool that copies gno's standard library in | 1 | 4,074 | 1 carried |
@@ -39,7 +39,7 @@ Every carried file keeps the path it had.
 | `internal/gnovm/testdata/`: mem's scenarios, goldens and upgrade fixtures | 91 | 360,974 | 91 carried |
 | `internal/gnovm/`: the GnoVM machines and mem: the package's own files, DESIGN.md and LICENSE.md | 80 | 934,405 | 71 carried, 9 carried with changes |
 | `internal/swarm/cmd/swarmdemo/`: the swarm demo | 3 | 41,115 | 2 carried, 1 carried with changes |
-| **all** | **373** | **3,272,233** | 194 carried (1,423,956 bytes), 11 carried with changes (284,084 bytes), 168 third-party (1,564,193 bytes) |
+| **all** | **373** | **3,272,233** | 193 carried (1,367,598 bytes), 12 carried with changes (340,442 bytes), 168 third-party (1,564,193 bytes) |
 
 <!-- carried-summary:end -->
 
@@ -103,7 +103,7 @@ give.
 
 | new path | old path | kind | bytes | line share | longest run | SHA-256 of the staged original | what was changed |
 |---|---|---|---:|---:|---:|---|---|
-| `GNOMEM.md` | `GNOMEM.md` | carried | 56,358 | 0.0% | 0 | `ee7d139f66864f99fe2aadfe569d530b2a3ae22a5f7aeab87a4a6b3194ac623d` | nothing |
+| `GNOMEM.md` | `GNOMEM.md` | carried with changes | 56,358 | 0.0% | 0 | `ee7d139f66864f99fe2aadfe569d530b2a3ae22a5f7aeab87a4a6b3194ac623d` | the embedding server's setting, 5 lines: the earlier config line (`option mem-embeddings-url`) is now the `gnosh.json` key `options.memEmbeddingsUrl` |
 | `gno/r/gnosh/mem/calls.gno` | `gno/r/gnosh/mem/calls.gno` | carried | 12,579 | 0.0% | 0 | `29e951e729f3e1bdf644732db97b018f41069c5044f523efaed0bbd4e4e3f5c5` | nothing |
 | `gno/r/gnosh/mem/gnomod.toml` | `gno/r/gnosh/mem/gnomod.toml` | carried | 79 | 0.0% | 0 | `31808b66f4c9b6df49ab9bd47a98b639931d64fe7a34bc4c81c2a0d209b5e34e` | nothing |
 | `gno/r/gnosh/mem/mem.gno` | `gno/r/gnosh/mem/mem.gno` | carried | 12,122 | 0.0% | 0 | `36d29da66f211881dab690f492b32ef5e1334cb130246fb09e324df2c7068e14` | nothing |

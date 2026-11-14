@@ -380,10 +380,11 @@ you answer.
 ### Found by meaning, if you want it
 
 mem finds by words until you name an embedding server, an OpenAI-compatible
-`/embeddings` endpoint such as `llama-server --embedding`, in your gnoshrc:
+`/embeddings` endpoint such as `llama-server --embedding`, in your
+`gnosh.json`:
 
-```bash
-option mem-embeddings-url "http://127.0.0.1:8091/v1"
+```json
+{ "options": { "memEmbeddingsUrl": "http://127.0.0.1:8091/v1" } }
 ```
 
 Then `mem.Find` gives the rows holding all the words first, then those close
