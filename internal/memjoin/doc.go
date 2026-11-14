@@ -45,9 +45,11 @@
 // the order things happen:
 //
 // Tools (IC 5.1, 5.2; plan.go). The session a person is in gets all four
-// tools. A sub-agent gets the ones its definition names, so the stock
-// kinds, which name none, get none, and nothing else of the join either
-// (IC 7.2, open-questions Q15). Plan mode does not change the list: a
+// tools. A sub-agent gets the ones its definition names (the definition
+// the Agent tool found, which the wiring hands over as Session.AgentDef,
+// whichever folder it was read from), so the stock kinds, which name
+// none, get none, and nothing else of the join either (IC 7.2,
+// open-questions Q15). Plan mode does not change the list: a
 // session's tools are fixed when it starts, and a model server keeps the
 // list as part of the prompt it has read. In plan mode gnovm_list alone
 // runs, and a call of one of the other three is answered with what plan

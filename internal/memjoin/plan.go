@@ -3,11 +3,8 @@ package memjoin
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"slices"
-	"strings"
 
-	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	gnovmtools "github.com/gnosh-ai/gnosh/internal/gnovm/tools"
 )
@@ -71,15 +68,19 @@ func (t gated) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (
 // The session a person is in is given all four. A sub-agent is given the
 // ones its definition names, and so the stock kinds, which name none, are
 // given none: mem is the plan of the session the person is in, and a
-// helper that was not written for it is kept out of it. gnovm_list runs
-// in every mode; the other three are gated.
+// helper that was not written for it is kept out of it. The definition is
+// the one the Agent tool found and the wiring hands over with the
+// sub-agent's facts (Session.AgentDef), wherever it was read from:
+// gnosh's own folders, Claude Code's, or gnosh itself. A sub-agent with
+// no definition is given nothing. gnovm_list runs in every mode; the
+// other three are gated.
 func (j *join) given(set *gnovmtools.Set) (tools []core.Tool, run bool) {
 	offered := func(name string) bool { return j.s.Offered == nil || j.s.Offered(name) }
 	named := func(string) bool { return true }
 	if !j.main {
-		def, ok := j.definition()
+		def := j.s.AgentDef
 		named = func(name string) bool {
-			return ok && def.ToolsSet && slices.Contains(def.Tools, name) && !slices.Contains(def.Disallowed, name)
+			return def != nil && def.ToolsSet && slices.Contains(def.Tools, name) && !slices.Contains(def.Disallowed, name)
 		}
 	}
 	for _, t := range set.Tools() {
@@ -96,39 +97,4 @@ func (j *join) given(set *gnovmtools.Set) (tools []core.Tool, run bool) {
 		tools = append(tools, t)
 	}
 	return tools, run
-}
-
-// definition returns the definition of the kind of sub-agent this session
-// is. It is found where the Agent tool finds it (the wiring's agentDefs):
-// gnosh's own kinds, the person's (~/.claude/agents), and, in a folder
-// the person trusts, the project's (.claude/agents in the working
-// directory, in every folder above it up to where the project begins,
-// and in the directories added to the session); in safe mode gnosh's own
-// alone. The session's facts name only the kind, so the file is read
-// again here; a kind that is not found is given nothing.
-func (j *join) definition() (agentdef.Def, bool) {
-	s := j.s
-	if s.Config != nil && s.Config.Switches.SafeMode.V {
-		return agentdef.Load("", nil).Get(s.AgentType)
-	}
-	var project []string
-	if s.Trusted {
-		root := s.Dirs.ProjectRoot
-		for dir := s.Dirs.Cwd; dir != ""; dir = filepath.Dir(dir) {
-			project = append(project, filepath.Join(dir, ".claude", "agents"))
-			if dir == root || dir == filepath.Dir(dir) || !strings.HasPrefix(dir, root) {
-				break
-			}
-		}
-		for _, r := range j.env().Roots {
-			if d := filepath.Join(r, ".claude", "agents"); !slices.Contains(project, d) {
-				project = append(project, d)
-			}
-		}
-	}
-	user := ""
-	if s.Dirs.Home != "" {
-		user = filepath.Join(s.Dirs.Home, ".claude", "agents")
-	}
-	return agentdef.Load(user, project).Get(s.AgentType)
 }

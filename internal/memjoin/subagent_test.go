@@ -2,6 +2,7 @@ package memjoin
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,7 +64,14 @@ func TestSubAgentsAndMem(t *testing.T) {
 
 	// The session itself has the four tools, the part about mem and the
 	// mem line; it stands in the circle when it starts the sub-agents.
-	has(t, "the session's tools", strings.Join(toolNamesOf(reqs[0]), " "), "Agent AskUserQuestion gnovm_run gnovm_new gnovm_list gnovm_drop")
+	// (Which other tools stand beside them is the wiring's to say: what
+	// is held here is that the session has the Agent tool and the four
+	// gnovm tools, in their order.)
+	own := toolNamesOf(reqs[0])
+	has(t, "the session's tools", strings.Join(own, " "), "gnovm_run gnovm_new gnovm_list gnovm_drop")
+	if !slices.Contains(own, "Agent") {
+		t.Errorf("the session has no Agent tool: %q", own)
+	}
 	has(t, "the session's system prompt", system(t, reqs[0]), memory)
 	has(t, "the session's first prompt", lastUser(t, reqs[0]), memLine)
 	has(t, "the session's step into the plan", lastResult(t, reqs[2]), "in `"+circle+"` \"circle\"")
@@ -154,4 +162,64 @@ func TestSubAgentsAndMem(t *testing.T) {
 	has(t, "the result of the Agent call", lastResult(t, reqs[9]), "The square is done. The circle is another session's.")
 	// The person was told of the sub-agent's pop, too.
 	has(t, "stderr", r.err, "popped `"+square+"`: about ")
+}
+
+// A kind of sub-agent that is defined only in gnosh's own folders, the
+// person's (the agents folder of gnosh's config) or a trusted project's
+// (.gnosh/agents), is given the gnovm tools its definition names, as one
+// defined in Claude Code's folders is. The join follows the definition
+// the Agent tool found and looks for no file itself.
+func TestSubAgentDefinedInGnoshsOwnFolders(t *testing.T) {
+	w := newWorld(t,
+		reply(call("m1", "Agent", map[string]any{"description": "keep the test command", "prompt": "Keep the test command, go test ./..., in mem.", "subagent_type": "keeper"})),
+		reply(memCall("s1", `mem.Fact("cmd/test", "go test ./...")`)),
+		says("Kept."),
+		reply(call("m2", "Agent", map[string]any{"description": "list the machines", "prompt": "List the Gno machines.", "subagent_type": "lister"})),
+		reply(call("s2", "gnovm_list", map[string]any{})),
+		says("There is mem, and no machine besides."),
+		says("Both are back."),
+	)
+	w.Write(filepath.Join(w.ConfigDir(), "agents", "keeper.md"),
+		"---\nname: keeper\ndescription: Keeps what it is told in mem.\ntools: gnovm_run\n---\n\nYou are the keeper. Keep what you are told in mem: call gnovm_run with the name mem.\n")
+	w.Write(filepath.Join(".gnosh", "agents", "lister.md"),
+		"---\nname: lister\ndescription: Lists the Gno machines of the project.\ntools: Read, gnovm_list\n---\n\nYou are the lister.\n")
+	// Neither kind is defined anywhere else.
+	if w.Exists(filepath.Join(w.Home, ".claude")) || w.Exists(".claude") {
+		t.Fatalf("the world has a folder of Claude Code's")
+	}
+
+	r := w.run("--trust-folder", "-y", "-p", "have the test command kept, and the machines listed")
+	r.wantCode(t, 0)
+	w.script.done()
+	reqs := w.script.requests()
+	if len(reqs) != 7 {
+		t.Fatalf("the run made %d requests, want 7", len(reqs))
+	}
+	mainID := strings.TrimSuffix(filepath.Base(w.Sessions()[0]), ".jsonl")
+
+	// The kind of the person's own folder: gnovm_run and nothing else,
+	// and its call on mem is a sub-agent's, under its own session.
+	keeper := reqs[1]
+	if got := strings.Join(toolNamesOf(keeper), " "); got != "gnovm_run" {
+		t.Errorf("the tools of the kind defined in gnosh's config folder: %q, want gnovm_run alone", got)
+	}
+	has(t, "its system prompt", system(t, keeper), "You are the keeper.")
+	has(t, "what it read of its call on mem", lastResult(t, reqs[2]), "fact `cmd/test` is new", "ok · mem · ")
+	sent := w.memRequests()
+	if len(sent) != 1 || !sent[0].SubAgent || sent[0].Session == mainID || sent[0].Session == "" {
+		t.Fatalf("the requests that reached mem: %+v, want one, a sub-agent's, under its own session (the session is %s)", sent, mainID)
+	}
+
+	// The kind of the project's own folder, in a folder that is trusted:
+	// the tools its definition names, gnovm_list among them.
+	lister := reqs[4]
+	if got := strings.Join(toolNamesOf(lister), " "); got != "Read gnovm_list" {
+		t.Errorf("the tools of the kind defined in the project's .gnosh folder: %q, want Read and gnovm_list", got)
+	}
+	has(t, "what it read of the list", lastResult(t, reqs[5]), "VM budget", "- mem: ")
+
+	// What the keeper kept is in mem for every session after it.
+	r = w.run("mem", "show", "cmd/test")
+	r.wantCode(t, 0)
+	has(t, "gnosh mem show", r.out, "go test ./...")
 }

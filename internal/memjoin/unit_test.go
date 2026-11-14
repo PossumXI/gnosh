@@ -13,6 +13,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/gnovm"
@@ -343,31 +344,49 @@ func TestLifecycle(t *testing.T) {
 	}
 }
 
-// A sub-agent's session. The stock kinds are given no gnovm tools, and
-// nothing else of the join either; so is a kind a person defined that
-// names none. A kind whose definition names gnovm tools is given exactly
-// those: it is a session of its own to mem, its requests are marked as a
-// sub-agent's, it holds a turn lock of its own, and it gets none of the
-// lines, the reminder, the goal or the commands.
+// A sub-agent's session. What it is given follows its definition, which
+// the wiring hands over with its facts, whichever folder it was read
+// from: the join looks for no file itself. The stock kinds are given no
+// gnovm tools, and nothing else of the join either; so is a kind a person
+// defined that names none, and a sub-agent with no definition. A kind
+// whose definition names gnovm tools is given exactly those: it is a
+// session of its own to mem, its requests are marked as a sub-agent's, it
+// holds a turn lock of its own, and it gets none of the lines, the
+// reminder, the goal or the commands.
 func TestSubAgent(t *testing.T) {
-	define := func(home, name, front string) {
+	// define reads a definition from the text of its file, as the Agent
+	// tool does.
+	define := func(name, front string) *agentdef.Def {
 		t.Helper()
-		dir := filepath.Join(home, ".claude", "agents")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
+		d, reason := agentdef.Parse("---\nname: " + name + "\ndescription: A helper for the test.\n" + front + "---\n\nYou are a helper.\n")
+		if reason != "" {
+			t.Fatalf("the definition of %s cannot be read: %s", name, reason)
 		}
-		text := "---\nname: " + name + "\ndescription: A helper for the test.\n" + front + "---\n\nYou are a helper.\n"
-		if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		return &d
+	}
+	defs := map[string]*agentdef.Def{
+		"plain-helper": define("plain-helper", ""),
+		"searcher":     define("searcher", "tools: Read, Grep\n"),
+		"reader":       define("reader", "tools: Read, gnovm_list\n"),
+		"planner":      define("planner", "tools: Read, gnovm_run\n"),
+		"keeper":       define("keeper", "tools: gnovm_run, gnovm_new, gnovm_list, gnovm_drop\ndisallowedTools: gnovm_drop\n"),
+	}
+	for _, d := range agentdef.Builtin() {
+		defs[d.Name] = &d
 	}
 	sub := func(kind string) func(s *app.Session) {
 		return func(s *app.Session) {
-			s.SubAgent, s.Parent, s.AgentType, s.Source = true, "the-parent-session", kind, "subagent"
-			define(s.Dirs.Home, "plain-helper", "")
-			define(s.Dirs.Home, "reader", "tools: Read, gnovm_list\n")
-			define(s.Dirs.Home, "planner", "tools: Read, gnovm_run\n")
-			define(s.Dirs.Home, "keeper", "tools: gnovm_run, gnovm_new, gnovm_list, gnovm_drop\ndisallowedTools: gnovm_drop\n")
+			s.SubAgent, s.Parent, s.AgentType, s.AgentDef, s.Source = true, "the-parent-session", kind, defs[kind], "subagent"
+			// A file that says otherwise, where the join once looked for
+			// definitions itself: nothing reads it now.
+			dir := filepath.Join(s.Dirs.Home, ".claude", "agents")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			text := "---\nname: " + kind + "\ndescription: Not the definition in force.\ntools: gnovm_run, gnovm_new, gnovm_list, gnovm_drop\n---\n\nYou are a helper.\n"
+			if err := os.WriteFile(filepath.Join(dir, kind+".md"), []byte(text), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	names := func(b *bench) string {
@@ -377,10 +396,14 @@ func TestSubAgent(t *testing.T) {
 		}
 		return strings.Join(out, " ")
 	}
+	if defs["general-purpose"] == nil || defs["Explore"] == nil || defs["no-definition"] != nil {
+		t.Fatalf("the definitions at hand: %v", defs)
+	}
 
-	// The stock kinds, a kind that names no gnovm tool, and a kind nobody
-	// defined: nothing of the join.
-	for _, kind := range []string{"general-purpose", "Explore", "plain-helper", "no-such-kind"} {
+	// The stock kinds, a kind that names no tools, a kind that names
+	// tools and no gnovm tool, and a sub-agent that came with no
+	// definition: nothing of the join.
+	for _, kind := range []string{"general-purpose", "Explore", "plain-helper", "searcher", "no-definition"} {
 		b := newBench(t, Options{}, sub(kind))
 		if len(b.c.Tools) != 0 || b.c.Stored != nil || b.c.Busy != nil || b.c.PromptLines != nil || b.c.Ready != nil {
 			t.Errorf("a %s sub-agent was given something of the join: tools %q", kind, names(b))
@@ -398,39 +421,6 @@ func TestSubAgent(t *testing.T) {
 		t.Errorf("the tools of a kind that names all four and disallows one: %q", got)
 	}
 	keeper.feature.Shutdown(context.Background())
-
-	// A kind the project defines counts in a folder the person trusts,
-	// and not otherwise, as it does for the Agent tool itself; in safe
-	// mode only gnosh's own kinds count.
-	project := func(trusted, safe bool) func(s *app.Session) {
-		return func(s *app.Session) {
-			s.SubAgent, s.Parent, s.AgentType, s.Source = true, "the-parent-session", "builder", "subagent"
-			s.Trusted = trusted
-			define(s.Dirs.ProjectRoot, "builder", "tools: gnovm_run, gnovm_list\n")
-			define(s.Dirs.Home, "planner", "tools: Read, gnovm_run\n")
-			if safe {
-				cfg := &config.Config{}
-				cfg.Switches.SafeMode.V = true
-				s.Config = cfg
-				s.AgentType = "planner"
-			}
-		}
-	}
-	for _, c := range []struct {
-		what          string
-		trusted, safe bool
-		want          string
-	}{
-		{"a project's kind in a trusted folder", true, false, "gnovm_run gnovm_list"},
-		{"a project's kind in a folder that is not trusted", false, false, ""},
-		{"a person's kind in safe mode", true, true, ""},
-	} {
-		b := newBench(t, Options{}, project(c.trusted, c.safe))
-		if got := names(b); got != c.want {
-			t.Errorf("the gnovm tools of %s: %q, want %q", c.what, got, c.want)
-		}
-		b.feature.Shutdown(context.Background())
-	}
 
 	b := newBench(t, Options{}, sub("planner"))
 	if got := names(b); got != "gnovm_run" {

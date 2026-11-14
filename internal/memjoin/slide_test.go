@@ -18,6 +18,40 @@ func filler(word string, size int) string {
 	return b.String()
 }
 
+// room is how far above what a session starts with the tests of this file
+// put the point at which the loop makes room: enough for the two calls on
+// mem that plan and enter a todo and for three files of 6,000 bytes read
+// in it, and not for a fourth. (It is what a window of 16,000 tokens gave
+// when these tests were written and a session started with 6,676.)
+const room = 6124
+
+// startTokens measures what a session of the join's starts with: the size
+// of its first request (the system prompt, the tools and the first
+// prompt with what goes out beside it), in tokens as the scripted server
+// counts them. The tests of the slide and of the room-making point set
+// the model's window from it. So they go on testing the same thing when a
+// tool is added to every session or a text of the fixed prompt grows:
+// what they are about is how much the conversation may grow before room
+// is made, and that is the same however much the session starts with.
+func startTokens(t *testing.T, words string) int {
+	t.Helper()
+	w := newWorld(t, says("Nothing to do yet."))
+	w.run("-y", "-p", words).wantCode(t, 0)
+	reqs := w.script.requests()
+	if len(reqs) != 1 {
+		t.Fatalf("measuring what a session starts with took %d requests, want one", len(reqs))
+	}
+	return len(reqs[0].Body) / 4
+}
+
+// pointOf is where the loop makes room for a window as small as these
+// tests use: at four fifths of it.
+func pointOf(window int) int { return (window*4 + 2) / 5 }
+
+// windowWithRoom returns the window whose room-making point stands above
+// start by the room these tests give a conversation.
+func windowWithRoom(start int) int { return ((start+room)*5 + 3) / 4 }
+
 // The slide, end to end, at a small window. A session that stands in a
 // todo and fills its window gets no summary: the oldest rounds of the
 // todo leave the model's view instead. The model is told so before its
@@ -48,11 +82,9 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 	for _, name := range []string{"alpha", "bravo", "charlie", "delta"} {
 		w.Write(name+".txt", filler(name, 6000))
 	}
-	// The room is made at four fifths of the window. The number was 16000
-	// before the question tool joined every session's list of tools; the
-	// 833 more keep the point as far above what the session starts with
-	// as it was (the tool adds about 666 tokens to every request).
-	w.Model.SetWindow(16833)
+	window := windowWithRoom(startTokens(t, "review the files"))
+	point := pointOf(window)
+	w.Model.SetWindow(window)
 	r := w.run("-y", "-p", "review the files")
 	r.wantCode(t, 0)
 	w.script.done()
@@ -73,7 +105,18 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 	has(t, "the request before the slide", before, "alpha line 0005", "bravo line 0005", "charlie line 0005")
 	hasNot(t, "the request after the slide", after, "alpha line 0005", "bravo line 0005")
 	has(t, "the request after the slide", after, "charlie line 0005", "delta line 0005")
-	t.Logf("the request before the slide: about %d tokens; the request after it: about %d tokens", len(before)/4, len(after)/4)
+	t.Logf("a window of %d tokens, with room made at %d; the request before the slide: about %d tokens; the request after it: about %d tokens", window, point, len(before)/4, len(after)/4)
+	// The slide was made for want of room, and when the fourth read came
+	// in, no sooner: the request before it was under the point, with
+	// three files in it; one more file took the conversation over; and
+	// what was sent after the slide is under the point again.
+	step := (len(reqs[5].Body) - len(reqs[4].Body)) / 4
+	if size := len(before) / 4; size >= point || size+step <= point {
+		t.Errorf("the request before the slide was about %d tokens and a file read adds about %d, with room made at %d: want it under the point, and over it with one more read", size, step, point)
+	}
+	if size := len(after) / 4; size >= point {
+		t.Errorf("the request after the slide is about %d tokens, and room is made at %d: the slide did not make room", size, point)
+	}
 
 	// The answer that entered the todo says what went, and why.
 	push := find(reqs[6], "mem.Next()")
@@ -199,11 +242,9 @@ func TestPopKeepsTheSessionUnderThePoint(t *testing.T) {
 	for _, name := range []string{"alpha", "bravo", "charlie", "delta"} {
 		w.Write(name+".txt", filler(name, 6000))
 	}
-	// The room is made at four fifths of the window. The number was 16000
-	// before the question tool joined every session's list of tools; the
-	// 833 more keep the point as far above what the session starts with
-	// as it was (the tool adds about 666 tokens to every request).
-	w.Model.SetWindow(16833)
+	window := windowWithRoom(startTokens(t, "review the files"))
+	point := pointOf(window)
+	w.Model.SetWindow(window)
 	r := w.run("-y", "-p", "review the files")
 	r.wantCode(t, 0)
 	w.script.done()
@@ -222,13 +263,22 @@ func TestPopKeepsTheSessionUnderThePoint(t *testing.T) {
 			t.Errorf("request %d tells the model of a slide", i)
 		}
 	}
-	t.Logf("the size of each request, in tokens as the server counts them: %v", sizes)
-	if sizes[6] >= sizes[5] || sizes[6] > 9000 {
+	t.Logf("a window of %d tokens, with room made at %d; the size of each request, in tokens as the server counts them: %v", window, point, sizes)
+	// The pop came on the last round there was room for: the request that
+	// made it held three files and was under the point, and one more file
+	// would have taken the conversation over it.
+	step := sizes[5] - sizes[4]
+	if sizes[5] >= point || sizes[5]+step <= point {
+		t.Errorf("the request that made the pop was about %d tokens and a file read adds about %d, with room made at %d: want it under the point, and over it with one more read", sizes[5], step, point)
+	}
+	// After the pop none of the three files is sent: the request is
+	// smaller than the one that held the first of them.
+	if sizes[6] >= sizes[3] {
 		t.Errorf("the request after the pop is about %d tokens, and the one that made it was about %d: the popped reads are still being sent", sizes[6], sizes[5])
 	}
 	for i, n := range sizes {
-		if n > 13466 {
-			t.Errorf("request %d is about %d tokens, over the point at which room is made for a window of 16833", i, n)
+		if n >= point {
+			t.Errorf("request %d is about %d tokens, at or over the point at which room is made for a window of %d (%d)", i, n, window, point)
 		}
 	}
 }
