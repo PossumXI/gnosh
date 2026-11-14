@@ -37,9 +37,9 @@ Every carried file keeps the path it had.
 | `internal/gnovm/klashlibs/klash/bptree/v0/`: gno's B+tree package, with its LICENSE.md and SOURCE | 5 | 64,230 | 5 third-party |
 | `internal/gnovm/stdlibs/`: gno's standard library, with its LICENSE.md, LICENSE-GO and VERSION | 163 | 1,499,963 | 163 third-party |
 | `internal/gnovm/testdata/`: mem's scenarios, goldens and upgrade fixtures | 91 | 360,974 | 91 carried |
-| `internal/gnovm/`: the GnoVM machines and mem: the package's own files, DESIGN.md and LICENSE.md | 80 | 934,405 | 71 carried, 9 carried with changes |
+| `internal/gnovm/`: the GnoVM machines and mem: the package's own files, DESIGN.md and LICENSE.md | 80 | 934,405 | 70 carried, 10 carried with changes |
 | `internal/swarm/cmd/swarmdemo/`: the swarm demo | 3 | 41,115 | 2 carried, 1 carried with changes |
-| **all** | **373** | **3,272,233** | 193 carried (1,367,598 bytes), 12 carried with changes (340,442 bytes), 168 third-party (1,564,193 bytes) |
+| **all** | **373** | **3,272,233** | 192 carried (1,300,372 bytes), 13 carried with changes (407,668 bytes), 168 third-party (1,564,193 bytes) |
 
 <!-- carried-summary:end -->
 
@@ -119,11 +119,11 @@ give.
 | `internal/gnochain/sender.go` | `internal/gnochain/sender.go` | carried | 6,052 | 0.0% | 0 | `84151ef27fe1511c3d4e260914bc69439da6204d0de03909bc248173b5566e69` | nothing |
 | `internal/gnochain/signer.go` | `internal/gnochain/signer.go` | carried | 6,070 | 0.0% | 0 | `5dd9af83f96aaadd92297e708db30545790b6c6283a0dba151fb78e14f741861` | nothing |
 | `internal/gnochain/swarm_test.go` | `internal/gnochain/swarm_test.go` | carried | 6,730 | 3.8% | 0 | `4e44d17427202df30d1005b797e6bd352f8b031bcd7c68afc72ee04fbd8bd8ef` | nothing |
-| `internal/gnovm/DESIGN.md` | `internal/gnovm/DESIGN.md` | carried | 67,226 | 0.0% | 0 | `b1afaacb1d96ce3a734c9e504a24192a4aacda27f49776016a2c447fc8ebd4a4` | nothing |
+| `internal/gnovm/DESIGN.md` | `internal/gnovm/DESIGN.md` | carried with changes | 67,226 | 0.0% | 0 | `b1afaacb1d96ce3a734c9e504a24192a4aacda27f49776016a2c447fc8ebd4a4` | 1 word: the variable dropped from the worker's environment, by its name now |
 | `internal/gnovm/LICENSE.md` | `internal/gnovm/LICENSE.md` | carried with changes | 44,843 | 0.0% | 0 | `f8cc447c85ad90c04b976c8c3f2c4a8062c0cdabe826003a89296fd2f61c548f` | the notes under "Known license interactions" (not part of the licence terms) rewritten on 13 November 2026 to say what is true of the rewritten gnosh; the terms are untouched |
 | `internal/gnovm/base.go` | `internal/gnovm/base.go` | carried | 6,250 | 0.0% | 0 | `157faf3eacf435f88d22ddb104ed3527fe057edf7e91ba3670912f8edb030986` | nothing |
 | `internal/gnovm/budget.go` | `internal/gnovm/budget.go` | carried | 5,727 | 0.0% | 0 | `ecfef5ed402a750c6c84a6ecdd0466e02ac2f3e37a8c82127670e1a4a83f2a61` | nothing |
-| `internal/gnovm/client.go` | `internal/gnovm/client.go` | carried with changes | 24,348 | 0.7% | 0 | `c552bd0ae975c8f2f97190cc865a59da36d9dcec6ca6909144e3bcd475f4649f` | import path, 1 line: the earlier harness's `internal/lock` is now `internal/filelock`, imported under the name `lock` so no call changed |
+| `internal/gnovm/client.go` | `internal/gnovm/client.go` | carried with changes | 24,348 | 0.7% | 0 | `c552bd0ae975c8f2f97190cc865a59da36d9dcec6ca6909144e3bcd475f4649f` | import path, 1 line: the earlier harness's `internal/lock` is now `internal/filelock`, imported under the name `lock` so no call changed; the worker's environment, a 2-line comment: the profiling switch is now the debugging page's; the worker's environment, 1 line: the switch dropped from it is `GNOSH_DEBUG_PAGE`, the one name the variable has now |
 | `internal/gnovm/client_unix.go` | `internal/gnovm/client_unix.go` | carried | 784 | 9.1% | 0 | `6d756b6fd22b27c5702073d709d0abd26143222b38ec0591d2972ea49bcd7965` | nothing |
 | `internal/gnovm/client_windows.go` | `internal/gnovm/client_windows.go` | carried | 637 | 0.0% | 0 | `8e2bf614ca2edbe87ced8cbe2c7a3c31a3cf0d98e6fd9ee3ef0ac46860d0ba75` | nothing |
 | `internal/gnovm/differential_test.go` | `internal/gnovm/differential_test.go` | carried | 4,318 | 1.7% | 0 | `7dfe41faa8f7580b091dab3f6dcd4228d6980c113b9609aaad06fe35aacd7c9b` | nothing |
@@ -524,8 +524,6 @@ history, or names the code still reads, or not the porter's to change:
   configuration files (`crushrc`, `crush.json`, under `config/crush` and
   `data/crush`) for the gnosh binary it drives. The test runs only when it
   is given such a binary.
-- `internal/gnovm/client.go` drops `GNOSH_PROFILE`, `KLASH_PROFILE` and
-  `CRUSH_PROFILE` from a worker's environment.
 - `klashlibs` and the import path `klash/gnomem/v2` keep an earlier name of
   gnosh: mem's journals on disk import the library by that path.
 

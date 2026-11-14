@@ -79,7 +79,7 @@ gnosh reads the goals snapshots directly for injection, checking them against th
 - **Worker hygiene**: exec `/proc/self/exe` on Linux (survives a deploy that
   replaced the binary); the handshake compares protocol, gnosh, gno and stdlib
   versions; `Setpgid`, SIGINT/SIGHUP ignored; exits on EOF of fd 3; reaped with
-  `cmd.Wait`; `GNOSH_PROFILE` dropped; **`cmd.Dir` is the gnovm data directory**
+  `cmd.Wait`; `GNOSH_DEBUG_PAGE` dropped; **`cmd.Dir` is the gnovm data directory**
   (`godotenv/autoload` in `main.go` loads `.env` from the working directory
   before main dispatches, and the project's `.env` is agent-writable);
   **stdout to `/dev/null`, stderr to a bounded log** (`worker.log`, 1 MB,

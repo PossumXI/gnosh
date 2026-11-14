@@ -194,7 +194,20 @@ GNOMEM_EMBEDDINGS = (
 EDITS = {
     "GNOMEM.md": [GNOMEM_EMBEDDINGS],
     "internal/gnovm/LICENSE.md": [LICENSE_NOTES],
-    "internal/gnovm/client.go": [LOCK],
+    "internal/gnovm/DESIGN.md": [(
+        '`cmd.Wait`; `GNOSH_PROFILE` dropped;',
+        '`cmd.Wait`; `GNOSH_DEBUG_PAGE` dropped;',
+        "1 word: the variable dropped from the worker's environment, by its name now",
+    )],
+    "internal/gnovm/client.go": [LOCK, (
+        "// workerEnv is the client's environment without the profiling switch,\n// under any of its names: two processes cannot serve pprof on one port.\n",
+        "// workerEnv is the client's environment without the switch for the\n// debugging page: two processes cannot serve it on one port.\n",
+        "the worker's environment, a 2-line comment: the profiling switch is now the debugging page's",
+    ), (
+        '\t\tcase "GNOSH_PROFILE", "KLASH_PROFILE", "CRUSH_PROFILE":\n',
+        '\t\tcase "GNOSH_DEBUG_PAGE":\n',
+        "the worker's environment, 1 line: the switch dropped from it is `GNOSH_DEBUG_PAGE`, the one name the variable has now",
+    )],
     "internal/gnovm/host.go": [LOCK],
     "internal/gnovm/memhost.go": [LOCK],
     "internal/gnovm/memhost_test.go": [LOCK],
