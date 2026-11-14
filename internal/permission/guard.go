@@ -70,10 +70,16 @@ func (e *Engine) skeletons(c *simpleCmd) [][]tok {
 		}
 	}
 	w0 := c.words[0]
+	if c.nameGlob {
+		// The program is whatever file the pattern matches: the text
+		// around the pattern's marks stays as it is.
+		return [][]tok{append(globToks(w0.joined()), rest...)}
+	}
 	name, known := e.progName(w0)
 	if !known || progIsPattern(w0) {
 		var head []tok
-		if progIsPattern(w0) || w0.eqHead || w0.tilde {
+		if progIsPattern(w0) || w0.eqHead || w0.tilde || w0.static() {
+			// (Static and still not known: a program named by a number.)
 			head = appendHole(head)
 		} else {
 			for _, p := range w0.parts {
@@ -84,7 +90,16 @@ func (e *Engine) skeletons(c *simpleCmd) [][]tok {
 				}
 			}
 		}
-		return [][]tok{append(head, rest...)}
+		out := [][]tok{append(head, rest...)}
+		// The program by its name alone, as for one that is known:
+		// "/bin/r${x}m" is r${x}m in a directory.
+		for i := len(head) - 1; i >= 0; i-- {
+			if !head[i].hole && head[i].b == '/' {
+				out = append(out, append(append([]tok(nil), head[i+1:]...), rest...))
+				break
+			}
+		}
+		return out
 	}
 	if !holes {
 		return nil
@@ -92,6 +107,35 @@ func (e *Engine) skeletons(c *simpleCmd) [][]tok {
 	out := [][]tok{append(appendLit(nil, name), rest...)}
 	if b := baseName(name); b != name {
 		out = append(out, append(appendLit(nil, b), rest...))
+	}
+	return out
+}
+
+// globToks turns a file name pattern into tokens: a hole for every * and
+// ? and for each [...], which is more than those match and never less.
+func globToks(s string) []tok {
+	var out []tok
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '*', '?':
+			out = appendHole(out)
+		case '[':
+			// To the ] that closes it; a ] right after [ or [! is a member.
+			k := i + 1
+			if k < len(s) && (s[k] == '!' || s[k] == '^') {
+				k++
+			}
+			if k < len(s) && s[k] == ']' {
+				k++
+			}
+			for k < len(s) && s[k] != ']' {
+				k++
+			}
+			out = appendHole(out)
+			i = k
+		default:
+			out = append(out, tok{b: s[i]})
+		}
 	}
 	return out
 }
@@ -140,11 +184,12 @@ func (e *Engine) couldHit(v *bashView) *crule {
 	}
 	// Each rule is its pattern and, for a lone trailing " *", the bare
 	// command as well.
+	// (Both sides go by the program's key: R${x}M may be rm.)
 	pats := make([][][]tok, len(guards))
 	for i, c := range guards {
-		pats[i] = [][]tok{patToks(c.cmd)}
-		if c.cmd.bare != "" {
-			pats[i] = append(pats[i], appendLit(nil, c.cmd.bare))
+		pats[i] = [][]tok{patToks(c.cmdFold)}
+		if c.cmdFold.bare != "" {
+			pats[i] = append(pats[i], appendLit(nil, c.cmdFold.bare))
 		}
 	}
 	// The comparison below costs the product of the two lengths. A line
@@ -153,6 +198,7 @@ func (e *Engine) couldHit(v *bashView) *crule {
 	budget := guardBudget
 	for _, u := range v.units {
 		for _, sk := range e.skeletons(u.cmd) {
+			sk = foldHead(sk)
 			for i, c := range guards {
 				for _, pt := range pats[i] {
 					if headsClash(pt, sk) {
@@ -167,6 +213,21 @@ func (e *Engine) couldHit(v *bashView) *crule {
 		}
 	}
 	return nil
+}
+
+// foldHead lowers the letters of a skeleton's first word, the program's
+// name, as progKey does.
+func foldHead(sk []tok) []tok {
+	out := append([]tok(nil), sk...)
+	for i, t := range out {
+		if !t.hole && (t.b == ' ' || t.b == '\t') {
+			break
+		}
+		if !t.hole && t.b >= 'A' && t.b <= 'Z' {
+			out[i].b = t.b + 'a' - 'A'
+		}
+	}
+	return out
 }
 
 // guardBudget bounds the work couldHit does for one command line.

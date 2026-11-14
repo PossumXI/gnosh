@@ -2,14 +2,14 @@ package permission
 
 import (
 	"path"
-	"strings"
 )
 
 // Protected paths hold a repository's state, shell startup files, keys,
 // and the settings of gnosh and of other tools. A change to one always
 // asks, whatever rule allows the tool: only skipping permissions
-// altogether skips the question. Names are compared without regard to
-// letter case, because some file systems do the same.
+// altogether skips the question. Names are compared by their keys
+// (guardKey): without regard to letter case, to how an accent is written,
+// or to characters and trailing dots that some file systems leave out.
 
 // protectedDirs are directory names that protect everything under them,
 // wherever they appear in a path.
@@ -35,13 +35,16 @@ var protectedFiles = map[string]bool{
 	"gradle-wrapper.properties": true, "maven-wrapper.properties": true,
 	".devcontainer.json": true, ".ripgreprc": true, "pyrightconfig.json": true,
 	".mcp.json": true, ".claude.json": true,
-	"gnoshrc": true, ".gnoshrc": true, "gnosh.json": true, ".netrc": true,
+	// gnosh's own settings: gnosh.json in the user's config directory and
+	// in the project. (The project's settings.local.json lies in .gnosh,
+	// which is protected whole.)
+	"gnosh.json": true, ".netrc": true,
 }
 
 // protectedWhy says why the cleaned absolute path p is protected, or
 // returns "" when it is not.
 func (e *Engine) protectedWhy(p string) string {
-	low := strings.ToLower(p)
+	low := guardPath(p)
 	segs := splitPath(low)
 	for i, s := range segs {
 		switch {

@@ -63,11 +63,15 @@ const (
 	mcpPrefix        = "mcp__"
 )
 
+// localHost is the name this machine goes by as the host of a Bash call
+// (the shell tool's LocalName).
+const localHost = "local"
+
 // builtinTools is the table of names this package knows by itself. The
 // program's own tools are added through Options.KnownTools and
 // Options.QuietTools.
 var builtinTools = map[string]toolInfo{
-	toolBash:         {classShell, "command", []string{"timeout", "description", "run_in_background", "dangerouslyDisableSandbox", "host", "working_dir"}},
+	toolBash:         {classShell, "command", []string{"timeout", "description", "run_in_background", "dangerouslyDisableSandbox", "host"}},
 	toolMonitor:      {classShell, "command", []string{"description", "timeout_ms"}},
 	toolRead:         {classFileRead, "file_path", []string{"offset", "limit", "pages", "allow_large"}},
 	toolGrep:         {classFileRead, "path", []string{"pattern", "glob", "type", "output_mode", "-i", "-n", "-o", "-A", "-B", "-C", "context", "head_limit", "offset", "multiline"}},

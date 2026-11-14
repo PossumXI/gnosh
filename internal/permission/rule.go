@@ -104,7 +104,10 @@ type crule struct {
 	canon string
 	kind  ruleKind
 
-	cmd     cmdPattern  // kindCommand
+	cmd cmdPattern // kindCommand
+	// cmdFold is cmd with the program's name as its key (progKey): what
+	// deny and ask rules are matched by.
+	cmdFold cmdPattern
 	path    pathPattern // kindPath
 	negate  bool        // kindPath: a "!" pattern that reopens earlier matches
 	domain  string      // kindDomain, lower case
@@ -187,7 +190,7 @@ func (e *Engine) compile(r Rule, list List, ly *layer) (*crule, error) {
 				return nil, errors.New("an allow rule cannot start with a variable assignment: gnosh asks about every command that sets a variable, so the rule would never apply")
 			}
 		}
-		c.kind, c.cmd = kindCommand, p
+		c.kind, c.cmd, c.cmdFold = kindCommand, p, foldPattern(p)
 	case c.canon == toolRead || c.canon == toolEdit:
 		spec := r.Spec
 		if strings.HasPrefix(spec, "!") {
@@ -210,9 +213,25 @@ func (e *Engine) compile(r Rule, list List, ly *layer) (*crule, error) {
 		return nil, fmt.Errorf("%s takes no path pattern, so this rule would never match; write %s(%s), which covers %s", r.Tool, use, r.Spec, r.Tool)
 	case info.class == classFetch:
 		host, ok := strings.CutPrefix(r.Spec, "domain:")
-		host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
-		if !ok || host == "" || strings.ContainsAny(host, "/ \t:") {
+		host = strings.ToLower(strings.TrimRight(strings.TrimSpace(host), "."))
+		// An address may be written in brackets, as it is in a URL.
+		if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+			host = host[1 : len(host)-1]
+		}
+		if !ok || host == "" || strings.ContainsAny(host, "/ \t") || strings.Contains(host, ":") && strings.Contains(host, "*") {
 			return nil, errors.New("a WebFetch rule names a host: WebFetch(domain:example.com), WebFetch(domain:*.example.com) or WebFetch(domain:*)")
+		}
+		for i := 0; i < len(host); i++ {
+			if host[i] >= 0x80 {
+				return nil, errors.New("a WebFetch rule names a host in ASCII; write a name with other letters in the form that starts with xn--, which is the one a request is sent to")
+			}
+		}
+		if !strings.Contains(host, "*") {
+			canon, ok := canonHost(host)
+			if !ok {
+				return nil, errors.New("the host of this WebFetch rule cannot be read as a name or an address")
+			}
+			host = canon
 		}
 		c.kind, c.domain = kindDomain, host
 	case info.class == classAgent:
@@ -277,6 +296,22 @@ type cmdPattern struct {
 	// bare is the command a lone trailing " *" also matches with nothing
 	// after it; "" when the rule has no such form.
 	bare string
+}
+
+// foldPattern returns the pattern with its first word, the program's
+// name, turned into its key.
+func foldPattern(p cmdPattern) cmdPattern {
+	out := cmdPattern{segs: append([]string(nil), p.segs...), bare: foldFirst(p.bare)}
+	for i, seg := range out.segs {
+		j := strings.IndexAny(seg, " \t")
+		if j < 0 {
+			out.segs[i] = progKey(seg) // the word goes on after the wildcard
+			continue
+		}
+		out.segs[i] = progKey(seg[:j]) + seg[j:]
+		break
+	}
+	return out
 }
 
 // exact reports whether the pattern has no wildcard.

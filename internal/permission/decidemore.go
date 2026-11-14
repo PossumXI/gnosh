@@ -44,7 +44,15 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		if req.pathOpaque != "" && !bypass && e.hasGuards(kindPath) {
 			return ask("This command cannot be checked against the Read and Edit rules: " + req.pathOpaque + ".")
 		}
+		// Not so for what the line itself spells out in more values than
+		// gnosh follows: padding a line is not a way past a rule.
+		if req.pathCapped != "" && e.hasGuards(kindPath) {
+			return ask("This command cannot be checked against the Read and Edit rules: " + req.pathCapped + ".")
+		}
 		dirs := e.lineDirs(v)
+		if v.pwds == nil {
+			v.pwds = dirs
+		}
 		fromSubst := map[string]bool{}
 		for _, u := range v.units {
 			for _, a := range u.cmd.assigns {
@@ -54,26 +62,41 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 			}
 		}
 		for _, u := range v.units {
-			if why := e.removalDanger(u.cmd, dirs, fromSubst); why != "" {
+			if why := e.removalDanger(v, u.cmd, dirs, fromSubst); why != "" {
 				return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
 					Reason: "This removal looks dangerous (" + why + "). No rule approves it; a person decides."}, true
 			}
 		}
+		// A line, or a script inside it that will run (the argument of an
+		// eval), that could not be read and that holds an rm: its crude
+		// pieces say so, and nothing says what the rm is given.
+		crude, why := v.unread, v.opaque
 		if !v.sc.ok {
-			for _, f := range v.frags {
-				fields := strings.Fields(f)
-				for i := 0; i < len(fields) && i < 3; i++ {
-					if n := baseName(fields[i]); n == "rm" || n == "rmdir" {
-						return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
-							Reason: "A dangerous removal cannot be ruled out: gnosh could not read the whole command (" + v.sc.why + "), and the shell may read it differently."}, true
-					}
+			crude, why = v.frags, v.sc.why
+		}
+		for _, f := range crude {
+			fields := strings.Fields(f)
+			for i := 0; i < len(fields) && i < 3; i++ {
+				if n := baseName(fields[i]); n == "rm" || n == "rmdir" {
+					return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
+						Reason: "A dangerous removal cannot be ruled out: gnosh could not read the whole command (" + why + "), and the shell may read it differently."}, true
 				}
 			}
+		}
+		if !v.sc.ok && e.hasGuards(kindCommand) {
+			// The crude pieces of the line met no deny rule (that was
+			// checked first), but a crude cut does not undo every way of
+			// writing a command. A guard that could not be checked has not
+			// passed.
+			return ask("gnosh could not read the whole command (" + v.sc.why + "), so the deny and ask rules for commands could not be checked against it.")
 		}
 		if req.remote != "" && !bypass {
 			return Decision{Behavior: Ask, Stage: StageSafety, hookAllow: true,
 				Reason: "The command runs on the host " + req.remote + ". Allow rules and the read-only list are about this machine, so a person decides."}, true
 		}
+	}
+	if req.byNumber != "" && (!bypass || e.hasGuards(kindPath)) {
+		return ask("This names a file by a number (" + req.byNumber + ") and not by where it is, so the rules about files and the protected paths could not be checked against it.")
 	}
 	if req.info.class == classFetch && req.host == "" && e.hasGuards(kindDomain) {
 		return ask("The URL has no host gnosh can read, so the rules about hosts could not be checked against it.")
@@ -92,7 +115,7 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 	if e.gitRuns && req.view != nil {
 		for _, u := range req.view.units {
 			if len(u.cmd.words) > 0 {
-				if name, ok := e.progName(u.cmd.words[0]); ok && baseName(name) == "git" {
+				if name, ok := e.progName(u.cmd.words[0]); ok && progKey(baseName(name)) == "git" {
 					return ask("This repository's own git settings name programs that git would run, and the folder is not trusted, so git commands ask first.")
 				}
 			}

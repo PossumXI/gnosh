@@ -67,6 +67,19 @@ type assign struct {
 	w word
 	// fromSubst is set when the value comes from a command substitution.
 	fromSubst bool
+	// array is set for name=(word ...); elems are the words.
+	array bool
+	elems []word
+}
+
+// loopVar is the variable of a for loop and the words it goes through.
+type loopVar struct {
+	name  string
+	words []word
+	// args is set for a loop with no list: it goes through "$@".
+	args bool
+	// from and to bound the commands of the loop's body in script.cmds.
+	from, to int
 }
 
 // simpleCmd is one program invocation: assignments, words, redirections.
@@ -78,6 +91,18 @@ type simpleCmd struct {
 	nest    nesting
 	// bg is set when the list the command ends was put in the background.
 	bg bool
+	// pieces and altRedirs are how a shell that has no [[ ]] (dash, and
+	// every plain sh) would read a [[ ]] test that holds && || | ( ) < >
+	// or a line break: as several commands, and as redirections. mixed is
+	// set when one of those commands would be more than a test operator
+	// that no program is named after.
+	pieces    [][]word
+	altRedirs []redir
+	mixed     bool
+	// nameGlob is set for a command read out of (( )) whose first word
+	// holds * ? or [: to bash it is arithmetic (total[i]), to a plain sh
+	// a file name pattern that names the program to run.
+	nameGlob bool
 }
 
 // script is everything read from one command line.
@@ -94,9 +119,20 @@ type script struct {
 	subshell   bool // ( ... )
 	compound   bool // a loop, if, case, group or function
 	background bool // a command followed by &
-	setsVar    bool // a ${name:=value} expansion, which assigns
+	piped      bool // a | anywhere
+	setsVar    bool // a ${name:=value} expansion or a {name}> redirection, which assign
+	blindSet   bool // a variable is set and the reader cannot say which: ${!ref:=x}
+	funcs      bool // a function is defined
 	exotic     bool // a ${...} form that is followed but not modelled
 	comments   []string
+	// arith holds the text of every (( ... )) command. A shell without
+	// that form (dash) runs it as commands in nested subshells.
+	arith []string
+	// loose holds words that belong to no command: the list of a for
+	// loop, the word and patterns of a case.
+	loose []word
+	// loops holds every for loop's variable and list.
+	loops []loopVar
 }
 
 // maxShellDepth bounds how deeply substitutions and groups may nest before
@@ -218,6 +254,10 @@ func (p *parser) blanks() {
 		case c == ' ' || c == '\t':
 			p.pos++
 		case c == '\\' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '\n':
+			if !p.joinOK(p.pos) {
+				p.fail("a backslash at the end of a line that joins two pieces of the command")
+				return
+			}
 			p.pos += 2
 		case c == '#':
 			end := strings.IndexByte(p.src[p.pos:], '\n')
@@ -226,17 +266,52 @@ func (p *parser) blanks() {
 			}
 			text := p.src[p.pos+1 : p.pos+end]
 			p.sc.comments = append(p.sc.comments, text)
-			// A shell that does not take # as a comment (an interactive zsh)
-			// would run what follows. Plain words are harmless either way;
-			// anything a shell could act on is not.
-			if strings.ContainsAny(text, ";&|<>()$`\\\"'{}") {
-				p.fail("a comment that holds shell operators")
+			// The shells gnosh runs (bash and sh, never at a prompt) end a
+			// comment at the end of its line whatever it holds. Inside a
+			// substitution an older bash looks for the closing parenthesis
+			// or quote without knowing what a comment is, so there a
+			// comment that holds anything a shell could act on is refused.
+			if p.nest&nestSubst != 0 && strings.ContainsAny(text, ";&|<>()$`\\\"'{}") {
+				p.fail("a comment that holds shell operators, inside a substitution")
 			}
 			p.pos += end
 		default:
 			return
 		}
 	}
+}
+
+// nextReal returns the first byte at or after i that is not part of a
+// backslash-newline pair, or 0 at the end of the text.
+func (p *parser) nextReal(i int) byte {
+	for i+1 < len(p.src) && p.src[i] == '\\' && p.src[i+1] == '\n' {
+		i += 2
+	}
+	if i >= len(p.src) {
+		return 0
+	}
+	return p.src[i]
+}
+
+// joinOK reports whether the backslash-newline pair at i sits where it
+// can only be white space. A shell takes the pair out before it reads
+// anything, so "&\<newline>&" is "&&" and "$\<newline>(x)" is "$(x)":
+// two pieces of text become one token. The reader does not rebuild the
+// joined text. It accepts the pair where a blank stands on one side of
+// it, or where a list operator stands before it and no operator after
+// it, and refuses the line everywhere else.
+func (p *parser) joinOK(i int) bool {
+	next := p.nextReal(i + 2)
+	if i == 0 || next == 0 || next == ' ' || next == '\t' || next == '\n' {
+		return true
+	}
+	switch p.src[i-1] {
+	case ' ', '\t', '\n':
+		return true
+	case ';', '&', '|', '(', ')':
+		return strings.IndexByte(";&|<>()", next) < 0
+	}
+	return false
 }
 
 // newlines skips blanks and line breaks, reading the bodies of any
@@ -293,6 +368,14 @@ func (p *parser) newline() {
 		r := &d.cmd.redirs[d.idx]
 		r.body = body.String()
 		r.bodyStatic = true
+		if !d.lit && joinMovesEnd(r.body, d.delim, d.tabs) {
+			// With an unquoted delimiter the shell joins a line that ends
+			// in a backslash to the next one before it looks for the
+			// delimiter, and shells do not agree on the details. Where the
+			// body ends is then not known.
+			p.fail("a here-document in which a backslash at the end of a line may move where it ends")
+			return
+		}
 		if !d.lit {
 			// An unquoted delimiter: the shell expands the body.
 			q := &parser{src: r.body, sc: p.sc, nest: p.nest, depth: p.depth + 1}
@@ -309,6 +392,40 @@ func (p *parser) newline() {
 			}
 		}
 	}
+}
+
+// joinMovesEnd reports whether a backslash at the end of a line could
+// change where a here-document with an unquoted delimiter ends. body is
+// what stands before the first line that is the delimiter. Shells join a
+// line that ends in a backslash to the one after it, and do not agree on
+// whether they look for the delimiter before or after joining, so two
+// things make the end uncertain: a line joined to the delimiter line
+// itself, and lines that spell the delimiter once they are joined. With
+// <<-, where tabs are taken off as well, any join does.
+func joinMovesEnd(body, delim string, tabs bool) bool {
+	lines := strings.Split(strings.TrimSuffix(body, "\n"), "\n")
+	joins := func(line string) bool {
+		n := 0
+		for n < len(line) && line[len(line)-1-n] == '\\' {
+			n++
+		}
+		return n%2 == 1
+	}
+	run := ""
+	for i, line := range lines {
+		if !joins(line) {
+			if run != "" && run+line == delim {
+				return true
+			}
+			run = ""
+			continue
+		}
+		if tabs || i == len(lines)-1 {
+			return true
+		}
+		run += line[:len(line)-1]
+	}
+	return false
 }
 
 // stopper says where a list ends besides the end of the text.
@@ -409,6 +526,15 @@ func (p *parser) pipeline() {
 	if p.reserved() == "!" {
 		p.pos++
 	}
+	if p.keywordAfterTime() {
+		// To bash, "time" opens a pipeline, and what stands after it is
+		// read as one, keywords and all: "time coproc rm x" runs rm, and
+		// "time if a; then b; fi" is an if. A reader that took time for a
+		// program and the keyword for its first argument would be reading
+		// another line.
+		p.fail("a shell keyword after time")
+		return
+	}
 	p.command()
 	for !p.failed {
 		p.blanks()
@@ -420,9 +546,47 @@ func (p *parser) pipeline() {
 		if strings.HasPrefix(rest, "|&") {
 			p.pos++
 		}
+		p.sc.piped = true
 		p.sep = sepPipe
 		p.newlines()
 		p.command()
+	}
+}
+
+// keywordAfterTime reports whether the pipeline at p.pos opens with
+// bash's "time" (and its -p, --, a ! or another time) followed by a word
+// of the shell's own.
+func (p *parser) keywordAfterTime() bool {
+	i, sawTime := p.pos, false
+	for {
+		for i < len(p.src) {
+			if p.src[i] == ' ' || p.src[i] == '\t' {
+				i++
+			} else if strings.HasPrefix(p.src[i:], "\\\n") {
+				i += 2
+			} else {
+				break
+			}
+		}
+		j := i
+		for j < len(p.src) && !isWordEnd(p.src[j]) {
+			j++
+		}
+		switch tok := p.src[i:j]; {
+		case tok == "time":
+			sawTime = true
+		case sawTime && (tok == "-p" || tok == "--" || tok == "!"):
+		default:
+			if !sawTime {
+				return false
+			}
+			save := p.pos
+			p.pos = i
+			kw := p.reserved()
+			p.pos = save
+			return kw != "" && kw != "!"
+		}
+		i = j
 	}
 }
 
@@ -440,16 +604,19 @@ func (p *parser) reserved() string {
 		if !strings.HasPrefix(rest, kw) {
 			continue
 		}
-		if len(rest) == len(kw) {
+		// A backslash-newline pair after the word is taken out by the
+		// shell before it reads the word.
+		c := p.nextReal(p.pos + len(kw))
+		if c == 0 {
 			return kw
 		}
-		c := rest[len(kw)]
 		switch kw {
-		case "{", "!":
+		case "{":
 			if c == ' ' || c == '\t' || c == '\n' {
 				return kw
 			}
 		default:
+			// "!" too: "!<file cmd" and "!(cmd)" negate.
 			if isWordEnd(c) {
 				return kw
 			}
@@ -509,6 +676,7 @@ func (p *parser) command() {
 				p.fail("an arithmetic command gnosh cannot follow")
 				return
 			}
+			p.sc.arith = append(p.sc.arith, p.src[p.pos+2:end-2])
 			p.pos = end
 			p.sc.compound = true
 			p.trailingRedirs()
@@ -561,9 +729,14 @@ func (p *parser) command() {
 	case "for":
 		p.pos += 3
 		p.sc.compound = true
+		loops := len(p.sc.loops)
 		p.forHead()
 		p.expect("do")
+		from := len(p.sc.cmds)
 		p.body("done")
+		if len(p.sc.loops) > loops {
+			p.sc.loops[loops].from, p.sc.loops[loops].to = from, len(p.sc.cmds)
+		}
 		p.expect("done")
 	case "case":
 		p.pos += 4
@@ -599,7 +772,7 @@ func (p *parser) command() {
 
 // funcBody reads the command that is a function's body.
 func (p *parser) funcBody() {
-	p.sc.compound = true
+	p.sc.compound, p.sc.funcs = true, true
 	p.newlines()
 	if p.failed {
 		return
@@ -637,15 +810,21 @@ func (p *parser) forHead() {
 		return
 	}
 	rest := p.src[p.pos:]
+	loop := loopVar{name: name.joined(), args: true}
 	if strings.HasPrefix(rest, "in") && (len(rest) == 2 || isWordEnd(rest[2])) {
 		p.pos += 2
+		loop.args = false
 		for !p.failed {
 			p.blanks()
-			if _, ok := p.readWord(); !ok {
+			w, ok := p.readWord()
+			if !ok {
 				break
 			}
+			p.sc.loose = append(p.sc.loose, w)
+			loop.words = append(loop.words, w)
 		}
 	}
+	p.sc.loops = append(p.sc.loops, loop)
 	p.blanks()
 	if strings.HasPrefix(p.src[p.pos:], ";") && !strings.HasPrefix(p.src[p.pos:], ";;") {
 		p.pos++
@@ -655,10 +834,12 @@ func (p *parser) forHead() {
 // caseBody reads "word in pattern) list ;; ... esac".
 func (p *parser) caseBody() {
 	p.blanks()
-	if _, ok := p.readWord(); !ok {
+	subject, ok := p.readWord()
+	if !ok {
 		p.fail("a case with nothing to match")
 		return
 	}
+	p.sc.loose = append(p.sc.loose, subject)
 	p.newlines()
 	rest := p.src[p.pos:]
 	if p.failed || !strings.HasPrefix(rest, "in") || (len(rest) > 2 && !isWordEnd(rest[2])) {
@@ -680,10 +861,12 @@ func (p *parser) caseBody() {
 		}
 		for !p.failed {
 			p.blanks()
-			if _, ok := p.readWord(); !ok {
+			pat, ok := p.readWord()
+			if !ok {
 				p.fail("a case pattern gnosh cannot follow")
 				return
 			}
+			p.sc.loose = append(p.sc.loose, pat)
 			p.blanks()
 			rest := p.src[p.pos:]
 			if strings.HasPrefix(rest, "|") {
@@ -723,14 +906,40 @@ func (p *parser) caseBody() {
 // testCommand reads [[ ... ]]. Inside it && || ( ) < > and | are the
 // test's own operators, not the shell's; everything else is read as
 // words, so that a substitution among them is still seen.
+//
+// That is how bash reads it. A shell with no [[ ]] (dash, which is sh on
+// many systems) reads the same text as ordinary commands: "[[ -f a ||
+// rm x ]]" runs rm there, and "[[ a > b ]]" empties the file b. So the
+// reader also keeps that second reading: the words cut at every operator
+// and line break (pieces), and the words after < and > (altRedirs).
 func (p *parser) testCommand() {
 	cmd := &simpleCmd{sep: p.sep, nest: p.nest}
 	open, _ := p.readWord()
 	cmd.words = append(cmd.words, open)
+	piece := []word{open}
+	cut := func() {
+		if len(piece) > 0 {
+			cmd.pieces = append(cmd.pieces, piece)
+		}
+		piece = nil
+	}
+	// afterOp is set between an && or || and the word after it. If that
+	// word is a test operator (-f, !), the other reading runs a program
+	// named "-f", which there is none of; any other word is a program.
+	afterOp, pendingRedir := false, ""
+	// lastEnd is where the last word read ended: a number that stands
+	// right before a < or > is the descriptor to a plain sh, not a word.
+	lastEnd := -1
 	for !p.failed {
-		p.newlines()
+		p.blanks()
 		if p.failed {
 			return
+		}
+		if p.pos < len(p.src) && p.src[p.pos] == '\n' {
+			p.newline()
+			cut()
+			cmd.mixed = true
+			continue
 		}
 		rest := p.src[p.pos:]
 		switch {
@@ -738,17 +947,39 @@ func (p *parser) testCommand() {
 			p.fail("a [[ is never closed")
 		case strings.HasPrefix(rest, "]]") && (len(rest) == 2 || isWordEnd(rest[2])):
 			p.pos += 2
-			cmd.words = append(cmd.words, word{raw: "]]", parts: []wordPart{{lit: "]]"}}})
+			closer := word{raw: "]]", parts: []wordPart{{lit: "]]"}}}
+			cmd.words = append(cmd.words, closer)
+			if pendingRedir != "" {
+				// "[[ a >]]": to a plain sh the ]] is the file.
+				cmd.altRedirs = append(cmd.altRedirs, redir{op: pendingRedir, target: closer})
+			} else {
+				piece = append(piece, closer)
+			}
+			if len(cmd.pieces) > 0 {
+				cut()
+			}
 			p.sc.cmds = append(p.sc.cmds, cmd)
 			return
 		case strings.HasPrefix(rest, "&&"), strings.HasPrefix(rest, "||"):
 			p.pos += 2
+			cut()
+			afterOp = true
 		case strings.HasPrefix(rest, "<("), strings.HasPrefix(rest, ">("):
 			// A process substitution runs a command even here.
 			w, _ := p.readWord()
 			cmd.words = append(cmd.words, w)
-		case strings.IndexByte("()<>|", rest[0]) >= 0:
+			piece = append(piece, w)
+		case rest[0] == '<' || rest[0] == '>':
+			if n := len(piece); n > 0 && lastEnd == p.pos && pendingRedir == "" && isDigits(piece[n-1].raw) {
+				piece = piece[:n-1]
+			}
 			p.pos++
+			pendingRedir = rest[:1]
+			cmd.mixed = true
+		case strings.IndexByte("()|", rest[0]) >= 0:
+			p.pos++
+			cut()
+			cmd.mixed = true
 		case rest[0] == ';' || rest[0] == '&':
 			p.fail("an operator inside [[ ]]")
 		default:
@@ -758,6 +989,22 @@ func (p *parser) testCommand() {
 				return
 			}
 			cmd.words = append(cmd.words, w)
+			lastEnd = p.pos
+			if pendingRedir != "" {
+				cmd.altRedirs = append(cmd.altRedirs, redir{op: pendingRedir, target: w})
+				pendingRedir = ""
+				lastEnd = -1
+				continue
+			}
+			if afterOp {
+				if w.raw != "!" {
+					afterOp = false
+					if !strings.HasPrefix(w.raw, "-") {
+						cmd.mixed = true
+					}
+				}
+			}
+			piece = append(piece, w)
 		}
 	}
 	if len(cmd.words) > 0 {
@@ -788,13 +1035,19 @@ func (p *parser) trailingRedirs() {
 // simple reads one simple command.
 func (p *parser) simple() {
 	cmd := &simpleCmd{sep: p.sep, nest: p.nest}
+	// ampAts is how many words stood before each &> redirection.
+	var ampAts []int
 	for !p.failed {
 		p.blanks()
 		if p.pos >= len(p.src) {
 			break
 		}
 		if p.redirAt() {
+			amp := strings.HasPrefix(p.src[p.pos:], "&>")
 			p.redir(cmd)
+			if amp {
+				ampAts = append(ampAts, len(cmd.words))
+			}
 			continue
 		}
 		c := p.src[p.pos]
@@ -822,16 +1075,28 @@ func (p *parser) simple() {
 		if !ok || p.failed {
 			break
 		}
+		if isBraceName(w.raw) && p.pos < len(p.src) && (p.src[p.pos] == '<' || p.src[p.pos] == '>') {
+			// {name}>file: bash opens the file on a descriptor of its
+			// choosing and puts the number in the variable. The word is not
+			// an argument, and a variable is set (PATH, say).
+			p.sc.setsVar = true
+			p.sc.loose = append(p.sc.loose, w)
+			continue
+		}
 		if len(cmd.words) == 0 {
 			if name, ok := assignName(w.raw); ok {
 				a := assign{name: name, w: w, fromSubst: w.hasSubst()}
 				if strings.HasSuffix(w.raw, "=") && strings.HasPrefix(p.src[p.pos:], "(") {
 					// name=(word ...): an array.
+					a.array = true
 					p.pos++
 					for !p.failed {
 						p.newlines()
 						if strings.HasPrefix(p.src[p.pos:], ")") {
 							p.pos++
+							if p.pos < len(p.src) && !isWordEnd(p.src[p.pos]) {
+								p.fail("text right after an array assignment")
+							}
 							break
 						}
 						v, ok := p.readWord()
@@ -840,6 +1105,7 @@ func (p *parser) simple() {
 							break
 						}
 						a.fromSubst = a.fromSubst || v.hasSubst()
+						a.elems = append(a.elems, v)
 					}
 				}
 				cmd.assigns = append(cmd.assigns, a)
@@ -859,7 +1125,45 @@ func (p *parser) simple() {
 		p.fail("an operator with no command before it")
 		return
 	}
+	if len(ampAts) > 0 && ampAts[0] < len(cmd.words) {
+		// "a &>file b": to bash, a with the argument b and its output in
+		// file. To a shell with no &> (sh, dash) it is a in the
+		// background, and then the command b; and each further &> ends
+		// a command in the same way ("a &>f b &>g c" is a, b and c).
+		from := 0
+		for _, at := range append(ampAts, len(cmd.words)) {
+			if at > from || from == 0 {
+				cmd.pieces = append(cmd.pieces, cmd.words[from:at:at])
+			}
+			from = at
+		}
+		cmd.mixed = true
+	}
 	p.sc.cmds = append(p.sc.cmds, cmd)
+}
+
+// isDigits reports whether s is made of digits and nothing else.
+func isDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// isBraceName reports whether raw is {name}, the word bash takes before a
+// redirection as the variable to keep the descriptor's number in.
+func isBraceName(raw string) bool {
+	if len(raw) < 3 || raw[0] != '{' || raw[len(raw)-1] != '}' || !isNameStart(raw[1]) {
+		return false
+	}
+	for i := 2; i < len(raw)-1; i++ {
+		if !isNameChar(raw[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // assignName reports whether raw starts like an assignment (name=, name+=
@@ -916,6 +1220,12 @@ func (p *parser) redir(cmd *simpleCmd) {
 		p.pos++
 	}
 	r := redir{fd: p.src[start:p.pos]}
+	if len(r.fd) > 1 {
+		// bash takes 10>&1 as descriptor ten; dash and other plain shells
+		// take the 10 as an argument and redirect descriptor one.
+		p.fail("a redirection of a descriptor above 9, which shells read differently")
+		return
+	}
 	for _, op := range redirOps {
 		if strings.HasPrefix(p.src[p.pos:], op) {
 			r.op = op
@@ -924,7 +1234,23 @@ func (p *parser) redir(cmd *simpleCmd) {
 	}
 	p.pos += len(r.op)
 	if r.op == ">>|" {
-		r.op = ">>"
+		// zsh's "append, noclobber or not". To bash and sh it is >> with
+		// nothing after it, and the line does not run.
+		p.fail("the >>| redirection, which only zsh has")
+		return
+	}
+	p.blanks()
+	if p.failed {
+		return
+	}
+	if (r.op == ">&" || r.op == "<&") && p.pos < len(p.src) && p.src[p.pos] == '-' {
+		// >&- and <&- close a descriptor. To bash the dash is a token of
+		// its own, whatever follows it: "git>&-push" is git push with its
+		// output closed.
+		r.target = litOf("-")
+		p.pos++
+		cmd.redirs = append(cmd.redirs, r)
+		return
 	}
 	p.blanks()
 	t, ok := p.readWord()
@@ -936,6 +1262,13 @@ func (p *parser) redir(cmd *simpleCmd) {
 		return
 	}
 	r.target = t
+	if (isInt(t.raw) || isBraceName(t.raw)) && p.pos < len(p.src) && (p.src[p.pos] == '<' || p.src[p.pos] == '>') {
+		// "date>2>x": the 2 is the descriptor of the next redirection, and
+		// this one has no target. bash refuses the line. "{fd}>{fd}>x" is
+		// the same with a name for the descriptor.
+		p.fail("a redirection with no target")
+		return
+	}
 	switch r.op {
 	case "<<", "<<-":
 		if !t.static() || t.glob && !t.quoted {
@@ -964,13 +1297,22 @@ func (p *parser) redir(cmd *simpleCmd) {
 // could not follow, and only to look for what deny and ask rules name: it
 // finds too much rather than too little.
 func crudeFragments(src string) []string {
-	src = strings.ReplaceAll(src, "\\\n", "")
+	if joined := strings.ReplaceAll(src, "\\\n", ""); joined != src {
+		// A backslash-newline pair joins two lines, except in a comment or
+		// in single quotes, where the line break still ends a command.
+		// Both readings are cut.
+		return append(crudeCut(joined), crudeCut(src)...)
+	}
+	return crudeCut(src)
+}
+
+func crudeCut(src string) []string {
 	var out []string
 	add := func(s string) {
 		for {
 			s = strings.TrimLeft(s, " \t\r")
 			cut := false
-			for _, kw := range []string{"do", "then", "else", "elif", "if", "while", "until", "time", "function", "!", "in"} {
+			for _, kw := range []string{"do", "then", "else", "elif", "if", "while", "until", "time", "function", "!", "in", "coproc", "-p", "--"} {
 				if strings.HasPrefix(s, kw+" ") || strings.HasPrefix(s, kw+"\t") {
 					s = s[len(kw)+1:]
 					cut = true
@@ -980,7 +1322,7 @@ func crudeFragments(src string) []string {
 				break
 			}
 		}
-		s = strings.TrimRight(s, " \t\r")
+		s = strings.TrimRight(s, " \t\r\\")
 		if s == "" {
 			return
 		}

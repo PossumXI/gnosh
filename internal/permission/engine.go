@@ -72,9 +72,12 @@ type Options struct {
 	// given are already resolved. An error means the path cannot be
 	// resolved, and nothing about it is allowed without asking.
 	Resolve func(path string) (string, error)
-	// Glob expands a file name pattern, as the shell would, to cleaned
-	// absolute paths. Nil means patterns cannot be checked, so a
-	// read-only command with one asks.
+	// Glob expands a file name pattern to cleaned absolute paths: every
+	// path it matches, the names that start with a dot among them, as
+	// filepath.Glob returns them (the engine leaves those out itself
+	// where the shell would; see "What the engine is told" in doc.go).
+	// Nil means patterns cannot be checked, so a read-only command with
+	// one asks.
 	Glob func(pattern string) ([]string, error)
 	// GitRunsPrograms says the repository's own git settings name
 	// programs that git would run (a file-system monitor, filters, diff
@@ -165,7 +168,7 @@ func New(o Options) (*Engine, error) {
 	}
 	for _, p := range o.Protected {
 		if strings.HasPrefix(p, "/") {
-			e.protected = append(e.protected, strings.ToLower(path.Clean(p)))
+			e.protected = append(e.protected, guardPath(path.Clean(p)))
 		}
 	}
 

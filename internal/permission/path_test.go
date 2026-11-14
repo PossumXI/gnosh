@@ -254,13 +254,15 @@ func TestProtectedPaths(t *testing.T) {
 		"/home/u/.profile", "/proj/.envrc", "/proj/.npmrc", "/proj/.yarnrc.yml", "/proj/bunfig.toml",
 		"/proj/.bazelrc", "/proj/.pre-commit-config.yaml", "/proj/lefthook.yml",
 		"/proj/gradle/wrapper/gradle-wrapper.properties", "/proj/.devcontainer.json", "/proj/.ripgreprc",
-		"/proj/pyrightconfig.json", "/proj/.mcp.json", "/home/u/.claude.json", "/proj/gnoshrc",
-		"/proj/.gnoshrc", "/home/u/.config/gnosh/gnoshrc", "/home/u/.ssh/authorized_keys",
+		"/proj/pyrightconfig.json", "/proj/.mcp.json", "/home/u/.claude.json", "/proj/gnosh.json",
+		"/proj/sub/GNOSH.JSON", "/home/u/.config/gnosh/gnosh.json", "/home/u/.ssh/authorized_keys",
 		"/custom/settings.json", "/var/mem/store/x",
 	}
 	open := []string{
 		"/proj/a.go", "/proj/git/config", "/proj/.github/workflows/ci.yml", "/proj/.claude/worktrees/w/a.go",
 		"/proj/zshrc", "/proj/.env", "/proj/gitconfig",
+		// (The line-format files gnosh once read are files like any now.)
+		"/proj/gnoshrc", "/proj/.gnoshrc", "/proj/gnosh.json.bak",
 	}
 	o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
 	o.Protected = []string{"/custom/settings.json", "/var/mem/store"}

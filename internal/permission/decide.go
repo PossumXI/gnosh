@@ -111,6 +111,14 @@ type request struct {
 	// pathOpaque is not empty when a command names a file in a way that
 	// cannot be held against the Read and Edit rules. It says how.
 	pathOpaque string
+	// pathCapped is not empty when the files a command names could have
+	// been worked out, and there were more of them than the engine
+	// follows. It says of what.
+	pathCapped string
+	// byNumber is a path of the call that names a file by a number
+	// (macOS's /.vol/<disk>/<file>): no rule about paths, and no
+	// protected path, can be held against it.
+	byNumber string
 	// host is the lower-case host of a fetch; "" when the URL has none.
 	host string
 	// remote is the declared host a shell command would run on.
@@ -239,10 +247,21 @@ func (e *Engine) newRequest(canon string, call core.ToolCall, action core.Action
 		} else if in != "" && in != cmd {
 			req.problem = "The command the tool reports is not the command the model sent, so it cannot be judged."
 		}
-		req.remote = str("host")
+		// A host that is left blank or named "local" is this machine, as
+		// the shell tool reads it: the call is judged like any command
+		// here. Anything else in that place is somewhere else, a value
+		// that is no name at all included.
+		if raw, ok := req.input["host"]; ok {
+			var host string
+			if json.Unmarshal(raw, &host) != nil {
+				req.remote = strings.TrimSpace(string(raw))
+			} else if host = strings.TrimSpace(host); host != "" && host != localHost {
+				req.remote = host
+			}
+		}
 		req.view = e.viewBash(cmd)
 		e.shellPaths(req)
-		if req.view.sc.ok && len(req.view.sc.cmds) == 0 && req.problem == "" {
+		if req.view.sc.ok && len(req.view.sc.cmds) == 0 && len(req.view.sc.arith) == 0 && req.problem == "" {
 			req.problem = canon + " was given no command, so there is nothing to judge it by."
 		}
 	case classFileRead, classFileEdit:
@@ -273,7 +292,9 @@ func (e *Engine) newRequest(canon string, call core.ToolCall, action core.Action
 			raw = str("url")
 		}
 		if u, err := url.Parse(raw); err == nil {
-			req.host = strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+			// A host that cannot be compared with the rules is no host:
+			// the call then asks.
+			req.host, _ = canonHost(u.Hostname())
 		}
 	default:
 		// Any other tool that says it reads or changes files is held to
@@ -319,6 +340,9 @@ func (e *Engine) expand(req *request, paths []string) []string {
 		}
 		p = path.Clean(p)
 		add(p)
+		if byNumber(p) {
+			req.byNumber = p
+		}
 		if e.resolve == nil {
 			continue
 		}
@@ -391,21 +415,27 @@ func (e *Engine) match(list List, req *request) *crule {
 // the line: one of its own, one nested in it, or one found inside a
 // wrapper or a script.
 func (e *Engine) commandHit(c *crule, v *bashView) bool {
-	if c.cmd.match(strings.TrimSpace(v.text)) {
+	// A guard goes by the program's key as well as by its name as
+	// written: RM is rm where the file system takes no notice of case.
+	hit := func(t string) bool { return c.cmd.match(t) || c.cmdFold.match(foldFirst(t)) }
+	if hit(strings.TrimSpace(v.text)) {
 		return true
 	}
 	for _, u := range v.units {
 		if u.texts == nil {
 			u.texts = e.denyTexts(u.cmd)
+			if t := e.filledText(v, u.cmd); t != "" {
+				u.texts = append(u.texts, t)
+			}
 		}
 		for _, t := range u.texts {
-			if c.cmd.match(t) {
+			if hit(t) {
 				return true
 			}
 		}
 	}
 	for _, f := range v.frags {
-		if c.cmd.match(f) {
+		if hit(f) {
 			return true
 		}
 	}
@@ -424,17 +454,23 @@ func (e *Engine) pathHit(list List, tool string, paths []string) *crule {
 		}
 		for _, p := range paths {
 			var hit *crule
+			// Deny and ask rules compare names by their keys; the path's
+			// key is worked out once for all of them.
+			key := ""
 			for _, c := range rs {
 				if c.kind != kindPath || c.canon != tool {
 					continue
 				}
+				if key == "" {
+					key = guardPath(p)
+				}
 				if c.negate {
-					if hit != nil && c.path.match(p) {
+					if ok, _ := c.path.matchKeyed(key); hit != nil && ok {
 						hit = nil
 					}
 					continue
 				}
-				ok, viaDir := c.path.matchHow(p)
+				ok, viaDir := c.path.matchKeyed(key)
 				if !ok {
 					continue
 				}

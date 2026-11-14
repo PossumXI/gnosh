@@ -121,8 +121,11 @@ func TestBashAllowRules(t *testing.T) {
 		{"sh -c is not seen through", "", npm, "sh -c 'npm run build'", Ask},
 		{"eval is not seen through", "", npm, "eval npm run build", Ask},
 		{"here-document to an allowed command", "", rules{allow: []string{"Bash(cat *)"}}, "cat <<EOF\nhello\nEOF", Allow},
-		{"comment with operators asks", "", npm, "npm run build # ; rm -rf x", Ask},
+		{"a comment is a comment, whatever it holds", "", npm, "npm run build # ; rm -rf x", Allow},
 		{"comment of plain words is fine", "", npm, "npm run build # make the site", Allow},
+		{"a comment ends at the end of its line", "", npm, "npm run build # x\nnpm install", Ask},
+		{"a backslash does not carry a comment on", "", npm, "npm run build #\\\nnpm install", Ask},
+		{"a comment with operators inside a substitution asks", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "echo $(ls # )\n)", Ask},
 		{"function definition asks", "", npm, "npm() { rm -rf x; }; npm run build", Ask},
 		{"too long asks", "", rules{allow: []string{"Bash(echo *)"}}, "echo " + strings.Repeat("a", 10001), Ask},
 		{"a relative program under a rule", "", rules{allow: []string{"Bash(./run.sh *)"}}, "./run.sh x", Allow},
@@ -256,7 +259,7 @@ func TestBashDenyRules(t *testing.T) {
 		"echo 'unclosed; rm -rf x",
 		"for ((i=0;i<1;i++)); do rm -rf x; done",
 		"echo ${x[1]}; rm -rf x",
-		"ls # ; rm -rf x",
+		"ls #\\\nrm -rf x",
 	} {
 		cases = append(cases, bashCase{"deny", "", r, cmd, Deny})
 		cases = append(cases, bashCase{"deny in bypass", ModeBypass, r, cmd, Deny})
@@ -272,6 +275,7 @@ func TestBashDenyRules(t *testing.T) {
 		{"another program", "", r, "rmdir x", Allow},
 		{"git status is not git push", "", r, "git status", Allow},
 		{"commit message", "", r, `git commit -m "rm old files; curl later"`, Allow},
+		{"a comment", "", r, "ls # ; rm -rf x", Allow},
 	})
 }
 
@@ -381,7 +385,7 @@ func TestBashReadOnly(t *testing.T) {
 		"wc -l src/*.py", "cat <<EOF\n$SECRET\nEOF", "cat <<< $X", "grep foo $(ls)", "echo `id`",
 		"find . -name *.go", "sort *.txt", "git diff *.go", "xargs cat", "ls | xargs cat",
 		"echo /etc/*", "echo ~/.ssh/*", "echo *", "basename *", "ls '--color --all'", "git log --help",
-		"echo ok # ; cat /etc/passwd",
+		"echo ok #\\\ncat /etc/passwd", "echo $(ls # ; cat /etc/passwd\n)",
 	} {
 		cases = append(cases, bashCase{"not read-only", "", rules{}, cmd, Ask})
 		cases = append(cases, bashCase{"not read-only in plan", ModePlan, rules{}, cmd, Ask})
@@ -429,7 +433,7 @@ func TestBashAcceptEdits(t *testing.T) {
 	var cases []bashCase
 	for _, cmd := range []string{
 		"mkdir build", "mkdir -p a/b/c", "touch a.txt", "touch a b", "rm a.txt", "rm -rf build",
-		"rmdir build", "mv a b", "cp a b", "cp -r src dst", "sed -i 's/a/b/g' a.txt",
+		"rmdir build", "mv a b", "cp a b", "cp -R src dst", "cp -a src dst", "sed -i 's/a/b/g' a.txt",
 		"sed -i '' 's/a/b/' a.txt", "sed -i -e 's/a/b/' -e '2d' a.txt", "sed -i 5d a.txt",
 		"timeout 5 rm a.txt", "nice mkdir x", "nohup cp a b", "mkdir x && cp a x/a", "ls && rm a.txt",
 		"cd src && rm a.txt", "rm /proj/src/a.txt", "rm ./a ../proj/b",
@@ -445,7 +449,7 @@ func TestBashAcceptEdits(t *testing.T) {
 		// touch with anything beyond plain paths.
 		"touch -t 202601010000 a", "touch *.txt", "timeout 5 touch a", "LANG=C touch a",
 		// Forms that are not the everyday ones.
-		"LANG=C rm a", "rm --no-preserve-root a", "rm $X", "rm *.txt", "mv -t dir a", "cp --parents a b",
+		"LANG=C rm a", "rm --no-preserve-root a", "rm $X", "rm *.txt", "mv -t dir a", "cp --parents a b", "cp -r src dst",
 		"rmdir -p a/b", "mkdir -m 777 x", "sed -i 's/a/b/e' a.txt", "sed -i '1e id' a.txt",
 		"sed -i 's/a/b/w /tmp/out' a.txt", "sed -i.bak 's/a/b/' a.txt",
 		// Everything else still asks.
@@ -483,8 +487,9 @@ func TestBashRedirectionsAndFileRules(t *testing.T) {
 		"echo x > .env":                     Deny, // a Read deny also stops a write
 		"cp .env /tmp/x":                    Deny,
 		"cat ~/.ssh/id_ed25519":             Deny,
-		"cat $HOME/.ssh/id_ed25519":         Ask, // cannot be checked against the rules
-		"cat .en*":                          Ask, // nor can a pattern, without a way to expand it
+		"cat $HOME/.ssh/id_ed25519":         Deny, // $HOME is the home directory the engine was given
+		"cat $SECRETS/id_ed25519":           Ask,  // cannot be checked against the rules
+		"cat .en*":                          Ask,  // nor can a pattern, without a way to expand it
 		"cat $(echo .env)":                  Ask,
 		"echo x > generated/a.go":           Deny,
 		"echo x >> /proj/generated/a.go":    Deny,
@@ -547,6 +552,37 @@ func TestBashOnAHost(t *testing.T) {
 	e = engine(t, ModeBypass, rules{})
 	if d := e.Decide("Bash", coreCall("Bash", "command", "make", "host", "render"), coreAction("make")); d.Behavior != Allow {
 		t.Errorf("with permissions skipped the declaration is the whole gate: %+v", d)
+	}
+}
+
+// TestBashHere: a host left blank or named "local" is this machine, and
+// the call is judged like one that names no host at all.
+func TestBashHere(t *testing.T) {
+	e := engine(t, ModeDefault, rules{allow: []string{"Bash(ls *)"}, deny: []string{"Bash(rm *)"}})
+	for _, host := range []any{"", "local", " local ", "\t", nil} {
+		call := func(cmd string) Decision {
+			return e.Decide("Bash", coreCall("Bash", "command", cmd, "host", host), coreAction(cmd))
+		}
+		if d, plain := call("ls -la src"), bash(e, "ls -la src"); d.Behavior != Allow || d.Reason != plain.Reason || d.Stage != plain.Stage {
+			t.Errorf("host %q: ls -la src got %s at %s (%s), want what a call with no host gets: %s at %s", host, d.Behavior, d.Stage, d.Reason, plain.Behavior, plain.Stage)
+		}
+		if d := call("cat a.txt | wc -l"); d.Behavior != Allow {
+			t.Errorf("host %q: a line that only reads got %s (%s), want allow", host, d.Behavior, d.Reason)
+		}
+		if d := call("rm -rf x"); d.Behavior != Deny {
+			t.Errorf("host %q: rm -rf x got %s, want deny", host, d.Behavior)
+		}
+		if d := call("make"); d.Behavior != Ask || len(d.Suggestions) == 0 {
+			t.Errorf("host %q: make got %s with %d suggestions, want an ask that offers a rule, as for a command here", host, d.Behavior, len(d.Suggestions))
+		}
+	}
+	// Anything else in that place is another machine: a name, a name
+	// that only looks like this one, a value that is no name.
+	for _, host := range []any{"render", "LOCAL", "localhost", "local.", 7, true, []string{"local"}} {
+		d := e.Decide("Bash", coreCall("Bash", "command", "ls -la src", "host", host), coreAction("ls -la src"))
+		if d.Behavior != Ask || len(d.Suggestions) != 0 {
+			t.Errorf("host %v: got %s with %d suggestions (%s), want the ask of a command that leaves this machine", host, d.Behavior, len(d.Suggestions), d.Reason)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package permission
 
 import (
 	"encoding/json"
+	"path"
 	"strings"
 	"testing"
 
@@ -129,6 +130,23 @@ func (f fakeFS) glob(pattern string) ([]string, error) {
 	var out []string
 	for _, file := range f.files {
 		if pat.match(file) {
+			out = append(out, file)
+		}
+	}
+	return out, nil
+}
+
+// goGlob is a Glob made of Go's own pattern matching, which is what a
+// caller is likely to reach for: there "[!x]" is the characters ! and x,
+// "[^x]" is "not x", and "[[:alpha:]]" is no class at all.
+func (f fakeFS) goGlob(pattern string) ([]string, error) {
+	var out []string
+	for _, file := range f.files {
+		ok, err := path.Match(pattern, file)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			out = append(out, file)
 		}
 	}

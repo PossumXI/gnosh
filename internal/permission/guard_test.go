@@ -61,9 +61,9 @@ func TestGuardsThatCannotBeChecked(t *testing.T) {
 	e := engine(t, ModeBypass, r)
 	for _, cmd := range []string{
 		"$CMD -rf x", "${CMD} -rf x", "$(echo rm) -rf x", "`echo rm` -rf x", "r$X -rf x", "$X$Y",
-		"rm${IFS}-rf${IFS}x", "{rm,-rf,x}", "/bin/r? -rf x", "r[m] -rf x", "~user/rm x", "=rm x",
-		"git ${X:-push} origin", "git $SUB origin main", "git {push,origin}", "git pus? origin", "git $(echo push)",
-		"npm $X", "npm pub$X", "env $X rm y", "sudo $FLAGS rm y", "xargs $X",
+		"/bin/r? -rf x", "r[m] -rf x", "~user/rm x", "=rm x",
+		"git ${X:-push} origin", "git $SUB origin main", "git pus? origin", "git $(echo push)",
+		"npm $X", "npm pub$X", "env $X y", "sudo $FLAGS y", "xargs $X",
 	} {
 		d := bash(e, cmd)
 		if d.Behavior != Ask || d.Stage != StageSafety {
@@ -71,6 +71,16 @@ func TestGuardsThatCannotBeChecked(t *testing.T) {
 		}
 		if h := d.WithHook(HookAllow, ""); h.Behavior != Ask {
 			t.Errorf("%q: a hook's approval passed an unchecked guard", cmd)
+		}
+	}
+	// Braces can be worked out, and then the rule is checked: these are
+	// refused outright.
+	// ($IFS is a blank, a tab and a line break.)
+	for _, cmd := range []string{"{rm,-rf,x}", "git {push,origin}", "{git,push} origin", "bash {-c,rm}", "rm${IFS}-rf${IFS}x", "git${IFS}push${IFS}origin",
+		// (What follows a wrapper's unknown word may be the command.)
+		"env $X rm y", "sudo $FLAGS rm y"} {
+		if d := bash(e, cmd); d.Behavior != Deny {
+			t.Errorf("%q: got %s at %s (%s), want it refused", cmd, d.Behavior, d.Stage, d.Reason)
 		}
 	}
 	for _, cmd := range []string{

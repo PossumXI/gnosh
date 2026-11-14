@@ -22,9 +22,11 @@ type pathPattern struct {
 	// under it, as in gitignore. Deny and ask rules have it; allow rules
 	// must match the path itself.
 	below bool
-	// fold is set when letter case is ignored. Deny and ask rules have
-	// it, because some file systems treat names that differ only in case
-	// as one file; an allow rule never gains from it.
+	// fold is set when names are compared by their keys (guardKey): with
+	// letter case, composed and taken-apart accents, and a few other
+	// spellings that some file systems take for the same name, all
+	// counted as one. Deny and ask rules have it; an allow rule never
+	// gains from it.
 	fold bool
 }
 
@@ -113,7 +115,21 @@ func (e *Engine) parsePathPattern(spec string, list List, ly *layer, negate bool
 	p.segs = append(head, segs...)
 	if p.fold {
 		for i, s := range p.segs {
-			p.segs[i] = strings.ToLower(s)
+			p.segs[i] = guardPattern(s)
+		}
+		// A rule written by way of macOS's second mount of the data disk
+		// is a rule for the path without it (see sameDisk).
+		for {
+			switch {
+			case len(p.segs) >= 3 && p.segs[0] == "system" && p.segs[1] == "volumes" && p.segs[2] == "data":
+				p.segs = p.segs[3:]
+			case len(p.segs) >= 1 && p.segs[0] == ".nofollow":
+				p.segs = p.segs[1:]
+			case len(p.segs) >= 2 && p.segs[0] == ".resolve" && isDigits(p.segs[1]):
+				p.segs = p.segs[2:]
+			default:
+				return p, nil
+			}
 		}
 	}
 	return p, nil
@@ -140,8 +156,14 @@ func (p pathPattern) match(abs string) bool {
 // does so only by covering a directory above it.
 func (p pathPattern) matchHow(abs string) (ok, viaDir bool) {
 	if p.fold {
-		abs = strings.ToLower(abs)
+		abs = guardPath(abs)
 	}
+	return p.matchKeyed(abs)
+}
+
+// matchKeyed is matchHow for a path that, for a pattern that compares
+// names by their keys, has already been turned into its key (guardPath).
+func (p pathPattern) matchKeyed(abs string) (ok, viaDir bool) {
 	segs := splitPath(abs)
 	if matchSegs(p.segs, segs) {
 		return true, false

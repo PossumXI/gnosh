@@ -121,10 +121,16 @@ func FuzzDecide(f *testing.F) {
 		// with the deny rule or without it (nothing allows rm here).
 		if d.Behavior == Allow {
 			guarded := engine(t, ModeDefault, rules{allow: allow, deny: []string{"Bash(rm *)"}})
-			for _, suffix := range []string{
+			suffixes := []string{
 				"; rm -rf zzz", " && rm -rf zzz", " || rm -rf zzz", " | rm -rf zzz", " & rm -rf zzz",
 				"\nrm -rf zzz", " $(rm -rf zzz)", " `rm -rf zzz`", " <(rm -rf zzz)", "; (rm -rf zzz)",
-			} {
+			}
+			if len(sc.comments) > 0 {
+				// What is added to a line that ends in a comment is part of
+				// the comment, which no shell runs. A new line is not.
+				suffixes = []string{"\nrm -rf zzz", "\n(rm -rf zzz)", "\necho $(rm -rf zzz)"}
+			}
+			for _, suffix := range suffixes {
 				if got := bash(guarded, cmd+suffix); got.Behavior == Allow {
 					t.Errorf("%q + %q: allowed past a deny rule (%s)", cmd, suffix, got.Reason)
 				}
@@ -266,6 +272,30 @@ func FuzzPath(f *testing.F) {
 		}
 		if c.path.match(abs + "x") {
 			t.Errorf("the escaped rule for %q matches another path", abs)
+		}
+		// A deny rule for a path always covers that path, whatever its
+		// name is made of, and every other spelling of it that a file
+		// system may fold into it.
+		guard, err := New(testOptions(ModeBypass, rules{deny: []string{"Read(/" + EscapePath(abs) + ")"}}))
+		if err != nil {
+			t.Errorf("the escaped deny rule for %q is refused: %v", abs, err)
+			return
+		}
+		upper := strings.Map(func(r rune) rune {
+			if r >= 'a' && r <= 'z' {
+				return r - 'a' + 'A'
+			}
+			return r
+		}, abs)
+		spellings := []string{abs, upper, abs + "/", abs + "/."}
+		if strings.Trim(baseName(abs), " .") != "" {
+			// (A name of nothing but dots and blanks has no shorter form.)
+			spellings = append(spellings, abs+".", abs+" ")
+		}
+		for _, spelling := range spellings {
+			if !guard.ReadDenied(spelling) {
+				t.Errorf("the deny rule for %q does not cover %q", abs, spelling)
+			}
 		}
 	})
 }

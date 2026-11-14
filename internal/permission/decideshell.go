@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"errors"
 	"strings"
 )
 
@@ -16,6 +17,12 @@ type lineState struct {
 	moved bool
 	// unknown is set when the directory can no longer be worked out.
 	unknown bool
+	// made are the places an earlier cp or mv of the line puts things,
+	// and linked is set once an earlier ln has run. What is there when a
+	// later command reads it was not there when the line was judged: a
+	// link that was copied or moved in leads wherever it leads.
+	made   []string
+	linked bool
 }
 
 // enter is called before judging c: it settles where the shell is.
@@ -52,21 +59,116 @@ func unionStrings(a, b []string) []string {
 // lineDirs returns every directory a command of the line might run in:
 // the shell's current one and wherever a cd in the line leads. It is used
 // where being wrong must err on the strict side (deny rules, dangerous
-// removals), so order and && are ignored.
-func (e *Engine) lineDirs(v *bashView) []string {
-	dirs := []string{e.cur}
+// removals), so order and && are ignored. unknown is set when a cd leads
+// somewhere that cannot be told ahead of time.
+func (e *Engine) lineDirs(v *bashView) (dirs []string) {
+	dirs, _ = e.lineDirsKnown(v)
+	return dirs
+}
+
+func (e *Engine) lineDirsKnown(v *bashView) (dirs []string, unknown bool) {
+	dirs = []string{e.cur}
 	for _, u := range v.units {
 		ws := u.cmd.words
-		if len(ws) != 2 || !ws[0].static() || ws[0].joined() != "cd" || !ws[1].static() || len(dirs) >= 16 {
+		if len(ws) == 0 || !ws[0].static() {
 			continue
 		}
+		// (popd goes back to a directory the line was in before, and so
+		// does pushd with no directory or with a turn of its stack: +1.)
+		pushd := ws[0].joined() == "pushd"
+		if ws[0].joined() != "cd" && !pushd {
+			continue
+		}
+		v.moves = true
+		// The directory is the word that is not an option. Where there
+		// are several (a variable the line gave several values), each
+		// one may be it.
+		var targets []*word
+		for i := range ws[1:] {
+			w := &ws[1+i]
+			l := w.lit()
+			if w.static() && (l == "-L" || l == "-P" || l == "-e" || l == "-@" || l == "--" || pushd && l == "-n") {
+				continue
+			}
+			if pushd && w.static() && len(l) > 1 && (l[0] == '+' || l[0] == '-') && isDigits(l[1:]) {
+				continue
+			}
+			targets = append(targets, w)
+			// A variable the line set is where it was set to, each value
+			// in its turn.
+			vals, _, _ := e.filledAll(v, *w)
+			if len(vals) > maxLineDirs || e.tooManyFills(v, *w) {
+				v.dirsCapped, vals = true, nil
+			}
+			for i := range vals {
+				dir := litOf(vals[i].text)
+				targets = append(targets, &dir)
+			}
+		}
+		switch {
+		case len(targets) == 0 && pushd:
+		case len(targets) == 0 && len(ws) == 1 && e.home != "":
+			dirs = unionStrings(dirs, []string{e.home})
+		case len(targets) == 0:
+			unknown = true
+		}
+		if len(targets) > 1 {
+			unknown = true
+		}
+		for _, target := range targets {
+			e.lineDir(target, &dirs, &unknown)
+		}
+	}
+	return dirs, unknown
+}
+
+// maxLineDirs bounds how many directories a line is followed to. A line
+// that goes to more asks where a rule about files is in force.
+const maxLineDirs = 32
+
+// lineDir adds the directory a cd or a pushd names to the ones the line
+// may be in.
+func (e *Engine) lineDir(target *word, into *[]string, lost *bool) {
+	dirs := *into
+	if rest, ok := dirTilde(*target); ok {
+		// A directory the line is in or was in (nothing new), or one
+		// under such a directory.
 		for _, d := range append([]string(nil), dirs...) {
-			if abs, ok := cleanAbs(ws[1].value(e.home), d); ok {
+			if abs, ok := cleanAbs(d+rest, ""); ok && rest != "" && len(dirs) < maxLineDirs {
 				dirs = unionStrings(dirs, []string{abs})
 			}
 		}
+		*into = dirs
+		return
 	}
-	return dirs
+	if !target.static() {
+		// "cd ${X:+/etc}" goes to /etc where X is set.
+		for i, p := range target.parts {
+			if p.kind == partVar && p.body != nil && len(dirs) < maxLineDirs {
+				alt := withBody(*target, i, e.home)
+				e.lineDir(&alt, &dirs, lost)
+			}
+		}
+	}
+	if !target.static() || target.joined() == "-" || len(dirs) >= maxLineDirs {
+		*lost = true
+		// A variable nobody set is empty: "cd /e${x}tc" goes to /etc.
+		if l := target.unset(); l != "" && l != "-" && (!target.tilde || l == "~" || strings.HasPrefix(l, "~/")) && len(dirs) < maxLineDirs {
+			for _, d := range append([]string(nil), dirs...) {
+				if abs, ok := cleanAbs(e.unsetValue(*target), d); ok {
+					dirs = unionStrings(dirs, []string{abs})
+				}
+			}
+		}
+		*into = dirs
+		return
+	}
+	for _, d := range append([]string(nil), dirs...) {
+		if abs, ok := cleanAbs(target.value(e.home), d); ok {
+			dirs = unionStrings(dirs, []string{abs})
+		}
+	}
+	*into = dirs
 }
 
 // absAll returns w's value as an absolute path for each directory the
@@ -79,14 +181,302 @@ func (e *Engine) absAll(w word, dirs []string) (out []string, pattern, ok bool) 
 	if val == "" {
 		return nil, false, false
 	}
+	// On Linux /proc/self/cwd is the directory of the process that asks:
+	// the command's own, wherever the line has taken it.
+	for _, proc := range []string{"/proc/self/cwd", "/proc/thread-self/cwd"} {
+		if val == proc || strings.HasPrefix(val, proc+"/") {
+			val = "." + val[len(proc):]
+		}
+	}
 	for _, d := range dirs {
 		abs, ok := cleanAbs(val, d)
 		if !ok {
 			return nil, false, false
 		}
 		out = unionStrings(out, []string{abs})
+		// The kernel does not read "link/.." the way the text does: it
+		// goes to the link's target first and takes the parent of that.
+		// Both places count.
+		phys, ok := e.physical(val, d)
+		if !ok {
+			return nil, false, false
+		}
+		out = unionStrings(out, []string{phys})
 	}
 	return out, w.glob && hasPathMagic(val), true
+}
+
+// dotMatches returns what a pattern names through "." and "..": in dash,
+// and in bash before 5.2, a segment such as ".*" matches both, so that
+// "ls .*" lists the directory above and "cat .*/x" reads from it. A way
+// to expand patterns that lists a directory does not find those two.
+// ok is false when a pattern it had to expand on the way could not be.
+func (e *Engine) dotMatches(pattern string) (out []string, ok bool) {
+	segs := splitPath(pattern)
+	ok = true
+	for i, seg := range segs {
+		if !strings.HasPrefix(seg, ".") || !hasPathMagic(seg) {
+			continue
+		}
+		for _, name := range []string{".", ".."} {
+			if !segMatch(seg, name) {
+				continue
+			}
+			rest := append(append(append([]string(nil), segs[:i]...), name), segs[i+1:]...)
+			p := cleanPath("/" + strings.Join(rest, "/"))
+			if !hasPathMagic(strings.Join(segs[i+1:], "/")) {
+				out = append(out, p)
+			} else if ms, err := e.expandGlob(p); err == nil {
+				out = append(out, ms...)
+			} else {
+				ok = false
+			}
+		}
+	}
+	return out, ok
+}
+
+// expandGlob asks Options.Glob what a pattern matches, and asks it only
+// what every way of matching patterns reads alike. Shells write "not
+// these" as [!abc]; Go's path matching, which is what a Glob is likely
+// to be made of, takes that for the characters ! a b c, and both take
+// [^abc] for "not these": so that is how it is handed over. A named
+// class ([[:alpha:]]), a ] that opens a set, a slash inside one and a
+// backslash are read differently by different matchers, and a set that
+// never closes is text to a shell and a mistake to others: for those it
+// reports an error, and the caller asks. A pattern whose only mark is a
+// [ that never closes names one file, itself, and matches nothing else.
+func (e *Engine) expandGlob(pattern string) ([]string, error) {
+	if e.glob == nil {
+		return nil, errors.New("no way to expand patterns")
+	}
+	var b strings.Builder
+	others, open := false, false
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		switch c {
+		case '\\':
+			return nil, errors.New("a backslash in a file name pattern")
+		case '*', '?':
+			others = true
+			b.WriteByte(c)
+		case '[':
+			j := i + 1
+			neg := j < len(pattern) && (pattern[j] == '!' || pattern[j] == '^')
+			if neg {
+				j++
+			}
+			end := strings.IndexByte(pattern[j:], ']')
+			switch {
+			case end < 0:
+				open = true
+				b.WriteByte(c)
+				continue
+			case end == 0:
+				return nil, errors.New("a ] that opens a set in a file name pattern")
+			}
+			body := pattern[j : j+end]
+			if strings.ContainsAny(body, "[/!^") {
+				return nil, errors.New("a set in a file name pattern that matchers read differently")
+			}
+			b.WriteByte('[')
+			if neg {
+				b.WriteByte('^')
+			}
+			b.WriteString(body)
+			b.WriteByte(']')
+			others = true
+			i = j + end
+		default:
+			b.WriteByte(c)
+		}
+	}
+	switch {
+	case open && others:
+		return nil, errors.New("a [ that never closes in a file name pattern")
+	case open:
+		return nil, nil
+	}
+	return e.glob(b.String())
+}
+
+// dotSettings are the names of the settings that make a shell match
+// names that start with a dot with * and ?: bash's dotglob (also by way
+// of BASHOPTS) and GLOBIGNORE, zsh's GLOB_DOTS, ksh's FIGNORE.
+var dotSettings = []string{"dotglob", "globignore", "globdots", "glob_dots", "bashopts", "fignore"}
+
+// namesDotSetting reports whether a text holds one of dotSettings.
+func namesDotSetting(text string) bool {
+	// (Quotes, backslashes and line breaks may stand inside the name.)
+	text = strings.ToLower(strings.NewReplacer("'", "", "\"", "", "\\", "", "\n", "").Replace(text))
+	for _, s := range dotSettings {
+		if strings.Contains(text, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// hidesDots reports whether the shell that runs the line is sure to
+// leave names that start with a dot out of what a * or a ? matches, as
+// bash and sh do until they are told otherwise. Options.Glob may return
+// those names (see doc.go), and "cat *" would then be held to a rule
+// about .env that it never touches. The answer is yes only for a line
+// that was read to its end, runs nothing to build itself, starts no
+// shell, reads no file into this one, and names none of those settings
+// in any word, however the word is put together.
+func (e *Engine) hidesDots(v *bashView) bool {
+	if !v.sc.ok || v.opaque != "" || v.tooMany || len(v.unread) > 0 || v.sc.subst {
+		return false
+	}
+	named := func(w word) bool {
+		if namesDotSetting(w.raw) || namesDotSetting(w.joined()) || namesDotSetting(w.unset()) {
+			return true
+		}
+		vals, _, _ := e.filledAll(v, w)
+		for _, val := range vals {
+			if namesDotSetting(val.text) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, a := range v.sc.arith {
+		// (( $x = 1 )) sets whatever x names.
+		if namesDotSetting(a) || strings.Contains(a, "$") {
+			return false
+		}
+	}
+	for _, w := range v.sc.loose {
+		if named(w) {
+			return false
+		}
+	}
+	for _, l := range v.sc.loops {
+		if namesDotSetting(l.name) {
+			return false
+		}
+	}
+	// A variable whose value is not known for sure may hold the
+	// setting's name, for a builtin or a sum to use.
+	for name := range v.vars {
+		if !e.closedVar(v, name) {
+			return false
+		}
+	}
+	for _, u := range v.units {
+		c := u.cmd
+		for _, a := range c.assigns {
+			if named(a.w) {
+				return false
+			}
+			for _, el := range a.elems {
+				if named(el) {
+					return false
+				}
+			}
+		}
+		for _, r := range c.redirs {
+			if named(r.target) || namesDotSetting(r.body) {
+				return false
+			}
+		}
+		if len(c.words) == 0 {
+			continue
+		}
+		name, known := e.progName(c.words[0])
+		if !known || progIsPattern(c.words[0]) {
+			return false
+		}
+		k := progKey(baseName(name))
+		switch {
+		case shellNames[k], k == "source", k == ".", k == "shopt", k == "set", k == "setopt", k == "emulate", k == "enable":
+			return false
+		}
+		// A builtin that gives a variable its value, or works one out
+		// as a number, may be handed the setting's name in a word that
+		// is only known when the line runs.
+		sets := evaluators[k] || k == "mapfile" || k == "readarray"
+		for _, w := range c.words {
+			if named(w) || strings.Contains(w.raw, "$((") || strings.Contains(w.raw, "$[") {
+				return false
+			}
+			if sets && !w.static() && !e.closedWord(v, w, anyTime) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// dropHidden takes out of a pattern's matches the names a shell does not
+// match: those with a part that starts with a dot where the pattern's
+// own part does not. A match that cannot be laid beside the pattern
+// part for part is kept.
+func dropHidden(pattern string, matches []string) []string {
+	pp := strings.Split(pattern, "/")
+	var out []string
+	for _, m := range matches {
+		mp := strings.Split(m, "/")
+		hidden := false
+		if len(mp) == len(pp) {
+			for i := range mp {
+				if strings.HasPrefix(mp[i], ".") && !strings.HasPrefix(pp[i], ".") {
+					hidden = true
+					break
+				}
+			}
+		}
+		if !hidden {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// physical returns the path p names when read from dir the way the
+// kernel reads it: each ".." is taken from where the path before it
+// really leads, links followed. With no way to follow links it is the
+// path with its dots taken out by the text alone. It reports false when
+// a link on the way cannot be followed.
+func (e *Engine) physical(p, dir string) (string, bool) {
+	if !strings.HasPrefix(p, "/") {
+		if dir == "" {
+			return "", false
+		}
+		p = dir + "/" + p
+	}
+	if e.resolve == nil || !strings.Contains(p, "..") {
+		return cleanAbs(p, "")
+	}
+	cur := "/"
+	for _, seg := range strings.Split(p, "/") {
+		switch seg {
+		case "", ".":
+		case "..":
+			r, err := e.resolve(cur)
+			if err != nil || !strings.HasPrefix(r, "/") {
+				return "", false
+			}
+			cur = parentDir(cleanPath(r))
+		default:
+			if cur == "/" {
+				cur += seg
+			} else {
+				cur += "/" + seg
+			}
+		}
+	}
+	return cur, true
+}
+
+// parentDir returns the directory a cleaned absolute path lies in.
+func parentDir(p string) string {
+	i := strings.LastIndexByte(p, '/')
+	if i <= 0 {
+		return "/"
+	}
+	return p[:i]
 }
 
 // shellPaths lists the files a command line names for reading and for
@@ -94,31 +484,189 @@ func (e *Engine) absAll(w word, dirs []string) (out []string, pattern, ok bool) 
 // held against them.
 func (e *Engine) shellPaths(req *request) {
 	v := req.view
-	dirs := e.lineDirs(v)
-	var reads, writes []string
-	add := func(w word, into *[]string) {
-		if w.static() && (w.joined() == "-" || w.joined() == "/dev/null") {
-			return
-		}
-		abs, pattern, ok := e.absAll(w, dirs)
-		switch {
-		case !ok:
-			req.pathOpaque = "it names a file with text computed when the command runs (" + w.raw + ")"
-		case !pattern:
-			*into = append(*into, abs...)
-		case e.glob == nil:
-			req.pathOpaque = "it names files with a pattern (" + w.raw + ")"
-		default:
-			for _, a := range abs {
-				if ms, err := e.glob(a); err == nil {
-					*into = append(*into, ms...)
-				} else {
-					req.pathOpaque = "it names files with a pattern that could not be expanded (" + w.raw + ")"
+	dirs, lost := e.lineDirsKnown(v)
+	if lost {
+		req.pathOpaque = "it changes directory to a place gnosh cannot tell ahead of time"
+	}
+	if v.dirsCapped || len(dirs) >= maxLineDirs {
+		req.pathCapped = "the line changes directory more often than gnosh follows"
+	}
+	for _, name := range []string{"CDPATH", "GLOBIGNORE"} {
+		// Assigned anywhere in the line, these change where cd goes and
+		// what a pattern matches.
+		for _, c := range v.sc.cmds {
+			for _, a := range c.assigns {
+				if a.name == name {
+					req.pathOpaque = "it sets " + name + ", which changes what the files it names are"
 				}
 			}
 		}
 	}
+	v.pwds = dirs
+	if v.index == nil {
+		v.index = map[*simpleCmd]int{}
+		for i, c := range v.sc.cmds {
+			v.index[c] = i
+		}
+	}
+	var reads, writes []string
+	hide := e.hidesDots(v)
+	// at is where the command whose words are being read stands among
+	// the line's own, or noPlace for one found inside another: only for
+	// the line's own is it known which assignments come before it.
+	at := noPlace
+	var add func(w word, into *[]string)
+	add = func(w word, into *[]string) {
+		if w.static() && (w.joined() == "-" || w.joined() == "/dev/null") {
+			return
+		}
+		if w.brace && w.static() && !w.quoted {
+			// Braces are words bash makes before anything else, and they
+			// can be worked out: "cat {.env,x}" names .env. (A plain sh
+			// keeps the braces, so the word as written is a name too.)
+			if alts, ok := braceExpand(w.joined()); ok {
+				for _, alt := range append(alts, w.joined()) {
+					if alt == "" {
+						continue
+					}
+					part := litOf(alt)
+					part.glob, part.tilde = w.glob && hasPathMagic(alt), strings.HasPrefix(alt, "~")
+					add(part, into)
+				}
+				return
+			}
+		}
+		if alts, ok := braceAlts(w); ok {
+			// "cat {$F,x}": each word the braces make is read by itself.
+			for _, alt := range alts {
+				add(alt, into)
+			}
+			return
+		}
+		if rest, ok := dirTilde(w); ok {
+			// ~+ is the directory the shell is in, ~- the one it was in
+			// before and ~2 one that pushd put by: each is one of those
+			// the line may be in.
+			if w.joined() != "~+"+rest && !v.moves {
+				return // no cd on the line: the word stays as it is written
+			}
+			for _, d := range dirs {
+				part := litOf(d + rest)
+				part.glob = w.glob && hasPathMagic(rest)
+				add(part, into)
+			}
+			if lost {
+				req.pathOpaque = "it names a file by where the line is (" + w.raw + "), and that is not known"
+			}
+			return
+		}
+		if lv := v.vars["HOME"]; lv != nil && w.tilde && w.static() {
+			// The line moved HOME: ~ is that place now.
+			for _, home := range lv.vals {
+				if home.text == "" {
+					continue
+				}
+				if a, ok := cleanAbs(home.text+strings.TrimPrefix(w.joined(), "~"), ""); ok {
+					*into = append(*into, a)
+				}
+			}
+		}
+		abs, pattern, ok := e.absAll(w, dirs)
+		switch {
+		case !ok:
+			// (Not so where the line itself gave the word's variables all
+			// the values they can have: those are tried below, and are
+			// all there is to try.)
+			if e.tooManyFills(v, w) {
+				req.pathCapped = "the line gives " + w.raw + " more values than gnosh follows"
+			}
+			if !e.closedWord(v, w, at) {
+				req.pathOpaque = "it names a file with text computed when the command runs (" + w.raw + ")"
+				// The word a ${name:-word} or a ${name:+word} may stand
+				// for is a name as well: "cat ${HOME:+.env}" reads .env.
+				for i, p := range w.parts {
+					if p.kind == partVar && p.body != nil {
+						add(withBody(w, i, e.home), into)
+					}
+				}
+			}
+			// A variable the line itself set is tried as what it was set
+			// to: "x=.env; cat $x". And a variable nobody set is empty, so
+			// what is written of the name is a name too: "cat .e${x}nv".
+			// Either way the shell then cuts an unquoted value into words
+			// and matches the patterns in it: "x='.e*'; cat $x".
+			if l := w.unset(); !w.brace && (!w.tilde || l == "~" || strings.HasPrefix(l, "~/")) {
+				vals, _, _ := e.filledAll(v, w)
+				known := len(vals)
+				if !e.closedWord(v, w, at) {
+					// (One of them may still be as it came, or not set.)
+					vals = append(vals, lineVal{text: e.unsetValue(w)})
+				}
+				for i, val := range vals {
+					fields := []string{val.text}
+					if i < known && !w.quoted {
+						fields = e.fields(v, val.text)
+					}
+					for _, f := range fields {
+						if f == "" {
+							continue
+						}
+						part := litOf(f)
+						part.glob = hasPathMagic(f) && (w.glob || i < known && (!w.quoted || val.glob))
+						add(part, into)
+					}
+				}
+			}
+		case !pattern:
+			*into = append(*into, abs...)
+		case e.glob == nil:
+			req.pathOpaque = "it names files with a pattern (" + w.raw + ")"
+			// A pattern that matches nothing stays as it is written: the
+			// text itself is a name too ("echo x >build/[").
+			*into = append(*into, abs...)
+		default:
+			*into = append(*into, abs...)
+			for _, a := range abs {
+				ms, err := e.expandGlob(a)
+				dots, ok := e.dotMatches(a)
+				if err != nil || !ok {
+					req.pathOpaque = "it names files with a pattern that could not be expanded (" + w.raw + ")"
+				}
+				if hide {
+					ms = dropHidden(a, ms)
+				}
+				*into = append(*into, ms...)
+				*into = append(*into, dots...)
+			}
+		}
+	}
 	for _, u := range v.units {
+		at = noPlace
+		if i, ok := v.index[u.cmd]; ok && !u.derived {
+			at = i
+		}
+		if len(u.cmd.words) > 0 {
+			w0 := u.cmd.words[0]
+			if _, known := e.progName(w0); !known || progIsPattern(w0) {
+				// A program that is only known when the line runs may be
+				// cat, and what it would read is not known either. (One
+				// the line itself set is read as what it was set to.)
+				if name, ok := e.filled(v, w0); !ok || name == "" {
+					req.pathOpaque = "the program it runs (" + w0.raw + ") is only known when it runs, and so are the files that program reads"
+				}
+				// What is not written of the name may be a blank:
+				// "cat${s}.env" is then cat .env.
+				if alt := spaceReading(u.cmd); alt != nil {
+					f := facts(alt.words)
+					for _, w := range f.reads {
+						add(w, &reads)
+					}
+					for _, w := range f.writes {
+						add(w, &writes)
+					}
+				}
+			}
+		}
 		f := facts(u.cmd.words)
 		for _, w := range f.reads {
 			add(w, &reads)
@@ -135,6 +683,46 @@ func (e *Engine) shellPaths(req *request) {
 			case ">&":
 				if !isFdTarget(r.target) {
 					add(r.target, &writes)
+					// bash expands this word a second time: what the first
+					// expansion leaves is read again, tilde and variables
+					// and all ("echo x >&'~/.bashrc'" writes in the home
+					// directory).
+					if r.target.static() {
+						if again, ok := rereadWord(r.target.joined()); ok {
+							add(again, &writes)
+						} else {
+							req.pathOpaque = "it writes to " + r.target.raw + " through >&, a word bash expands twice"
+						}
+					}
+				}
+			}
+		}
+	}
+	if v.opaque != "" && req.pathOpaque == "" {
+		// Where not every command is known, neither is every file.
+		req.pathOpaque = v.opaque
+	}
+	if !v.sc.ok {
+		// A line the reader could not follow may name files it never got
+		// to. Its crude pieces are read as commands, which finds too much
+		// rather than too little, and what else it names is not known.
+		if req.pathOpaque == "" {
+			req.pathOpaque = "gnosh could not read the whole command"
+		}
+		for _, frag := range v.frags {
+			var ws []word
+			for _, fld := range strings.Fields(frag) {
+				ws = append(ws, litOf(fld))
+			}
+			f := facts(ws)
+			for _, w := range f.reads {
+				if abs, _, ok := e.absAll(w, dirs); ok {
+					reads = append(reads, abs...)
+				}
+			}
+			for _, w := range f.writes {
+				if abs, _, ok := e.absAll(w, dirs); ok {
+					writes = append(writes, abs...)
 				}
 			}
 		}
@@ -144,14 +732,100 @@ func (e *Engine) shellPaths(req *request) {
 	req.unresolved = false // links matter here only to the checks that allow
 }
 
+// unsetValue is the word with no variable in it set (see unset), and a
+// leading ~ or ~/ as the home directory.
+func (e *Engine) unsetValue(w word) string {
+	l := w.unsetIn(e.home)
+	if w.tilde && e.home != "" {
+		if l == "~" {
+			return e.home
+		}
+		if strings.HasPrefix(l, "~/") {
+			return e.home + l[1:]
+		}
+	}
+	return l
+}
+
+// rereadWord reads text as one word of a command line: what bash does
+// to the word after >& once it has expanded it a first time.
+func rereadWord(s string) (word, bool) {
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c == 0x7f {
+			return word{}, false
+		}
+	}
+	p := &parser{src: s, sc: &script{ok: true}}
+	w, ok := p.readWord()
+	return w, ok && !p.failed && p.pos == len(s)
+}
+
+// dirTilde reports whether a word is one of bash's names for a
+// directory the shell is or was in (~+, ~-, ~2, ~+1, ~-0), alone or with
+// a path after it, and returns that path ("" or "/...").
+func dirTilde(w word) (rest string, ok bool) {
+	l := w.joined()
+	if !w.tilde || !allLit(w) || !strings.HasPrefix(l, "~") {
+		return "", false
+	}
+	i := 1
+	if i < len(l) && (l[i] == '+' || l[i] == '-') {
+		i++
+	}
+	for i < len(l) && l[i] >= '0' && l[i] <= '9' {
+		i++
+	}
+	if i == 1 || i < len(l) && l[i] != '/' {
+		return "", false
+	}
+	return l[i:], true
+}
+
+// allLit reports whether a word is made of literal text alone.
+func allLit(w word) bool {
+	for _, p := range w.parts {
+		if p.kind != partLit {
+			return false
+		}
+	}
+	return true
+}
+
+// braceAlts returns the words bash's braces make of a word that also
+// holds variables: "{$F,x}" is $F and x, and the braces are taken apart
+// before any variable is looked at. Only a word written with nothing but
+// names, $name and the braces themselves is taken apart (a quote or a
+// ${...} holds commas and braces that count for nothing).
+func braceAlts(w word) ([]word, bool) {
+	if !w.brace || w.static() || w.quoted || strings.ContainsAny(w.raw, "'\"\\`(") || strings.Contains(w.raw, "${") {
+		return nil, false
+	}
+	alts, ok := braceExpand(w.raw)
+	if !ok || len(alts) == 1 && alts[0] == w.raw {
+		return nil, false
+	}
+	var out []word
+	for _, alt := range alts {
+		if alt == "" {
+			continue
+		}
+		part, ok := rereadWord(alt)
+		if !ok || part.brace {
+			return nil, false
+		}
+		out = append(out, part)
+	}
+	return out, len(out) > 0
+}
+
 // isFdTarget reports whether a redirection target is a descriptor number
 // or "-", as in 2>&1 and >&-.
 func isFdTarget(w word) bool {
 	if !w.plain() {
 		return false
 	}
-	l := w.joined()
-	return l == "-" || isInt(l) && l[0] != '-' && l[0] != '+'
+	l := strings.TrimSuffix(w.joined(), "-")
+	return l == "" || isInt(l) && l[0] != '-' && l[0] != '+'
 }
 
 // readable reports whether the cleaned absolute path may be read without
@@ -216,28 +890,45 @@ func (e *Engine) wordsOK(ws []word, st *lineState, ok func(string) bool, what st
 		if st.unknown && !strings.HasPrefix(w.value(e.home), "/") {
 			return "it names " + w.raw + " after a change of directory gnosh could not follow"
 		}
+		if st.linked {
+			return "it names " + w.raw + " after an ln earlier in the line, so where that leads cannot be known ahead of time"
+		}
+		for _, a := range abs {
+			for _, m := range st.made {
+				if inside(m, a) {
+					return "it names " + w.raw + ", which an earlier cp or mv in the line puts there: what it will be cannot be known ahead of time"
+				}
+			}
+		}
 		if pattern {
 			if e.glob == nil {
 				return "it names files with a pattern (" + w.raw + "), which cannot be checked ahead of time"
 			}
 			var all []string
 			for _, a := range abs {
-				ms, err := e.glob(a)
-				if err != nil {
+				ms, err := e.expandGlob(a)
+				dots, ok := e.dotMatches(a)
+				if err != nil || !ok {
 					return "the pattern " + w.raw + " could not be expanded"
 				}
 				all = append(all, ms...)
+				all = append(all, dots...)
 			}
 			// A matched name that starts with a dash would reach the
-			// command as a flag.
+			// command as a flag. The name is the match as the shell writes
+			// it: from the directory the command runs in.
 			if strings.ContainsAny(w.joined()[:1], "*?[") {
 				for _, m := range all {
-					if strings.HasPrefix(baseName(m), "-") {
-						return "the pattern " + w.raw + " matches " + baseName(m) + ", which the command would read as a flag"
+					for _, d := range st.dirs {
+						if rel, ok := strings.CutPrefix(m, strings.TrimSuffix(d, "/")+"/"); ok && strings.HasPrefix(rel, "-") {
+							return "the pattern " + w.raw + " matches " + rel + ", which the command would read as a flag"
+						}
 					}
 				}
 			}
-			abs = all
+			// A pattern that matches nothing stays as it is written, and
+			// is then a name of its own: "cat /[" reads a file named [.
+			abs = append(all, abs...)
 		}
 		for _, a := range abs {
 			if !ok(cleanPath(a)) {
@@ -259,6 +950,9 @@ type partVerdict struct {
 	// exact and prefix are the rules that would cover the part from now
 	// on; both are empty when no rule could.
 	exact, prefix string
+	// state names the builtin, when the part is one that changes the
+	// shell the rest of the line runs in (see stateBuiltins).
+	state string
 }
 
 // judgePart decides whether one simple command of a flat line runs
@@ -268,6 +962,9 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 	plan := e.mode == ModePlan
 	if len(c.assigns) > 0 {
 		return partVerdict{why: "it sets a variable (" + c.assigns[0].w.raw + "), and gnosh asks about every command that does"}
+	}
+	if c.mixed {
+		return partVerdict{why: "it uses a form ([[ ]] with operators, or &>) that a plain sh would run as several commands"}
 	}
 	staticInput := true
 	for _, r := range c.redirs {
@@ -322,19 +1019,23 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 			}
 			break
 		}
+		state := ""
+		if stateBuiltins[f.name] && (f.name != "printf" || hasLong(words[1:], "-v")) {
+			state = f.name
+		}
 		// After a cd, a program named by a relative path is not the file
 		// the rule's author saw: no allow rule names it.
 		prog := words[0].joined()
 		relProg := strings.Contains(prog, "/") && !strings.HasPrefix(prog, "/")
-		if !plan && !(st.moved && relProg) {
-			if r := e.allowCommand(words); r != nil {
-				e.afterPart(f, st)
-				return partVerdict{ok: true, rule: r}
+		if !plan && !((st.moved || st.unknown) && relProg) {
+			if r := e.allowCommand(words, viaXargs); r != nil {
+				e.afterPart(f, words, st)
+				return partVerdict{ok: true, rule: r, state: state}
 			}
 		}
 		if !viaXargs {
 			if w := e.partRuns(c, f, st, depth, staticInput); w == "" {
-				e.afterPart(f, st)
+				e.afterPart(f, words, st)
 				return partVerdict{ok: true}
 			} else if why == "" {
 				why = w
@@ -347,7 +1048,7 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		viaXargs = viaXargs || words[0].joined() == "xargs"
 		words = inner
 	}
-	e.afterPart(first, st)
+	e.afterPart(first, c.words, st)
 	pv := partVerdict{why: why}
 	if plainName(c.words[0]) {
 		pv.exact, pv.prefix = e.suggestRules(c, first, st)
@@ -356,8 +1057,8 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 }
 
 // afterPart notes what a part that is going to run does to the shell's
-// directory.
-func (e *Engine) afterPart(f cmdFacts, st *lineState) {
+// directory, and to the files the rest of the line may name.
+func (e *Engine) afterPart(f cmdFacts, words []word, st *lineState) {
 	switch f.name {
 	case "cd":
 		if f.cd == nil {
@@ -372,15 +1073,55 @@ func (e *Engine) afterPart(f cmdFacts, st *lineState) {
 		st.pending = abs
 	case "pushd", "popd":
 		st.unknown = true
+	case "ln":
+		st.linked = true
+	case "cp", "mv":
+		// A plain cp of a file makes a file. A cp of a directory, and any
+		// mv, may bring links along.
+		brings := f.name == "mv"
+		for _, w := range words[1:] {
+			if l := w.lit(); strings.HasPrefix(l, "-") && (strings.HasPrefix(l, "--") || strings.ContainsAny(l, "rRadP")) {
+				brings = true
+			}
+		}
+		if !brings {
+			return
+		}
+		for _, w := range f.writes {
+			if abs, _, ok := e.absAll(w, st.dirs); ok {
+				st.made = unionStrings(st.made, abs)
+			} else {
+				st.linked = true
+			}
+		}
 	}
 }
 
+// stateBuiltins change the shell itself: what a name means, where
+// programs are looked for, which options are on. Each can be allowed by
+// a rule when it is all there is to the line. In a line with other
+// commands it asks, because those other commands were judged as if the
+// shell were the one the line started in: "alias ls=rm; ls x" is not an
+// alias command and an ls command. (eval, source and trap are not here:
+// a rule that allows one of those already allows whatever it runs.)
+var stateBuiltins = map[string]bool{
+	"alias": true, "unalias": true, "hash": true, "enable": true, "shopt": true, "set": true, "export": true,
+	"declare": true, "typeset": true, "local": true, "readonly": true, "unset": true, "read": true,
+	"mapfile": true, "readarray": true, "let": true, "getopts": true, "umask": true, "ulimit": true,
+	"bind": true, "complete": true, "compopt": true, "printf": true, "pushd": true, "popd": true,
+}
+
 // allowCommand returns the allow rule that names the command, if any.
-func (e *Engine) allowCommand(words []word) *crule {
+// With viaXargs the command is one xargs will add arguments to, so only a
+// rule that ends in a wildcard covers what will really run.
+func (e *Engine) allowCommand(words []word, viaXargs bool) *crule {
 	text := rawJoined(words)
 	exactOnly := prefixOnlyExact(words)
 	for _, c := range e.rules(ListAllow) {
 		if c.kind != kindCommand || exactOnly && !c.cmd.exact() {
+			continue
+		}
+		if viaXargs && (c.cmd.exact() || c.cmd.segs[len(c.cmd.segs)-1] != "") {
 			continue
 		}
 		if c.cmd.match(text) {
@@ -413,6 +1154,24 @@ func (e *Engine) partRuns(c *simpleCmd, f cmdFacts, st *lineState, depth int, st
 		if f.cd != nil {
 			return e.wordsOK([]word{*f.cd}, st, e.readable, "outside the working directories")
 		}
+		if f.name == "diff" && e.resolve != nil {
+			// Given a directory, diff reads the files in it and follows
+			// the links among them: every entry is held to the project
+			// like a file named outright.
+			var entries []word
+			for _, o := range f.reads {
+				if !o.static() || o.joined() == "-" {
+					continue
+				}
+				for _, pat := range []string{"/*", "/.[!.]*", "/..?*"} {
+					v := strings.TrimRight(o.joined(), "/") + pat
+					entries = append(entries, word{raw: v, parts: []wordPart{{lit: v}}, glob: true, tilde: o.tilde, quoted: true})
+				}
+			}
+			if why := e.wordsOK(entries, st, e.readable, "outside the working directories"); why != "" {
+				return why
+			}
+		}
 		return e.wordsOK(f.reads, st, e.readable, "outside the working directories")
 	case f.fsEdit && e.mode == ModeAcceptEdits:
 		if f.name == "touch" && depth > 0 {
@@ -420,6 +1179,23 @@ func (e *Engine) partRuns(c *simpleCmd, f cmdFacts, st *lineState, depth int, st
 		}
 		if why := e.wordsOK(f.reads, st, e.readable, "outside the working directories"); why != "" {
 			return why
+		}
+		// A file that is only put back as it was matters when it is a
+		// link in the project that leads out of it: the copy that takes
+		// the link's place can then be read like any file here.
+		for _, w := range f.rewrites {
+			abs, _, good := e.absAll(w, st.dirs)
+			if !good {
+				continue
+			}
+			for _, a := range abs {
+				p := cleanPath(a)
+				for _, d := range e.workDirs() {
+					if inside(d, p) && !e.inWork(p) {
+						return a + " is a link that leads out of the working directories, and GNU sed would put a copy of what it leads to in its place"
+					}
+				}
+			}
 		}
 		return e.wordsOK(f.writes, st, e.inWork, "outside the working directories")
 	case f.fsEdit:
@@ -450,6 +1226,12 @@ func (e *Engine) decideShell(req *request) Decision {
 		return ask("gnosh could not read the whole command (" + v.sc.why + "), so a person decides.")
 	case v.tooMany:
 		return ask("The command holds more nested commands than gnosh will follow, so a person decides.")
+	case len(v.unread) > 0:
+		// A script the line will run (the argument of an eval, a
+		// subscript a builtin evaluates) that the reader could not
+		// follow: no rule for the command that runs it covers what it
+		// does.
+		return ask("Part of the command is a script gnosh could not read (" + v.opaque + "), so a person decides.")
 	case v.sc.subst:
 		return ask("The command runs another command to build part of itself ($(...), backticks or <(...)), and gnosh asks about every command that does.")
 	case v.sc.subshell || v.sc.compound:
@@ -466,9 +1248,20 @@ func (e *Engine) decideShell(req *request) Decision {
 	var rule *crule
 	var whys, exact, prefix []string
 	coverable := true
+	parts := 0
+	for _, c := range v.sc.cmds {
+		if len(c.words) > 0 {
+			parts++
+		}
+	}
 	for _, c := range v.sc.cmds {
 		st.enter(c)
 		pv := e.judgePart(c, st)
+		if pv.ok && pv.state != "" && parts > 1 {
+			whys = append(whys, pv.state+" changes the shell that runs the rest of the line, so the rest cannot be judged ahead of time")
+			coverable = false
+			continue
+		}
 		if pv.ok {
 			if rule == nil {
 				rule = pv.rule

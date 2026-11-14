@@ -27,7 +27,8 @@ func TestParseSplitsCommands(t *testing.T) {
 		{"a |& b", []string{"a", "b"}},
 		{"ls  \t -la", []string{"ls -la"}},
 		{"ls \\\n -la", []string{"ls -la"}},
-		{"l\\\ns", []string{"ls"}},
+		{"ls\\\n -la", []string{"ls -la"}},
+		{"ls # ; not a command\nrm x", []string{"ls", "rm x"}},
 		{"echo 'a; b' \"c && d\"", []string{"echo a; b c && d"}},
 		{"echo a\\;b", []string{"echo a;b"}},
 		{"echo $'\\x72\\x6d' $'a\\nb'", []string{"echo rm a\nb"}},
@@ -57,6 +58,7 @@ func TestParseSplitsCommands(t *testing.T) {
 		{"cat <<'EOF'\n$(rm x)\nEOF", []string{"cat"}},
 		{"cat <<EOF\n$(rm x)\nEOF", []string{"cat", "rm x"}},
 		{"cat <<-EOF\n\tbody\n\tEOF\nls", []string{"cat", "ls"}},
+		{"cat <<EOF\na \\\n b\nEOF\nls", []string{"cat", "ls"}},
 		{"echo ${X:-$(rm x)}", []string{"rm x", "echo ${X:-$(rm x)}"}},
 		{"echo $((1+2))", []string{"echo $((1+2))"}},
 		{"arr=(a b $(rm x)) ls", []string{"rm x", "ls"}},
@@ -128,12 +130,27 @@ func TestParseRefusesWhatItCannotFollow(t *testing.T) {
 		"echo a\x00b",
 		"echo a\rb",
 		"echo $'a\\0b'",
-		"ls # ; rm -rf x",
+		"echo $(ls # ; rm -rf x\n)",
+		"l\\\ns",
+		"ls &\\\n& ls",
+		"echo \"$\\\n(ls)\"",
+		"echo $\"hello\"",
+		"ls 10>&1",
+		"ls\u00a0-la",
+		"cat <<EOF\nline\\\nEOF\nEOF",
+		"cat <<EOF\nEO\\\nF\nEOF",
+		"cat <<-EOF\n\ta\\\n\tb\n\tEOF",
 		"ls & | cat",
 		"ls > ",
 		"time { ls; }",
 		"coproc ls",
 		"then ls",
+		"ls {fd}>{fd}> out", "git {}>{d}>t", "npm''>{d}>t", "wget {}>{H}>1", "wget x .env {PATH}>&{PATH}>&1",
+		"time coproc ls",
+		"time -p -- if true; then ls; fi",
+		"! time ! coproc ls",
+		"time \\\n coproc ls",
+		"ls >>| out",
 	} {
 		if sc := parseScript(src); sc.ok {
 			t.Errorf("%q: read as %q, want it refused", src, cmdsOf(sc))
@@ -241,5 +258,122 @@ func TestCrudeFragments(t *testing.T) {
 		if !found {
 			t.Errorf("fragment %q missing from %q", want, got)
 		}
+	}
+}
+
+// TestParseSecondReadings: the forms a plain sh reads as several commands
+// keep that reading beside bash's.
+func TestParseSecondReadings(t *testing.T) {
+	pieces := func(c *simpleCmd) string {
+		var out []string
+		for _, p := range c.pieces {
+			out = append(out, strings.Join(litsOf(p), " "))
+		}
+		return strings.Join(out, " | ")
+	}
+	for _, tt := range []struct {
+		src    string
+		mixed  bool
+		pieces string
+	}{
+		{"[[ -f a ]]", false, ""},
+		{"[[ -f a && -d b ]]", false, "[[ -f a | -d b ]]"},
+		{"[[ -f a || ! -d b ]]", false, "[[ -f a | ! -d b ]]"},
+		{"[[ -f a || rm x ]]", true, "[[ -f a | rm x ]]"},
+		{"[[ a == b || c == d ]]", true, "[[ a == b | c == d ]]"},
+		{"[[ x\nrm y ]]", true, "[[ x | rm y ]]"},
+		{"[[ ( -f a ) ]]", true, "[[ | -f a | ]]"},
+		{"ls &>/dev/null", false, ""},
+		{"ls &>/dev/null rm y", true, "ls | rm y"},
+		{"x &>>log rm y", true, "x | rm y"},
+		// A number right before < or > is the descriptor, not a word, and
+		// the ]] after one is the file.
+		{"[[ x || git push 2>/dev/null || y ]]", true, "[[ x | git push | y ]]"},
+		{"[[|nohup 2>/dev/null ]]", true, "[[ | nohup ]]"},
+		{"[[ \"\"|timeout>]]", true, "[[  | timeout"},
+		{"[[ a 2 > b ]]", true, ""},
+	} {
+		sc := parseScript(tt.src)
+		if !sc.ok || len(sc.cmds) != 1 {
+			t.Errorf("%q: not read as one command (%s)", tt.src, sc.why)
+			continue
+		}
+		if c := sc.cmds[0]; c.mixed != tt.mixed || pieces(c) != tt.pieces {
+			t.Errorf("%q: mixed=%v pieces %q, want %v %q", tt.src, c.mixed, pieces(c), tt.mixed, tt.pieces)
+		}
+	}
+	sc := parseScript("[[ a > out || b < in ]]")
+	if !sc.ok || len(sc.cmds[0].altRedirs) != 2 || sc.cmds[0].altRedirs[0].target.raw != "out" || !sc.cmds[0].mixed {
+		t.Errorf("[[ a > out || b < in ]]: %+v", sc.cmds)
+	}
+	sc = parseScript("[[ \"\"|timeout>]]")
+	if !sc.ok || len(sc.cmds[0].altRedirs) != 1 || sc.cmds[0].altRedirs[0].target.raw != "]]" {
+		t.Errorf("[[ \"\"|timeout>]]: the file ]] is not seen: %+v", sc.cmds[0].altRedirs)
+	}
+	// What bash makes of a few forms that are easy to misread.
+	for src, want := range map[string]string{
+		"git>&-push origin":                "git push origin",
+		"ls >& -x":                         "ls x",
+		"!<a rm x":                         "rm x",
+		"!(rm x)":                          "rm x",
+		"if\\\n true; then rm x; fi":       "true|rm x",
+		"ls # it's (a) comment; rm x\npwd": "ls|pwd",
+		"echo {fd}>&1 x":                   "echo x",
+	} {
+		sc := parseScript(src)
+		if got := strings.Join(cmdsOf(sc), "|"); !sc.ok || got != want {
+			t.Errorf("%q: read as %q (%s), want %q", src, got, sc.why, want)
+		}
+	}
+	if sc := parseScript("echo {PATH}>&1"); !sc.setsVar {
+		t.Errorf("{PATH}>&1 is not seen to set a variable")
+	}
+	// time before a plain command is still read, as the command it runs.
+	for _, src := range []string{"time ls", "time -p ls -la", "time -- ls", "! time ls", "time time ls", "timeout 5 ls", "ls | time cat"} {
+		if sc := parseScript(src); !sc.ok {
+			t.Errorf("%q: refused (%s)", src, sc.why)
+		}
+	}
+	// A process substitution is part of the word it stands in.
+	sc = parseScript("r>()m -rf x")
+	if !sc.ok || len(sc.cmds) == 0 || len(sc.cmds[len(sc.cmds)-1].words) != 3 || sc.cmds[len(sc.cmds)-1].words[0].static() {
+		t.Errorf("r>()m -rf x: %q", cmdsOf(sc))
+	}
+}
+
+// TestBraceExpand: the words bash makes of braces, in any order.
+func TestBraceExpand(t *testing.T) {
+	for src, want := range map[string]string{
+		"a{b,c}d":      "abd acd",
+		"{a,b}{1,2}":   "a1 a2 b1 b2",
+		"{a,{b,c}}":    "a b c",
+		"{1..3}":       "1 2 3",
+		"{3..1}":       "1 2 3",
+		"{01..03}":     "01 02 03",
+		"{a..c}":       "a b c",
+		"{1..10..3}":   "1 10 4 7",
+		"x{,y}":        "x xy",
+		"{x}":          "{x}",
+		"{}":           "{}",
+		"a{b":          "a{b",
+		"{a,b":         "{a,b",
+		"{a,b}}":       "a} b}",
+		".en{v,}":      ".en .env",
+		"{.env,n}":     ".env n",
+		"./{*,}":       "./ ./*",
+		"{n,.e{x,nv}}": ".env .ex n",
+		"plain":        "plain",
+	} {
+		got, ok := braceExpand(src)
+		sortStrings(got)
+		if !ok || strings.Join(got, " ") != want {
+			t.Errorf("%q: got %q (%v), want %q", src, strings.Join(got, " "), ok, want)
+		}
+	}
+	if _, ok := braceExpand("{1..9}{1..9}{1..9}"); ok {
+		t.Errorf("729 words were made without a murmur")
+	}
+	if got, ok := braceExpand("{1..100000}"); ok && len(got) > 700 {
+		t.Errorf("{1..100000}: %d words", len(got))
 	}
 }
