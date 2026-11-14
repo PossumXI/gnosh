@@ -28,6 +28,18 @@ Claude Code.
 Set: gnosh's config is its own (Claude chose JSON with comments and said
 why); the licence; `-y` works as root.
 
+Evening of 13 November 2026, when Claude put two more choices to him:
+
+> use best judgement. use best judgement for the other thing too.
+
+> try not to prompt me for anything, keep going and pushing, use best judgemenet.
+
+Set: Claude decides what it would otherwise have asked, and says what it
+chose. What it chose in this repository on that footing: the three rulings
+on hosts and the three on the config build (`spec/DECISIONS.md` items 20 to
+25), and starting the first measured bench pass on the home AI box that
+night (`bench/README.md` had left when to measure to him).
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
