@@ -187,3 +187,25 @@ both are silent, the builder chooses, and says so in its report.
     refuses `run_in_background` together with `host`, stops such a command
     at its time limit, and says in the result what may still be running
     there.
+
+## From the config build, 14 November 2026
+
+23. **A variable that is not set leaves its provider out, with a warning.**
+    `${NAME}` with no default in a provider's address, key or header value,
+    when NAME is not set, does not stop startup: that provider is left out,
+    and a warning names the variable, the key and the line (`gnosh doctor`
+    shows it). A config that lists a hosted provider therefore still starts
+    on a machine where that provider's key is not exported. The earlier
+    line format did the same for `$NAME`. One word in `finish.go` makes it
+    a stop.
+24. **What the new syntax does not carry over**, because nothing in gnosh
+    acts on it: `notifications`, named hooks and the removing of a hook, the
+    directives for MCP and language servers, model prices, six provider
+    types nothing speaks to (openrouter, vercel, google, google-vertex,
+    azure, bedrock), and the options and variables for analytics, an update
+    check and a provider catalogue. A key for any of them is an unknown key
+    now, which stops startup and says so. `openai-compat` is spelled
+    `openai-compatible`.
+25. **A leftover `gnoshrc` is neither read nor warned about**: no code for
+    users who do not exist. Jae's own files are converted by hand at
+    switch-over.
