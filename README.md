@@ -27,7 +27,14 @@ peers' turn locks, `gnosh mem`, `gnosh doctor`, `gnosh trust`.
 Not built yet: hosts (running a command on a named machine), MCP servers,
 rewind, background sub-agents, web search. The interface has been tried in
 tmux only. Its wording to the model has not yet been compared run against
-run. There is no licence file yet, and nothing here is released.
+run. Nothing here is released.
+
+## Licence
+
+The GNO Network General Public License, version 6, with Additional Terms
+(Strong Attribution): see [LICENSE.md](LICENSE.md). The GnoVM subsystem has
+its own copy in `internal/gnovm/LICENSE.md`. A user interface built on gnosh
+shows "built on gnosh" with a link to <https://gnosh.ai>.
 
 ## Build
 

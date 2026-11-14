@@ -140,3 +140,27 @@ both are silent, the builder chooses, and says so in its report.
     gnosh's own. It is kept so that Jae's existing files load, as he ruled
     for his own files (PRIN-5). Whether gnosh gets a config syntax of its
     own before it is published is his to decide.
+
+## From Jae, 13 November 2026
+
+17. **gnosh gets a config syntax of its own.** Jae: "own syntax". Asked which,
+    he left it open ("i don't know anything there, yaml?"). It is one JSON
+    file with comments allowed, the same file that already holds
+    `permissions`, `hooks` and `env` in Claude Code's shape, with gnosh's own
+    keys beside them (`providers`, `models`, `hosts`, `options`), in
+    camelCase as Claude Code's settings are. Not YAML: Go has no YAML reader
+    in its standard library, so it would mean either a dependency (against
+    decision 1 of ARCHITECTURE.md) or a hand-made reader of a format with
+    many surprises; JSON is in the standard library and is what Jae already
+    edits for Claude Code. The `gnoshrc` line language, the reading of the
+    earlier program's files, and every name taken from it go. This replaces
+    items 10 (first point) and 16 above. Jae's three existing files are
+    converted for him by hand at switch-over; gnosh ships no converter.
+18. **The licence** is the GNO Network General Public License, latest
+    version, with the Strong Attribution terms. Jae: "GNO Network GPL latest
+    with strong attribution". The latest on that day is version 6 of 25
+    November 2025, checked against gno's own repository. `LICENSE.md` holds
+    it with the Additional Terms as Jae set them on 29 October 2026.
+19. **`-y` is not refused for root.** Jae: "-y yolo lol, sure". Claude Code
+    refuses to skip permissions as root; gnosh does not, because Jae runs as
+    root on his machines.

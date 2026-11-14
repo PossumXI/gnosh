@@ -21,6 +21,13 @@ Set: the build runs as parallel agents, starting at once; the language is Go;
 the three things that matter are the GnoVM integration, `mem`, and being like
 Claude Code.
 
+13 November 2026, on the three things Claude had left for him:
+
+> "own syntax". i don't know anything there, yaml? license: GNO Network GPL latest with strong attribution; -y yolo lol, sure, not sure what you mean by eyes on the screen.
+
+Set: gnosh's config is its own (Claude chose JSON with comments and said
+why); the licence; `-y` works as root.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

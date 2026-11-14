@@ -37,9 +37,9 @@ Every carried file keeps the path it had.
 | `internal/gnovm/klashlibs/klash/bptree/v0/`: gno's B+tree package, with its LICENSE.md and SOURCE | 5 | 64,230 | 5 third-party |
 | `internal/gnovm/stdlibs/`: gno's standard library, with its LICENSE.md, LICENSE-GO and VERSION | 163 | 1,499,963 | 163 third-party |
 | `internal/gnovm/testdata/`: mem's scenarios, goldens and upgrade fixtures | 91 | 360,974 | 91 carried |
-| `internal/gnovm/`: the GnoVM machines and mem: the package's own files, DESIGN.md and LICENSE.md | 80 | 934,405 | 72 carried, 8 carried with changes |
+| `internal/gnovm/`: the GnoVM machines and mem: the package's own files, DESIGN.md and LICENSE.md | 80 | 934,405 | 71 carried, 9 carried with changes |
 | `internal/swarm/cmd/swarmdemo/`: the swarm demo | 3 | 41,115 | 2 carried, 1 carried with changes |
-| **all** | **373** | **3,272,233** | 195 carried (1,468,799 bytes), 10 carried with changes (239,241 bytes), 168 third-party (1,564,193 bytes) |
+| **all** | **373** | **3,272,233** | 194 carried (1,423,956 bytes), 11 carried with changes (284,084 bytes), 168 third-party (1,564,193 bytes) |
 
 <!-- carried-summary:end -->
 
@@ -120,7 +120,7 @@ give.
 | `internal/gnochain/signer.go` | `internal/gnochain/signer.go` | carried | 6,070 | 0.0% | 0 | `5dd9af83f96aaadd92297e708db30545790b6c6283a0dba151fb78e14f741861` | nothing |
 | `internal/gnochain/swarm_test.go` | `internal/gnochain/swarm_test.go` | carried | 6,730 | 3.8% | 0 | `4e44d17427202df30d1005b797e6bd352f8b031bcd7c68afc72ee04fbd8bd8ef` | nothing |
 | `internal/gnovm/DESIGN.md` | `internal/gnovm/DESIGN.md` | carried | 67,226 | 0.0% | 0 | `b1afaacb1d96ce3a734c9e504a24192a4aacda27f49776016a2c447fc8ebd4a4` | nothing |
-| `internal/gnovm/LICENSE.md` | `internal/gnovm/LICENSE.md` | carried | 44,843 | 0.0% | 0 | `f8cc447c85ad90c04b976c8c3f2c4a8062c0cdabe826003a89296fd2f61c548f` | nothing |
+| `internal/gnovm/LICENSE.md` | `internal/gnovm/LICENSE.md` | carried with changes | 44,843 | 0.0% | 0 | `f8cc447c85ad90c04b976c8c3f2c4a8062c0cdabe826003a89296fd2f61c548f` | the notes under "Known license interactions" (not part of the licence terms) rewritten on 13 November 2026 to say what is true of the rewritten gnosh; the terms are untouched |
 | `internal/gnovm/base.go` | `internal/gnovm/base.go` | carried | 6,250 | 0.0% | 0 | `157faf3eacf435f88d22ddb104ed3527fe057edf7e91ba3670912f8edb030986` | nothing |
 | `internal/gnovm/budget.go` | `internal/gnovm/budget.go` | carried | 5,727 | 0.0% | 0 | `ecfef5ed402a750c6c84a6ecdd0466e02ac2f3e37a8c82127670e1a4a83f2a61` | nothing |
 | `internal/gnovm/client.go` | `internal/gnovm/client.go` | carried with changes | 24,348 | 0.7% | 0 | `c552bd0ae975c8f2f97190cc865a59da36d9dcec6ca6909144e3bcd475f4649f` | import path, 1 line: the earlier harness's `internal/lock` is now `internal/filelock`, imported under the name `lock` so no call changed |
@@ -481,7 +481,8 @@ give.
 
 ## The changes to carried files
 
-Ten files were changed, one line in each, and no line was added or removed.
+Ten files were changed by one line each, with no line added or removed, and
+one more, the GnoVM subsystem's licence file, had its closing notes rewritten.
 The table says which; this is why.
 
 - **The module path.** The earlier tree's module was still named
@@ -491,6 +492,17 @@ The table says which; this is why.
   `internal/swarm/cmd/swarmdemo/main.go`, and the path under which
   `internal/gnochain/msg.go` registers its own package with amino (amino
   panics at start-up when a type's package path is not the one registered).
+- **The licence file's notes.** `internal/gnovm/LICENSE.md` ends its
+  Additional Terms with a section, "Known license interactions", that the
+  file itself says is not part of the licence terms. As carried it said that
+  most of gnosh was derived from Charm's Crush under the Functional Source
+  License, and listed the ways out of that conflict. That is no longer true
+  of this repository. On 13 November 2026 Jae Kwon, the Licensor the file
+  names, gave the licence of the whole rewritten program ("GNO Network GPL
+  latest with strong attribution"), and those notes were rewritten to say
+  what is so now. The licence terms before and after them are byte for byte
+  the staged original's; `tools/audit/carried.py` holds both versions of the
+  notes and checks it.
 - **The file-lock helper.** Six files of `internal/gnovm` imported the
   earlier harness's `internal/lock`, which was not staged. They now import
   `internal/filelock` (below) under the name `lock`, so every call
@@ -505,10 +517,6 @@ The table says which; this is why.
 Words about the earlier harness that were left as they are, because they are
 history, or names the code still reads, or not the porter's to change:
 
-- `internal/gnovm/LICENSE.md`, under "Known license interactions", says that
-  most of gnosh is derived from Charm's Crush and is under the Functional
-  Source License. That is no longer true of this repository. It is a licence
-  file and was carried unchanged; the correction is its Licensor's to make.
 - `internal/gnovm/DESIGN.md` and `GNOMEM.md` describe the subsystem as it
   was built inside the earlier harness (its tools, its `/mem` and `/goal`
   commands, a context file named `CRUSH.md`, `testenv`).
