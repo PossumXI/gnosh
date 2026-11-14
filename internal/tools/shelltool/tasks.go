@@ -262,7 +262,8 @@ func (t outputTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 			meta[metaSignal] = signalName(e.sig)
 		}
 	}
-	text := compose("", body, []string{j.status(e, m.opt.Now())})
+	m.where(meta, j.host, j.dir)
+	text := m.stamp(j.host, j.dir) + "\n" + compose("", body, []string{j.status(e, m.opt.Now())}, true)
 	return core.ToolResult{Content: []core.Block{core.Text(text)}, Meta: meta}, nil
 }
 

@@ -51,6 +51,17 @@ How long it may run:
 	}
 	fmt.Fprintf(&b, "\n- Do not keep a process alive by ending the command with &. It stays tied to this call's output and is reported as left running; %s is the way.", argBackground)
 
+	// What is said of other machines is the same whether or not any is
+	// declared, so that the tools a model is sent are the same bytes in
+	// every session. Which machines there are goes with the first prompt.
+	fmt.Fprintf(&b, `
+
+On another machine:
+- With %[1]s set to the name of a declared machine, ssh runs the command there, in that account's login shell and home directory. The machines declared, if any, are listed with your first prompt. Without %[1]s the command runs here.
+- Nothing carries over there, not even the directory: put cd and the work in one command. There is no %[2]s there either; a command is stopped when its time is up, and a program there that prints nothing may outlive the stop.
+- Every result begins with a line that says where it ran: <host>name (account@address)</host><cwd>directory</cwd>. A path belongs to the machine it was seen on.
+- With machines declared, never type ssh or scp in a command: it is refused.`, argHost, argBackground)
+
 	timeout := fmt.Sprintf("How long the command may run, in milliseconds. Default %d, at most %d.", o.DefaultTimeout.Milliseconds(), o.MaxTimeout.Milliseconds())
 	return core.ToolSpec{
 		Name:        BashName,
@@ -60,6 +71,7 @@ How long it may run:
 			param{argDescription, "string", "What the command does, in a few plain words, for the person watching."},
 			param{argTimeout, "number", timeout},
 			param{argBackground, "boolean", "Set to true to start the command in the background and return at once."},
+			param{argHost, "string", "The name of a declared machine to run the command on. Leave it out to run on this machine."},
 		),
 	}
 }

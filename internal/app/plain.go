@@ -19,6 +19,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/diff"
 	"github.com/gnosh-ai/gnosh/internal/text"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // plain is the interactive session at its plainest: it reads a line at a
@@ -965,7 +966,11 @@ func (f *plain) Event(ev any) {
 		f.say("%s%s", markResult, visible(resultLine(ev.Result, ev.Denied, ev.Interrupted)))
 		if !ev.Denied && !ev.Result.IsError {
 			if _, isCommand := metaInt(ev.Result.Meta, "exitCode"); isCommand {
-				for _, line := range lastLines(core.TextOf(ev.Result.Content), 3) {
+				// The line a command's result begins with, which says
+				// where it ran, is for the model: the call's own line
+				// above has named the machine.
+				_, output := shelltool.SplitStamp(core.TextOf(ev.Result.Content))
+				for _, line := range lastLines(output, 3) {
 					f.say("    %s", visible(line))
 				}
 			}

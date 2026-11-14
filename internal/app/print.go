@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -64,6 +65,16 @@ type printer struct {
 	msgSeq  int
 
 	capped bool
+	// rounds counts the run's own replies as they are reported, for a
+	// result that has to be written before the turn has said how it
+	// ended.
+	rounds int
+	// signal is the signal that stopped the run, and inTools says a tool
+	// call was running when it came.
+	signal  os.Signal
+	inTools bool
+	// finished says the run's result has been written: nothing follows it.
+	finished bool
 	// toldUnattended says the person has been told why calls are refused.
 	toldUnattended bool
 	// noArgs are the tools whose arguments and results --verbose does not
@@ -124,10 +135,9 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 			return cli.ExitFailure
 		}
 	}
-	res, sig := f.await(ctx, c, id)
+	res, sig, st := f.await(ctx, c, id)
 	if sig != nil {
-		// Stopped by a signal: no result is printed.
-		return signalExit(sig)
+		return f.stoppedBySignal(c, id, sig, st)
 	}
 	if ctx.Err() != nil {
 		return cli.ExitFailure
@@ -250,34 +260,95 @@ func (p *program) readPiped(ctx context.Context, havePrompt, quiet bool) (string
 }
 
 // await waits for the turn that answers the prompt to end, or for the
-// prompt to come back unsent. A signal stops the turn and is returned:
-// the run then exits without printing a result.
-func (f *printer) await(ctx context.Context, c Controls, id string) (agent.TurnResult, os.Signal) {
-	var sig os.Signal
+// prompt to come back unsent. A signal stops the turn and is returned,
+// with what the session was doing when it came.
+func (f *printer) await(ctx context.Context, c Controls, id string) (agent.TurnResult, os.Signal, agent.State) {
 	signals := c.Signals()
 	for {
 		select {
 		case res := <-f.results:
 			if slices.Contains(res.Prompts, id) {
-				return res, sig
+				return res, nil, agent.State{}
 			}
 		case s := <-signals:
-			// The run is over: no result is printed after a signal, so
-			// there is nothing to wait for here. The turn is stopped, and
-			// the rest (its commands, the SessionEnd hooks, the session's
-			// file) is the shutdown's, which a second signal cuts short.
+			// The run is over. The turn is stopped, and the rest (its
+			// commands, the SessionEnd hooks, the session's file) is the
+			// shutdown's, which a second signal cuts short.
+			st := c.State()
 			c.Interrupt()
-			return agent.TurnResult{Reason: agent.EndStopped}, s
+			return agent.TurnResult{Reason: agent.EndStopped}, s, st
 		case <-ctx.Done():
-			return agent.TurnResult{Reason: agent.EndStopped}, sig
+			return agent.TurnResult{Reason: agent.EndStopped}, nil, agent.State{}
 		}
 	}
+}
+
+// signalWait is how long a run that a signal stopped gives its turn to say
+// how far it had come, before the result is written without that. Stopping
+// a request or a command takes a moment; whoever sent the signal may
+// follow it with a kill, so the result is not held back for long.
+const signalWait = 2 * time.Second
+
+// stoppedBySignal ends a run that a signal stopped, and returns its exit
+// code: 130 after SIGINT, 143 after SIGTERM. The text format prints
+// nothing more. The two JSON formats print the result object, so that a
+// script that stops a run still learns what the run was: how many replies
+// the model had written, what it had cost, and that it was stopped and by
+// what.
+//
+// From the moment the signal is acted on, the program is shutting down: a
+// second signal ends the process at once, whether or not the result has
+// been written.
+func (f *printer) stoppedBySignal(c Controls, id string, sig os.Signal, st agent.State) int {
+	code := signalExit(sig)
+	if f.format == cli.FormatText {
+		return code
+	}
+	f.p.beginClosing(code)
+	res := agent.TurnResult{Reason: agent.EndStopped}
+	wait := time.NewTimer(signalWait)
+	defer wait.Stop()
+	for waiting := true; waiting; {
+		select {
+		case r := <-f.results:
+			if slices.Contains(r.Prompts, id) {
+				res, waiting = r, false
+			}
+		case <-wait.C:
+			waiting = false
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.signal, f.inTools = sig, len(st.Running) > 0
+	obj := f.result(c, res)
+	if f.format == cli.FormatStreamJSON {
+		f.init()
+	}
+	f.encode(obj)
+	f.finished = true
+	return code
+}
+
+// signalWord names a signal the way a result's message writes it.
+func signalWord(sig os.Signal) string {
+	switch sig {
+	case os.Interrupt:
+		return "an interrupt (SIGINT)"
+	case syscall.SIGTERM:
+		return "SIGTERM"
+	}
+	return "a signal (" + sig.String() + ")"
 }
 
 // Event takes in what happens in the session.
 func (f *printer) Event(ev any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.finished {
+		// The result is the last thing a run prints.
+		return
+	}
 	switch ev := ev.(type) {
 	case *agent.TurnStartEvent:
 		f.init()
@@ -290,6 +361,7 @@ func (f *printer) Event(ev any) {
 			return
 		}
 		if ev.Agent == "" {
+			f.rounds++
 			f.endReply()
 		}
 		f.replyLines(ev)
@@ -864,6 +936,19 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 		obj.Subtype, obj.IsError, obj.TerminalReason, obj.Errors = subtype, true, reason, errs
 	}
 	switch {
+	case f.signal != nil:
+		if res.Turn == "" {
+			// The turn had not said how it ended when this was written:
+			// the counts are the ones seen so far.
+			obj.NumTurns = f.rounds
+			totals := c.Usage()
+			obj.Usage, obj.DurationAPIMS = usageOf(totals.Main), totals.APITime.Milliseconds()
+		}
+		reason := "aborted_streaming"
+		if f.inTools {
+			reason = "aborted_tools"
+		}
+		fail("error_during_execution", reason, fmt.Sprintf("the run was stopped by %s after %d turns of the model", signalWord(f.signal), obj.NumTurns))
 	case f.capped:
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped:

@@ -256,14 +256,11 @@ func (b *builder) setSlot(slot string, ch slotChange, o Origin) {
 	}
 }
 
-// addHost declares a machine, or replaces the one of the same name.
+// addHost takes in the declaration of a machine. Every declaration is kept,
+// in the order it was made: what is wrong with them, a name declared twice
+// among it, is found on the hosts as they stand when every file has been
+// read (checkHosts), so that it is found whichever file said it.
 func (b *builder) addHost(h Host) {
-	for i := range b.hosts {
-		if b.hosts[i].Name == h.Name {
-			b.hosts[i] = h
-			return
-		}
-	}
 	b.hosts = append(b.hosts, h)
 }
 

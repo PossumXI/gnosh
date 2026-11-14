@@ -14,6 +14,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // slashSet is the registry of a session's slash commands: gnosh's own, and
@@ -177,9 +178,15 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number]", Summary: "Take the conversation back to before one of your prompts. Files stay as they are.", Run: l.slashRewind},
-		{Name: "doctor", Summary: "Check that a turn can run: config, providers, models, hooks.", InRun: true,
+		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {
-				findings := append(l.p.doctor(ctx, l.cfg, l.st.problems), defFindings(l.cfg, l.st.trusted)...)
+				// The declared hosts are listed, and reached only when the
+				// person says so.
+				tryHosts := strings.TrimSpace(c.Args) == "hosts"
+				if !tryHosts && strings.TrimSpace(c.Args) != "" {
+					return fmt.Errorf("/doctor takes nothing after it, or the word hosts, which also logs in to each declared host; %q is neither", oneLine(c.Args, 80))
+				}
+				findings := append(l.p.doctor(ctx, l.cfg, l.st.problems, tryHosts), defFindings(l.cfg, l.st.trusted)...)
 				for _, f := range findings {
 					c.Say("%s", f.String())
 				}
@@ -485,6 +492,20 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		c.Say("small model  %s at %s (the short side jobs)", l.small.ref, l.small.model.Address)
 	}
 	c.Say("permissions  mode %s", l.engine.Mode())
+	// The machines commands run on: this one as results name it, and the
+	// declared hosts.
+	c.Say("machine      %s (%s)", shelltool.LocalName, firstOf(l.p.whoAndWhere(), "its name is not known"))
+	for i, h := range l.cfg.Hosts {
+		label := "hosts"
+		if i > 0 {
+			label = ""
+		}
+		about := ""
+		if h.Description != "" {
+			about = ": " + h.Description
+		}
+		c.Say("%-12s %s (%s)%s", label, h.Name, h.SSH, about)
+	}
 
 	cs := a.Context()
 	if cs.Window > 0 {

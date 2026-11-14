@@ -117,6 +117,7 @@ func TestHostDirective(t *testing.T) {
 host add render --ssh root@203.0.113.10 --description "the render box"
 host add web --ssh deploy@203.0.113.11
 host add alias --ssh my-alias
+host remove web
 host add web --ssh deploy@203.0.113.12
 host remove alias
 `))
@@ -282,6 +283,7 @@ option debug YES
 option data-directory .agent
 option attribution-trailer-style co-authored-by
 option attribution-generated-with true
+option memory-text full
 `))
 	o := cfg.Options
 	check := func(name string, got, want any) {
@@ -311,6 +313,7 @@ option attribution-generated-with true
 	check("skill-path", items(o.SkillPaths), []string{userDir + "/skills"})
 	check("disable-skill", items(o.DisabledSkills), []string{"pdf", "xlsx"})
 	check("initialize-as", o.InitializeAs.V, "GNOSH.md")
+	check("memory-text", o.MemoryText.V, "full")
 	check("metrics", o.Metrics, Value[bool]{V: true, Set: true, Origin: Origin{Layer: LayerUser, File: userRC, Line: 18}})
 	check("metrics-url", o.MetricsURL.V, "https://metrics.example.com/v1")
 	check("metrics-key", o.MetricsKey.V.Reveal(), "mk-0123456789abcdef")

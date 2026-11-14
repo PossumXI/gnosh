@@ -34,7 +34,7 @@ func (l Level) String() string {
 // Finding is one line of gnosh doctor's report.
 type Finding struct {
 	// Area is what was checked: config, providers, models, hooks, tools,
-	// trust or environment.
+	// hosts, trust or environment.
 	Area  string
 	Level Level
 	// Text is the finding, in one line.
@@ -75,6 +75,12 @@ type Probes struct {
 	LookPath func(name string) (string, error)
 	// Exists reports whether a file is there.
 	Exists func(path string) bool
+	// TryHost logs in to a declared host and runs nothing there. It
+	// returns the directory a command would start in, or, when a command
+	// could not be run there, why not in plain words. It reaches another
+	// machine, so it is given only when the person asked for the hosts to
+	// be tried; with nil, Doctor lists the hosts and reaches none of them.
+	TryHost func(ctx context.Context, h Host) (dir, problem string)
 }
 
 // CanRun reports whether the findings leave a turn able to run: none of
@@ -304,7 +310,35 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		}
 	}
 
-	// 6. Trust.
+	// 6. Hosts. A host that was not tried is never called fine: nothing
+	// reads as checked that was not.
+	sshMissing := false
+	if len(cfg.Hosts) > 0 && pr.LookPath != nil {
+		if _, err := pr.LookPath("ssh"); err != nil {
+			sshMissing = true
+		}
+	}
+	for _, h := range cfg.Hosts {
+		what := h.Name + " → " + h.SSH
+		if h.Description != "" {
+			what += " (" + h.Description + ")"
+		}
+		switch {
+		case sshMissing:
+			add("hosts", Note, "%s cannot be used: the program ssh is not installed (it was not found on the PATH), and it is what runs a command on another machine. (%s)", what, h.Origin)
+		case pr.TryHost == nil:
+			add("hosts", Note, "%s is declared (%s). It was not tried: gnosh doctor --hosts logs in to each host with ssh and runs nothing there.", what, h.Origin)
+		default:
+			dir, problem := pr.TryHost(ctx, h)
+			if problem != "" {
+				add("hosts", Note, "%s cannot be used right now: %s (%s)", what, strings.TrimRight(problem, ". ")+".", h.Origin)
+			} else {
+				add("hosts", Fine, "%s answers: a command there starts in %s. (%s)", what, firstNonEmpty(dir, "the account's home directory"), h.Origin)
+			}
+		}
+	}
+
+	// 7. Trust.
 	project := slices.ContainsFunc(cfg.Files, func(f File) bool { return f.Scope == "project" || f.Scope == "local" })
 	switch {
 	case !project:
@@ -325,7 +359,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		add("trust", Note, "this folder is not trusted, so %d of its settings are held: %s%s. To use them: gnosh trust, or --trust-folder for one run.", len(cfg.Held), list(some), more)
 	}
 
-	// 7. Environment.
+	// 8. Environment.
 	for _, p := range cfg.BadEnv {
 		add("environment", Note, "%s", p)
 	}
@@ -336,6 +370,14 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		out[i].Text = cfg.secrets.scrub(out[i].Text)
 	}
 	return out
+}
+
+// firstNonEmpty returns a, or b when a is empty.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // blocksWhat says what a hook that cannot run holds up, by its event.

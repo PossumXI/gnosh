@@ -18,6 +18,10 @@ type World struct {
 	Root, Home, Dir string
 	// Model is the scripted model server.
 	Model *Model
+	// PathFirst are directories that stand before the machine's own on
+	// the PATH gnosh is run with: where a test puts a stand-in for a
+	// program gnosh starts.
+	PathFirst []string
 
 	t testing.TB
 }
@@ -51,16 +55,82 @@ func (w *World) ConfigDir() string { return filepath.Join(w.Home, ".config", "gn
 func (w *World) DataDir() string { return filepath.Join(w.Home, ".local", "share", "gnosh") }
 
 // Env is the environment gnosh is run with: the home and XDG directories
-// of this world, the machine's PATH, and nothing else.
+// of this world, the machine's PATH with PathFirst before it, and nothing
+// else.
 func (w *World) Env() []string {
+	path := strings.Join(append(append([]string{}, w.PathFirst...), os.Getenv("PATH")), string(os.PathListSeparator))
 	return []string{
 		"HOME=" + w.Home,
 		"XDG_CONFIG_HOME=" + filepath.Join(w.Home, ".config"),
 		"XDG_DATA_HOME=" + filepath.Join(w.Home, ".local", "share"),
 		"XDG_CACHE_HOME=" + filepath.Join(w.Home, ".cache"),
 		"TMPDIR=" + filepath.Join(w.Root, "tmp"),
-		"PATH=" + os.Getenv("PATH"),
+		"PATH=" + path,
 		"LANG=C.UTF-8",
+	}
+}
+
+// FarMachine is a made-up machine for a world: a stand-in for ssh, first
+// on the world's PATH, that writes down which destination it was called
+// with and then runs the command it was given in a directory of its own,
+// as the login shell of another machine would, or fails as it was told to.
+// Nothing ever leaves this machine.
+type FarMachine struct {
+	// Home is the directory a command starts in on the made-up machine.
+	Home string
+
+	w   *World
+	dir string
+}
+
+// The stand-in. ssh hands the last of its arguments to the login shell of
+// the other machine; the destination is the argument after "--".
+const standInSSH = `dir=$(dirname "$0")
+dest= after=
+for arg in "$@"; do
+	if [ -n "$after" ] && [ -z "$dest" ]; then dest=$arg; fi
+	if [ "$arg" = "--" ]; then after=yes; fi
+	last=$arg
+done
+[ -n "$dest" ] || dest=$1
+echo "$dest" >> "$dir/calls"
+if [ -f "$dir/fail" ]; then
+	cat "$dir/fail" >&2
+	exit 255
+fi
+cd "$dir/home" || exit 255
+exec env -i PATH="$PATH" HOME="$dir/home" /bin/sh -c "$last"`
+
+// FarMachine sets the made-up machine up and returns it.
+func (w *World) FarMachine() *FarMachine {
+	w.t.Helper()
+	dir := filepath.Join(w.Root, "far")
+	f := &FarMachine{Home: filepath.Join(dir, "home"), w: w, dir: dir}
+	if err := os.MkdirAll(f.Home, 0o755); err != nil {
+		w.t.Fatal(err)
+	}
+	w.Script(filepath.Join(dir, "ssh"), standInSSH)
+	w.PathFirst = append(w.PathFirst, dir)
+	return f
+}
+
+// Calls returns the destinations the stand-in was called with, in order.
+func (f *FarMachine) Calls() []string {
+	data, _ := os.ReadFile(filepath.Join(f.dir, "calls"))
+	return strings.Fields(string(data))
+}
+
+// Fail makes every later call of the stand-in fail as ssh fails, saying
+// words on its standard error. Empty words make it work again.
+func (f *FarMachine) Fail(words string) {
+	f.w.t.Helper()
+	path := filepath.Join(f.dir, "fail")
+	if words == "" {
+		os.Remove(path)
+		return
+	}
+	if err := os.WriteFile(path, []byte(words+"\n"), 0o644); err != nil {
+		f.w.t.Fatal(err)
 	}
 }
 

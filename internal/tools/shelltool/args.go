@@ -19,19 +19,27 @@ type bashArgs struct {
 	background  bool          // start it and return at once
 	limit       time.Duration // how long it may run; 0 for no limit
 	asked       time.Duration // the timeout the model asked for, when that was more than it got
+	host        *Host         // the machine it is for; nil for this one
 }
 
 // summary is the one line that says what the call would do: the model's
-// own description, or failing that the command's first line.
+// own description, or failing that the command's first line. For a command
+// on another machine it names the machine first.
 func (a bashArgs) summary() string {
-	if s := oneLine(a.description, 200); s != "" {
-		return s
+	s := oneLine(a.description, 200)
+	if s == "" {
+		s = firstLine(a.command, 200)
 	}
-	return firstLine(a.command, 200)
+	if a.host != nil {
+		return "On " + a.host.Name + " (" + a.host.Target + "): " + s
+	}
+	return s
 }
 
 // bashArgs reads and checks the arguments of a Bash call. An error is
 // worded for the model: it is what Describe returns and what Run shows.
+// What was read before the error is returned beside it, so that a caller
+// can still say what the call was aimed at.
 func (m *Manager) bashArgs(raw json.RawMessage) (bashArgs, error) {
 	fields, err := objectFields(raw)
 	if err != nil {
@@ -58,6 +66,16 @@ func (m *Manager) bashArgs(raw json.RawMessage) (bashArgs, error) {
 	}
 	asked, err := millisField(fields, argTimeout)
 	if err != nil {
+		return a, err
+	}
+	name, _, err := stringField(fields, argHost)
+	if err != nil {
+		return a, err
+	}
+	if a.host, err = m.findHost(name); err != nil {
+		return a, err
+	}
+	if err := unknownArg(fields); err != nil {
 		return a, err
 	}
 

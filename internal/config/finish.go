@@ -95,6 +95,7 @@ func (ld *loader) finish() *Config {
 	cfg.Large, cfg.Small = b.large, b.small
 	cfg.Options = b.opts
 	cfg.Hosts = b.hosts
+	ld.probs.list = append(ld.probs.list, checkHosts(cfg.Hosts)...)
 	cfg.LSP = b.lsp
 
 	cfg.AllHooks = b.hooks

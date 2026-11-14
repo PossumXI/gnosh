@@ -10,12 +10,15 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/llm"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // doctor checks that a turn could run with this configuration, and returns
@@ -28,16 +31,56 @@ import (
 // exactly this and no more: one opens a connection and closes it, sending
 // nothing; the other sends one GET of the address's models list. No
 // request of doctor's names a model.
-func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []config.Problem) []config.Finding {
-	return config.Doctor(ctx, cfg, problems, config.Probes{
+//
+// The declared hosts are listed. They are logged in to, through ssh, only
+// when tryHosts says the person asked for that (gnosh doctor --hosts,
+// /doctor hosts): doctor reaches no other machine by itself.
+func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []config.Problem, tryHosts bool) []config.Finding {
+	probes := config.Probes{
 		Connect:    dialOnly,
 		ListModels: listModelNames,
-		LookPath:   exec.LookPath,
+		LookPath:   p.lookPath,
 		Exists: func(path string) bool {
 			_, err := os.Stat(path)
 			return err == nil
 		},
-	})
+	}
+	if tryHosts && cfg != nil && len(cfg.Hosts) > 0 {
+		// The same shell tool a session has, so that a host is tried
+		// exactly as a command for it would reach it.
+		shell := shelltool.New(shelltool.Options{
+			Environ: func() []string { return slices.Clone(p.o.Environ) },
+			Env:     cfg.CommandEnv(),
+			Now:     p.now,
+			Hosts:   shellHosts(cfg),
+			Local:   p.whoAndWhere(),
+		})
+		defer shell.Close()
+		probes.TryHost = func(ctx context.Context, h config.Host) (string, string) {
+			check := shell.TryHost(ctx, h.Name)
+			return check.Dir, check.Problem
+		}
+	}
+	return config.Doctor(ctx, cfg, problems, probes)
+}
+
+// lookPath finds a program by name on the PATH gnosh was started with,
+// which is the PATH the hooks and commands it starts are given. A name
+// with a slash in it is a path, and is looked at as it is.
+func (p *program) lookPath(name string) (string, error) {
+	if strings.ContainsRune(name, filepath.Separator) {
+		return exec.LookPath(name)
+	}
+	for _, dir := range filepath.SplitList(p.getenv("PATH")) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("%s is not on the PATH", name)
 }
 
 // listModelNames asks the server at e for its list of models, with one
@@ -122,7 +165,9 @@ func listModelNames(ctx context.Context, pc config.Provider, e config.Endpoint) 
 
 // doctorCommand is `gnosh doctor`: it checks that a turn could run here
 // and says what it found, one line each. It starts no session, sends no
-// prompt and asks nobody anything: the folder's own settings, and the
+// prompt and asks nobody anything. It lists the declared hosts, and with
+// --hosts it also logs in to each of them and runs nothing there; without
+// the flag it reaches no other machine. The folder's own settings, and the
 // sub-agent kinds and skills it defines, count when the folder is
 // recorded as trusted (gnosh trust) and are reported as held otherwise.
 // It says where each kind of sub-agent and each skill came from. It exits
@@ -132,7 +177,7 @@ func (p *program) doctorCommand(ctx context.Context, inv cli.Invocation) int {
 	if st == nil {
 		return code
 	}
-	findings := p.doctor(ctx, st.cfg, st.problems)
+	findings := p.doctor(ctx, st.cfg, st.problems, inv.Hosts)
 	if st.cfg != nil {
 		findings = append(findings, defFindings(st.cfg, st.trusted)...)
 	}

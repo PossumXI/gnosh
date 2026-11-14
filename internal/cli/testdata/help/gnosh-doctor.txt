@@ -11,6 +11,9 @@ Usage
   gnosh doctor [flags]
 
 Flags
+  --hosts
+      Also try each declared host: log in to it with ssh and run nothing
+      there. Without this, doctor reaches no other machine. (Not built yet.)
   --cwd <dir>
       Work in this folder instead of the current one.
   -D, --data-dir <dir>

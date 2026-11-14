@@ -21,6 +21,12 @@ type Manager struct {
 	opt   Options // with every default filled in
 	shell string  // the shell that runs commands
 
+	// The machines a call may name as its host, and this one as results
+	// write it.
+	hosts     map[string]*Host // the declared hosts by name
+	hostNames []string         // their names, in the order declared
+	local     string           // who and where this machine is: "dev@box"
+
 	// The two ways the manager touches other processes. They are fields so
 	// that a test can stand in for them.
 	signal func(pid int, sig syscall.Signal) error
@@ -94,15 +100,38 @@ func New(opts Options) *Manager {
 			m.shell = "/bin/bash"
 		}
 	}
+	m.local = m.opt.Local
+	if m.local == "" {
+		m.local = whoAndWhere()
+	}
+	m.hosts = make(map[string]*Host, len(m.opt.Hosts))
+	for _, h := range m.opt.Hosts {
+		// The name of this machine is never a host's, and a name stands
+		// for one machine: the config refuses both, and here the first
+		// declaration of a name is the one that counts.
+		if _, twice := m.hosts[h.Name]; h.Name == "" || h.Name == LocalName || twice {
+			continue
+		}
+		m.hosts[h.Name] = &h
+		m.hostNames = append(m.hostNames, h.Name)
+	}
 	m.notes = newNotifier(m.opt.OnEnd, &m.wg)
 	return m
+}
+
+// PersonsBash returns the Bash tool for a command the person types into the
+// session themselves. It runs the command exactly as Bash does, with the
+// same shell, limits and line at the head of the result, and without the
+// rules and notes that are there to steer a model: a person may type ssh.
+func (m *Manager) PersonsBash() core.Tool {
+	return bashTool{m: m, person: true}
 }
 
 // Tools returns the tools the manager offers a model: Bash, TaskOutput
 // (unless Options.NoOutputTool) and TaskStop. Each is also a
 // core.Describer.
 func (m *Manager) Tools() []core.Tool {
-	tools := []core.Tool{bashTool{m}}
+	tools := []core.Tool{bashTool{m: m}}
 	if !m.opt.NoOutputTool {
 		tools = append(tools, outputTool{m})
 	}
@@ -143,12 +172,14 @@ func (m *Manager) Stop(ctx context.Context, id string) (Task, error) {
 // Background moves the foreground command that the tool call callID is
 // waiting for to the background, where it keeps running; the call returns
 // at once with the command's task id. It is for the person's own controls.
-// It reports whether there was such a command to ask.
+// It reports whether there was such a command to ask. A command on another
+// machine is not one: it runs for as long as its call holds the connection,
+// and stays in the foreground.
 func (m *Manager) Background(callID string) bool {
 	m.mu.Lock()
 	j := m.calls[callID]
 	m.mu.Unlock()
-	if j == nil {
+	if j == nil || j.host != nil {
 		return false
 	}
 	select {

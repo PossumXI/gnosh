@@ -277,6 +277,9 @@ func Default() *Table {
 	// The flags of single commands.
 	// ------------------------------------------------------------------
 
+	doctorHosts := t.add(&flag{names: "--hosts", id: "doctor --hosts", pri: 1,
+		help: "Also try each declared host: log in to it with ssh and run nothing there. Without this, doctor reaches no other machine.",
+		set:  func(i *Invocation, _ flagValue) { i.Hosts = true }})
 	trustList := t.add(&flag{names: "--list", id: "trust --list", pri: 1,
 		help: "List the trusted folders.",
 		set:  func(i *Invocation, _ flagValue) { i.List = true }})
@@ -348,7 +351,7 @@ func Default() *Table {
 		about:    "Print mode: no interface, one answer, then exit. The words after run that are not flags are the prompt, and text piped in goes before it. Without -y, a permission mode or allow rules, whatever would have asked for permission is refused."})
 
 	t.command(root, &command{name: "doctor", cmd: CmdDoctor, pri: 1,
-		flags:   []*flag{cwd, dataDir, help},
+		flags:   []*flag{doctorHosts, cwd, dataDir, help},
 		summary: "Check that a turn could run here.",
 		about:   "Reads the config for this folder and prints one line per check. Exits 1 when a turn could not run. Starts no model."})
 

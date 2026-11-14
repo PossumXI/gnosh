@@ -19,6 +19,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
@@ -112,8 +113,20 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 
 	// 2. The rules and the mode, on the final arguments. A relative path
 	// in a command is read from where the session's shell now is.
+	//
+	// The engine takes a shell call that has a host argument for a command
+	// on another machine, which always asks. A call that names this
+	// machine as its host runs here, so the engine is shown it as the
+	// call for this machine that it is: without the argument. The hooks
+	// and the tool are given the arguments as the model wrote them.
+	judged := call
+	if call.Name == shelltool.BashName {
+		if here, ok := shelltool.WithoutLocalHost(call.Input); ok {
+			judged.Input = here
+		}
+	}
 	l.engine.SetCwd(cwd)
-	d := l.engine.Decide(call.Name, call, action).WithHook(verdict, hookReason)
+	d := l.engine.Decide(call.Name, judged, action).WithHook(verdict, hookReason)
 	confirm := action.Confirm && cannot == nil
 	if confirm {
 		// Asked every time: a kept approval would be the rule that this

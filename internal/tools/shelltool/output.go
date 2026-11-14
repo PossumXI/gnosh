@@ -13,6 +13,10 @@ import (
 type output struct {
 	path string // the spool file
 	max  int64  // the most the spool file may hold; negative for no limit
+	// where is added after the spool file's path wherever the model is
+	// told of it: " on this machine", for the output of a command that ran
+	// on another one.
+	where string
 
 	mu      sync.Mutex
 	cap     *capture
@@ -89,7 +93,7 @@ func (o *output) end(limit int) string {
 // gap makes the line that stands for the output left out of a view. It
 // must be called with mu held.
 func (o *output) gap(lines int64) string {
-	return gapLine(lines, o.path, o.spooled, o.cap.total)
+	return gapLine(lines, o.path+o.where, o.spooled, o.cap.total)
 }
 
 // gapLine makes the line that stands for output left out of a view: how

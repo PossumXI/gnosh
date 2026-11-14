@@ -170,6 +170,18 @@
 // folder is trusted: a deny rule in a file that could not be read would
 // not be in force.
 //
+// # Hosts
+//
+// A host is another machine the model may run commands on: a name, the
+// destination ssh is given, and what the person wrote about it. The
+// declarations are checked as plain values, once every file has been read
+// (checkHosts), so that the same mistakes are found whichever file, in
+// whichever format, made the declaration: a name that is this machine's
+// own ("local"), a name declared twice, a destination that is missing or
+// is not user@address or one word ssh's own configuration can know. Each
+// is a Problem that names the host and the place that declared it, and
+// like every other mistake it stops startup.
+//
 // # Secrets
 //
 // A key, a header value, a variable's value and a password inside an
@@ -182,7 +194,7 @@
 // The Config is plain data. Each part of gnosh is handed what it needs:
 // the provider client gets a Provider's Wire, an Endpoint's URL and
 // Timeouts, the key, the headers and ExtraBody; the permission package gets
-// Permissions; the hook runner gets Hooks; the shell tool gets CommandEnv
-// and Limits; the package that reads instruction files gets Context. Load
-// reads none of those files and starts nothing.
+// Permissions; the hook runner gets Hooks; the shell tool gets CommandEnv,
+// Limits and Hosts; the package that reads instruction files gets Context.
+// Load reads none of those files and starts nothing.
 package config

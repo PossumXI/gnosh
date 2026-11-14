@@ -27,20 +27,33 @@ const (
 	argDescription = "description"       // Bash: what the command does, in a few plain words
 	argTimeout     = "timeout"           // Bash: milliseconds the command may run
 	argBackground  = "run_in_background" // Bash: start it and return at once
+	argHost        = "host"              // Bash: the declared machine to run the command on; left out, this one
 	argTaskID      = "task_id"           // TaskOutput, TaskStop: the id Bash gave a background command
 	argTaskIDOld   = "shell_id"          // the same, as Claude Code spelled it before; read but not advertised
 	argFilter      = "filter"            // TaskOutput: a regular expression that picks lines
 )
 
+// argNoSandbox is an argument of Claude Code's Bash that a model trained on
+// it may send. gnosh has no sandbox to leave, so the argument changes
+// nothing: it is taken and passed over, and is not advertised.
+const argNoSandbox = "dangerouslyDisableSandbox"
+
+// LocalName is the name this machine goes by wherever a machine is named:
+// in the line a shell result begins with, and as the host argument of a
+// call that means here. No declared host may have it.
+const LocalName = "local"
+
 // The keys of ToolResult.Meta. Where Claude Code's structured Bash result
 // has a field for the same fact, the key is that field's name.
 const (
-	metaExitCode       = "exitCode"                 // int: the shell's exit code; 128+n when signal n killed it; -1 when not known
+	metaHost           = "host"                     // string: the machine the command was for: LocalName, or a declared host's name
+	metaMachine        = "machine"                  // string: who and where that is: user@name for this machine, the ssh destination for a host
+	metaExitCode       = "exitCode"                 // int: the shell's exit code; 128+n when signal n killed it; -1 when not known; absent for a command on a host that ssh never started, lost, or was stopped with
 	metaSignal         = "signal"                   // string: the signal that killed the shell, such as "SIGKILL"
 	metaReason         = "reason"                   // string: one of the Reason constants
 	metaInterrupted    = "interrupted"              // bool: stopped because the call was cancelled or the session closed
 	metaDuration       = "durationMs"               // int64: how long the command ran
-	metaDir            = "cwd"                      // string: the directory the command ran in
+	metaDir            = "cwd"                      // string: the directory the command started in, on the machine it ran on; absent when a host never said
 	metaOutputBytes    = "outputBytes"              // int64: how much the command printed in all
 	metaTruncated      = "truncated"                // bool: the model was shown less than all of the output
 	metaOutputFile     = "persistedOutputPath"      // string: the file that holds the output
@@ -74,4 +87,12 @@ const (
 	ReasonClosed = "closed"
 	// ReasonOutputLimit: it printed more than Options.MaxOutputBytes.
 	ReasonOutputLimit = "output_limit"
+	// ReasonNoConnection: the command was for another machine and never
+	// started there, because ssh could not connect or log in. It appears
+	// in ToolResult.Meta only.
+	ReasonNoConnection = "no_connection"
+	// ReasonConnectionLost: the connection to the other machine broke
+	// while the command ran there, so how the command ended is not known.
+	// It appears in ToolResult.Meta only.
+	ReasonConnectionLost = "connection_lost"
 )

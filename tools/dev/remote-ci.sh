@@ -59,7 +59,7 @@ run="$run && go build ./... && go vet ./..."
 if [ "$gnovm" = 1 ]; then
 	run="$run && go test -count=1 -timeout 60m $flags ./..."
 else
-	run="$run && go test -count=1 $flags \$(go list ./... | grep -v '/internal/gnovm\$')"
+	run="$run && go test -count=1 -timeout 30m $flags \$(go list ./... | grep -v '/internal/gnovm\$')"
 fi
 
 # shellcheck disable=SC2086,SC2029

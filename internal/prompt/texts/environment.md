@@ -12,6 +12,6 @@ Where this session runs, as gnosh found it when the session began (this is not k
 {{status}}]][[{{unread?}}
 - Git status was not read.]][[ The reason: {{why}}.]][[
 - Added directories you may also read: {{dirs}}]][[
-- Other machines you may run commands on, by naming one as `host` in a Bash call (never ssh there yourself):
+- Other machines you may run commands on, by naming one as `host` in a Bash call (never with ssh or scp in a command):
 {{hosts}}
   A path belongs to the machine it was seen on, and the file tools reach only this machine.]]

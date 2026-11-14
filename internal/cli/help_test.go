@@ -240,7 +240,7 @@ func TestHelpMarksWhatIsNotBuilt(t *testing.T) {
 		t.Errorf("the help for gnosh session does not say none of its commands is built:\n%s", group)
 	}
 
-	for _, name := range []string{"--fork-session", "--output-format=json", "--output-format=stream-json", "doctor", "session list"} {
+	for _, name := range []string{"--fork-session", "--output-format=json", "--output-format=stream-json", "doctor", "doctor --hosts", "session list"} {
 		if err := tab.SetStatus(name, Built); err != nil {
 			t.Fatal(err)
 		}

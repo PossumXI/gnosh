@@ -12,20 +12,33 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
 
-// bashTool is the Bash tool: it runs one shell command.
-type bashTool struct{ m *Manager }
+// bashTool is the Bash tool: it runs one shell command, on this machine or
+// on the declared host the call names.
+type bashTool struct {
+	m *Manager
+	// person says the commands are the person's own, typed into the
+	// session: the rules and notes that steer a model are left out.
+	person bool
+}
 
 // Spec says what the model is told about the tool.
 func (t bashTool) Spec() core.ToolSpec { return t.m.bashSpec() }
 
 // Describe says what a call would run, for permission rules and for the
-// person who may be asked. Its error is the same refusal Run would give.
+// person who may be asked. Its error is the same refusal Run would give,
+// and beside it the Action still names the command, as far as it could be
+// read. A call for another machine carries that machine's name in its
+// host argument, which is where the permission rules read it, and in the
+// Action's summary, which is what a person is shown.
 func (t bashTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
 	a, err := t.m.bashArgs(call.Input)
-	if err != nil {
+	if err == nil {
+		err = t.m.rules(a, env, t.person)
+	}
+	if a.command == "" {
 		return core.Action{}, err
 	}
-	return core.Action{Kind: core.ActionExecute, Command: a.command, Summary: a.summary()}, nil
+	return core.Action{Kind: core.ActionExecute, Command: a.command, Summary: a.summary()}, err
 }
 
 // Run runs the command. In the foreground it returns when the command has
@@ -34,6 +47,9 @@ func (t bashTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, 
 func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
 	m := t.m
 	a, err := m.bashArgs(call.Input)
+	if err == nil {
+		err = m.rules(a, env, t.person)
+	}
 	if err != nil {
 		return core.ErrorResult(err.Error()), nil
 	}
@@ -60,7 +76,7 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	if outcome != attendEnded {
 		return m.movedResult(j, a, outcome == attendTimedOut), nil
 	}
-	return m.finishedResult(j, a, env), nil
+	return m.finishedResult(j, a, env, t.person), nil
 }
 
 // start starts a command. A refusal is for the model; any other error is
@@ -69,11 +85,19 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 	if st, err := os.Stat(env.Cwd); err != nil || !st.IsDir() {
 		return nil, refusal(fmt.Sprintf("The command was not run: the working directory %s is not there any more. Nothing can run until it exists again.", env.Cwd))
 	}
+	ssh := ""
+	if a.host != nil {
+		var err error
+		if ssh, err = m.sshProgram(a.host); err != nil {
+			return nil, err
+		}
+	}
 	dir, err := m.spoolDir()
 	if err != nil {
 		return nil, err
 	}
 	j := newJob(m, a, env.Cwd)
+	j.ssh = ssh
 	name, err := m.admit(j, a.background, callID)
 	if err != nil {
 		return nil, err
@@ -95,11 +119,29 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 }
 
 // finishedResult is the result of a foreground command that has ended.
-func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv) core.ToolResult {
+// person says the command was the person's own, which gets no notes that
+// are there to steer a model.
+func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person bool) core.ToolResult {
 	e := j.ending()
 	failed := e.failed()
+
+	// For a command on another machine: whether it started there, and
+	// whether the exit code is the command's own. ssh passes the command's
+	// exit code on only when the command ended by itself over a connection
+	// that held; what ssh ends with when it is stopped, or when it fails,
+	// says nothing of the command.
+	var far farEnd
+	dir, own, shell := j.dir, true, "the shell"
+	if j.host != nil {
+		far = j.farEnd(e)
+		dir = far.dir
+		failed = failed || far.unsure
+		own = e.reason == endExited && far.reason == ""
+		shell = "the ssh on this machine"
+	}
+
 	meaning := ""
-	if e.reason == endExited && e.code == 1 {
+	if e.reason == endExited && e.code == 1 && own {
 		if meaning = harmlessExit(a.command); meaning != "" {
 			failed = false
 		}
@@ -113,19 +155,24 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv) core.Too
 	took := e.at.Sub(j.started)
 
 	meta := map[string]any{
-		metaExitCode:    e.code,
 		metaReason:      e.reason.String(),
 		metaInterrupted: e.reason == endCancelled || e.reason == endClosed,
 		metaDuration:    took.Milliseconds(),
-		metaDir:         j.dir,
 		metaOutputBytes: total,
 		metaTruncated:   cut,
+	}
+	m.where(meta, j.host, dir)
+	if own {
+		meta[metaExitCode] = e.code
+	}
+	if far.reason != "" {
+		meta[metaReason] = far.reason
 	}
 	res := core.ToolResult{IsError: failed, Meta: meta}
 
 	// What happened to the command, when it did not simply end: this goes
 	// above the output.
-	headline := ""
+	headline := far.headline
 	switch e.reason {
 	case endTimeout:
 		headline = "timed out after " + seconds(e.limit) + " and was stopped; the output so far is below"
@@ -148,20 +195,28 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv) core.Too
 	var notes []string
 	switch {
 	case !e.reaped:
-		notes = append(notes, fmt.Sprintf("the shell (pid %d) had not ended when this was written", j.pid))
+		notes = append(notes, fmt.Sprintf("%s (pid %d) had not ended when this was written", shell, j.pid))
+	case !own:
+		// How ssh ended is not how the command ended.
 	case e.waitErr != nil:
 		notes = append(notes, fmt.Sprintf("the exit status could not be read: %v", e.waitErr))
 	case e.sig != 0 && e.reason == endExited:
-		notes = append(notes, fmt.Sprintf("the shell was killed by %s (%s)", signalName(e.sig), e.sig))
+		notes = append(notes, fmt.Sprintf("%s was killed by %s (%s)", shell, signalName(e.sig), e.sig))
 		meta[metaSignal] = signalName(e.sig)
 	case e.sig != 0:
 		meta[metaSignal] = signalName(e.sig)
 	case meaning != "":
 		notes = append(notes, "exit code 1: "+meaning)
 		meta[metaExitMeaning] = meaning
+	case e.code == 255 && j.host != nil:
+		notes = append(notes, "exit code 255 (the command's own, as far as ssh said; it is also what ssh ends with when a connection breaks and ssh is set to say nothing)")
 	case e.code != 0:
 		notes = append(notes, fmt.Sprintf("exit code %d", e.code))
 	}
+	if !person {
+		notes = append(notes, m.hints(a, e, body, own && !far.unsure && e.reaped && e.sig == 0)...)
+	}
+	notes = append(notes, far.notes...)
 	if len(e.alive) > 0 {
 		notes = append(notes, "could not stop: "+describeProcs(e.alive)+"; they are still running")
 	}
@@ -182,9 +237,11 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv) core.Too
 		notes = append(notes, fmt.Sprintf("the output file stopped at %s: %v", byteSize(spooled), spoolErr))
 	}
 
-	// Where the session is now.
+	// Where the session is now. A command on another machine never moves
+	// it: a directory there is not a directory here.
 	ownExit := e.reason == endExited && e.reaped && e.sig == 0
 	switch where := place(e.finalDir, env); {
+	case j.host != nil:
 	case ownExit && e.finalDir == "":
 		notes = append(notes, "the shell did not say where it ended (the command replaced it with exec, or set an EXIT trap of its own), so the working directory is still "+env.Cwd)
 	case ownExit && where.to != "":
@@ -206,10 +263,23 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv) core.Too
 		os.Remove(j.out.path)
 	}
 
-	text := compose(headline, body, notes)
-	res.Content = []core.Block{core.Text(text)}
+	// A command that never started has no output to speak of.
+	text := compose(headline, body, notes, far.reason != ReasonNoConnection)
+	res.Content = []core.Block{core.Text(m.stamp(j.host, dir) + "\n" + text)}
 	res.Display = &core.Display{Kind: "command", Title: a.summary(), Text: text}
 	return res
+}
+
+// where puts into a result's Meta which machine the command was for and in
+// which directory it started there.
+func (m *Manager) where(meta map[string]any, h *Host, dir string) {
+	meta[metaHost], meta[metaMachine] = LocalName, m.local
+	if h != nil {
+		meta[metaHost], meta[metaMachine] = h.Name, h.Target
+	}
+	if dir != "" {
+		meta[metaDir] = dir
+	}
 }
 
 // escapedNote is the news that stopping a command did not reach everything
@@ -253,14 +323,15 @@ func (m *Manager) startedResult(j *job, a bashArgs) core.ToolResult {
 	fmt.Fprintf(&b, "Started in the background as %s (process group %d).\n", id, j.pid)
 	b.WriteString(m.backgroundHelp(j, a.limit))
 	text := b.String()
+	meta := map[string]any{
+		metaTaskID:     id,
+		metaOutputFile: j.out.path,
+	}
+	m.where(meta, j.host, j.dir)
 	return core.ToolResult{
-		Content: []core.Block{core.Text(text)},
+		Content: []core.Block{core.Text(m.stamp(j.host, j.dir) + "\n" + text)},
 		Display: &core.Display{Kind: "command", Title: a.summary(), Text: text},
-		Meta: map[string]any{
-			metaTaskID:     id,
-			metaOutputFile: j.out.path,
-			metaDir:        j.dir,
-		},
+		Meta:    meta,
 	}
 }
 
@@ -298,10 +369,10 @@ func (m *Manager) movedResult(j *job, a bashArgs, timedOut bool) core.ToolResult
 	meta := map[string]any{
 		metaTaskID:      id,
 		metaOutputFile:  j.out.path,
-		metaDir:         j.dir,
 		metaOutputBytes: total,
 		metaTruncated:   cut,
 	}
+	m.where(meta, j.host, j.dir)
 	headline := fmt.Sprintf("moved to the background as %s at the person's request, where it is still running; what it has printed so far is below", id)
 	if timedOut {
 		headline = fmt.Sprintf("still running after %s, so it was moved to the background as %s; what it has printed so far is below", seconds(a.limit), id)
@@ -311,32 +382,40 @@ func (m *Manager) movedResult(j *job, a bashArgs, timedOut bool) core.ToolResult
 		m.backgroundHelp(j, m.opt.BackgroundTimeout),
 		"a change of directory it makes will not carry over: the working directory is still " + j.dir,
 	}
-	text := compose(headline, body, notes)
+	text := compose(headline, body, notes, true)
 	return core.ToolResult{
-		Content: []core.Block{core.Text(text)},
+		Content: []core.Block{core.Text(m.stamp(j.host, j.dir) + "\n" + text)},
 		Display: &core.Display{Kind: "command", Title: a.summary(), Text: text},
 		Meta:    meta,
 	}
 }
 
-// compose lays out a result: a line about what happened to the command,
-// if there is one; the output; then the notes, each in brackets so that
-// they cannot be taken for output.
-func compose(headline, body string, notes []string) string {
-	var b strings.Builder
+// compose lays out a result under its first line, which says where the
+// command ran: a line about what happened to the command, if there is one;
+// the output; then the notes, each in brackets so that they cannot be taken
+// for output. ran is false for a command that never started, which has no
+// output to show or to call empty.
+func compose(headline, body string, notes []string, ran bool) string {
+	var parts []string
 	if headline != "" {
-		b.WriteString("[" + headline + "]\n")
+		parts = append(parts, "["+headline+"]")
 	}
-	if body = strings.TrimRight(body, "\n"); body == "" {
-		b.WriteString("(no output)")
-	} else {
-		b.WriteString(body)
+	switch body = strings.TrimRight(body, "\n"); {
+	case body != "":
+		parts = append(parts, body)
+	case ran:
+		parts = append(parts, "(no output)")
 	}
-	if len(notes) > 0 {
-		b.WriteByte('\n')
+	text := strings.Join(parts, "\n")
+	if len(notes) > 0 && (body != "" || ran) {
+		// A blank line sets the notes apart from the output.
+		text += "\n"
 	}
 	for _, note := range notes {
-		b.WriteString("\n[" + note + "]")
+		if text != "" {
+			text += "\n"
+		}
+		text += "[" + note + "]"
 	}
-	return b.String()
+	return text
 }

@@ -9,7 +9,7 @@
  M internal/net/listen.go
 ?? notes.txt
 - Added directories you may also read: /home/dev/shared, /srv/data
-- Other machines you may run commands on, by naming one as `host` in a Bash call (never ssh there yourself):
+- Other machines you may run commands on, by naming one as `host` in a Bash call (never with ssh or scp in a command):
   - render (root@203.0.113.10): the render box; videos land in /root/renders
   - spare
   A path belongs to the machine it was seen on, and the file tools reach only this machine.</gnosh>

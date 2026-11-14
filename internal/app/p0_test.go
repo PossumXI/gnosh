@@ -155,7 +155,6 @@ func TestInstructionFilesAreRead(t *testing.T) {
 // a message that says so. It is never taken and left out.
 func TestConfigForWhatIsNotBuiltStopsStartup(t *testing.T) {
 	for _, line := range []string{
-		"host add render --ssh root@203.0.113.10",
 		"mcp add files --command /usr/bin/true",
 		"lsp add gopls --command gopls",
 	} {

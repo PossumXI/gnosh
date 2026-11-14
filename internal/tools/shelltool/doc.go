@@ -1,17 +1,123 @@
-// Package shelltool is the model's way to run shell commands: the Bash
-// tool, background commands, their output, and stopping them.
+// Package shelltool is the model's way to run shell commands, on this
+// machine and on the machines the person declared: the Bash tool,
+// background commands, their output, and stopping them.
 //
 // A Manager belongs to one session. It hands out the tools (Tools), keeps
 // track of every process it starts, and stops them all when it is closed
 // (Close). The tools are Bash, which runs a command; TaskOutput, which
 // returns what a background command has printed since it was last asked;
 // and TaskStop, which stops a background command. Their names and the
-// names of their arguments are Claude Code's, and all of them are in
-// names.go.
+// names of their arguments are Claude Code's, but for host, which is
+// gnosh's own, and all of them are in names.go.
 //
 // The package does not decide which commands may run. A call says what it
 // would do through core.Describer, with the command exactly as the model
-// wrote it, and the permission rules that judge it live elsewhere.
+// wrote it, and the permission rules that judge it live elsewhere. The few
+// rules it does have are about how a thing is done, not whether it may be
+// (see "The tool's own rules").
+//
+// # Where a command runs
+//
+// Where a command runs is a fact of the call, never something written into
+// the command. Bash takes host: the name of a machine the person declared
+// (Options.Hosts). Left out, or given as LocalName, the command runs on
+// this machine; a name that was not declared is an error that lists the
+// names there are, or, with none declared, tells the model to ask the user
+// to declare one and not to reach a machine some other way.
+//
+// Every result of a command, a local one too, begins with one line that
+// says where it ran (stamp), so that the model reads the machine beside
+// the output and a path is never taken for a path on another machine:
+//
+//	<host>local (dev@box)</host><cwd>/home/dev/project</cwd>
+//	<host>render (root@203.0.113.10)</host><cwd>/root</cwd>
+//
+// The directory is the one the command started in, on that machine. A
+// result with no output has the line too. The same facts are in the
+// result's Meta ("host", "machine", "cwd"), for hooks and the transcript;
+// the Display, which is for the person, has the machine in its title and
+// not the line. A call that was refused before anything ran has no such
+// line: it ran nowhere.
+//
+// # Commands on other machines
+//
+// A command for a host is run by the system's ssh (Options.SSH), started
+// in a session of its own exactly as a local shell is, with the null
+// device as its standard input. sshArgs lists what it is given and why:
+// no terminal on the other side, never a question (a password, a
+// passphrase, an unknown key: what would ask fails instead), a limit on
+// connecting (Options.ConnectTimeout), "--" before the destination so that
+// nothing after it can be read as an option, and the command as one
+// argument, which no shell on this machine ever reads. Keys, agents,
+// ports, jump hosts and shared connections are the business of the
+// person's own ssh configuration.
+//
+// A machine's key must already be known to this account's ssh. gnosh
+// passes StrictHostKeyChecking=yes, so a key that is not on record, or
+// that has changed, means no connection: the result says so in plain
+// words, says that the user has to connect once by hand and check the
+// key, and tells the model not to reach the machine another way. gnosh
+// never accepts a key by itself, and does not let ssh do it for it.
+//
+// On the other machine the account's login shell is handed one line: a
+// short lead of gnosh's (remoteLead) and then the command, in single
+// quotes, as the argument of eval. So the command is read by that shell
+// exactly as it was written, several lines and here-documents included.
+// The lead reports the directory the shell is in on standard error, sends
+// standard error where standard output goes from then on, and sets the
+// same few variables a local command gets (GNOSH=1 and the rest). It
+// needs a login shell that reads sh: sh, bash, dash, ksh or zsh.
+//
+// That gives two streams on this side. ssh's standard output is the
+// command's output, its two streams in the order written, and is treated
+// like a local command's: kept in a file on this machine, shown live, cut
+// to the same length. ssh's standard error is kept apart (sideChannel): it
+// carries the report that the command started, and whatever ssh itself has
+// to say. That is how a failure of the connection is told from a failure
+// of the command, which the exit code alone cannot do, since ssh ends with
+// 255 for its own failures and a command may end with 255 too:
+//
+//   - no report, exit code 255: ssh never got the command started. The
+//     result says why in plain words (the machine refused the connection,
+//     did not answer in time, is not known by that name, took none of the
+//     account's keys, has an unknown or a changed key), says that nothing
+//     ran, and carries ssh's own words. Meta has ReasonNoConnection and no
+//     exit code.
+//   - a report, exit code 255, and ssh said something afterwards: the
+//     connection broke while the command ran. How the command ended is not
+//     known, and the result says so. Meta has ReasonConnectionLost.
+//   - a report, and any exit code: the command's own.
+//   - no report and another exit code: the lead did not run as written
+//     (a login shell that is not sh, an account tied to one command). The
+//     result says that whether the command ran is not known.
+//
+// What does not carry over to another machine:
+//
+//   - The working directory. A command there starts in the account's home
+//     directory, every time; the session's directory is a path on this
+//     machine and is never used there. Nothing carries over between two
+//     commands on a host, not even the directory, and a command there
+//     never moves the session (the result's Cwd is always empty). A
+//     command that is only a cd gets a note that says so.
+//   - Background commands. run_in_background with host is refused, a
+//     command there is stopped when its time is up even where local ones
+//     move to the background (Options.TimeoutToBackground), and
+//     Manager.Background leaves it where it is. A command on another
+//     machine lives only as long as its call holds the connection, and its
+//     output file would be a path on this machine holding another
+//     machine's output, read later with nothing to say so.
+//   - Stopping. A stop (the time limit, a cancelled call, the manager
+//     closing, too much output) ends the ssh on this machine, with
+//     everything it started here, exactly as it ends a local command, and
+//     that closes the connection. Nothing on the other machine is
+//     signalled: ssh without a terminal has no way to do it. A program
+//     there that is printing is ended by its own system at its next write;
+//     one that prints nothing (a sleep, a server, a job that writes to a
+//     file) runs on, where gnosh can neither see it nor stop it. The
+//     result of a stopped command says exactly that.
+//
+// TryHost logs in to a host and runs nothing but the lead, for whoever
+// wants to know that a host can be used. Nothing calls it unasked.
 //
 // # How a command runs
 //
@@ -143,15 +249,16 @@
 // the files of finished foreground commands add up to more than
 // Options.SpoolBudget, when the oldest go.
 //
-// A result is the output, with a line above it when the command did not
-// simply end ("[timed out after 120 s and was stopped; the output so far
-// is below]") and bracketed notes under it: the exit code when it is not
-// 0, a process left running, where the working directory is now. A
-// non-zero exit code makes the result an error, except exit code 1 from
-// the programs for which 1 is an answer and not a failure (grep and its
-// kin, find, diff, test, git diff, git grep; see harmlessExit). The exit
-// code is always in the result's Meta, with the other facts of the call;
-// the keys are in names.go.
+// A result is the line that says where the command ran, then the output,
+// with a line above it when the command did not simply end ("[timed out
+// after 120 s and was stopped; the output so far is below]") and bracketed
+// notes under it: the exit code when it is not 0, a process left running,
+// where the working directory is now. A non-zero exit code makes the
+// result an error, except exit code 1 from the programs for which 1 is an
+// answer and not a failure (grep and its kin, find, diff, test, git diff,
+// git grep; see harmlessExit). The exit code of a command that ran is
+// always in the result's Meta, with the other facts of the call; the keys
+// are in names.go.
 //
 // While a foreground command runs, its output is passed to the session's
 // Progress function a line at a time (a line without its newline after a
@@ -177,6 +284,33 @@
 // the model, and not if Close caused it. Manager.Tasks lists the
 // background commands and Manager.Stop stops one, for the person's own
 // controls.
+//
+// # The tool's own rules
+//
+// rules.go holds the few things Bash refuses whatever the permissions say,
+// and the notes it puts under a failure. Each is there to tell a model, at
+// the moment it matters, what to do instead; none is a wall, and a full
+// path or a script gets past every one. They read only the first line of a
+// command that is not blank or a comment, so a file written with a
+// here-document may say anything. The person's own command line
+// (PersonsBash) is held to none of them.
+//
+//   - With hosts declared, a command whose first line runs ssh or scp, in
+//     any of its commands and behind env, sudo, timeout and the like, is
+//     refused with the declared hosts and the way to use one. With no host
+//     declared nothing is refused on that account.
+//   - An argument Bash does not take is an error that names it. Passed
+//     over in silence, a made-up argument (a working directory, say) would
+//     leave the model believing the command ran as it asked.
+//   - With Options.LongSleep set, a foreground command of a session's own
+//     that begins by sleeping that long or longer is refused, with what to
+//     do instead: run the wait in the background and be told when it ends.
+//     Several shorter sleeps one after another count together.
+//   - Under a failure: exit code 127 gets a note that the program is not
+//     installed on that machine, to do it another way or ask the user, and
+//     not to search the disk; a lookup that found nothing (which, command
+//     -v) gets the same; and a command whose first word is one of the
+//     session's tools (Options.ToolNames) is told to call the tool.
 //
 // # Closing
 //

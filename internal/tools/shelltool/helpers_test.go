@@ -28,6 +28,11 @@ var mark = fmt.Sprintf("GNOSH_SHELLTOOL_TEST=%d-%d", os.Getpid(), time.Now().Uni
 // processes, and goroutines of the managers. Either is a failure. A process
 // is killed, so that it does not stay on the machine.
 func TestMain(m *testing.M) {
+	if dir := os.Getenv(standInEnv); dir != "" {
+		// This process was started as the stand-in for ssh: see
+		// standin_test.go. No test runs in it.
+		os.Exit(standIn(dir, os.Args[1:]))
+	}
 	code := m.Run()
 	if left := strays(5 * time.Second); len(left) > 0 {
 		fmt.Fprintf(os.Stderr, "FAIL: %d processes started by these tests were left running:\n", len(left))
@@ -116,6 +121,9 @@ func newManager(t *testing.T, o Options) *Manager {
 	if o.PipeGrace == 0 {
 		o.PipeGrace = 100 * time.Millisecond
 	}
+	if o.Local == "" {
+		o.Local = "dev@box"
+	}
 	m := New(o)
 	t.Cleanup(func() {
 		if err := m.Close(); err != nil {
@@ -189,10 +197,23 @@ func bash(t *testing.T, m *Manager, env *core.ToolEnv, command string) core.Tool
 	return run(t, t.Context(), m, BashName, env, args{argCommand: command, argTimeout: 60_000})
 }
 
-// parts splits a result's text into the line above the output, the output,
-// and the notes under it, as compose laid them out.
-func parts(res core.ToolResult) (headline, body string, notes []string) {
+// stampOf returns the line a result begins with, which says where the
+// command ran, and the rest of the result's text. A result that is not a
+// command's (a refusal, the answer of TaskStop) has no such line.
+func stampOf(res core.ToolResult) (stamp, rest string) {
 	text := core.TextOf(res.Content)
+	if !strings.HasPrefix(text, "<host>") {
+		return "", text
+	}
+	stamp, rest, _ = strings.Cut(text, "\n")
+	return stamp, rest
+}
+
+// parts splits a result's text into the line above the output, the output,
+// and the notes under it, as compose laid them out. The line that says
+// where the command ran is left out.
+func parts(res core.ToolResult) (headline, body string, notes []string) {
+	_, text := stampOf(res)
 	// Only a command that did not simply end gets a line above its output.
 	if reason, _ := res.Meta[metaReason].(string); reason != ReasonExited && strings.HasPrefix(text, "[") {
 		line, rest, _ := strings.Cut(text, "\n")

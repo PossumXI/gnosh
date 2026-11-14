@@ -259,6 +259,7 @@ func (st *startup) load(trusted bool) {
 			Hooks:       true,
 			HookEvents:  eventNames(firedEvents()),
 			Permissions: true,
+			Hosts:       true,
 			Env:         true,
 		},
 		Tools:      p.toolNames(),

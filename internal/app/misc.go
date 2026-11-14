@@ -17,6 +17,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // crashDir is the folder a session's crash files and log go to: the
@@ -429,11 +430,17 @@ func (ps *profileServer) close() {
 }
 
 // toolLine is a tool call on one line, for a log and for --verbose: the
-// tool's name and the argument that says most about the call.
+// tool's name and the argument that says most about the call. A command
+// for another machine names the machine.
 func toolLine(name string, input []byte) string {
 	var args map[string]any
 	if json.Unmarshal(input, &args) != nil {
 		return name
+	}
+	if host, _ := args["host"].(string); name == shelltool.BashName {
+		if host = strings.TrimSpace(host); host != "" && host != shelltool.LocalName {
+			name += " on " + oneLine(host, 60)
+		}
 	}
 	for _, key := range []string{"command", "file_path", "pattern", "path", "url", "task_id", "code", "description", "name"} {
 		if v, ok := args[key].(string); ok && v != "" {
@@ -461,7 +468,14 @@ func resultLine(res core.ToolResult, denied, interrupted bool) string {
 		parts = append(parts, fmt.Sprintf("+%d -%d %s", added, removed, firstOf(d.Path, d.Title)))
 	}
 	if res.IsError {
-		parts = append(parts, "failed: "+oneLine(core.TextOf(res.Content), 200))
+		text := core.TextOf(res.Content)
+		if _, shell := res.Meta["host"]; shell {
+			// A command's result begins with the line that tells the
+			// model where it ran; a person has been told by the call's
+			// own line.
+			_, text = shelltool.SplitStamp(text)
+		}
+		parts = append(parts, "failed: "+oneLine(text, 200))
 	}
 	if len(parts) == 0 {
 		return "ok"

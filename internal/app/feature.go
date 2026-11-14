@@ -394,10 +394,11 @@ type Contribution struct {
 	// line replaces or appends. (The instruction files are not part of
 	// it: they go to the model with the first prompt, so that the system
 	// prompt is the same for every project.) The part about mem is
-	// sent whenever gnovm_run is among the tools; choosing between its two
-	// texts (SystemInput.Memory) is done here. Nothing that changes from
-	// session to session may be put in: the system prompt is the same
-	// bytes in every session with the same config.
+	// sent whenever gnovm_run is among the tools; which of its two texts
+	// (SystemInput.Memory) is what the config's option for it says
+	// (config.Options.MemoryText), and may be changed here. Nothing that
+	// changes from session to session may be put in: the system prompt
+	// is the same bytes in every session with the same config.
 	System func(in *prompt.SystemInput)
 
 	// PromptLines are asked, in order, for the hidden lines of a prompt at

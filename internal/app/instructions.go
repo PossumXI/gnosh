@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -151,17 +150,19 @@ func (l *live) environment() string {
 	e := prompt.Environment{
 		Now:      l.p.now(),
 		Cwd:      l.cfg.Paths.Cwd,
+		User:     l.p.userName(),
 		Machine:  hostName(),
 		Platform: runtime.GOOS + ", " + runtime.GOARCH,
 	}
-	e.User = l.p.getenv("USER")
-	if e.User == "" {
-		if u, err := user.Current(); err == nil {
-			e.User = u.Username
-		}
-	}
 	for _, d := range l.cfg.Permissions.Dirs {
 		e.AddedDirs = append(e.AddedDirs, d.V)
+	}
+	// The other machines a command may be run on, with what the person
+	// wrote about each. They are named here and not in the system prompt
+	// or in a tool's description, which are the same bytes for every
+	// session whatever is declared.
+	for _, h := range l.cfg.Hosts {
+		e.Hosts = append(e.Hosts, prompt.Host{Name: h.Name, Machine: h.SSH, Description: h.Description})
 	}
 	e.Git = l.gitState()
 	return l.texts.Environment(e)
@@ -260,6 +261,11 @@ func (l *live) systemPrompt() ([]string, error) {
 		GnoProject: hasGnoCode(l.cfg.Paths.ProjectRoot, l.cfg.Paths.Cwd),
 		Replace:    replace,
 		Append:     extra,
+	}
+	// Which of the two texts about mem is sent is an option of the
+	// config (Options.MemoryText).
+	if l.cfg.Options.MemoryText.V == "full" {
+		in.Memory = prompt.MemoryFull
 	}
 	for _, c := range l.contribs {
 		if c.c.System != nil {

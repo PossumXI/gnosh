@@ -303,3 +303,76 @@ func TestDoctorTheRest(t *testing.T) {
 	wantFinding(t, findings, "config", Fail, userRC+":1:", "not a directive")
 	wantFinding(t, findings, "config", Fail, userRC+":2:", "not an option")
 }
+
+// Doctor lists every declared host and reaches none of them unless it was
+// asked to: a host that was not tried is never called fine.
+func TestDoctorHosts(t *testing.T) {
+	in := inputs(newFS().put(userRC, boxRC+`host add render --ssh root@203.0.113.10 --description "the render box"
+host add web --ssh deploy@203.0.113.11
+`))
+	m := &fakeMachine{models: map[string][]string{"qwen": {"qwen3.8-27b"}}, programs: []string{"ssh"}}
+
+	// Not asked: listed, not tried, and not marked ok.
+	findings := doctor(t, in, m)
+	wantFinding(t, findings, "hosts", Note, "render → root@203.0.113.10 (the render box) is declared ("+userRC+":", "It was not tried", "gnosh doctor --hosts logs in to each host with ssh and runs nothing there")
+	wantFinding(t, findings, "hosts", Note, "web → deploy@203.0.113.11 is declared", "It was not tried")
+	for _, f := range findings {
+		if f.Area == "hosts" && f.Level == Fine {
+			t.Errorf("a host that was not tried is reported as fine: %s", f)
+		}
+	}
+	if !CanRun(findings) {
+		t.Errorf("hosts that were not tried stop a turn:\n%s", showFindings(findings))
+	}
+
+	// Asked: each host is tried, and what was found is said.
+	var tried []string
+	pr := m.probes()
+	pr.TryHost = func(ctx context.Context, h Host) (string, string) {
+		tried = append(tried, h.Name+"="+h.SSH)
+		if h.Name == "web" {
+			return "", "web (deploy@203.0.113.11) refused the connection: nothing answers ssh at its address. Nothing was run on web"
+		}
+		return "/root", ""
+	}
+	cfg := mustLoad(t, in)
+	findings = Doctor(context.Background(), cfg, nil, pr)
+	if !slices.Equal(tried, []string{"render=root@203.0.113.10", "web=deploy@203.0.113.11"}) {
+		t.Errorf("tried %q", tried)
+	}
+	wantFinding(t, findings, "hosts", Fine, "render → root@203.0.113.10 (the render box) answers: a command there starts in /root.")
+	wantFinding(t, findings, "hosts", Note, "web → deploy@203.0.113.11 cannot be used right now: web (deploy@203.0.113.11) refused the connection", "Nothing was run on web.")
+	if !CanRun(findings) {
+		t.Errorf("a host that cannot be reached stops a turn:\n%s", showFindings(findings))
+	}
+
+	// With no ssh program, no host can be used, and none is tried.
+	tried = nil
+	m.programs = nil
+	pr = m.probes()
+	pr.TryHost = func(ctx context.Context, h Host) (string, string) {
+		tried = append(tried, h.Name)
+		return "", ""
+	}
+	findings = Doctor(context.Background(), cfg, nil, pr)
+	wantFinding(t, findings, "hosts", Note, "render → root@203.0.113.10 (the render box) cannot be used: the program ssh is not installed")
+	if len(tried) != 0 {
+		t.Errorf("hosts were tried without an ssh program: %q", tried)
+	}
+
+	// No hosts: nothing is said of them.
+	for _, f := range doctor(t, inputs(newFS().put(userRC, boxRC)), m) {
+		if f.Area == "hosts" {
+			t.Errorf("a finding about hosts with none declared: %s", f)
+		}
+	}
+}
+
+// showFindings lays findings out for a failure message.
+func showFindings(findings []Finding) string {
+	var all []string
+	for _, f := range findings {
+		all = append(all, f.String())
+	}
+	return strings.Join(all, "\n")
+}

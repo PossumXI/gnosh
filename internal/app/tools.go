@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"os/user"
 	"slices"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -68,12 +70,23 @@ func (l *live) buildTools() error {
 		MaxBackground:       l.cfg.Options.MaxBackgroundJobs.V,
 		MaxOutputChars:      limits.BashMaxOutput.V,
 		NoOutputTool:        true,
+		// The machines the config declares, and this one as every result
+		// names it. A folder's own hosts are among them only once the
+		// folder is trusted: until then the config holds them back.
+		Hosts:     shellHosts(l.cfg),
+		Local:     l.p.whoAndWhere(),
+		ToolNames: l.p.toolNames(),
 	}
 	if l.interactive {
 		// Only a session somebody attends is told when a background
 		// command ends; a run would be gone, and the tool's words to the
 		// model must not promise it.
 		so.OnEnd = l.backgroundEnded
+		// The refusal of a foreground command that begins with a long
+		// sleep (shelltool.Options.LongSleep, for sessions like this one,
+		// which are told when a background command ends) is built and is
+		// not switched on here: a test of the interface still runs such a
+		// sleep in the foreground. It goes on together with that test.
 	}
 	l.shell = shelltool.New(so)
 	all = append(all, l.shell.Tools()...)
@@ -123,6 +136,42 @@ func (l *live) buildTools() error {
 		}
 	}
 	return nil
+}
+
+// shellHosts turns the hosts the configuration holds in force into the
+// shell tool's own form.
+func shellHosts(cfg *config.Config) []shelltool.Host {
+	hosts := make([]shelltool.Host, 0, len(cfg.Hosts))
+	for _, h := range cfg.Hosts {
+		hosts = append(hosts, shelltool.Host{Name: h.Name, Target: h.SSH, Description: h.Description})
+	}
+	return hosts
+}
+
+// whoAndWhere says who gnosh runs as and on which machine, as user@name,
+// with whatever of the two is known. It is how every shell result names
+// this machine.
+func (p *program) whoAndWhere() string {
+	who, where := p.userName(), hostName()
+	switch {
+	case who != "" && where != "":
+		return who + "@" + where
+	case where != "":
+		return where
+	}
+	return who
+}
+
+// userName is the name of the user gnosh runs as: what the environment it
+// was given says, or failing that what the system says.
+func (p *program) userName() string {
+	if name := p.getenv("USER"); name != "" {
+		return name
+	}
+	if u, err := user.Current(); err == nil {
+		return u.Username
+	}
+	return ""
 }
 
 // toolNames lists the names of the session's tools, in order.

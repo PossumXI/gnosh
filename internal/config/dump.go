@@ -140,7 +140,11 @@ func (c *Config) String() string {
 	if len(c.Hosts) > 0 {
 		line("hosts:")
 		for _, h := range c.Hosts {
-			line("  %s → %s%s", h.Name, h.SSH, from(h.Origin))
+			about := ""
+			if h.Description != "" {
+				about = ": " + h.Description
+			}
+			line("  %s → %s%s%s", h.Name, h.SSH, about, from(h.Origin))
 		}
 	}
 	if len(c.MCP) > 0 {

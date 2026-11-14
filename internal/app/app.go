@@ -196,7 +196,7 @@ func (p *program) warnf(format string, args ...any) {
 // table stays as it ships: typing it stops startup with a message that
 // says it is not built.
 var built = []string{
-	"doctor", "trust", "trust --list", "trust --forget",
+	"doctor", "doctor --hosts", "trust", "trust --list", "trust --forget",
 	"dirs", "logs", "logs --tail", "logs --follow", "models",
 	"session list", "session show", "session last", "session rename",
 	"session --json",

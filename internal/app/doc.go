@@ -58,6 +58,34 @@
 // changes from session to session; texts.go makes text harmless on its way
 // to a model and back; slash.go is the registry of slash commands.
 //
+// Hosts are the other machines the config declares for commands. The
+// config checks the declarations and holds a folder's own back until the
+// folder is trusted, like everything else of a folder's that reaches out.
+// What is in force goes to three places, and nowhere else:
+//
+//   - The shell tool (tools.go) is handed the hosts, and this machine's
+//     name as results write it. A Bash call that names a host runs there
+//     through ssh, and every shell result, a local one too, begins with a
+//     line that says where it ran. The person's own command line, typed
+//     behind "!", runs through the same tool without the rules that steer
+//     a model (shellline.go).
+//   - The first prompt's environment block (instructions.go) names the
+//     hosts, with what the person wrote about each, and says that a path
+//     belongs to the machine it was seen on. The system prompt and the
+//     tools say nothing that depends on which hosts there are, so they are
+//     the same bytes with and without them.
+//   - The gate (gate.go) hands the permission engine the call with its
+//     host argument, which is how the engine knows a command for another
+//     machine: such a call always asks, whatever the allow rules and the
+//     read-only list say, the deny rules are held against the command
+//     before it leaves, and with permissions skipped the declaration is
+//     the whole gate. A call that names this machine as its host is shown
+//     to the engine as the local call it is.
+//
+// gnosh doctor and /status list the hosts. Doctor logs in to them only
+// when it is asked to (gnosh doctor --hosts, /doctor hosts); by itself it
+// reaches no other machine.
+//
 // subagent.go is the Agent tool. A sub-agent is a second session run by
 // the same loop, with a context of its own: the tool gives it a session
 // file of its own inside the folder of the session the person is in, the
@@ -129,8 +157,13 @@
 // A session ends because its work is done, because the person left, or
 // because a signal arrived. The first SIGINT or SIGTERM is handed to the
 // front end, which stops the turn and says which exit code that is (130,
-// 143); a run prints no result then. Whatever the reason, the order is
-// the same:
+// 143). A run that prints JSON (json, stream-json) still prints its
+// result object then: the replies the model had written, what they cost,
+// and that the run was stopped and by which signal. It gives the turn two
+// seconds to say how far it had come, and from the moment the signal is
+// acted on a second one ends the process at once, result or no result. A
+// run that prints text prints nothing more. Whatever the reason, the order
+// is the same:
 //
 //  1. From here on a second signal is not handled: it ends the process
 //     at once.

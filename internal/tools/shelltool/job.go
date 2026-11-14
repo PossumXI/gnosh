@@ -90,14 +90,19 @@ func (e *ending) failed() bool {
 }
 
 // job is one command: its shell process, everything it prints, and how it
-// ended.
+// ended. For a command on another machine the process is the ssh that
+// carries it, and what is said here of the shell is true of that ssh.
 type job struct {
 	m           *Manager
 	callID      string // the tool call waiting for it, if it started in the foreground
 	command     string
 	description string
-	dir         string // the directory it started in
+	dir         string // the directory it started in, on this machine
 	started     time.Time
+
+	host *Host        // the machine the command is for; nil for this one
+	ssh  string       // the ssh program that carries it there
+	side *sideChannel // what that ssh itself says, apart from the command's output
 
 	cmd     *exec.Cmd
 	pid     int      // the shell's process id, which is also its process group and its session
@@ -136,6 +141,7 @@ func newJob(m *Manager, a bashArgs, dir string) *job {
 		command:     a.command,
 		description: a.description,
 		dir:         dir,
+		host:        a.host,
 		stop:        make(chan endReason, 1),
 		move:        make(chan struct{}, 1),
 		exited:      make(chan struct{}),
@@ -155,7 +161,6 @@ func (j *job) launch(dir, name string) error {
 		return fmt.Errorf("shelltool: creating the output file: %w", err)
 	}
 	j.out = newOutput(path, file, m.opt.MaxSpoolBytes, 2*m.opt.MaxOutputChars)
-	j.cwdFile = filepath.Join(dir, name+".cwd")
 	fail := func(err error) error {
 		file.Close()
 		os.Remove(path)
@@ -165,26 +170,47 @@ func (j *job) launch(dir, name string) error {
 		return err
 	}
 
-	script, arg := wrapper, j.command
-	if len(j.command) > longCommand {
-		j.cmdFile = filepath.Join(dir, name+".sh")
-		if err := os.WriteFile(j.cmdFile, []byte(j.command), 0o600); err != nil {
-			return fail(fmt.Errorf("shelltool: writing the command to a file: %w", err))
-		}
-		script, arg = fileWrapper, j.cmdFile
-	}
-
 	// One pipe takes both stdout and stderr, so the two stay in the order
 	// they were written in.
 	r, w, err := os.Pipe()
 	if err != nil {
 		return fail(fmt.Errorf("shelltool: making the output pipe: %w", err))
 	}
-	cmd := exec.Command(m.shell, "-c", script, filepath.Base(m.shell), j.cwdFile, arg)
+	var cmd *exec.Cmd
+	var said, saidEnd *os.File // the pipe for what ssh itself says, and its writing end
+	if j.host == nil {
+		j.cwdFile = filepath.Join(dir, name+".cwd")
+		script, arg := wrapper, j.command
+		if len(j.command) > longCommand {
+			j.cmdFile = filepath.Join(dir, name+".sh")
+			if err := os.WriteFile(j.cmdFile, []byte(j.command), 0o600); err != nil {
+				r.Close()
+				w.Close()
+				return fail(fmt.Errorf("shelltool: writing the command to a file: %w", err))
+			}
+			script, arg = fileWrapper, j.cmdFile
+		}
+		cmd = exec.Command(m.shell, "-c", script, filepath.Base(m.shell), j.cwdFile, arg)
+		cmd.Stdout, cmd.Stderr = w, w
+	} else {
+		// The command's own two streams are joined on the other machine
+		// and come down ssh's standard output. ssh's standard error is
+		// kept apart: it carries the word that the command started, and
+		// whatever ssh itself has to say.
+		if said, saidEnd, err = os.Pipe(); err != nil {
+			r.Close()
+			w.Close()
+			return fail(fmt.Errorf("shelltool: making the pipe for what ssh says: %w", err))
+		}
+		cmd = exec.Command(j.ssh, m.sshArgs(j.host, j.command)...)
+		cmd.Stdout, cmd.Stderr = w, saidEnd
+		// The file that holds the output is on this machine, whatever
+		// machine the output came from.
+		j.out.where = " on this machine"
+	}
 	cmd.Dir = j.dir
 	cmd.Env = commandEnv(m.opt.Environ(), j.dir, m.opt.Env)
 	cmd.Stdin = nil // the null device
-	cmd.Stdout, cmd.Stderr = w, w
 	// A session of its own: the shell leads a new process group, which is
 	// what gets signalled, and has no terminal, so nothing in it can stop
 	// to ask the person a question behind gnosh's back.
@@ -192,8 +218,14 @@ func (j *job) launch(dir, name string) error {
 	j.started = m.opt.Now()
 	err = cmd.Start()
 	w.Close()
+	if saidEnd != nil {
+		saidEnd.Close()
+	}
 	if err != nil {
 		r.Close()
+		if said != nil {
+			said.Close()
+		}
 		return fail(j.startError(err))
 	}
 	j.cmd, j.pid, j.pipe = cmd, cmd.Process.Pid, r
@@ -203,7 +235,14 @@ func (j *job) launch(dir, name string) error {
 		cmd.Process.Kill()
 		cmd.Wait()
 		r.Close()
+		if said != nil {
+			said.Close()
+		}
 		return fail(fmt.Errorf("shelltool: the shell (pid %d) did not get a process group of its own", j.pid))
+	}
+	if said != nil {
+		j.side = newSideChannel(said)
+		m.wg.Go(j.side.run)
 	}
 	m.wg.Add(2)
 	go j.pump()
@@ -211,7 +250,8 @@ func (j *job) launch(dir, name string) error {
 	return nil
 }
 
-// startError words a failure to start the shell.
+// startError words a failure to start the shell, or the ssh that carries a
+// command to another machine.
 func (j *job) startError(err error) error {
 	if errors.Is(err, syscall.E2BIG) {
 		return refusal(fmt.Sprintf("The command could not be started: with the environment, it is too much for the system to pass to a program (%v). Put less in the environment, or put the work in a script file and run that.", err))
@@ -219,7 +259,11 @@ func (j *job) startError(err error) error {
 	if _, statErr := os.Stat(j.dir); statErr != nil {
 		return refusal(fmt.Sprintf("The command was not run: the working directory %s cannot be used (%v).", j.dir, statErr))
 	}
-	return fmt.Errorf("shelltool: starting %s: %w", j.m.shell, err)
+	program := j.m.shell
+	if j.host != nil {
+		program = j.ssh
+	}
+	return fmt.Errorf("shelltool: starting %s: %w", program, err)
 }
 
 // pump reads the command's output until there is no more: until every
@@ -287,7 +331,12 @@ func (j *job) attend(ctx context.Context, limit time.Duration) attended {
 	defer timer.Stop()
 	for {
 		why, asked := j.await(ctx, timer.C, j.move)
-		if !asked && (why != endTimeout || !j.m.opt.TimeoutToBackground || startsWithSleep(j.command)) {
+		if asked && j.host != nil {
+			// A command on another machine stays where it is: see
+			// Manager.Background.
+			continue
+		}
+		if !asked && (why != endTimeout || !j.m.opt.TimeoutToBackground || j.host != nil || startsWithSleep(j.command)) {
 			j.finish(why, limit)
 			return attendEnded
 		}
@@ -381,6 +430,12 @@ func (j *job) finish(why endReason, limit time.Duration) {
 		}
 	}
 	e.unread = !closed(j.pumped)
+	if j.side != nil && !waitFor(j.side.done, m.opt.PipeGrace) {
+		// ssh is gone, and something it started still holds its standard
+		// error open. What ssh had to say has been said: stop listening.
+		j.side.r.Close()
+		waitFor(j.side.done, m.opt.PipeGrace)
+	}
 
 	e.code = -1
 	if e.reaped = closed(j.exited); e.reaped {

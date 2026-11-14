@@ -119,6 +119,49 @@ type Options struct {
 	// call Close. An end the model has already been shown (by TaskOutput or
 	// TaskStop), and an end caused by Close, is not announced.
 	OnEnd func(Ended)
+
+	// Hosts are the other machines a Bash call may name as its host. A
+	// call that names one runs its command there through ssh. With none,
+	// every command runs here.
+	Hosts []Host
+
+	// Local says who and where this machine is, the way results write it:
+	// "dev@box". Empty means the current user's name and the machine's
+	// name, as the system gives them when the manager is made.
+	Local string
+
+	// SSH is the program that runs a command on a host: a path, or a name
+	// that is looked up on the PATH of Environ. Empty means "ssh".
+	SSH string
+
+	// ConnectTimeout is how long ssh may take to reach a host and log in.
+	// ssh takes it in whole seconds, so it is rounded up to one. Default:
+	// 20 seconds.
+	ConnectTimeout time.Duration
+
+	// ToolNames are the names of the session's tools. A command that
+	// fails because its first word is one of them and no such program
+	// exists is answered with word that it is a tool, to be called as one.
+	ToolNames []string
+
+	// LongSleep, when not zero, refuses a foreground command of the
+	// model's that begins by sleeping for this long or longer, and says
+	// what to do instead. It is for a session that tells the model when a
+	// background command ends (OnEnd), which is what makes waiting in the
+	// foreground needless. Zero, the default, refuses no command for
+	// sleeping.
+	LongSleep time.Duration
+}
+
+// Host is another machine commands may run on.
+type Host struct {
+	// Name is what a call gives as its host argument.
+	Name string
+	// Target is the destination ssh is given: user@address, or a Host
+	// alias of the person's own ssh configuration.
+	Target string
+	// Description is what the person wrote about the machine.
+	Description string
 }
 
 // The defaults, and the fixed sizes that are not worth an option.
@@ -135,6 +178,10 @@ const (
 	defaultOutputBytes    = 5 << 30
 	defaultSpoolBudget    = 1 << 30
 	defaultTailChars      = 2_000
+	defaultConnectTimeout = 20 * time.Second
+	defaultSSH            = "ssh"
+	maxRemoteCommand      = 120 << 10              // the longest text ssh is handed as one argument: under what a system takes
+	sideKeep              = 8 << 10                // how much of what ssh itself says is kept, before and after the command starts
 	defaultMaxLingering   = 32                     // processes left by ended commands that are listened to at once
 	drainWait             = 30 * time.Second       // how long output already in the pipe is waited for
 	pipeHolds             = 1 << 20                // more than a pipe holds at once, on any system in use
@@ -196,5 +243,12 @@ func (o Options) withDefaults() Options {
 	if o.TailChars <= 0 {
 		o.TailChars = defaultTailChars
 	}
+	if o.SSH == "" {
+		o.SSH = defaultSSH
+	}
+	if o.ConnectTimeout <= 0 {
+		o.ConnectTimeout = defaultConnectTimeout
+	}
+	o.LongSleep = max(o.LongSleep, 0)
 	return o
 }

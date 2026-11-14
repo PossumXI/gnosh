@@ -355,19 +355,69 @@ func TestBinarySIGINT(t *testing.T) {
 	checkSession(t, w)
 }
 
-// SIGTERM in the middle of a turn: the same, with exit code 143.
+// SIGTERM in the middle of a turn: the same, with exit code 143. In the two
+// JSON formats the run still prints its result object before it goes, so
+// that whatever stopped it learns what it was: the replies the model had
+// written, and that the run was stopped and by what.
 func TestBinarySIGTERM(t *testing.T) {
-	w := apptest.NewWorld(t, longJob())
-	sessionEndHook(w)
-	p := start(t, w, "-y", "-p", "--output-format", "stream-json", "run the long job")
-	pid := readPid(t, w, "pid.txt")
-	p.cmd.Process.Signal(syscall.SIGTERM)
-	p.wait(30*time.Second).wantCode(t, 143)
-	waitFor(t, "the command to be stopped", func() bool { return gone(pid) })
-	if got := strings.TrimSpace(w.Read(w.Home + "/ended")); got != "other" {
-		t.Errorf("the SessionEnd hook was told %q, want other", got)
+	for _, format := range []string{"stream-json", "json"} {
+		t.Run(format, func(t *testing.T) {
+			w := apptest.NewWorld(t, longJob())
+			sessionEndHook(w)
+			p := start(t, w, "-y", "-p", "--output-format", format, "run the long job")
+			pid := readPid(t, w, "pid.txt")
+			p.cmd.Process.Signal(syscall.SIGTERM)
+			o := p.wait(30*time.Second).wantCode(t, 143)
+			waitFor(t, "the command to be stopped", func() bool { return gone(pid) })
+			if got := strings.TrimSpace(w.Read(w.Home + "/ended")); got != "other" {
+				t.Errorf("the SessionEnd hook was told %q, want other", got)
+			}
+			checkSession(t, w)
+
+			lines := strings.Split(strings.TrimRight(o.out, "\n"), "\n")
+			if format == "json" && len(lines) != 1 {
+				t.Errorf("the json format printed %d lines, want the result alone:\n%s", len(lines), o.out)
+			}
+			var result struct {
+				Type           string   `json:"type"`
+				Subtype        string   `json:"subtype"`
+				IsError        bool     `json:"is_error"`
+				NumTurns       int      `json:"num_turns"`
+				Errors         []string `json:"errors"`
+				TerminalReason string   `json:"terminal_reason"`
+				SessionID      string   `json:"session_id"`
+			}
+			if err := json.Unmarshal([]byte(lines[len(lines)-1]), &result); err != nil {
+				t.Fatalf("the last line of the output is not a JSON object (%v):\n%s", err, o.out)
+			}
+			if result.Type != "result" || result.Subtype != "error_during_execution" || !result.IsError || result.NumTurns != 1 ||
+				result.TerminalReason != "aborted_tools" || result.SessionID == "" ||
+				len(result.Errors) != 1 || result.Errors[0] != "the run was stopped by SIGTERM after 1 turns of the model" {
+				t.Errorf("the result object of a run stopped by SIGTERM: %s", lines[len(lines)-1])
+			}
+		})
 	}
-	checkSession(t, w)
+}
+
+// The result of a stopped run is not waited for when a second signal
+// comes: a command that takes no notice of being stopped holds the turn's
+// end back, and the second signal ends the program all the same.
+func TestBinarySecondSignalDoesNotWaitForTheResult(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Calls: []apptest.Call{
+		{ID: "c1", Name: "Bash", Args: `{"command":"trap '' TERM INT HUP; echo $$ > pid.txt; sleep 300"}`},
+	}})
+	p := start(t, w, "-y", "-p", "--output-format", "json", "run the stubborn job")
+	pid := readPid(t, w, "pid.txt")
+	// Whatever the program leaves behind, the test does not.
+	defer syscall.Kill(-pid, syscall.SIGKILL)
+	p.cmd.Process.Signal(syscall.SIGTERM)
+	time.Sleep(100 * time.Millisecond)
+	began := time.Now()
+	p.cmd.Process.Signal(syscall.SIGTERM)
+	p.wait(10*time.Second).wantCode(t, 143)
+	if took := time.Since(began); took > 1500*time.Millisecond {
+		t.Errorf("the second signal took %s to end the program", took)
+	}
 }
 
 // Only the first signal is handled in order. A second one, while the

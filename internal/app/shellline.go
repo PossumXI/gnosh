@@ -18,8 +18,9 @@ import (
 // is run for them, through the same shell tool the model's commands run
 // through, so that it has the session's working directory, its
 // environment and its limits, and can be moved to the background like any
-// other. It is the person's own: no rule is looked at and nothing is
-// asked.
+// other. It is the person's own: no rule is looked at, nothing is asked,
+// and the shell tool leaves out what is there to steer a model. A person
+// may type ssh.
 //
 // The front end is shown it as a tool call. When it has ended, the command
 // and what it printed go to the model as a prompt of gnosh's own, which
@@ -34,15 +35,7 @@ func (l *live) shellLine(command string) error {
 	if l.shell == nil || l.closing.Load() {
 		return errors.New("the session is closing")
 	}
-	var bash core.Tool
-	for _, t := range l.shell.Tools() {
-		if t.Spec().Name == shelltool.BashName {
-			bash = t
-		}
-	}
-	if bash == nil {
-		return errors.New("this session has no shell to run it in")
-	}
+	bash := l.shell.PersonsBash()
 	l.shellMu.Lock()
 	if l.shellStop != nil {
 		l.shellMu.Unlock()

@@ -102,7 +102,7 @@ func readUntil(t *testing.T, m *Manager, env *core.ToolEnv, id, want string) str
 // the line about the command's state. The newlines at its end are gone,
 // as they are from every result.
 func taskBody(res core.ToolResult) string {
-	text := core.TextOf(res.Content)
+	_, text := stampOf(res)
 	if i := strings.LastIndex(text, "\n\n["); i >= 0 {
 		return text[:i]
 	}
@@ -111,7 +111,7 @@ func taskBody(res core.ToolResult) string {
 
 // taskState returns the line about the command's state.
 func taskState(res core.ToolResult) string {
-	text := core.TextOf(res.Content)
+	_, text := stampOf(res)
 	return text[strings.LastIndex(text, "\n[")+1:]
 }
 

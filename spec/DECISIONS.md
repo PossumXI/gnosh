@@ -164,3 +164,26 @@ both are silent, the builder chooses, and says so in its report.
 19. **`-y` is not refused for root.** Jae: "-y yolo lol, sure". Claude Code
     refuses to skip permissions as root; gnosh does not, because Jae runs as
     root on his machines.
+
+## From the hosts build, 13 November 2026
+
+20. **A machine whose key ssh does not already know is refused, not
+    accepted.** TOOL-20 records that the earlier gnosh took a machine's key
+    the first time it saw it. The new one runs ssh with strict host-key
+    checking. The first connection to a machine is the one moment anything
+    on the network can answer in its place, and an agent that accepts the
+    key by itself means nobody ever looked at the fingerprint. The person
+    connects once by hand (`ssh user@address`), and from then on gnosh's
+    commands go through. Machines already in the account's `known_hosts`
+    are not affected. Claude's choice, from "security-first"; one word in
+    `sshArgs` (`accept-new`) gives the earlier behaviour back.
+21. **A command on a host starts in the account's home directory, every
+    time.** Bash has no working-directory argument (Claude Code's has
+    none), so TOOL-20's "with a working directory" has nothing to attach
+    to, and the session's directory is a path on this machine that is never
+    sent. A command that needs another directory says `cd dir && …`.
+22. **A command on a host never moves to the background.** Stopping the
+    local ssh does not stop a quiet program on the other machine, so gnosh
+    refuses `run_in_background` together with `host`, stops such a command
+    at its time limit, and says in the result what may still be running
+    there.

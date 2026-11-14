@@ -56,6 +56,9 @@ type Options struct {
 	DisabledSkills []ListItem
 	// InitializeAs is the file /init writes.
 	InitializeAs Value[string]
+	// MemoryText chooses which of gnosh's two texts about mem a model is
+	// given in its instructions: "lean", the default, or "full".
+	MemoryText Value[string]
 
 	// Metrics says whether anonymous usage events may be sent. Unset means
 	// nothing decided it, which is off.
@@ -91,6 +94,7 @@ func defaultOptions() Options {
 	o.MaxBackgroundJobs.V = 50
 	o.MemReviewCloses.V = true
 	o.InitializeAs.V = "AGENTS.md"
+	o.MemoryText.V = "lean"
 	o.ArtifactServer.V = "127.0.0.1:7777"
 	o.DataDirectory.V = ".gnosh"
 	o.AttributionTrailerStyle.V = "off"
@@ -181,6 +185,9 @@ var optionSpecs = []optionSpec{
 	{key: "initialize-as", kind: oText, pri: "P2", status: Parsed, def: "AGENTS.md",
 		what: "the file /init writes", check: checkFileName,
 		text: func(o *Options) *Value[string] { return &o.InitializeAs }},
+	{key: "memory-text", kind: oEnum, pri: "P1", status: Works, def: "lean",
+		what: "which of gnosh's two texts about mem the model is given: the short one, or the one that says everything", enum: []string{"lean", "full"},
+		text: func(o *Options) *Value[string] { return &o.MemoryText }},
 
 	// Options about the network: all off unless set.
 	{key: "metrics", kind: oTruth, pri: "P2", status: Parsed, def: "unset (off)",

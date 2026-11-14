@@ -267,6 +267,9 @@ type Invocation struct {
 	// JSON asks a subcommand to print JSON (`session ...`, `projects`,
 	// `prompt tools`).
 	JSON bool
+	// Hosts belongs to `doctor`: also try each declared host, which reaches
+	// out to other machines.
+	Hosts bool
 	// List and Forget belong to `trust`: list the trusted folders, or forget
 	// one instead of trusting it.
 	List   bool

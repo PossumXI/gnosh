@@ -20,14 +20,15 @@ vets and tests every package from a clean copy.
 
 Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output), an
 interactive session in the terminal's own scrollback, the file and shell
-tools, permission modes and rules, hooks, instruction files, sub-agents in
-the foreground, `mem` and frames with the close check, `/goal`, the slide and
-peers' turn locks, `gnosh mem`, `gnosh doctor`, `gnosh trust`.
+tools, commands on declared hosts over ssh, permission modes and rules,
+hooks, instruction files, sub-agents in the foreground, `mem` and frames
+with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
+`gnosh doctor`, `gnosh trust`.
 
-Not built yet: hosts (running a command on a named machine), MCP servers,
-rewind, background sub-agents, web search. The interface has been tried in
-tmux only. Its wording to the model has not yet been compared run against
-run. Nothing here is released.
+Not built yet: MCP servers, rewind, background sub-agents, web search. The
+interface has been tried in tmux only. Its wording to the model has not yet
+been compared run against run. Hosts have been tested against a stand-in
+for ssh only, not yet against a real machine. Nothing here is released.
 
 ## Licence
 
