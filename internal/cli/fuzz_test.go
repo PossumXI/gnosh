@@ -19,25 +19,24 @@ var seedLines = [][]string{
 	{"hello there"},
 	{"-y", "-C"},
 	{"-p", "what is this", "--output-format", "json"},
-	{"run", "-q", "-y", "--cwd", "DIR", "-D", "DATA", "-m", "p/m", "do it"},
+	{"-p", "-y", "--cwd", "DIR", "-m", "p/m", "do it"},
 	{"-r"},
 	{"-r", "abc", "more"},
-	{"-s", "abc", "--fork-session", "--session-id", sampleUUID},
+	{"-r", "abc", "--fork-session", "--session-id", sampleUUID},
 	{"--allowedTools", "Bash(git log *)", "Bash(git diff *)", "Read"},
 	{"--allowedTools", "Bash(go test *)", "run the tests and report"},
 	{"--disallowedTools", "Bash Edit", "-p", "x"},
 	{"--tools", "", "review this"},
 	{"--add-dir", "../apps", "../lib"},
-	{"--mcp-config", `{"mcpServers": {}}`, "--strict-mcp-config"},
 	{"--system-prompt", "- be terse", "--append-system-prompt-file", "x.md"},
 	{"--settings", `{"env": {}}`, "--setting-sources", "user,local"},
 	{"--debug=hooks,mcp", "--debug-file", "/tmp/d.log"},
-	{"-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--include-partial-messages"},
-	{"-p", "x", "--max-turns", "3", "--goal", "done", "--small-model", "m", "--no-session-persistence", "--permission-prompts", "none"},
-	{"--permission-mode", "plan", "--allow-dangerously-skip-permissions"},
+	{"-p", "--input-format", "text", "--output-format", "stream-json", "--verbose"},
+	{"-p", "x", "--max-turns", "3", "--goal", "done", "--small-model", "m"},
+	{"--permission-mode", "plan", "--safe-mode", "--disable-slash-commands"},
 	{"-pv", "x"},
 	{"-v"},
-	{"-yCs", "abc"},
+	{"-yCn", "abc"},
 	{"--", "-p", "--help"},
 	{"-c", "/tmp/a/b"},
 	{"-c", "--", "/tmp/a/b"},
@@ -46,25 +45,18 @@ var seedLines = [][]string{
 	{"models"},
 	{"session", "list", "--json"},
 	{"s", "rename", "abc", "New", "title"},
-	{"session", "web", "--port", "8080"},
+	{"session", "show", "abc", "--json"},
 	{"mem", "find", "flaky", "test"},
-	{"prompt", "context", "-s", "abc"},
-	{"prompt", "tools", "--json", "--export"},
+	{"mem", "--cwd", "/w", "log", "20"},
 	{"logs", "-ft", "50"},
 	{"dirs"},
-	{"ssh", "-p", "2222", "box"},
-	{"projects", "--json"},
-	{"stats", "--all", "--crawl-dir", "/x"},
-	{"mcp", "add", "-e", "A=1", "B=2", "-t", "stdio", "name", "--", "cmd", "--flag"},
-	{"mcp", "add", "-H", "X: y", "name", "https://mcp.example.com"},
-	{"mcp", "add-json", "name", "{}"},
 	{"help", "session", "list"},
 	{"version"},
 	{"--alowedTools", "x"},
 	{"docter"},
 	{"session", "lst"},
 	{"-m=x"},
-	{"-sy"},
+	{"-ny"},
 	{"--model"},
 	{"--verbose=1"},
 	{"-"},
@@ -182,19 +174,19 @@ func checkInvocation(t *testing.T, tab *Table, args []string, env Env, inv Invoc
 	printing := inv.Command == CmdPrint
 
 	switch inv.Conversation {
-	case ConversationNew, ConversationContinue, ConversationResume, ConversationSession:
+	case ConversationNew, ConversationContinue, ConversationResume:
 	case "":
-		if session || inv.Command == CmdPromptContext {
+		if session {
 			bad("a session with no Conversation")
 		}
 	default:
 		bad("Conversation %q", inv.Conversation)
 	}
+	if !session && inv.Conversation != "" {
+		bad("a Conversation for a command that has none")
+	}
 	if (inv.Resume != "" || inv.ResumeIsFile) && inv.Conversation != ConversationResume {
 		bad("Resume without ConversationResume")
-	}
-	if inv.Session != "" && inv.Conversation != ConversationSession {
-		bad("Session without ConversationSession")
 	}
 	if inv.ForkSession && inv.Conversation == ConversationNew {
 		bad("a fork of nothing")
@@ -223,7 +215,7 @@ func checkInvocation(t *testing.T, tab *Table, args []string, env Env, inv Invoc
 			}
 		}
 	}
-	for name, list := range map[string][]string{"AddDirs": inv.AddDirs, "MCPConfig": inv.MCPConfig, "SettingSources": inv.SettingSources, "MCPEnv": inv.MCPEnv, "MCPHeaders": inv.MCPHeaders} {
+	for name, list := range map[string][]string{"AddDirs": inv.AddDirs, "SettingSources": inv.SettingSources} {
 		for _, it := range list {
 			if blank(it) {
 				bad("%s holds an empty item", name)
@@ -239,7 +231,7 @@ func checkInvocation(t *testing.T, tab *Table, args []string, env Env, inv Invoc
 	if inv.SettingsInline != strings.HasPrefix(strings.TrimSpace(inv.Settings), "{") {
 		bad("SettingsInline is wrong for %q", inv.Settings)
 	}
-	if inv.MaxTurns < 0 || inv.Tail < 0 || inv.Port < 0 || inv.Port > 65535 {
+	if inv.MaxTurns < 0 || inv.Tail < 0 {
 		bad("a number out of range")
 	}
 
@@ -268,22 +260,13 @@ func checkInvocation(t *testing.T, tab *Table, args []string, env Env, inv Invoc
 		default:
 			bad("OutputFormat %q", inv.OutputFormat)
 		}
-		switch inv.InputFormat {
-		case FormatText, FormatStreamJSON:
-		default:
+		if inv.InputFormat != FormatText {
 			bad("InputFormat %q", inv.InputFormat)
 		}
-		if inv.Prompt == "" && !inv.ReadStdin && inv.Goal == "" && inv.InputFormat != FormatStreamJSON {
+		if inv.Prompt == "" && !inv.ReadStdin && inv.Goal == "" {
 			bad("print mode with nothing to answer")
 		}
-		if inv.IncludePartialMessages && inv.OutputFormat != FormatStreamJSON {
-			bad("partial messages without a stream")
-		}
-		if inv.ReplayUserMessages && (inv.OutputFormat != FormatStreamJSON || inv.InputFormat != FormatStreamJSON) {
-			bad("replay without stream-json both ways")
-		}
-	} else if inv.OutputFormat != "" || inv.InputFormat != "" || inv.IncludePartialMessages || inv.ReplayUserMessages ||
-		inv.Quiet || inv.Goal != "" || inv.MaxTurns != 0 || inv.SmallModel != "" || inv.NoSessionPersistence || inv.PermissionPrompts != "" {
+	} else if inv.OutputFormat != "" || inv.InputFormat != "" || inv.Goal != "" || inv.MaxTurns != 0 || inv.SmallModel != "" {
 		bad("a print-mode setting outside print mode")
 	}
 }
@@ -296,7 +279,7 @@ func checkInvocation(t *testing.T, tab *Table, args []string, env Env, inv Invoc
 func FuzzAfterDashes(f *testing.F) {
 	tab := allBuilt(f)
 	addSeeds(f, func(line string) { f.Add(line, uint8(3)) })
-	for _, l := range [][]string{{"-p"}, {"--help"}, {"--version"}, {"--bogus"}, {"-x"}, {"run"}, {"doctor"}, {"--model"}, {"--"}, {"-"}, {"--allowedTools", "x"}} {
+	for _, l := range [][]string{{"-p"}, {"--help"}, {"--version"}, {"--bogus"}, {"-x"}, {"mem"}, {"doctor"}, {"--model"}, {"--"}, {"-"}, {"--allowedTools", "x"}} {
 		f.Add(strings.Join(l, sep), uint8(3))
 	}
 	// Each lead is a line up to its "--", with arguments that make it
@@ -310,14 +293,13 @@ func FuzzAfterDashes(f *testing.F) {
 	}{
 		{before: []string{}, filler: []string{"x"}},
 		{before: []string{"-p"}, filler: []string{"x"}},
-		{before: []string{"run", "-q"}, filler: []string{"x"}},
+		{before: []string{"-p", "-v", "--max-turns", "3"}, filler: []string{"x"}},
 		{before: []string{"-y", "-C", "--model", "m", "--allowedTools", "Read", "--add-dir", "../x", "--debug"}, filler: []string{"x"}},
 		{before: []string{"trust"}, filler: []string{"x"}, arguments: func(rest []string) []string { return rest }},
 		{before: []string{"mem", "find"}, filler: []string{"x"}, arguments: func(rest []string) []string { return append([]string{"find"}, rest...) }},
 		{before: []string{"session", "rename", "--json"}, filler: []string{"i", "t"}, arguments: func(rest []string) []string {
 			return []string{rest[0], strings.Join(rest[1:], " ")}
 		}},
-		{before: []string{"mcp", "add", "-e", "A=1", "-H", "X: y"}, filler: []string{"n", "c"}, arguments: func(rest []string) []string { return rest }},
 		{before: []string{"session", "show"}, filler: []string{"x"}, arguments: func(rest []string) []string { return rest }},
 	}
 	f.Fuzz(func(t *testing.T, line string, envBits uint8) {

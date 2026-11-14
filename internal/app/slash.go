@@ -375,7 +375,7 @@ func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
 	l.large = mu
 	l.modelMu.Unlock()
 	l.saveState(c, func(st *config.State) error {
-		if err := st.SetModel("large", ref); err != nil {
+		if err := st.SetModel("model", ref); err != nil {
 			return err
 		}
 		if level != "" {

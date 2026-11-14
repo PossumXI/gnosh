@@ -18,10 +18,10 @@ import (
 // the user's gnosh.json: a choice made inside gnosh sticks. A model given
 // on the command line is never written here.
 type State struct {
-	// Large and Small are the models chosen, as provider/id: the
+	// Model and SmallModel are the models chosen, as provider/id: the
 	// session's model, and the one for the short side jobs. Empty means no
 	// choice.
-	Large, Small string
+	Model, SmallModel string
 	// Thinking is the level chosen for each model, keyed by provider/id.
 	Thinking map[string]string
 	// AutoCompactWindow is the window chosen, in tokens. Zero means no
@@ -36,12 +36,13 @@ type State struct {
 // stateVersion is the version written to the state file.
 const stateVersion = 1
 
-// stateFile is the state file's shape on disk.
+// stateFile is the state file's shape on disk. The two slots of "models"
+// have the names of the config's two keys for the same choices.
 type stateFile struct {
 	Version int `json:"version"`
 	Models  struct {
-		Large string `json:"large,omitempty"`
-		Small string `json:"small,omitempty"`
+		Model      string `json:"model,omitempty"`
+		SmallModel string `json:"smallModel,omitempty"`
 	} `json:"models"`
 	Thinking          map[string]string `json:"thinking,omitempty"`
 	AutoCompactWindow int               `json:"autoCompactWindow,omitempty"`
@@ -69,7 +70,7 @@ func ReadState(fsys FS, path string) (State, []Problem) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return warn("the state file is not JSON gnosh can read, so the model and thinking level chosen earlier are not in force. Choosing them again with /model writes a new file.")
 	}
-	st := State{Large: f.Models.Large, Small: f.Models.Small, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow}
+	st := State{Model: f.Models.Model, SmallModel: f.Models.SmallModel, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(data, &all) == nil {
 		for _, k := range stateKeys {
@@ -85,7 +86,7 @@ func ReadState(fsys FS, path string) (State, []Problem) {
 // check says what is wrong with a State that is about to be written, or
 // nil. A writer is held to what the reader accepts.
 func (st State) check() error {
-	for _, m := range []string{st.Large, st.Small} {
+	for _, m := range []string{st.Model, st.SmallModel} {
 		if m != "" && !validModelRef(m) {
 			return fmt.Errorf("%q is not a model name of the form provider/id", m)
 		}
@@ -119,7 +120,7 @@ func WriteState(fsys WriteFS, path string, st State) error {
 	}
 	var f stateFile
 	f.Version = stateVersion
-	f.Models.Large, f.Models.Small = st.Large, st.Small
+	f.Models.Model, f.Models.SmallModel = st.Model, st.SmallModel
 	f.Thinking, f.AutoCompactWindow = st.Thinking, st.AutoCompactWindow
 	known, err := json.Marshal(f)
 	if err != nil {
@@ -161,8 +162,8 @@ func UpdateState(fsys WriteFS, path string, change func(*State)) error {
 	return WriteState(fsys, path, st)
 }
 
-// SetModel records a model choice for a slot, "large" or "small". An empty
-// ref clears the choice.
+// SetModel records a model choice for a slot, "model" or "smallModel". An
+// empty ref clears the choice.
 func (st *State) SetModel(slot string, ref ModelRef) error {
 	name := ""
 	if ref.ID != "" {
@@ -172,12 +173,12 @@ func (st *State) SetModel(slot string, ref ModelRef) error {
 		}
 	}
 	switch slot {
-	case "large":
-		st.Large = name
-	case "small":
-		st.Small = name
+	case "model":
+		st.Model = name
+	case "smallModel":
+		st.SmallModel = name
 	default:
-		return fmt.Errorf("%q is not a model slot; the slots are large and small", slot)
+		return fmt.Errorf("%q is not a model slot; the slots are model and smallModel", slot)
 	}
 	return nil
 }

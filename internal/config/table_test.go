@@ -15,12 +15,12 @@ func TestKindsMatchTheTrustPackage(t *testing.T) {
 	got := []string{
 		KindProvider, KindModel, KindHost, KindHook, KindHookOff,
 		KindAllowRule, KindAskRule, KindDenyRule, KindMode, KindAddDir, KindEnv, KindOption, KindExtraPath,
-		KindAddress, KindDisabledSkill, KindRemoval,
+		KindAddress, KindHiddenSkill, KindRemoval,
 	}
 	want := []string{
 		"provider", "model", "host", "hook", "hook-off",
 		"allow-rule", "ask-rule", "deny-rule", "mode", "add-dir", "env", "option", "extra-path",
-		"address", "disabled-skill", "removal",
+		"address", "hidden-skill", "removal",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("the kinds changed:\n got %q\nwant %q\nChange internal/trust/kinds.go and its test to match.", got, want)
@@ -54,10 +54,10 @@ func TestTable(t *testing.T) {
 	for _, name := range []string{
 		"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks",
 		"providers.<id>.type", "providers.<id>.baseUrl", "providers.<id>.apiKey", "providers.<id>.headers", "providers.<id>.extraBody",
-		"providers.<id>.discoverModels", "providers.<id>.disabled", "providers.<id>.name",
+		"providers.<id>.listModels", "providers.<id>.disabled", "providers.<id>.name",
 		"models.<provider>/<model id>.contextWindow", "models.<provider>/<model id>.maxOutputTokens", "models.<provider>/<model id>.thinkingLevels",
 		"model.id", "model.thinking", "model.temperature", "smallModel.id", "hosts.<name>.ssh", "hosts.<name>.description",
-		"options.requestTimeout", "options.autoCompactWindow", "options.memEmbeddingsUrl", "options.disabledSkills",
+		"options.requestTimeout", "options.autoCompactWindow", "options.memEmbeddingsUrl", "options.hiddenSkills",
 		"permissions.allow", "permissions.defaultMode",
 		"hook event Stop", "provider type llamacpp", "provider type openai-compatible", "$GNOSH_CONFIG_DIR", "$GNOSH_DATA_DIR", "$API_TIMEOUT_MS",
 	} {
@@ -87,6 +87,17 @@ func TestTable(t *testing.T) {
 	for _, v := range ownEnv {
 		if v.use == "reads" && (v.what == "" || v.from == "") {
 			t.Errorf("the variable %s lacks its meaning or where its name comes from", v.name)
+		}
+	}
+	// The provider types are the servers gnosh treats in a way of their
+	// own and the one format the rest speak, and no others
+	// (spec/DECISIONS.md, 26 and 27).
+	if got := providerTypeNames(); !slices.Equal(got, []string{"llamacpp", "openai-compatible", "anthropic", "openai"}) {
+		t.Errorf("the provider types are %q", got)
+	}
+	for _, pt := range providerTypes {
+		if pt.what == "" || pt.from == "" {
+			t.Errorf("the provider type %s lacks what it is or where its name comes from", pt.name)
 		}
 	}
 }

@@ -192,9 +192,11 @@ func (p *program) warnf(format string, args ...any) {
 }
 
 // built lists what this wiring makes work beyond the table's own P0
-// entries, by the names cli.Table.SetStatus takes. Everything else in the
-// table stays as it ships: typing it stops startup with a message that
-// says it is not built.
+// entries, by the names cli.Table.SetStatus takes. What is then left in
+// the table is a feature's to mark (Feature.Built): where the feature is
+// not joined, typing it stops startup with a message that says it is not
+// built. The table holds nothing else: a command or a flag whose part is
+// not built has no row (spec/DECISIONS.md, 26).
 var built = []string{
 	"doctor", "doctor --hosts", "trust", "trust --list", "trust --forget",
 	"dirs", "logs", "logs --tail", "logs --follow", "models",
@@ -416,9 +418,6 @@ func (p *program) featureCommand(ctx context.Context, c Command, inv cli.Invocat
 		cc.Sessions = st.sessions()
 	} else {
 		sessions := p.stateDir()
-		if inv.DataDir != "" {
-			sessions = p.absFrom(inv.DataDir)
-		}
 		cc.Dirs = Dirs{
 			Home:        p.home,
 			Cwd:         st.folder.Start,

@@ -25,8 +25,8 @@ var ErrNoShell = errors.New("gnosh was not started from a shell that could bring
 
 // Options adjust a Terminal. The zero value is what gnosh uses.
 type Options struct {
-	// EscTimeout replaces DefaultEscWait when it is positive.
-	EscTimeout time.Duration
+	// EscWait replaces DefaultEscWait when it is positive.
+	EscWait time.Duration
 
 	// Clipboard allows CopyToClipboard, which writes to the person's
 	// clipboard through the terminal (OSC 52). It is off unless they

@@ -141,8 +141,8 @@ func (ld *loader) switches() Switches {
 	if in.Flags.SafeMode {
 		s.SafeMode.put(true, flagOrigin("--safe-mode"))
 	}
-	if on, set := ld.onOff("GNOSH_PROFILE"); set {
-		s.Profile.put(on, envOrigin("GNOSH_PROFILE"))
+	if on, set := ld.onOff("GNOSH_DEBUG_PAGE"); set {
+		s.DebugPage.put(on, envOrigin("GNOSH_DEBUG_PAGE"))
 	}
 	if in.Flags.Debug {
 		b.opts.Debug.put(true, flagOrigin("--debug"))
@@ -254,8 +254,8 @@ func (ld *loader) models() {
 			case ref.Provider == "":
 			case p == nil:
 				stale("the %s chosen here, %s, is on a provider that is not configured, so it was not used. Choose a model with /model or -m. The providers are: %s.%s", slot.name, ref, b.providerIDs(), ld.heldNote())
-			case p.DiscoverModels.Set && !p.DiscoverModels.V && b.model(ref) == nil:
-				stale("the %s chosen here, %s, is not one provider %s lists, and that provider is set not to ask its server (\"discoverModels\": false). Register the model under \"models\", as %q: {}, or choose another.", slot.name, ref, ref.Provider, ref.String())
+			case p.ListModels.Set && !p.ListModels.V && b.model(ref) == nil:
+				stale("the %s chosen here, %s, is not one provider %s lists, and that provider is set not to ask its server (\"listModels\": false). Register the model under \"models\", as %q: {}, or choose another.", slot.name, ref, ref.Provider, ref.String())
 			}
 		}
 		if sl.Model.Set {
@@ -307,8 +307,8 @@ func (ld *loader) providers(limits Limits) {
 				p.APIKey, p.KeyFrom = NewSecret(key), "$"+t.keyVar
 			}
 		}
-		if !p.DiscoverModels.Set {
-			p.DiscoverModels.V = !slices.ContainsFunc(b.models, func(m *Model) bool { return m.Provider == p.ID })
+		if !p.ListModels.Set {
+			p.ListModels.V = !slices.ContainsFunc(b.models, func(m *Model) bool { return m.Provider == p.ID })
 		}
 		at, hint := p.Origin, ""
 		switch {

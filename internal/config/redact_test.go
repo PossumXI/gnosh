@@ -170,7 +170,7 @@ func TestProblemsShowNoSecret(t *testing.T) {
 		`{"providers": {"sk-provider-key-0123456789/x": {"type": "llamacpp"}}}`,
 		`{"providers": {"x": {"type": "sk-provider-key-0123456789"}}}`,
 		`{"providers": {"x": {"type": "llamacpp", "disabled": "sk-provider-key-0123456789"}}}`,
-		`{"providers": {"x": {"type": "llamacpp", "discoverModels": "sk-provider-key-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "listModels": "sk-provider-key-0123456789"}}}`,
 		`{"providers": {"x": {"type": "llamacpp", "apiKey": ["sk-provider-key-0123456789"]}}}`,
 		`{"providers": {"x": {"type": "llamacpp", "headers": "Bearer header-value-0123456789"}}}`,
 		`{"providers": {"x": {"type": "llamacpp", "headers": {"Authorization": ["Bearer header-value-0123456789"]}}}}`,

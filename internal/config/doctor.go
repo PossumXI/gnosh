@@ -157,7 +157,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		}
 		if pr.Connect == nil {
 			answering++
-			offers[p.ID], known[p.ID] = listed, !p.DiscoverModels.V
+			offers[p.ID], known[p.ID] = listed, !p.ListModels.V
 			add("providers", Note, "%s at %s: %d models registered. Whether its server answers was not checked.", p.ID, p.Endpoints[0].Display, len(listed))
 			continue
 		}
@@ -185,7 +185,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 			which += "."
 		}
 		offers[p.ID], known[p.ID] = listed, true
-		if p.DiscoverModels.V && pr.ListModels != nil {
+		if p.ListModels.V && pr.ListModels != nil {
 			found, err := pr.ListModels(ctx, p, *chosen)
 			if err != nil {
 				known[p.ID] = false
@@ -197,7 +197,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 					offers[p.ID] = append(offers[p.ID], id)
 				}
 			}
-		} else if p.DiscoverModels.V {
+		} else if p.ListModels.V {
 			known[p.ID] = false
 		}
 		add("providers", Fine, "%s at %s: %d models.%s", p.ID, chosen.Display, len(offers[p.ID]), which)

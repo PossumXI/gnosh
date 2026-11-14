@@ -21,8 +21,8 @@ type Command string
 const (
 	// CmdInteractive opens a session a person types into: `gnosh`.
 	CmdInteractive Command = "interactive"
-	// CmdPrint answers one prompt and exits: `gnosh -p`, `gnosh run`, or
-	// `gnosh` with its output going somewhere other than a terminal.
+	// CmdPrint answers one prompt and exits: `gnosh -p`, or `gnosh` with
+	// its output going somewhere other than a terminal.
 	CmdPrint Command = "print"
 	// CmdHelp prints help: -h, --help, or `gnosh help`. Invocation.HelpFor
 	// says for which command.
@@ -38,39 +38,18 @@ const (
 	CmdTrust Command = "trust"
 	// CmdModels lists the models each provider offers.
 	CmdModels Command = "models"
-	// CmdSessionList and the five after it are `gnosh session ...`.
+	// CmdSessionList and the three after it are `gnosh session ...`.
 	CmdSessionList   Command = "session list"
 	CmdSessionShow   Command = "session show"
 	CmdSessionLast   Command = "session last"
-	CmdSessionDelete Command = "session delete"
 	CmdSessionRename Command = "session rename"
-	CmdSessionWeb    Command = "session web"
 	// CmdMem reads the project's mem; Invocation.Args holds the words after
 	// `mem`, for mem itself to read.
 	CmdMem Command = "mem"
-	// CmdPromptShow and the four after it are `gnosh prompt ...`.
-	CmdPromptShow    Command = "prompt show"
-	CmdPromptPath    Command = "prompt path"
-	CmdPromptExport  Command = "prompt export"
-	CmdPromptTools   Command = "prompt tools"
-	CmdPromptContext Command = "prompt context"
 	// CmdLogs prints the project's log.
 	CmdLogs Command = "logs"
 	// CmdDirs says which config and data folders are in use.
 	CmdDirs Command = "dirs"
-	// CmdSSH runs ssh; Invocation.Args holds everything after `ssh`,
-	// untouched.
-	CmdSSH Command = "ssh"
-	// CmdProjects lists the project folders gnosh has been used in.
-	CmdProjects Command = "projects"
-	// CmdStats prints usage totals.
-	CmdStats Command = "stats"
-	// CmdMCPAdd and the four after it are `gnosh mcp ...`.
-	CmdMCPAdd     Command = "mcp add"
-	CmdMCPAddJSON Command = "mcp add-json"
-	CmdMCPGet     Command = "mcp get"
-	CmdMCPList    Command = "mcp list"
-	CmdMCPRemove  Command = "mcp remove"
 )
 
 // Conversation says which conversation a session command works in.
@@ -87,9 +66,6 @@ const (
 	// ConversationResume goes on with the one -r names (Invocation.Resume),
 	// or lets the person pick when it names none.
 	ConversationResume Conversation = "resume"
-	// ConversationSession goes on with the one whose ID -s gives
-	// (Invocation.Session).
-	ConversationSession Conversation = "session"
 )
 
 // The values of --permission-mode, in Claude Code's spelling.
@@ -101,7 +77,7 @@ const (
 	ModeBypassPermissions = "bypassPermissions"
 )
 
-// The values of --output-format and --input-format.
+// The values of --output-format. --input-format takes the first of them.
 const (
 	FormatText       = "text"
 	FormatJSON       = "json"
@@ -121,11 +97,8 @@ type Invocation struct {
 	HelpFor []string
 
 	// Args is a subcommand's own arguments, in order and exactly as typed:
-	// the folder of `trust`, the ID of `session show` and `session delete`,
-	// the ID and then the title of `session rename`, the name of `prompt
-	// show` and `prompt export`, the words after `mem` and after `ssh`, and
-	// for `mcp` the server's name followed by its command or URL (or its
-	// JSON).
+	// the folder of `trust`, the ID of `session show`, the ID and then the
+	// title of `session rename`, and the words after `mem`.
 	Args []string
 
 	// Prompt is the prompt given on the command line: every argument that is
@@ -137,11 +110,11 @@ type Invocation struct {
 	// line between; in an interactive session it is the first prompt.
 	ReadStdin bool
 	// PrintImplied says print mode was chosen because standard output is not
-	// a terminal, not because -p or `run` was typed.
+	// a terminal, not because -p was typed.
 	PrintImplied bool
 
-	// Conversation says which conversation to work in. Session commands
-	// always set it; ConversationNew is the default.
+	// Conversation says which conversation to work in. A session always
+	// sets it; ConversationNew is the default.
 	Conversation Conversation
 	// Resume is what followed -r: a session ID, a session's name, words to
 	// search the session list for, or the path of a transcript file. Empty
@@ -150,8 +123,6 @@ type Invocation struct {
 	// ResumeIsFile says Resume is an absolute path ending in .jsonl, which
 	// names a transcript file and not a session.
 	ResumeIsFile bool
-	// Session is the session ID that followed -s.
-	Session string
 	// SessionID is the ID the new conversation is to have (--session-id). It
 	// is a UUID; Parse has checked its form.
 	SessionID string
@@ -160,8 +131,6 @@ type Invocation struct {
 	ForkSession bool
 	// Name is the name to give the session (-n).
 	Name string
-	// NoSessionPersistence says not to save the session at all.
-	NoSessionPersistence bool
 
 	// Model is the model for this run, as typed: `model` or `provider/model`.
 	Model string
@@ -176,9 +145,6 @@ type Invocation struct {
 	// --dangerously-skip-permissions set ModeBypassPermissions, and `manual`
 	// is recorded as ModeDefault.
 	PermissionMode string
-	// AllowSkipPermissions says the person may switch to skipping
-	// permissions later in the session (--allow-dangerously-skip-permissions).
-	AllowSkipPermissions bool
 	// AllowedTools holds the allow rules, one per item, as typed.
 	AllowedTools []string
 	// DisallowedTools holds the deny rules, one per item, as typed.
@@ -192,9 +158,6 @@ type Invocation struct {
 	AddDirs []string
 	// TrustFolder says to use this folder's own settings for this one run.
 	TrustFolder bool
-	// PermissionPrompts is who answers permission questions in a print run:
-	// "host" or "none"; "" means the command line did not say.
-	PermissionPrompts string
 
 	// SystemPrompt is text to use in place of gnosh's own instructions, and
 	// SystemPromptFile the path of a file holding such text. Neither file is
@@ -209,8 +172,6 @@ type Invocation struct {
 
 	// Cwd is the folder to work in (--cwd).
 	Cwd string
-	// DataDir is the folder to keep sessions and data in (-D).
-	DataDir string
 	// Settings is what followed --settings: a file's path, or the settings
 	// themselves as JSON. SettingsInline says it is JSON (it begins with a
 	// brace).
@@ -219,20 +180,10 @@ type Invocation struct {
 	// SettingSources lists which settings files to read: any of "user",
 	// "project", "local". Nil means the command line did not say.
 	SettingSources []string
-	// Bare asks for the least gnosh can start with.
-	Bare bool
 	// SafeMode asks for a start with the user's customizations off.
 	SafeMode bool
 	// DisableSlashCommands turns skills and slash commands off.
 	DisableSlashCommands bool
-	// MCPConfig holds what was given to --mcp-config: each item a file's
-	// path or JSON written out.
-	MCPConfig []string
-	// StrictMCPConfig says to use only the servers MCPConfig names.
-	StrictMCPConfig bool
-	// Agents is the JSON given to --agents (or, in print mode, the path of a
-	// file holding it).
-	Agents string
 	// Debug asks for more in the log. --debug-file turns it on too.
 	Debug bool
 	// DebugFilter is the filter attached to --debug with an equals sign.
@@ -247,25 +198,16 @@ type Invocation struct {
 	// In print mode it is FormatText unless the command line says otherwise;
 	// outside print mode it is "".
 	OutputFormat string
-	// InputFormat is what a print run reads from standard input: FormatText
-	// or FormatStreamJSON. It defaults as OutputFormat does.
+	// InputFormat is what a print run reads from standard input: FormatText,
+	// the one format there is. It defaults as OutputFormat does.
 	InputFormat string
-	// IncludePartialMessages asks for the answer piece by piece in a
-	// stream-json run.
-	IncludePartialMessages bool
-	// ReplayUserMessages asks for each user message read from standard input
-	// to be printed back.
-	ReplayUserMessages bool
-	// Quiet asks for no progress indicator on stderr.
-	Quiet bool
 	// Goal is the condition a print run works towards (--goal).
 	Goal string
 	// MaxTurns is the most turns the model may take in a print run. Zero
 	// means no limit.
 	MaxTurns int
 
-	// JSON asks a subcommand to print JSON (`session ...`, `projects`,
-	// `prompt tools`).
+	// JSON asks a subcommand to print JSON (`session ...`).
 	JSON bool
 	// Hosts belongs to `doctor`: also try each declared host, which reaches
 	// out to other machines.
@@ -274,30 +216,10 @@ type Invocation struct {
 	// one instead of trusting it.
 	List   bool
 	Forget bool
-	// Force belongs to `prompt export`: write the file even if one is there.
-	Force bool
-	// Export belongs to `prompt tools`: write each tool's description to a
-	// file to edit.
-	Export bool
 	// Follow and Tail belong to `logs`: keep printing as the log grows, and
 	// how many lines to print (zero means the command line did not say).
 	Follow bool
 	Tail   int
-	// Port belongs to `session web`: the port to serve the page on (zero
-	// means the command line did not say).
-	Port int
-	// All and CrawlDir belong to `stats`.
-	All      bool
-	CrawlDir string
-	// MCPScope, MCPTransport, MCPEnv and MCPHeaders belong to `mcp`: where
-	// the server is recorded ("local", "user" or "project"), how it is
-	// reached ("stdio", "sse" or "http"), the KEY=value pairs for its
-	// command, and the headers for a remote one. An empty scope or transport
-	// means the command line did not say.
-	MCPScope     string
-	MCPTransport string
-	MCPEnv       []string
-	MCPHeaders   []string
 }
 
 // Exit codes, for the code that runs what Parse describes.
@@ -323,7 +245,8 @@ const (
 //
 // A flag whose feature is not built yet is an error, not a silent no-op.
 // The code that wires features in makes its own table with Default and marks
-// what it has built; Parse uses the table as it ships.
+// what it has built; Parse uses the table as it ships, in which only what
+// the specs call P0 is marked.
 func Parse(args []string, env Env) (Invocation, error) {
 	return Default().Parse(args, env)
 }

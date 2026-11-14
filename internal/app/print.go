@@ -21,11 +21,11 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 )
 
-// printer is the front end of a run that nobody attends (`gnosh -p`,
-// `gnosh run`): it sends the one prompt, writes standard output in the
-// format that was asked for and nothing else, puts everything a person
-// would be shown as a warning on standard error, and says with the exit
-// code how the run ended.
+// printer is the front end of a run that nobody attends (`gnosh -p`): it
+// sends the one prompt, writes standard output in the format that was
+// asked for and nothing else, puts everything a person would be shown as a
+// warning on standard error, and says with the exit code how the run
+// ended.
 //
 // The three formats:
 //
@@ -46,7 +46,6 @@ type printer struct {
 	inv     cli.Invocation
 	format  string
 	verbose bool
-	quiet   bool
 	// live says standard output is a terminal, where a person watches the
 	// words arrive.
 	live bool
@@ -89,7 +88,6 @@ func newPrinter(p *program, inv cli.Invocation) *printer {
 		p: p, inv: inv,
 		format:  inv.OutputFormat,
 		verbose: inv.Verbose,
-		quiet:   inv.Quiet,
 		live:    p.o.StdoutIsTerminal,
 		results: make(chan agent.TurnResult, 64),
 		noArgs:  p.noLogTools(),
@@ -169,7 +167,7 @@ func (f *printer) readPrompt(ctx context.Context) (string, error) {
 	piped := ""
 	if f.inv.ReadStdin {
 		var err error
-		if piped, err = f.p.readPiped(ctx, arg != "", f.quiet); err != nil {
+		if piped, err = f.p.readPiped(ctx, arg != ""); err != nil {
 			return "", err
 		}
 	}
@@ -198,7 +196,7 @@ func joinPrompt(piped, arg string) string {
 // readPiped reads standard input to its end. With a prompt already given,
 // it waits only a moment for the first byte: a run started with an open
 // standard input that never says anything goes on without it.
-func (p *program) readPiped(ctx context.Context, havePrompt, quiet bool) (string, error) {
+func (p *program) readPiped(ctx context.Context, havePrompt bool) (string, error) {
 	type chunk struct {
 		data []byte
 		err  error
@@ -249,9 +247,7 @@ func (p *program) readPiped(ctx context.Context, havePrompt, quiet bool) (string
 				return string(all), nil
 			}
 		case <-silence:
-			if !quiet {
-				p.warnf("nothing arrived on standard input within %s, so gnosh goes on with the prompt from the command line.", wait)
-			}
+			p.warnf("nothing arrived on standard input within %s, so gnosh goes on with the prompt from the command line.", wait)
 			return "", nil
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -404,13 +400,7 @@ func (f *printer) Event(ev any) {
 				ToolName: ev.Name, ToolUseID: ev.CallID, Message: core.TextOf(ev.Result.Content)})
 		}
 	case *agent.NoticeEvent:
-		if ev.Level == agent.LevelInfo {
-			if !f.quiet {
-				f.stderr("%s", ev.Text)
-			}
-		} else {
-			f.stderr("%s", ev.Text)
-		}
+		f.stderr("%s", ev.Text)
 		level := "info"
 		if ev.Level != agent.LevelInfo {
 			level = "warning"
@@ -429,9 +419,7 @@ func (f *printer) Event(ev any) {
 	case *agent.SummaryEvent:
 		switch {
 		case ev.Phase == "start":
-			if !f.quiet {
-				f.stderr("the conversation is being summarized to make room (%s).", ev.Trigger)
-			}
+			f.stderr("the conversation is being summarized to make room (%s).", ev.Trigger)
 			f.line(statusLine{Type: "system", Subtype: "status", UUID: newUUID(), SessionID: f.sessionID(), Status: ptr("compacting")})
 		case ev.Err == nil:
 			f.line(compactLine{Type: "system", Subtype: "compact_boundary", UUID: newUUID(), SessionID: f.sessionID(),

@@ -29,8 +29,8 @@ type Paths struct {
 	// ProjectSettings is the project's gnosh.json that was found in the
 	// working directory, or "".
 	ProjectSettings string
-	// DataDir is the project's data folder: sessions, logs, mem. It is
-	// the directory given with -D, else the closest folder of the
+	// DataDir is the project's data folder, where the settings file that
+	// gnosh itself writes is kept. It is the closest folder of the
 	// configured name (.gnosh, or the projectDataDir option) on the way up
 	// to the project root, else a new one at the project root. Load does
 	// not create it.

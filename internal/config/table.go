@@ -14,8 +14,10 @@ import (
 //
 // Every name was chosen by one rule, in this order: the key or the
 // variable Claude Code documents for the same thing, where there is one;
-// else the public term of the model providers' APIs; else plain words for
-// what the thing does. The from of each entry says which.
+// else the public term of the model providers' APIs and of their SDKs;
+// else plain words for what the thing does. The from of each entry says
+// which, and spec/DECISIONS.md items 26 and 27 give the reasons for the
+// names that were changed or weighed.
 
 // Where a name comes from, in the words the table uses.
 const (
@@ -83,7 +85,7 @@ var topKeys = []keyDef{
 	{"providers", "", "the model servers, each under an id of the person's choosing", fromPlain},
 	{"models", "", "what gnosh should know about a model, under \"<provider>/<model id>\"", fromPlain},
 	{"model", "", "the session's model: \"<provider>/<model id>\", or an object that also says how it is asked", fromClaudeCode + ": the settings key"},
-	{"smallModel", "", "the model for the short side jobs (titles, summaries, checks); the session's model does them when none is named", fromPlain + ", after \"model\" and the --small-model flag"},
+	{"smallModel", "", "the model for the short side jobs (titles, summaries, checks); the session's model does them when none is named", fromPlain + ", after \"model\""},
 	{"hosts", FeatureHosts, "other machines the model may run commands on, each under a name", fromPlain},
 	{"options", "", "gnosh's own switches and limits", fromPlain},
 	{"permissions", FeaturePermissions, "allow, ask and deny rules, the starting mode, more directories", fromClaudeCode + ": the settings key"},
@@ -101,7 +103,7 @@ var providerFields = []keyDef{
 	{"apiKey", "", "the key; none for a server on the person's own machine", fromAPIs + ": the API key"},
 	{"headers", "", "more request headers, as an object of names and values; an empty value is not sent", fromClaudeCode + ": the key of .mcp.json for a server's request headers"},
 	{"extraBody", "", "an object merged into the body of every request", fromAPIs + ": the extra_body of the OpenAI and Anthropic SDKs"},
-	{"discoverModels", "", "ask the server which models it has; when not given, it is asked exactly when no model is registered for it", fromPlain},
+	{"listModels", "", "ask the server which models it has; when not given, it is asked exactly when no model is registered for it", fromAPIs + ": the request they call \"list models\""},
 	{"disabled", "", "keep the entry and do not use it", fromPlain},
 }
 
@@ -180,19 +182,19 @@ type providerType struct {
 	keyVar string
 	// what says which server it is.
 	what string
+	// from says where the name comes from.
+	from string
 }
 
-// providerTypes is every value of a provider's "type". Each is the public
-// name of the server it is for.
+// providerTypes is every value of a provider's "type": three servers
+// under their own names, and the format every other server speaks, under
+// the name such servers give themselves. A server that speaks OpenAI's
+// format needs no type of its own (spec/DECISIONS.md, 26 and 27).
 var providerTypes = []providerType{
-	{name: "llamacpp", wire: "llamacpp", v1: "always", what: "llama.cpp's server"},
-	{name: "openai-compatible", wire: "openai", v1: "bare", what: "any server that speaks OpenAI's chat-completions format (what such servers call themselves)"},
-	{name: "anthropic", wire: "anthropic", url: "https://api.anthropic.com", keyVar: "ANTHROPIC_API_KEY", what: "Anthropic's API"},
-	{name: "openai", wire: "openai", v1: "bare", url: "https://api.openai.com/v1", keyVar: "OPENAI_API_KEY", what: "OpenAI's API"},
-	{name: "ollama", wire: "openai", v1: "always", what: "Ollama"},
-	{name: "lmstudio", wire: "openai", v1: "always", what: "LM Studio"},
-	{name: "litellm", wire: "openai", v1: "always", what: "LiteLLM"},
-	{name: "omlx", wire: "openai", v1: "always", what: "oMLX"},
+	{name: "llamacpp", wire: "llamacpp", v1: "always", what: "llama.cpp's server", from: fromPlain + ": the server's own name"},
+	{name: "openai-compatible", wire: "openai", v1: "bare", what: "any server that speaks OpenAI's chat-completions format", from: fromAPIs + ": what servers that speak OpenAI's format call themselves"},
+	{name: "anthropic", wire: "anthropic", url: "https://api.anthropic.com", keyVar: "ANTHROPIC_API_KEY", what: "Anthropic's API", from: fromPlain + ": the provider's own name"},
+	{name: "openai", wire: "openai", v1: "bare", url: "https://api.openai.com/v1", keyVar: "OPENAI_API_KEY", what: "OpenAI's API", from: fromPlain + ": the provider's own name"},
 }
 
 // providerTypeNames lists the provider types for a message.
@@ -324,11 +326,13 @@ var ownEnv = []envVar{
 	{"GNOSH_CONFIG_DIR", "reads", "the directory to use in place of the user's config directory", fromClaudeCode + ": CLAUDE_CONFIG_DIR"},
 	{"GNOSH_DATA_DIR", "reads", "the directory to use in place of the user's state directory", fromPlain + ", after GNOSH_CONFIG_DIR"},
 	{"GNOSH_SAFE_MODE", "reads", "the same as --safe-mode", fromClaudeCode + ": CLAUDE_CODE_SAFE_MODE"},
-	{"GNOSH_PROFILE", "reads", "serve a debugging page on loopback", fromPlain},
+	{"GNOSH_DEBUG_PAGE", "reads", "serve a debugging page on loopback", fromPlain},
 	// What gnosh sets for the commands and hooks it starts. A gnosh started
-	// from inside one of those inherits them.
+	// from inside one of those inherits them. A hook's variables are named
+	// for the fields of Claude Code's hook input, in upper case behind
+	// GNOSH_ (the hooks package says how).
 	{"GNOSH", "sets", "1 in every command gnosh runs", ""},
-	{"GNOSH_EVENT", "sets", "a hook's event", ""},
+	{"GNOSH_HOOK_EVENT_NAME", "sets", "a hook's event", ""},
 	{"GNOSH_SESSION_ID", "sets", "the session", ""},
 	{"GNOSH_CWD", "sets", "the working directory", ""},
 	{"GNOSH_PROJECT_DIR", "sets", "the project root", ""},
@@ -412,7 +416,7 @@ type Entry struct {
 	// What says what it is for.
 	What string
 	// From says where the name comes from: Claude Code's documentation, the
-	// model providers' APIs, or plain words.
+	// model providers' APIs and SDKs, or plain words.
 	From string
 	// Feature is the part of gnosh it needs, or "". A setting for a part
 	// the calling program does not have stops startup.
@@ -433,7 +437,7 @@ func Table() []Entry {
 	add("", topKeys)
 	add("providers.<id>.", providerFields)
 	for _, t := range providerTypes {
-		out = append(out, Entry{Name: "provider type " + t.name, What: t.what + ", in the " + t.wire + " format", From: fromPlain + ": the server's own name"})
+		out = append(out, Entry{Name: "provider type " + t.name, What: t.what + ", in the " + t.wire + " format", From: t.from})
 	}
 	add("models.<provider>/<model id>.", modelFields)
 	add("model.", slotFields)

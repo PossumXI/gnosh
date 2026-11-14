@@ -158,7 +158,7 @@ left() { [ -z "${RUN_TIMEOUT:-}" ] || python3 -c 'import sys, time; t0, run = ma
 case $harness in
   gnosh|gnosh-full|gnosh-nomem|gnosh-swarm)
     # The run's own config. It names one model and gives its window, and
-    # discovery is off, so gnosh asks the server for nothing and can name no
+    # listModels is off, so gnosh asks the server for nothing and can name no
     # other model. The model's own line is the thinking switch.
     mkdir -p "$H/.config/gnosh"
     pin=""; [ -n "${SLOT:-}" ] && pin=", \"extraBody\": {\"id_slot\": $SLOT}"
@@ -166,12 +166,12 @@ case $harness in
     small="box/$MODEL"
     side=""; sidemodel=""
     if [ -n "${SIDE_SLOT:-}" ]; then  # the short side requests, on a slot of their own
-      side=$(printf ',\n    "side": {"type": "%s", "baseUrl": "http://127.0.0.1:%s", "discoverModels": false, "extraBody": {"id_slot": %s}}' "$ptype" "$port" "$SIDE_SLOT")
+      side=$(printf ',\n    "side": {"type": "%s", "baseUrl": "http://127.0.0.1:%s", "listModels": false, "extraBody": {"id_slot": %s}}' "$ptype" "$port" "$SIDE_SLOT")
       sidemodel=$(printf ',\n    "side/%s": {"contextWindow": %s}' "$MODEL" "$WINDOW")
     fi
     {
       printf '{\n  "providers": {\n'
-      printf '    "box": {"type": "%s", "baseUrl": "http://127.0.0.1:%s", "discoverModels": false%s}%s\n  },\n' "$ptype" "$port" "$pin" "$side"
+      printf '    "box": {"type": "%s", "baseUrl": "http://127.0.0.1:%s", "listModels": false%s}%s\n  },\n' "$ptype" "$port" "$pin" "$side"
       printf '  "models": {\n    "box/%s": {"contextWindow": %s}%s\n  },\n' "$MODEL" "$WINDOW" "$sidemodel"
       printf '  "model": {"id": "box/%s"%s}\n}\n' "$MODEL" "$think"
     } > "$H/.config/gnosh/gnosh.json"
@@ -191,14 +191,14 @@ case $harness in
     append=(); [ -n "${GNOSH_APPEND_FILE:-}" ] && append=(--append-system-prompt-file "$GNOSH_APPEND_FILE")
     suffix=""; [ -n "${PROMPT_SUFFIX_FILE:-}" ] && suffix=$(cat "$PROMPT_SUFFIX_FILE")
     version=$("$GNOSH_BIN" --version 2>&1 | head -1)${GNOSH_PROMPTS:+ +prompts $(basename "$GNOSH_PROMPTS")}${VARIANT:+ +variant $VARIANT}
-    # A session answers one prompt and exits (run), allowed everything (-y: a
+    # A session answers one prompt and exits (-p), allowed everything (-y: a
     # run refuses what would have asked otherwise), and prints what happened as
     # JSON lines with its result object last, which is what the row reads.
     session() { local cont=(); [ "$1" -gt 1 ] && [ "${CONTINUE_MODE:-}" != new ] && cont=(--continue)
-      "${runenv[@]}" timeout -k 30 "$(cap)" "$GNOSH_BIN" run -q -y --cwd "$work" --output-format stream-json \
+      "${runenv[@]}" timeout -k 30 "$(cap)" "$GNOSH_BIN" -p -y --cwd "$work" --output-format stream-json \
       -m "box/$MODEL" --small-model "$small" "${nomem[@]}" "${turns[@]}" "${reason[@]}" "${append[@]}" "${cont[@]}" -- "$2$suffix" < /dev/null; }
     # swarm_session <prompt>: one session of a swarm.
-    swarm_session() { "${runenv[@]}" timeout -k 30 "$(cap)" "$GNOSH_BIN" run -q -y --cwd "$work" --output-format stream-json \
+    swarm_session() { "${runenv[@]}" timeout -k 30 "$(cap)" "$GNOSH_BIN" -p -y --cwd "$work" --output-format stream-json \
       -m "box/$MODEL" --small-model "$small" "${turns[@]}" "${reason[@]}" "${append[@]}" -- "$1" < /dev/null; }
     [ "$harness" = gnosh-swarm ] && version="$version +swarm ${SWARM:-3}" ;;
   crush)

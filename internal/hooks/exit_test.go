@@ -33,7 +33,7 @@ var exits = []struct {
 	{"exit 137", "exit 137", true, true, []string{"status 137", "signal 9"}, 137},
 	{"exit 255", "exit 255", true, true, []string{"status 255"}, 255},
 	{"exit 1 with nothing said", "exit 1", false, false, nil, 1},
-	{"a test that comes out false", `[ "$GNOSH_EVENT" = NoSuchEvent ] && echo formatted`, false, false, nil, 1},
+	{"a test that comes out false", `[ "$GNOSH_HOOK_EVENT_NAME" = NoSuchEvent ] && echo formatted`, false, false, nil, 1},
 	{"exit 1 with a reason", "echo 'jq: error: cannot parse the input' >&2; exit 1", true, true, []string{"status 1", "reported trouble", "jq: error: cannot parse the input"}, 1},
 	{"exit 1 with only blank lines on stderr", "printf '\\n  \\n' >&2; exit 1", false, false, nil, 1},
 	{"exit 42 with nothing said", "exit 42", false, false, nil, 42},

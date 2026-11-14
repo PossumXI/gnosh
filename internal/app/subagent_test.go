@@ -155,9 +155,9 @@ func TestDefinedSubAgentUnderTheSameRulesAndHooks(t *testing.T) {
 		w.Write(".claude/agents/fixer.md", "---\nname: fixer\ndescription: Makes one small change to a file.\ntools: Read, Edit\n---\n\nYou are the fixer. Make the change you are asked for and nothing else.\n")
 		hook := w.Script(w.Home+"/hooks/log.sh", `
 cat > /dev/null
-echo "$GNOSH_EVENT tool=$GNOSH_TOOL_NAME type=$GNOSH_AGENT_TYPE agent=${GNOSH_AGENT_ID:+set}" >> "$HOME/events.log"
-if [ "$GNOSH_EVENT" = SubagentStart ]; then echo '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"The reviewer wants one-line reports."}}'; fi
-if [ "$GNOSH_EVENT" = SubagentStop ] && [ ! -e "$HOME/objected" ]; then touch "$HOME/objected"; echo "check your work before you report" >&2; exit 2; fi`)
+echo "$GNOSH_HOOK_EVENT_NAME tool=$GNOSH_TOOL_NAME type=$GNOSH_AGENT_TYPE agent=${GNOSH_AGENT_ID:+set}" >> "$HOME/events.log"
+if [ "$GNOSH_HOOK_EVENT_NAME" = SubagentStart ]; then echo '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"The reviewer wants one-line reports."}}'; fi
+if [ "$GNOSH_HOOK_EVENT_NAME" = SubagentStop ] && [ ! -e "$HOME/objected" ]; then touch "$HOME/objected"; echo "check your work before you report" >&2; exit 2; fi`)
 		for _, e := range []string{"PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop", "Stop"} {
 			w.Hook(e, "", hook)
 		}

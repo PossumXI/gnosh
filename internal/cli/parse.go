@@ -57,7 +57,7 @@ func (t *Table) walk(args []string) (*parsed, *Error) {
 		if p.help {
 			// Help was asked for. The rest of the line can only say which
 			// command's help, and is otherwise not read.
-			if !ended && !p.cmd.raw && !strings.HasPrefix(a, "-") && len(p.args) == 0 {
+			if !ended && !strings.HasPrefix(a, "-") && len(p.args) == 0 {
 				if sub := p.cmd.sub(a); sub != nil {
 					p.cmd = sub
 					continue
@@ -68,7 +68,7 @@ func (t *Table) walk(args []string) (*parsed, *Error) {
 			}
 			continue
 		}
-		if ended || p.cmd.raw {
+		if ended {
 			p.args = append(p.args, a)
 			continue
 		}
@@ -116,9 +116,6 @@ func (p *parsed) plain(args []string, i int) *Error {
 				}
 			}
 			p.cmd, p.name = sub, a
-			if sub.raw && i+1 < len(args) && (args[i+1] == "-h" || args[i+1] == "--help") {
-				p.help = true
-			}
 			return nil
 		}
 		if c.needSub {

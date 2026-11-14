@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -80,7 +79,7 @@ func TestTableIsSound(t *testing.T) {
 		if c.needSub != (len(c.subs) > 0 && c.parent != nil) {
 			t.Errorf("%s: needSub is %v with %d subcommands", title, c.needSub, len(c.subs))
 		}
-		if c.needSub && (c.cmd != "" || c.raw) {
+		if c.needSub && c.cmd != "" {
 			t.Errorf("%s needs a subcommand and yet is a command of its own", title)
 		}
 		if !c.needSub && c.cmd == "" {
@@ -94,14 +93,6 @@ func TestTableIsSound(t *testing.T) {
 		}
 		if !hasFlag(c.flags, tab.flags[indexOf(tab, idHelp)]) {
 			t.Errorf("%s does not take --help", title)
-		}
-		if c.raw && len(c.flags) != 1 {
-			t.Errorf("%s passes everything on and still has flags of its own", title)
-		}
-		for id := range c.flagHelp {
-			if !ids[id] {
-				t.Errorf("%s has help for %q, which is no flag", title, id)
-			}
 		}
 
 		// Within a command, and within everything that can be typed before
@@ -154,15 +145,12 @@ func TestTableIsSound(t *testing.T) {
 		}
 	}
 
-	// gnosh and gnosh run take the same flags: a leading -p is exactly run.
-	var run *command
+	// Only gnosh itself opens a session or answers a prompt: print mode is
+	// a flag of it, -p, and not a command of its own.
 	for _, c := range tab.commands {
-		if c.print {
-			run = c
+		if c.session != (c == tab.root) {
+			t.Errorf("%s: session is %v", c.title(), c.session)
 		}
-	}
-	if run == nil || !reflect.DeepEqual(run.flags, tab.root.flags) {
-		t.Errorf("gnosh run does not take exactly the flags gnosh does")
 	}
 }
 
@@ -175,10 +163,13 @@ func indexOf(tab *Table, id string) int {
 	return 0
 }
 
-// TestTableCoversTheSpecs lists every flag and command of the two specs by
-// name, so that dropping one from the table fails here and not in Jae's
-// terminal.
-func TestTableCoversTheSpecs(t *testing.T) {
+// TestTableHoldsWhatIsBuilt lists every flag and command of the table by
+// name, so that dropping one fails here and not in Jae's terminal. It also
+// lists what the two specs name and the table leaves out: what
+// spec/DECISIONS.md item 26 took off the command line, and the commands
+// and flags whose parts are not written. One of those gets its row with
+// the code that builds it, and not before.
+func TestTableHoldsWhatIsBuilt(t *testing.T) {
 	tab := Default()
 	have := map[string]bool{}
 	for _, e := range tab.Entries() {
@@ -196,56 +187,53 @@ func TestTableCoversTheSpecs(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		// harness-cli.md CLI-4 to CLI-9, on gnosh and on gnosh run.
-		"-C", "--continue", "-c", "-s", "--session", "-r", "--resume", "--fork-session", "-n", "--name",
+		// The flags of a session.
+		"-C", "--continue", "-c", "-r", "--resume", "--session-id", "--fork-session", "-n", "--name",
 		"-m", "--model", "--small-model", "--reasoning-effort", "--effort",
 		"-y", "--yolo", "--dangerously-skip-permissions", "--permission-mode",
 		"--allowedTools", "--allowed-tools", "--disallowedTools", "--disallowed-tools", "--tools", "--add-dir", "--trust-folder",
 		"--system-prompt", "--system-prompt-file", "--append-system-prompt", "--append-system-prompt-file",
-		"--cwd", "-D", "--data-dir", "--safe-mode", "--mcp-config", "--strict-mcp-config", "-d", "--debug",
-		"--output-format", "-q", "--quiet", "-v", "--verbose", "--goal",
-		// spec/cc/cli.md, P0 and P1.
-		"-p", "--print", "--input-format", "--include-partial-messages", "--replay-user-messages",
-		"--max-turns", "--no-session-persistence", "--permission-prompts", "--session-id",
-		"--allow-dangerously-skip-permissions", "--settings", "--setting-sources", "--bare",
-		"--disable-slash-commands", "--agents", "--debug-file", "--version", "-h", "--help",
+		"--cwd", "--settings", "--setting-sources", "--safe-mode", "--disable-slash-commands",
+		"-d", "--debug", "--debug-file", "-v", "--verbose",
+		"-p", "--print", "--output-format", "--input-format", "--max-turns", "--goal",
+		"--version", "-h", "--help",
 	} {
-		for _, c := range []string{"gnosh", "gnosh run"} {
-			if !have[c+" "+want] {
-				t.Errorf("%s does not take %s", c, want)
-			}
+		if !have["gnosh "+want] {
+			t.Errorf("gnosh does not take %s", want)
 		}
 	}
 	for _, want := range []string{
-		// harness-cli.md CLI-10 to CLI-12.
-		"gnosh run", "gnosh r", "gnosh doctor", "gnosh trust", "gnosh models",
-		"gnosh session list", "gnosh session show", "gnosh session last", "gnosh session delete", "gnosh session rename",
-		"gnosh sessions list", "gnosh s list", "gnosh session ls", "gnosh session rm", "gnosh session web",
-		"gnosh mem", "gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
-		"gnosh logs", "gnosh dirs", "gnosh ssh", "gnosh projects", "gnosh stats",
-		"gnosh trust --list", "gnosh trust --forget",
-		"gnosh session list --json", "gnosh session show --json", "gnosh session last --json", "gnosh session delete --json", "gnosh session rename --json",
-		"gnosh session web --port", "gnosh prompt export --force", "gnosh prompt tools --json", "gnosh prompt tools --export",
-		"gnosh prompt context -s", "gnosh prompt context -C", "gnosh logs -f", "gnosh logs -t",
-		"gnosh projects --json", "gnosh stats --all", "gnosh stats --crawl-dir",
-		// spec/cc/cli.md section 5, P0 and P1.
-		"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
-		"gnosh mcp add -s", "gnosh mcp add --scope", "gnosh mcp add -t", "gnosh mcp add --transport",
-		"gnosh mcp add -e", "gnosh mcp add --env", "gnosh mcp add -H", "gnosh mcp add --header",
+		"gnosh doctor", "gnosh doctor --hosts", "gnosh trust", "gnosh trust --list", "gnosh trust --forget", "gnosh models",
+		"gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename",
+		"gnosh sessions list", "gnosh s list", "gnosh session ls",
+		"gnosh session list --json", "gnosh session show --json", "gnosh session last --json", "gnosh session rename --json",
+		"gnosh mem", "gnosh logs", "gnosh logs -f", "gnosh logs --follow", "gnosh logs -t", "gnosh logs --tail", "gnosh dirs",
+		"gnosh help", "gnosh version",
 	} {
 		if !have[want] {
 			t.Errorf("the table has no %s", want)
 		}
 	}
-	// What the specs list as not carried over, or not adopted, is absent.
 	for _, gone := range []string{
+		// What the specs list as not carried over, or not adopted.
 		"gnosh server", "gnosh login", "gnosh logout", "gnosh update-providers", "gnosh schema",
 		"gnosh --channels", "gnosh -H", "gnosh --host", "gnosh --from-pr", "gnosh --betas",
 		"gnosh --plugin-dir", "gnosh --plugin-url", "gnosh --prompt-suggestions", "gnosh --file",
 		"gnosh auth", "gnosh install", "gnosh plugin", "gnosh mcp serve", "gnosh mcp login",
+		// What spec/DECISIONS.md item 26 took off: print mode is -p, a
+		// session is named with --resume, and there is no other data folder.
+		"gnosh run", "gnosh r", "gnosh -q", "gnosh --quiet", "gnosh -s", "gnosh --session", "gnosh -D", "gnosh --data-dir",
+		// What the specs name and nothing builds yet.
+		"gnosh --bare", "gnosh --agents", "gnosh --mcp-config", "gnosh --strict-mcp-config",
+		"gnosh --allow-dangerously-skip-permissions", "gnosh --include-partial-messages", "gnosh --replay-user-messages",
+		"gnosh --no-session-persistence", "gnosh --permission-prompts",
+		"gnosh session delete", "gnosh session rm", "gnosh session web",
+		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
+		"gnosh ssh", "gnosh projects", "gnosh stats",
+		"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
 	} {
 		if have[gone] {
-			t.Errorf("the table has %s, which the specs leave out", gone)
+			t.Errorf("the table has %s, which is not to be on the command line", gone)
 		}
 	}
 }
@@ -256,12 +244,12 @@ func TestSharedTable(t *testing.T) {
 	tab := allBuilt(t)
 	lines := [][]string{
 		{"-y", "-C"},
-		{"run", "-q", "--allowedTools", "Bash(git diff *),Edit", "do it"},
+		{"-p", "--allowedTools", "Bash(git diff *),Edit", "do it"},
 		{"session", "list", "--json"},
 		{"--alowedTools", "x"},
 		{"docter"},
 		{"--help"},
-		{"mcp", "add", "-e", "A=1", "x", "y"},
+		{"mem", "find", "-x", "y"},
 	}
 	want := make([]string, len(lines))
 	for i, l := range lines {

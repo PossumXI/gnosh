@@ -83,14 +83,14 @@ func (t *Table) build(p *parsed, env Env) (Invocation, *Error) {
 }
 
 // explicitPrint reports whether the line asks for print mode in so many
-// words: the run command, or -p.
+// words: -p.
 func (p *parsed) explicitPrint() bool {
-	return p.cmd.print || p.given(idPrint) != nil
+	return p.given(idPrint) != nil
 }
 
 // printLetters gives each one-letter flag the meaning it has in print mode,
 // where that differs: -v is --version on a plain `gnosh` and --verbose
-// after `run` or with -p.
+// with -p.
 func (p *parsed) printLetters() {
 	for k := range p.occs {
 		o := &p.occs[k]
@@ -194,6 +194,9 @@ func (p *parsed) check(o *occurrence) (flagValue, *Error) {
 		if ch == nil {
 			names := f.choiceNames()
 			msg := fmt.Sprintf("%s takes %s, and %s is none of them, so %s.", o.typed, oneOf(names, "or"), shown(v), nothing(c))
+			if len(names) == 1 {
+				msg = fmt.Sprintf("%s takes %s and no other value, and %s was given, so %s.", o.typed, names[0], shown(v), nothing(c))
+			}
 			e := &Error{Kind: ErrBadValue, Typed: o.typed}
 			var all []string
 			for _, known := range f.choices {
@@ -219,12 +222,8 @@ func (p *parsed) check(o *occurrence) (flagValue, *Error) {
 	}
 	if f.number {
 		n, err := strconv.Atoi(v)
-		if err != nil || n < f.min || (f.max > 0 && n > f.max) {
-			span := fmt.Sprintf("of %d or more", f.min)
-			if f.max > 0 {
-				span = fmt.Sprintf("from %d to %d", f.min, f.max)
-			}
-			return bad("%s takes a whole number %s, and %s is not one, so %s.", o.typed, span, shown(v), nothing(c))
+		if err != nil || n < f.min {
+			return bad("%s takes a whole number of %d or more, and %s is not one, so %s.", o.typed, f.min, shown(v), nothing(c))
 		}
 		out.n = n
 	}
@@ -312,11 +311,11 @@ func (p *parsed) arity() *Error {
 			"%s is one argument too many for %s, so %s. It is written: %s. An argument with spaces in it needs quotes around it, and so does a prompt.",
 			shown(p.args[c.maxArgs]), c.title(), nothing(c), written)}
 	}
-	if c.session || c.raw {
+	if c.session {
 		return nil
 	}
 	// The arguments a command names must say something. Words it passes on
-	// to something else (mem's, a server's command) are that thing's own.
+	// to something else (mem's) are that thing's own.
 	named := n
 	if c.maxArgs < 0 {
 		named = min(c.minArgs, n)

@@ -11,9 +11,9 @@ func takePrompt(inv *Invocation, args []string) {
 	inv.Prompt = strings.Join(args, " ")
 }
 
-// finishSession does what `gnosh` and `gnosh run` need once their flags are
-// recorded: it decides between a session and print mode, and checks what
-// the flags mean together.
+// finishSession does what `gnosh` needs once its flags are recorded: it
+// decides between a session and print mode, and checks what the flags mean
+// together.
 func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 	explicit := p.explicitPrint()
 	printing := explicit || !env.StdoutIsTerminal
@@ -42,8 +42,6 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			kind = ConversationContinue
 		case idResume:
 			kind = ConversationResume
-		case idSession:
-			kind = ConversationSession
 		default:
 			continue
 		}
@@ -60,7 +58,7 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 	}
 	if o := p.given(idFork); o != nil && chosen == nil {
 		return fail(ErrUsage, o.typed,
-			"%s goes on in a copy of an earlier session, and this line starts a new one, so nothing was started. Add -c, -r or -s to say which session to copy.",
+			"%s goes on in a copy of an earlier session, and this line starts a new one, so nothing was started. Add -c or -r to say which session to copy.",
 			o.typed)
 	}
 	if o := p.given(idSessionID); o != nil && chosen != nil && !inv.ForkSession {
@@ -78,8 +76,8 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 	if y := p.given(idYolo); y != nil {
 		if m := p.given(idMode); m != nil && inv.PermissionMode != ModeBypassPermissions {
 			return fail(ErrConflict, y.typed,
-				"%s skips every permission question and %s %s starts in another mode, so nothing was started. Keep one of them. To start in %s with skipping still within reach, write --allow-dangerously-skip-permissions in place of %s.",
-				y.typed, m.typed, inv.PermissionMode, inv.PermissionMode, y.typed)
+				"%s skips every permission question and %s %s starts in another mode, so nothing was started. Keep one of them.",
+				y.typed, m.typed, inv.PermissionMode)
 		}
 		inv.PermissionMode = ModeBypassPermissions
 	}
@@ -96,7 +94,7 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 				inside = " Inside a session, type /goal."
 			}
 			return fail(ErrUsage, o.typed,
-				"%s only does something in print mode, and this line opens a session, so nothing was started. Add -p (or use gnosh run) to answer once and exit.%s",
+				"%s only does something in print mode, and this line opens a session, so nothing was started. Add -p to answer once and exit.%s",
 				o.typed, inside)
 		}
 	}
@@ -108,16 +106,6 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			inv.InputFormat = FormatText
 		}
 	}
-	if o := p.given(idPartial); o != nil && inv.OutputFormat != FormatStreamJSON {
-		return fail(ErrUsage, o.typed,
-			"%s adds lines to a stream-json run, and this run prints %s, so nothing was started. Add --output-format stream-json.",
-			o.typed, inv.OutputFormat)
-	}
-	if o := p.given(idReplay); o != nil && (inv.InputFormat != FormatStreamJSON || inv.OutputFormat != FormatStreamJSON) {
-		return fail(ErrUsage, o.typed,
-			"%s prints back the messages of a run that both reads and prints stream-json, and this run reads %s and prints %s, so nothing was started. Add --input-format stream-json and --output-format stream-json.",
-			o.typed, inv.InputFormat, inv.OutputFormat)
-	}
 
 	inv.SettingsInline = strings.HasPrefix(strings.TrimSpace(inv.Settings), "{")
 
@@ -127,7 +115,7 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			"The prompt on the command line is empty, so nothing was started. Give it some words, or leave it out.")
 	}
 	inv.ReadStdin = !env.StdinIsTerminal
-	if printing && inv.Prompt == "" && env.StdinIsTerminal && inv.Goal == "" && inv.InputFormat != FormatStreamJSON {
+	if printing && inv.Prompt == "" && env.StdinIsTerminal && inv.Goal == "" {
 		msg := "Print mode answers one prompt, and none was given, so nothing was started. Put the prompt on the command line, or pipe it in."
 		if inv.PrintImplied {
 			msg = "No prompt was given, so nothing was started. gnosh's output is not going to a terminal, so it would answer one prompt and exit, as with -p: put the prompt on the command line, or pipe it in."
@@ -166,24 +154,6 @@ func finishTrust(inv *Invocation, p *parsed, _ Env) *Error {
 // the rest of the words as one title.
 func takeRename(inv *Invocation, args []string) {
 	inv.Args = []string{args[0], strings.Join(args[1:], " ")}
-}
-
-// finishContext checks `gnosh prompt context`, which shows a new session's
-// context, the most recent session's (-C) or one session's (-s).
-func finishContext(inv *Invocation, p *parsed, _ Env) *Error {
-	s, c := p.given(idSession), p.given(idContinue)
-	inv.Conversation = ConversationNew
-	switch {
-	case s != nil && c != nil:
-		return &Error{Kind: ErrConflict, Typed: c.typed, Message: fmt.Sprintf(
-			"%s and %s each say which session's context to show, and only one can, so nothing was done. Keep one of them.",
-			s.typed, c.typed)}
-	case s != nil:
-		inv.Conversation = ConversationSession
-	case c != nil:
-		inv.Conversation = ConversationContinue
-	}
-	return nil
 }
 
 // finishHelp turns `gnosh help [command...]` into a request for that

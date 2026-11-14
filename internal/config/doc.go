@@ -32,8 +32,8 @@
 // (the state file, the trust record) is $GNOSH_DATA_DIR, else
 // $XDG_DATA_HOME/gnosh, else ~/.local/share/gnosh; no config file is ever
 // read from it. A project's data folder is .gnosh: the closest one on the
-// way up to the project root, or a new one at the root, or the directory
-// given with -D. Paths has them all.
+// way up to the project root, or a new one at the root. Paths has them
+// all.
 //
 // # The format
 //
@@ -72,14 +72,14 @@
 //
 //	providers   the model servers, each under an id of the person's choosing
 //	  type            which kind of server it is: llamacpp, openai-compatible,
-//	                  anthropic, openai, ollama, lmstudio, litellm, omlx
+//	                  anthropic or openai
 //	  name            the name shown to the person
 //	  baseUrl         where the API is: one address, or a list tried in
 //	                  order, the first that answers being used
 //	  apiKey          the key; none for a server on the person's own machine
 //	  headers         more request headers, as an object of names and values
 //	  extraBody       an object merged into the body of every request
-//	  discoverModels  ask the server which models it has
+//	  listModels      ask the server which models it has
 //	  disabled        keep the entry and do not use it
 //	models      what gnosh should know about a model, each under
 //	            "<provider>/<model id>"
@@ -105,7 +105,7 @@
 //	  maxBackgroundTasks       background commands that may run at once
 //	  userInstructionFiles     more instruction files of the person's own
 //	  projectInstructionFiles  more instruction files of the project
-//	  disabledSkills           skills to hide from the model
+//	  hiddenSkills             skills to hide from the model
 //	  memoryText               "lean" or "full": which of gnosh's two texts
 //	                           about mem the model is given
 //	  memReviewCloses          review a todo when it is closed
@@ -121,11 +121,18 @@
 // "thinking" is true, false, or one of the model's own levels, such as
 // "low".
 //
+// A provider's "type" names the server where gnosh treats that server in
+// a way of its own: llamacpp, anthropic, openai. Every other server that
+// speaks OpenAI's chat-completions format is openai-compatible, whatever
+// it is called, and needs no type of its own.
+//
 // Table lists every key, provider type, hook event and environment
 // variable with what it is for and where its name comes from. The names
 // follow one rule: the key or the variable Claude Code documents for the
 // same thing, where there is one; else the public term of the model
-// providers' APIs; else plain words for what the thing does.
+// providers' APIs and of their SDKs (requestTimeout, extraBody,
+// listModels); else plain words for what the thing does (options,
+// hiddenSkills).
 //
 // An example file:
 //
@@ -136,7 +143,7 @@
 //	      "type": "llamacpp",
 //	      "name": "Qwen (ai box)",
 //	      "baseUrl": ["http://192.0.2.91:8080", "http://127.0.0.1:18080"],  // or one string
-//	      "discoverModels": false
+//	      "listModels": false
 //	    },
 //	    // a hosted provider; the key comes from the environment
 //	    "claude": { "type": "anthropic", "apiKey": "${ANTHROPIC_API_KEY}" }
@@ -161,11 +168,11 @@
 //
 // gnosh reads four variables of its own: GNOSH_CONFIG_DIR and
 // GNOSH_DATA_DIR, which name the two directories above; GNOSH_SAFE_MODE,
-// which is --safe-mode; and GNOSH_PROFILE, which serves a debugging page
-// on this machine. Any other variable whose name begins with GNOSH_ stops
-// startup: it is most likely a misspelling, and would do nothing. (The
-// variables gnosh sets for the hooks and commands it runs are known too,
-// since a gnosh started from inside one inherits them.)
+// which is --safe-mode; and GNOSH_DEBUG_PAGE, which serves a debugging
+// page on this machine. Any other variable whose name begins with GNOSH_
+// stops startup: it is most likely a misspelling, and would do nothing.
+// (The variables gnosh sets for the hooks and commands it runs are known
+// too, since a gnosh started from inside one inherits them.)
 //
 // Of Claude Code's variables it reads, with Claude Code's meaning:
 // API_TIMEOUT_MS, BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS,
@@ -229,9 +236,9 @@
 // (Inputs.Trusted) they are read by the same reader, checked in full, and
 // then held: only settings of a kind that Inputs.KeepUntrusted accepts are
 // put in force, which with the trust package's rule means deny rules, ask
-// rules and switched-off skills. Every setting of a file is one of the
-// Kind constants, whatever key it stands under and however deep, and
-// there is no key by which a file can name another file to read.
+// rules and hidden skills. Every setting of a file is one of the Kind
+// constants, whatever key it stands under and however deep, and there is
+// no key by which a file can name another file to read.
 // Config.Held lists everything that waits, for the trust question and for
 // doctor. What is held is also taken out again after the last merge, so
 // that no later step can put it back, and naming one of the folder's two

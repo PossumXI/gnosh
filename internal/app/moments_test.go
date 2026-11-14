@@ -97,7 +97,7 @@ func TestHookEventsInOrder(t *testing.T) {
 		apptest.Reply{Text: "Done."})
 	hook := w.Script(w.Home+"/hooks/log.sh", `
 cat > /dev/null
-echo "$GNOSH_EVENT session=$GNOSH_SESSION_ID project=$GNOSH_PROJECT_DIR claude=$CLAUDE_PROJECT_DIR agent=$AGENT tool=$GNOSH_TOOL_NAME source=$GNOSH_SESSION_START_SOURCE reason=$GNOSH_SESSION_END_REASON" >> "$HOME/events.log"`)
+echo "$GNOSH_HOOK_EVENT_NAME session=$GNOSH_SESSION_ID project=$GNOSH_PROJECT_DIR claude=$CLAUDE_PROJECT_DIR agent=$AGENT tool=$GNOSH_TOOL_NAME source=$GNOSH_SESSION_START_SOURCE reason=$GNOSH_SESSION_END_REASON" >> "$HOME/events.log"`)
 	for _, e := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"} {
 		w.Hook(e, "", hook)
 	}
@@ -147,7 +147,7 @@ func TestMaxTurns(t *testing.T) {
 func eventLog(w *apptest.World, events ...string) {
 	hook := w.Script(w.Home+"/hooks/log.sh", `
 cat > /dev/null
-echo "$GNOSH_EVENT $GNOSH_TOOL_NAME$GNOSH_STOP_FAILURE_ERROR$GNOSH_PRE_COMPACT_TRIGGER$GNOSH_POST_COMPACT_TRIGGER$GNOSH_INSTRUCTIONS_LOAD_REASON$GNOSH_NOTIFICATION_TYPE$GNOSH_SESSION_START_SOURCE" >> "$HOME/events.log"`)
+echo "$GNOSH_HOOK_EVENT_NAME $GNOSH_TOOL_NAME$GNOSH_STOP_FAILURE_ERROR$GNOSH_PRE_COMPACT_TRIGGER$GNOSH_POST_COMPACT_TRIGGER$GNOSH_INSTRUCTIONS_LOAD_REASON$GNOSH_NOTIFICATION_TYPE$GNOSH_SESSION_START_SOURCE" >> "$HOME/events.log"`)
 	for _, e := range events {
 		w.Hook(e, "", hook)
 	}

@@ -11,7 +11,7 @@ import (
 // What an untrusted folder's settings may still do: only restrict.
 func TestRestricts(t *testing.T) {
 	for kind, want := range map[string]bool{
-		KindDenyRule: true, KindAskRule: true, KindDisabledTool: true, KindDisabledSkill: true,
+		KindDenyRule: true, KindAskRule: true, KindDisabledTool: true, KindHiddenSkill: true,
 
 		KindProvider: false, KindModel: false, KindHost: false, KindHook: false, KindHookOff: false,
 		KindMCPLocal: false, KindMCPOnline: false, KindLSP: false, KindAllowRule: false,
@@ -35,12 +35,12 @@ func TestKindsMatchTheConfigPackage(t *testing.T) {
 	got := []string{
 		KindProvider, KindModel, KindHost, KindHook, KindHookOff,
 		KindAllowRule, KindAskRule, KindDenyRule, KindMode, KindAddDir, KindEnv, KindOption, KindExtraPath,
-		KindAddress, KindDisabledSkill, KindRemoval,
+		KindAddress, KindHiddenSkill, KindRemoval,
 	}
 	want := []string{
 		"provider", "model", "host", "hook", "hook-off",
 		"allow-rule", "ask-rule", "deny-rule", "mode", "add-dir", "env", "option", "extra-path",
-		"address", "disabled-skill", "removal",
+		"address", "hidden-skill", "removal",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("the kinds changed:\n got %q\nwant %q\nChange internal/config/config.go and its test to match.", got, want)

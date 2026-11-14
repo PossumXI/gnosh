@@ -49,8 +49,8 @@
 // # What an untrusted folder may still do
 //
 // Only restrict. Restricts is the rule: a deny rule, a rule that makes a
-// tool ask first, a tool turned off and a skill turned off apply;
-// everything else waits. The config loader is
+// tool ask first, a tool turned off and a skill hidden from the model
+// apply; everything else waits. The config loader is
 // given Restricts as its filter, reads the project's files with the same
 // reader either way, and returns the settings that wait as a list. That
 // list is the input of the question, so the question can never show less
@@ -67,7 +67,7 @@
 // sentence per kind of harm and only for the kinds present. Everything
 // taken from the folder's files is escaped. Decide says when to ask:
 // only with a person there, and only when something is held. Without a
-// person (gnosh run, -p) nothing is asked: the settings stay out and
+// person (gnosh -p) nothing is asked: the settings stay out and
 // Notice is the one line for stderr. The command line has three ways in:
 // gnosh trust (Store.Trust, then Report), gnosh trust --list and --forget
 // (Store.List, Store.Forget), and --trust-folder, which trusts for one run

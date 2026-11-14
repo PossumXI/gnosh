@@ -18,11 +18,10 @@ func TestDefaultStatuses(t *testing.T) {
 		{line: `gnosh`, want: inter(Invocation{})},
 		{line: `gnosh "fix the build"`, want: inter(Invocation{Prompt: "fix the build"})},
 		{line: `gnosh -p "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
-		{line: `gnosh run -q -y --cwd DIR -D DATADIR -m provider/model "task"`,
-			want: pr(Invocation{Quiet: true, PermissionMode: skip, Cwd: "DIR", DataDir: "DATADIR", Model: "provider/model", Prompt: "task"})},
+		{line: `gnosh -p -y --cwd DIR -m provider/model "task"`,
+			want: pr(Invocation{PermissionMode: skip, Cwd: "DIR", Model: "provider/model", Prompt: "task"})},
 		{line: `gnosh -y -C`, want: inter(Invocation{PermissionMode: skip, Conversation: ConversationContinue})},
 		{line: `gnosh -y -c`, want: inter(Invocation{PermissionMode: skip, Conversation: ConversationContinue})},
-		{line: `gnosh -y -s abc`, want: inter(Invocation{PermissionMode: skip, Conversation: ConversationSession, Session: "abc"})},
 		{line: `gnosh --dangerously-skip-permissions -r abc "more"`, want: inter(Invocation{PermissionMode: skip, Conversation: ConversationResume, Resume: "abc", Prompt: "more"})},
 		{line: `gnosh -r`, want: inter(Invocation{Conversation: ConversationResume})},
 		{line: `gnosh --session-id ` + sampleUUID, want: inter(Invocation{SessionID: sampleUUID})},
@@ -32,14 +31,13 @@ func TestDefaultStatuses(t *testing.T) {
 		{line: `gnosh -v`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh version`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh -h`, want: helpFor()},
-		{line: `gnosh help run`, want: helpFor("run")},
+		{line: `gnosh help doctor`, want: helpFor("doctor")},
 
 		{line: `gnosh --fork-session -c`, kind: ErrNotBuilt, say: []string{"--fork-session is not built yet in this build of gnosh, so nothing was started. Leave it out for now."}},
 		{line: `gnosh -n x --verbose --safe-mode`, kind: ErrNotBuilt, say: []string{"-n, --verbose and --safe-mode are not built yet in this build of gnosh, so nothing was started. Leave them out for now."}},
 		{line: `gnosh -n x -n y --name z`, kind: ErrNotBuilt, say: []string{"--name is not built yet"}},
 		{line: `gnosh -p x --output-format json`, kind: ErrNotBuilt, say: []string{"--output-format json is not built yet"}},
 		{line: `gnosh -p x --output-format=stream-json`, kind: ErrNotBuilt, say: []string{"--output-format stream-json is not built yet"}},
-		{line: `gnosh -p --input-format stream-json`, kind: ErrNotBuilt, say: []string{"--input-format stream-json is not built yet"}},
 		// The value that counts is the last one.
 		{line: `gnosh -p x --output-format json --output-format text`, want: pr(Invocation{Prompt: "x"})},
 		{line: `gnosh --permission-mode plan`, kind: ErrNotBuilt, say: []string{"--permission-mode is not built yet"}},
@@ -47,26 +45,21 @@ func TestDefaultStatuses(t *testing.T) {
 		{line: `gnosh --tools ""`, kind: ErrNotBuilt, say: []string{"--tools is not built yet"}},
 		{line: `gnosh --system-prompt x`, kind: ErrNotBuilt},
 		{line: `gnosh --debug`, kind: ErrNotBuilt, say: []string{"--debug is not built yet"}},
-		{line: `gnosh run -v x`, kind: ErrNotBuilt, say: []string{"-v is not built yet"}},
-		{line: `gnosh run --goal "done" x`, kind: ErrNotBuilt, say: []string{"--goal is not built yet"}},
+		{line: `gnosh -p -v x`, kind: ErrNotBuilt, say: []string{"-v is not built yet"}},
+		{line: `gnosh -p --goal "done" x`, kind: ErrNotBuilt, say: []string{"--goal is not built yet"}},
 		{line: `gnosh doctor`, kind: ErrNotBuilt, say: []string{`gnosh doctor is not built yet in this build of gnosh, so nothing was done. "gnosh doctor --help" says what it is for.`}},
 		{line: `gnosh trust --list`, kind: ErrNotBuilt, say: []string{"gnosh trust is not built yet"}},
 		{line: `gnosh models`, kind: ErrNotBuilt},
 		{line: `gnosh s ls`, kind: ErrNotBuilt, say: []string{"gnosh session list is not built yet"}},
-		{line: `gnosh session web`, kind: ErrNotBuilt},
+		{line: `gnosh session rename abc A title`, kind: ErrNotBuilt},
 		{line: `gnosh mem show`, kind: ErrNotBuilt, say: []string{"gnosh mem is not built yet"}},
-		{line: `gnosh prompt tools`, kind: ErrNotBuilt},
 		{line: `gnosh logs -f`, kind: ErrNotBuilt},
 		{line: `gnosh dirs`, kind: ErrNotBuilt},
-		{line: `gnosh ssh box`, kind: ErrNotBuilt, say: []string{"gnosh ssh is not built yet"}},
-		{line: `gnosh projects`, kind: ErrNotBuilt},
-		{line: `gnosh stats`, kind: ErrNotBuilt},
-		{line: `gnosh mcp list`, kind: ErrNotBuilt},
 
 		// Help for something not built still works: it is how to find out.
 		{line: `gnosh doctor --help`, want: helpFor("doctor")},
 		{line: `gnosh --fork-session --help`, want: helpFor()},
-		{line: `gnosh ssh --help`, want: helpFor("ssh")},
+		{line: `gnosh mem --help`, want: helpFor("mem")},
 
 		// A slip in the typing is reported before anything else; a value
 		// that is wrong in itself before "not built"; "not built" before
@@ -75,7 +68,7 @@ func TestDefaultStatuses(t *testing.T) {
 		{line: `gnosh --permission-mode bogus`, kind: ErrBadValue},
 		{line: `gnosh --fork-session`, kind: ErrNotBuilt},
 		{line: `gnosh doctor now`, kind: ErrNotBuilt},
-		{line: `gnosh --include-partial-messages`, kind: ErrNotBuilt},
+		{line: `gnosh --small-model m`, kind: ErrNotBuilt},
 	})
 }
 
@@ -117,7 +110,7 @@ func TestSetStatus(t *testing.T) {
 		{"--fork-session", `gnosh -c --fork-session`},
 		{"doctor", `gnosh doctor`},
 		{"--output-format=json", `gnosh -p x --output-format json`},
-		{"ssh", `gnosh ssh box`},
+		{"mem", `gnosh mem show`},
 	} {
 		args := words(t, c.line)
 		if _, err := tab.Parse(args, tty); err == nil {
@@ -169,11 +162,11 @@ func TestSetStatus(t *testing.T) {
 	if _, err := tab.Parse(words(t, `gnosh -m x`), tty); !errors.As(err, &e) || e.Kind != ErrNotBuilt {
 		t.Errorf("gnosh -m x = %v; want not built", err)
 	}
-	if err := tab.SetStatus("run", NotBuilt); err != nil {
+	if err := tab.SetStatus("version", NotBuilt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tab.Parse(words(t, `gnosh run x`), tty); !errors.As(err, &e) || e.Kind != ErrNotBuilt {
-		t.Errorf("gnosh run x = %v; want not built", err)
+	if _, err := tab.Parse(words(t, `gnosh version`), tty); !errors.As(err, &e) || e.Kind != ErrNotBuilt {
+		t.Errorf("gnosh version = %v; want not built", err)
 	}
 
 	// Another table is not touched.
@@ -187,7 +180,6 @@ func TestSetStatus(t *testing.T) {
 		"fork-session":             `did you mean "--fork-session"?`,
 		"sesion list":              `did you mean "session list"?`,
 		"session":                  "is a group of commands",
-		"mcp":                      "is a group of commands",
 		"--output-format=xml":      "has no value",
 		"--permission-mode=manual": "has no value",
 		"--permission-mode=auto":   "has no value",
@@ -233,20 +225,21 @@ func TestEntries(t *testing.T) {
 		}
 	}
 	for name, want := range map[string]Entry{
-		"--continue":                {Kind: EntryFlag, Spellings: []string{"-c", "-C", "--continue"}, Commands: []string{"gnosh", "gnosh run", "gnosh prompt context"}, Priority: 0, Status: Built},
-		"--verbose":                 {Kind: EntryFlag, Spellings: []string{"--verbose", "-v"}, Commands: []string{"gnosh", "gnosh run"}, Priority: 1},
-		"--version":                 {Kind: EntryFlag, Spellings: []string{"-v", "--version"}, Commands: []string{"gnosh", "gnosh run"}, Priority: 0, Status: Built},
-		"--yolo":                    {Kind: EntryFlag, Spellings: []string{"-y", "--yolo", "--dangerously-skip-permissions"}, Commands: []string{"gnosh", "gnosh run"}, Priority: 0, Status: Built},
-		"--allowedTools":            {Kind: EntryFlag, Spellings: []string{"--allowedTools", "--allowed-tools"}, Commands: []string{"gnosh", "gnosh run"}, Priority: 1},
-		"--reasoning-effort":        {Kind: EntryFlag, Spellings: []string{"--reasoning-effort", "--effort"}, Commands: []string{"gnosh", "gnosh run"}, Priority: 1},
-		"--mcp-config":              {Kind: EntryFlag, Spellings: []string{"--mcp-config"}, Commands: []string{"gnosh", "gnosh run"}, Priority: 2},
-		"session --json":            {Kind: EntryFlag, Spellings: []string{"--json"}, Commands: []string{"gnosh session list", "gnosh session show", "gnosh session last", "gnosh session delete", "gnosh session rename"}, Priority: 1},
-		"mcp --scope":               {Kind: EntryFlag, Spellings: []string{"-s", "--scope"}, Commands: []string{"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp remove"}, Priority: 1},
-		"run":                       {Kind: EntryCommand, Spellings: []string{"run", "r"}, Priority: 0, Status: Built},
+		"--continue":                {Kind: EntryFlag, Spellings: []string{"-c", "-C", "--continue"}, Commands: []string{"gnosh"}, Priority: 0, Status: Built},
+		"--verbose":                 {Kind: EntryFlag, Spellings: []string{"--verbose", "-v"}, Commands: []string{"gnosh"}, Priority: 1},
+		"--version":                 {Kind: EntryFlag, Spellings: []string{"-v", "--version"}, Commands: []string{"gnosh"}, Priority: 0, Status: Built},
+		"--yolo":                    {Kind: EntryFlag, Spellings: []string{"-y", "--yolo", "--dangerously-skip-permissions"}, Commands: []string{"gnosh"}, Priority: 0, Status: Built},
+		"--allowedTools":            {Kind: EntryFlag, Spellings: []string{"--allowedTools", "--allowed-tools"}, Commands: []string{"gnosh"}, Priority: 1},
+		"--reasoning-effort":        {Kind: EntryFlag, Spellings: []string{"--reasoning-effort", "--effort"}, Commands: []string{"gnosh"}, Priority: 1},
+		"--cwd":                     {Kind: EntryFlag, Spellings: []string{"--cwd"}, Commands: []string{"gnosh", "gnosh doctor", "gnosh trust", "gnosh models", "gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename", "gnosh mem", "gnosh logs", "gnosh dirs"}, Priority: 0, Status: Built},
+		"session --json":            {Kind: EntryFlag, Spellings: []string{"--json"}, Commands: []string{"gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename"}, Priority: 1},
+		"logs --tail":               {Kind: EntryFlag, Spellings: []string{"-t", "--tail"}, Commands: []string{"gnosh logs"}, Priority: 1},
+		"help":                      {Kind: EntryCommand, Spellings: []string{"help"}, Priority: 0, Status: Built},
 		"doctor":                    {Kind: EntryCommand, Spellings: []string{"doctor"}, Priority: 1},
 		"session list":              {Kind: EntryCommand, Spellings: []string{"session list", "session ls", "sessions list", "sessions ls", "s list", "s ls"}, Priority: 1},
-		"session web":               {Kind: EntryCommand, Spellings: []string{"session web", "sessions web", "s web"}, Priority: 2},
+		"session rename":            {Kind: EntryCommand, Spellings: []string{"session rename", "sessions rename", "s rename"}, Priority: 1},
 		"--output-format=text":      {Kind: EntryValue, Spellings: []string{"text"}, Priority: 0, Status: Built},
+		"--input-format=text":       {Kind: EntryValue, Spellings: []string{"text"}, Priority: 0, Status: Built},
 		"--output-format=json":      {Kind: EntryValue, Spellings: []string{"json"}, Priority: 1},
 		"--permission-mode=default": {Kind: EntryValue, Spellings: []string{"default", "manual"}, Priority: 1},
 	} {
@@ -260,7 +253,7 @@ func TestEntries(t *testing.T) {
 			t.Errorf("entry %q:\n  got  %+v\n  want %+v", name, got, want)
 		}
 	}
-	for _, absent := range []string{"session", "prompt", "mcp", "gnosh", "--permission-mode=auto", "--permission-mode=manual", "mcp add --transport=ws"} {
+	for _, absent := range []string{"session", "gnosh", "--permission-mode=auto", "--permission-mode=manual"} {
 		if _, ok := seen[absent]; ok {
 			t.Errorf("the table lists %q, which has no status of its own", absent)
 		}

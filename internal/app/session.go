@@ -64,7 +64,7 @@ type live struct {
 	front     Frontend
 	flog      *fileLog
 	crash     *crashFile
-	profile   *profileServer
+	debugPage *debugPage
 
 	// ctx ends when the session is closed. What runs beside the session
 	// and is not waited for (a hook nobody reads the answer of) runs
@@ -394,8 +394,8 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			}
 		}
 	}
-	if l.cfg.Switches.Profile.V {
-		l.profile = startProfile(l)
+	if l.cfg.Switches.DebugPage.V {
+		l.debugPage = startDebugPage(l)
 	}
 	if name := strings.TrimSpace(l.inv.Name); name != "" && l.source != "clear" {
 		l.setStatus("session", name)
@@ -451,8 +451,6 @@ func (l *live) openTranscript(ctx context.Context) error {
 			return fmt.Errorf("there is no session to continue: none was started in %s (sessions are kept under %s). Start one without -c", cwd, l.store.Dir)
 		}
 		id = info.ID
-	case cli.ConversationSession:
-		id = inv.Session
 	case cli.ConversationResume:
 		switch {
 		case inv.ResumeIsFile:
@@ -978,9 +976,6 @@ func (l *live) info() SessionInfo {
 	if m.Provider != nil {
 		info.Provider = m.Provider.Name()
 	}
-	if l.inv.DataDir != "" {
-		info.Resume = "gnosh -D " + l.st.sessionsDir() + " -r " + l.ts.ID()
-	}
 	info.NotifyHooks = l.hooks.has(hooks.Notification)
 	return info
 }
@@ -1022,8 +1017,8 @@ func (l *live) close(reason string) {
 			}()
 		}
 		cancel()
-		if l.profile != nil {
-			l.profile.close()
+		if l.debugPage != nil {
+			l.debugPage.close()
 		}
 		if l.ts != nil {
 			_ = l.ts.Sync()
@@ -1117,7 +1112,7 @@ func (c *controls) SetMode(mode string) error {
 	case fell:
 		return errors.New("gnosh has no auto mode: it needs a second model to review each action")
 	case m == permission.ModeBypass && !l.cfg.Permissions.BypassAvailable:
-		return errors.New("skipping permissions can only be switched to in a session that was started with it within reach (-y, or --allow-dangerously-skip-permissions)")
+		return errors.New("skipping permissions can only be switched to in a session that was started with it (-y)")
 	}
 	return l.setMode(m)
 }
@@ -1279,9 +1274,9 @@ func (c *controls) close() {
 	l.close(reason)
 }
 
-// sessionCommand is `gnosh`, `gnosh "prompt"`, `gnosh -p` and `gnosh run`:
-// it settles the folder and its config, opens the session, hands it to its
-// front end, and closes it.
+// sessionCommand is `gnosh`, `gnosh "prompt"` and `gnosh -p`: it settles
+// the folder and its config, opens the session, hands it to its front end,
+// and closes it.
 func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code int) {
 	interactive := inv.Command == cli.CmdInteractive
 	var front Frontend

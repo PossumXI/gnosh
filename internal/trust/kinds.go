@@ -8,42 +8,42 @@ package trust
 // not trusted. A word that is not in this list is treated as the most
 // dangerous kind: it is held, and the question mentions it.
 const (
-	KindProvider      = "provider"       // a model provider: its address, its key
-	KindModel         = "model"          // a model registered or chosen
-	KindHost          = "host"           // a machine to log in to
-	KindHook          = "hook"           // a command run at a named moment
-	KindHookOff       = "hook-off"       // switching all hooks off
-	KindMCPLocal      = "mcp-local"      // an MCP server started on this machine
-	KindMCPOnline     = "mcp-online"     // an MCP server at an address
-	KindLSP           = "lsp"            // a language server
-	KindAllowRule     = "allow-rule"     // a tool or command let run without asking
-	KindAskRule       = "ask-rule"       // a tool or command that always asks
-	KindDenyRule      = "deny-rule"      // a tool or command refused
-	KindMode          = "mode"           // the starting permission mode and its switches
-	KindAddDir        = "add-dir"        // another directory the file tools may read
-	KindEnv           = "env"            // a variable for commands
-	KindOption        = "option"         // any other option
-	KindExtraPath     = "extra-path"     // an extra context or skill path
-	KindAddress       = "address"        // an address for analytics, embeddings or deliverables
-	KindDisabledSkill = "disabled-skill" // a skill hidden from the model
-	KindDisabledTool  = "disabled-tool"  // a tool taken away from the model
-	KindRemoval       = "removal"        // taking away a provider, a model or a host
-	KindRunsCommand   = "runs-command"   // a value gnosh would expand by running something
-	KindGitProgram    = "git-program"    // a program the repository's own git settings name
-	KindSkillsLink    = "skills-link"    // a skills folder that is a link out of the folder
-	KindStoredState   = "stored-state"   // something the project's stored state would turn on
+	KindProvider     = "provider"      // a model provider: its address, its key
+	KindModel        = "model"         // a model registered or chosen
+	KindHost         = "host"          // a machine to log in to
+	KindHook         = "hook"          // a command run at a named moment
+	KindHookOff      = "hook-off"      // switching all hooks off
+	KindMCPLocal     = "mcp-local"     // an MCP server started on this machine
+	KindMCPOnline    = "mcp-online"    // an MCP server at an address
+	KindLSP          = "lsp"           // a language server
+	KindAllowRule    = "allow-rule"    // a tool or command let run without asking
+	KindAskRule      = "ask-rule"      // a tool or command that always asks
+	KindDenyRule     = "deny-rule"     // a tool or command refused
+	KindMode         = "mode"          // the starting permission mode and its switches
+	KindAddDir       = "add-dir"       // another directory the file tools may read
+	KindEnv          = "env"           // a variable for commands
+	KindOption       = "option"        // any other option
+	KindExtraPath    = "extra-path"    // an extra context or skill path
+	KindAddress      = "address"       // an address for analytics, embeddings or deliverables
+	KindHiddenSkill  = "hidden-skill"  // a skill hidden from the model
+	KindDisabledTool = "disabled-tool" // a tool taken away from the model
+	KindRemoval      = "removal"       // taking away a provider, a model or a host
+	KindRunsCommand  = "runs-command"  // a value gnosh would expand by running something
+	KindGitProgram   = "git-program"   // a program the repository's own git settings name
+	KindSkillsLink   = "skills-link"   // a skills folder that is a link out of the folder
+	KindStoredState  = "stored-state"  // something the project's stored state would turn on
 )
 
 // Restricts reports whether a setting of this kind only takes something
 // away from the agent. Such a setting applies even in a folder that is not
 // trusted: a deny rule, a rule that makes a tool ask first, a tool turned
-// off, a skill turned off. Everything else waits for trust, including
-// every kind this package has never heard of. It is the function the
-// config loader is given to filter a project's files
+// off, a skill hidden from the model. Everything else waits for trust,
+// including every kind this package has never heard of. It is the
+// function the config loader is given to filter a project's files
 // (config.Inputs.KeepUntrusted).
 func Restricts(kind string) bool {
 	switch kind {
-	case KindDenyRule, KindAskRule, KindDisabledTool, KindDisabledSkill:
+	case KindDenyRule, KindAskRule, KindDisabledTool, KindHiddenSkill:
 		return true
 	}
 	return false

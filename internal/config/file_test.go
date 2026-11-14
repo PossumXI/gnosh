@@ -16,7 +16,7 @@ func TestProviders(t *testing.T) {
       "name": "The box",
       "baseUrl": ["http://127.0.0.1:8080", "http://192.168.1.9:8080/v1"],
       "apiKey": "",
-      "discoverModels": false,
+      "listModels": false,
       "extraBody": {"id_slot": 1, "nested": {"list": [1.5, "two", null, true]}},
       "headers": {"X-One": "1", "X-Two": "two words"},
       "disabled": false
@@ -34,8 +34,8 @@ func TestProviders(t *testing.T) {
 	if len(p.Endpoints) != 2 || p.Endpoints[0].Given != "http://127.0.0.1:8080" || p.Endpoints[1].Given != "http://192.168.1.9:8080/v1" {
 		t.Errorf("endpoints: %+v", p.Endpoints)
 	}
-	if p.DiscoverModels.V || !p.DiscoverModels.Set || p.DiscoverModels.Origin.Line != 8 {
-		t.Errorf("discoverModels false was not taken, or not from its own line: %+v", p.DiscoverModels)
+	if p.ListModels.V || !p.ListModels.Set || p.ListModels.Origin.Line != 8 {
+		t.Errorf("listModels false was not taken, or not from its own line: %+v", p.ListModels)
 	}
 	if n, ok := p.ExtraBody["id_slot"].(json.Number); !ok || n.String() != "1" {
 		t.Errorf("extra body: %#v", p.ExtraBody)
@@ -52,7 +52,7 @@ func TestProviders(t *testing.T) {
 	if p.Origin.File != userJSON || p.Origin.Line != 3 || p.Origin.Layer != LayerUser {
 		t.Errorf("origin: %+v", p.Origin)
 	}
-	if o := cfg.Providers[1]; o.Name != "other" || o.Type != "openai-compatible" || o.Wire != "openai" || !o.DiscoverModels.V || len(o.Endpoints) != 1 {
+	if o := cfg.Providers[1]; o.Name != "other" || o.Type != "openai-compatible" || o.Wire != "openai" || !o.ListModels.V || len(o.Endpoints) != 1 {
 		t.Errorf("second provider: %+v", o)
 	}
 }
@@ -64,9 +64,9 @@ func TestProvidersAcrossFiles(t *testing.T) {
 	fsys := newFS().put(userJSON, `{
   "providers": {
     "a": {"type": "llamacpp", "name": "First", "baseUrl": ["http://127.0.0.1:1", "http://127.0.0.1:2"],
-          "apiKey": "key-of-the-user-0123", "headers": {"X-One": "1", "X-Two": "2"}, "extraBody": {"id_slot": 1}, "discoverModels": false},
+          "apiKey": "key-of-the-user-0123", "headers": {"X-One": "1", "X-Two": "2"}, "extraBody": {"id_slot": 1}, "listModels": false},
     "b": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:3"},
-    "c": {"type": "ollama", "baseUrl": "http://127.0.0.1:4"}
+    "c": {"type": "openai-compatible", "baseUrl": "http://127.0.0.1:4"}
   },
   "models": {"b/m": {"contextWindow": 1000}, "c/m": {}},
   "model": "b/m"
@@ -81,7 +81,7 @@ func TestProvidersAcrossFiles(t *testing.T) {
 		t.Fatalf("providers: %+v", cfg.Providers)
 	}
 	a := cfg.Providers[0]
-	if a.Name != "First" || a.Type != "llamacpp" || a.APIKey.Reveal() != "key-of-the-user-0123" || a.DiscoverModels.V || !a.DiscoverModels.Set ||
+	if a.Name != "First" || a.Type != "llamacpp" || a.APIKey.Reveal() != "key-of-the-user-0123" || a.ListModels.V || !a.ListModels.Set ||
 		len(a.ExtraBody) != 1 {
 		t.Errorf("what the stronger file left out did not stay: %+v", a)
 	}
@@ -97,10 +97,10 @@ func TestProvidersAcrossFiles(t *testing.T) {
 	}
 
 	// null for a field puts it back to not given.
-	fsys.put(localJSON, `{"providers": {"a": {"name": null, "apiKey": null, "headers": null, "extraBody": null, "discoverModels": null, "disabled": null, "baseUrl": null}}}`)
+	fsys.put(localJSON, `{"providers": {"a": {"name": null, "apiKey": null, "headers": null, "extraBody": null, "listModels": null, "disabled": null, "baseUrl": null}}}`)
 	cfg = mustLoad(t, inputs(fsys))
 	a = cfg.Providers[0]
-	if a.Name != "a" || !a.APIKey.Empty() || a.Headers != nil || a.ExtraBody != nil || a.DiscoverModels.Set || a.Disabled || len(a.Endpoints) != 0 ||
+	if a.Name != "a" || !a.APIKey.Empty() || a.Headers != nil || a.ExtraBody != nil || a.ListModels.Set || a.Disabled || len(a.Endpoints) != 0 ||
 		!strings.Contains(a.LeftOut, "no address was given") {
 		t.Errorf("null did not put the fields back: %+v", a)
 	}
@@ -148,7 +148,7 @@ func TestModels(t *testing.T) {
 	if s := cfg.Small; s.Model.V.ID != "org/name:tag" || s.Thinking.V != "low" || s.Temperature.Set {
 		t.Errorf("the small model: %+v", s)
 	}
-	if cfg.Providers[0].DiscoverModels.V {
+	if cfg.Providers[0].ListModels.V {
 		t.Errorf("a provider with a registered model does not ask its server by default")
 	}
 
@@ -274,7 +274,7 @@ func TestOptions(t *testing.T) {
     "maxBackgroundTasks": 7,
     "userInstructionFiles": ["~/notes", "/etc/gnosh/RULES.md", "rules"],
     "projectInstructionFiles": ["docs/AGENT-NOTES.md"],
-    "disabledSkills": ["pdf", "xlsx", "pdf"],
+    "hiddenSkills": ["pdf", "xlsx", "pdf"],
     "memoryText": "full",
     "memReviewCloses": false,
     "memEmbeddingsUrl": "http://127.0.0.1:8090",
@@ -307,7 +307,7 @@ func TestOptions(t *testing.T) {
 	check("maxBackgroundTasks", o.MaxBackgroundTasks.V, 7)
 	check("userInstructionFiles", items(o.UserInstructionFiles), []string{testHome + "/notes", "/etc/gnosh/RULES.md", userDir + "/rules"})
 	check("projectInstructionFiles", items(o.ProjectInstructionFiles), []string{testCwd + "/docs/AGENT-NOTES.md"})
-	check("disabledSkills", items(o.DisabledSkills), []string{"pdf", "xlsx"})
+	check("hiddenSkills", items(o.HiddenSkills), []string{"pdf", "xlsx"})
 	check("memoryText", o.MemoryText.V, "full")
 	check("memReviewCloses", o.MemReviewCloses.V, false)
 	check("memEmbeddingsUrl", o.MemEmbeddingsURL.V, "http://127.0.0.1:8090")
@@ -334,22 +334,22 @@ func TestOptions(t *testing.T) {
 // files added to a list; lists add up across files.
 func TestOptionDefaultsAndNull(t *testing.T) {
 	fsys := newFS().
-		put(userJSON, `{"options": {"memoryText": "full", "maxBackgroundTasks": 3, "disabledSkills": ["a", "b"], "userInstructionFiles": ["/one"]}}`).
+		put(userJSON, `{"options": {"memoryText": "full", "maxBackgroundTasks": 3, "hiddenSkills": ["a", "b"], "userInstructionFiles": ["/one"]}}`).
 		put(projJSON, `{"options": {"memoryText": null, "maxBackgroundTasks": null, "userInstructionFiles": ["/two", "/one"]}}`)
 	cfg := mustLoad(t, inputs(fsys))
 	o := cfg.Options
 	if o.MemoryText.V != "lean" || o.MemoryText.Set || o.MaxBackgroundTasks.V != 50 || o.MaxBackgroundTasks.Set {
 		t.Errorf("null did not put the defaults back: %+v %+v", o.MemoryText, o.MaxBackgroundTasks)
 	}
-	if len(o.UserInstructionFiles) != 2 || o.UserInstructionFiles[0].V != "/one" || o.UserInstructionFiles[1].V != "/two" || len(o.DisabledSkills) != 2 {
-		t.Errorf("lists add up across files, each value once: %+v %+v", o.UserInstructionFiles, o.DisabledSkills)
+	if len(o.UserInstructionFiles) != 2 || o.UserInstructionFiles[0].V != "/one" || o.UserInstructionFiles[1].V != "/two" || len(o.HiddenSkills) != 2 {
+		t.Errorf("lists add up across files, each value once: %+v %+v", o.UserInstructionFiles, o.HiddenSkills)
 	}
-	fsys.put(localJSON, `{"options": {"disabledSkills": null}}`)
-	fsys.put("/work/x.json", `{"options": {"disabledSkills": ["c"]}}`)
+	fsys.put(localJSON, `{"options": {"hiddenSkills": null}}`)
+	fsys.put("/work/x.json", `{"options": {"hiddenSkills": ["c"]}}`)
 	in := inputs(fsys)
 	in.Flags.Settings = "/work/x.json"
 	cfg = mustLoad(t, in)
-	if got := cfg.Options.DisabledSkills; len(got) != 1 || got[0].V != "c" {
+	if got := cfg.Options.HiddenSkills; len(got) != 1 || got[0].V != "c" {
 		t.Errorf("null clears what weaker files added to a list: %+v", got)
 	}
 
@@ -527,11 +527,12 @@ func TestFileRefusals(t *testing.T) {
 
 		// providers.
 		{"providers of the wrong shape", `{"providers": [{"id": "x"}]}`, "", []string{`"providers" is an object`, `"local": {"type": "llamacpp"`, "a list"}},
-		{"a provider of the wrong shape", `{"providers": {"x": "llamacpp"}}`, "", []string{"the provider x is an object", "type, name, baseUrl, apiKey, headers, extraBody, discoverModels, disabled", "a string"}},
+		{"a provider of the wrong shape", `{"providers": {"x": "llamacpp"}}`, "", []string{"the provider x is an object", "type, name, baseUrl, apiKey, headers, extraBody, listModels, disabled", "a string"}},
 		{"a bad id", `{"providers": {"a/b": {"type": "llamacpp"}}}`, "", []string{"not a usable id for a provider", "letters, digits, dots, dashes and underscores"}},
 		{"an unknown field", "{\"providers\": {\"x\": {\"type\": \"llamacpp\",\n \"baseURL\": \"http://h\"}}}", "baseURL", []string{`"baseURL"`, "not a field of a provider", "baseUrl"}},
 		{"a field given twice", "{\"providers\": {\"x\": {\"type\": \"llamacpp\",\n \"type\": \"openai\"}}}", "\"openai\"", []string{`"providers.x.type"`, "given twice"}},
-		{"an unknown provider type", `{"providers": {"x": {"type": "llamacp"}}}`, "", []string{`"llamacp"`, "not a provider type", "llamacpp, openai-compatible, anthropic, openai, ollama, lmstudio, litellm, omlx"}},
+		{"an unknown provider type", `{"providers": {"x": {"type": "llamacp"}}}`, "", []string{`"llamacp"`, "not a provider type", "The types are: llamacpp, openai-compatible, anthropic, openai."}},
+		{"a server's name that is no type of its own", `{"providers": {"x": {"type": "vllm", "baseUrl": "http://127.0.0.1:1"}}}`, "", []string{`"vllm"`, "not a provider type", "The types are: llamacpp, openai-compatible, anthropic, openai."}},
 		{"a type that is not a string", `{"providers": {"x": {"type": 5}}}`, "", []string{`"providers.x.type" is one of`, "and here it is 5"}},
 		{"a type of null", `{"providers": {"x": {"type": null}}}`, "", []string{`"providers.x.type" cannot be null`, "write null for the provider itself"}},
 		{"first declared without a type", `{"providers": {"x": {"baseUrl": "http://127.0.0.1:1"}}}`, "", []string{`the provider x has no "type"`, "where it is first declared", "llamacpp"}},
@@ -547,7 +548,7 @@ func TestFileRefusals(t *testing.T) {
 		{"a bad header name", `{"providers": {"x": {"type": "llamacpp", "headers": {"X One": "v"}}}}`, "", []string{"not a usable HTTP header name"}},
 		{"a header value that is not a string", `{"providers": {"x": {"type": "llamacpp", "headers": {"X-One": 1}}}}`, "", []string{"the value of the header X-One", "is a string", "a number"}},
 		{"a truth value in quotes", `{"providers": {"x": {"type": "llamacpp", "disabled": "yes"}}}`, "", []string{`"providers.x.disabled" is true or false`, "a string"}},
-		{"discoverModels as a number", `{"providers": {"x": {"type": "llamacpp", "discoverModels": 1}}}`, "", []string{`"providers.x.discoverModels" is true or false`}},
+		{"listModels as a number", `{"providers": {"x": {"type": "llamacpp", "listModels": 1}}}`, "", []string{`"providers.x.listModels" is true or false`}},
 		{"taking away what is not there", `{"providers": {"nope": null}}`, "", []string{`"providers" takes nope away with null`, "nothing to take away", "none"}},
 		{"a brace left open in a variable", `{"providers": {"x": {"type": "llamacpp", "baseUrl": "http://${HOST:8080"}}}`, "", []string{`"providers.x.baseUrl" holds ${ with no } after it`, "${NAME:-default}"}},
 		{"something of the shell's in a variable", `{"providers": {"x": {"type": "llamacpp", "apiKey": "${KEY:?export it first}"}}}`, "", []string{`"providers.x.apiKey" holds ${ and }`, "not a variable's name", "nothing else is filled in"}},
@@ -615,7 +616,7 @@ func TestFileRefusals(t *testing.T) {
 		{"a text gnosh does not have", `{"options": {"memoryText": "long"}}`, "", []string{`"options.memoryText" is one of "lean", "full"`, `"long"`}},
 		{"an address that is not one", `{"options": {"memEmbeddingsUrl": "box:8090"}}`, "", []string{`the address given in "options.memEmbeddingsUrl" cannot be used`}},
 		{"a variable outside providers", `{"options": {"memEmbeddingsUrl": "http://${EMBED_HOST}:8090"}}`, "", []string{"cannot be used", `Variables are filled in only inside "providers"`}},
-		{"a list that is one string", `{"options": {"disabledSkills": "pdf"}}`, "", []string{`"options.disabledSkills" is a list of names`, "a string"}},
+		{"a list that is one string", `{"options": {"hiddenSkills": "pdf"}}`, "", []string{`"options.hiddenSkills" is a list of names`, "a string"}},
 		{"a list with a number in it", `{"options": {"userInstructionFiles": ["/a", 2]}}`, "", []string{`"options.userInstructionFiles" is a list of paths`, "a list that holds more than strings"}},
 		{"an empty entry of a list", `{"options": {"projectInstructionFiles": [""]}}`, "", []string{`an entry of "options.projectInstructionFiles" is empty`}},
 		{"an empty folder name", `{"options": {"projectDataDir": ""}}`, "", []string{`"options.projectDataDir" is a path as a string that is not empty`, "an empty string"}},

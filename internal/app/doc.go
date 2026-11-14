@@ -79,8 +79,8 @@
 //     machine: such a call always asks, whatever the allow rules and the
 //     read-only list say, the deny rules are held against the command
 //     before it leaves, and with permissions skipped the declaration is
-//     the whole gate. A call that names this machine as its host is shown
-//     to the engine as the local call it is.
+//     the whole gate. A call that names this machine as its host, or
+//     leaves the host blank, the engine judges as the local call it is.
 //
 // gnosh doctor and /status list the hosts. Doctor logs in to them only
 // when it is asked to (gnosh doctor --hosts, /doctor hosts); by itself it
@@ -136,7 +136,7 @@
 //     rules against the one list of tool names, the hooks against the
 //     events this build fires. Every mistake is printed at once, each
 //     with its file and line, and any mistake ends the program here.
-//  8. The session's file is opened: a new one, or the one -c, -r or -s
+//  8. The session's file is opened: a new one, or the one -c or -r
 //     names, or a copy of it. One session has one writer; a file left
 //     unfinished by a kill is mended as it is read.
 //  9. The session's log file and crash file; the prompt texts, gnosh's own

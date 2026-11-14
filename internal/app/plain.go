@@ -528,7 +528,7 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 	// line.
 	first := f.inv.Prompt
 	if f.piped != nil {
-		piped, err := f.p.readPiped(ctx, first != "", false)
+		piped, err := f.p.readPiped(ctx, first != "")
 		if err != nil {
 			f.p.errf("%v", err)
 			return cli.ExitFailure

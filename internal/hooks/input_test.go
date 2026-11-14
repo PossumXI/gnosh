@@ -348,7 +348,7 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 			// What a gnosh that is itself running inside a hook, or
 			// inside a command of another harness, would hand down.
 			"GNOSH=0", "AGENT=another-harness", "AI_AGENT=another-harness",
-			"GNOSH_EVENT=Stop", "GNOSH_TOOL_NAME=stale", "GNOSH_TOOL_USE_ID=stale",
+			"GNOSH_HOOK_EVENT_NAME=Stop", "GNOSH_TOOL_NAME=stale", "GNOSH_TOOL_USE_ID=stale",
 			"GNOSH_TOOL_INPUT_COMMAND=stale", "GNOSH_TOOL_INPUT_FILE_PATH=stale",
 			"GNOSH_STOP_HOOK_ACTIVE=1", "GNOSH_AGENT_ID=stale", "GNOSH_AGENT_TYPE=stale",
 			"GNOSH_SESSION_START_SOURCE=stale", "GNOSH_SESSION_END_REASON=stale",
@@ -358,16 +358,16 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 			"CLAUDE_PROJECT_DIR=/stale", "GNOSH_PROJECT_DIR=/stale", "GNOSH_MEM_STATUS=/stale",
 			"PWD=/stale", "OLDPWD=/stale", "CLAUDECODE=1",
 			// A setting of the user's that is not this package's to touch.
-			"GNOSH_PROFILE=1",
+			"GNOSH_DEBUG_PAGE=1",
 		)
 	}
 	always := func(event Event) map[string]string {
 		return map[string]string{
 			"GNOSH": "1", "AGENT": "gnosh", "AI_AGENT": "gnosh",
-			"GNOSH_EVENT": string(event), "GNOSH_SESSION_ID": "session-1", "GNOSH_CWD": cwd,
+			"GNOSH_HOOK_EVENT_NAME": string(event), "GNOSH_SESSION_ID": "session-1", "GNOSH_CWD": cwd,
 			"GNOSH_PROJECT_DIR": project, "CLAUDE_PROJECT_DIR": project,
 			"GNOSH_MEM_STATUS": "/project/.gnosh/mem/status.json",
-			"GNOSH_PROFILE":    "1",
+			"GNOSH_DEBUG_PAGE": "1",
 			"PWD":              cwd,
 		}
 	}

@@ -36,9 +36,9 @@
 //   - "-x" is a one-letter flag, and "-xyz" is three of them sharing a dash.
 //   - The first plain word names a command if gnosh has one by that name:
 //     `gnosh doctor`, `gnosh session list`.
-//   - Anything else is an argument. For `gnosh` and `gnosh run` the
-//     arguments are the prompt: several are joined by single spaces, and
-//     the text is otherwise passed on untouched, newlines and all.
+//   - Anything else is an argument. For `gnosh` the arguments are the
+//     prompt: several are joined by single spaces, and the text is
+//     otherwise passed on untouched, newlines and all.
 //
 // Flags and arguments mix freely, so these are the same:
 //
@@ -69,17 +69,17 @@
 //     `gnosh --debug hooks`, "hooks" is the prompt.
 //
 // One-letter flags that share a dash are read one by one, and one that takes
-// a value must be the last: `-ys ID` is -y and then -s ID; `-sy ID` is
+// a value must be the last: `-ym qwen` is -y and then -m qwen; `-my qwen` is
 // refused. A one-letter flag never takes its value attached (`-mqwen`,
 // `-m=qwen`); the message says how to write it.
 //
 // # List flags
 //
-// --allowedTools, --disallowedTools, --tools, --add-dir and --mcp-config
-// take one or more values. The first argument after the flag is always
-// taken. Each argument after that is taken too, up to the next flag, for as
-// long as it has no space in it; for tools and rules, a space inside
-// parentheses does not count. So:
+// --allowedTools, --disallowedTools, --tools and --add-dir take one or more
+// values. The first argument after the flag is always taken. Each argument
+// after that is taken too, up to the next flag, for as long as it has no
+// space in it; for tools and rules, a space inside parentheses does not
+// count. So:
 //
 //	--add-dir ../apps ../lib                      two folders
 //	--allowedTools "Bash(git log *)" Read          two rules
@@ -113,7 +113,7 @@
 //
 // If the parentheses of an argument do not pair up, it is one rule when
 // that is the only way to read it, and an error when it could be two.
-// Folders and MCP configs are never cut: each argument is one item.
+// Folders are never cut: each argument is one item.
 //
 // # A flag typed twice
 //
@@ -124,31 +124,34 @@
 //
 // A first word that is a command's name (or alias) is that command, and its
 // flags come after it. Flags typed before the name must be ones the command
-// takes too. After -p, no word is a command: `gnosh -p run the tests` sends
-// "run the tests". To send a command's name as a prompt in a session, put
-// "--" before it: `gnosh -- doctor`.
+// takes too. After -p, no word is a command: `gnosh -p doctor says what`
+// sends "doctor says what". To send a command's name as a prompt in a
+// session, put "--" before it: `gnosh -- doctor`.
+//
+// A first word that names no command is the prompt, or its first word.
+// That holds for the commands of the specs that are not built, which are
+// not in the table: they are words like any other until they are.
 //
 // A first word that is one slip away from a command's name (a letter
 // dropped, added, changed, or two swapped), on a line that would make sense
 // for that command, is refused with the name it probably meant, instead of
-// being sent to a model as a prompt: `gnosh docter`. For the three-letter
-// commands only swapped letters count, because too many ordinary words are
-// one letter away from "run".
+// being sent to a model as a prompt: `gnosh docter`. For a three-letter
+// command only swapped letters count, because too many ordinary words are
+// one letter away from "mem".
 //
-// `gnosh mem` passes the words after it to mem unread, and `gnosh ssh`
-// passes everything after it to ssh, flags included. `gnosh help [command]`
-// and `gnosh version` do what --help and --version do.
+// `gnosh mem` passes the words after it to mem unread. `gnosh help
+// [command]` and `gnosh version` do what --help and --version do.
 //
 // # Print mode, and -v
 //
-// `gnosh run` and `gnosh -p` are the same thing. `gnosh` with its output
-// going anywhere but a terminal is print mode too (Invocation.PrintImplied
-// says so). Print mode needs a prompt: on the command line, piped in, or
-// both. Some flags only do something in print mode and are refused outside
-// it, rather than accepted and ignored.
+// `gnosh -p` is print mode: one prompt, one answer, and gnosh exits.
+// `gnosh` with its output going anywhere but a terminal is print mode too
+// (Invocation.PrintImplied says so). Print mode needs a prompt: on the
+// command line, piped in, or both. Some flags only do something in print
+// mode and are refused outside it, rather than accepted and ignored.
 //
-// -v is --version on a plain `gnosh`, as in Claude Code, and --verbose after
-// `run` or with -p, as the scripts around gnosh use it.
+// -v is --version on a plain `gnosh`, as in Claude Code, and --verbose with
+// -p.
 //
 // # -c
 //
@@ -174,6 +177,11 @@
 //
 // Table.Entries lists every name with its status, and help marks what is not
 // built.
+//
+// The table holds only what some part of gnosh can mark built: the program's
+// own wiring, or a feature that is joined to it (mem, --goal). A command or
+// a flag of the specs that nothing builds yet has no row (spec/DECISIONS.md,
+// 26), so that the table never lists a name with nothing behind it.
 //
 // # What is left to the caller
 //

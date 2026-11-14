@@ -347,26 +347,26 @@ func (p *program) crashed(dir string, v any, stack []byte) int {
 	return 2
 }
 
-// profileServer is the debugging page of GNOSH_PROFILE: with it a session
+// debugPage is the debugging page of GNOSH_DEBUG_PAGE: with it a session
 // that seems stuck can be looked at without being killed.
-type profileServer struct {
+type debugPage struct {
 	ln  net.Listener
 	srv *http.Server
 }
 
-// profilePort is the port the debugging page is served on when it is
+// debugPagePort is the port the debugging page is served on when it is
 // free.
-const profilePort = 6060
+const debugPagePort = 6060
 
-// startProfile serves, on loopback only, what is needed to see where a
+// startDebugPage serves, on loopback only, what is needed to see where a
 // session is stuck: what it says it is doing, every goroutine's stack, and
 // a short CPU profile. When the usual port is taken a free one is used,
 // and the port is in the log and told to the person.
-func startProfile(l *live) *profileServer {
-	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(profilePort))
+func startDebugPage(l *live) *debugPage {
+	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(debugPagePort))
 	if err != nil {
 		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
-			l.notice(agent.LevelWarning, "profile", fmt.Sprintf("GNOSH_PROFILE is set, but the debugging page could not be served (%v).", err))
+			l.notice(agent.LevelWarning, "debug-page", fmt.Sprintf("GNOSH_DEBUG_PAGE is set, but the debugging page could not be served (%v).", err))
 			return nil
 		}
 	}
@@ -414,19 +414,19 @@ func startProfile(l *live) *profileServer {
 		}
 		mux.ServeHTTP(w, r)
 	})
-	ps := &profileServer{ln: ln, srv: &http.Server{Handler: guarded, ReadHeaderTimeout: 10 * time.Second}}
-	go func() { _ = ps.srv.Serve(ln) }()
-	l.flog.logf("startup", "GNOSH_PROFILE: the debugging page is at http://%s/", ln.Addr())
-	l.notice(agent.LevelInfo, "profile", fmt.Sprintf("GNOSH_PROFILE is set: the debugging page is at http://%s/ (this machine only).", ln.Addr()))
-	return ps
+	dp := &debugPage{ln: ln, srv: &http.Server{Handler: guarded, ReadHeaderTimeout: 10 * time.Second}}
+	go func() { _ = dp.srv.Serve(ln) }()
+	l.flog.logf("startup", "GNOSH_DEBUG_PAGE: the debugging page is at http://%s/", ln.Addr())
+	l.notice(agent.LevelInfo, "debug-page", fmt.Sprintf("GNOSH_DEBUG_PAGE is set: the debugging page is at http://%s/ (this machine only).", ln.Addr()))
+	return dp
 }
 
 // close stops the debugging page.
-func (ps *profileServer) close() {
-	if ps == nil {
+func (dp *debugPage) close() {
+	if dp == nil {
 		return
 	}
-	_ = ps.srv.Close()
+	_ = dp.srv.Close()
 }
 
 // toolLine is a tool call on one line, for a log and for --verbose: the

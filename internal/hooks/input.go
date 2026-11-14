@@ -322,7 +322,7 @@ func (in *Input) duration(m map[string]any) {
 // Claude Code must not hand its hooks the mark of another program.
 var ownedEnv = []string{
 	"GNOSH", "AGENT", "AI_AGENT", "CLAUDECODE",
-	"GNOSH_EVENT", "GNOSH_SESSION_ID", "GNOSH_CWD",
+	"GNOSH_HOOK_EVENT_NAME", "GNOSH_SESSION_ID", "GNOSH_CWD",
 	"GNOSH_PROJECT_DIR", "CLAUDE_PROJECT_DIR",
 	"GNOSH_TOOL_NAME", "GNOSH_TOOL_USE_ID",
 	"GNOSH_TOOL_INPUT_COMMAND", "GNOSH_TOOL_INPUT_FILE_PATH",
@@ -358,7 +358,7 @@ func (in *Input) environ(info eventInfo, base []string, dir, projectDir, memStat
 	vars["GNOSH"] = "1"
 	vars["AGENT"] = "gnosh"
 	vars["AI_AGENT"] = "gnosh"
-	vars["GNOSH_EVENT"] = string(in.Event)
+	vars["GNOSH_HOOK_EVENT_NAME"] = string(in.Event)
 	vars["GNOSH_SESSION_ID"] = in.SessionID
 	vars["GNOSH_CWD"] = in.Cwd
 	vars["GNOSH_PROJECT_DIR"] = projectDir

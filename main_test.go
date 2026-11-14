@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
@@ -249,6 +250,86 @@ func TestVersionHelpDoctor(t *testing.T) {
 	o = gnosh(t, bare, "doctor").wantCode(t, 1)
 	if !strings.Contains(o.out, "no provider is configured") || !strings.Contains(o.out, "A turn cannot run") {
 		t.Errorf("doctor with no provider:\n%s", o.out)
+	}
+}
+
+// shipped runs the program in this process, as main does but for the
+// worker dispatch and the terminal, with the features it ships with
+// (features.go), and returns its exit code and what it wrote. It is for
+// what the command line alone decides, where starting the binary would
+// add nothing but time.
+func shipped(t *testing.T, args ...string) (code int, out, errs string) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code = app.Main(context.Background(), app.Options{
+		Args:     args,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Environ:  []string{"HOME=" + t.TempDir()},
+		Cwd:      t.TempDir(),
+		Features: features(),
+	})
+	return code, stdout.String(), stderr.String()
+}
+
+// The command line of the program as it ships holds only what is built
+// (spec/DECISIONS.md, 26): the help of gnosh, and of every command that
+// help lists, marks nothing as not built, and a command or flag that was
+// taken off is refused, not read as what it once was.
+func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
+	var titles []string
+	var visit func(path ...string)
+	visit = func(path ...string) {
+		title := strings.Join(append([]string{"gnosh"}, path...), " ")
+		titles = append(titles, title)
+		code, text, errs := shipped(t, append([]string{"help"}, path...)...)
+		if code != 0 || errs != "" {
+			t.Fatalf("the help of %s: exit code %d, stderr %q", title, code, errs)
+		}
+		if strings.Contains(text, "ot built") {
+			t.Errorf("the help of %s says something is not built:\n%s", title, text)
+		}
+		// The names under the Commands heading, each with a help of its own.
+		_, list, _ := strings.Cut(text, "\nCommands\n")
+		for _, line := range strings.Split(list, "\n") {
+			if line == "" {
+				break
+			}
+			if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "   ") {
+				visit(append(append([]string{}, path...), strings.Fields(line)[0])...)
+			}
+		}
+	}
+	visit()
+	want := []string{
+		"gnosh", "gnosh doctor", "gnosh trust", "gnosh models",
+		"gnosh session", "gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename",
+		"gnosh mem", "gnosh logs", "gnosh dirs", "gnosh help", "gnosh version",
+	}
+	if strings.Join(titles, ", ") != strings.Join(want, ", ") {
+		t.Errorf("the commands help lists:\n got %s\nwant %s", strings.Join(titles, ", "), strings.Join(want, ", "))
+	}
+
+	for _, args := range [][]string{
+		{"-p", "-q", "x"}, {"-s", "abc", "-p", "x"}, {"-D", t.TempDir(), "-p", "x"}, {"--bare", "-p", "x"},
+		{"session", "delete", "abc"}, {"session", "web"}, {"help", "run"}, {"help", "mcp"},
+	} {
+		code, out, errs := shipped(t, args...)
+		if code != 1 || out != "" || (!strings.Contains(errs, "is not a flag of gnosh") && !strings.Contains(errs, "is not a command of gnosh")) {
+			t.Errorf("gnosh %s: exit code %d, stdout %q, stderr %q", strings.Join(args, " "), code, out, errs)
+		}
+	}
+
+	// The binary itself agrees, for one line of each kind.
+	w := apptest.NewWorld(t)
+	if o := gnosh(t, w, "help", "session").wantCode(t, 0); strings.Contains(o.out, "ot built") || !strings.Contains(o.out, "rename <id> <title...>") {
+		t.Errorf("gnosh help session, from the binary:\n%s", o.out)
+	}
+	if o := gnosh(t, w, "-p", "-q", "x").wantCode(t, 1); !strings.Contains(o.err, "-q is not a flag of gnosh") {
+		t.Errorf("gnosh -p -q x, from the binary: %s", o.err)
+	}
+	if n := len(w.Model.Requests()); n != 0 {
+		t.Errorf("the model server was sent %d requests by a command line that was refused", n)
 	}
 }
 

@@ -153,12 +153,12 @@ type providerChange struct {
 	hasHeaders   bool
 	extraBody    map[string]any
 	hasExtraBody bool
-	discover     *bool
-	noDiscover   bool // "discoverModels": null
+	listModels   *bool
+	noListModels bool // "listModels": null
 	disabled     *bool
 	// at is where each field stands that sets a value with a place of its
 	// own.
-	discoverAt Origin
+	listModelsAt Origin
 	// filled are the fields given here that take variables, and unset
 	// those of them whose variables are not all set.
 	filled []string
@@ -354,12 +354,12 @@ func (s *source) provider(id string, m jfield) {
 			default:
 				s.errorf(fl.line, "%q is a JSON object that is merged into the body of every request, such as {\"id_slot\": 1}, and here it is %s.", key, shown(v))
 			}
-		case "discoverModels":
+		case "listModels":
 			switch v.kind {
 			case jNull:
-				ch.noDiscover = true
+				ch.noListModels = true
 			case jBool:
-				ch.discover, ch.discoverAt = &v.b, s.at(fl.line)
+				ch.listModels, ch.listModelsAt = &v.b, s.at(fl.line)
 			default:
 				s.errorf(fl.line, "%q is true or false, and here it is %s.", key, shown(v))
 			}

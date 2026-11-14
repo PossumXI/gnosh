@@ -26,7 +26,7 @@ func TestUnknownFlags(t *testing.T) {
 		{line: `gnosh --skip-permissions`, kind: ErrUnknownFlag, say: []string{"--skip-permissions is not a flag of gnosh"}},
 		{line: `gnosh --system-promt x`, kind: ErrUnknownFlag, hint: "--system-prompt"},
 		{line: `gnosh --verbos`, kind: ErrUnknownFlag, hint: "--verbose"},
-		{line: `gnosh run --quite x`, kind: ErrUnknownFlag, hint: "--quiet", say: []string{"--quite is not a flag of gnosh run"}},
+		{line: `gnosh -p --max-turn 3 x`, kind: ErrUnknownFlag, hint: "--max-turns", say: []string{"--max-turn is not a flag of gnosh"}},
 		{line: `gnosh --model=x --bogus=y`, kind: ErrUnknownFlag, say: []string{"--bogus is not a flag of gnosh"}},
 		{line: `gnosh --=x`, kind: ErrUnknownFlag, say: []string{"-- is not a flag of gnosh"}},
 		{line: `gnosh ---x`, kind: ErrUnknownFlag, say: []string{"---x is not a flag of gnosh"}},
@@ -40,14 +40,15 @@ func TestUnknownFlags(t *testing.T) {
 		{line: `gnosh -help`, kind: ErrUnknownFlag, hint: "--help"},
 
 		// A flag of another command says where it belongs.
-		{line: `gnosh --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh, so nothing was started. It is a flag of gnosh session list, gnosh session show, gnosh session last and others."}},
+		{line: `gnosh --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh, so nothing was started. It is a flag of gnosh session list, gnosh session show, gnosh session last and gnosh session rename."}},
+		{line: `gnosh --cwd x version --cwd y`, kind: ErrUnknownFlag, say: []string{"--cwd does not go with gnosh version, so nothing was done. It is a flag of gnosh, gnosh doctor, gnosh trust and others."}},
 		{line: `gnosh --list`, kind: ErrUnknownFlag, say: []string{"--list does not go with gnosh", "It is a flag of gnosh trust."}},
 		{line: `gnosh -f`, kind: ErrUnknownFlag, say: []string{"-f does not go with gnosh", "It is a flag of gnosh logs."}},
 
 		// What the specs list as not carried over is simply unknown.
 		{line: `gnosh --channels x`, kind: ErrUnknownFlag, say: []string{"--channels is not a flag of gnosh"}},
 		{line: `gnosh --host box`, kind: ErrUnknownFlag, say: []string{"--host is not a flag of gnosh"}},
-		{line: `gnosh -H box`, kind: ErrUnknownFlag, say: []string{"-H does not go with gnosh"}},
+		{line: `gnosh -H box`, kind: ErrUnknownFlag, say: []string{"-H is not a flag of gnosh"}},
 		{line: `gnosh --from-pr 12`, kind: ErrUnknownFlag, say: []string{"--from-pr is not a flag of gnosh"}},
 		{line: `gnosh --betas x`, kind: ErrUnknownFlag, say: []string{"--betas is not a flag of gnosh"}},
 		{line: `gnosh --plugin-dir x`, kind: ErrUnknownFlag, say: []string{"--plugin-dir is not a flag of gnosh"}},
@@ -66,7 +67,8 @@ func TestUnknownFlags(t *testing.T) {
 		// the start is enough for a suggestion.
 		{line: `gnosh --verb`, kind: ErrUnknownFlag, hint: "--verbose"},
 		{line: `gnosh --dangerously`, kind: ErrUnknownFlag, hint: "--dangerously-skip-permissions"},
-		{line: `gnosh --permission`, kind: ErrUnknownFlag, say: []string{"--permission is not a flag of gnosh"}},
+		{line: `gnosh --permission`, kind: ErrUnknownFlag, hint: "--permission-mode"},
+		{line: `gnosh --system`, kind: ErrUnknownFlag, say: []string{"--system is not a flag of gnosh", `"gnosh --help" lists the flags`}},
 	})
 }
 
@@ -116,43 +118,33 @@ func TestMistypedCommands(t *testing.T) {
 		{line: `gnosh model`, kind: ErrUnknownCommand, hint: "models"},
 		{line: `gnosh log`, kind: ErrUnknownCommand, hint: "logs"},
 		{line: `gnosh dir`, kind: ErrUnknownCommand, hint: "dirs"},
-		{line: `gnosh stat`, kind: ErrUnknownCommand, hint: "stats"},
-		{line: `gnosh status`, kind: ErrUnknownCommand, hint: "stats"},
 		{line: `gnosh trst`, kind: ErrUnknownCommand, hint: "trust"},
 		{line: `gnosh hlep`, kind: ErrUnknownCommand, hint: "help"},
 		{line: `gnosh verison`, kind: ErrUnknownCommand, hint: "version"},
 		{line: `gnosh sesions`, kind: ErrUnknownCommand, hint: "sessions"},
-		// Three-letter commands: only swapped letters, or the wrong case.
-		{line: `gnosh rnu`, kind: ErrUnknownCommand, hint: "run"},
-		{line: `gnosh urn`, kind: ErrUnknownCommand, hint: "run"},
-		{line: `gnosh RUN`, kind: ErrUnknownCommand, hint: "run"},
+		// A three-letter command: only swapped letters, or the wrong case.
 		{line: `gnosh mme`, kind: ErrUnknownCommand, hint: "mem"},
-		{line: `gnosh shs`, kind: ErrUnknownCommand, hint: "ssh"},
-		{line: `gnosh cmp`, kind: ErrUnknownCommand, hint: "mcp"},
-		{line: `gnosh ran`, want: inter(Invocation{Prompt: "ran"})},
-		{line: `gnosh fun`, want: inter(Invocation{Prompt: "fun"})},
-		{line: `gnosh runs`, want: inter(Invocation{Prompt: "runs"})},
+		{line: `gnosh emm`, kind: ErrUnknownCommand, hint: "mem"},
+		{line: `gnosh MEM`, kind: ErrUnknownCommand, hint: "mem"},
 		{line: `gnosh men`, want: inter(Invocation{Prompt: "men"})},
-		{line: `gnosh map`, want: inter(Invocation{Prompt: "map"})},
+		{line: `gnosh mum`, want: inter(Invocation{Prompt: "mum"})},
+		{line: `gnosh mems`, want: inter(Invocation{Prompt: "mems"})},
 		{line: `gnosh me`, want: inter(Invocation{Prompt: "me"})},
-		{line: `gnosh shh`, want: inter(Invocation{Prompt: "shh"})},
 		// One-letter aliases are never matched.
 		{line: `gnosh a`, want: inter(Invocation{Prompt: "a"})},
-		{line: `gnosh R`, want: inter(Invocation{Prompt: "R"})},
+		{line: `gnosh S`, want: inter(Invocation{Prompt: "S"})},
 		{line: `gnosh x`, want: inter(Invocation{Prompt: "x"})},
 
 		// With more words, only when the next word is one of the near
 		// command's own commands.
 		{line: `gnosh sesion list`, kind: ErrUnknownCommand, hint: "session"},
 		{line: `gnosh sessoin lst`, kind: ErrUnknownCommand, hint: "session"},
-		{line: `gnosh promt tools`, kind: ErrUnknownCommand, hint: "prompt"},
-		{line: `gnosh mpc add files npx`, kind: ErrUnknownCommand, hint: "mcp"},
 		{line: `gnosh sesion of the day`, want: inter(Invocation{Prompt: "sesion of the day"})},
 		{line: `gnosh doctors hate this`, want: inter(Invocation{Prompt: "doctors hate this"})},
 		{line: `gnosh model the data as a graph`, want: inter(Invocation{Prompt: "model the data as a graph"})},
 		{line: `gnosh log the output`, want: inter(Invocation{Prompt: "log the output"})},
 		{line: `gnosh trst ../folder`, want: inter(Invocation{Prompt: "trst ../folder"})},
-		{line: `gnosh rnu the tests`, want: inter(Invocation{Prompt: "rnu the tests"})},
+		{line: `gnosh mme the files`, want: inter(Invocation{Prompt: "mme the files"})},
 
 		// Anything else is a prompt: a word far from every command, a
 		// quoted sentence, a word after "--" or after -p.
@@ -164,7 +156,6 @@ func TestMistypedCommands(t *testing.T) {
 		{line: `gnosh -- docter`, want: inter(Invocation{Prompt: "docter"})},
 		{line: `gnosh -p docter`, want: pr(Invocation{Prompt: "docter"})},
 		{line: `gnosh docter -p`, want: pr(Invocation{Prompt: "docter"})},
-		{line: `gnosh run docter`, want: pr(Invocation{Prompt: "docter"})},
 		{line: `gnosh fix docter`, want: inter(Invocation{Prompt: "fix docter"})},
 
 		// Commands the earlier gnosh had and this one does not are words
@@ -253,7 +244,7 @@ func TestDistance(t *testing.T) {
 }
 
 func TestNearest(t *testing.T) {
-	names := []string{"continue", "resume", "session", "session-id", "model", "allowedTools", "allowed-tools", "permission-mode", "permission-prompts"}
+	names := []string{"continue", "resume", "settings", "setting-sources", "model", "allowedTools", "allowed-tools", "system-prompt", "system-prompt-file"}
 	for _, c := range []struct {
 		typed string
 		limit int
@@ -263,10 +254,10 @@ func TestNearest(t *testing.T) {
 		{"CONTINUE", 1, "continue"},
 		{"allowed_tools", 1, "allowedTools"},
 		{"allowedtools", 1, "allowedTools"},
-		{"sess", 1, ""}, // the start of two names
+		{"sett", 1, ""}, // the start of two names
 		{"mod", 1, "model"},
 		{"modle", 1, "model"},
-		{"permission", 3, ""},
+		{"system", 3, ""},
 		{"zzz", 3, ""},
 		{"", 3, ""},
 		{"x", 3, ""},

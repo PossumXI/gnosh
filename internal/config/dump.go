@@ -73,7 +73,7 @@ func (c *Config) String() string {
 		if len(p.ExtraBody) > 0 {
 			line("    extra body fields: %s", list(slices.Sorted(maps.Keys(p.ExtraBody))))
 		}
-		line("    discoverModels: %v", p.DiscoverModels.V)
+		line("    listModels: %v", p.ListModels.V)
 	}
 	if len(c.Providers) == 0 {
 		line("  none")

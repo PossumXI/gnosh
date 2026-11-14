@@ -5,13 +5,12 @@ Usage
       Open a session in this folder. A prompt, if there is one, is sent as its
       first message.
   gnosh -p [flags] [prompt]
-      Answer one prompt and exit: print mode. "gnosh run" is the same. Text
-      piped in goes before the prompt.
+      Answer one prompt and exit: print mode. Text piped in goes before the
+      prompt.
   gnosh <command> [flags] [arguments]
       Run one of the commands below. "gnosh <command> --help" explains it.
 
 Commands
-  run [prompt...]         Answer one prompt and exit; the same as -p.
   doctor                  Check that a turn could run here. (Not built yet.)
   trust [folder]          Trust a folder's own settings, list the trusted
                           folders, or forget one. (Not built yet.)
@@ -20,18 +19,10 @@ Commands
   session <command>       Look at and manage sessions. (Not built yet.)
   mem [show|find|log]     Read the project's mem, without a model. (Not built
                           yet.)
-  prompt <command>        See what the model is sent, and where to change it.
-                          (Not built yet.)
   logs                    Print the end of the project's log, or follow it.
                           (Not built yet.)
   dirs                    Say which config and data folders are in use. (Not
                           built yet.)
-  ssh [ssh arguments]     Run ssh, and put what is copied on the far side onto
-                          this computer's clipboard. (Not built yet.)
-  projects                List the project folders gnosh has been used in.
-                          (Not built yet.)
-  stats                   Print usage totals across sessions. (Not built yet.)
-  mcp <command>           Manage MCP servers. (Not built yet.)
   help [command]          Show gnosh's help, or a command's.
   version                 Print which build of gnosh this is.
 
@@ -45,14 +36,12 @@ Which conversation
       as an absolute path ending in .jsonl. With nothing after it, show the
       sessions to pick from; in print mode a session must be named. The
       argument after -r is always taken as the session, never as the prompt.
-  -s, --session <id>
-      Resume the session with this ID. An ID only, never a name.
   --session-id <uuid>
-      Give the new conversation this ID, which must be a UUID. With -c, -r or
-      -s it needs --fork-session too, and names the copy.
+      Give the new conversation this ID, which must be a UUID. With -c or -r
+      it needs --fork-session too, and names the copy.
   --fork-session
-      With -c, -r or -s: go on in a copy of the session and leave the original
-      as it was. (Not built yet.)
+      With -c or -r: go on in a copy of the session and leave the original as
+      it was. (Not built yet.)
   -n, --name <name>
       Name the session: the new one, the one resumed, or the --fork-session
       copy. (Not built yet.)
@@ -70,9 +59,6 @@ Permissions
       Skip every permission question; the same as --permission-mode
       bypassPermissions. A print run refuses whatever would have asked, unless
       it is given this, a permission mode or allow rules.
-  --allow-dangerously-skip-permissions
-      Let the session be switched to skipping permissions later, without
-      starting that way. (Not built yet.)
   --permission-mode <mode>
       Start in this permission mode: default (also written manual), plan,
       acceptEdits, dontAsk or bypassPermissions. (Not built yet.)
@@ -107,32 +93,18 @@ What the model is told
 Settings for this run
   --cwd <dir>
       Work in this folder instead of the current one.
-  -D, --data-dir <dir>
-      Keep sessions and data in this folder instead of the project's own.
-      Commands that read them look there too.
   --settings <file-or-json>
       Extra settings for this run: a file, or the JSON itself. They win over
       the settings files for the keys they name.
   --setting-sources <list>
       Which settings files to read: any of user, project and local, with
       commas between. (Not built yet.)
-  --bare
-      Start with the least: no hooks, skills, custom commands, sub-agents, MCP
-      servers or context files, except what other flags name. (Not built yet.)
   --safe-mode
       Start with your customizations off (hooks, MCP servers, context files,
       skills on disk, custom commands), to fix a broken one. Providers, the
       model, built-in tools and permissions stay as they are. (Not built yet.)
   --disable-slash-commands
       Turn off skills and slash commands for this session. (Not built yet.)
-  --mcp-config <files-or-json...>
-      Load MCP servers from these files, or from the JSON itself. (Not built
-      yet.)
-  --strict-mcp-config
-      Use only the MCP servers that --mcp-config names. (Not built yet.)
-  --agents <json>
-      Define sub-agents for this session, as a JSON object (in print mode, a
-      file holding one will do). (Not built yet.)
   -d, --debug[=filter]
       Write more to the log. A filter keeps only some kinds, and must be
       attached with an equals sign: --debug=hooks,mcp. (Not built yet.)
@@ -140,28 +112,19 @@ Settings for this run
       Write the debug log to this file. Turns --debug on. (Not built yet.)
   --verbose
       Show each turn in full. In print mode: the log, and one line per
-      finished tool call, on stderr. After run or with -p, -v means this. (Not
-      built yet.)
+      finished tool call, on stderr. With -p, -v means this. (Not built yet.)
 
 Print mode
   -p, --print
-      Answer one prompt and exit, without the interface. The same as "gnosh
-      run". Every word after it that is not a flag is the prompt.
+      Answer one prompt and exit, without the interface. Every word after it
+      that is not a flag is the prompt.
   --output-format <format>
       What to print: text (the answer, and the default), json (one result
       object at the end) or stream-json (a JSON line per message, then the
       result). (Not built yet: json, stream-json.)
   --input-format <format>
-      What standard input carries: text (the default) or stream-json (a JSON
-      user message per line). (Not built yet: stream-json.)
-  --include-partial-messages
-      Print the answer piece by piece as it is written. Needs --output-format
-      stream-json. (Not built yet.)
-  --replay-user-messages
-      Print back each user message read from standard input. Needs stream-json
-      for both input and output. (Not built yet.)
-  -q, --quiet
-      No progress indicator on stderr.
+      What standard input carries: text, which is the default and the one
+      format gnosh reads.
   --goal <condition>
       Keep working until this condition holds, as /goal does in a session. The
       run exits non-zero while the goal is still unmet. (Not built yet.)
@@ -171,31 +134,25 @@ Print mode
   --small-model <model>
       The model for the run's short side jobs. Without it they use the main
       model. (Not built yet.)
-  --no-session-persistence
-      Do not save this session. It cannot be resumed. (Not built yet.)
-  --permission-prompts <who>
-      Who answers permission questions: host (the program that started gnosh)
-      or none (whatever would ask is refused). (Not built yet.)
 
 Help and version
   -h, --help
       Show help: gnosh's, or after a command's name that command's.
   -v, --version
       Print which build of gnosh this is: when it was built, and from which
-      commit. (After run or with -p, -v means --verbose.)
+      commit. (With -p, -v means --verbose.)
 
 Reading the command line
   Flags go before or after the prompt, in any order. Everything after a lone
   -- is the prompt, even if it begins with a dash.
 
-  A list flag (--allowedTools, --disallowedTools, --tools, --add-dir,
-  --mcp-config) takes the argument after it, and then each argument after that
-  up to the next flag, for as long as the argument has no space in it (spaces
-  inside parentheses do not count). So a prompt of two words or more ends a
-  list (gnosh stops to ask if that prompt reads like more tools), but a
-  one-word prompt right after a list would join it: put the prompt first, put
-  -- before it, or attach the list with an equals sign, as in
-  --tools=Read,Edit.
+  A list flag (--allowedTools, --disallowedTools, --tools, --add-dir) takes
+  the argument after it, and then each argument after that up to the next
+  flag, for as long as the argument has no space in it (spaces inside
+  parentheses do not count). So a prompt of two words or more ends a list
+  (gnosh stops to ask if that prompt reads like more tools), but a one-word
+  prompt right after a list would join it: put the prompt first, put -- before
+  it, or attach the list with an equals sign, as in --tools=Read,Edit.
 
   In a list of tools or rules, commas and spaces separate the items, but not
   inside parentheses: "Bash(git diff *),Edit" is two rules.

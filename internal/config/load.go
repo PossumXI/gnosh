@@ -88,7 +88,8 @@ type Flags struct {
 	SkipPermissions bool
 	// AllowSkipPermissions is --allow-dangerously-skip-permissions: the
 	// session may switch to skipping permissions later, without starting
-	// that way.
+	// that way. (The command line does not take that flag yet, so nothing
+	// sets this today: internal/cli lists a flag once its part is built.)
 	AllowSkipPermissions bool
 	// AllowedTools and DisallowedTools are the rules of --allowedTools and
 	// --disallowedTools. Each element may itself be a list, split as
@@ -112,9 +113,6 @@ type Flags struct {
 	SafeMode bool
 	// Debug is -d / --debug.
 	Debug bool
-	// DataDir is -D / --data-dir: where this run keeps its sessions and
-	// data, in place of the project's data folder.
-	DataDir string
 }
 
 // Built says which parts of gnosh the calling program has. The zero value
@@ -463,15 +461,11 @@ func (ld *loader) dirs() {
 	p.TrustDir = filepath.Join(p.StateDir, "trusted-folders")
 }
 
-// dataDir finds the project's data folder: the one given with -D, or the
-// closest folder of the configured name on the way up to the project
-// root, or a new one at the project root.
+// dataDir finds the project's data folder: the closest folder of the
+// configured name on the way up to the project root, or a new one at the
+// project root.
 func (ld *loader) dataDir() {
 	in, p := ld.in, &ld.paths
-	if in.Flags.DataDir != "" {
-		p.DataDir = absPath(in.Flags.DataDir, in.Home, in.Cwd)
-		return
-	}
 	name := ld.b.opts.ProjectDataDir.V
 	if filepath.IsAbs(name) {
 		p.DataDir = filepath.Clean(name)
@@ -519,19 +513,22 @@ func (ld *loader) state() {
 	}
 	ld.files = append(ld.files, File{Path: path, Role: "state", Scope: "user"})
 	o := Origin{Layer: LayerState, File: path}
-	for _, choice := range [][2]string{{"large", st.Large}, {"small", st.Small}} {
-		slot, name := choice[0], choice[1]
+	for _, choice := range []struct {
+		what, name string
+		sl         *Slot
+		before     *Value[ModelRef]
+	}{
+		{"model", st.Model, &ld.b.large, &ld.b.largeBefore},
+		{"small model", st.SmallModel, &ld.b.small, &ld.b.smallBefore},
+	} {
+		name, sl, before := choice.name, choice.sl, choice.before
 		if name == "" {
 			continue
 		}
 		prov, id, ok := strings.Cut(name, "/")
 		if !ok || prov == "" || id == "" {
-			ld.probs.warnf(path, 0, "the %s model saved here, %s, is not of the form provider/id, so it was not used.", slot, showName(name))
+			ld.probs.warnf(path, 0, "the %s saved here, %s, is not of the form provider/id, so it was not used.", choice.what, showName(name))
 			continue
-		}
-		sl, before := &ld.b.large, &ld.b.largeBefore
-		if slot == "small" {
-			sl, before = &ld.b.small, &ld.b.smallBefore
 		}
 		*before = sl.Model
 		sl.Model.put(ModelRef{Provider: prov, ID: id}, o)

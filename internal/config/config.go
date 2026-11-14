@@ -101,22 +101,22 @@ type Held struct {
 // the same words: its Restricts says which kinds still apply in a folder
 // that is not trusted, and its question says what each could do.
 const (
-	KindProvider      = "provider"
-	KindModel         = "model"
-	KindHost          = "host"
-	KindHook          = "hook"
-	KindHookOff       = "hook-off" // switching all hooks off
-	KindAllowRule     = "allow-rule"
-	KindAskRule       = "ask-rule"
-	KindDenyRule      = "deny-rule"
-	KindMode          = "mode"
-	KindAddDir        = "add-dir"
-	KindEnv           = "env"
-	KindOption        = "option"
-	KindExtraPath     = "extra-path"
-	KindAddress       = "address"
-	KindDisabledSkill = "disabled-skill"
-	KindRemoval       = "removal" // taking away a provider, a model or a host a weaker file declared
+	KindProvider    = "provider"
+	KindModel       = "model"
+	KindHost        = "host"
+	KindHook        = "hook"
+	KindHookOff     = "hook-off" // switching all hooks off
+	KindAllowRule   = "allow-rule"
+	KindAskRule     = "ask-rule"
+	KindDenyRule    = "deny-rule"
+	KindMode        = "mode"
+	KindAddDir      = "add-dir"
+	KindEnv         = "env"
+	KindOption      = "option"
+	KindExtraPath   = "extra-path"
+	KindAddress     = "address"
+	KindHiddenSkill = "hidden-skill"
+	KindRemoval     = "removal" // taking away a provider, a model or a host a weaker file declared
 )
 
 // Provider is one model provider.
@@ -144,10 +144,10 @@ type Provider struct {
 	Headers []Header
 	// ExtraBody is merged into every request body. Nil when none was given.
 	ExtraBody map[string]any
-	// DiscoverModels says whether to ask the server which models it has.
+	// ListModels says whether to ask the server which models it has.
 	// When nothing set it, it is true exactly when no model is registered
 	// for the provider.
-	DiscoverModels Value[bool]
+	ListModels Value[bool]
 	// Disabled keeps the entry without using it.
 	Disabled bool
 	// LeftOut says why the provider cannot be used, in a plain sentence.
@@ -353,8 +353,8 @@ type Switches struct {
 	// SafeMode starts gnosh with the config's customizations off: hooks,
 	// context files, skills found on disk and custom commands.
 	SafeMode Value[bool]
-	// Profile serves a debugging page on loopback.
-	Profile Value[bool]
+	// DebugPage serves a debugging page on loopback.
+	DebugPage Value[bool]
 }
 
 // ContextFiles says which instruction files the model is given, as data

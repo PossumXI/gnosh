@@ -214,7 +214,7 @@ func TestKeysArrive(t *testing.T) {
 }
 
 func TestLoneEscapeWaits(t *testing.T) {
-	p := openTerminal(t, Options{NoSignals: true, EscTimeout: 30 * time.Millisecond})
+	p := openTerminal(t, Options{NoSignals: true, EscWait: 30 * time.Millisecond})
 	start := time.Now()
 	p.typeKeys("\x1b")
 	p.want(key(KeyEscape, 0))
@@ -233,7 +233,7 @@ func TestLoneEscapeWaits(t *testing.T) {
 	// A sequence that arrives in two pieces within the wait is one key.
 	// (The wait is long here so that a busy machine cannot stretch the
 	// pause between the pieces past it.)
-	q := openTerminal(t, Options{NoSignals: true, EscTimeout: 5 * time.Second})
+	q := openTerminal(t, Options{NoSignals: true, EscWait: 5 * time.Second})
 	q.typeKeys("\x1b")
 	time.Sleep(5 * time.Millisecond)
 	q.typeKeys("[")

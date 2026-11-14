@@ -14,7 +14,7 @@ func TestStateRoundTrip(t *testing.T) {
 	// The real file system, in a directory of the test's own: the write
 	// must be a rename, and must make its directory.
 	path := filepath.Join(t.TempDir(), "state", "gnosh", "state.json")
-	want := State{Large: "qwen/qwen3.8-27b", Small: "qwen/qwen3.8-27b", Thinking: map[string]string{"qwen/qwen3.8-27b": "off", "gptoss/gpt-oss-120b": "low"}, AutoCompactWindow: 200000}
+	want := State{Model: "qwen/qwen3.8-27b", SmallModel: "qwen/qwen3.8-27b", Thinking: map[string]string{"qwen/qwen3.8-27b": "off", "gptoss/gpt-oss-120b": "low"}, AutoCompactWindow: 200000}
 	if err := WriteState(OS{}, path, want); err != nil {
 		t.Fatalf("WriteState: %v", err)
 	}
@@ -34,6 +34,11 @@ func TestStateRoundTrip(t *testing.T) {
 	}
 	// Writing the same State gives the same bytes.
 	first, _ := os.ReadFile(path)
+	// The two slots are written under the names of the config's two keys,
+	// "model" and "smallModel" (spec/DECISIONS.md, 26).
+	if text := string(first); !strings.Contains(text, `"model": "qwen/qwen3.8-27b"`) || !strings.Contains(text, `"smallModel": "qwen/qwen3.8-27b"`) {
+		t.Errorf("the state file does not hold its two slots as model and smallModel:\n%s", text)
+	}
 	if err := WriteState(OS{}, path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -47,14 +52,21 @@ func TestStateRoundTrip(t *testing.T) {
 	if len(problems) != 0 || !reflect.DeepEqual(got, State{}) {
 		t.Errorf("no file: %+v %v", got, problems)
 	}
+
+	// The slots had other names once. A file that still has them holds no
+	// choice: gnosh alone writes this file, and nothing is carried over.
+	old := newFS().put(statePath, `{"version": 1, "models": {"large": "p/m", "small": "p/s"}}`)
+	if got, problems := ReadState(old, statePath); len(problems) != 0 || got.Model != "" || got.SmallModel != "" {
+		t.Errorf("a state file with the earlier slot names: %+v %v", got, problems)
+	}
 }
 
 // A state file written by another version of gnosh keeps the keys this
 // one does not know.
 func TestStateKeepsUnknownKeys(t *testing.T) {
-	fsys := newFS().put(statePath, `{"version": 1, "models": {"large": "p/m"}, "recentModels": ["p/a", "p/b"], "future": {"x": 1}}`)
+	fsys := newFS().put(statePath, `{"version": 1, "models": {"model": "p/m"}, "recentModels": ["p/a", "p/b"], "future": {"x": 1}}`)
 	err := UpdateState(fsys, statePath, func(st *State) {
-		if st.Large != "p/m" {
+		if st.Model != "p/m" {
 			t.Errorf("UpdateState hands over the file as it is: %+v", st)
 		}
 		if err := st.SetThinking(ModelRef{Provider: "p", ID: "m"}, "off"); err != nil {
@@ -73,7 +85,7 @@ func TestStateKeepsUnknownKeys(t *testing.T) {
 		t.Errorf("unknown keys were dropped: %s", data)
 	}
 	st, _ := ReadState(fsys, statePath)
-	if st.Large != "p/m" || st.Thinking["p/m"] != "off" {
+	if st.Model != "p/m" || st.Thinking["p/m"] != "off" {
 		t.Errorf("after the update: %+v", st)
 	}
 }
@@ -90,13 +102,13 @@ func TestStaleStateNeverStopsStartup(t *testing.T) {
 	}{
 		{"not JSON", "{{{", []string{"not JSON gnosh can read", "not in force"}, nil},
 		{"the wrong shape", `{"models": "p/m"}`, []string{"not JSON gnosh can read"}, nil},
-		{"a provider that is gone", `{"models": {"large": "gone/m"}}`, []string{"gone/m", "provider that is not configured", "Choose a model"},
+		{"a provider that is gone", `{"models": {"model": "gone/m"}}`, []string{"gone/m", "provider that is not configured", "Choose a model"},
 			func(c *Config) {
 				if m := c.Large.Model; m.V.String() != "p/m" || m.Origin.Layer != LayerUser {
 					t.Errorf("a stale choice is dropped, and the user's own file counts again: %+v", m)
 				}
 			}},
-		{"a model name of the wrong form", `{"models": {"small": "justaname"}}`, []string{"not of the form provider/id"}, nil},
+		{"a model name of the wrong form", `{"models": {"smallModel": "justaname"}}`, []string{"not of the form provider/id"}, nil},
 		{"a window out of range", `{"autoCompactWindow": 7}`, []string{"not between 100000 and 1000000"}, nil},
 		{"a level the model does not have", `{"thinking": {"p/m": "extreme"}}`, []string{"extreme", "not one of that model's levels"},
 			func(c *Config) {
@@ -154,7 +166,7 @@ func TestStateThinking(t *testing.T) {
 func TestWriteStateRefusesWhatTheReaderWould(t *testing.T) {
 	fsys := newFS()
 	for name, st := range map[string]State{
-		"a model with no provider": {Large: "justaname"},
+		"a model with no provider": {Model: "justaname"},
 		"a level that is no word":  {Thinking: map[string]string{"p/m": "LOUD!"}},
 		"a window out of range":    {AutoCompactWindow: 5},
 	} {
@@ -167,15 +179,15 @@ func TestWriteStateRefusesWhatTheReaderWould(t *testing.T) {
 	}
 	var st State
 	if err := st.SetModel("medium", ModelRef{Provider: "p", ID: "m"}); err == nil {
-		t.Errorf("a slot other than large or small was taken")
+		t.Errorf("a slot other than model or smallModel was taken")
 	}
-	if err := st.SetModel("large", ModelRef{ID: "m"}); err == nil {
+	if err := st.SetModel("model", ModelRef{ID: "m"}); err == nil {
 		t.Errorf("a model with no provider was taken")
 	}
-	if err := st.SetModel("large", ModelRef{Provider: "p", ID: "m"}); err != nil || st.Large != "p/m" {
+	if err := st.SetModel("model", ModelRef{Provider: "p", ID: "m"}); err != nil || st.Model != "p/m" {
 		t.Errorf("SetModel: %v %+v", err, st)
 	}
-	if err := st.SetModel("large", ModelRef{}); err != nil || st.Large != "" {
+	if err := st.SetModel("model", ModelRef{}); err != nil || st.Model != "" {
 		t.Errorf("an empty model clears the choice: %v %+v", err, st)
 	}
 	if err := st.SetThinking(ModelRef{Provider: "p", ID: "m"}, "LOUD"); err == nil {

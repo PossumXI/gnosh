@@ -13,10 +13,7 @@ Commands
   list                    List this project's sessions. (Not built yet.)
   show <id>               Print one session. (Not built yet.)
   last                    Print the most recent session. (Not built yet.)
-  delete <id>             Delete a session. (Not built yet.)
   rename <id> <title...>  Give a session a new title. (Not built yet.)
-  web                     Serve a page on this machine for reading a session's
-                          messages. (Not built yet.)
 
 Flags
   -h, --help

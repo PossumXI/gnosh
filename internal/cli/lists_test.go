@@ -36,7 +36,7 @@ func TestListFlags(t *testing.T) {
 		{line: `gnosh --allowedTools "Bash(echo :))" Read`, want: inter(Invocation{AllowedTools: []string{"Bash(echo :))", "Read"}})},
 
 		// A prompt of two or more words ends a list.
-		{line: `gnosh run --permission-mode dontAsk --allowedTools "Bash(go test *)" "run the tests and report"`,
+		{line: `gnosh -p --permission-mode dontAsk --allowedTools "Bash(go test *)" "run the tests and report"`,
 			want: pr(Invocation{PermissionMode: ModeDontAsk, AllowedTools: []string{"Bash(go test *)"}, Prompt: "run the tests and report"})},
 		{line: `gnosh --allowedTools Read "explain (briefly) this"`, want: inter(Invocation{AllowedTools: []string{"Read"}, Prompt: "explain (briefly) this"})},
 		{line: `gnosh -p --disallowedTools "Bash Edit" "prompt text here"`, want: pr(Invocation{DisallowedTools: []string{"Bash", "Edit"}, Prompt: "prompt text here"})},
@@ -73,7 +73,7 @@ func TestListFlags(t *testing.T) {
 		{line: `gnosh --tools=`, want: inter(Invocation{ToolsGiven: true})},
 		{line: `gnosh --tools " "`, want: inter(Invocation{ToolsGiven: true})},
 		{line: `gnosh --tools "" "review the diff"`, want: inter(Invocation{ToolsGiven: true, Prompt: "review the diff"})},
-		{line: `gnosh run -q -y --tools "" hello`, want: pr(Invocation{Quiet: true, PermissionMode: ModeBypassPermissions, ToolsGiven: true, Prompt: "hello"})},
+		{line: `gnosh -p -y --tools "" hello`, want: pr(Invocation{PermissionMode: ModeBypassPermissions, ToolsGiven: true, Prompt: "hello"})},
 		{line: `gnosh --tools default`, want: inter(Invocation{Tools: []string{"default"}, ToolsGiven: true})},
 		{line: `gnosh --tools "Bash,Edit,Read"`, want: inter(Invocation{Tools: []string{"Bash", "Edit", "Read"}, ToolsGiven: true})},
 		{line: `gnosh --tools Bash Edit Read`, want: inter(Invocation{Tools: []string{"Bash", "Edit", "Read"}, ToolsGiven: true})},
@@ -89,11 +89,6 @@ func TestListFlags(t *testing.T) {
 		{line: `gnosh --add-dir=../lib ../apps`, want: inter(Invocation{AddDirs: []string{"../lib"}, Prompt: "../apps"})},
 		{line: `gnosh "the prompt" --add-dir ../apps ../lib`, want: inter(Invocation{AddDirs: []string{"../apps", "../lib"}, Prompt: "the prompt"})},
 
-		// --mcp-config: files or JSON, never cut.
-		{line: `gnosh --mcp-config a.json b.json`, want: inter(Invocation{MCPConfig: []string{"a.json", "b.json"}})},
-		{line: `gnosh --mcp-config '{"mcpServers": {"x": {"command": "y"}}}' "start here"`, want: inter(Invocation{MCPConfig: []string{`{"mcpServers": {"x": {"command": "y"}}}`}, Prompt: "start here"})},
-		{line: `gnosh --mcp-config a.json --strict-mcp-config`, want: inter(Invocation{MCPConfig: []string{"a.json"}, StrictMCPConfig: true})},
-
 		// What is refused.
 		{line: `gnosh --allowedTools`, kind: ErrMissingValue, say: []string{"--allowedTools needs a value after it (<rules...>)"}},
 		{line: `gnosh --allowed-tools -p x`, kind: ErrMissingValue, say: []string{"--allowed-tools needs a value after it", "what follows is -p"}},
@@ -102,7 +97,6 @@ func TestListFlags(t *testing.T) {
 		{line: `gnosh --disallowed-tools=`, kind: ErrBadValue, say: []string{"--disallowed-tools was given an empty list"}},
 		{line: `gnosh --add-dir ""`, kind: ErrBadValue, say: []string{"--add-dir was given an empty list"}},
 		{line: `gnosh --add-dir`, kind: ErrMissingValue, say: []string{"--add-dir needs a value after it (<dirs...>)"}},
-		{line: `gnosh --mcp-config`, kind: ErrMissingValue, say: []string{"--mcp-config needs a value"}},
 
 		// Parentheses that do not pair up: one rule when that is the only
 		// reading, an error when it could be two.
@@ -231,18 +225,6 @@ func TestListReach(t *testing.T) {
 		{listPaths, "fix\nthis", false},
 		{listPaths, "", false},
 		{listPaths, "--cwd", false},
-		{listPairs, "KEY=value", true},
-		{listPairs, "KEY=", true},
-		{listPairs, "_K9=a b", true},
-		{listPairs, "myserver", false},
-		{listPairs, "9K=x", false},
-		{listPairs, "=x", false},
-		{listPairs, "https://example.com/mcp?a=b", false},
-		{listHeaders, "Authorization: Bearer abc", true},
-		{listHeaders, "X-Key:abc", true},
-		{listHeaders, "myserver", false},
-		{listHeaders, "https://example.com/mcp", false},
-		{listHeaders, "bad name: x", false},
 	} {
 		if got := c.kind.more(c.next); got != c.want {
 			t.Errorf("listKind(%d).more(%q) = %v, want %v", c.kind, c.next, got, c.want)

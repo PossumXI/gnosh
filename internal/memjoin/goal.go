@@ -36,7 +36,7 @@ type goalState struct {
 	// goal waits for has happened: a reply to it that ends with the stop
 	// marker ends the turn with the goal still set.
 	asked bool
-	// directive is the directive of the goal that `gnosh run --goal`
+	// directive is the directive of the goal that `gnosh -p --goal`
 	// bound as the run began, until it has gone out with the run's first
 	// prompt or as that prompt.
 	directive string
@@ -234,7 +234,7 @@ func (j *join) sendDirective(a *agent.Agent, directive string) error {
 	return nil
 }
 
-// armGoalFlag is `gnosh run --goal`: the goal is bound before the run's
+// armGoalFlag is `gnosh -p --goal`: the goal is bound before the run's
 // prompt is composed. Its directive then goes out with that prompt
 // (promptLines), or, when the run was given no prompt at all, as the
 // prompt (runPrompt).
@@ -276,7 +276,7 @@ func (j *join) takeDirective() string {
 // runPrompt is Contribution.RunPrompt: a run that was given no prompt, on
 // its command line or on standard input, asks for one. A run started
 // with --goal has one: the goal's directive, sent as /goal sends it in a
-// session, as a prompt of gnosh's own. So `gnosh run --goal "the tests
+// session, as a prompt of gnosh's own. So `gnosh -p --goal "the tests
 // pass"` is a whole command line.
 func (j *join) runPrompt(context.Context) (agent.Prompt, bool) {
 	text := j.takeDirective()

@@ -22,14 +22,13 @@ func ExampleParse() {
 	// now run the tests
 }
 
-// Print mode: -p and run are the same thing, and flags go on either side of
-// the prompt.
+// Print mode is -p, and flags go on either side of the prompt.
 func ExampleParse_print() {
-	inv, _ := cli.Parse([]string{"run", "-q", "--cwd", "/work/app", "what does main.go do?", "-m", "local/qwen"}, terminal)
-	fmt.Println(inv.Command, inv.Quiet, inv.Cwd, inv.Model, inv.OutputFormat)
+	inv, _ := cli.Parse([]string{"-p", "--cwd", "/work/app", "what does main.go do?", "-m", "local/qwen"}, terminal)
+	fmt.Println(inv.Command, inv.Cwd, inv.Model, inv.OutputFormat)
 	fmt.Println(inv.Prompt)
 	// Output:
-	// print true /work/app local/qwen text
+	// print /work/app local/qwen text
 	// what does main.go do?
 }
 

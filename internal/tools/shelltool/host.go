@@ -3,7 +3,6 @@ package shelltool
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -179,37 +178,6 @@ func (m *Manager) hostList() string {
 		parts = append(parts, name+" ("+m.hosts[name].Target+")")
 	}
 	return strings.Join(parts, ", ")
-}
-
-// WithoutLocalHost returns the arguments of a Bash call without their host
-// argument, when that argument names this machine or nothing at all: such a
-// call runs here, exactly as one that gives no host. ok is false when the
-// arguments name another machine, have no host, or cannot be read, and are
-// to be used as they are.
-//
-// It is for whoever judges a call by whether it has a host argument, as
-// the permission rules do: a call for this machine is to be judged as one.
-func WithoutLocalHost(input json.RawMessage) (out json.RawMessage, ok bool) {
-	fields, err := objectFields(input)
-	if err != nil {
-		return nil, false
-	}
-	raw, has := fields[argHost]
-	if !has {
-		return nil, false
-	}
-	var name string
-	if json.Unmarshal(raw, &name) != nil {
-		return nil, false
-	}
-	if name = strings.TrimSpace(name); name != "" && name != LocalName {
-		return nil, false
-	}
-	delete(fields, argHost)
-	if out, err = json.Marshal(fields); err != nil {
-		return nil, false
-	}
-	return out, true
 }
 
 // SplitStamp parts the text of a shell result into the line it begins with,

@@ -31,7 +31,7 @@ type flagUse struct {
 func uses(tab *Table) []flagUse {
 	var out []flagUse
 	for _, c := range tab.commands {
-		if c.raw || c.needSub {
+		if c.needSub {
 			continue
 		}
 		for _, f := range c.flags {
@@ -44,11 +44,22 @@ func uses(tab *Table) []flagUse {
 					out = append(out, flagUse{c, f, true})
 				}
 			default:
-				out = append(out, flagUse{c, f, c.print})
+				out = append(out, flagUse{c, f, false})
 			}
 		}
 	}
 	return out
+}
+
+// printLetterOf reports whether r is a letter that some flag of c takes over
+// in print mode.
+func printLetterOf(c *command, r rune) bool {
+	for _, f := range c.flags {
+		if f.printLetter == r {
+			return true
+		}
+	}
+	return false
 }
 
 // spellings returns the ways to type the flag in this use: all of them,
@@ -71,7 +82,8 @@ func (u flagUse) spellings() []string {
 func sample(f *flag) string {
 	switch {
 	case len(f.choices) > 0:
-		// The last one, which is never the default: the flag then shows.
+		// The last one, which is not the default where the flag has more
+		// than one: the flag then shows.
 		names := f.choiceNames()
 		return names[len(names)-1]
 	case f.number:
@@ -80,10 +92,6 @@ func sample(f *flag) string {
 		return sampleUUID
 	case f.id == "--setting-sources":
 		return "user,local"
-	case f.list == listPairs:
-		return "KEY=value"
-	case f.list == listHeaders:
-		return "X-Key: value"
 	case f.list == listRules:
 		return "Read,Bash(git diff *)"
 	}
@@ -94,16 +102,11 @@ func sample(f *flag) string {
 // before it, and the command's arguments.
 func (u flagUse) around() (before, args []string) {
 	before = append(before, u.c.path()...)
-	if u.c.session && u.print && !u.c.print {
+	if u.c.session && u.print {
 		before = append(before, "-p")
 	}
-	switch u.f.id {
-	case idFork:
+	if u.f.id == idFork {
 		before = append(before, "-C")
-	case idPartial:
-		before = append(before, "--output-format", "stream-json")
-	case idReplay:
-		before = append(before, "--output-format", "stream-json", "--input-format", "stream-json")
 	}
 	if u.c.session {
 		return before, []string{"the prompt"}
@@ -209,15 +212,16 @@ func TestEverySpelling(t *testing.T) {
 			}
 		}
 	}
-	if count < 500 {
+	if count < 300 {
 		t.Errorf("only %d lines were tried; the table should give many more", count)
 	}
 }
 
 // redundant reports whether the flag adds nothing to the line it is tried
-// on: -p on a line that already has it or is `run`.
+// on: a flag with one value, which is what gnosh does without it too
+// (--input-format text).
 func redundant(u flagUse) bool {
-	return u.f.id == idPrint && (u.print || u.c.print)
+	return len(u.f.choiceNames()) == 1
 }
 
 // FuzzSpellings gives every flag an arbitrary value and checks that its

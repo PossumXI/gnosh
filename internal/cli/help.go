@@ -117,7 +117,7 @@ func (t *Table) render(c *command) string {
 		h.item("gnosh [flags] [prompt]",
 			"Open a session in this folder. A prompt, if there is one, is sent as its first message.")
 		h.item("gnosh -p [flags] [prompt]",
-			`Answer one prompt and exit: print mode. "gnosh run" is the same. Text piped in goes before the prompt.`)
+			"Answer one prompt and exit: print mode. Text piped in goes before the prompt.")
 		h.item("gnosh <command> [flags] [arguments]",
 			`Run one of the commands below. "gnosh <command> --help" explains it.`)
 	} else {
@@ -170,7 +170,7 @@ func (t *Table) render(c *command) string {
 					h.heading(group)
 					first = false
 				}
-				h.item(flagLine(c, f), flagHelp(c, f))
+				h.item(flagLine(f), flagHelp(f))
 			}
 		}
 		h.heading("Reading the command line")
@@ -183,7 +183,7 @@ func (t *Table) render(c *command) string {
 	} else if len(c.flags) > 0 {
 		h.heading("Flags")
 		for _, f := range c.flags {
-			h.item(flagLine(c, f), flagHelp(c, f))
+			h.item(flagLine(f), flagHelp(f))
 		}
 	}
 	return h.b.String()
@@ -191,11 +191,8 @@ func (t *Table) render(c *command) string {
 
 // usage returns the line that shows how a command is typed.
 func usage(c *command) string {
-	switch {
-	case c.needSub:
+	if c.needSub {
 		return c.title() + " <command> [flags] [arguments]"
-	case c.raw:
-		return strings.TrimSpace(c.title() + " " + c.argsUsage)
 	}
 	return strings.TrimSpace(c.title() + " [flags] " + c.argsUsage)
 }
@@ -211,17 +208,11 @@ func label(c *command) string {
 }
 
 // flagLine returns a flag's spellings and the shape of its value, as help
-// lists them: "-r, --resume [session]".
-func flagLine(c *command, f *flag) string {
+// lists them: "-r, --resume [session]". A letter that is the flag's only in
+// print mode is not among them: the flag's own help says so.
+func flagLine(f *flag) string {
 	var names []string
-	if c.print && f.printLetter != 0 {
-		names = append(names, "-"+string(f.printLetter))
-	}
 	for _, r := range f.short {
-		if c.print && printLetterOf(c, r) {
-			// In print mode the letter belongs to another flag.
-			continue
-		}
 		names = append(names, "-"+string(r))
 	}
 	for _, l := range f.long {
@@ -239,24 +230,10 @@ func flagLine(c *command, f *flag) string {
 	return line
 }
 
-// printLetterOf reports whether r is a letter that some flag of c takes over
-// in print mode.
-func printLetterOf(c *command, r rune) bool {
-	for _, f := range c.flags {
-		if f.printLetter == r {
-			return true
-		}
-	}
-	return false
-}
-
-// flagHelp returns what help says a flag does for a command, with a mark
-// when the flag, or some of its values, are not built.
-func flagHelp(c *command, f *flag) string {
+// flagHelp returns what help says a flag does, with a mark when the flag,
+// or some of its values, are not built.
+func flagHelp(f *flag) string {
 	text := f.help
-	if own, ok := c.flagHelp[f.id]; ok {
-		text = own
-	}
 	if f.status == NotBuilt {
 		return text + " " + notBuiltMark
 	}
@@ -272,8 +249,8 @@ func flagHelp(c *command, f *flag) string {
 	return text
 }
 
-// sessionNotes returns the paragraphs that end the help of `gnosh` and
-// `gnosh run`: how the line is read, where that is not obvious.
+// sessionNotes returns the paragraphs that end the help of `gnosh`: how the
+// line is read, where that is not obvious.
 func sessionNotes(c *command) []string {
 	var lists []string
 	for _, f := range c.flags {
@@ -281,15 +258,11 @@ func sessionNotes(c *command) []string {
 			lists = append(lists, f.main())
 		}
 	}
-	notes := []string{
+	return []string{
 		"Flags go before or after the prompt, in any order. Everything after a lone -- is the prompt, even if it begins with a dash.",
 		"A list flag (" + strings.Join(lists, ", ") + ") takes the argument after it, and then each argument after that up to the next flag, for as long as the argument has no space in it (spaces inside parentheses do not count). So a prompt of two words or more ends a list (gnosh stops to ask if that prompt reads like more tools), but a one-word prompt right after a list would join it: put the prompt first, put -- before it, or attach the list with an equals sign, as in --tools=Read,Edit.",
 		`In a list of tools or rules, commas and spaces separate the items, but not inside parentheses: "Bash(git` + nbsp + `diff` + nbsp + `*),Edit" is two rules.`,
 		"A value that begins with a dash is attached with an equals sign: --name=-draft. A flag typed twice counts the last time, except list flags, which add up. One-letter flags can share a dash (-yC); one that takes a value goes last, and its value is the next argument.",
+		"A first word that is one of the commands above is that command, not a prompt. To send such a word as a prompt, put -- before it, or use -p.",
 	}
-	if !c.print {
-		notes = append(notes,
-			"A first word that is one of the commands above is that command, not a prompt. To send such a word as a prompt, put -- before it, or use -p.")
-	}
-	return notes
 }

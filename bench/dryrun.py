@@ -400,8 +400,8 @@ def check(d, expect_path, opts):
     c.true("the run's sessions are under its own home", bool(sessions.session_files(sessions.store(d))))
     c.true("its config is under its own home", os.path.isfile(os.path.join(home, ".config", "gnosh", "gnosh.json")))
     config = json.load(open(os.path.join(home, ".config", "gnosh", "gnosh.json")))
-    c.true("its config turns discovery off and names one model",
-           all(p.get("discoverModels") is False for p in config["providers"].values()) and config["model"]["id"] == "box/" + row["model"])
+    c.true("its config turns listModels off and names one model",
+           all(p.get("listModels") is False for p in config["providers"].values()) and config["model"]["id"] == "box/" + row["model"])
     return c.bad
 
 

@@ -46,8 +46,8 @@ type Options struct {
 	// ProjectInstructionFiles are more instruction files of the project,
 	// as absolute paths.
 	ProjectInstructionFiles []ListItem
-	// DisabledSkills are skills hidden from the model.
-	DisabledSkills []ListItem
+	// HiddenSkills are skills hidden from the model.
+	HiddenSkills []ListItem
 	// MemoryText chooses which of gnosh's two texts about mem a model is
 	// given in its instructions: "lean", the default, or "full".
 	MemoryText Value[string]
@@ -108,7 +108,7 @@ type optionDef struct {
 var optionDefs = []optionDef{
 	// The model's requests.
 	{key: "requestTimeout", kind: oInt, def: "900 on your own machine, 60 elsewhere",
-		what: "seconds a model request may go without sending anything; 0 waits for ever", from: fromPlain,
+		what: "seconds a model request may go without sending anything; 0 waits for ever", from: fromAPIs + ": the request timeout of the OpenAI and Anthropic SDKs",
 		bounded: true, min: 0, max: 1 << 30,
 		num: func(o *Options) *Value[int] { return &o.RequestTimeout }},
 
@@ -137,10 +137,10 @@ var optionDefs = []optionDef{
 		what: "more instruction files of the project", from: fromPlain,
 		trust: KindExtraPath, fromCwd: true,
 		list: func(o *Options) *[]ListItem { return &o.ProjectInstructionFiles }},
-	{key: "disabledSkills", kind: oNameList, def: "none",
-		what: "skills to hide from the model", from: fromPlain + ", shaped as Claude Code's disabled… lists are",
-		trust: KindDisabledSkill,
-		list:  func(o *Options) *[]ListItem { return &o.DisabledSkills }},
+	{key: "hiddenSkills", kind: oNameList, def: "none",
+		what: "skills to hide from the model", from: fromPlain,
+		trust: KindHiddenSkill,
+		list:  func(o *Options) *[]ListItem { return &o.HiddenSkills }},
 
 	// mem.
 	{key: "memoryText", kind: oEnum, def: "lean",
@@ -160,7 +160,7 @@ var optionDefs = []optionDef{
 		what: "write more to the log", from: fromClaudeCode + ": the --debug flag",
 		truth: func(o *Options) *Value[bool] { return &o.Debug }},
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
-		what: "the name of the project's data folder", from: fromPlain + ", after the --data-dir flag",
+		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},
 }
 

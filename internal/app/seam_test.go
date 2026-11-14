@@ -281,7 +281,7 @@ func TestRunPromptFromAFeature(t *testing.T) {
 		},
 	}
 	w := apptest.NewWorld(t, apptest.Reply{Text: "The tests pass now."})
-	o := testOptions(w, "run", "--goal", "the tests pass")
+	o := testOptions(w, "-p", "--goal", "the tests pass")
 	o.Features = []Feature{goal}
 	r := runWith(t, t.Context(), o).wantCode(t, 0)
 	if r.out != "The tests pass now.\n" {
@@ -292,7 +292,7 @@ func TestRunPromptFromAFeature(t *testing.T) {
 	}
 	// A prompt that was typed is the run's prompt; the feature is not asked.
 	w = apptest.NewWorld(t, apptest.Reply{Text: "Typed."})
-	o = testOptions(w, "run", "--goal", "the tests pass", "fix the build")
+	o = testOptions(w, "-p", "--goal", "the tests pass", "fix the build")
 	o.Features = []Feature{goal}
 	runWith(t, t.Context(), o).wantCode(t, 0)
 	if users := userTexts(w.Model.Requests()[0]); len(users) != 1 || !strings.HasSuffix(users[0], "fix the build") {
@@ -300,7 +300,7 @@ func TestRunPromptFromAFeature(t *testing.T) {
 	}
 	// No prompt and no feature with one.
 	w = apptest.NewWorld(t)
-	o = testOptions(w, "run")
+	o = testOptions(w, "-p")
 	o.Features = []Feature{goal}
 	r = runWith(t, t.Context(), o).wantCode(t, 1)
 	has(t, "stderr", r.err, "the prompt is empty")

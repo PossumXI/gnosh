@@ -239,11 +239,10 @@ type Dirs struct {
 	Config string
 	State  string
 	Cache  string
-	// Project is the project's data folder: .gnosh, or the directory given
-	// with -D. It may not exist yet.
+	// Project is the project's data folder: .gnosh, or the folder the
+	// projectDataDir option names. It may not exist yet.
 	Project string
-	// Sessions is the root of the session store: State, or the directory
-	// given with -D.
+	// Sessions is the root of the session store, which is State.
 	Sessions string
 	// Session is the session's own folder, beside its file: the place for
 	// what belongs to one session and should go when the session is
@@ -272,7 +271,7 @@ type Session struct {
 	AgentDef *agentdef.Def
 
 	// Interactive says a person is there to be asked: the session was
-	// opened in a terminal. It is false in a run (-p, gnosh run).
+	// opened in a terminal. It is false in a run (gnosh -p).
 	Interactive bool
 	// Source is how the session came to be, in the SessionStart hook's
 	// words: "startup", "resume", "fork" or "clear"; and "subagent" for a
@@ -528,7 +527,7 @@ type Contribution struct {
 	// standard input. The features are asked in order, and the first that
 	// reports true supplies it; the run then answers that prompt as it
 	// would one that was typed. It is how a flag a feature claims can be a
-	// run's whole command line: gnosh run --goal "the tests pass". With no
+	// run's whole command line: gnosh -p --goal "the tests pass". With no
 	// feature supplying one, a run without a prompt is refused as before.
 	RunPrompt func(ctx context.Context) (agent.Prompt, bool)
 

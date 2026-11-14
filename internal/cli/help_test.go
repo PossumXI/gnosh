@@ -141,7 +141,7 @@ func TestHelpIsComplete(t *testing.T) {
 		text, _ := tab.Help(c.path()...)
 		lines := strings.Split(text, "\n")
 		for _, f := range c.flags {
-			line := flagLine(c, f)
+			line := flagLine(f)
 			found := false
 			for _, l := range lines {
 				if l == "  "+line {
@@ -178,18 +178,16 @@ func TestHelpIsComplete(t *testing.T) {
 		}
 	}
 
-	// The letter -v is shown where it means what the line says.
+	// The letter -v stands with the flag it means on a plain gnosh, and
+	// the other flag's help says when the letter is its own.
 	root, _ := tab.Help()
-	run, _ := tab.Help("run")
-	for text, lines := range map[string][2]string{
-		root: {"  -v, --version", "  --verbose"},
-		run:  {"  --version", "  -v, --verbose"},
-	} {
-		for _, l := range lines {
-			if !strings.Contains(text, "\n"+l+"\n") {
-				t.Errorf("help lacks the line %q:\n%.300s...", l, text)
-			}
+	for _, l := range []string{"  -v, --version", "  --verbose"} {
+		if !strings.Contains(root, "\n"+l+"\n") {
+			t.Errorf("help lacks the line %q:\n%.300s...", l, root)
 		}
+	}
+	if !strings.Contains(root, "With -p, -v means this.") || !strings.Contains(root, "(With -p, -v means --verbose.)") {
+		t.Errorf("help does not say what -v means with -p:\n%s", root)
 	}
 }
 
@@ -200,9 +198,8 @@ func TestHelpMarksWhatIsNotBuilt(t *testing.T) {
 	tab := Default()
 	root, _ := tab.Help()
 	for _, want := range []string{
-		"  --fork-session\n      With -c, -r or -s: go on in a copy of the session and leave the original\n      as it was. (Not built yet.)",
+		"  --fork-session\n      With -c or -r: go on in a copy of the session and leave the original as\n      it was. (Not built yet.)",
 		"(Not built yet: json, stream-json.)",
-		"(Not built yet: stream-json.)",
 		"  doctor                  Check that a turn could run here. (Not built yet.)",
 		"  session <command>       Look at and manage sessions. (Not built yet.)",
 	} {
@@ -210,7 +207,7 @@ func TestHelpMarksWhatIsNotBuilt(t *testing.T) {
 			t.Errorf("the help as shipped does not say:\n%s", want)
 		}
 	}
-	for _, built := range []string{"-c, -C, --continue", "-m, --model <model>", "-p, --print", "run [prompt...]"} {
+	for _, built := range []string{"-c, -C, --continue", "-m, --model <model>", "-p, --print", "help [command]"} {
 		at := strings.Index(root, "\n  "+built)
 		if at < 0 {
 			t.Errorf("the help has no %q", built)
@@ -246,7 +243,7 @@ func TestHelpMarksWhatIsNotBuilt(t *testing.T) {
 		}
 	}
 	root, _ = tab.Help()
-	for _, gone := range []string{"as it was. (Not built yet.)", "(Not built yet: json", "could run here. (Not built yet.)", "manage sessions. (Not built yet.)"} {
+	for _, gone := range []string{"it was. (Not built yet.)", "(Not built yet: json", "could run here. (Not built yet.)", "manage sessions. (Not built yet.)"} {
 		if strings.Contains(root, gone) {
 			t.Errorf("the help still says %q after it was marked built", gone)
 		}

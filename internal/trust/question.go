@@ -192,8 +192,7 @@ type Decision struct {
 
 // Decide says what to do about a folder's own settings: use them, ask, or
 // leave them out with a notice. A folder with nothing waiting for trust is
-// never asked about. Without a person (gnosh run, -p) nothing is ever
-// asked.
+// never asked about. Without a person (gnosh -p) nothing is ever asked.
 func Decide(a Asked) Decision {
 	switch {
 	case a.TrustFolder:

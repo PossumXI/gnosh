@@ -5,8 +5,8 @@ import "testing"
 const sampleUUID = "123e4567-e89b-12d3-a456-426614174000"
 
 // TestInvocationForms covers the ways of starting gnosh: a session, a
-// session with a prompt, print mode by -p, by run and by a redirected
-// output, and where the prompt comes from.
+// session with a prompt, print mode by -p and by a redirected output, and
+// where the prompt comes from.
 func TestInvocationForms(t *testing.T) {
 	runLines(t, allBuilt(t), []lineCase{
 		{line: `gnosh`, want: inter(Invocation{})},
@@ -14,46 +14,40 @@ func TestInvocationForms(t *testing.T) {
 		{line: `gnosh -p "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
 		{line: `gnosh --print "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
 		{line: `gnosh "fix the build" -p`, want: pr(Invocation{Prompt: "fix the build"})},
-		{line: `gnosh run "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
-		{line: `gnosh r "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
-		{line: `gnosh run -p "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
 
 		// Standard input and output decide two things.
 		{line: `gnosh -p "prompt"`, env: &piped, want: pr(Invocation{Prompt: "prompt", ReadStdin: true})},
 		{line: `gnosh -p`, env: &piped, want: pr(Invocation{ReadStdin: true})},
-		{line: `gnosh run`, env: &piped, want: pr(Invocation{ReadStdin: true})},
 		{line: `gnosh`, env: &piped, want: inter(Invocation{ReadStdin: true})},
 		{line: `gnosh "q"`, env: &captured, want: pr(Invocation{Prompt: "q", PrintImplied: true})},
 		{line: `gnosh`, env: &script, want: pr(Invocation{PrintImplied: true, ReadStdin: true})},
 		{line: `gnosh -p "q"`, env: &script, want: pr(Invocation{Prompt: "q", ReadStdin: true})},
 		{line: `gnosh`, env: &captured, kind: ErrUsage, say: []string{"No prompt was given", "not going to a terminal"}},
 		{line: `gnosh -p`, kind: ErrUsage, say: []string{"Print mode answers one prompt, and none was given"}},
-		{line: `gnosh run`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
-		{line: `gnosh r -y`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
+		{line: `gnosh -p -y`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
 
 		// Several words make one prompt.
 		{line: `gnosh fix the tests`, want: inter(Invocation{Prompt: "fix the tests"})},
-		{line: `gnosh run fix the tests`, want: pr(Invocation{Prompt: "fix the tests"})},
+		{line: `gnosh -p fix the tests`, want: pr(Invocation{Prompt: "fix the tests"})},
 		{line: `gnosh -p fix -y the --model q tests`, want: pr(Invocation{Prompt: "fix the tests", PermissionMode: ModeBypassPermissions, Model: "q"})},
 		{line: `gnosh "first part" "second part"`, want: inter(Invocation{Prompt: "first part second part"})},
 
 		// After -p no word is a command.
-		{line: `gnosh -p run the tests`, want: pr(Invocation{Prompt: "run the tests"})},
+		{line: `gnosh -p trust the tests`, want: pr(Invocation{Prompt: "trust the tests"})},
 		{line: `gnosh -p doctor`, want: pr(Invocation{Prompt: "doctor"})},
 		{line: `gnosh -yp session list`, want: pr(Invocation{Prompt: "session list", PermissionMode: ModeBypassPermissions})},
-		{line: `gnosh run run`, want: pr(Invocation{Prompt: "run"})},
-		{line: `gnosh "what now" run`, want: inter(Invocation{Prompt: "what now run"})},
+		{line: `gnosh "what now" doctor`, want: inter(Invocation{Prompt: "what now doctor"})},
 
 		// A lone word that is a command's name is the command. The error
 		// that follows says how to send the word as a prompt.
-		{line: `gnosh prompt`, kind: ErrUsage, say: []string{"gnosh prompt needs one of its commands after it", "If prompt is a prompt, put -- before it."}},
+		{line: `gnosh session`, kind: ErrUsage, say: []string{"gnosh session needs one of its commands after it", "If session is a prompt, put -- before it."}},
 		{line: `gnosh -y -C logs`, kind: ErrUnknownFlag, say: []string{"-y (--yolo) was typed before gnosh logs and does not go with it", "If logs is a prompt, put -- before it."}},
-		{line: `gnosh -r abc prompt`, kind: ErrUnknownFlag, say: []string{"-r (--resume) was typed before gnosh prompt", "If prompt is a prompt, put -- before it."}},
+		{line: `gnosh -r abc session`, kind: ErrUnknownFlag, say: []string{"-r (--resume) was typed before gnosh session", "If session is a prompt, put -- before it."}},
 		{line: `gnosh doctor my code please`, kind: ErrUsage, say: []string{"my was typed after gnosh doctor", "If the whole line is a prompt, put it in quotes or after --."}},
 		{line: `gnosh -y -C -- logs`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationContinue, Prompt: "logs"})},
 		// help and version may follow anything, as --help and --version may.
 		{line: `gnosh -y -C help`, want: Invocation{Command: CmdHelp}},
-		{line: `gnosh -m qwen help run`, want: Invocation{Command: CmdHelp, HelpFor: []string{"run"}}},
+		{line: `gnosh -m qwen help doctor`, want: Invocation{Command: CmdHelp, HelpFor: []string{"doctor"}}},
 		{line: `gnosh -y version`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh --bogus help`, kind: ErrUnknownFlag, say: []string{"--bogus is not a flag of gnosh"}},
 	})
@@ -79,9 +73,9 @@ func TestPromptText(t *testing.T) {
 		{line: `gnosh -- a -- b`, want: inter(Invocation{Prompt: "a -- b"})},
 		{line: `gnosh first -- -second`, want: inter(Invocation{Prompt: "first -second"})},
 		{line: `gnosh --`, want: inter(Invocation{})},
-		{line: `gnosh run -- -q`, want: pr(Invocation{Prompt: "-q"})},
+		{line: `gnosh -p -- -q`, want: pr(Invocation{Prompt: "-q"})},
 		{line: `gnosh -- doctor`, want: inter(Invocation{Prompt: "doctor"})},
-		{line: `gnosh -- run x`, want: inter(Invocation{Prompt: "run x"})},
+		{line: `gnosh -- trust x`, want: inter(Invocation{Prompt: "trust x"})},
 		{line: `gnosh -- -`, want: inter(Invocation{Prompt: "-"})},
 
 		// Without "--" it is refused, never guessed at.
@@ -95,13 +89,13 @@ func TestPromptText(t *testing.T) {
 		{line: `gnosh ""`, kind: ErrBadValue, say: []string{"The prompt on the command line is empty"}},
 		{line: `gnosh -p "   "`, kind: ErrBadValue, say: []string{"prompt on the command line is empty"}},
 		{line: `gnosh -p ""`, env: &piped, kind: ErrBadValue, say: []string{"empty"}},
-		{args: []string{"run", "\n\t"}, kind: ErrBadValue, say: []string{"empty"}},
+		{args: []string{"-p", "\n\t"}, kind: ErrBadValue, say: []string{"empty"}},
 		{line: `gnosh -- ""`, kind: ErrBadValue, say: []string{"empty"}},
 	})
 }
 
-// TestConversationFlags covers -c, -r, -s, --session-id, --fork-session
-// and -n in every spelling.
+// TestConversationFlags covers -c, -r, --session-id, --fork-session and -n
+// in every spelling.
 func TestConversationFlags(t *testing.T) {
 	cont := Invocation{Conversation: ConversationContinue}
 	runLines(t, allBuilt(t), []lineCase{
@@ -110,7 +104,7 @@ func TestConversationFlags(t *testing.T) {
 		{line: `gnosh --continue`, want: inter(cont)},
 		{line: `gnosh -c -C --continue`, want: inter(cont)},
 		{line: `gnosh -c -p "query"`, want: pr(Invocation{Conversation: ConversationContinue, Prompt: "query"})},
-		{line: `gnosh run -C "query"`, want: pr(Invocation{Conversation: ConversationContinue, Prompt: "query"})},
+		{line: `gnosh -p -C "query"`, want: pr(Invocation{Conversation: ConversationContinue, Prompt: "query"})},
 		{line: `gnosh "query" -c`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "query"})},
 		{line: `gnosh -c "go on"`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "go on"})},
 		{line: `gnosh -C /compact`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "/compact"})},
@@ -129,12 +123,7 @@ func TestConversationFlags(t *testing.T) {
 		{line: `gnosh -r /home/u/.local/share/gnosh/s/one.jsonl`, want: inter(Invocation{Conversation: ConversationResume, Resume: "/home/u/.local/share/gnosh/s/one.jsonl", ResumeIsFile: true})},
 		{line: `gnosh -r notes.jsonl`, want: inter(Invocation{Conversation: ConversationResume, Resume: "notes.jsonl"})},
 		{line: `gnosh -p -r abc "query"`, want: pr(Invocation{Conversation: ConversationResume, Resume: "abc", Prompt: "query"})},
-		{line: `gnosh run -r abc "query"`, want: pr(Invocation{Conversation: ConversationResume, Resume: "abc", Prompt: "query"})},
-
-		{line: `gnosh -s abc123`, want: inter(Invocation{Conversation: ConversationSession, Session: "abc123"})},
-		{line: `gnosh --session abc123`, want: inter(Invocation{Conversation: ConversationSession, Session: "abc123"})},
-		{line: `gnosh --session=abc123`, want: inter(Invocation{Conversation: ConversationSession, Session: "abc123"})},
-		{line: `gnosh run -s abc123 "more"`, want: pr(Invocation{Conversation: ConversationSession, Session: "abc123", Prompt: "more"})},
+		{line: `gnosh "query" -p --resume=abc`, want: pr(Invocation{Conversation: ConversationResume, Resume: "abc", Prompt: "query"})},
 
 		{line: `gnosh --session-id ` + sampleUUID, want: inter(Invocation{SessionID: sampleUUID})},
 		{line: `gnosh --session-id=` + sampleUUID, want: inter(Invocation{SessionID: sampleUUID})},
@@ -142,38 +131,37 @@ func TestConversationFlags(t *testing.T) {
 		{line: `gnosh -c --fork-session`, want: inter(Invocation{Conversation: ConversationContinue, ForkSession: true})},
 		{line: `gnosh --fork-session -r abc`, want: inter(Invocation{Conversation: ConversationResume, Resume: "abc", ForkSession: true})},
 		{line: `gnosh --fork-session -r`, want: inter(Invocation{Conversation: ConversationResume, ForkSession: true})},
-		{line: `gnosh -s abc --fork-session --session-id ` + sampleUUID, want: inter(Invocation{Conversation: ConversationSession, Session: "abc", ForkSession: true, SessionID: sampleUUID})},
+		{line: `gnosh -r abc --fork-session --session-id ` + sampleUUID, want: inter(Invocation{Conversation: ConversationResume, Resume: "abc", ForkSession: true, SessionID: sampleUUID})},
 		{line: `gnosh -n "Release notes"`, want: inter(Invocation{Name: "Release notes"})},
 		{line: `gnosh --name "Release notes"`, want: inter(Invocation{Name: "Release notes"})},
 		{line: `gnosh --name=x -C`, want: inter(Invocation{Name: "x", Conversation: ConversationContinue})},
 
 		// What cannot be combined, or is missing something.
 		{line: `gnosh -c -r abc`, kind: ErrConflict, say: []string{"-c and -r each say which conversation"}},
-		{line: `gnosh -s a -C`, kind: ErrConflict, say: []string{"-s and -C"}},
-		{line: `gnosh --resume --session a`, kind: ErrConflict, say: []string{"--resume and --session"}},
-		{line: `gnosh --fork-session`, kind: ErrUsage, say: []string{"--fork-session goes on in a copy", "Add -c, -r or -s"}},
+		{line: `gnosh -r a -C`, kind: ErrConflict, say: []string{"-r and -C"}},
+		{line: `gnosh --resume --continue`, kind: ErrConflict, say: []string{"--resume and --continue"}},
+		{line: `gnosh --fork-session`, kind: ErrUsage, say: []string{"--fork-session goes on in a copy", "Add -c or -r to say which session to copy."}},
 		{line: `gnosh -c --session-id ` + sampleUUID, kind: ErrConflict, say: []string{"--session-id gives a new conversation its ID", "-c goes on with an earlier one", "--fork-session"}},
 		{line: `gnosh --session-id nope`, kind: ErrBadValue, say: []string{"--session-id nope is not a UUID"}},
 		{line: `gnosh --session-id 123e4567e89b12d3a456426614174000`, kind: ErrBadValue, say: []string{"is not a UUID"}},
 		{line: `gnosh --session-id 123e4567-e89b-12d3-a456-42661417400g`, kind: ErrBadValue, say: []string{"is not a UUID"}},
 		{line: `gnosh -p -r`, kind: ErrUsage, say: []string{"-r needs a session's ID or name after it in print mode"}},
-		{line: `gnosh run --resume -y "query"`, kind: ErrUsage, say: []string{"--resume needs a session's ID or name"}},
+		{line: `gnosh -p --resume -y "query"`, kind: ErrUsage, say: []string{"--resume needs a session's ID or name"}},
 		{line: `gnosh -r`, env: &captured, kind: ErrUsage, say: []string{"-r needs a session's ID or name", "not going to a terminal"}},
-		{line: `gnosh run -r "do it"`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
+		{line: `gnosh -p -r "do it"`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
 		{line: `gnosh -r ""`, kind: ErrBadValue, say: []string{"-r was given an empty value", "type -r by itself"}},
-		{line: `gnosh -s ""`, kind: ErrBadValue, say: []string{"-s was given an empty value"}},
-		{line: `gnosh -s`, kind: ErrMissingValue, say: []string{"-s needs a value after it (<id>) and the command line ends there"}},
-		{line: `gnosh -s -y`, kind: ErrMissingValue, say: []string{"-s needs a value after it (<id>), and what follows is -y", "--session=-y"}},
-		{line: `gnosh -n`, kind: ErrMissingValue, say: []string{"-n needs a value"}},
+		{line: `gnosh -n ""`, kind: ErrBadValue, say: []string{"-n was given an empty value"}},
+		{line: `gnosh -n`, kind: ErrMissingValue, say: []string{"-n needs a value after it (<name>) and the command line ends there"}},
+		{line: `gnosh -n -y`, kind: ErrMissingValue, say: []string{"-n needs a value after it (<name>), and what follows is -y", "--name=-y"}},
 		{line: `gnosh --fork-session=yes -c`, kind: ErrBadValue, say: []string{"--fork-session=yes", "takes no value", `Leave the =yes off`}},
 
 		// -c used to take the working folder. A single word right after it,
 		// the one shape the old use could have, is refused, so that an old
 		// script fails loudly instead of continuing some session, in the
 		// wrong folder, with a path for a prompt.
-		{line: `gnosh run -q -y -c /tmp/bench/run1 -D /tmp/data -m p/m "go"`, kind: ErrUsage,
+		{line: `gnosh -p -y -c /tmp/bench/run1 -m p/m "go"`, kind: ErrUsage,
 			say: []string{"-c /tmp/bench/run1: -c means --continue now", "For the folder, write --cwd /tmp/bench/run1.", "For a one-word prompt, write -C /tmp/bench/run1, or put -- before it."}},
-		{line: `gnosh run -q -y -c DIR -D DATADIR -m provider/model`, env: &piped, kind: ErrUsage, say: []string{"-c DIR: -c means --continue now", "--cwd DIR"}},
+		{line: `gnosh -p -y -c DIR -m provider/model`, env: &piped, kind: ErrUsage, say: []string{"-c DIR: -c means --continue now", "--cwd DIR"}},
 		{line: `gnosh -c .`, kind: ErrUsage, say: []string{"-c .: -c means --continue now"}},
 		{line: `gnosh -c ./work`, kind: ErrUsage, say: []string{"--cwd ./work"}},
 		{line: `gnosh -c ../other "the prompt"`, kind: ErrUsage, say: []string{"--cwd ../other"}},
@@ -191,7 +179,8 @@ func TestConversationFlags(t *testing.T) {
 		{line: `gnosh go -c`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "go"})},
 		{line: `gnosh -c "go on"`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "go on"})},
 		{line: `gnosh -c "/tmp/a/b has a bug"`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "/tmp/a/b has a bug"})},
-		{line: `gnosh -c run "go"`, want: pr(Invocation{Conversation: ConversationContinue, Prompt: "go"})},
+		// A word after -c that names a command is the command, and is told so.
+		{line: `gnosh -c doctor`, kind: ErrUnknownFlag, say: []string{"-c (--continue) was typed before gnosh doctor and does not go with it"}},
 		{line: `gnosh -c -y`, want: inter(Invocation{Conversation: ConversationContinue, PermissionMode: ModeBypassPermissions})},
 		// -C and --continue never took a folder, so nothing is refused.
 		{line: `gnosh -C /tmp/a/b`, want: inter(Invocation{Conversation: ConversationContinue, Prompt: "/tmp/a/b"})},
@@ -210,7 +199,7 @@ func TestModelAndPermissionFlags(t *testing.T) {
 		{line: `gnosh --model provider/model`, want: inter(Invocation{Model: "provider/model"})},
 		{line: `gnosh --model=provider/model`, want: inter(Invocation{Model: "provider/model"})},
 		{line: `gnosh "hi" -m qwen`, want: inter(Invocation{Model: "qwen", Prompt: "hi"})},
-		{line: `gnosh run -m a --small-model b "hi"`, want: pr(Invocation{Model: "a", SmallModel: "b", Prompt: "hi"})},
+		{line: `gnosh -p -m a --small-model b "hi"`, want: pr(Invocation{Model: "a", SmallModel: "b", Prompt: "hi"})},
 		{line: `gnosh -p --small-model=b "hi"`, want: pr(Invocation{SmallModel: "b", Prompt: "hi"})},
 		{line: `gnosh --reasoning-effort high`, want: inter(Invocation{Effort: "high"})},
 		{line: `gnosh --effort off`, want: inter(Invocation{Effort: "off"})},
@@ -220,9 +209,7 @@ func TestModelAndPermissionFlags(t *testing.T) {
 		{line: `gnosh --yolo`, want: inter(skip)},
 		{line: `gnosh --dangerously-skip-permissions`, want: inter(skip)},
 		{line: `gnosh -y --yolo --dangerously-skip-permissions`, want: inter(skip)},
-		{line: `gnosh run -y "go"`, want: pr(Invocation{PermissionMode: ModeBypassPermissions, Prompt: "go"})},
-		{line: `gnosh --allow-dangerously-skip-permissions`, want: inter(Invocation{AllowSkipPermissions: true})},
-		{line: `gnosh --allow-dangerously-skip-permissions --permission-mode plan`, want: inter(Invocation{AllowSkipPermissions: true, PermissionMode: ModePlan})},
+		{line: `gnosh -p -y "go"`, want: pr(Invocation{PermissionMode: ModeBypassPermissions, Prompt: "go"})},
 		{line: `gnosh --permission-mode default`, want: inter(Invocation{PermissionMode: ModeDefault})},
 		{line: `gnosh --permission-mode manual`, want: inter(Invocation{PermissionMode: ModeDefault})},
 		{line: `gnosh --permission-mode plan`, want: inter(Invocation{PermissionMode: ModePlan})},
@@ -231,11 +218,9 @@ func TestModelAndPermissionFlags(t *testing.T) {
 		{line: `gnosh --permission-mode bypassPermissions`, want: inter(skip)},
 		{line: `gnosh -y --permission-mode bypassPermissions`, want: inter(skip)},
 		{line: `gnosh --trust-folder`, want: inter(Invocation{TrustFolder: true})},
-		{line: `gnosh run --trust-folder x`, want: pr(Invocation{TrustFolder: true, Prompt: "x"})},
-		{line: `gnosh -p x --permission-prompts none`, want: pr(Invocation{PermissionPrompts: "none", Prompt: "x"})},
-		{line: `gnosh -p x --permission-prompts=host`, want: pr(Invocation{PermissionPrompts: "host", Prompt: "x"})},
+		{line: `gnosh -p --trust-folder x`, want: pr(Invocation{TrustFolder: true, Prompt: "x"})},
 
-		{line: `gnosh -y --permission-mode plan`, kind: ErrConflict, say: []string{"-y skips every permission question and --permission-mode plan starts in another mode", "--allow-dangerously-skip-permissions in place of -y"}},
+		{line: `gnosh -y --permission-mode plan`, kind: ErrConflict, say: []string{"-y skips every permission question and --permission-mode plan starts in another mode, so nothing was started. Keep one of them."}},
 		{line: `gnosh --permission-mode default --yolo`, kind: ErrConflict, say: []string{"--yolo skips"}},
 		{line: `gnosh --permission-mode auto`, kind: ErrBadValue, say: []string{"--permission-mode auto: gnosh has no auto mode", "It takes default, plan, acceptEdits, dontAsk or bypassPermissions"}},
 		{line: `gnosh --permission-mode bogus`, kind: ErrBadValue, say: []string{"--permission-mode takes default, plan, acceptEdits, dontAsk or bypassPermissions, and bogus is none of them"}},
@@ -253,8 +238,6 @@ func TestModelAndPermissionFlags(t *testing.T) {
 		{line: `gnosh --model -fast`, kind: ErrMissingValue, say: []string{"what follows is -fast", "--model=-fast"}},
 		{line: `gnosh --model=-fast`, want: inter(Invocation{Model: "-fast"})},
 		{line: `gnosh --small-model b`, kind: ErrUsage, say: []string{"--small-model only does something in print mode"}},
-		{line: `gnosh --permission-prompts none`, kind: ErrUsage, say: []string{"only does something in print mode"}},
-		{line: `gnosh -p x --permission-prompts nobody`, kind: ErrBadValue, say: []string{"--permission-prompts takes host or none"}},
 	})
 }
 
@@ -282,9 +265,6 @@ func TestPromptAndSettingsFlags(t *testing.T) {
 
 		{line: `gnosh --cwd /work/app`, want: inter(Invocation{Cwd: "/work/app"})},
 		{line: `gnosh --cwd=/work/app -C`, want: inter(Invocation{Cwd: "/work/app", Conversation: ConversationContinue})},
-		{line: `gnosh -D /tmp/data`, want: inter(Invocation{DataDir: "/tmp/data"})},
-		{line: `gnosh --data-dir /tmp/data`, want: inter(Invocation{DataDir: "/tmp/data"})},
-		{line: `gnosh --data-dir=/tmp/data`, want: inter(Invocation{DataDir: "/tmp/data"})},
 		{line: `gnosh --cwd "my folder" "the prompt"`, want: inter(Invocation{Cwd: "my folder", Prompt: "the prompt"})},
 		{line: `gnosh --settings ./settings.json`, want: inter(Invocation{Settings: "./settings.json"})},
 		{line: `gnosh --settings '{"permissions": {"allow": ["Read"]}}'`, want: inter(Invocation{Settings: `{"permissions": {"allow": ["Read"]}}`, SettingsInline: true})},
@@ -292,13 +272,9 @@ func TestPromptAndSettingsFlags(t *testing.T) {
 		{line: `gnosh --setting-sources user`, want: inter(Invocation{SettingSources: []string{"user"}})},
 		{line: `gnosh --setting-sources user,project,local`, want: inter(Invocation{SettingSources: []string{"user", "project", "local"}})},
 		{line: `gnosh --setting-sources="local, user"`, want: inter(Invocation{SettingSources: []string{"local", "user"}})},
-		{line: `gnosh --bare`, want: inter(Invocation{Bare: true})},
 		{line: `gnosh --safe-mode`, want: inter(Invocation{SafeMode: true})},
-		{line: `gnosh run --safe-mode x`, want: pr(Invocation{SafeMode: true, Prompt: "x"})},
+		{line: `gnosh -p --safe-mode x`, want: pr(Invocation{SafeMode: true, Prompt: "x"})},
 		{line: `gnosh --disable-slash-commands`, want: inter(Invocation{DisableSlashCommands: true})},
-		{line: `gnosh --strict-mcp-config`, want: inter(Invocation{StrictMCPConfig: true})},
-		{line: `gnosh --agents '{"reviewer": {"description": "x", "prompt": "y"}}'`, want: inter(Invocation{Agents: `{"reviewer": {"description": "x", "prompt": "y"}}`})},
-		{line: `gnosh -p x --agents ./agents.json`, want: pr(Invocation{Agents: "./agents.json", Prompt: "x"})},
 
 		// --debug takes its filter only attached.
 		{line: `gnosh -d`, want: inter(Invocation{Debug: true})},
@@ -311,8 +287,8 @@ func TestPromptAndSettingsFlags(t *testing.T) {
 		{line: `gnosh --debug-file /tmp/gnosh-debug.log`, want: inter(Invocation{Debug: true, DebugFile: "/tmp/gnosh-debug.log"})},
 		{line: `gnosh --debug=`, kind: ErrBadValue, say: []string{"--debug was given an empty value", "type --debug by itself"}},
 		{line: `gnosh -d=hooks`, kind: ErrBadValue, say: []string{"-d=hooks: -d takes a value only in its long form", "--debug=hooks"}},
-		// "mcp" is a command, and --debug is not one of its flags.
-		{line: `gnosh --debug mcp`, kind: ErrUnknownFlag, say: []string{"--debug was typed before gnosh mcp and does not go with it"}},
+		// "logs" is a command, and --debug is not one of its flags.
+		{line: `gnosh --debug logs`, kind: ErrUnknownFlag, say: []string{"--debug was typed before gnosh logs and does not go with it"}},
 
 		{line: `gnosh --verbose`, want: inter(Invocation{Verbose: true})},
 		{line: `gnosh --verbose "hi"`, want: inter(Invocation{Verbose: true, Prompt: "hi"})},
@@ -323,9 +299,9 @@ func TestPromptAndSettingsFlags(t *testing.T) {
 		{line: `gnosh --setting-sources projects`, kind: ErrBadValue, say: []string{"did you mean project?"}},
 		{line: `gnosh --setting-sources ""`, kind: ErrBadValue, say: []string{"empty value"}},
 		{line: `gnosh --cwd ""`, kind: ErrBadValue, say: []string{"--cwd was given an empty value"}},
-		{line: `gnosh -D`, kind: ErrMissingValue, say: []string{"-D needs a value after it (<dir>)"}},
+		{line: `gnosh --cwd`, kind: ErrMissingValue, say: []string{"--cwd needs a value after it (<dir>)"}},
 		{line: `gnosh --settings`, kind: ErrMissingValue, say: []string{"--settings needs a value after it (<file-or-json>)"}},
-		{line: `gnosh --bare=1`, kind: ErrBadValue, say: []string{"takes no value"}},
+		{line: `gnosh --safe-mode=1`, kind: ErrBadValue, say: []string{"takes no value"}},
 		{line: `gnosh --verbose=true`, kind: ErrBadValue, say: []string{"--verbose=true: --verbose is on when it is typed"}},
 	})
 }
@@ -337,22 +313,15 @@ func TestPrintFlags(t *testing.T) {
 		{line: `gnosh -p x --output-format text`, want: pr(Invocation{Prompt: "x"})},
 		{line: `gnosh -p x --output-format json`, want: pr(Invocation{Prompt: "x", OutputFormat: FormatJSON})},
 		{line: `gnosh -p x --output-format=stream-json`, want: pr(Invocation{Prompt: "x", OutputFormat: FormatStreamJSON})},
-		{line: `gnosh --output-format json run x`, want: pr(Invocation{Prompt: "x", OutputFormat: FormatJSON})},
+		{line: `gnosh --output-format json -p x`, want: pr(Invocation{Prompt: "x", OutputFormat: FormatJSON})},
 		{line: `gnosh --output-format json "x"`, env: &captured, want: pr(Invocation{Prompt: "x", OutputFormat: FormatJSON, PrintImplied: true})},
 		{line: `gnosh -p --input-format text x`, want: pr(Invocation{Prompt: "x"})},
-		{line: `gnosh -p --input-format stream-json`, env: &piped, want: pr(Invocation{InputFormat: FormatStreamJSON, ReadStdin: true})},
-		{line: `gnosh -p --input-format=stream-json`, want: pr(Invocation{InputFormat: FormatStreamJSON})},
-		{line: `gnosh -p x --output-format stream-json --include-partial-messages`, want: pr(Invocation{Prompt: "x", OutputFormat: FormatStreamJSON, IncludePartialMessages: true})},
-		{line: `gnosh -p --input-format stream-json --output-format stream-json --replay-user-messages`,
-			want: pr(Invocation{InputFormat: FormatStreamJSON, OutputFormat: FormatStreamJSON, ReplayUserMessages: true})},
-		{line: `gnosh run -q x`, want: pr(Invocation{Quiet: true, Prompt: "x"})},
-		{line: `gnosh -p --quiet x`, want: pr(Invocation{Quiet: true, Prompt: "x"})},
-		{line: `gnosh run --goal "the tests pass" "fix the build"`, want: pr(Invocation{Goal: "the tests pass", Prompt: "fix the build"})},
-		{line: `gnosh run --goal="the tests pass"`, want: pr(Invocation{Goal: "the tests pass"})},
-		{line: `gnosh run --goal "-race passes"`, want: pr(Invocation{Goal: "-race passes"})},
+		{line: `gnosh -p --input-format=text`, env: &piped, want: pr(Invocation{ReadStdin: true})},
+		{line: `gnosh -p --goal "the tests pass" "fix the build"`, want: pr(Invocation{Goal: "the tests pass", Prompt: "fix the build"})},
+		{line: `gnosh -p --goal="the tests pass"`, want: pr(Invocation{Goal: "the tests pass"})},
+		{line: `gnosh -p --goal "-race passes"`, want: pr(Invocation{Goal: "-race passes"})},
 		{line: `gnosh -p x --max-turns 5`, want: pr(Invocation{MaxTurns: 5, Prompt: "x"})},
 		{line: `gnosh -p x --max-turns=1`, want: pr(Invocation{MaxTurns: 1, Prompt: "x"})},
-		{line: `gnosh -p x --no-session-persistence`, want: pr(Invocation{NoSessionPersistence: true, Prompt: "x"})},
 		{line: `gnosh -p x --verbose`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
 
 		// -v.
@@ -363,36 +332,25 @@ func TestPrintFlags(t *testing.T) {
 		{line: `gnosh -v -y -C`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh -v`, env: &script, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh --version`, env: &captured, want: Invocation{Command: CmdVersion}},
-		{line: `gnosh run --version`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh -p --version`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh -p -v x`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
 		{line: `gnosh -v -p x`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
 		{line: `gnosh x -v -p`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
-		{line: `gnosh run -v x`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
-		{line: `gnosh -v run x`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
-		{line: `gnosh run -qv x`, want: pr(Invocation{Verbose: true, Quiet: true, Prompt: "x"})},
 		{line: `gnosh -pv x`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
-		{line: `gnosh run -v`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
+		{line: `gnosh -vp x`, want: pr(Invocation{Verbose: true, Prompt: "x"})},
+		{line: `gnosh -p -v`, kind: ErrUsage, say: []string{"Print mode answers one prompt"}},
 
 		// Flags that only print mode acts on are refused outside it.
 		{line: `gnosh --output-format json`, kind: ErrUsage, say: []string{"--output-format only does something in print mode, and this line opens a session", "Add -p"}},
 		{line: `gnosh --input-format text`, kind: ErrUsage, say: []string{"--input-format only does something in print mode"}},
-		{line: `gnosh -q`, kind: ErrUsage, say: []string{"-q only does something in print mode"}},
-		{line: `gnosh --max-turns 3 "x"`, kind: ErrUsage, say: []string{"--max-turns only does something in print mode"}},
-		{line: `gnosh --no-session-persistence`, kind: ErrUsage, say: []string{"only does something in print mode"}},
-		{line: `gnosh --include-partial-messages`, kind: ErrUsage, say: []string{"only does something in print mode"}},
-		{line: `gnosh --replay-user-messages`, kind: ErrUsage, say: []string{"only does something in print mode"}},
+		{line: `gnosh --max-turns 3 "x"`, kind: ErrUsage, say: []string{"--max-turns only does something in print mode", "Add -p to answer once and exit."}},
 		{line: `gnosh --goal "the tests pass"`, kind: ErrUsage, say: []string{"--goal only does something in print mode", "Inside a session, type /goal."}},
 
-		{line: `gnosh -p x --include-partial-messages`, kind: ErrUsage, say: []string{"--include-partial-messages adds lines to a stream-json run, and this run prints text", "Add --output-format stream-json"}},
-		{line: `gnosh -p x --include-partial-messages --output-format json`, kind: ErrUsage, say: []string{"this run prints json"}},
-		{line: `gnosh -p x --replay-user-messages --output-format stream-json`, kind: ErrUsage, say: []string{"--replay-user-messages prints back", "reads text and prints stream-json"}},
-		{line: `gnosh -p x --replay-user-messages --input-format stream-json`, kind: ErrUsage, say: []string{"reads stream-json and prints text"}},
 		{line: `gnosh -p x --output-format jsno`, kind: ErrBadValue, hint: "json", say: []string{"--output-format takes text, json or stream-json, and jsno is none of them", "Did you mean json?"}},
 		{line: `gnosh -p x --output-format stream_json`, kind: ErrBadValue, hint: "stream-json"},
 		{line: `gnosh -p x --output-format JSON`, kind: ErrBadValue, hint: "json"},
 		{line: `gnosh -p x --output-format xml`, kind: ErrBadValue, say: []string{"xml is none of them"}},
-		{line: `gnosh -p x --input-format json`, kind: ErrBadValue, say: []string{"--input-format takes text or stream-json"}},
+		{line: `gnosh -p x --input-format json`, kind: ErrBadValue, say: []string{"--input-format takes text and no other value, and json was given"}},
 		{line: `gnosh -p x --max-turns 0`, kind: ErrBadValue, say: []string{"--max-turns takes a whole number of 1 or more, and 0 is not one"}},
 		{line: `gnosh -p x --max-turns many`, kind: ErrBadValue, say: []string{"many is not one"}},
 		{line: `gnosh -p x --max-turns 2.5`, kind: ErrBadValue, say: []string{"2.5 is not one"}},
@@ -409,17 +367,17 @@ func TestBundles(t *testing.T) {
 		{line: `gnosh -yC`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationContinue})},
 		{line: `gnosh -Cy`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationContinue})},
 		{line: `gnosh -yd`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Debug: true})},
-		{line: `gnosh -ys abc`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationSession, Session: "abc"})},
+		{line: `gnosh -yn abc`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Name: "abc"})},
 		{line: `gnosh -yr`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationResume})},
 		{line: `gnosh -yr abc`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationResume, Resume: "abc"})},
 		{line: `gnosh -ry abc`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationResume, Prompt: "abc"})},
 		{line: `gnosh -ym qwen "hi"`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Model: "qwen", Prompt: "hi"})},
-		{line: `gnosh -pq hi`, want: pr(Invocation{Quiet: true, Prompt: "hi"})},
-		{line: `gnosh -pyqm qwen hi`, want: pr(Invocation{Quiet: true, PermissionMode: ModeBypassPermissions, Model: "qwen", Prompt: "hi"})},
-		{line: `gnosh -pyCD /tmp/data hi`, want: pr(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationContinue, DataDir: "/tmp/data", Prompt: "hi"})},
+		{line: `gnosh -py hi`, want: pr(Invocation{PermissionMode: ModeBypassPermissions, Prompt: "hi"})},
+		{line: `gnosh -pyvm qwen hi`, want: pr(Invocation{Verbose: true, PermissionMode: ModeBypassPermissions, Model: "qwen", Prompt: "hi"})},
+		{line: `gnosh -pyCn draft hi`, want: pr(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationContinue, Name: "draft", Prompt: "hi"})},
 		{line: `gnosh -yh`, want: Invocation{Command: CmdHelp}},
 
-		{line: `gnosh -sy abc`, kind: ErrMissingValue, say: []string{"-sy: -s takes a value (<id>), so it has to be the last letter", "then -s <id>"}},
+		{line: `gnosh -ny abc`, kind: ErrMissingValue, say: []string{"-ny: -n takes a value (<name>), so it has to be the last letter", "then -n <name>"}},
 		{line: `gnosh -mqwen`, kind: ErrMissingValue, say: []string{"-mqwen: -m takes a value (<model>)"}},
 		{line: `gnosh -ym`, kind: ErrMissingValue, say: []string{"-m needs a value after it (<model>) and the command line ends there"}},
 		{line: `gnosh -m=qwen`, kind: ErrBadValue, say: []string{"-m=qwen: a one-letter flag takes its value as the next argument", "Write -m qwen, or --model=qwen"}},
@@ -441,12 +399,11 @@ func TestRepeatedFlags(t *testing.T) {
 	runLines(t, allBuilt(t), []lineCase{
 		{line: `gnosh -m a -m b`, want: inter(Invocation{Model: "b"})},
 		{line: `gnosh --model=a -m b --model c`, want: inter(Invocation{Model: "c"})},
-		{line: `gnosh -s a -s b`, want: inter(Invocation{Conversation: ConversationSession, Session: "b"})},
 		{line: `gnosh -r a -r b`, want: inter(Invocation{Conversation: ConversationResume, Resume: "b"})},
 		{line: `gnosh -r a -r`, want: inter(Invocation{Conversation: ConversationResume})},
 		{line: `gnosh -r --resume=a`, want: inter(Invocation{Conversation: ConversationResume, Resume: "a"})},
 		{line: `gnosh -n a --name b`, want: inter(Invocation{Name: "b"})},
-		{line: `gnosh --cwd a --cwd b -D c -D d`, want: inter(Invocation{Cwd: "b", DataDir: "d"})},
+		{line: `gnosh --cwd a --cwd b`, want: inter(Invocation{Cwd: "b"})},
 		{line: `gnosh --permission-mode plan --permission-mode default`, want: inter(Invocation{PermissionMode: ModeDefault})},
 		{line: `gnosh --permission-mode plan -y --permission-mode bypassPermissions`, want: inter(Invocation{PermissionMode: ModeBypassPermissions})},
 		{line: `gnosh -p x --output-format json --output-format text`, want: pr(Invocation{Prompt: "x"})},
@@ -458,7 +415,7 @@ func TestRepeatedFlags(t *testing.T) {
 		{line: `gnosh --setting-sources user --setting-sources local`, want: inter(Invocation{SettingSources: []string{"local"}})},
 		{line: `gnosh -y -y -C -C`, want: inter(Invocation{PermissionMode: ModeBypassPermissions, Conversation: ConversationContinue})},
 		{line: `gnosh -p -p x --print`, want: pr(Invocation{Prompt: "x"})},
-		{line: `gnosh run --goal a --goal b`, want: pr(Invocation{Goal: "b"})},
+		{line: `gnosh -p --goal a --goal b`, want: pr(Invocation{Goal: "b"})},
 
 		// Lists add up, across spellings too.
 		{line: `gnosh --allowedTools Read --allowed-tools Edit`, want: inter(Invocation{AllowedTools: []string{"Read", "Edit"}})},
@@ -466,7 +423,6 @@ func TestRepeatedFlags(t *testing.T) {
 		{line: `gnosh --add-dir ../a --add-dir ../b ../c`, want: inter(Invocation{AddDirs: []string{"../a", "../b", "../c"}})},
 		{line: `gnosh --tools Read --tools Edit`, want: inter(Invocation{Tools: []string{"Read", "Edit"}, ToolsGiven: true})},
 		{line: `gnosh --tools "" --tools Read`, want: inter(Invocation{Tools: []string{"Read"}, ToolsGiven: true})},
-		{line: `gnosh --mcp-config a.json --mcp-config b.json`, want: inter(Invocation{MCPConfig: []string{"a.json", "b.json"}})},
 
 		// Every value is checked, even one that a later one replaces.
 		{line: `gnosh -p x --output-format nope --output-format text`, kind: ErrBadValue, say: []string{"nope is none of them"}},

@@ -167,7 +167,7 @@ func (l *live) offered(ctx context.Context, pc config.Provider) (ids []string, n
 			ids = append(ids, m.ID)
 		}
 	}
-	if !pc.DiscoverModels.V {
+	if !pc.ListModels.V {
 		return ids, ""
 	}
 	pu, err := l.providerFor(ctx, pc.ID)
@@ -276,7 +276,7 @@ func (l *live) buildModel(ctx context.Context, ref config.ModelRef, slot config.
 	if registered && cm.ContextWindow.Set {
 		info.ContextWindow = cm.ContextWindow.V
 	}
-	if window && (info.ContextWindow == 0 || pu.cfg.DiscoverModels.V) {
+	if window && (info.ContextWindow == 0 || pu.cfg.ListModels.V) {
 		models, err := l.listModels(ctx, pu)
 		if err != nil && info.ContextWindow == 0 {
 			l.notice(agent.LevelWarning, "model", fmt.Sprintf(
@@ -439,7 +439,7 @@ func (l *live) setupModels(ctx context.Context, pick func(models []string) (stri
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			l.notice(agent.LevelWarning, "model", fmt.Sprintf("The small model %s cannot be used (%v), so the large model does the short side jobs too.", s.Model.V, err))
+			l.notice(agent.LevelWarning, "model", fmt.Sprintf("The small model %s cannot be used (%v), so the session's model does the short side jobs too.", s.Model.V, err))
 		}
 	}
 	return nil
@@ -453,10 +453,9 @@ func (l *live) outgoing(req *core.Request) {
 	l.typeMu.Lock()
 	typ := l.types[req.Model]
 	l.typeMu.Unlock()
-	switch typ {
-	case "openai-compatible", "ollama", "litellm", "omlx":
-		// These read the switch from the chat template's arguments, as
-		// llama.cpp's own server does.
+	if typ == "openai-compatible" {
+		// Such a server reads the switch from the chat template's
+		// arguments, as llama.cpp's own server does.
 		kw := map[string]any{}
 		switch {
 		case req.Thinking.Effort != "":
@@ -469,12 +468,6 @@ func (l *live) outgoing(req *core.Request) {
 		}
 		if len(kw) > 0 {
 			addExtra(req, "chat_template_kwargs", kw)
-		}
-	case "lmstudio":
-		// LM Studio takes a level of its own, where "none" is off; "on"
-		// sends nothing, so that the setting made in LM Studio stays.
-		if req.Thinking.Mode == "off" {
-			addExtra(req, "reasoning_effort", "none")
 		}
 	}
 }

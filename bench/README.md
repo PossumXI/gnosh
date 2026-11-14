@@ -24,7 +24,7 @@ peak context; compactions (summaries); and, for gnosh, slides, todos popped
 and calls to mem.
 
 It does not measure how good the code is beyond the check, or anything about
-an interactive session: every run is `gnosh run`, one prompt, nobody
+an interactive session: every run is `gnosh -p`, one prompt, nobody
 watching. Four small Go tasks are not a sample of real work. A run varies a
 lot from one time to the next on the same machine (the same build took 43
 and 57 minutes on one task), so a difference needs several runs behind it.
@@ -51,7 +51,7 @@ a check (see [tasks/README.md](tasks/README.md)).
 ## How a run is scored
 
 `run.sh` builds the task's repository in a new directory, starts a proxy of
-its own, gives the prompt to one `gnosh run` (two for continue, the second
+its own, gives the prompt to one `gnosh -p` (two for continue, the second
 with `--continue`), and then runs the task's `check.sh` on what was left.
 The check exits 0 or 1 and prints one line saying why: "PASS: 9/9 packages
 pass, test files untouched", "FAIL: 4/6 bugs fixed; still failing: tax
@@ -128,11 +128,11 @@ switches more).
 How each reaches gnosh: every run has a home of its own (`HOME` and the four
 `XDG_*` directories inside the run directory), so its config, its sessions
 and its mem are its own and no run sees another's. The config written there
-names one model with its window and turns discovery off:
+names one model with its window and turns `listModels` off:
 
     {
       "providers": {
-        "box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:<the proxy>", "discoverModels": false}
+        "box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:<the proxy>", "listModels": false}
       },
       "models": {
         "box/<MODEL>": {"contextWindow": <WINDOW>}
@@ -145,7 +145,7 @@ the provider's `"extraBody": {"id_slot": n}`; thinking is `"thinking"` beside
 the `"id"` of `"model"`; the fuller text about mem is put in the home as the
 user's own text `prompts/memory.md`; and a session is
 
-    gnosh run -q -y --cwd <the task's folder> --output-format stream-json \
+    gnosh -p -y --cwd <the task's folder> --output-format stream-json \
         -m box/<MODEL> --small-model box/<MODEL> -- "<the prompt>"
 
 with `--disallowedTools=gnovm_run,gnovm_new,gnovm_list,gnovm_drop` for
@@ -522,13 +522,17 @@ checks and the proxy's counting are the same, byte for byte but for the
 proxy's test for a summary. What differs:
 
 - **The program.** `gnosh` is now the gnosh of this repository. A session
-  is `gnosh run -q -y --cwd DIR --output-format stream-json -m … -- prompt`
-  where it was `gnosh run -q -y -c DIR -D DATADIR -m … prompt`; `-y` is
-  needed now, since a run no longer approves its own tool calls
-  (`spec/DECISIONS.md`, 11). Sessions and mem are kept under the run's own
-  home, through `XDG_DATA_HOME`, where sessions were kept in `-D`.
-- **The window** is given to gnosh in its config, with discovery off. The
-  earlier gnosh found it in the proxy's `/models` answer.
+  is `gnosh -p -y --cwd DIR --output-format stream-json -m … -- prompt`
+  where it was `gnosh run -q -y -c DIR -D DATADIR -m … prompt`: print mode
+  is `-p`, and this gnosh has no `run` command, no `-q` and no `-D`
+  (`spec/DECISIONS.md`, 26); `-y` is needed now, since a run no longer
+  approves its own tool calls (`spec/DECISIONS.md`, 11). Sessions and mem
+  are kept under the run's own home, through `XDG_DATA_HOME`, where
+  sessions were kept in `-D`. Without `-q`, a run's notices go to its
+  stderr, which the runner keeps as `session-N.err`; nothing is scored
+  from it.
+- **The window** is given to gnosh in its config, with `listModels` off.
+  The earlier gnosh found it in the proxy's `/models` answer.
 - **Summaries.** The proxy knew a summary request by the words of the
   earlier gnosh's, crush's and Codex's own prompts. It now knows it by the
   first words of the new gnosh's (`about to be replaced by a summary`).

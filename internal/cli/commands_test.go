@@ -13,16 +13,16 @@ func TestCommands(t *testing.T) {
 	runLines(t, allBuilt(t), []lineCase{
 		// doctor
 		{line: `gnosh doctor`, want: Invocation{Command: CmdDoctor}},
-		{line: `gnosh doctor --cwd /work/app -D /tmp/data`, want: Invocation{Command: CmdDoctor, Cwd: "/work/app", DataDir: "/tmp/data"}},
+		{line: `gnosh doctor --cwd /work/app`, want: Invocation{Command: CmdDoctor, Cwd: "/work/app"}},
 		{line: `gnosh --cwd /work/app doctor`, want: Invocation{Command: CmdDoctor, Cwd: "/work/app"}},
-		{line: `gnosh -D /tmp/data doctor --cwd=/work/app`, want: Invocation{Command: CmdDoctor, Cwd: "/work/app", DataDir: "/tmp/data"}},
+		{line: `gnosh doctor --cwd=/work/app`, want: Invocation{Command: CmdDoctor, Cwd: "/work/app"}},
 		{line: `gnosh doctor --hosts`, want: Invocation{Command: CmdDoctor, Hosts: true}},
 		{line: `gnosh doctor --hosts --cwd /work/app`, want: Invocation{Command: CmdDoctor, Hosts: true, Cwd: "/work/app"}},
 		{line: `gnosh --hosts`, kind: ErrUnknownFlag, say: []string{"--hosts"}},
 		{line: `gnosh doctor now`, kind: ErrUsage, say: []string{"now was typed after gnosh doctor, which takes nothing after it but flags"}},
 		{line: `gnosh doctor -- now`, kind: ErrUsage, say: []string{"now was typed after gnosh doctor"}},
-		{line: `gnosh doctor -y`, kind: ErrUnknownFlag, say: []string{"-y does not go with gnosh doctor", "It is a flag of gnosh and gnosh run."}},
-		{line: `gnosh -y doctor`, kind: ErrUnknownFlag, say: []string{"-y (--yolo) was typed before gnosh doctor and does not go with it", "It is a flag of gnosh and gnosh run"}},
+		{line: `gnosh doctor -y`, kind: ErrUnknownFlag, say: []string{"-y does not go with gnosh doctor", "It is a flag of gnosh."}},
+		{line: `gnosh -y doctor`, kind: ErrUnknownFlag, say: []string{"-y (--yolo) was typed before gnosh doctor and does not go with it", "It is a flag of gnosh; flags of gnosh doctor go after its name."}},
 		{line: `gnosh doctor --model x`, kind: ErrUnknownFlag, say: []string{"--model does not go with gnosh doctor"}},
 		{line: `gnosh doctor -p`, kind: ErrUnknownFlag, say: []string{"-p does not go with gnosh doctor"}},
 		{line: `gnosh doctor --frobnicate`, kind: ErrUnknownFlag, say: []string{"--frobnicate is not a flag of gnosh doctor", `"gnosh doctor --help" lists the flags.`}},
@@ -43,12 +43,12 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh trust --list ../x`, kind: ErrUsage, say: []string{"--list shows every trusted folder and takes no folder, and ../x was typed with it"}},
 		{line: `gnosh trust ""`, kind: ErrBadValue, say: []string{"An empty argument was typed after gnosh trust"}},
 		{line: `gnosh trust --lst`, kind: ErrUnknownFlag, hint: "--list"},
-		{line: `gnosh trust --trust-folder`, kind: ErrUnknownFlag, say: []string{"--trust-folder does not go with gnosh trust", "gnosh and gnosh run"}},
+		{line: `gnosh trust --trust-folder`, kind: ErrUnknownFlag, say: []string{"--trust-folder does not go with gnosh trust", "It is a flag of gnosh."}},
 
 		// models
 		{line: `gnosh models`, want: Invocation{Command: CmdModels}},
 		{line: `gnosh models --cwd x`, want: Invocation{Command: CmdModels, Cwd: "x"}},
-		{line: `gnosh models -D x`, kind: ErrUnknownFlag, say: []string{"-D does not go with gnosh models"}},
+		{line: `gnosh models --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh models", "It is a flag of gnosh session list, gnosh session show, gnosh session last and gnosh session rename."}},
 		{line: `gnosh models qwen`, kind: ErrUsage, say: []string{"qwen was typed after gnosh models"}},
 
 		// session
@@ -57,27 +57,21 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh s ls`, want: Invocation{Command: CmdSessionList}},
 		{line: `gnosh session ls --json`, want: Invocation{Command: CmdSessionList, JSON: true}},
 		{line: `gnosh session --json list`, want: Invocation{Command: CmdSessionList, JSON: true}},
-		{line: `gnosh session -D /tmp/d list`, want: Invocation{Command: CmdSessionList, DataDir: "/tmp/d"}},
-		{line: `gnosh -D /tmp/d --cwd /w session list --json`, want: Invocation{Command: CmdSessionList, DataDir: "/tmp/d", Cwd: "/w", JSON: true}},
+		{line: `gnosh session --cwd /w list`, want: Invocation{Command: CmdSessionList, Cwd: "/w"}},
+		{line: `gnosh --cwd /w session list --json`, want: Invocation{Command: CmdSessionList, Cwd: "/w", JSON: true}},
 		{line: `gnosh session show abc`, want: Invocation{Command: CmdSessionShow, Args: []string{"abc"}}},
 		{line: `gnosh session show --json abc`, want: Invocation{Command: CmdSessionShow, Args: []string{"abc"}, JSON: true}},
 		{line: `gnosh session last`, want: Invocation{Command: CmdSessionLast}},
 		{line: `gnosh session last --json`, want: Invocation{Command: CmdSessionLast, JSON: true}},
-		{line: `gnosh session delete abc`, want: Invocation{Command: CmdSessionDelete, Args: []string{"abc"}}},
-		{line: `gnosh s rm abc --json`, want: Invocation{Command: CmdSessionDelete, Args: []string{"abc"}, JSON: true}},
 		{line: `gnosh session rename abc New title here`, want: Invocation{Command: CmdSessionRename, Args: []string{"abc", "New title here"}}},
 		{line: `gnosh session rename abc "New title" --json`, want: Invocation{Command: CmdSessionRename, Args: []string{"abc", "New title"}, JSON: true}},
 		{line: `gnosh session rename abc -- -dash title`, want: Invocation{Command: CmdSessionRename, Args: []string{"abc", "-dash title"}}},
-		{line: `gnosh session web`, want: Invocation{Command: CmdSessionWeb}},
-		{line: `gnosh session web --port 8080`, want: Invocation{Command: CmdSessionWeb, Port: 8080}},
-		{line: `gnosh session web --port=1`, want: Invocation{Command: CmdSessionWeb, Port: 1}},
-		{line: `gnosh session web --port 65535 -D d`, want: Invocation{Command: CmdSessionWeb, Port: 65535, DataDir: "d"}},
-		{line: `gnosh session`, kind: ErrUsage, say: []string{"gnosh session needs one of its commands after it, so nothing was done: list, show, last, delete, rename or web", `"gnosh session --help" explains them`}},
+		{line: `gnosh session`, kind: ErrUsage, say: []string{"gnosh session needs one of its commands after it, so nothing was done: list, show, last or rename", `"gnosh session --help" explains them`}},
 		{line: `gnosh s --json`, kind: ErrUsage, say: []string{"gnosh session needs one of its commands", "If s is a prompt, put -- before it."}},
-		{line: `gnosh session lst`, kind: ErrUnknownCommand, hint: "list", say: []string{"lst is not a command of gnosh session, so nothing was done. Did you mean list? Its commands are list, show, last, delete, rename and web."}},
+		{line: `gnosh session lst`, kind: ErrUnknownCommand, hint: "list", say: []string{"lst is not a command of gnosh session, so nothing was done. Did you mean list? Its commands are list, show, last and rename."}},
 		{line: `gnosh session List`, kind: ErrUnknownCommand, hint: "list"},
-		{line: `gnosh session delet abc`, kind: ErrUnknownCommand, hint: "delete"},
-		{line: `gnosh session del abc`, kind: ErrUnknownCommand, hint: "delete"},
+		{line: `gnosh session renam abc x`, kind: ErrUnknownCommand, hint: "rename"},
+		{line: `gnosh session ren abc x`, kind: ErrUnknownCommand, hint: "rename"},
 		{line: `gnosh session xyzzy`, kind: ErrUnknownCommand, say: []string{"xyzzy is not a command of gnosh session", "Its commands are"}},
 		{line: `gnosh session show`, kind: ErrUsage, say: []string{"gnosh session show needs more after it", "It is written: gnosh session show <id>"}},
 		{line: `gnosh session show a b`, kind: ErrUsage, say: []string{"b is one argument too many for gnosh session show"}},
@@ -85,12 +79,9 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh session list extra`, kind: ErrUsage, say: []string{"extra was typed after gnosh session list"}},
 		{line: `gnosh session rename abc`, kind: ErrUsage, say: []string{"gnosh session rename needs more after it", "gnosh session rename <id> <title...>"}},
 		{line: `gnosh session rename abc ""`, kind: ErrBadValue, say: []string{"An empty argument"}},
-		{line: `gnosh session web --port 0`, kind: ErrBadValue, say: []string{"--port takes a whole number from 1 to 65535, and 0 is not one"}},
-		{line: `gnosh session web --port 70000`, kind: ErrBadValue, say: []string{"70000 is not one"}},
-		{line: `gnosh session web --port http`, kind: ErrBadValue, say: []string{"http is not one"}},
-		{line: `gnosh session list --port 80`, kind: ErrUnknownFlag, say: []string{"--port does not go with gnosh session list", "It is a flag of gnosh session web."}},
-		{line: `gnosh session --port 80 list`, kind: ErrUnknownFlag, say: []string{"--port was typed before gnosh session list and does not go with it", "It is a flag of gnosh session web"}},
-		{line: `gnosh -s abc session list`, kind: ErrUnknownFlag, say: []string{"-s (--session) was typed before gnosh session and does not go with it"}},
+		{line: `gnosh session list --follow`, kind: ErrUnknownFlag, say: []string{"--follow does not go with gnosh session list", "It is a flag of gnosh logs."}},
+		{line: `gnosh session --follow list`, kind: ErrUnknownFlag, say: []string{"--follow does not go with gnosh session", "It is a flag of gnosh logs."}},
+		{line: `gnosh -r abc session list`, kind: ErrUnknownFlag, say: []string{"-r (--resume) was typed before gnosh session and does not go with it"}},
 		{line: `gnosh session list -y`, kind: ErrUnknownFlag, say: []string{"-y does not go with gnosh session list"}},
 
 		// mem: the words after it are mem's to read.
@@ -101,38 +92,10 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh mem log 20`, want: Invocation{Command: CmdMem, Args: []string{"log", "20"}}},
 		{line: `gnosh mem undo`, want: Invocation{Command: CmdMem, Args: []string{"undo"}}},
 		{line: `gnosh mem find -- -race`, want: Invocation{Command: CmdMem, Args: []string{"find", "-race"}}},
-		{line: `gnosh mem --cwd /w -D /d find x`, want: Invocation{Command: CmdMem, Cwd: "/w", DataDir: "/d", Args: []string{"find", "x"}}},
+		{line: `gnosh mem --cwd /w find x`, want: Invocation{Command: CmdMem, Cwd: "/w", Args: []string{"find", "x"}}},
 		{line: `gnosh mem find ""`, want: Invocation{Command: CmdMem, Args: []string{"find", ""}}},
 		{line: `gnosh mem find -race`, kind: ErrUnknownFlag, say: []string{"-race: -r is not a flag of gnosh mem", "a word for mem that begins with a dash goes after --"}},
 		{line: `gnosh mem show --json`, kind: ErrUnknownFlag, say: []string{"--json is not a flag of gnosh mem", "goes after --"}},
-
-		// prompt
-		{line: `gnosh prompt show`, want: Invocation{Command: CmdPromptShow}},
-		{line: `gnosh prompt show coder`, want: Invocation{Command: CmdPromptShow, Args: []string{"coder"}}},
-		{line: `gnosh prompt path`, want: Invocation{Command: CmdPromptPath}},
-		{line: `gnosh prompt export`, want: Invocation{Command: CmdPromptExport}},
-		{line: `gnosh prompt export coder --force`, want: Invocation{Command: CmdPromptExport, Args: []string{"coder"}, Force: true}},
-		{line: `gnosh prompt --force export`, want: Invocation{Command: CmdPromptExport, Force: true}},
-		{line: `gnosh prompt tools`, want: Invocation{Command: CmdPromptTools}},
-		{line: `gnosh prompt tools --json`, want: Invocation{Command: CmdPromptTools, JSON: true}},
-		{line: `gnosh prompt tools --export`, want: Invocation{Command: CmdPromptTools, Export: true}},
-		{line: `gnosh prompt tools --json --export --cwd /w`, want: Invocation{Command: CmdPromptTools, JSON: true, Export: true, Cwd: "/w"}},
-		{line: `gnosh prompt context`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationNew}},
-		{line: `gnosh prompt context -s abc`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationSession, Session: "abc"}},
-		{line: `gnosh prompt context --session=abc -D /d`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationSession, Session: "abc", DataDir: "/d"}},
-		{line: `gnosh prompt context -C`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationContinue}},
-		{line: `gnosh prompt context -c`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationContinue}},
-		{line: `gnosh prompt context --continue`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationContinue}},
-		{line: `gnosh -C prompt context`, want: Invocation{Command: CmdPromptContext, Conversation: ConversationContinue}},
-		{line: `gnosh prompt context -s abc -C`, kind: ErrConflict, say: []string{"-s and -C each say which session's context to show"}},
-		{line: `gnosh prompt context -c /tmp/a/b`, kind: ErrUsage, say: []string{"-c means --continue now"}},
-		{line: `gnosh prompt context -r abc`, kind: ErrUnknownFlag, say: []string{"-r does not go with gnosh prompt context"}},
-		{line: `gnosh prompt`, kind: ErrUsage, say: []string{"gnosh prompt needs one of its commands after it", "show, path, export, tools or context"}},
-		{line: `gnosh prompt tool`, kind: ErrUnknownCommand, hint: "tools"},
-		{line: `gnosh prompt show a b`, kind: ErrUsage, say: []string{"b is one argument too many for gnosh prompt show"}},
-		{line: `gnosh prompt path x`, kind: ErrUsage, say: []string{"x was typed after gnosh prompt path"}},
-		{line: `gnosh prompt tools --force`, kind: ErrUnknownFlag, say: []string{"--force does not go with gnosh prompt tools", "It is a flag of gnosh prompt export."}},
-		{line: `gnosh prompt --force tools`, kind: ErrUnknownFlag, say: []string{"--force was typed before gnosh prompt tools and does not go with it"}},
 
 		// logs
 		{line: `gnosh logs`, want: Invocation{Command: CmdLogs}},
@@ -142,91 +105,33 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh logs --tail 50`, want: Invocation{Command: CmdLogs, Tail: 50}},
 		{line: `gnosh logs --tail=50`, want: Invocation{Command: CmdLogs, Tail: 50}},
 		{line: `gnosh logs -ft 50`, want: Invocation{Command: CmdLogs, Follow: true, Tail: 50}},
-		{line: `gnosh logs -f -t 20 --cwd /w -D /d`, want: Invocation{Command: CmdLogs, Follow: true, Tail: 20, Cwd: "/w", DataDir: "/d"}},
+		{line: `gnosh logs -f -t 20 --cwd /w`, want: Invocation{Command: CmdLogs, Follow: true, Tail: 20, Cwd: "/w"}},
 		{line: `gnosh logs -tf 50`, kind: ErrMissingValue, say: []string{"-tf: -t takes a value (<n>), so it has to be the last letter"}},
 		{line: `gnosh logs -t 0`, kind: ErrBadValue, say: []string{"-t takes a whole number of 1 or more, and 0 is not one"}},
+		{line: `gnosh logs -t many`, kind: ErrBadValue, say: []string{"many is not one"}},
 		{line: `gnosh logs -t`, kind: ErrMissingValue, say: []string{"-t needs a value after it (<n>)"}},
 		{line: `gnosh logs 50`, kind: ErrUsage, say: []string{"50 was typed after gnosh logs"}},
 
-		// dirs, projects, stats
+		// dirs
 		{line: `gnosh dirs`, want: Invocation{Command: CmdDirs}},
-		{line: `gnosh dirs --cwd /w -D /d`, want: Invocation{Command: CmdDirs, Cwd: "/w", DataDir: "/d"}},
-		{line: `gnosh projects`, want: Invocation{Command: CmdProjects}},
-		{line: `gnosh projects --json`, want: Invocation{Command: CmdProjects, JSON: true}},
-		{line: `gnosh projects --cwd x`, kind: ErrUnknownFlag, say: []string{"--cwd does not go with gnosh projects"}},
-		{line: `gnosh stats`, want: Invocation{Command: CmdStats}},
-		{line: `gnosh stats --all`, want: Invocation{Command: CmdStats, All: true}},
-		{line: `gnosh stats --crawl-dir /srv/sessions`, want: Invocation{Command: CmdStats, CrawlDir: "/srv/sessions"}},
-		{line: `gnosh stats --all --crawl-dir=/x`, want: Invocation{Command: CmdStats, All: true, CrawlDir: "/x"}},
-		{line: `gnosh stats --crawl-dir`, kind: ErrMissingValue, say: []string{"--crawl-dir needs a value after it (<dir>)"}},
-
-		// ssh: everything after the word is ssh's.
-		{line: `gnosh ssh`, want: Invocation{Command: CmdSSH}},
-		{line: `gnosh ssh -p 2222 user@box.example.com`, want: Invocation{Command: CmdSSH, Args: []string{"-p", "2222", "user@box.example.com"}}},
-		{line: `gnosh ssh box -- ls -la`, want: Invocation{Command: CmdSSH, Args: []string{"box", "--", "ls", "-la"}}},
-		{line: `gnosh ssh -v box`, want: Invocation{Command: CmdSSH, Args: []string{"-v", "box"}}},
-		{line: `gnosh ssh box --help`, want: Invocation{Command: CmdSSH, Args: []string{"box", "--help"}}},
-		{line: `gnosh ssh "" -`, want: Invocation{Command: CmdSSH, Args: []string{"", "-"}}},
-		{line: `gnosh ssh --help`, want: helpFor("ssh")},
-		{line: `gnosh ssh -h`, want: helpFor("ssh")},
-		{line: `gnosh --cwd x ssh box`, kind: ErrUnknownFlag, say: []string{"--cwd was typed before gnosh ssh and does not go with it"}},
-
-		// mcp
-		{line: `gnosh mcp list`, want: Invocation{Command: CmdMCPList}},
-		{line: `gnosh mcp get files`, want: Invocation{Command: CmdMCPGet, Args: []string{"files"}}},
-		{line: `gnosh mcp remove files`, want: Invocation{Command: CmdMCPRemove, Args: []string{"files"}}},
-		{line: `gnosh mcp remove -s user files`, want: Invocation{Command: CmdMCPRemove, Args: []string{"files"}, MCPScope: "user"}},
-		{line: `gnosh mcp remove files --scope=project`, want: Invocation{Command: CmdMCPRemove, Args: []string{"files"}, MCPScope: "project"}},
-		{line: `gnosh mcp add files npx server`, want: Invocation{Command: CmdMCPAdd, Args: []string{"files", "npx", "server"}}},
-		{line: `gnosh mcp add --env KEY=value --transport stdio myserver -- python server.py --port 8080`,
-			want: Invocation{Command: CmdMCPAdd, MCPEnv: []string{"KEY=value"}, MCPTransport: "stdio", Args: []string{"myserver", "python", "server.py", "--port", "8080"}}},
-		{line: `gnosh mcp add -e A=1 B=2 myserver cmd`, want: Invocation{Command: CmdMCPAdd, MCPEnv: []string{"A=1", "B=2"}, Args: []string{"myserver", "cmd"}}},
-		{line: `gnosh mcp add -e A=1 -e "B=two words" myserver cmd ""`, want: Invocation{Command: CmdMCPAdd, MCPEnv: []string{"A=1", "B=two words"}, Args: []string{"myserver", "cmd", ""}}},
-		{line: `gnosh mcp add -t http -H "Authorization: Bearer abc" "X-Trace: 1" remote https://mcp.example.com/mcp`,
-			want: Invocation{Command: CmdMCPAdd, MCPTransport: "http", MCPHeaders: []string{"Authorization: Bearer abc", "X-Trace: 1"}, Args: []string{"remote", "https://mcp.example.com/mcp"}}},
-		{line: `gnosh mcp add remote https://mcp.example.com/mcp -t http --header "X-Key: 1" https://not-a-header.example.com`,
-			want: Invocation{Command: CmdMCPAdd, MCPTransport: "http", MCPHeaders: []string{"X-Key: 1"}, Args: []string{"remote", "https://mcp.example.com/mcp", "https://not-a-header.example.com"}}},
-		{line: `gnosh mcp add -s user -t sse events https://mcp.example.com/sse`, want: Invocation{Command: CmdMCPAdd, MCPScope: "user", MCPTransport: "sse", Args: []string{"events", "https://mcp.example.com/sse"}}},
-		{line: `gnosh mcp -s local add files npx`, want: Invocation{Command: CmdMCPAdd, MCPScope: "local", Args: []string{"files", "npx"}}},
-		{line: `gnosh mcp add-json files '{"command": "npx", "args": ["server"]}'`, want: Invocation{Command: CmdMCPAddJSON, Args: []string{"files", `{"command": "npx", "args": ["server"]}`}}},
-		{line: `gnosh mcp add-json -s project files '{}'`, want: Invocation{Command: CmdMCPAddJSON, MCPScope: "project", Args: []string{"files", "{}"}}},
-		{line: `gnosh mcp`, kind: ErrUsage, say: []string{"gnosh mcp needs one of its commands after it", "add, add-json, get, list or remove"}},
-		{line: `gnosh mcp ad`, kind: ErrUnknownCommand, hint: "add"},
-		{line: `gnosh mcp serve`, kind: ErrUnknownCommand, say: []string{"serve is not a command of gnosh mcp"}},
-		{line: `gnosh mcp add files`, kind: ErrUsage, say: []string{"gnosh mcp add needs more after it", "gnosh mcp add <name> <command-or-url> [arguments...]"}},
-		{line: `gnosh mcp add "" npx`, kind: ErrBadValue, say: []string{"An empty argument was typed after gnosh mcp add"}},
-		{line: `gnosh mcp add files npx server --port 8080`, kind: ErrUnknownFlag, say: []string{"--port is not a flag of gnosh mcp add", "the server's own flags go after --, with its command"}},
-		{line: `gnosh mcp add files npx -y`, kind: ErrUnknownFlag, say: []string{"-y is not a flag of gnosh mcp add", "go after --"}},
-		{line: `gnosh mcp add --transprt http a b`, kind: ErrUnknownFlag, hint: "--transport"},
-		{line: `gnosh mcp add -t ws x y`, kind: ErrBadValue, say: []string{"-t ws: a ws server cannot be added this way", "gnosh mcp add-json", "It takes stdio, sse or http"}},
-		{line: `gnosh mcp add -t pipe x y`, kind: ErrBadValue, say: []string{"-t takes stdio, sse or http, and pipe is none of them"}},
-		{line: `gnosh mcp add -e notapair x y`, kind: ErrBadValue, say: []string{"-e notapair is not a KEY=value pair"}},
-		{line: `gnosh mcp add -e 9A=1 x y`, kind: ErrBadValue, say: []string{"does not begin with a digit"}},
-		{line: `gnosh mcp add -H nocolon x y`, kind: ErrBadValue, say: []string{"-H nocolon is not a header, which is written Name: value"}},
-		{line: `gnosh mcp add -s everywhere x y`, kind: ErrBadValue, say: []string{"-s takes local, user or project"}},
-		{line: `gnosh mcp add-json files`, kind: ErrUsage, say: []string{"gnosh mcp add-json needs more after it"}},
-		{line: `gnosh mcp add-json a b c`, kind: ErrUsage, say: []string{"c is one argument too many"}},
-		{line: `gnosh mcp get`, kind: ErrUsage, say: []string{"gnosh mcp get needs more after it"}},
-		{line: `gnosh mcp list -s user`, kind: ErrUnknownFlag, say: []string{"-s does not go with gnosh mcp list"}},
-		{line: `gnosh mcp get -t http x`, kind: ErrUnknownFlag, say: []string{"-t does not go with gnosh mcp get", "gnosh mcp add"}},
+		{line: `gnosh dirs --cwd /w`, want: Invocation{Command: CmdDirs, Cwd: "/w"}},
+		{line: `gnosh dirs --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh dirs"}},
 
 		// help and version, as flags and as commands
 		{line: `gnosh -h`, want: helpFor()},
 		{line: `gnosh --help`, want: helpFor()},
 		{line: `gnosh help`, want: helpFor()},
 		{line: `gnosh --help`, env: &script, want: helpFor()},
-		{line: `gnosh run --help`, want: helpFor("run")},
-		{line: `gnosh r -h`, want: helpFor("run")},
-		{line: `gnosh --help run`, want: helpFor("run")},
-		{line: `gnosh help run`, want: helpFor("run")},
-		{line: `gnosh help r`, want: helpFor("run")},
+		{line: `gnosh doctor --help`, want: helpFor("doctor")},
+		{line: `gnosh doctor -h`, want: helpFor("doctor")},
+		{line: `gnosh --help doctor`, want: helpFor("doctor")},
+		{line: `gnosh help doctor`, want: helpFor("doctor")},
 		{line: `gnosh session --help`, want: helpFor("session")},
 		{line: `gnosh session list -h`, want: helpFor("session", "list")},
 		{line: `gnosh s ls -h`, want: helpFor("session", "list")},
 		{line: `gnosh --help session list`, want: helpFor("session", "list")},
 		{line: `gnosh help session list`, want: helpFor("session", "list")},
 		{line: `gnosh help s ls`, want: helpFor("session", "list")},
-		{line: `gnosh help mcp add`, want: helpFor("mcp", "add")},
 		{line: `gnosh help help`, want: helpFor("help")},
 		{line: `gnosh doctor extra --help`, want: helpFor("doctor")},
 		{line: `gnosh mem show --help`, want: helpFor("mem")},
@@ -236,7 +141,7 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh --help -p x`, want: helpFor()},
 		{line: `gnosh --help --bogus`, want: helpFor()},
 		{line: `gnosh --help --model`, want: helpFor()},
-		{line: `gnosh -h -- run`, want: helpFor()},
+		{line: `gnosh -h -- doctor`, want: helpFor()},
 		{line: `gnosh --fork-session --help`, want: helpFor()},
 		{line: `gnosh --bogus --help`, kind: ErrUnknownFlag, say: []string{"--bogus is not a flag of gnosh"}},
 		{line: `gnosh help sesion`, kind: ErrUnknownCommand, hint: "session", say: []string{"sesion is not a command of gnosh", "Did you mean session?"}},
@@ -247,4 +152,87 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh version --help`, want: helpFor("version")},
 		{line: `gnosh version now`, kind: ErrUsage, say: []string{"now was typed after gnosh version"}},
 	})
+}
+
+// TestWhatIsNotInTheTable covers the commands and flags that
+// spec/DECISIONS.md item 26 took off the command line, and the ones of the
+// specs whose parts are not built: none of them is read as what it once
+// was. A flag is unknown, a command of a group is unknown, and a first
+// word that names no command is the prompt, as any other word is.
+func TestWhatIsNotInTheTable(t *testing.T) {
+	runLines(t, allBuilt(t), []lineCase{
+		// Print mode is -p. "run" is a word, and its -q is no flag.
+		{line: `gnosh run`, want: inter(Invocation{Prompt: "run"})},
+		{line: `gnosh run the tests`, want: inter(Invocation{Prompt: "run the tests"})},
+		{line: `gnosh run "fix the build"`, env: &captured, want: pr(Invocation{Prompt: "run fix the build", PrintImplied: true})},
+		{line: `gnosh r x`, want: inter(Invocation{Prompt: "r x"})},
+		{line: `gnosh -p run the tests`, want: pr(Invocation{Prompt: "run the tests"})},
+		{line: `gnosh help run`, kind: ErrUnknownCommand, say: []string{"run is not a command of gnosh"}},
+		{line: `gnosh run -q -y --cwd DIR "do the task"`, kind: ErrUnknownFlag, say: []string{"-q is not a flag of gnosh, so nothing was started."}},
+		{line: `gnosh -p -q x`, kind: ErrUnknownFlag, say: []string{"-q is not a flag of gnosh"}},
+		{line: `gnosh -p --quiet x`, kind: ErrUnknownFlag, say: []string{"--quiet is not a flag of gnosh"}},
+
+		// A session is named with --resume, and a new one with --session-id.
+		{line: `gnosh -s abc`, kind: ErrUnknownFlag, say: []string{"-s is not a flag of gnosh"}},
+		{line: `gnosh --session abc`, kind: ErrUnknownFlag, hint: "--session-id", say: []string{"--session is not a flag of gnosh"}},
+		{line: `gnosh -ys abc`, kind: ErrUnknownFlag, say: []string{"-ys: -s is not a flag of gnosh"}},
+
+		// There is no flag for another data folder.
+		{line: `gnosh -D /tmp/data`, kind: ErrUnknownFlag, hint: "-d", say: []string{"-D is not a flag of gnosh", "Did you mean -d (--debug)? Letter case counts."}},
+		{line: `gnosh --data-dir /tmp/data`, kind: ErrUnknownFlag, say: []string{"--data-dir is not a flag of gnosh"}},
+		{line: `gnosh doctor -D /tmp/data`, kind: ErrUnknownFlag, say: []string{"-D is not a flag of gnosh doctor"}},
+
+		// The flags of parts that are not built.
+		{line: `gnosh --bare`, kind: ErrUnknownFlag, say: []string{"--bare is not a flag of gnosh"}},
+		{line: `gnosh --agents '{}'`, kind: ErrUnknownFlag, say: []string{"--agents is not a flag of gnosh"}},
+		{line: `gnosh --mcp-config ./mcp.json`, kind: ErrUnknownFlag, say: []string{"--mcp-config is not a flag of gnosh"}},
+		{line: `gnosh --strict-mcp-config`, kind: ErrUnknownFlag, say: []string{"--strict-mcp-config is not a flag of gnosh"}},
+		{line: `gnosh --allow-dangerously-skip-permissions`, kind: ErrUnknownFlag, say: []string{"--allow-dangerously-skip-permissions is not a flag of gnosh"}},
+		{line: `gnosh -p x --no-session-persistence`, kind: ErrUnknownFlag, say: []string{"--no-session-persistence is not a flag of gnosh"}},
+		{line: `gnosh -p x --permission-prompts none`, kind: ErrUnknownFlag, say: []string{"--permission-prompts is not a flag of gnosh"}},
+		{line: `gnosh -p x --output-format stream-json --include-partial-messages`, kind: ErrUnknownFlag, say: []string{"--include-partial-messages is not a flag of gnosh"}},
+		{line: `gnosh -p x --replay-user-messages`, kind: ErrUnknownFlag, say: []string{"--replay-user-messages is not a flag of gnosh"}},
+		{line: `gnosh -p --input-format stream-json`, kind: ErrBadValue, say: []string{"--input-format takes text and no other value, and stream-json was given, so nothing was started."}},
+
+		// The commands of parts that are not built: in a group, unknown; as
+		// a first word, the prompt.
+		{line: `gnosh session delete abc`, kind: ErrUnknownCommand, say: []string{"delete is not a command of gnosh session", "Its commands are list, show, last and rename."}},
+		{line: `gnosh session rm abc`, kind: ErrUnknownCommand, say: []string{"rm is not a command of gnosh session"}},
+		{line: `gnosh session web`, kind: ErrUnknownCommand, say: []string{"web is not a command of gnosh session"}},
+		{line: `gnosh prompt show`, want: inter(Invocation{Prompt: "prompt show"})},
+		{line: `gnosh "prompt"`, want: inter(Invocation{Prompt: "prompt"})},
+		{line: `gnosh ssh box.example.com`, want: inter(Invocation{Prompt: "ssh box.example.com"})},
+		{line: `gnosh projects`, want: inter(Invocation{Prompt: "projects"})},
+		{line: `gnosh stats`, want: inter(Invocation{Prompt: "stats"})},
+		{line: `gnosh mcp list`, want: inter(Invocation{Prompt: "mcp list"})},
+		{line: `gnosh help mcp`, kind: ErrUnknownCommand, say: []string{"mcp is not a command of gnosh"}},
+		{line: `gnosh stats --all`, kind: ErrUnknownFlag, say: []string{"--all is not a flag of gnosh"}},
+		{line: `gnosh projects --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh"}},
+	})
+
+	// None of them has an entry, so none can be marked built by mistake.
+	tab := Default()
+	have := map[string]bool{}
+	for _, e := range tab.Entries() {
+		have[e.Name] = true
+	}
+	for _, gone := range []string{
+		"run", "--quiet", "--session", "--data-dir",
+		"--bare", "--agents", "--mcp-config", "--strict-mcp-config", "--allow-dangerously-skip-permissions",
+		"--no-session-persistence", "--permission-prompts", "--include-partial-messages", "--replay-user-messages",
+		"--input-format=stream-json",
+		"session delete", "session web", "session web --port",
+		"prompt show", "prompt path", "prompt export", "prompt tools", "prompt context",
+		"prompt export --force", "prompt tools --json", "prompt tools --export",
+		"ssh", "projects", "projects --json", "stats", "stats --all", "stats --crawl-dir",
+		"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove",
+		"mcp --scope", "mcp add --transport", "mcp add --env", "mcp add --header",
+	} {
+		if have[gone] {
+			t.Errorf("the table has an entry %q, which spec/DECISIONS.md item 26 took off it", gone)
+		}
+		if err := tab.SetStatus(gone, Built); err == nil {
+			t.Errorf("SetStatus(%q) worked: the table still knows the name", gone)
+		}
+	}
 }

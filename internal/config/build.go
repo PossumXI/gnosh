@@ -121,11 +121,11 @@ func (b *builder) addProvider(id string, ch providerChange, o Origin) {
 	if ch.key != nil {
 		p.APIKey, p.KeyFrom = *ch.key, ch.keyFrom
 	}
-	if ch.noDiscover {
-		p.DiscoverModels = Value[bool]{}
+	if ch.noListModels {
+		p.ListModels = Value[bool]{}
 	}
-	if ch.discover != nil {
-		p.DiscoverModels.put(*ch.discover, ch.discoverAt)
+	if ch.listModels != nil {
+		p.ListModels.put(*ch.listModels, ch.listModelsAt)
 	}
 	if ch.hasExtraBody {
 		p.ExtraBody = ch.extraBody
@@ -337,9 +337,9 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 			return false
 		})
 		for _, p := range b.providers {
-			if p.DiscoverModels.Set && from(p.DiscoverModels.Origin) {
-				note("discoverModels of provider " + p.ID)
-				p.DiscoverModels = Value[bool]{}
+			if p.ListModels.Set && from(p.ListModels.Origin) {
+				note("listModels of provider " + p.ID)
+				p.ListModels = Value[bool]{}
 			}
 		}
 	}

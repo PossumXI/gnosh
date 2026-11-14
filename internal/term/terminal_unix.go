@@ -40,7 +40,7 @@ type Terminal struct {
 	in, out     *os.File
 	inFd, outFd int
 	opts        Options
-	escTimeout  time.Duration
+	escWait     time.Duration
 	events      chan Event
 
 	// The reader waits in select(2) on the terminal and on wakeR; a
@@ -111,7 +111,7 @@ func Open(in, out *os.File, opts Options) (*Terminal, error) {
 	t := &Terminal{
 		in: in, out: out, inFd: int(in.Fd()), outFd: int(out.Fd()),
 		opts:       opts,
-		escTimeout: DefaultEscWait,
+		escWait:    DefaultEscWait,
 		events:     make(chan Event),
 		kick:       make(chan struct{}, 1),
 		done:       make(chan struct{}),
@@ -120,8 +120,8 @@ func Open(in, out *os.File, opts Options) (*Terminal, error) {
 		unpause:    make(chan struct{}),
 		cont:       make(chan struct{}, 1),
 	}
-	if opts.EscTimeout > 0 {
-		t.escTimeout = opts.EscTimeout
+	if opts.EscWait > 0 {
+		t.escWait = opts.EscWait
 	}
 	var p [2]int
 	if err := unix.Pipe(p[:]); err != nil {
@@ -548,7 +548,7 @@ func (t *Terminal) readLoop() {
 		set.Set(t.wakeR)
 		var timeout *unix.Timeval
 		if held {
-			tv := unix.NsecToTimeval(t.escTimeout.Nanoseconds())
+			tv := unix.NsecToTimeval(t.escWait.Nanoseconds())
 			timeout = &tv
 		}
 		n, err := unix.Select(max(t.inFd, t.wakeR)+1, &set, nil, nil, timeout)

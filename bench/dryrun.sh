@@ -241,9 +241,9 @@ if want ways; then
     --model test-model --window 65536 --log "$d/proxy.jsonl" > "$d/proxy.err" 2>&1 & proxy=$!
   echo "$proxy" > "$d/proxy.pid"
   for _ in $(seq 100); do [ -s "$d/port" ] && break; sleep 0.1; done
-  printf '{"providers": {"box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:%s", "discoverModels": false}},\n "models": {"box/test-model": {"contextWindow": 65536}},\n "model": "box/test-model"}\n' "$(cat "$d/port")" > "$d/home/.config/gnosh/gnosh.json"
+  printf '{"providers": {"box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:%s", "listModels": false}},\n "models": {"box/test-model": {"contextWindow": 65536}},\n "model": "box/test-model"}\n' "$(cat "$d/port")" > "$d/home/.config/gnosh/gnosh.json"
   g=(env -i PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" XDG_DATA_HOME="$d/home/.local/share" XDG_CACHE_HOME="$d/home/.cache" TERM=dumb
-     "$DRY/bin/gnosh" run -q -y --cwd "$d/work" --output-format stream-json)
+     "$DRY/bin/gnosh" -p -y --cwd "$d/work" --output-format stream-json)
   "${g[@]}" -- "Say something." < /dev/null > "$d/session-1.out" 2> "$d/session-1.err"
   "${g[@]}" --continue -- "/compact" < /dev/null > "$d/session-2.out" 2> "$d/session-2.err"
   kill "$proxy" "$model" 2>/dev/null; wait "$proxy" "$model" 2>/dev/null

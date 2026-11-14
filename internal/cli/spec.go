@@ -11,9 +11,10 @@ type Status int
 
 const (
 	// NotBuilt means gnosh knows the name and reads it correctly, but the
-	// feature behind it is not written yet. Typing it stops startup with a
-	// message that says so. It is the zero value, so a row of the table
-	// that forgets its status fails closed.
+	// part behind it is not in this build: nothing that wires the part in
+	// has marked it. Typing it stops startup with a message that says so.
+	// It is the zero value, so a row of the table that forgets its status
+	// fails closed.
 	NotBuilt Status = iota
 	// Built means gnosh acts on it.
 	Built
@@ -37,10 +38,10 @@ const (
 // Entry describes one row of the table: a command, a flag, or one value of
 // a flag that takes a fixed set of values.
 type Entry struct {
-	// Name is the key SetStatus takes: a command's words ("run", "session
-	// list"), a flag's main spelling ("--model"; a flag that belongs to one
-	// command carries the command's words in front, "session --json"), or a
-	// flag and one of its values ("--output-format=json").
+	// Name is the key SetStatus takes: a command's words ("doctor",
+	// "session list"), a flag's main spelling ("--model"; a flag that
+	// belongs to one command carries the command's words in front, "session
+	// --json"), or a flag and one of its values ("--output-format=json").
 	Name string
 	// Kind is EntryCommand, EntryFlag or EntryValue.
 	Kind string
@@ -84,15 +85,9 @@ const (
 	// separate the items, except inside parentheses. A further argument
 	// belongs to the list while it has no space outside parentheses.
 	listRules listKind = iota + 1
-	// listPaths is folders, files or JSON: each argument is one item, taken
-	// whole. A further argument belongs to the list while it has no space.
+	// listPaths is folders: each argument is one item, taken whole. A
+	// further argument belongs to the list while it has no space.
 	listPaths
-	// listPairs is KEY=value pairs. A further argument belongs to the list
-	// while it has that shape.
-	listPairs
-	// listHeaders is HTTP headers, "Name: value". A further argument belongs
-	// to the list while it has that shape.
-	listHeaders
 )
 
 // choice is one value of a flag that takes a fixed set of values.
@@ -134,10 +129,10 @@ type flag struct {
 	// arg is what help calls the value: "model", "rules...".
 	arg     string
 	choices []choice
-	// number says the value is a whole number between min and max.
-	number   bool
-	min, max int
-	list     listKind
+	// number says the value is a whole number of min or more.
+	number bool
+	min    int
+	list   listKind
 	// freeText says the value is prose that may begin with a dash.
 	freeText bool
 	// emptyOK says an empty value means something (--tools "").
@@ -226,9 +221,6 @@ type command struct {
 	typable  []*flag
 	byWord   map[string]*flag
 	byLetter map[rune]*flag
-	// flagHelp replaces a shared flag's help line where this command gives
-	// the flag a narrower meaning, keyed by the flag's id.
-	flagHelp map[string]string
 	// minArgs and maxArgs bound the arguments after the command's words;
 	// maxArgs below zero means any number.
 	minArgs, maxArgs int
@@ -239,19 +231,15 @@ type command struct {
 	// session says the command opens a session or answers a prompt, so its
 	// arguments are the prompt.
 	session bool
-	// print says the command is print mode by itself (run).
-	print bool
 	// needSub says one of subs must follow.
 	needSub bool
-	// raw says everything after the command's word is passed on untouched.
-	raw bool
 	// afterAnything says the command may follow any flags, which are then
 	// dropped: help and version, like --help and --version.
 	afterAnything bool
-	// passes says the command hands its arguments to something with flags
-	// or words of its own (mem, an MCP server's command), so a dash
-	// argument it does not know is more likely meant for that than for
-	// another gnosh command. dashHint says how to pass such an argument.
+	// passes says the command hands its arguments to something with words
+	// of its own (mem), so a dash argument it does not know is more likely
+	// meant for that than for another gnosh command. dashHint says how to
+	// pass such an argument.
 	passes   bool
 	dashHint string
 	pri      int

@@ -70,7 +70,7 @@ func TestGoldenWebsiteFile(t *testing.T) {
 		t.Fatalf("providers: %+v", cfg.Providers)
 	}
 	p := cfg.Providers[0]
-	if p.ID != "local" || p.Type != "llamacpp" || p.Wire != "llamacpp" || !p.Usable() || !p.DiscoverModels.V || !p.APIKey.Empty() {
+	if p.ID != "local" || p.Type != "llamacpp" || p.Wire != "llamacpp" || !p.Usable() || !p.ListModels.V || !p.APIKey.Empty() {
 		t.Errorf("provider: %+v", p)
 	}
 	e := p.Endpoints[0]
@@ -112,7 +112,7 @@ func TestGoldenAIBoxFile(t *testing.T) {
 		cfg.Models[1].Ref() != "gptoss/gpt-oss-120b" || cfg.Models[1].ContextWindow.V != 131072 {
 		t.Errorf("models: %+v", cfg.Models)
 	}
-	if cfg.Providers[0].DiscoverModels.V {
+	if cfg.Providers[0].ListModels.V {
 		t.Errorf("a provider whose models are listed is not asked for more by default")
 	}
 	if cfg.Options.RequestTimeout.V != 900 || cfg.Options.MemEmbeddingsURL.V != "http://127.0.0.1:8090" {
@@ -221,7 +221,7 @@ func TestPrecedenceLayerByLayer(t *testing.T) {
 
 	// 3. The state file over the user's gnosh.json: a choice made inside
 	// gnosh sticks.
-	fsys.put(statePath, `{"version": 1, "models": {"large": "p/from-state"}, "autoCompactWindow": 120000}`)
+	fsys.put(statePath, `{"version": 1, "models": {"model": "p/from-state"}, "autoCompactWindow": 120000}`)
 	if w := window(); w.V != 120000 || w.Origin.Layer != LayerState || w.Origin.File != statePath {
 		t.Errorf("state over user gnosh.json: %+v", w)
 	}
@@ -311,7 +311,7 @@ func TestPaths(t *testing.T) {
 }
 
 // The project's data folder is the closest .gnosh on the way up to the
-// project root, so a subfolder shares its project's; -D names another.
+// project root, so a subfolder shares its project's.
 func TestDataDir(t *testing.T) {
 	deep := "/work/proj/sub/deep"
 	at := func(fsys *memFS, change func(*Inputs)) Paths {
@@ -341,12 +341,6 @@ func TestDataDir(t *testing.T) {
 	if p := at(above, nil); p.DataDir != "/work/proj/.gnosh" {
 		t.Errorf("a .gnosh above the project root is not the project's: got %q", p.DataDir)
 	}
-	if p := at(fsys, func(in *Inputs) { in.Flags.DataDir = "/scratch/run1" }); p.DataDir != "/scratch/run1" || p.LocalSettings != "/scratch/run1/settings.local.json" {
-		t.Errorf("-D: got %q", p.DataDir)
-	}
-	if p := at(fsys, func(in *Inputs) { in.Flags.DataDir = "run2" }); p.DataDir != deep+"/run2" {
-		t.Errorf("-D with a relative path is under the working directory: got %q", p.DataDir)
-	}
 	named := newFS().put(userJSON, `{"options": {"projectDataDir": ".agent"}}`)
 	named.mkdir("/work/proj/.agent")
 	if p := at(named, nil); p.DataDir != "/work/proj/.agent" {
@@ -362,11 +356,11 @@ func TestDataDir(t *testing.T) {
 func TestProjectFiles(t *testing.T) {
 	// Started in the config directory itself, the user's file is not read
 	// a second time as a project's.
-	in := inputs(newFS().put(userJSON, `{"options": {"disabledSkills": ["a"]}, "permissions": {"deny": ["Bash"], "allow": ["Read"]}}`))
+	in := inputs(newFS().put(userJSON, `{"options": {"hiddenSkills": ["a"]}, "permissions": {"deny": ["Bash"], "allow": ["Read"]}}`))
 	in.Cwd = userDir
 	in.Trusted = false
 	cfg := mustLoad(t, in)
-	if len(cfg.Files) != 1 || cfg.Files[0].Held || cfg.Paths.ProjectSettings != "" || len(cfg.Options.DisabledSkills) != 1 || len(ruleTexts(cfg, "allow")) != 1 {
+	if len(cfg.Files) != 1 || cfg.Files[0].Held || cfg.Paths.ProjectSettings != "" || len(cfg.Options.HiddenSkills) != 1 || len(ruleTexts(cfg, "allow")) != 1 {
 		t.Errorf("in the config directory: files %+v", cfg.Files)
 	}
 
@@ -447,7 +441,7 @@ func TestOwnVariables(t *testing.T) {
 		t.Fatalf("an unknown GNOSH_ variable must stop startup")
 	}
 	wantProblem(t, problems, Error, "$GNOSH_SAFEMODE", 0, "not a variable gnosh knows", "would do nothing", "GNOSH_SAFE_MODE")
-	wantProblem(t, problems, Error, "$GNOSH_DATA_DIRECTORY", 0, "GNOSH_CONFIG_DIR, GNOSH_DATA_DIR, GNOSH_SAFE_MODE, GNOSH_PROFILE")
+	wantProblem(t, problems, Error, "$GNOSH_DATA_DIRECTORY", 0, "GNOSH_CONFIG_DIR, GNOSH_DATA_DIR, GNOSH_SAFE_MODE, GNOSH_DEBUG_PAGE")
 	wantProblem(t, problems, Error, "$GNOSH_GLOBAL_CONFIG", 0, "not a variable gnosh knows")
 	wantProblem(t, problems, Error, "$GNOSH_DISABLE_METRICS", 0, "not a variable gnosh knows")
 	if n := len(Errors(problems)); n != 4 {
@@ -458,8 +452,8 @@ func TestOwnVariables(t *testing.T) {
 	// and the families kept for tests are all fine.
 	in = inputs(newFS())
 	in.Environ = append(in.Environ,
-		"GNOSH_CONFIG_DIR=/scratch/cfg", "GNOSH_DATA_DIR=/scratch/data", "GNOSH_SAFE_MODE=0", "GNOSH_PROFILE=1",
-		"GNOSH=1", "GNOSH_EVENT=Stop", "GNOSH_SESSION_ID=abc", "GNOSH_PROJECT_DIR=/work/proj", "GNOSH_MEM_STATUS=/x/status.json",
+		"GNOSH_CONFIG_DIR=/scratch/cfg", "GNOSH_DATA_DIR=/scratch/data", "GNOSH_SAFE_MODE=0", "GNOSH_DEBUG_PAGE=1",
+		"GNOSH=1", "GNOSH_HOOK_EVENT_NAME=Stop", "GNOSH_SESSION_ID=abc", "GNOSH_PROJECT_DIR=/work/proj", "GNOSH_MEM_STATUS=/x/status.json",
 		"GNOSH_TEST_EMBEDDINGS=1", "GNOSH_DEV_HOST=dev@203.0.113.9", "GNOSH_PEER_CHILD=1",
 		"GNOSH_OF_ANOTHER_PART=1")
 	in.KnownEnv = []string{"GNOSH_OF_ANOTHER_PART"}
@@ -467,7 +461,7 @@ func TestOwnVariables(t *testing.T) {
 	if cfg == nil || len(problems) != 0 {
 		t.Fatalf("known variables must load without a word:\n%s", showProblems(problems))
 	}
-	if !cfg.Switches.Profile.V || cfg.Switches.SafeMode.V || !cfg.Switches.SafeMode.Set || cfg.Paths.ConfigDir != "/scratch/cfg" {
+	if !cfg.Switches.DebugPage.V || cfg.Switches.SafeMode.V || !cfg.Switches.SafeMode.Set || cfg.Paths.ConfigDir != "/scratch/cfg" {
 		t.Errorf("switches: %+v", cfg.Switches)
 	}
 }
@@ -499,11 +493,11 @@ func TestOnOffVariables(t *testing.T) {
 	if cfg, _ := with("CLAUDE_CODE_SAFE_MODE=1"); !cfg.Switches.SafeMode.V {
 		t.Errorf("Claude Code's safe-mode variable is read too")
 	}
-	if cfg, _ := with(); cfg.Switches.Profile.Set || cfg.Switches.Profile.V {
-		t.Errorf("the debugging page with nothing set: %+v", cfg.Switches.Profile)
+	if cfg, _ := with(); cfg.Switches.DebugPage.Set || cfg.Switches.DebugPage.V {
+		t.Errorf("the debugging page with nothing set: %+v", cfg.Switches.DebugPage)
 	}
-	if cfg, _ := with("GNOSH_PROFILE=1"); !cfg.Switches.Profile.V || cfg.Switches.Profile.Origin.Name != "$GNOSH_PROFILE" {
-		t.Errorf("GNOSH_PROFILE=1: %+v", cfg.Switches.Profile)
+	if cfg, _ := with("GNOSH_DEBUG_PAGE=1"); !cfg.Switches.DebugPage.V || cfg.Switches.DebugPage.Origin.Name != "$GNOSH_DEBUG_PAGE" {
+		t.Errorf("GNOSH_DEBUG_PAGE=1: %+v", cfg.Switches.DebugPage)
 	}
 }
 
@@ -626,7 +620,7 @@ func TestProvidersLeftOut(t *testing.T) {
     "noaddr": {"type": "llamacpp"},
     "nokey": {"type": "anthropic", "baseUrl": "https://api.example.com"},
     "off": {"type": "llamacpp", "disabled": true},
-    "fine": {"type": "ollama", "baseUrl": "http://localhost:11434"}
+    "fine": {"type": "openai-compatible", "baseUrl": "http://localhost:11434"}
   }
 }`))
 	if cfg == nil {
@@ -657,10 +651,8 @@ func TestAPIRootAndLocal(t *testing.T) {
 		{"llamacpp", "http://127.0.0.1:8080/v1", "http://127.0.0.1:8080/v1"},
 		{"llamacpp", "http://127.0.0.1:8080/v1/", "http://127.0.0.1:8080/v1"},
 		{"llamacpp", "http://box.lan/llm", "http://box.lan/llm/v1"},
-		{"ollama", "http://localhost:11434", "http://localhost:11434/v1"},
-		{"lmstudio", "http://localhost:1234/v1", "http://localhost:1234/v1"},
-		{"litellm", "http://localhost:4000", "http://localhost:4000/v1"},
-		{"omlx", "http://localhost:8000", "http://localhost:8000/v1"},
+		{"openai-compatible", "http://localhost:11434", "http://localhost:11434/v1"},
+		{"openai-compatible", "http://localhost:1234/v1", "http://localhost:1234/v1"},
 		{"openai-compatible", "https://api.example.com", "https://api.example.com/v1"},
 		{"openai-compatible", "https://api.example.com/openai/v1beta", "https://api.example.com/openai/v1beta"},
 		{"openai", "https://api.openai.com/v1", "https://api.openai.com/v1"},
@@ -796,8 +788,8 @@ func TestModelFlags(t *testing.T) {
 
 	// A model the file chooses on a provider that is told not to ask its
 	// server must be registered.
-	_, problems = load(t, withConfig(`{"providers": {"p": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1", "discoverModels": false}}, "model": "p/unlisted"}`))
-	wantProblem(t, problems, Error, userJSON, 1, "the model chosen here, p/unlisted, is not one provider p lists", `"discoverModels": false`, `Register the model under "models", as "p/unlisted": {}`)
+	_, problems = load(t, withConfig(`{"providers": {"p": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1", "listModels": false}}, "model": "p/unlisted"}`))
+	wantProblem(t, problems, Error, userJSON, 1, "the model chosen here, p/unlisted, is not one provider p lists", `"listModels": false`, `Register the model under "models", as "p/unlisted": {}`)
 }
 
 func TestPermissionFlags(t *testing.T) {
@@ -1007,7 +999,7 @@ const userOwn = `{
   "model": {"id": "mine/m", "thinking": false, "temperature": 0.5},
   "smallModel": "mine/m",
   "hosts": {"box": {"ssh": "me@203.0.113.2"}},
-  "options": {"requestTimeout": 900, "disabledSkills": ["mine"], "userInstructionFiles": ["/mine/notes"], "memEmbeddingsUrl": "http://127.0.0.1:8090"},
+  "options": {"requestTimeout": 900, "hiddenSkills": ["mine"], "userInstructionFiles": ["/mine/notes"], "memEmbeddingsUrl": "http://127.0.0.1:8090"},
   "permissions": {"allow": ["Read"], "deny": ["WebSearch"], "defaultMode": "acceptEdits"},
   "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "/mine/gate.sh"}]}]},
   "env": {"MINE": "1"}
@@ -1028,7 +1020,7 @@ func untrustedProject() *memFS {
   "smallModel": {"thinking": true},
   "hosts": {"h": {"ssh": "a@203.0.113.6"}},
   "options": {
-    "disabledSkills": ["pdf"],
+    "hiddenSkills": ["pdf"],
     "userInstructionFiles": ["/outside/notes"],
     "memEmbeddingsUrl": "https://203.0.113.5/embed",
     "debug": true,
@@ -1074,9 +1066,8 @@ var heldByAnUntrustedFolder = []string{
 	"allow-rule: allow Write",
 }
 
-// A project's files can add a deny rule, make a tool ask, and switch a
-// skill off. Nothing else of theirs is in force until the folder is
-// trusted.
+// A project's files can add a deny rule, make a tool ask, and hide a
+// skill. Nothing else of theirs is in force until the folder is trusted.
 func TestUntrustedFolderOnlyRestricts(t *testing.T) {
 	in := inputs(untrustedProject())
 	in.Trusted = false
@@ -1093,8 +1084,8 @@ func TestUntrustedFolderOnlyRestricts(t *testing.T) {
 	if got := ruleTexts(cfg, "ask"); !slices.Equal(got, []string{"Read"}) {
 		t.Errorf("the project's ask rules apply: %q", got)
 	}
-	if got := cfg.Options.DisabledSkills; len(got) != 2 || got[0].V != "mine" || got[1].V != "pdf" {
-		t.Errorf("the project's disabled skill applies: %+v", got)
+	if got := cfg.Options.HiddenSkills; len(got) != 2 || got[0].V != "mine" || got[1].V != "pdf" {
+		t.Errorf("the project's hidden skill applies: %+v", got)
 	}
 
 	// What waits: everything else.
@@ -1177,11 +1168,11 @@ func sameButRestrictions(t *testing.T, without, with *Config, project []string) 
 		}
 	}
 	b.Permissions.Layers = layers
-	// Its switched-off skills are added to the person's, never taken away.
-	if n := len(a.Options.DisabledSkills); len(b.Options.DisabledSkills) < n || !reflect.DeepEqual(b.Options.DisabledSkills[:n], a.Options.DisabledSkills) {
-		t.Errorf("an untrusted folder's file took a switched-off skill away: %+v, was %+v", b.Options.DisabledSkills, a.Options.DisabledSkills)
+	// Its hidden skills are added to the person's, never taken away.
+	if n := len(a.Options.HiddenSkills); len(b.Options.HiddenSkills) < n || !reflect.DeepEqual(b.Options.HiddenSkills[:n], a.Options.HiddenSkills) {
+		t.Errorf("an untrusted folder's file took a hidden skill off the list: %+v, was %+v", b.Options.HiddenSkills, a.Options.HiddenSkills)
 	}
-	b.Options.DisabledSkills = a.Options.DisabledSkills
+	b.Options.HiddenSkills = a.Options.HiddenSkills
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("an untrusted folder's files changed more than they may.\nwithout them:\n%s\nwith them:\n%s", without, with)
 	}
@@ -1189,7 +1180,7 @@ func sameButRestrictions(t *testing.T, without, with *Config, project []string) 
 
 // The other side of the same rule, as one comparison: whatever an
 // untrusted folder's files say, the configuration is the one there would
-// be without them, but for deny rules, ask rules and switched-off skills.
+// be without them, but for deny rules, ask rules and hidden skills.
 func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 	bare := inputs(newFS().put(userJSON, userOwn))
 	bare.Trusted = false
@@ -1207,7 +1198,7 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"providers": {"mine": {"apiKey": null}}}`,
 		`{"providers": {"mine": {"headers": {"X-Evil": "1"}}}}`,
 		`{"providers": {"mine": {"extraBody": {"a": 1}}}}`,
-		`{"providers": {"mine": {"discoverModels": true}}}`,
+		`{"providers": {"mine": {"listModels": true}}}`,
 		`{"providers": {"mine": {"disabled": true}}}`,
 		`{"providers": {"mine": {"name": "theirs"}}}`,
 		`{"providers": {"mine": null}}`,
@@ -1238,7 +1229,7 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"options": {"memEmbeddingsUrl": "https://203.0.113.5/embed"}}`,
 		`{"options": {"debug": true}}`,
 		`{"options": {"projectDataDir": "/outside"}}`,
-		`{"options": {"disabledSkills": null}}`,
+		`{"options": {"hiddenSkills": null}}`,
 		`{"options": {"userInstructionFiles": null}}`,
 		`{"options": {"memEmbeddingsUrl": null}}`,
 		`{"permissions": {"allow": ["Bash"]}}`,
@@ -1251,7 +1242,7 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"env": {"MINE": ""}}`,
 		`{"disableAllHooks": true}`,
 		// What may pass, beside what may not.
-		`{"permissions": {"deny": ["Bash"], "ask": ["Edit"]}, "options": {"disabledSkills": ["pdf"], "debug": true}}`,
+		`{"permissions": {"deny": ["Bash"], "ask": ["Edit"]}, "options": {"hiddenSkills": ["pdf"], "debug": true}}`,
 	} {
 		for _, path := range []string{projJSON, localJSON} {
 			in := inputs(newFS().put(userJSON, userOwn).put(path, text))
@@ -1282,8 +1273,8 @@ func TestUntrustedFolderWithNoRuleKeepsNothing(t *testing.T) {
 	in := inputs(untrustedProject())
 	in.Trusted, in.KeepUntrusted = false, nil
 	cfg := mustLoad(t, in)
-	if got := ruleTexts(cfg, "deny"); !slices.Equal(got, []string{"WebSearch"}) || len(cfg.Options.DisabledSkills) != 1 {
-		t.Errorf("with no rule nothing is kept: deny %q, skills %+v", got, cfg.Options.DisabledSkills)
+	if got := ruleTexts(cfg, "deny"); !slices.Equal(got, []string{"WebSearch"}) || len(cfg.Options.HiddenSkills) != 1 {
+		t.Errorf("with no rule nothing is kept: deny %q, skills %+v", got, cfg.Options.HiddenSkills)
 	}
 	if want := len(heldByAnUntrustedFolder) + 4; len(cfg.Held) != want {
 		t.Errorf("everything the project says is held: %d, want %d", len(cfg.Held), want)
@@ -1355,7 +1346,7 @@ func TestHeldIsTakenAwayAfterEveryMerge(t *testing.T) {
 	// A merge gone wrong: one of everything from a project's file, beside
 	// the user's own.
 	mine := &Provider{ID: "mine", Origin: user}
-	mine.DiscoverModels.put(true, proj)
+	mine.ListModels.put(true, proj)
 	b.providers = []*Provider{mine, {ID: "evil", Origin: proj}}
 	b.unset["evil"] = map[string]unsetVars{"apiKey": {names: []string{"X"}, origin: proj}}
 	kept := &Model{Provider: "mine", ID: "m", Origin: user}
@@ -1382,7 +1373,7 @@ func TestHeldIsTakenAwayAfterEveryMerge(t *testing.T) {
 	b.setEnv(EnvVar{Name: "MINE", Value: NewSecret("1"), Origin: user})
 	b.opts.UserInstructionFiles = []ListItem{{V: "/outside", Origin: proj}, {V: "/mine", Origin: user}}
 	b.opts.ProjectInstructionFiles = []ListItem{{V: "/outside", Origin: local}}
-	b.opts.DisabledSkills = []ListItem{{V: "pdf", Origin: proj}}
+	b.opts.HiddenSkills = []ListItem{{V: "pdf", Origin: proj}}
 	b.opts.Debug.put(true, proj)
 	b.opts.MemEmbeddingsURL.put("https://203.0.113.5", proj)
 	b.opts.RequestTimeout.put(5, proj)
@@ -1400,12 +1391,12 @@ func TestHeldIsTakenAwayAfterEveryMerge(t *testing.T) {
 	}
 	def := defaultOptions()
 	def.UserInstructionFiles = []ListItem{{V: "/mine", Origin: user}}
-	def.DisabledSkills = []ListItem{{V: "pdf", Origin: proj}}
+	def.HiddenSkills = []ListItem{{V: "pdf", Origin: proj}}
 	if len(b.opts.ProjectInstructionFiles) != 0 {
 		t.Errorf("a project's instruction file is still in force: %+v", b.opts.ProjectInstructionFiles)
 	}
 	b.opts.ProjectInstructionFiles = nil
-	if len(b.providers) != 1 || b.providers[0].DiscoverModels.Set || len(b.unset) != 0 || len(b.models) != 1 || b.models[0].ContextWindow.Set ||
+	if len(b.providers) != 1 || b.providers[0].ListModels.Set || len(b.unset) != 0 || len(b.models) != 1 || b.models[0].ContextWindow.Set ||
 		b.models[0].MaxOutputTokens.Set || b.models[0].ThinkingLevels.Set || !reflect.DeepEqual(b.large, Slot{}) || !reflect.DeepEqual(b.small, Slot{}) ||
 		len(b.hosts) != 0 || len(b.hooks) != 1 || b.hooks[0].Command != "mine" || b.hooksOff.Set || b.mode.Set || b.bypassDisabled.Set || b.denyInstead.Set ||
 		len(b.dirs) != 1 || len(b.env) != 1 || !reflect.DeepEqual(b.opts, def) {
@@ -1418,7 +1409,7 @@ func TestHeldIsTakenAwayAfterEveryMerge(t *testing.T) {
 
 	// With no rule for what may be kept, nothing of the project's stays.
 	b.sweep(nil, []string{projJSON, localJSON})
-	if len(b.layers[0].Deny) != 0 || len(b.layers[0].Ask) != 0 || len(b.opts.DisabledSkills) != 0 {
+	if len(b.layers[0].Deny) != 0 || len(b.layers[0].Ask) != 0 || len(b.opts.HiddenSkills) != 0 {
 		t.Errorf("with no rule the sweep keeps nothing of the project's")
 	}
 
@@ -1744,7 +1735,7 @@ func TestFirstBinaryShape(t *testing.T) {
 		put(statePath, `{"thinking": {"local/qwen3.8-27b": "off"}}`).
 		put(projJSON, `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./gate.sh"}]}]},
   "permissions": {"deny": ["Bash"]}, "providers": {"other": {"type": "llamacpp", "baseUrl": "http://203.0.113.7:8080"}}}`)
-	in := Inputs{FS: fsys, Environ: []string{"HOME=" + testHome, "GNOSH_PROFILE=1"}, Home: testHome, Cwd: testCwd}
+	in := Inputs{FS: fsys, Environ: []string{"HOME=" + testHome, "GNOSH_DEBUG_PAGE=1"}, Home: testHome, Cwd: testCwd}
 	in.Flags.SkipPermissions = true
 	in.Flags.Model = "local/qwen3.8-27b"
 	cfg, problems := load(t, in)
@@ -1807,7 +1798,7 @@ func TestLoadFromTheRealFileSystem(t *testing.T) {
 	// The state file written through the same file system is read back
 	// by the next load.
 	err = UpdateState(OS{}, cfg.Paths.StateFile, func(st *State) {
-		if err := st.SetModel("large", ModelRef{Provider: "local", ID: "qwen"}); err != nil {
+		if err := st.SetModel("model", ModelRef{Provider: "local", ID: "qwen"}); err != nil {
 			t.Error(err)
 		}
 	})
@@ -1843,7 +1834,7 @@ func TestLoadFromTheRealFileSystem(t *testing.T) {
 func TestSettingSources(t *testing.T) {
 	fsys := newFS().
 		put(userJSON, "{"+one+`, "options": {"memoryText": "full"}, "permissions": {"deny": ["WebFetch"]}}`).
-		put(statePath, `{"models": {"large": "p/m"}}`).
+		put(statePath, `{"models": {"model": "p/m"}}`).
 		put(projJSON, `{"options": {"memoryText": "lean", "debug": true}, "permissions": {"deny": ["Bash"]}}`).
 		put(localJSON, `{"permissions": {"allow": ["Read"]}}`)
 	read := func(sources ...string) (*Config, []string) {

@@ -12,7 +12,7 @@ import (
 
 // A session that is busy can always be asked what it is doing, without
 // stopping it: /status answers in the middle of a turn, a prompt typed
-// meanwhile waits its turn and is then answered, and with GNOSH_PROFILE
+// meanwhile waits its turn and is then answered, and with GNOSH_DEBUG_PAGE
 // set a page on this machine shows the state and every goroutine.
 func TestBusySessionCanBeExamined(t *testing.T) {
 	hold := make(chan struct{})
@@ -22,7 +22,7 @@ func TestBusySessionCanBeExamined(t *testing.T) {
 	pr, pw := io.Pipe()
 	s := &seat{t: t, in: pw, out: &safeBuffer{}, errs: &safeBuffer{}, done: make(chan int, 1)}
 	o := testOptions(w)
-	o.Environ = append(o.Environ, "GNOSH_PROFILE=1")
+	o.Environ = append(o.Environ, "GNOSH_DEBUG_PAGE=1")
 	o.Stdin, o.Stdout, o.Stderr = pr, s.out, s.errs
 	o.StdinIsTerminal, o.StdoutIsTerminal = true, true
 	go func() { s.done <- Main(t.Context(), o) }()
@@ -83,16 +83,16 @@ func TestBusySessionCanBeExamined(t *testing.T) {
 
 // The ways gnosh is started that the first binary must have.
 func TestCommandLineForms(t *testing.T) {
-	w := apptest.NewWorld(t, apptest.Reply{Text: "one"}, apptest.Reply{Text: "two"}, apptest.Reply{Text: "three"}, apptest.Reply{Text: "four"}, apptest.Reply{Text: "five"})
+	w := apptest.NewWorld(t, apptest.Reply{Text: "one"}, apptest.Reply{Text: "two"}, apptest.Reply{Text: "three"}, apptest.Reply{Text: "four"})
 	w.Model.SetModels("test-model", "other-model")
 
-	// gnosh run is gnosh -p.
-	r := run(t, w, "run", "--output-format", "json", "first").wantCode(t, 0)
+	// gnosh -p answers one prompt and exits.
+	r := run(t, w, "-p", "--output-format", "json", "first").wantCode(t, 0)
 	id := jsonLines(t, r.out)[0]["session_id"].(string)
-	// -s names the session by its id; -C continues, as -c does.
-	r = run(t, w, "-s", id, "-p", "--output-format", "json", "second").wantCode(t, 0)
+	// -r names the session by its id; -C continues, as -c does.
+	r = run(t, w, "-r", id, "-p", "--output-format", "json", "second").wantCode(t, 0)
 	if got := jsonLines(t, r.out)[0]["session_id"]; got != id {
-		t.Errorf("-s went on in %v", got)
+		t.Errorf("-r went on in %v", got)
 	}
 	r = run(t, w, "-C", "-p", "--output-format", "json", "third").wantCode(t, 0)
 	if got := jsonLines(t, r.out)[0]["session_id"]; got != id {
@@ -109,12 +109,24 @@ func TestCommandLineForms(t *testing.T) {
 	if w.Exists(w.DataDir() + "/state.json") {
 		t.Errorf("-m was saved for later sessions")
 	}
-	// -D keeps the session under the directory it names.
-	run(t, w, "-D", w.Root+"/elsewhere", "-p", "fifth").wantCode(t, 0)
-	if found := globAll(w.Root + "/elsewhere/projects/*/*.jsonl"); len(found) != 1 {
-		t.Errorf("-D: session files under the named directory: %v", found)
-	}
 	w.Model.Done()
+
+	// What was taken off the command line is refused, never read as what
+	// it once meant: no model is asked anything.
+	gone := apptest.NewWorld(t)
+	for _, args := range [][]string{
+		{"-p", "-q", "x"}, {"-s", id, "-p", "x"}, {"-D", gone.Root + "/elsewhere", "-p", "x"},
+		{"session", "delete", id}, {"-p", "--input-format", "stream-json"},
+	} {
+		r := run(t, gone, args...).wantCode(t, 1)
+		has(t, "stderr for "+strings.Join(args, " "), r.err, "nothing was")
+	}
+	if n := len(gone.Model.Requests()); n != 0 {
+		t.Errorf("a command line that was refused sent %d requests", n)
+	}
+	if found := globAll(gone.Root + "/elsewhere/*"); len(found) != 0 {
+		t.Errorf("-D made something under the directory it named: %v", found)
+	}
 
 	// gnosh "prompt" opens a session with the prompt as its first message.
 	w2 := apptest.NewWorld(t, apptest.Reply{Text: "Hello to you."})

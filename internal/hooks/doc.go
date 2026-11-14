@@ -110,7 +110,7 @@
 // Input type lists.
 //
 // In its environment a hook finds GNOSH=1, AGENT=gnosh, AI_AGENT=gnosh,
-// GNOSH_EVENT, GNOSH_SESSION_ID, GNOSH_CWD, GNOSH_PROJECT_DIR and
+// GNOSH_HOOK_EVENT_NAME, GNOSH_SESSION_ID, GNOSH_CWD, GNOSH_PROJECT_DIR and
 // CLAUDE_PROJECT_DIR (the same directory under both names), and where
 // they apply GNOSH_TOOL_NAME, GNOSH_TOOL_USE_ID, GNOSH_TOOL_INPUT_COMMAND,
 // GNOSH_TOOL_INPUT_FILE_PATH, GNOSH_STOP_HOOK_ACTIVE (1 or 0),
@@ -122,6 +122,16 @@
 // that does not apply to the event is unset, even if gnosh's own
 // environment had it, and so is CLAUDECODE: gnosh does not pass itself off
 // as another program.
+//
+// A variable that repeats a field of the JSON object is named for it, for
+// a script that would rather not read JSON: the field as Claude Code
+// documents it, in upper case behind GNOSH_ (hook_event_name,
+// tool_input.command). Where the field belongs to one event and its name
+// alone would not say which (source, reason, trigger, error, load_reason),
+// the event's name, or the start of it, stands in front
+// (GNOSH_SESSION_START_SOURCE, GNOSH_INSTRUCTIONS_LOAD_REASON).
+// GNOSH_PROJECT_DIR and GNOSH_ENV_FILE stand beside Claude Code's own two
+// variables, and GNOSH_MEM_STATUS is gnosh's alone.
 //
 // # What a hook's answer means
 //

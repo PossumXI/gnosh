@@ -11,14 +11,14 @@ import (
 var fuzzSeeds = []string{
 	websiteFile, aiBoxFile, macFile, userOwn, pastedSettings, hookFile,
 	"{}", "[]", `"x"`, "null", "", "{", `{"a":`, "{\n\"env\": {},\n}", "{ // c\n}", "/* open",
-	`{"providers": {"x": {"type": "llamacpp", "baseUrl": ["http://127.0.0.1:1", "http://${HOME}:2/${NOPE:-v1}"], "apiKey": "${NOPE}", "extraBody": {"id_slot": 1, "a": {"b": [1, null]}}, "headers": {"A": "b ${HOME}"}, "discoverModels": false, "disabled": true, "name": "X"}}}`,
-	`{"providers": {"x": null, "y": {"type": null}, "z": {"baseUrl": null, "apiKey": null, "headers": null, "extraBody": null, "discoverModels": null, "disabled": null, "name": null}}}`,
+	`{"providers": {"x": {"type": "llamacpp", "baseUrl": ["http://127.0.0.1:1", "http://${HOME}:2/${NOPE:-v1}"], "apiKey": "${NOPE}", "extraBody": {"id_slot": 1, "a": {"b": [1, null]}}, "headers": {"A": "b ${HOME}"}, "listModels": false, "disabled": true, "name": "X"}}}`,
+	`{"providers": {"x": null, "y": {"type": null}, "z": {"baseUrl": null, "apiKey": null, "headers": null, "extraBody": null, "listModels": null, "disabled": null, "name": null}}}`,
 	`{"providers": {"x": {"type": "anthropic", "apiKey": "${", "baseUrl": "${A B}", "headers": {"X": "${CLAUDE_PROJECT_DIR}"}}}}`,
 	`{"providers": {"p": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1"}}, "models": {"p/m": {"name": "M", "contextWindow": 1, "maxOutputTokens": 2, "thinkingLevels": ["off", "on"]}, "p/n": {}, "p/o": null, "q/r": {}}, "model": {"id": "p/m", "thinking": "low", "temperature": 0.5}, "smallModel": "p/n"}`,
 	`{"model": null, "smallModel": {"id": null, "thinking": null, "temperature": null}}`, `{"model": {}, "smallModel": []}`, `{"model": "nope", "smallModel": {"thinking": true}}`,
 	`{"hosts": {"h": {"ssh": "a@203.0.113.10", "description": "d"}, "local": {"ssh": "x"}, "g": null, "bad name": {"ssh": "-o x"}}}`,
-	`{"options": {"requestTimeout": 900, "autoCompactEnabled": false, "autoCompactWindow": 200000, "loopMaxTurns": 3, "maxBackgroundTasks": 2, "userInstructionFiles": ["~/a", "b"], "projectInstructionFiles": ["c"], "disabledSkills": ["x"], "memoryText": "full", "memReviewCloses": false, "memEmbeddingsUrl": "http://127.0.0.1:1", "debug": true, "projectDataDir": ".x"}}`,
-	`{"options": {"requestTimeout": null, "disabledSkills": null, "debug": "yes", "nope": 1, "autoCompactWindow": 1e5, "memEmbeddingsUrl": "http://${X}"}}`,
+	`{"options": {"requestTimeout": 900, "autoCompactEnabled": false, "autoCompactWindow": 200000, "loopMaxTurns": 3, "maxBackgroundTasks": 2, "userInstructionFiles": ["~/a", "b"], "projectInstructionFiles": ["c"], "hiddenSkills": ["x"], "memoryText": "full", "memReviewCloses": false, "memEmbeddingsUrl": "http://127.0.0.1:1", "debug": true, "projectDataDir": ".x"}}`,
+	`{"options": {"requestTimeout": null, "hiddenSkills": null, "debug": "yes", "nope": 1, "autoCompactWindow": 1e5, "memEmbeddingsUrl": "http://${X}"}}`,
 	`{"permissions": {"allow": ["Read"], "deny": ["Bash(rm *)"], "ask": [], "defaultMode": "plan", "additionalDirectories": ["/x"]}}`,
 	`{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "timeout": 5, "async": false}]}]}}`,
 	`{"hooks": {"PreToolUse": [{"matcher": "(", "hooks": [{"type": "http", "if": "x", "args": []}]}]}}`,
@@ -36,7 +36,7 @@ var fuzzSeeds = []string{
 // ends in a Config or in mistakes. And whatever an untrusted folder's
 // files hold, they change nothing but what such a folder may: the
 // configuration is the one there would be without them, but for deny
-// rules, ask rules and switched-off skills.
+// rules, ask rules and hidden skills.
 func FuzzConfigFile(f *testing.F) {
 	for _, seed := range fuzzSeeds {
 		f.Add(seed)
@@ -190,7 +190,7 @@ func FuzzFill(f *testing.F) {
 // never stops startup.
 func FuzzState(f *testing.F) {
 	for _, seed := range []string{
-		"", "{}", "{{{", `{"version": 1, "models": {"large": "p/m", "small": "x"}, "thinking": {"p/m": "off", "q": "LOUD"}, "autoCompactWindow": 5}`,
+		"", "{}", "{{{", `{"version": 1, "models": {"model": "p/m", "smallModel": "x"}, "thinking": {"p/m": "off", "q": "LOUD"}, "autoCompactWindow": 5}`,
 		`{"models": "p/m"}`, `{"thinking": ["x"]}`, `[1, 2]`, `{"version": 99, "future": {"a": [1]}}`,
 	} {
 		f.Add(seed)

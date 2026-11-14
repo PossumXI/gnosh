@@ -100,10 +100,6 @@ func (k listKind) more(next string) bool {
 		return !spaceOutsideParens(next)
 	case listPaths:
 		return !hasSpace(next)
-	case listPairs:
-		return isEnvPair(next) == ""
-	case listHeaders:
-		return isHeader(next) == ""
 	}
 	return false
 }
@@ -179,39 +175,6 @@ func isUUID(s string) string {
 			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
 				return problem
 			}
-		}
-	}
-	return ""
-}
-
-// isEnvPair returns what is wrong with s as a KEY=value pair, or "".
-func isEnvPair(s string) string {
-	key, _, ok := strings.Cut(s, "=")
-	if !ok || key == "" {
-		return "is not a KEY=value pair"
-	}
-	for i := 0; i < len(key); i++ {
-		c := key[i]
-		letter := c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
-		if !letter && (i == 0 || c < '0' || c > '9') {
-			return "is not a KEY=value pair: a variable's name is letters, digits and underscores, and does not begin with a digit"
-		}
-	}
-	return ""
-}
-
-// isHeader returns what is wrong with s as an HTTP header, "Name: value", or
-// "". A URL has a colon too, but what follows it is "//", which no header
-// value begins with here.
-func isHeader(s string) string {
-	name, value, ok := strings.Cut(s, ":")
-	if !ok || name == "" || strings.HasPrefix(value, "//") {
-		return "is not a header, which is written Name: value"
-	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c <= ' ' || c >= 0x7f || strings.IndexByte(`()<>@,;:\"/[]?={}`, c) >= 0 {
-			return "is not a header, which is written Name: value"
 		}
 	}
 	return ""

@@ -212,26 +212,22 @@ func (p *program) prepare(ctx context.Context, inv cli.Invocation, interactive b
 func (st *startup) load(trusted bool) {
 	p, inv := st.p, st.inv
 	flags := config.Flags{
-		Model:                inv.Model,
-		SmallModel:           inv.SmallModel,
-		ReasoningEffort:      inv.Effort,
-		PermissionMode:       inv.PermissionMode,
-		AllowSkipPermissions: inv.AllowSkipPermissions,
-		AllowedTools:         inv.AllowedTools,
-		DisallowedTools:      inv.DisallowedTools,
-		ToolsGiven:           inv.ToolsGiven,
-		Tools:                inv.Tools,
-		SettingSources:       inv.SettingSources,
-		SafeMode:             inv.SafeMode,
-		Debug:                inv.Debug,
+		Model:           inv.Model,
+		SmallModel:      inv.SmallModel,
+		ReasoningEffort: inv.Effort,
+		PermissionMode:  inv.PermissionMode,
+		AllowedTools:    inv.AllowedTools,
+		DisallowedTools: inv.DisallowedTools,
+		ToolsGiven:      inv.ToolsGiven,
+		Tools:           inv.Tools,
+		SettingSources:  inv.SettingSources,
+		SafeMode:        inv.SafeMode,
+		Debug:           inv.Debug,
 	}
 	// What was typed as a path is meant from where it was typed, not from
 	// the folder --cwd names.
 	for _, d := range inv.AddDirs {
 		flags.AddDirs = append(flags.AddDirs, p.absFrom(d))
-	}
-	if inv.DataDir != "" {
-		flags.DataDir = p.absFrom(inv.DataDir)
 	}
 	switch {
 	case inv.Settings == "":
@@ -302,16 +298,13 @@ func (st *startup) trustStore() *trust.Store {
 }
 
 // sessions is the store the folder's sessions are kept in: gnosh's own
-// data directory, or the directory given with -D.
+// data directory.
 func (st *startup) sessions() *transcript.Store {
 	return &transcript.Store{Dir: st.sessionsDir(), Clock: st.p.now}
 }
 
 // sessionsDir is the root of the session store.
 func (st *startup) sessionsDir() string {
-	if st.inv.DataDir != "" {
-		return st.cfg.Paths.DataDir
-	}
 	return st.cfg.Paths.StateDir
 }
 

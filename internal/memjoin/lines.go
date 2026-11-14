@@ -59,7 +59,7 @@ type reminderState struct {
 // is running, and what it returns is stored after the prompt's text and
 // after what the hooks added, in this order:
 //
-//   - the directive of a goal that `gnosh run --goal` bound as the run
+//   - the directive of a goal that `gnosh -p --goal` bound as the run
 //     began, with the run's own prompt;
 //   - the digest of mem, with the first prompt a session ever sends (a
 //     hidden one too: a /goal directive), and again with a typed prompt

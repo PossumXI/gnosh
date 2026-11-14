@@ -80,7 +80,7 @@
 //
 // RunPrompt (IC 9.3). A run that was given no prompt asks for one. A run
 // started with --goal has one, the goal's directive, sent as /goal sends
-// it: `gnosh run --goal "the tests pass"` is a whole command line. A run
+// it: `gnosh -p --goal "the tests pass"` is a whole command line. A run
 // that was given a prompt carries the directive with it, as a hidden
 // part.
 //

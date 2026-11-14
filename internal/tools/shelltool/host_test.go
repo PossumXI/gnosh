@@ -910,37 +910,11 @@ func TestSideChannel(t *testing.T) {
 	}
 }
 
-// A call that names this machine as its host is, to whoever judges calls by
-// that argument, a call with no host.
-func TestWithoutLocalHost(t *testing.T) {
+// A call whose arguments name the host twice is read as every argument is,
+// the last one counting: named last, this machine is where it runs. And
+// the stamp a result begins with is parted from what follows it.
+func TestLastHostCountsAndSplitStamp(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		input string
-		want  string // "" for arguments that are to be used as they are
-	}{
-		{`{"command":"ls","host":"local"}`, `{"command":"ls"}`},
-		{`{"host":" local ","command":"ls","timeout":5}`, `{"command":"ls","timeout":5}`},
-		{`{"command":"ls","host":""}`, `{"command":"ls"}`},
-		{`{"command":"ls","host":null}`, `{"command":"ls"}`},
-		{`{"command":"ls","host":"render","host":"local"}`, `{"command":"ls"}`},
-		{`{"command":"ls","host":"render"}`, ""},
-		{`{"command":"ls","host":"local","host":"render"}`, ""},
-		{`{"command":"ls","host":"Local"}`, ""},
-		{`{"command":"ls","host":7}`, ""},
-		{`{"command":"ls"}`, ""},
-		{`{"command":"echo host local"}`, ""},
-		{`["ls"]`, ""},
-		{`{"command":`, ""},
-		{``, ""},
-	}
-	for _, tt := range tests {
-		out, ok := WithoutLocalHost(json.RawMessage(tt.input))
-		if ok != (tt.want != "") || string(out) != tt.want {
-			t.Errorf("WithoutLocalHost(%s) = %s, %v; want %q", tt.input, out, ok, tt.want)
-		}
-	}
-	// The tool reads the same arguments the same way: what is taken for
-	// this machine here runs on this machine.
 	box, o := newFarBox(t, plan{}, Options{})
 	m := newManager(t, o)
 	res, err := toolNamed(t, m, BashName).Run(t.Context(), core.ToolCall{ID: "c", Input: json.RawMessage(`{"command":"echo here","host":"render","host":"local"}`)}, newEnv(t))

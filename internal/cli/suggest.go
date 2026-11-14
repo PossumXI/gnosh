@@ -112,8 +112,7 @@ func nearest(typed string, names []string, limit int) string {
 // or nil. It is used to tell a mistyped command from a one-word prompt, so
 // it is strict: one slip only, and for a name of three letters or fewer
 // only two neighbouring letters swapped, because too many ordinary words
-// are one letter away from "run" or "mem". One-letter aliases are never
-// matched.
+// are one letter away from "mem". One-letter aliases are never matched.
 func nearCommand(c *command, word string) (*command, string) {
 	if utf8.RuneCountInString(word) < 2 {
 		return nil, ""

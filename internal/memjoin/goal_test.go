@@ -116,7 +116,7 @@ func TestGoalBoundJudgedSentBackAndMet(t *testing.T) {
 	}
 }
 
-// gnosh run --goal: the goal is bound before the run's prompt goes out.
+// gnosh -p --goal: the goal is bound before the run's prompt goes out.
 // A run whose goal is met ends well.
 func TestRunGoalMet(t *testing.T) {
 	w := newWorld(t,
@@ -155,7 +155,7 @@ func TestRunGoalMet(t *testing.T) {
 	}
 }
 
-// gnosh run --goal with nothing else: the goal's directive is the run's
+// gnosh -p --goal with nothing else: the goal's directive is the run's
 // prompt, sent as /goal sends it in a session.
 func TestRunGoalAlone(t *testing.T) {
 	w := newWorld(t,
@@ -165,7 +165,7 @@ func TestRunGoalAlone(t *testing.T) {
 		says("The greeting says hi now."),
 	)
 	w.Write("greet.txt", "hello, world\n")
-	r := w.run("run", "-y", "--goal", "greeting says hi")
+	r := w.run("-p", "-y", "--goal", "greeting says hi")
 	r.wantCode(t, 0)
 	w.script.done()
 	if r.out != "The greeting says hi now.\n" {
@@ -200,13 +200,13 @@ func TestRunGoalAlone(t *testing.T) {
 	}
 
 	// With no goal and no prompt a run is refused, as before.
-	r = w.run("run")
+	r = w.run("-p")
 	r.wantCode(t, 1)
 	has(t, "stderr of a run with nothing to do", r.err, "the prompt is empty")
 
 	// A goal that could not be bound is no prompt: the run says why no
 	// goal was set, and that it was given nothing to do.
-	r = w.run("run", "--tools", "Read", "--goal", "greeting says hi")
+	r = w.run("-p", "--tools", "Read", "--goal", "greeting says hi")
 	r.wantCode(t, 1)
 	has(t, "stderr of a run whose goal could not be set", r.err, "--goal needs the gnovm_run tool, which this run does not have, so no goal was set.", "the prompt is empty")
 }
