@@ -1,8 +1,9 @@
 # Results
 
 > **These are the earlier gnosh's results, carried as they were written.
-> None of them is of the gnosh in this repository,** which has not been run
-> on these tasks against a model.
+> None of them is of the gnosh in this repository.** Its own first numbers,
+> of 13 to 14 November 2026, are in [README.md](README.md) under "The first
+> measurement".
 >
 > Every "gnosh" below is the earlier program of that name: the fork of
 > Charm's Crush that this repository replaces. Its builds are named by

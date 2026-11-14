@@ -5,15 +5,14 @@ model server, with a small proxy in between that counts what every request
 cost. One run gives one row: passed or not, how long, how many requests, how
 many tokens.
 
-**None of it has been run against a model with the gnosh in this
-repository.** The bench was built for the earlier gnosh (the fork of Charm's
-Crush that this repository replaces) and measured it, Charm's crush and
-OpenAI's Codex CLI in November 2026. It was carried over on 13 November 2026
-(`CARRIED.md`, "The bench") and its runners now drive the new gnosh. What has
-been run here is the dry run below, which stands a scripted server where the
-model would be and proves the plumbing. Every number in this file is the
-earlier programs'. Whether, where and when the new gnosh is measured is
-Jae's to decide.
+**The gnosh in this repository was first measured on the night of 13 to 14
+November 2026**, on the home AI box: 39 runs of the four tasks, under "The
+first measurement" below. The bench was built for the earlier gnosh (the fork
+of Charm's Crush that this repository replaces) and measured it, Charm's
+crush and OpenAI's Codex CLI in November 2026. It was carried over on 13
+November 2026 (`CARRIED.md`, "The bench") and its runners now drive the new
+gnosh. Every number outside "The first measurement" is the earlier
+programs'.
 
 ## What it measures, and what it does not
 
@@ -259,9 +258,10 @@ Notes on reading it:
 
 ## Running it for real
 
-No run has been made with the commands of this section against a real
-server. They are the dry run's own, with a real server's address where the
-scripted one's was.
+The commands of this section were first run against a real server on 13
+November 2026, on the home AI box, as the user `crush` (the `bench` user of
+the earlier runs could not be reached). They are the dry run's own, with a
+real server's address where the scripted one's was.
 
 A run needs: this tree; a gnosh binary built from the commit to be measured;
 Go (the tasks are Go, the checks run `go test`, and so will the model);
@@ -328,9 +328,8 @@ are idle; otherwise it says what is wrong, and nothing has been changed by
 asking. With `MATRIX_GATE` set as above, `matrix.sh` asks the same before
 every task and waits until the answer is yes, so a pass never starts on a
 server that is busy or holds another model. The slot count comes from
-`/slots`, which is asked only of a model the list calls loaded; that
-question has been tried against a stand-in and never against the real
-server.
+`/slots`, which is asked only of a model the list calls loaded; it answered
+as expected on the real server (three idle slots of three).
 
 **4. A slot.** With nothing else on the server, leave `SLOT` unset: the
 earlier runs had none, one run took one slot, and gnosh's short side requests
@@ -445,48 +444,106 @@ half of what the same tasks took on the box.
 
 ## The first measurement
 
-Planned, not run. The question it is to answer: with the same model, does
-the new gnosh pass these tasks, what does mem cost or save against the same
-binary without it, which of the two texts about mem does the model work
-better with, and does the slide hold a session under a window that really
-is 32K.
+Night of 13 to 14 November 2026, the home AI box: llama.cpp serving Qwen 3.8
+27B, three slots of about 262,000 tokens, gnosh told a window of 65,536,
+`TIMEOUT=3600`. The binary was commit `2fa512c` and the bench's tree
+`5d80a4d`, the same for every run. One repetition of each pass, so every
+figure below is one run and a difference between two of them is not yet a
+finding. 39 runs in all; no request failed at the proxy, and no session
+needed a summary or a slide (the largest context was 48K of the 64K told).
 
-| | |
-|---|---|
-| tasks | rename, algos, bugs, continue |
-| ways of running gnosh | `gnosh` (mem, the lean text), `gnosh-full` (mem, the fuller text), `gnosh-nomem` (no mem) |
-| windows | 65,536 told, as the earlier runs; and 32,768 on a server whose slot is 32,768 |
-| thinking | on, as every earlier run. Off has nothing earlier to be compared with; it is how Jae runs his own sessions, so one pass more is listed below |
-| repetitions | three |
-| model | Qwen 3.8 27B, the model of the earlier AI box and swarm runs |
-| caps | `TIMEOUT=3600` a session, so five hours a pass at the very most |
+Wall time is minutes and seconds. Tokens are read / generated: what the
+server had to read fresh, and what it wrote.
 
-That is 3 ways × 2 windows × 4 tasks × 3 repetitions = 72 runs with thinking
-on.
+**Thinking on, mem with the lean text beside mem with the fuller text; then
+without mem, alone on the server** (so about twice as fast as a run that
+shares the GPU: its wall times are not comparable with the other two):
 
-**Model time, estimated from the earlier timings on the AI box** (two hours
-a pass with mem, an hour and a half without, and the 32K passes taken to
-cost what the 64K ones do, as the one 32K run on record did):
+| task | gnosh (lean) | gnosh-full | gnosh-nomem, alone |
+|---|---|---|---|
+| rename | passed, 36:52, 31 requests, 70K / 24.3K | passed, 23:26, 39, 49K / 13.1K | passed, 17:57, 10, 25K / 16.4K |
+| algos | passed 9/9, cut by the cap at 60:00, 27, 59K / 35.7K | passed 9/9, cut by the cap at 60:00, 21, 138K / 36.1K | passed, 15:46, 9, 17K / 15.5K |
+| bugs | passed, 11:08, 7, 11K / 8.0K | passed, 37:56, 37, 102K / 26.9K | passed, 6:24, 8, 10K / 6.4K |
+| continue | passed, 37:34, 57, 102K / 18.2K | passed, 48:33, 53, 110K / 24.7K | passed, 10:52, 32, 20K / 10.4K |
 
-| | passes | hours of model time |
+**Thinking on, mem beside no mem, under the same load** (the fair pair):
+
+| task | gnosh (lean) | gnosh-nomem |
 |---|---|---|
-| 64K: lean, full, without mem, three times each | 9 | 6 + 6 + 4.5 = 16.5 |
-| 32K, the same | 9 | 16.5 |
-| **thinking on, all of it** | **18** | **about 33** |
-| thinking off, 64K, lean and without mem, three times each, at about half the time a run | 6 | about 5 |
+| rename | passed, 23:53, 32, 78K / 14.6K | passed, 32:14, 11, 24K / 20.1K |
+| algos | **stopped by the cap, 0/9**, 23, 35K / 48.8K | passed, 29:46, 12, 23K / 22.5K |
+| bugs | passed, 8:47, 9, 13K / 6.7K | passed, 5:08, 5, 10K / 3.7K |
+| continue | passed, 38:25, 91, 167K / 25.3K | passed, 16:04, 25, 15K / 9.4K |
 
-So about 33 hours of model time, 38 with the thinking-off pass, and never
-more than 90 for the 72 runs, by the caps. Two runs side by side, as the
-earlier ones were made, is about half that on the clock: two nights. On a
-rented machine of the Ada's kind, where a run took a quarter to a half of
-the box's time and six requests at once cost little more than one, it is
-an evening, and about what the swarm night cost. These are estimates made
-from another program's numbers. The first row will say more than they do.
+**Thinking off (how Jae runs his own sessions), mem beside no mem:**
 
-What to read first when it has run: `passed` and `outcome` for each way;
-`gnosh` against `gnosh-nomem` in `compare.py` (wall, requests, read, peak);
-`gnosh` against `gnosh-full`; and in the 32K lane `window_true`,
-`over_window`, `errors`, `slides` and `summaries`.
+| task | gnosh (lean) | gnosh-nomem |
+|---|---|---|
+| rename | passed, 2:47, 6, 12K / 1.1K | passed, 9:21, 43, 16K / 7.6K |
+| algos | passed, 34:26, 88, 127K / 24.9K | passed, 16:12, 19, 14K / 12.5K |
+| bugs | passed, 4:42, 11, 9K / 3.0K | passed, 4:38, 11, 16K / 3.0K |
+| continue | **failed, 5/6**, 14:43, 71, 78K / 8.6K | passed, 9:02, 28, 9K / 5.5K |
+
+One run before these, alone on the server to see a row: bugs with the lean
+text passed in 5:25 with 8 requests.
+
+**What it says.**
+
+- Without mem the new gnosh passed every run, 12 of 12. With thinking on it
+  made about as many requests as crush made on these tasks on 6 November (5
+  to 12 where crush made 6 to 13; continue 25 to 32 where crush made 40);
+  with thinking off it made more and smaller ones (11 to 43).
+- With mem it passed 15 of 17 in the three passes. On these tasks, which
+  all fit the window, mem brought no gain to set against its cost: under
+  the same load and with thinking on it took 1.7 to 2.4 times as long on
+  three of the four tasks (with thinking off, 1.6 and 2.1 times on two, and
+  the same on bugs), and it was faster on rename both times.
+- The requests the earlier gnosh spent on one tool call a reply are gone
+  (bugs: 65 then, 7 to 11 now). The time is the model's writing: with
+  thinking on, a run with mem wrote two to three times the thinking of a
+  run without (60 to 100 thousand characters on algos, against 24 to 31).
+- In the three passes 47 of the 229 calls to `gnovm_run` failed (21%): 12
+  pops of a todo whose own todos were still open, 6 closes the review
+  refused, 10 that did not compile as Gno, 3 out of gas.
+
+**The two runs that did not pass, and why.**
+
+- *continue, thinking off.* The task's fourth change is a method named
+  `WithTag`. The first session closed its todo with what was left "for next
+  time" and wrote the method as `With(tag)`. The second session read mem,
+  built `With`, and the hidden test calls `WithTag`. mem carried the note
+  faithfully; the note was not exact.
+- *algos, thinking on, in the fair pair.* The model set out to "validate the
+  trickier algorithms in Gno before writing the Go", and spent the hour in
+  the scratch machine: a loop of 3,999 steps out of gas, no `reflect` and no
+  `sort.Slice` in Gno, the machine's state gone after an error. It never
+  wrote a Go file. Counting the experiments below, the scratch machine was
+  used to try the project's code in 4 of the 8 runs of algos with mem.
+
+**Two small experiments on those two**, each a sentence added to the end of
+the system prompt (`GNOSH_APPEND_FILE`), the same binary beside itself:
+
+| experiment | runs | without the sentence | with it |
+|---|---|---|---|
+| a note for later is written exactly (continue, thinking off) | 3 each | 3/3 passed; the exact name reached mem in 2 of 3 | 3/3 passed; the exact name reached mem in 3 of 3 |
+| the scratch machine is not for the project's code (algos, thinking on) | 2 each | 2/2 passed (53:19; 60:00 at the cap) | 1 passed in 43:40; 1 stopped by the cap at 6/9, having tried code in Gno five times |
+
+The first is weak evidence for its sentence and shows no cost. The second
+shows that a sentence at the end of the prompt does not stop it. Both
+sentences were then written into the text about mem itself, where the
+scratch machine is introduced and where stopping with work left is
+described (`internal/prompt/texts/memory.md`, `memory-full.md`); that
+wording has not been measured.
+
+**Not run:** the three repetitions the plan asked for, the 32K lane on a
+server whose slot really is 32,768, the fuller text with thinking off, and
+any task larger than the window, which is where mem is meant to pay. The
+lean text against the fuller one is not settled by one run each (lean was
+faster on bugs and continue, the fuller on rename).
+
+The rows (`results-aibox.jsonl`, with `rows.jsonl` and the tables made from
+it) and the run folders are on the AI box under `/home/crush/newgnosh-bench`;
+a copy of the rows and tables is in Jae's notes (`bench-2026-11-14/`).
 
 ## The dry run
 
