@@ -54,6 +54,12 @@ were written against the earlier harness's tool interface, so they could not
 come over with their import paths changed and nothing more. "The tools,
 carried with larger changes" below is their record.
 
+Thirty-three more staged files came after those: `bench/`, the harness
+bench (a metering proxy, runners, four tasks, scoring scripts and the earlier
+results). Twenty are here byte for byte, twelve with changes that make them
+drive this repository's gnosh, and one was left behind. They are not in the
+table above either; "The bench" below is their record.
+
 Nothing else that was staged was brought. In particular:
 
 - `internal/testenv/` (2 staged files) was offered in case the carried tests
@@ -89,8 +95,9 @@ The table is written and checked by `tools/audit/carried.py`:
 hashes every file below as it stands in the tree, with the listed edits
 undone, and compares it with the checksum in its row; it also fails if the
 carried directories hold a file that is neither in the table nor listed
-under "Files written fresh". The files of `internal/gnovm/tools/` are held
-to their own section instead, in the ways that section gives.
+under "Files written fresh". The files of `internal/gnovm/tools/` and of
+`bench/` are held to their own sections instead, in the ways those sections
+give.
 
 <!-- carried-table:begin (written by tools/audit/carried.py; do not edit by hand) -->
 
@@ -688,6 +695,241 @@ staged code did. The package's tests are for that. They run the tools
 against the real host, in the process, and against a scripted client, and
 hold each result to the text `spec/gnosh/machines.md` gives.
 
+## The bench
+
+`bench/` is the harness bench: a proxy that meters every request between a
+harness and a model server, runners, four tasks with a check each, scoring
+scripts, and the results of the runs made with it in November 2026. It is
+the earlier gnosh's own work. All 33 of its staged files (147,375 bytes) were
+CARRY in the scan: no run of lines shared with Charm's code in any of them,
+and no symbol of the earlier harness used, since none of it is code that was
+built into the harness. It drives a harness from outside, through its command
+line and through what it leaves on disk. So bringing it meant pointing those
+two things at this repository's gnosh, and nothing else.
+
+It was brought on 13 November 2026. The porter read the 33 staged files, the
+inventory's row for `bench/**`, the scan's rows for those files, and Jae's own
+write-ups of the three nights the bench was run (`BENCH.md`, `BENCH-SWARM.md`
+and `BENCH-HF.md` in his notes: prose and tables, read for what was measured,
+how, and the numbers). It read nothing else of the earlier tree, and not the
+run data those write-ups point at.
+
+Every file keeps the path it had.
+
+<!-- carried-bench:begin (written by tools/audit/carried.py; do not edit by hand) -->
+
+| path, as it was and as it is | how it came | bytes | line share | longest run | SHA-256 of the staged original | lines kept | what was changed, or why it was left |
+|---|---|---:|---:|---:|---|---:|---|
+| `bench/.gitignore` | carried | 13 | 0.0% | 0 | `32dae3052f331ee34d628ef535709b301259a45df7c7522c4d35dcf49873f00b` | all | nothing |
+| `bench/README.md` | carried with changes | 4,309 | 0.0% | 0 | `8b17df23c8a106cf14c0cd83c96134b9e8c6b8c5ec2421eb341d658404f4c5f6` | 41 of 74 | written again for this repository; the staged file's account of the pieces, of the swarm and of the other harnesses stands where it still holds |
+| `bench/RESULTS.md` | carried with changes | 7,672 | 0.0% | 0 | `c8f967bc21632d5511dd0ee749b1c9b4d93f2bcae97a193bddf76b5271f78413` | 128 of 128 | a label added under the title: whose numbers these are, and when and how each part was measured. Every line of the original stands |
+| `bench/analyze.py` | carried with changes | 4,909 | 0.0% | 0 | `f82af2ca999faa93a245ec1bd8e5690b911ce7721e4e2f4e65ebc88c5b8e35eb` | 87 of 123 | gnosh's session files are read where the earlier gnosh's session database and its log were; the readers of crush's database and of Codex's files stand as they were |
+| `bench/cachetest.py` | carried with changes | 2,962 | 0.0% | 0 | `8533768aee01a354c691b2c13b67a2a697ef13dad751f235ee0197a12a396bdd` | 41 of 42 | 1 line: the reminder it appends is this gnosh's, in this gnosh's tag, where it was the earlier one's |
+| `bench/compare.py` | carried with changes | 3,282 | 2.7% | 0 | `cdb47a1d5a5fecc768a7be140bafdfb62f2927a162f92204ccc0f93327bacf22` | 82 of 84 | runs that a cap stopped are counted apart from runs that failed |
+| `bench/matrix.sh` | carried | 1,129 | 0.0% | 0 | `5f9bca7dce23aef69ee1b616c7a1a65a4111dff80502bcf4a9488d3f757b47a9` | all | nothing |
+| `bench/memerrors.py` | carried with changes | 2,680 | 0.0% | 0 | `271d7b56b88838df33ed24b1f02e6a48e9475f14e62710e926c8e299befa645c` | 40 of 63 | gnosh's session files are read where the earlier gnosh's session database was |
+| `bench/prefixdiff.py` | carried | 1,526 | 0.0% | 0 | `1e02bd9f1877b865965e9e3440ec7da3920cfb7e7bb5b62f9c7b63835da01a97` | all | nothing |
+| `bench/proxy.py` | carried with changes | 21,803 | 0.0% | 0 | `f37d66139c6198dd6f5953dde2c5e0e7e92e813000da320f49dc991f054deb37` | 465 of 477 | how a summary request is told: by the first words of this gnosh's own, or by a pattern given from outside, where the staged file held words of the earlier gnosh's, crush's and Codex's prompts; and the comment that went with it. Nothing else |
+| `bench/reads.py` | carried with changes | 1,449 | 0.0% | 0 | `f31fc0ce573be9c96427c10863a173f333d5a531d4164d25ea87dddc0e22dbad` | 30 of 31 | 1 line: a summary request is told by the proxy's own mark alone, and no longer by two words of the earlier prompts as well |
+| `bench/rescore.py` | carried with changes | 1,485 | 0.0% | 0 | `65732919f8813d229869972bf5ff01e2e0929d826faba76fda3a08ebd93d596c` | 31 of 34 | the fields it copies are the ones analyze.py now gives, and what gnosh printed of each session is added |
+| `bench/reviewab.py` | not brought | 6,526 | 0.0% | 0 | `0c69311446d3ed6b281e3ad39de884e0ea3f5f2a04508e8f822934ba70d27ec8` | none | it replayed the earlier gnosh's close reviews by rebuilding their request by hand from its session database; this gnosh words that request differently, and nothing in the scoring of the four tasks uses it |
+| `bench/rounds.py` | carried | 1,006 | 0.0% | 0 | `1c202ccd1bea0ef3afa1c6ed007929ede224e6f72cee285d3b29ff3fb9b33d46` | all | nothing |
+| `bench/run.sh` | carried with changes | 11,927 | 0.0% | 0 | `766ff2f8eb534b70a838d2e650e706436828db536fdd903c8089848e00c32467` | 178 of 213 | the gnosh branch drives this gnosh: its command line, its config, its home; the switches a run can be given; what the server says of its window; the row's new fields. crush's and Codex's branches stand but for the cap |
+| `bench/streams.py` | carried | 1,365 | 0.0% | 0 | `4e2d00502cdacd62981c43d4a84dc80856d8c7c2b1c79002545e678c28587692` | all | nothing |
+| `bench/table.py` | carried with changes | 3,060 | 2.9% | 0 | `2e47280b1681b57d5957f70330234d0745d06933b774974f11bee56b4088aaf2` | 59 of 68 | every harness in the rows gets a line, gnosh's ways of running first, where three names were listed; runs that a cap stopped are counted and listed apart |
+| `bench/tasks/README.md` | carried | 1,955 | 0.0% | 0 | `0a45b21385f2b487c501e64e6686b16ac4d15462aec61bd4d462f8527f6b1e8d` | all | nothing |
+| `bench/tasks/algos/check.sh` | carried | 1,137 | 0.0% | 0 | `ba46db79b6d30503838ac622a86dd432081c9445b099f6b4cf0e73346162fb15` | all | nothing |
+| `bench/tasks/algos/make.sh` | carried | 26,646 | 0.0% | 0 | `b2ae63e5a12b7114b17999f65d0e2d22e9b907577afffb935dc02d36c1702cc0` | all | nothing |
+| `bench/tasks/algos/prompt.txt` | carried | 349 | 0.0% | 0 | `9e94adaaf17442b92c90e93de56c6a2a8a96dafa25507c801c2b22cf62238cee` | all | nothing |
+| `bench/tasks/bugs/check.sh` | carried | 1,350 | 0.0% | 0 | `c7427b27e3af5195b781ecfa54f0221f212790c453e757b6808502c1d7d7fc18` | all | nothing |
+| `bench/tasks/bugs/make.sh` | carried | 12,580 | 0.0% | 0 | `b9a2d1445517ae695afdbb9566aad32c6cbc127efde623720b4aa3033132e8aa` | all | nothing |
+| `bench/tasks/bugs/prompt.txt` | carried | 158 | 0.0% | 0 | `feb98a09f7a2e2d13cc9e390a6f736214cc6e327bbca0c8f3c395ecedd972ae7` | all | nothing |
+| `bench/tasks/continue/check.sh` | carried | 3,962 | 0.0% | 0 | `b0de861a8a913518d60a9706c9759cc592d6a1ef317e56db38943261c3bf560d` | all | nothing |
+| `bench/tasks/continue/make.sh` | carried | 5,516 | 0.0% | 0 | `47d65f47c8029b5817085e186584d5854d6d01338cda1dd1359c28a1cfd4f093` | all | nothing |
+| `bench/tasks/continue/prompt.txt` | carried | 1,298 | 0.0% | 0 | `2159d6e1ec5fcc5341cb1689e9e6db33053f34958e4f524b76c5db7faa8993d0` | all | nothing |
+| `bench/tasks/continue/prompt2.txt` | carried | 42 | 0.0% | 0 | `a033a2186168c7059bb9f2e3ed7f5f650a1e4f38396434429427a1e2dce37942` | all | nothing |
+| `bench/tasks/rename/check.sh` | carried | 1,968 | 0.0% | 0 | `505f6710e9f4b3df27ee231c73dd0cd4fb8bdfa2bc17c3a5061da461f3276bc8` | all | nothing |
+| `bench/tasks/rename/make.sh` | carried | 9,877 | 1.4% | 0 | `9c7b95202853a4b881af7ecf6f4315fe8d7decf1e5b26ac949ea3f99eb31d354` | all | nothing |
+| `bench/tasks/rename/prompt.txt` | carried | 532 | 0.0% | 0 | `30dc4b6d4e149b6250931905827ceeb2ef3951d4d4677f95638a5e5be60de646` | all | nothing |
+| `bench/tasks/selftest.sh` | carried | 802 | 0.0% | 0 | `8bb0a17377940391a3cf2dfcb905199f99b3c876d3e193dfe201a3401308dcc5` | all | nothing |
+| `bench/waitplan.py` | carried with changes | 2,100 | 0.0% | 0 | `18c1b727544b009785ebae7e3a6f72332c3bab207b0e232cfd21a3a8710fdcf7` | 29 of 60 | gnosh's session files are read where the earlier gnosh's session database was |
+| **all** | 20 carried (73,211 bytes), 12 carried with changes (67,638 bytes), 1 not brought (6,526 bytes) | **147,375** | | | | 1211 of 1397 in the changed files | |
+
+<!-- carried-bench:end -->
+
+- **how it came**: *carried* is the staged file, byte for byte. *carried with
+  changes* is the staged file with lines replaced, added or left out, as the
+  last column says and the text below says in full. *not brought* was staged
+  and is not here.
+- **bytes**, **SHA-256**, **line share** and **longest run** are of the
+  staged original, as in the table of files.
+- **lines kept** is how many of the staged original's lines that are not
+  blank stand in the file here, in order, byte for byte. The script counts
+  them; "What the check holds these files to", below, says how.
+- Three files have a line share above zero, and none has a run. `compare.py`
+  and `table.py` each have one line that the scan also found in a Python
+  script of a third party's that Crush's history once held under `vendor/`;
+  the scan gives the count and the file, not the line, and both scripts open
+  and close the way Python scripts do. `tasks/rename/make.sh` has two lines
+  that the scan also found in a GitHub workflow of Crush's: they are in the
+  workflow file the task gives its made-up project, which begins as every
+  such file does.
+
+### What was changed, and why
+
+A carried file keeps its content except where it named or drove the earlier
+program. That is four places: the command line a session is started with;
+the config written for it; the session store that is read for scoring; and
+the words by which the proxy knew a request for a summary. The rest of what
+changed is what the brief for this port asked the bench to be able to do:
+run gnosh without mem, with either of its two texts about mem, with thinking
+on or off, pinned to a slot, under a cap, and say which window the server
+really has.
+
+**`run.sh`**, the runner. Kept as they were: how a task's repository is
+built, how the proxy is started, the clean environment of a run, the swarm's
+two prompts and its flow, the order of the sessions and the check between
+them, the check and its line, how wall time is taken, and the row's first
+thirteen fields. The branches for Charm's crush and for OpenAI's Codex CLI
+(the config each is given and the command line each is started with) stand
+byte for byte but for one word each, the cap. What was changed:
+
+| the staged runner | here |
+|---|---|
+| a session was `gnosh run -q -y -c DIR -D DATADIR -m box/MODEL --small-model box/MODEL PROMPT` | `gnosh run -q -y --cwd DIR --output-format stream-json -m box/MODEL --small-model box/MODEL -- PROMPT`. `-c` means continue now and the folder is `--cwd`; a run prints what happened as JSON lines with its result object last, which the row reads; `--` keeps a prompt from being read as flags. `-y` was accepted and changed nothing; it is needed now, since a run no longer approves its own tool calls |
+| sessions were kept where `-D` said, in a database; mem under the run's home | both are under the run's own home, through `XDG_DATA_HOME`. The home was already the run's own, so no run sees another's sessions or mem |
+| the config was one line, `provider add box --type llamacpp --base-url PROXY`; the model and its window were discovered from the proxy's answer to `/models` | three lines: the provider with `--discover-models false`, `model add box/MODEL --context-window WINDOW`, and `model large box/MODEL`. One model is named, its window is stated, and nothing is asked of the server |
+| the environment held four `GNOSH_DISABLE_*` variables (metrics, the providers' update, the default providers, the update check) | they are gone: this gnosh has none of the four things to switch off |
+| `GNOSH_TEMPLATES` copied a folder of prompt templates to the earlier gnosh's template folder | `GNOSH_PROMPTS` copies a folder of prompt texts to `prompts` in the run's config folder, where this gnosh reads a person's own texts |
+| a swarm's sessions each had a `-D` of their own, and `waitplan.py` watched the first one's database | they share the run's one store, and `waitplan.py` watches it |
+| a session that ran out of time was killed, and the row said `timed_out` | the same, and the row's `outcome` says `stopped`, never `failed` (and `passed`, if the check passes all the same) |
+
+Added: the switches `MEM`, `MEMORY_TEXT`, `THINKING`, `SLOT` and `SIDE_SLOT`,
+`MAX_TURNS`, `RUN_TIMEOUT`, `PROVIDER_TYPE` and `SERVER_WINDOW`; the harness
+names `gnosh-full` and `gnosh-nomem`, which are gnosh run with two of those
+switches set, so that `matrix.sh` can run the three side by side; a question
+to the server before the proxy starts (`serverfacts.py`); `gnosh mem show`
+after the last session; and the row's new fields: how the run was made, what
+gnosh printed of itself, the three windows (told, believed, the server's)
+and the outcome. `bench/README.md` lists them.
+
+**`proxy.py`**, the metering proxy. Nothing of the metering was changed:
+what it forwards, what it pins, what it answers itself, what it counts and
+how are the staged file's, line for line. One thing was: how it knows a
+request for a summary. The staged file knew it by a regular expression made
+of words from three programs' prompts (the earlier gnosh's and crush's
+request for a summary, and two phrases of Codex's compaction prompt), under a
+comment that quoted the three, a sentence of crush's among them. The scan
+compared lines, and no line of the file is a line of Charm's; but words
+quoted from another program's prompt are what PROVENANCE.md keeps out of this
+repository, however few. Those eight lines were replaced and are kept
+nowhere, the audit script's record included. The proxy now knows a summary
+request by the first words of this gnosh's own text for one
+(`internal/prompt/texts/summary.md`), and is given another harness's words
+from outside, in `BENCH_SUMMARY_RE`. A second comment, which described how
+the earlier gnosh and crush sent that request, was reworded for this gnosh.
+
+**`analyze.py`** counts the tools a model called. For gnosh it read the
+earlier session database and the earlier log; it reads this gnosh's session
+files through `sessions.py`. Its readers of crush's database and of Codex's
+session files stand as they were. Two of the numbers it gave for gnosh are
+not the same numbers any more: `popped` was the count of messages a pop had
+cut from the model's context, and the new session file records the pops
+themselves, so the count is `pops`, the todos popped; and `slid_tokens` is
+gone, since a slide is recorded and its size is not.
+
+**`waitplan.py`** and **`memerrors.py`** read the same calls and results as
+before, from the session files. The texts `memerrors.py` sorts mem's
+refusals by are mem's own, which were carried, and are unchanged.
+
+**`rescore.py`** copies the fields `analyze.py` now gives, and adds what
+gnosh printed of each session. **`table.py`** listed three harness names; it
+gives every harness in the rows a line, gnosh's ways of running first.
+**`table.py`** and **`compare.py`** count a run that a cap stopped apart from
+one that failed.
+
+**`reads.py`**, one line: it told a summary request by the proxy's mark or by
+two words of the earlier prompts; the mark alone is left. **`cachetest.py`**,
+one line: the reminder it appends to a turn was the earlier gnosh's, in the
+earlier gnosh's tag; it is this gnosh's, in this gnosh's. Neither staged line
+is kept.
+
+**`RESULTS.md`** is the earlier results as they were written, every line of
+them. A label was added under the title, because the file says "gnosh" and
+"the harness in this folder" and means the earlier ones: whose numbers these
+are, that none is this repository's gnosh's, and when and on what each part
+was measured.
+
+**`README.md`** was written again for this repository: what the bench
+measures, the tasks, the scoring, the switches, the earlier results in one
+table, how to run it, the plan for a first measurement, and what differs from
+the earlier bench. The staged file's account of the pieces, of the swarm and
+of the other harnesses stands where it still holds.
+
+### What was not brought
+
+`reviewab.py` replayed a session's close reviews under two versions of the
+review's instructions. It did so by reading the earlier session database and
+rebuilding, by hand, the request the earlier gnosh's review was sent. This
+gnosh words that request differently and keeps it in a text file, so a port
+would have been a second copy of the code that fills that text, to be kept
+in step with it by hand; and nothing in the scoring of the four tasks uses
+the script. The proxy can save every request a run makes, the reviews among
+them, exactly as sent, and a replay made from those would need no rebuilding.
+That is not written.
+
+### What in the bench is not the earlier gnosh's own
+
+- **The numbers of two other programs.** `RESULTS.md` holds what this bench
+  measured of Charm's crush v0.100.0 and of OpenAI's Codex CLI 0.167.0 beside
+  the earlier gnosh. They are measurements, and the label says whose.
+- **The interfaces of those two programs.** `run.sh` writes the config each
+  reads and calls each one's command line; `analyze.py` reads crush's session
+  database by two tables and three columns, and Codex's session files by the
+  names of their events. That is use of what those programs publish or leave
+  on disk. Nothing here has run either program.
+- **One quoted error message.** A comment in `run.sh` quotes, in six words,
+  what vLLM and llama.cpp answer when Codex sends them a kind of tool they
+  do not know.
+- **Words of other programs' prompts**, in the staged `proxy.py`: replaced,
+  as told above.
+- **The tasks' fixtures** are the bench's own. Each task's `make.sh` writes
+  out a small made-up Go project under `example.com` (a word counter, nine
+  textbook packages, a shop's arithmetic, a store of notes) and its solved
+  copy. The porter read them and found no notice, no licence text and no
+  mention of a source in any; the scan found nothing of Charm's in them
+  beyond the two lines of the workflow file noted above. Nothing compared
+  them with anything else.
+
+### What the check holds these files to
+
+For a carried file, `tools/audit/carried.py check` does what it does for the
+table of files: it hashes the file and compares it with the row's checksum.
+
+For a file carried with changes it cannot undo the changes: the lines that
+were replaced are kept nowhere, on purpose. It holds the file to the lines
+that were kept instead. `tools/audit/bench-kept.json` lists, for each such
+file, the runs of consecutive lines of the staged original that stand in the
+file here: where each run begins in the original, how many lines it is, and
+the SHA-256 of its bytes. The check finds every run in the file here, byte
+for byte and in order. So a change to any line that was kept is seen. A line
+added between two runs is not, and need not be: the new lines are this
+repository's and are there to be read.
+
+It also checks that `bench/` holds exactly the 32 files brought and the four
+listed under "Files written fresh", that `reviewab.py` is not among them, and
+that the table above is the one the script writes from its own record.
+
+`tools/audit/carried.py bench --staged DIR --scan FILE`, run with the staging
+folder at hand, checks that record against the staged files themselves (size,
+SHA-256, the scan's verdict and numbers), that each carried file is its
+original, and makes the list of kept runs by comparing each changed file
+with its original, line by line. Of the staging folder it reads `bench`
+alone.
+
+What no script checks: that the new lines do what the old ones did. The dry
+run is for that ("The bench's dry run", under Tests).
+
 ## Words carried into `internal/prompt`
 
 The table above is of files. Some of what gnosh says to a model was carried
@@ -735,8 +977,12 @@ race-detector tag files.
 | `internal/gnovm/tools/params.go` | The JSON schema of a tool's arguments, read off the argument struct and its tags, and the reading of a call's arguments into the struct. The earlier harness's tool library did both; this is written from what the structs' tags say and from JSON Schema's and `encoding/json`'s documentation. |
 | `internal/gnovm/tools/check_test.go` | The checks the tools' tests make (`require` and `assert`, on the standard library alone, with the few methods those tests use), and the helpers that call a tool as a session. |
 | `internal/gnovm/tools/run_test.go` | Tests written for this harness: every result form of `machines.md` section 9 against the real host, the request of `integration-contract.md` section 5.2, the order in which a kept call's frames, goals, erasure and rules are handed on, the close-check loop and a worker's death against a scripted client, `Describe`, what a call shows, the cut at 30,000, cancellation, and the parsers under fuzzing. |
+| `bench/sessions.py` | Reads what this gnosh leaves in a bench run's directory: its session files (a reply's tool calls, the results that answer them, the frame and summary entries) and what each session printed (the first line and the result object of its stream). It stands where the staged scripts read the earlier gnosh's session database, and is written from `internal/transcript/doc.go`, which gives the session file's format, and `spec/cc/output-formats.md`, which gives what a run prints. |
+| `bench/serverfacts.py` | Asks a model server which models it lists, whether the run's model is the one loaded, and how large a context it gives, without asking anything that could make a server load or unload a model; and is the gate that says a run may start. Written from `spec/gnosh/harness-local-models.md` (LM-16, LM-20) and the public documentation of llama.cpp's and vLLM's servers. The earlier bench's gate was a script on the AI box and was not staged. |
+| `bench/dryrun.sh`, `bench/dryrun.py` | The dry run: every task and every way of running gnosh, through `run.sh`, against the scripted model server of `tools/dev/scriptmodel`, with each number held to what that server is known to have served. See "The bench's dry run" under Tests. |
 | `tools/audit/carried.py` | Writes and checks the tables in this file. |
 | `tools/audit/gnovm-tools-strings.json` | The strings of the staged `tools.go` and `memtodos.go` that the files here keep, written by `carried.py tools` and read by `carried.py check`. |
+| `tools/audit/bench-kept.json` | The runs of lines of the bench's staged originals that stand in its changed files, written by `carried.py bench` and read by `carried.py check`. It holds checksums and line numbers, and no line of any file. |
 
 ## Licences and notices
 
@@ -758,8 +1004,8 @@ The porter checked these against gno's module in the Go module cache: all
 gno's at v1.5.1-0.20260928125126-5cdbc25fcde0, both `LICENSE.md` files are
 gno's `LICENSE.md` after their prefaces, and `LICENSE-GO` is Go's `LICENSE`.
 
-`gno/r/gnosh/mem/`, `internal/gnochain/` and `internal/swarm/` came without
-a licence file of their own, as they were.
+`gno/r/gnosh/mem/`, `internal/gnochain/`, `internal/swarm/` and `bench/` came
+without a licence file of their own, as they were.
 
 ## Tests
 
@@ -799,6 +1045,59 @@ copies package directories and not that file, so it was copied to the
 devbox by hand for these runs. Without `-timeout` the script's `go test`
 stops a package after ten minutes, which `internal/gnovm` outlasts under
 the race detector.
+
+### The bench's dry run
+
+The bench has no Go in it, and its tests are a script: `bench/dryrun.sh`
+builds gnosh from the tree, stands the scripted model server of
+`tools/dev/scriptmodel` where a model server would be, and runs every task
+and every way of running gnosh through `run.sh` as a real run would be made.
+No model is asked anything. What it holds:
+
+- **The tasks' own checks.** `tasks/selftest.sh`, carried unchanged: each
+  check fails on its task as built and passes on the solved copy.
+- **The proxy against the scripted server.** That server answers with the
+  replies of a script, in order, and reports a quarter of each request's
+  bytes as prompt tokens and a quarter of each reply's, plus one, as
+  generated. For every run the proxy's count of requests is the number of
+  replies the script served; its prompt tokens are those of the request
+  bodies it saved, worked out again; its generated tokens are the script's;
+  and gnosh's own count of both, in its result object, is the proxy's.
+- **The scorer.** The scripted "model" writes one of the nine packages (the
+  check says 1/9), fixes one of the six bugs (1/6), and in the two-session
+  task is handed the solved files (6/6, and the row says passed), so that a
+  check is seen to pass as well as to fail.
+- **mem, through the runner.** A plan made in mem, its todos named by a side
+  request, a todo entered, a close the review lets through and one it
+  refuses, the turn that gnosh then holds open; and that `analyze.py`,
+  `waitplan.py`, `memerrors.py` and `gnosh mem show` each say so.
+- **Every switch.** Without mem: the model is offered no machine tool, the
+  system prompt holds neither text about mem, and no mem is made. The fuller
+  text: the system prompt holds it. Thinking off, the plain wire format, a
+  slot for the run and another for its side requests: each is in the request
+  bodies. A turn cap, a wall cap on a session and on the whole run: the row
+  says stopped and by what, the command the stopped session had started is
+  gone, and a second session that had no time left was never started. A
+  swarm of two, `matrix.sh` with two ways side by side behind a gate, a
+  second session that is new, a prompt experiment, and a summary, which the
+  proxy and the session file both count.
+- **The scoring scripts**, on the rows: each runs, a stopped run is listed as
+  stopped, and the three ways of running gnosh have a line each.
+- **That a run keeps to itself.** Each run's config, sessions and mem are
+  under its own directory; nothing of gnosh's appears in the home the dry run
+  was started from or in the tree; and at the end no proxy, scripted server,
+  gnosh or GnoVM worker is running, and the directories are removed.
+
+| what ran | result |
+|---|---|
+| `GO=/usr/local/go/bin/go bench/dryrun.sh` on the devbox, 14 November 2026 at 00:01 UTC, on the committed tree `d71521b` with this `bench/` over it, file for file | ok: 685 checks passed, 17 runs through `run.sh`, 181 s (3 min 1 s by the clock), while other builders' tests kept the machine's load average near 17; three runs before it, as the script was finished, took 173 to 178 s. Its work folder under `/tmp` was removed, nothing was written into the tree, and no proxy, scripted server, gnosh or GnoVM worker was left running |
+
+What it does not show: anything about a model, or about a real model
+server. `serverfacts.py` was held to stand-ins for a llama.cpp server with
+one model, one that holds several, and vLLM; its questions to a real one are
+written from the servers' documentation and have not been asked. The branches
+of `run.sh` for crush and for Codex were not run: neither program is on the
+machine, and neither is to be.
 
 ### The timing checks need a quiet machine
 

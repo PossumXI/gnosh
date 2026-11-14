@@ -12,7 +12,8 @@ Run from the repository root, with Python 3 and nothing else.
         files listed as written fresh, and that the summary table adds up.
         For the tools in internal/gnovm/tools, which were made from their
         staged files with changes too large to undo, it checks what can be
-        checked without the originals; "The tools" below says what.
+        checked without the originals; "The tools" below says what. The
+        files of bench have a rule of their own; "The bench" below says it.
         It exits non-zero and says why if anything differs.
 
     tools/audit/carried.py write --staged DIR --scan FILE
@@ -30,6 +31,12 @@ Run from the repository root, with Python 3 and nothing else.
         folder it reads only DIR/internal/gnovm/tools and the scan's rows
         for those files, and of CARRIED.md it rewrites only the tools'
         table. It then runs the check.
+
+    tools/audit/carried.py bench --staged DIR --scan FILE
+        The part of "write" that is about the bench, alone: of the staging
+        folder it reads only DIR/bench and the scan's rows for those files,
+        and of CARRIED.md it rewrites only the bench's table. It then runs
+        the check.
 
 The table of files has one row per carried file: its path here, its path in
 the earlier gnosh, its kind, the size of the staged original, the scan's two
@@ -63,10 +70,39 @@ and that every string of the staged tools.go and memtodos.go is either kept
 or listed as dropped. What none of the three can check is that the code
 around the strings does what the staged code did; the package's tests are
 for that.
+
+The bench. The staged files of bench (the harness bench: its metering proxy,
+its runners, four tasks, scoring scripts and the earlier results) came in
+three ways, and each has a row in a table of its own in CARRIED.md:
+
+  - carried: byte for byte. "check" hashes the file and compares it with
+    the SHA-256 of the staged original, as for the table of files.
+  - carried with changes: the staged file with lines replaced, added or left
+    out, so that it drives this repository's gnosh and not the earlier
+    one. The lines that were replaced are not kept anywhere, this script
+    included: some of them named the earlier program's files, and one block
+    quoted words of other programs' prompts. So "check" cannot undo the
+    changes. It holds each such file to the lines that were kept instead:
+    tools/audit/bench-kept.json lists, for each file, the runs of
+    consecutive lines of the staged original that stand in the file here
+    (where each begins in the original, how many lines it is, and the
+    SHA-256 of its bytes), and "check" finds every run in the file, byte
+    for byte and in order. A changed line of the original is thus seen, and
+    a line added between two runs is not: the lines that are new are this
+    repository's and are read in the file itself.
+  - not brought: staged, and left behind. "check" fails if it appears.
+
+"check" also holds bench to exactly those files and the ones this script
+lists as written fresh, and the table in CARRIED.md to this script's
+record. "write" and "bench", which have the originals, check that record
+against them (size, SHA-256, the scan's verdict and numbers), that a
+carried file is its original, and make the list of kept runs by comparing
+each changed file with its original, line by line.
 """
 
 import argparse
 import csv
+import difflib
 import hashlib
 import json
 import os
@@ -79,6 +115,8 @@ SUMMARY_BEGIN = "<!-- carried-summary:begin (written by tools/audit/carried.py; 
 SUMMARY_END = "<!-- carried-summary:end -->"
 TOOLS_BEGIN = "<!-- carried-tools:begin (written by tools/audit/carried.py; do not edit by hand) -->"
 TOOLS_END = "<!-- carried-tools:end -->"
+BENCH_BEGIN = "<!-- carried-bench:begin (written by tools/audit/carried.py; do not edit by hand) -->"
+BENCH_END = "<!-- carried-bench:end -->"
 
 # The directories that hold carried files. Each carried file keeps the path
 # it had in the earlier gnosh.
@@ -220,6 +258,71 @@ TOOLS_DROPPED = {
     'json:"frames,omitempty"':
         "the tag of the one field of tools.go's metadata struct: the frames are kept under the same key, \"frames\", in the result's Meta (MetaFrames), which needs no struct",
 }
+
+
+# The bench: bench. For each staged file, at the path it had: the staged
+# original's size and SHA-256, the scan's verdict and its two measures
+# (ext_sigd_pct and ext_srun_longest), how the file came (CARRIED, CHANGED or
+# LEFT), and what was changed, or why it was left.
+BENCH_DIR = "bench"
+BENCH_KEPT = "tools/audit/bench-kept.json"
+CARRIED, CHANGED, LEFT = "carried", "carried with changes", "not brought"
+SESSION_FILES = "gnosh's session files are read where the earlier gnosh's session database was"
+BENCH = {
+    "bench/.gitignore": (13, "32dae3052f331ee34d628ef535709b301259a45df7c7522c4d35dcf49873f00b", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/README.md": (4309, "8b17df23c8a106cf14c0cd83c96134b9e8c6b8c5ec2421eb341d658404f4c5f6", "CARRY", "0.0", "0", CHANGED,
+                        "written again for this repository; the staged file's account of the pieces, of the swarm and of the other harnesses stands where it still holds"),
+    "bench/RESULTS.md": (7672, "c8f967bc21632d5511dd0ee749b1c9b4d93f2bcae97a193bddf76b5271f78413", "CARRY", "0.0", "0", CHANGED,
+                         "a label added under the title: whose numbers these are, and when and how each part was measured. Every line of the original stands"),
+    "bench/analyze.py": (4909, "f82af2ca999faa93a245ec1bd8e5690b911ce7721e4e2f4e65ebc88c5b8e35eb", "CARRY", "0.0", "0", CHANGED,
+                         "gnosh's session files are read where the earlier gnosh's session database and its log were; the readers of crush's database and of Codex's files stand as they were"),
+    "bench/cachetest.py": (2962, "8533768aee01a354c691b2c13b67a2a697ef13dad751f235ee0197a12a396bdd", "CARRY", "0.0", "0", CHANGED,
+                           "1 line: the reminder it appends is this gnosh's, in this gnosh's tag, where it was the earlier one's"),
+    "bench/compare.py": (3282, "cdb47a1d5a5fecc768a7be140bafdfb62f2927a162f92204ccc0f93327bacf22", "CARRY", "2.7", "0", CHANGED,
+                         "runs that a cap stopped are counted apart from runs that failed"),
+    "bench/matrix.sh": (1129, "5f9bca7dce23aef69ee1b616c7a1a65a4111dff80502bcf4a9488d3f757b47a9", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/memerrors.py": (2680, "271d7b56b88838df33ed24b1f02e6a48e9475f14e62710e926c8e299befa645c", "CARRY", "0.0", "0", CHANGED, SESSION_FILES),
+    "bench/prefixdiff.py": (1526, "1e02bd9f1877b865965e9e3440ec7da3920cfb7e7bb5b62f9c7b63835da01a97", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/proxy.py": (21803, "f37d66139c6198dd6f5953dde2c5e0e7e92e813000da320f49dc991f054deb37", "CARRY", "0.0", "0", CHANGED,
+                       "how a summary request is told: by the first words of this gnosh's own, or by a pattern given from outside, where the staged file held words of the earlier gnosh's, crush's and Codex's prompts; and the comment that went with it. Nothing else"),
+    "bench/reads.py": (1449, "f31fc0ce573be9c96427c10863a173f333d5a531d4164d25ea87dddc0e22dbad", "CARRY", "0.0", "0", CHANGED,
+                       "1 line: a summary request is told by the proxy's own mark alone, and no longer by two words of the earlier prompts as well"),
+    "bench/rescore.py": (1485, "65732919f8813d229869972bf5ff01e2e0929d826faba76fda3a08ebd93d596c", "CARRY", "0.0", "0", CHANGED,
+                         "the fields it copies are the ones analyze.py now gives, and what gnosh printed of each session is added"),
+    "bench/reviewab.py": (6526, "0c69311446d3ed6b281e3ad39de884e0ea3f5f2a04508e8f822934ba70d27ec8", "CARRY", "0.0", "0", LEFT,
+                          "it replayed the earlier gnosh's close reviews by rebuilding their request by hand from its session database; this gnosh words that request differently, and nothing in the scoring of the four tasks uses it"),
+    "bench/rounds.py": (1006, "1c202ccd1bea0ef3afa1c6ed007929ede224e6f72cee285d3b29ff3fb9b33d46", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/run.sh": (11927, "766ff2f8eb534b70a838d2e650e706436828db536fdd903c8089848e00c32467", "CARRY", "0.0", "0", CHANGED,
+                     "the gnosh branch drives this gnosh: its command line, its config, its home; the switches a run can be given; what the server says of its window; the row's new fields. crush's and Codex's branches stand but for the cap"),
+    "bench/streams.py": (1365, "4e2d00502cdacd62981c43d4a84dc80856d8c7c2b1c79002545e678c28587692", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/table.py": (3060, "2e47280b1681b57d5957f70330234d0745d06933b774974f11bee56b4088aaf2", "CARRY", "2.9", "0", CHANGED,
+                       "every harness in the rows gets a line, gnosh's ways of running first, where three names were listed; runs that a cap stopped are counted and listed apart"),
+    "bench/tasks/README.md": (1955, "0a45b21385f2b487c501e64e6686b16ac4d15462aec61bd4d462f8527f6b1e8d", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/algos/check.sh": (1137, "ba46db79b6d30503838ac622a86dd432081c9445b099f6b4cf0e73346162fb15", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/algos/make.sh": (26646, "b2ae63e5a12b7114b17999f65d0e2d22e9b907577afffb935dc02d36c1702cc0", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/algos/prompt.txt": (349, "9e94adaaf17442b92c90e93de56c6a2a8a96dafa25507c801c2b22cf62238cee", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/bugs/check.sh": (1350, "c7427b27e3af5195b781ecfa54f0221f212790c453e757b6808502c1d7d7fc18", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/bugs/make.sh": (12580, "b9a2d1445517ae695afdbb9566aad32c6cbc127efde623720b4aa3033132e8aa", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/bugs/prompt.txt": (158, "feb98a09f7a2e2d13cc9e390a6f736214cc6e327bbca0c8f3c395ecedd972ae7", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/continue/check.sh": (3962, "b0de861a8a913518d60a9706c9759cc592d6a1ef317e56db38943261c3bf560d", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/continue/make.sh": (5516, "47d65f47c8029b5817085e186584d5854d6d01338cda1dd1359c28a1cfd4f093", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/continue/prompt.txt": (1298, "2159d6e1ec5fcc5341cb1689e9e6db33053f34958e4f524b76c5db7faa8993d0", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/continue/prompt2.txt": (42, "a033a2186168c7059bb9f2e3ed7f5f650a1e4f38396434429427a1e2dce37942", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/rename/check.sh": (1968, "505f6710e9f4b3df27ee231c73dd0cd4fb8bdfa2bc17c3a5061da461f3276bc8", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/rename/make.sh": (9877, "9c7b95202853a4b881af7ecf6f4315fe8d7decf1e5b26ac949ea3f99eb31d354", "CARRY", "1.4", "0", CARRIED, "nothing"),
+    "bench/tasks/rename/prompt.txt": (532, "30dc4b6d4e149b6250931905827ceeb2ef3951d4d4677f95638a5e5be60de646", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/tasks/selftest.sh": (802, "8bb0a17377940391a3cf2dfcb905199f99b3c876d3e193dfe201a3401308dcc5", "CARRY", "0.0", "0", CARRIED, "nothing"),
+    "bench/waitplan.py": (2100, "18c1b727544b009785ebae7e3a6f72332c3bab207b0e232cfd21a3a8710fdcf7", "CARRY", "0.0", "0", CHANGED, SESSION_FILES),
+}
+
+# Files of bench written for this repository. CARRIED.md says why each
+# exists.
+BENCH_FRESH = [
+    "bench/dryrun.py",
+    "bench/dryrun.sh",
+    "bench/serverfacts.py",
+    "bench/sessions.py",
+]
 
 
 def fail(msg):
@@ -418,6 +521,120 @@ def check_tools():
     return len(TOOLS), len(TOOLS_FRESH), len(kept)
 
 
+def bench_files():
+    """Every file of the bench's directory, by path. What python leaves
+    beside a script it ran is passed over: it is never committed."""
+    out = []
+    for dirpath, dirs, names in os.walk(BENCH_DIR):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for name in names:
+            if name != ".DS_Store":
+                out.append(os.path.join(dirpath, name).replace(os.sep, "/"))
+    return sorted(out)
+
+
+def bench_kept(orig, here):
+    """What of a staged original stands in the file made from it: the runs
+    of consecutive lines the two share, in order, as [the run's first line
+    in the original, its length in lines, the SHA-256 of its bytes], and how
+    many of the original's lines that are not blank there are, and how many
+    of those stand."""
+    a, b = orig.split(b"\n"), here.split(b"\n")
+    blocks, kept = [], 0
+    for m in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
+        if m.size:
+            run = a[m.a : m.a + m.size]
+            blocks.append([m.a + 1, m.size, sha256(b"\n".join(run))])
+            kept += sum(1 for line in run if line.strip())
+    return {"lines": sum(1 for line in a if line.strip()), "kept": kept, "blocks": blocks}
+
+
+def bench_stands(path, record):
+    """Finds every kept run of a staged original in the file here, in order,
+    and returns how many lines that are not blank they hold."""
+    lines = read(path).split(b"\n")
+    pos, kept = 0, 0
+    for first, size, digest in record["blocks"]:
+        at = next((i for i in range(pos, len(lines) - size + 1) if sha256(b"\n".join(lines[i : i + size])) == digest), None)
+        if at is None:
+            which = "line %d" % first if size == 1 else "lines %d to %d" % (first, first + size - 1)
+            fail("%s: %s of its staged original no longer stand in it, byte for byte and after the lines before them" % (path, which))
+        kept += sum(1 for line in lines[at : at + size] if line.strip())
+        pos = at + size
+    return kept
+
+
+def bench_table(kept):
+    """The table of the bench in CARRIED.md, from this script's record and
+    the list of kept runs."""
+    out = [
+        "| path, as it was and as it is | how it came | bytes | line share | longest run | SHA-256 of the staged original | lines kept | what was changed, or why it was left |",
+        "|---|---|---:|---:|---:|---|---:|---|",
+    ]
+    count, size_of, lines, stand = {}, {}, 0, 0
+    for path in sorted(BENCH):
+        size, digest, _, share, run, how, what = BENCH[path]
+        count[how] = count.get(how, 0) + 1
+        size_of[how] = size_of.get(how, 0) + size
+        cell = {CARRIED: "all", LEFT: "none"}.get(how)
+        if how == CHANGED:
+            cell = "%d of %d" % (kept[path]["kept"], kept[path]["lines"])
+            lines += kept[path]["lines"]
+            stand += kept[path]["kept"]
+        out.append("| `%s` | %s | %s | %s%% | %s | `%s` | %s | %s |" % (path, how, format(size, ","), share, run, digest, cell, what))
+    out.append("| **all** | %s | **%s** | | | | %d of %d in the changed files | |" % (
+        ", ".join("%d %s (%s bytes)" % (count[h], h, format(size_of[h], ",")) for h in (CARRIED, CHANGED, LEFT) if h in count),
+        format(sum(v[0] for v in BENCH.values()), ","), stand, lines))
+    return out
+
+
+def check_bench():
+    """Holds the bench's directory to its record; returns how many of its
+    staged files are here byte for byte, how many with changes, how many of
+    the changed files' lines stand and of how many, and how many files are
+    fresh."""
+    in_dir = set(bench_files())
+    here = set(p for p, v in BENCH.items() if v[5] != LEFT)
+    for path in sorted(BENCH):
+        if (path in here) != (path in in_dir):
+            fail("%s is recorded as %s, and the tree says otherwise" % (path, BENCH[path][5]))
+    extra = sorted(in_dir - here - set(BENCH_FRESH))
+    if extra:
+        fail("in %s but neither a staged file nor listed as fresh: %s" % (BENCH_DIR, ", ".join(extra)))
+    text = read(CARRIED_MD).decode()
+    for path in BENCH_FRESH:
+        if path not in in_dir:
+            fail("%s is listed as fresh but is not in the tree" % path)
+        if "`" + path + "`" not in text:
+            fail("%s is fresh but %s does not say why it exists" % (path, CARRIED_MD))
+    if not os.path.isfile(BENCH_KEPT):
+        fail("no file %s: it lists the lines kept of the bench's changed files" % BENCH_KEPT)
+    kept = json.loads(read(BENCH_KEPT).decode())
+    changed = sorted(p for p, v in BENCH.items() if v[5] == CHANGED)
+    if sorted(kept) != changed:
+        fail("%s does not list exactly the bench's changed files" % BENCH_KEPT)
+    carried, lines, stand = 0, 0, 0
+    for path in sorted(here):
+        size, digest, _, _, _, how, _ = BENCH[path]
+        data = read(path)
+        if how == CARRIED:
+            if sha256(data) != digest or len(data) != size:
+                fail("%s is not its staged original, byte for byte" % path)
+            carried += 1
+            continue
+        if sha256(data) == digest:
+            fail("%s is its staged original, byte for byte: record it as carried" % path)
+        if bench_stands(path, kept[path]) != kept[path]["kept"]:
+            fail("%s: the count of its kept lines is not the one %s gives" % (path, BENCH_KEPT))
+        lines += kept[path]["lines"]
+        stand += kept[path]["kept"]
+    md = text.split("\n")
+    a, b = block(md, BENCH_BEGIN, BENCH_END)
+    if [l for l in md[a + 1 : b] if l] != bench_table(kept):
+        fail("the table of the bench in %s is not the one this script's record gives" % CARRIED_MD)
+    return carried, len(changed), stand, lines, len(BENCH) - len(here), len(BENCH_FRESH)
+
+
 def original_of(path, here):
     """The staged original of a file, from its bytes here: its edits undone."""
     data = here
@@ -530,10 +747,14 @@ def check():
     if [l for l in lines[a + 1 : b] if l] != want:
         fail("the summary table in %s does not add up to the table of files" % CARRIED_MD)
     made, fresh, strings = check_tools()
+    bench = check_bench()
     print("carried.py: ok: %d carried files are their staged originals, but for the listed edits to %d of them; "
           "%d fresh files beside them" % (len(rows), len(EDITS), len(FRESH)))
     print("carried.py: ok: %s holds the %d files made from its staged files and %d fresh ones, as recorded; "
           "all %d strings kept from the staged tools stand in them" % (TOOLS_DIR, made, fresh, strings))
+    print("carried.py: ok: %s holds %d of its staged files byte for byte and %d with changes, in which %d of the "
+          "originals' %d lines stand in order; %d staged file was not brought; %d fresh files beside them"
+          % ((BENCH_DIR,) + bench))
 
 
 def write(staged, scan_path):
@@ -596,6 +817,7 @@ def write(staged, scan_path):
         f.write("\n".join(lines))
     print("carried.py: wrote %d rows to %s" % (len(files), CARRIED_MD))
     write_tools(staged, scan)
+    write_bench(staged, scan)
 
 
 def write_tools(staged, scan):
@@ -643,6 +865,53 @@ def write_tools(staged, scan):
           % (len(TOOLS), CARRIED_MD, len(kept), TOOLS_STRINGS))
 
 
+def write_bench(staged, scan):
+    """Holds this script's record of the bench to the staged originals and
+    the scan, writes the list of the lines kept in the changed files, and
+    rewrites the bench's table in CARRIED.md."""
+    staged_bench = set()
+    for dirpath, _, names in os.walk(os.path.join(staged, BENCH_DIR)):
+        for name in names:
+            if name != ".DS_Store":
+                staged_bench.add(os.path.relpath(os.path.join(dirpath, name), staged).replace(os.sep, "/"))
+    if staged_bench != set(BENCH):
+        fail("the staged files of %s are not the ones recorded here: only staged %s; only recorded %s"
+             % (BENCH_DIR, sorted(staged_bench - set(BENCH)), sorted(set(BENCH) - staged_bench)))
+    kept = {}
+    for path, (size, digest, verdict, share, run, how, _) in sorted(BENCH.items()):
+        orig = read(os.path.join(staged, path))
+        if len(orig) != size or sha256(orig) != digest:
+            fail("%s: the staged original is not the one recorded here (%d bytes, %s)" % (path, len(orig), sha256(orig)))
+        row = scan.get(path)
+        if row is None:
+            fail("%s is not in the scan" % path)
+        got = (int(row["bytes"]), row["verdict"], row["ext_sigd_pct"], row["ext_srun_longest"])
+        if got != (size, verdict, share, run):
+            fail("%s: the scan's numbers are not the ones recorded here: %r" % (path, got))
+        if how == LEFT:
+            if os.path.exists(path):
+                fail("%s is recorded as not brought, and it is in the tree" % path)
+            continue
+        if not os.path.isfile(path):
+            fail("%s is recorded as %s but is not in the tree" % (path, how))
+        here = read(path)
+        if how == CARRIED and here != orig:
+            fail("%s is recorded as carried and differs from its staged original" % path)
+        if how == CHANGED:
+            if here == orig:
+                fail("%s is recorded as changed and is its staged original, byte for byte" % path)
+            kept[path] = bench_kept(orig, here)
+    with open(BENCH_KEPT, "w", newline="\n") as f:
+        f.write(json.dumps(kept, indent=0, sort_keys=True) + "\n")
+    lines = read(CARRIED_MD).decode().split("\n")
+    a, b = block(lines, BENCH_BEGIN, BENCH_END)
+    lines[a + 1 : b] = [""] + bench_table(kept) + [""]
+    with open(CARRIED_MD, "w", newline="\n") as f:
+        f.write("\n".join(lines))
+    print("carried.py: wrote the %d rows of the bench to %s, and the lines kept of its %d changed files to %s"
+          % (len(BENCH), CARRIED_MD, len(kept), BENCH_KEPT))
+
+
 def main():
     ap = argparse.ArgumentParser(description="Write or check the tables of carried files in CARRIED.md.")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -653,12 +922,18 @@ def main():
     t = sub.add_parser("tools", help="hold the tools' record to their staged originals, and rewrite their table and their strings")
     t.add_argument("--staged", required=True, help="the staging folder's files/ directory")
     t.add_argument("--scan", required=True, help="the staging folder's scan.tsv")
+    b = sub.add_parser("bench", help="hold the bench's record to its staged originals, and rewrite its table and its list of kept lines")
+    b.add_argument("--staged", required=True, help="the staging folder's files/ directory")
+    b.add_argument("--scan", required=True, help="the staging folder's scan.tsv")
     args = ap.parse_args()
     if args.cmd == "write":
         write(args.staged, args.scan)
     if args.cmd == "tools":
         with open(args.scan, newline="") as f:
             write_tools(args.staged, {r["path"]: r for r in csv.DictReader(f, delimiter="\t")})
+    if args.cmd == "bench":
+        with open(args.scan, newline="") as f:
+            write_bench(args.staged, {r["path"]: r for r in csv.DictReader(f, delimiter="\t")})
     check()
 
 
