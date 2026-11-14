@@ -37,8 +37,8 @@ Which conversation
       sessions to pick from; in print mode a session must be named. The
       argument after -r is always taken as the session, never as the prompt.
   --session-id <uuid>
-      Give the new conversation this ID, which must be a UUID. With -c or -r
-      it needs --fork-session too, and names the copy.
+      Give the new conversation this ID, which must be a UUID. It is for a new
+      conversation only: not with -c, -r or --fork-session.
   --fork-session
       With -c or -r: go on in a copy of the session and leave the original as
       it was. (Not built yet.)

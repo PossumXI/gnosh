@@ -109,7 +109,7 @@ func Default() *Table {
 		help: "Resume a session by its ID or its name, or from a transcript file given as an absolute path ending in .jsonl. With nothing after it, show the sessions to pick from; in print mode a session must be named. The argument after -r is always taken as the session, never as the prompt.",
 		set:  func(i *Invocation, v flagValue) { i.Resume = v.text }})
 	sessionID := t.add(&flag{names: "--session-id", kind: kindText, arg: "uuid", group: groupConversation, pri: 0,
-		help:  "Give the new conversation this ID, which must be a UUID. With -c or -r it needs --fork-session too, and names the copy.",
+		help:  "Give the new conversation this ID, which must be a UUID. It is for a new conversation only: not with -c, -r or --fork-session.",
 		check: isUUID,
 		set:   func(i *Invocation, v flagValue) { i.SessionID = v.text }})
 	fork := t.add(&flag{names: "--fork-session", group: groupConversation, pri: 1,
