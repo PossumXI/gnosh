@@ -12,6 +12,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/diff"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // How a tool call is shown.
@@ -383,6 +384,11 @@ func (s *session) headOf(name string, raw []byte, action *core.Action) head {
 			h.arg, h.body = lines[0], lines[1:]
 		}
 		h.name, h.host = "", oneLine(get("host"))
+		if h.host == shelltool.LocalName {
+			// The model may name this machine; a person needs no label
+			// for a command that ran here.
+			h.host = ""
+		}
 	case "Read":
 		h.arg = path("file_path")
 		off, hasOff := metaInt(args, "offset")
@@ -538,6 +544,10 @@ func (s *session) body(lines []string) []string {
 // which the block's last line says in its own words.
 var exitNote = regexp.MustCompile(`^\[exit code -?\d+\]$`)
 
+// noOutput is what a shell result says to the model in place of output
+// when the command printed nothing.
+const noOutput = "(no output)"
+
 // liveRows draws a call for the live region: its heading on one row, and
 // under it the last rows of its output or of the code being written. It
 // takes at most 1+liveTail rows.
@@ -584,6 +594,12 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 	h := s.headOf(ev.Name, input, &c.action)
 	res := ev.Result
 	text := core.TextOf(res.Content)
+	if h.shell {
+		// A shell result begins with a line that tells the model which
+		// machine the command ran on. A person reads the machine in the
+		// heading, so the line is not shown again as output.
+		_, text = shelltool.SplitStamp(text)
+	}
 	took := ""
 	if ev.Duration >= time.Second {
 		took = span(ev.Duration)
@@ -617,6 +633,11 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 		lines := outputLines(text)
 		if n := len(lines); n > 0 && exitNote.MatchString(lines[n-1]) {
 			lines = lines[:n-1]
+		}
+		if len(lines) == 1 && strings.TrimSpace(lines[0]) == noOutput {
+			// The model is told in words that nothing was printed; a
+			// person sees that from the heading standing alone.
+			lines = nil
 		}
 		under = s.clipTail(lines, s.limit(tailLines))
 		code, hasCode := metaInt(res.Meta, "exitCode")
