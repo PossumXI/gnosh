@@ -214,11 +214,9 @@ func (s *session) drop(c *call) {
 // the list of what is queued.
 func (s *session) prompt(ev *agent.PromptEvent) {
 	if ev.Prompt.Hidden {
-		// One of gnosh's own. A quiet line says why a turn started, when
-		// the prompt carries one.
-		if ev.Prompt.Notice != "" {
-			s.say(ev.Prompt.Notice)
-		}
+		// One of gnosh's own. When it carries a line that says why a
+		// turn started, the loop gives that line as a notice right after
+		// this event, and it is shown then.
 		return
 	}
 	d := editor.Draft{Text: ev.Prompt.Text}

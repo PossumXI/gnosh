@@ -103,7 +103,13 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 	}
 	cmd := s.find(strings.ToLower(word))
 	if cmd == nil {
-		return CommandResult{}, nil
+		// Not a command of gnosh's or of a feature: it may be a skill of
+		// the person's.
+		res, _, err := s.l.typedSkill(word, args, line)
+		if res.Handled {
+			s.l.flog.logf("turn", "the skill /%s was typed (%d bytes of arguments): %v", word, len(args), err)
+		}
+		return res, err
 	}
 	res = CommandResult{Handled: true, Name: cmd.Name}
 	if !s.l.interactive && !cmd.InRun {
@@ -166,9 +172,14 @@ func (s *slashSet) own() []SlashCommand {
 			}},
 		{Name: "permissions", Summary: "The permission mode, the folders, and every rule with where it came from.", InRun: true, Run: l.slashPermissions},
 		{Name: "hooks", Summary: "Every hook that is configured, by the moment it runs at.", InRun: true, Run: l.slashHooks},
+		{Name: "skills", Summary: "Every skill there is, where it came from, and who may run it.", InRun: true, Run: l.slashSkills},
+		{Name: "context", Args: "[all]", Summary: "What fills the model's window, by kind.", InRun: true, Run: l.slashContext},
+		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
+		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
+		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number]", Summary: "Take the conversation back to before one of your prompts. Files stay as they are.", Run: l.slashRewind},
 		{Name: "doctor", Summary: "Check that a turn can run: config, providers, models, hooks.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {
-				findings := l.p.doctor(ctx, l.cfg, l.st.problems)
+				findings := append(l.p.doctor(ctx, l.cfg, l.st.problems), defFindings(l.cfg, l.st.trusted)...)
 				for _, f := range findings {
 					c.Say("%s", f.String())
 				}
@@ -551,6 +562,13 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		running, started := len(l.subs), l.agentCalls
 		l.subMu.Unlock()
 		c.Say("sub-agents   kinds: %s; %d started in this session, %d running now", strings.Join(kinds, ", "), started, running)
+	}
+	if !l.skillsOff() {
+		var names []string
+		for _, sk := range l.skills().All() {
+			names = append(names, sk.Name+" ("+sk.Source+")")
+		}
+		c.Say("skills       %s", firstOf(strings.Join(names, ", "), "none; /skills says where they go"))
 	}
 	for _, j := range l.contribs {
 		if j.f.Name != "" {

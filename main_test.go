@@ -471,5 +471,9 @@ func TestBinarySubAgentHasNoMachineTools(t *testing.T) {
 	if strings.Contains(sub, "gnovm_") || !strings.Contains(sub, "Read") {
 		t.Errorf("the stock sub-agent's tools are %q", sub)
 	}
+	// Only the session the person is in may put questions to them.
+	if !strings.Contains(session, "AskUserQuestion") || strings.Contains(sub, "AskUserQuestion") {
+		t.Errorf("the question tool: the session's tools are %q, the sub-agent's %q", session, sub)
+	}
 	checkSession(t, w)
 }

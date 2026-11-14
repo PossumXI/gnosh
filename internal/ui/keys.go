@@ -11,6 +11,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/term"
 	"github.com/gnosh-ai/gnosh/internal/ui/editor"
+	"github.com/gnosh-ai/gnosh/internal/ui/menu"
 )
 
 // What the keys do. The table is in doc.go; this file is where it is
@@ -36,6 +37,34 @@ type sheller interface {
 type backgrounder interface {
 	Background(callID string) bool
 }
+
+// withdrawer is what a session's controls may also be: able to take one
+// queued prompt of the person's back off the queue.
+type withdrawer interface {
+	Withdraw(id string) (agent.Prompt, bool)
+}
+
+// rewinder is what a session's controls may also be: able to list the
+// person's prompts of this conversation, the oldest first, for the menu
+// that takes the conversation back to before one of them. The going back
+// itself is the command /rewind N.
+type rewinder interface {
+	RewindPoints() []app.RewindPoint
+}
+
+// resumer is what a session's controls may also be: able to list the
+// folder's other sessions, the one written to last first, for the menu
+// that opens one in place of the session that is open. The opening
+// itself is the command /resume with the session's id.
+type resumer interface {
+	ResumeChoices() []app.SessionChoice
+}
+
+// resumeWords are the lines that open the list of sessions.
+var resumeWords = map[string]bool{"/resume": true, "/continue": true}
+
+// rewindWords are the lines that open the list of prompts to go back to.
+var rewindWords = map[string]bool{"/rewind": true, "/checkpoint": true, "/undo": true}
 
 // historian is what a session's controls may also be: able to give the
 // prompts sent from this folder in earlier sessions, oldest first, for Up
@@ -104,6 +133,12 @@ func (s *session) typed(ev term.Event, k *term.Key) {
 	}
 	res := q.ui.Handle(ev)
 	if !res.Done {
+		return
+	}
+	if q.local != nil {
+		// A menu of the interface's own: the session is not answered.
+		s.closeQuestion()
+		q.local(res)
 		return
 	}
 	ans, record, how := q.answer(res)
@@ -177,12 +212,22 @@ func (s *session) box(ev term.Event, k *term.Key) {
 				// Ctrl+B is tmux's own key, where it has to be pressed
 				// twice; this is the same without it.
 				s.background()
+			case k.Is('s', term.ModCtrl), k.Is('s', 0):
+				// Ctrl+Enter, for a terminal that cannot tell it from
+				// Enter.
+				s.sendNow()
+			case k.IsKey(term.KeyUp, 0):
+				// Alt+Up, for a terminal that does not send it.
+				s.withdrawLast()
 			default:
 				s.flash("Ctrl+X " + k.String() + " does nothing here. Ctrl+X Ctrl+E opens your editor.")
 			}
 			return
 		case k.Is('x', term.ModCtrl):
 			s.chord = true
+			return
+		case k.IsKey(term.KeyUp, term.ModAlt):
+			s.withdrawLast()
 			return
 		case k.IsKey(term.KeyTab, term.ModShift):
 			s.cycleMode()
@@ -209,13 +254,17 @@ func (s *session) box(ev term.Event, k *term.Key) {
 			s.command(d)
 		default:
 			s.send(d)
+			if res.Now {
+				// Ctrl+Enter: not behind what is running, but now.
+				s.sendNow()
+			}
 		}
 	case editor.ActionInterrupt:
 		s.interrupt()
 	case editor.ActionExit:
 		s.leave(0, "prompt_input_exit")
 	case editor.ActionRewind:
-		s.flash("Going back to an earlier prompt (Esc Esc) is not joined to this build yet.")
+		s.rewind()
 	case editor.ActionHelp:
 		s.help()
 	case editor.ActionEditor:
@@ -267,6 +316,20 @@ func (s *session) shell(d editor.Draft) {
 func (s *session) command(d editor.Draft) {
 	line := strings.TrimSpace(d.Text)
 	word, _, _ := strings.Cut(strings.TrimPrefix(line, "/"), " ")
+	if rewindWords[strings.ToLower(line)] {
+		if _, ok := s.c.(rewinder); ok {
+			// With no number after it, the command is the list to pick
+			// from.
+			s.rewind()
+			return
+		}
+	}
+	if resumeWords[strings.ToLower(line)] {
+		if _, ok := s.c.(resumer); ok {
+			s.resume()
+			return
+		}
+	}
 	if s.busy && !atOnce[strings.ToLower(word)] {
 		s.cmdq = append(s.cmdq, line)
 		s.queued()
@@ -342,9 +405,10 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.leave(0, "prompt_input_exit")
 			return
 		}
-		if res.Name == "clear" {
-			// A new session stands behind the same controls: nothing of
-			// the old one is under way any more.
+		if res.Name == "clear" || res.Reset {
+			// A new session stands behind the same controls, or the same
+			// one at another point of its conversation: nothing of what
+			// was under way is any more.
 			s.busy, s.stopping, s.ph = false, false, phIdle
 			s.reply, s.calls, s.queue, s.sending = reply{}, nil, nil, nil
 			s.q, s.qwait = nil, nil
@@ -356,6 +420,11 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		// A command may have put another session behind the controls,
 		// with a task list of its own or none.
 		s.tasks = s.c.Tasks()
+		if res.Draft != "" {
+			// The prompt a rewind went back to is in the box again, to be
+			// sent as it was or changed.
+			s.restore(editor.Draft{Text: res.Draft})
+		}
 	}
 	s.queued()
 	s.nextCommand()
@@ -647,9 +716,12 @@ func (s *session) help() {
 		{"Enter", "send; while a turn runs, queue the prompt behind it"},
 		{"\\ then Enter, Ctrl+J", "new line (Shift+Enter too, where the terminal reports it)"},
 		{"Esc", "stop the turn; idle, twice: clear the box (Up brings it back)"},
+		{"Esc Esc", "in an empty box: go back to before one of your prompts (/rewind)"},
 		{"Ctrl+C", "stop the turn; idle: clear the box, and again to leave"},
 		{"Ctrl+D", "on an empty box, twice: leave"},
 		{"Up, Down", "history; Up in an empty box takes the queue back for editing"},
+		{"Alt+Up, Ctrl+X Up", "take back the prompt you queued last, and leave the others queued"},
+		{"Ctrl+Enter, Ctrl+X Ctrl+S", "while a turn runs: send, and have it read now, not after the turn"},
 		{"Ctrl+R", "search the history"},
 		{"/ at the start", "a command, completed as you type (/help lists them)"},
 		{"@", "a file to mention, completed as you type"},
@@ -688,6 +760,192 @@ func (s *session) help() {
 	if _, ok := s.c.(historian); !ok {
 		missing = append(missing, "the prompts of earlier sessions in the history")
 	}
-	missing = append(missing, "going back to an earlier prompt (Esc Esc in an empty box)")
-	s.put(wrap(s.m, th.Quiet.Render(fmt.Sprintf("Not joined to this build yet: %s.", strings.Join(missing, "; "))), s.cols, "", "  ")...)
+	if _, ok := s.c.(rewinder); !ok {
+		missing = append(missing, "going back to an earlier prompt (Esc Esc in an empty box)")
+	}
+	if len(missing) > 0 {
+		s.put(wrap(s.m, th.Quiet.Render(fmt.Sprintf("Not joined to this build yet: %s.", strings.Join(missing, "; "))), s.cols, "", "  ")...)
+	}
+}
+
+// rewindNote is what the menu says a rewind does and does not do.
+const rewindNote = "Only the conversation goes back: the model forgets that prompt and everything after it. Files are not restored (this gnosh keeps no checkpoints of them yet), so what was changed on disk stays as it is. Commands running in the background are stopped."
+
+// rewind opens the list of the person's prompts, the newest first, to
+// take the conversation back to before one of them. It is what Esc Esc
+// in an empty box and /rewind do.
+func (s *session) rewind() {
+	rw, ok := s.c.(rewinder)
+	switch {
+	case !ok:
+		s.flash("Going back to an earlier prompt (Esc Esc) is not joined to this build yet.")
+		return
+	case s.busy:
+		s.flash("A turn is running. Stop it first (Esc), then go back to an earlier prompt.")
+		return
+	case s.q != nil:
+		return
+	}
+	points := rw.RewindPoints()
+	if len(points) == 0 {
+		s.flash("There is no prompt of yours in this conversation to go back to.")
+		return
+	}
+	var opts []menu.Option
+	for i := len(points) - 1; i >= 0; i-- {
+		opts = append(opts, menu.Option{Label: oneLine(points[i].Text), Description: points[i].Time.Local().Format("15:04")})
+	}
+	opts = append(opts, menu.Option{Label: "Never mind"})
+	pick := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before which prompt?"}}
+	pick.ui = menu.NewSelect(menu.SelectOptions{Title: pick.q.Title, Options: opts, CancelHint: "never mind", Theme: s.th.Menu, Metrics: s.m})
+	pick.local = func(res menu.Result) {
+		if res.Cancelled || res.Index < 0 || res.Index >= len(points) {
+			return
+		}
+		// The list is the newest first; the command counts from the
+		// oldest.
+		number := len(points) - res.Index
+		point := points[number-1]
+		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + oneLine(point.Text)}}
+		sure.ui = menu.NewSelect(menu.SelectOptions{
+			Title: sure.q.Title, Body: []string{rewindNote},
+			Options: []menu.Option{
+				{Label: "Go back", Description: "the prompt is put in the box, to send again or change"},
+				{Label: "Never mind"},
+			},
+			CancelHint: "never mind", Theme: s.th.Menu, Metrics: s.m,
+		})
+		sure.local = func(res menu.Result) {
+			if res.Cancelled || res.Index != 0 {
+				return
+			}
+			s.run(fmt.Sprintf("/rewind %d", number))
+		}
+		s.openLocal(sure)
+	}
+	s.openLocal(pick)
+}
+
+// openLocal puts a menu of the interface's own on the screen. The person
+// asked for it with a key, so it takes keys at once.
+func (s *session) openLocal(qs *question) {
+	s.open(qs)
+	qs.guarded = false
+}
+
+// withdrawLast takes the prompt the person queued last back into the
+// box, and leaves the ones before it in the queue. It is Alt+Up (and
+// Ctrl+X Up): Up alone takes all of them back, this takes one, and
+// pressed again the one before it.
+func (s *session) withdrawLast() {
+	w, ok := s.c.(withdrawer)
+	if !ok {
+		s.flash("Taking one queued prompt back (Alt+Up) is not joined to this build yet. Up takes all of them back.")
+		return
+	}
+	queued := s.c.Queued()
+	for i := len(queued) - 1; i >= 0; i-- {
+		if queued[i].Prompt.Hidden {
+			continue
+		}
+		p, took := w.Withdraw(queued[i].ID)
+		if !took {
+			// It went out to the model in the meantime.
+			continue
+		}
+		d := editor.Draft{Text: p.Text}
+		if spans, ok := p.Meta[metaPastes].([]editor.Span); ok {
+			d.Pastes = spans
+		}
+		s.attach = append(s.attach, p.Attachments...)
+		for j, x := range s.sending {
+			if x.id == queued[i].ID {
+				s.sending = append(s.sending[:j], s.sending[j+1:]...)
+				break
+			}
+		}
+		kept := s.queue[:0:0]
+		for _, q := range s.queue {
+			if q.ID != queued[i].ID {
+				kept = append(kept, q)
+			}
+		}
+		s.queue = kept
+		s.restore(d)
+		s.dirty = true
+		return
+	}
+	s.flash("No prompt of yours waits in the queue.")
+}
+
+// sendNow has the model read what the person queued without waiting for
+// the round that is running to end by itself (Ctrl+Enter, and Ctrl+X
+// Ctrl+S). The commands that are running are moved to the background,
+// where they go on, and the model reads the queue at the end of that
+// round, in the same turn. When something is in the way that cannot be
+// moved (the model is writing, or another tool runs) the turn is stopped,
+// and what was queued starts the next one at once.
+func (s *session) sendNow() {
+	if !s.busy {
+		return
+	}
+	waits := false
+	for _, q := range s.c.Queued() {
+		waits = waits || !q.Prompt.Hidden
+	}
+	if !waits {
+		s.flash("Nothing of yours waits to be sent.")
+		return
+	}
+	moved, blocked := 0, 0
+	b, movable := s.c.(backgrounder)
+	for _, c := range s.calls {
+		switch {
+		case c.started && movable && b.Background(c.id):
+			moved++
+		default:
+			blocked++
+		}
+	}
+	if moved > 0 && blocked == 0 {
+		s.flash(fmt.Sprintf("Moved to the background: %d running command(s), which go on there. The model reads what you sent next.", moved))
+		return
+	}
+	s.c.Interrupt()
+	s.flash("The turn was stopped so that what you sent goes out now.")
+}
+
+// resume opens the list of the folder's other sessions, to open one in
+// place of the session that is open. It is what /resume does with
+// nothing after it.
+func (s *session) resume() {
+	rs, ok := s.c.(resumer)
+	switch {
+	case !ok:
+		return
+	case s.busy:
+		s.flash("A turn is running. Stop it first (Esc), then open another session.")
+		return
+	case s.q != nil:
+		return
+	}
+	choices := rs.ResumeChoices()
+	if len(choices) == 0 {
+		s.flash("There is no other session in this folder to open.")
+		return
+	}
+	var opts []menu.Option
+	for _, ch := range choices {
+		opts = append(opts, menu.Option{Label: oneLine(ch.Title), Description: ch.Modified.Local().Format("2006-01-02 15:04") + ", " + ch.ID[:min(8, len(ch.ID))]})
+	}
+	opts = append(opts, menu.Option{Label: "Never mind"})
+	pick := &question{q: agent.Question{Kind: "resume", Title: "Open which session? This one is kept."}}
+	pick.ui = menu.NewSelect(menu.SelectOptions{Title: pick.q.Title, Options: opts, CancelHint: "never mind", Theme: s.th.Menu, Metrics: s.m})
+	pick.local = func(res menu.Result) {
+		if res.Cancelled || res.Index < 0 || res.Index >= len(choices) {
+			return
+		}
+		s.run("/resume " + choices[res.Index].ID)
+	}
+	s.openLocal(pick)
 }

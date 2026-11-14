@@ -52,13 +52,19 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 }
 
 // completeCommand offers the session's commands whose names begin with
-// what was typed, in the order /help lists them.
+// what was typed, in the order /help lists them, and after them the
+// person's skills.
 func (s *session) completeCommand(typed string) []editor.Candidate {
-	want := strings.ToLower(strings.TrimPrefix(typed, "/"))
+	want := strings.TrimPrefix(typed, "/")
 	var out []editor.Candidate
 	for _, name := range s.info.Commands {
-		if strings.HasPrefix(name, want) {
+		if strings.HasPrefix(name, strings.ToLower(want)) {
 			out = append(out, editor.Candidate{Text: "/" + name, Start: 0})
+		}
+	}
+	for _, sk := range s.info.Skills {
+		if strings.HasPrefix(sk.Name, want) && !slices.Contains(s.info.Commands, sk.Name) {
+			out = append(out, editor.Candidate{Text: "/" + sk.Name, Start: 0})
 		}
 	}
 	return out

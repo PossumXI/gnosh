@@ -108,16 +108,21 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 		f.p.errf("%v", err)
 		return cli.ExitFailure
 	}
+	id := ""
 	if strings.HasPrefix(strings.TrimSpace(text), "/") {
 		res, err := c.Command(ctx, strings.TrimSpace(text))
-		if res.Handled || err != nil {
+		if (res.Handled && res.Prompt == "") || err != nil {
 			return f.reportCommand(c, res, err)
 		}
+		// A skill: the command sent it to the model, and the run is that
+		// prompt's turn.
+		id = res.Prompt
 	}
-	id, err := c.Submit(first)
-	if err != nil {
-		f.p.errf("the prompt could not be sent: %v", err)
-		return cli.ExitFailure
+	if id == "" {
+		if id, err = c.Submit(first); err != nil {
+			f.p.errf("the prompt could not be sent: %v", err)
+			return cli.ExitFailure
+		}
 	}
 	res, sig := f.await(ctx, c, id)
 	if sig != nil {
@@ -706,6 +711,10 @@ func (f *printer) init() {
 	}
 	f.started = true
 	info := f.c.Info()
+	skills := []string{}
+	for _, sk := range info.Skills {
+		skills = append(skills, sk.Name)
+	}
 	f.encode(initLine{
 		Type: "system", Subtype: "init", UUID: newUUID(), SessionID: info.ID,
 		Cwd: info.Cwd, Model: info.Model,
@@ -714,7 +723,7 @@ func (f *printer) init() {
 		PermissionMode: info.Mode,
 		SlashCommands:  append([]string{}, info.Commands...),
 		OutputStyle:    "default",
-		Skills:         []string{},
+		Skills:         skills,
 		Plugins:        []string{},
 		APIKeySource:   "none",
 		GnoshVersion:   info.Version,

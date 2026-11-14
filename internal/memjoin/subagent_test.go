@@ -63,7 +63,7 @@ func TestSubAgentsAndMem(t *testing.T) {
 
 	// The session itself has the four tools, the part about mem and the
 	// mem line; it stands in the circle when it starts the sub-agents.
-	has(t, "the session's tools", strings.Join(toolNamesOf(reqs[0]), " "), "Agent gnovm_run gnovm_new gnovm_list gnovm_drop")
+	has(t, "the session's tools", strings.Join(toolNamesOf(reqs[0]), " "), "Agent AskUserQuestion gnovm_run gnovm_new gnovm_list gnovm_drop")
 	has(t, "the session's system prompt", system(t, reqs[0]), memory)
 	has(t, "the session's first prompt", lastUser(t, reqs[0]), memLine)
 	has(t, "the session's step into the plan", lastResult(t, reqs[2]), "in `"+circle+"` \"circle\"")

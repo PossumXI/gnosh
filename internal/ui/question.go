@@ -1,11 +1,11 @@
 package ui
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/diff"
 	"github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/ui/menu"
@@ -25,8 +25,9 @@ import (
 //	"trust"       menu.Select: the facts as the session wrote them, with the
 //	              choices in the order given, so that no is first.
 //	"question"    menu.Form when Question.Data holds the model's questions
-//	              (see formSpec), and otherwise a Select of the choices or,
-//	              with none, a menu.Input.
+//	              (an app.QuestionForm, which the AskUserQuestion tool
+//	              puts), and otherwise a Select of the choices or, with
+//	              none, a menu.Input.
 //	"secret"      menu.Secret: a masked line, whose answer goes to the tool
 //	              that asked and is kept nowhere here.
 //	anything else a Select of the choices, or an Input when there are none.
@@ -81,6 +82,10 @@ type question struct {
 	// answered says an answer was given and its AnswerEvent is on its
 	// way.
 	answered bool
+	// local, when not nil, makes this a menu of the interface's own, such
+	// as the list of prompts to go back to: the session did not ask, and
+	// what was chosen goes to this function and not to the session.
+	local func(res menu.Result)
 }
 
 // deadliner is what the Data of a question with a time limit has.
@@ -134,13 +139,9 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 	case q.Kind == "secret":
 		qs.secret = true
 		qs.ui = menu.NewSecret(menu.SecretOptions{Title: title, Body: body(), Theme: th.Menu, Metrics: m})
-	case q.Kind == "question" && formSpecOf(q.Data) != nil:
-		spec := formSpecOf(q.Data)
-		qs.form = spec.questions
-		qs.ui = menu.NewForm(menu.FormOptions{
-			Questions: spec.questions, ReviewTitle: spec.reviewTitle, ReviewNote: spec.reviewNote,
-			Theme: th.Menu, Metrics: m,
-		})
+	case q.Kind == "question" && formOf(q.Data) != nil:
+		qs.form = formOf(q.Data)
+		qs.ui = menu.NewForm(menu.FormOptions{Questions: qs.form, Theme: th.Menu, Metrics: m})
 	case len(q.Choices) == 0:
 		qs.ui = menu.NewInput(menu.InputOptions{Title: title, Body: body(), Theme: th.Menu, Metrics: m})
 	default:
@@ -276,83 +277,29 @@ func firstNonEmpty(ss ...string) string {
 	return ""
 }
 
-// formSpec is the questions of the model's question tool, as its call
-// writes them.
+// formOf is the questions of the model's question tool as the menu's
+// form takes them, or nil when a question's Data holds none.
 //
-// The session hands them over in Question.Data: the call's arguments as
-// JSON (a json.RawMessage, a []byte or a string) or decoded
-// (map[string]any). Both spellings the specs give are read: Claude Code's
-// AskUserQuestion ("questions", each with "question", "header", "options"
-// of "label" and "description", and "multiSelect") and the earlier gnosh's
-// ("label", "type", "choices", "confirm_title", "confirm_description").
-// The answer goes back as Answer.Data, a map[string]string from each
-// question's text to what was answered (several answers joined with
-// commas, as Claude Code does), and as the same in Answer.Text, one line
-// for each question.
-type formSpec struct {
-	questions               []menu.Question
-	reviewTitle, reviewNote string
-}
-
-// formSpecOf reads the questions out of a question's Data, or returns nil
-// when it holds none.
-func formSpecOf(data any) *formSpec {
-	var raw []byte
-	switch d := data.(type) {
-	case json.RawMessage:
-		raw = d
-	case []byte:
-		raw = d
-	case string:
-		raw = []byte(d)
-	case map[string]any:
-		raw, _ = json.Marshal(d)
-	default:
+// The tool (AskUserQuestion, in the app) hands them over as an
+// app.QuestionForm: one to four questions, each with a very short header
+// for its tab, two to four options with a label and a description, and
+// whether several may be chosen. The person can always answer in their
+// own words as well. The answer goes back as Answer.Data, a
+// map[string]string from each question's text to what was answered (the
+// labels picked, joined with commas, and the person's own words), and as
+// the same in Answer.Text, one line for each question.
+func formOf(data any) []menu.Question {
+	form, ok := data.(app.QuestionForm)
+	if !ok || len(form.Questions) == 0 {
 		return nil
 	}
-	var in struct {
-		Questions []struct {
-			Question    string            `json:"question"`
-			Header      string            `json:"header"`
-			Label       string            `json:"label"`
-			Description string            `json:"description"`
-			Options     []json.RawMessage `json:"options"`
-			Choices     []json.RawMessage `json:"choices"`
-			MultiSelect bool              `json:"multiSelect"`
-			Type        string            `json:"type"`
-		} `json:"questions"`
-		ConfirmTitle       string `json:"confirm_title"`
-		ConfirmDescription string `json:"confirm_description"`
-	}
-	if json.Unmarshal(raw, &in) != nil || len(in.Questions) == 0 {
-		return nil
-	}
-	spec := &formSpec{reviewTitle: in.ConfirmTitle, reviewNote: in.ConfirmDescription}
-	for _, q := range in.Questions {
-		mq := menu.Question{
-			Header:      firstNonEmpty(q.Header, q.Label),
-			Text:        firstNonEmpty(q.Question, q.Label, q.Header),
-			Description: q.Description,
+	var out []menu.Question
+	for _, q := range form.Questions {
+		mq := menu.Question{Header: oneLine(q.Header), Text: q.Question, Multi: q.MultiSelect}
+		for _, o := range q.Options {
+			mq.Options = append(mq.Options, menu.Option{Label: o.Label, Description: o.Description})
 		}
-		switch strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(q.Type)) {
-		case "multi", "multiselect", "multiple", "checkbox":
-			mq.Multi = true
-		}
-		mq.Multi = mq.Multi || q.MultiSelect
-		for _, o := range append(q.Options, q.Choices...) {
-			var label string
-			var full struct {
-				Label       string `json:"label"`
-				Description string `json:"description"`
-			}
-			switch {
-			case json.Unmarshal(o, &label) == nil:
-				mq.Options = append(mq.Options, menu.Option{Label: label})
-			case json.Unmarshal(o, &full) == nil && full.Label != "":
-				mq.Options = append(mq.Options, menu.Option{Label: full.Label, Description: full.Description})
-			}
-		}
-		spec.questions = append(spec.questions, mq)
+		out = append(out, mq)
 	}
-	return spec
+	return out
 }

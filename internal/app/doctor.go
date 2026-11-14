@@ -122,15 +122,20 @@ func listModelNames(ctx context.Context, pc config.Provider, e config.Endpoint) 
 
 // doctorCommand is `gnosh doctor`: it checks that a turn could run here
 // and says what it found, one line each. It starts no session, sends no
-// prompt and asks nobody anything: the folder's own settings count when
-// the folder is recorded as trusted (or --trust-folder is given) and are
-// reported as held otherwise. It exits 1 when a turn cannot run.
+// prompt and asks nobody anything: the folder's own settings, and the
+// sub-agent kinds and skills it defines, count when the folder is
+// recorded as trusted (gnosh trust) and are reported as held otherwise.
+// It says where each kind of sub-agent and each skill came from. It exits
+// 1 when a turn cannot run.
 func (p *program) doctorCommand(ctx context.Context, inv cli.Invocation) int {
 	st, code := p.prepare(ctx, inv, false)
 	if st == nil {
 		return code
 	}
 	findings := p.doctor(ctx, st.cfg, st.problems)
+	if st.cfg != nil {
+		findings = append(findings, defFindings(st.cfg, st.trusted)...)
+	}
 	for _, f := range findings {
 		fmt.Fprintln(p.stdout, f.String())
 	}

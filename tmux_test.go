@@ -329,3 +329,178 @@ func TestBinaryInTmuxSuspend(t *testing.T) {
 	checkSession(t, w)
 	w.Model.Done()
 }
+
+// The model's questions in the full interface: a tab for each, the
+// options to pick from, a last tab to look the answers over, and the
+// answers go back to the model.
+func TestBinaryInTmuxQuestions(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "AskUserQuestion", Args: `{"questions":[
+			{"question":"Which database should the service use?","header":"Database","multiSelect":false,"options":[
+				{"label":"SQLite","description":"One file, nothing to run."},
+				{"label":"Postgres","description":"A server of its own."}]},
+			{"question":"Which checks should run before a merge?","header":"Checks","multiSelect":true,"options":[
+				{"label":"vet","description":"Static checks."},
+				{"label":"race","description":"The race detector."},
+				{"label":"fuzz","description":"Ten seconds of fuzzing."}]}]}`}}},
+		apptest.Reply{Text: "Postgres, with vet and race."},
+	)
+	p := openPane(t, w)
+	p.see("GNOSH", "idle")
+	p.send("set the project up", "Enter")
+	p.see("Which database should the service use?", "SQLite", "Postgres", "Database", "Checks")
+	if os.Getenv("GNOSH_UI_SHOW") != "" {
+		t.Logf("with the questions put, tmux shows:\n%s", p.screen())
+	}
+	// A question takes keys once it has been read.
+	for quiet := time.Now(); time.Since(quiet) < 1500*time.Millisecond; {
+		time.Sleep(20 * time.Millisecond)
+	}
+	p.send("", "Down", "Enter") // Postgres, and on to the next question
+	p.see("Which checks should run before a merge?", "fuzz")
+	p.send("", "Space", "Down", "Space", "Enter") // vet and race, and on to the review
+	p.see("Review your answers")
+	p.send("", "Enter")
+	p.see("Postgres, with vet and race.", "done in")
+	if os.Getenv("GNOSH_UI_SHOW") != "" {
+		t.Logf("with the questions answered, tmux shows:\n%s", p.screen())
+	}
+	requests := w.Model.Requests()
+	last := string(requests[len(requests)-1].Body)
+	for _, want := range []string{"The user answered:", "Answer: Postgres", "Answer: vet, race"} {
+		if !strings.Contains(last, want) {
+			t.Errorf("the model was not told %q:\n%s", want, last)
+		}
+	}
+	p.send("", "C-d", "C-d")
+	p.see("gnosh ended with 0")
+	checkSession(t, w)
+	w.Model.Done()
+}
+
+// A skill of the person's in the full interface: typing its name runs it,
+// the name completes with Tab, and /skills says where it came from.
+func TestBinaryInTmuxSkill(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Tagged v1.2 at abc123."})
+	path := w.Write(w.ConfigDir()+"/skills/ship/SKILL.md", "---\ndescription: Ships a release.\nargument-hint: \"[tag]\"\narguments: [tag]\n---\n\nTag the release $tag and say which commit it is.\n")
+	p := openPane(t, w)
+	p.see("GNOSH", "idle")
+	p.send("/sh", "Tab")
+	p.see(" /ship")
+	p.send(" v1.2", "Enter")
+	p.see("> /ship v1.2", "The skill ship is in front of the model", "Tagged v1.2 at abc123.", "done in")
+	if os.Getenv("GNOSH_UI_SHOW") != "" {
+		t.Logf("after the skill, tmux shows:\n%s", p.screen())
+	}
+	if n := strings.Count(p.screen(), "> /ship v1.2"); n != 1 {
+		t.Errorf("the typed line is on the terminal %d times:\n%s", n, p.screen())
+	}
+	requests := w.Model.Requests()
+	if last := string(requests[len(requests)-1].Body); !strings.Contains(last, "Tag the release v1.2 and say which commit it is.") {
+		t.Errorf("the model was not sent the skill with its argument:\n%s", last)
+	}
+	p.send("/skills", "Enter")
+	p.see("/ship [tag]  Ships a release.", path)
+	p.send("", "C-d", "C-d")
+	p.see("gnosh ended with 0")
+	checkSession(t, w)
+	w.Model.Done()
+}
+
+// Going back in the full interface: Esc twice in an empty box lists the
+// prompts, the conversation is taken back to before the one chosen, and
+// that prompt stands in the box again to be changed and sent.
+func TestBinaryInTmuxRewind(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "First answer."}, apptest.Reply{Text: "Second answer."},
+		apptest.Reply{Text: "The changed prompt is answered."})
+	p := openPane(t, w)
+	p.see("GNOSH", "idle")
+	p.send("the first prompt", "Enter")
+	p.see("First answer.")
+	p.send("the second prompt", "Enter")
+	p.see("Second answer.")
+	p.until("the second turn is over", func() bool { return strings.Count(p.screen(), "done in") == 2 })
+	// Two presses, as a person makes them: far enough apart that the
+	// terminal takes each for a key of its own.
+	p.send("", "Escape")
+	time.Sleep(300 * time.Millisecond)
+	p.send("", "Escape")
+	p.see("Go back to before which prompt?", "Never mind")
+	p.send("", "Enter") // the newest prompt is first in the list
+	p.see("Go back to before: the second prompt", "not restored")
+	if os.Getenv("GNOSH_UI_SHOW") != "" {
+		t.Logf("before going back, tmux shows:\n%s", p.screen())
+	}
+	p.send("", "Enter")
+	p.see("The conversation is back to before this prompt of yours", "> the second prompt")
+	p.send(", changed", "Enter")
+	p.see("> the second prompt, changed", "The changed prompt is answered.")
+	requests := w.Model.Requests()
+	last := string(requests[len(requests)-1].Body)
+	if !strings.Contains(last, "First answer.") || !strings.Contains(last, "the second prompt, changed") || strings.Contains(last, "Second answer.") {
+		t.Errorf("after going back the model was sent:\n%s", last)
+	}
+	p.send("", "C-d", "C-d")
+	p.see("gnosh ended with 0")
+	checkSession(t, w)
+	w.Model.Done()
+}
+
+// The queue's keys and the commands that look at and change sessions, in
+// the full interface: one queued prompt is taken back, the rest is sent
+// at once, /context and /rename answer, and /resume opens an earlier
+// session from its list.
+func TestBinaryInTmuxQueueAndSessions(t *testing.T) {
+	hold := make(chan struct{})
+	defer close(hold)
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "The first session's answer."},
+		apptest.Reply{Text: "A reply that is held back.", Hold: hold},
+		apptest.Reply{Text: "The queued prompt is answered."},
+		apptest.Reply{Text: "Back in the first session."},
+	)
+	p := openPane(t, w)
+	p.see("GNOSH", "idle")
+	p.send("the first session's prompt", "Enter")
+	p.see("The first session's answer.", "done in")
+	p.send("/clear", "Enter")
+	p.see("A new session is open")
+
+	p.send("start", "Enter")
+	p.see("A reply")
+	p.send("queued one", "Enter")
+	p.send("queued two", "Enter")
+	p.see("queued one", "queued two")
+	// Ctrl+X Up takes the last one back (Alt+Up, where the terminal
+	// sends it), and it is dropped; Ctrl+X Ctrl+S sends the rest now.
+	p.send("", "C-x", "Up")
+	p.see("> queued two")
+	p.send("", "C-u")
+	p.send("", "C-x", "C-s")
+	p.see("stopped by you", "The queued prompt is answered.")
+	requests := w.Model.Requests()
+	if last := string(requests[len(requests)-1].Body); !strings.Contains(last, "queued one") || strings.Contains(last, "queued two") {
+		t.Errorf("after one prompt was taken back and the queue sent at once, the model was sent:\n%s", last)
+	}
+
+	p.send("/context", "Enter")
+	p.see("The model's window is", "gnosh's instructions to the model")
+	p.send("/rename the second one", "Enter")
+	p.see(`The session is named "the second one".`)
+	p.send("/resume", "Enter")
+	p.see("Open which session? This one is kept.", "the first session's prompt")
+	if os.Getenv("GNOSH_UI_SHOW") != "" {
+		t.Logf("with the list of sessions, tmux shows:\n%s", p.screen())
+	}
+	p.send("", "Enter")
+	p.see("is open: the first session's prompt")
+	p.send("where were we?", "Enter")
+	p.see("Back in the first session.")
+	requests = w.Model.Requests()
+	if last := string(requests[len(requests)-1].Body); !strings.Contains(last, "The first session's answer.") || strings.Contains(last, "The queued prompt is answered.") {
+		t.Errorf("after /resume the model was sent:\n%s", last)
+	}
+	p.send("", "C-d", "C-d")
+	p.see("gnosh ended with 0")
+	w.Model.Done()
+}

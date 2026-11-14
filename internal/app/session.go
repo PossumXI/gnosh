@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app/skill"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -117,6 +118,32 @@ type live struct {
 	roundsBefore int
 	capped       bool
 
+	// reopen is the id of the session this one opens again, after a
+	// rewind; rewindTo is the point /rewind asked to go back to, which
+	// the controls then do.
+	reopen   string
+	rewindTo string
+	// resumeTo is the session /resume asked to open in place of this one.
+	resumeTo string
+	// system is what the model is told as its instructions, and named
+	// says the session has a name or was given one after its first
+	// prompt.
+	system []string
+	named  atomic.Bool
+
+	// skillRuns are the skills that went into the conversation, the most
+	// recent last, each with its text as it went in.
+	skillMu   sync.Mutex
+	skillRuns []skillRun
+	// skillSet is the skills as they were last read, and skillRead when.
+	skillSet  *skill.Set
+	skillRead time.Time
+
+	// hookChanged holds the ids of the calls of the question tool whose
+	// arguments a PreToolUse hook wrote: only such a call may carry its
+	// own answers.
+	hookChanged sync.Map
+
 	// toldMu guards told, the last few turns whose end the features have
 	// been told of (TurnEnded), and toldCh, which is closed and made anew
 	// each time one is added.
@@ -137,10 +164,13 @@ type joined struct {
 
 // openSession builds a session: its file, its rules, its tools, its model
 // and its agent, in that order. source is "clear" for the session /clear
-// starts, and empty for the one the command line asks for.
-func (p *program) openSession(ctx context.Context, st *startup, front Frontend, source string) (l *live, err error) {
+// starts, "rewind" for a session that is opened again from its file after
+// a rewind (reopen is then its id), and empty for the one the command
+// line asks for.
+func (p *program) openSession(ctx context.Context, st *startup, front Frontend, source string, reopen ...string) (l *live, err error) {
 	l = &live{
-		p: p, st: st, inv: st.inv, cfg: st.cfg,
+		reopen: strings.Join(reopen, ""),
+		p:      p, st: st, inv: st.inv, cfg: st.cfg,
 		interactive: st.attended,
 		source:      source,
 		front:       front,
@@ -275,6 +305,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	l.agentNotices()
 	system, err := l.systemPrompt()
+	l.system = system
 	if err != nil {
 		return l, err
 	}
@@ -298,6 +329,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 
 	// The log, and the agent.
 	l.log = newSessionLog(l.ts, l.texts)
+	l.log.startedWith = "gnosh " + p.o.BuildID
 	for _, c := range l.contribs {
 		if c.c.Stored != nil {
 			l.log.stored = append(l.log.stored, c.c.Stored)
@@ -380,6 +412,15 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 // command line names, or a copy of it.
 func (l *live) openTranscript(ctx context.Context) error {
 	inv, cwd := l.inv, l.cfg.Paths.Cwd
+	if l.reopen != "" {
+		// The session that was just closed, again: a rewind.
+		ts, err := l.store.Open(ctx, l.reopen)
+		if err != nil {
+			return fmt.Errorf("the session %s could not be opened again: %w", l.reopen, err)
+		}
+		l.ts, l.source = ts, "resume"
+		return nil
+	}
 	if l.source == "clear" || inv.Conversation == cli.ConversationNew || inv.Conversation == "" {
 		var err error
 		if inv.SessionID != "" && l.source != "clear" {
@@ -929,6 +970,7 @@ func (l *live) info() SessionInfo {
 		Mode:        string(l.engine.Mode()),
 		Commands:    l.slash.names(),
 		CommandList: l.slash.list(),
+		Skills:      l.typedSkills(),
 		Version:     l.p.o.BuildID,
 		Interactive: l.interactive,
 		Resume:      "gnosh -r " + l.ts.ID(),
@@ -1027,7 +1069,16 @@ func (c *controls) cur() *live {
 }
 
 // Submit sends a prompt.
-func (c *controls) Submit(p agent.Prompt) (string, error) { return c.cur().agent.Submit(p) }
+func (c *controls) Submit(p agent.Prompt) (string, error) {
+	l := c.cur()
+	if !p.Hidden {
+		// The rules a skill brought with it hold until the person's next
+		// prompt, which this is.
+		l.dropSkillGrants()
+		l.nameAfter(p.Text)
+	}
+	return l.agent.Submit(p)
+}
 
 // Interrupt stops the turn that is running, and the command of the
 // person's own that is running, if one is.
@@ -1083,7 +1134,25 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 			res.Quit = true
 			return res, cerr
 		}
+		res.Reset = true
 		res.Text = "A new session is open: " + c.cur().ts.ID() + ". The one before is kept; " + l.info().Resume + " opens it again."
+	}
+	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
+		l.rewindTo = ""
+		text, rerr := c.Rewind(ctx, point)
+		if rerr != nil {
+			return res, rerr
+		}
+		res.Reset, res.Draft = true, text
+		res.Text = "The conversation is back to before this prompt of yours, which you can send again or change:\n" + text + "\n" + rewindNote
+	}
+	if id := l.resumeTo; err == nil && res.Handled && res.Name == "resume" && id != "" {
+		l.resumeTo = ""
+		said, rerr := c.resume(ctx, id)
+		if rerr != nil {
+			return res, rerr
+		}
+		res.Reset, res.Text = true, said
 	}
 	return res, err
 }

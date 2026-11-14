@@ -594,7 +594,10 @@ func randomStep(g *rig, r *rand.Rand) {
 		case 0:
 			q = agent.Question{ID: q.ID, Kind: "secret", Title: randomText(r)}
 		case 1:
-			q = agent.Question{ID: q.ID, Kind: "question", Title: randomText(r), Data: `{"questions":[{"question":"a?","header":"A","options":["x","y"]},{"question":"b?","options":[{"label":"z"}],"multiSelect":true}]}`}
+			q = agent.Question{ID: q.ID, Kind: "question", Title: randomText(r), Data: app.QuestionForm{Questions: []app.FormQuestion{
+				{Question: "a?", Header: "A", Options: []app.FormOption{{Label: "x"}, {Label: "y"}}},
+				{Question: "b?", Options: []app.FormOption{{Label: "z"}, {Label: randomText(r)}}, MultiSelect: true},
+			}}}
 		case 2:
 			q.Text, q.Title = randomText(r), randomText(r)
 			q.Action.Preview = &core.Display{Kind: "diff", Path: "x.go", Before: randomText(r), After: randomText(r)}

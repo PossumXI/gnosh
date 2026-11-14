@@ -48,7 +48,11 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 	for _, name := range []string{"alpha", "bravo", "charlie", "delta"} {
 		w.Write(name+".txt", filler(name, 6000))
 	}
-	w.Model.SetWindow(16000)
+	// The room is made at four fifths of the window. The number was 16000
+	// before the question tool joined every session's list of tools; the
+	// 833 more keep the point as far above what the session starts with
+	// as it was (the tool adds about 666 tokens to every request).
+	w.Model.SetWindow(16833)
 	r := w.run("-y", "-p", "review the files")
 	r.wantCode(t, 0)
 	w.script.done()
@@ -195,7 +199,11 @@ func TestPopKeepsTheSessionUnderThePoint(t *testing.T) {
 	for _, name := range []string{"alpha", "bravo", "charlie", "delta"} {
 		w.Write(name+".txt", filler(name, 6000))
 	}
-	w.Model.SetWindow(16000)
+	// The room is made at four fifths of the window. The number was 16000
+	// before the question tool joined every session's list of tools; the
+	// 833 more keep the point as far above what the session starts with
+	// as it was (the tool adds about 666 tokens to every request).
+	w.Model.SetWindow(16833)
 	r := w.run("-y", "-p", "review the files")
 	r.wantCode(t, 0)
 	w.script.done()
@@ -219,8 +227,8 @@ func TestPopKeepsTheSessionUnderThePoint(t *testing.T) {
 		t.Errorf("the request after the pop is about %d tokens, and the one that made it was about %d: the popped reads are still being sent", sizes[6], sizes[5])
 	}
 	for i, n := range sizes {
-		if n > 12800 {
-			t.Errorf("request %d is about %d tokens, over the point at which room is made for a window of 16000", i, n)
+		if n > 13466 {
+			t.Errorf("request %d is about %d tokens, over the point at which room is made for a window of 16833", i, n)
 		}
 	}
 }

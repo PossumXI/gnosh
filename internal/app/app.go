@@ -197,6 +197,9 @@ func (p *program) warnf(format string, args ...any) {
 // says it is not built.
 var built = []string{
 	"doctor", "trust", "trust --list", "trust --forget",
+	"dirs", "logs", "logs --tail", "logs --follow", "models",
+	"session list", "session show", "session last", "session rename",
+	"session --json",
 	"--fork-session", "--name",
 	"--reasoning-effort", "--small-model",
 	"--permission-mode",
@@ -281,6 +284,14 @@ func (p *program) run(ctx context.Context) int {
 		return p.trustCommand(ctx, inv)
 	case cli.CmdInteractive, cli.CmdPrint:
 		return p.sessionCommand(ctx, inv)
+	case cli.CmdDirs:
+		return p.dirsCommand(ctx, inv)
+	case cli.CmdLogs:
+		return p.logsCommand(ctx, inv)
+	case cli.CmdModels:
+		return p.modelsCommand(ctx, inv)
+	case cli.CmdSessionList, cli.CmdSessionShow, cli.CmdSessionLast, cli.CmdSessionRename:
+		return p.sessionsCommand(ctx, inv)
 	}
 	for _, f := range p.o.Features {
 		for _, c := range f.Commands {

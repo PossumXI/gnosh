@@ -215,7 +215,7 @@ if [ "$GNOSH_EVENT" = SubagentStop ] && [ ! -e "$HOME/objected" ]; then touch "$
 	t.Run("not trusted: the project's kind is not loaded", func(t *testing.T) {
 		w := prep(t, delegate, apptest.Reply{Text: "There is no such kind here."})
 		r := run(t, w, "-y", "-p", "have the sum fixed").wantCode(t, 0)
-		has(t, "stderr", r.err, "1 kind(s) of sub-agent of its own", "not trusted")
+		has(t, "stderr", r.err, "1 kind(s) of sub-agent and 0 skill(s) of its own", "not trusted")
 		has(t, "what the session read", toolResult(t, w, 1, "c1"), `there is no kind of sub-agent called "fixer"`, "general-purpose, Explore")
 		hasNot(t, "the session's first message", userTexts(w.Model.Requests()[0])[0], "fixer")
 		if got := w.Read("a.txt"); got != "two plus two\n" {
@@ -263,7 +263,7 @@ func TestFeatureSeesTheSubAgent(t *testing.T) {
 				Close: func(context.Context) { mu.Lock(); diary = append(diary, "close "+who); mu.Unlock() },
 			}
 			// The stock search agent gets nothing of this feature.
-			if !s.SubAgent || s.AgentType != "Explore" {
+			if !s.SubAgent || s.AgentType != "Explore" || s.AgentDef == nil || s.AgentDef.Name != "Explore" {
 				c.Tools = []core.Tool{probeTool{mu: &mu, seen: &seen}}
 			}
 			return c, nil

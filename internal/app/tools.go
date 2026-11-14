@@ -84,7 +84,15 @@ func (l *live) buildTools() error {
 			l.own = append(l.own, t)
 		}
 	}
-	all = append(all, &agentTool{l: l})
+	// The tools a sub-agent never has: its own Agent tool is made for it
+	// at its depth, and only the session the person is in may ask them a
+	// question.
+	all = append(all, &agentTool{l: l}, &askTool{l: l})
+	if len(l.forModel()) > 0 {
+		// The Skill tool is there when there is a skill a model may
+		// load, as the session starts.
+		all = append(all, &skillTool{l: l})
+	}
 
 	claimed := map[string]string{}
 	for _, f := range l.p.o.Features {

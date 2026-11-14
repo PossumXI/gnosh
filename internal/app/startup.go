@@ -62,7 +62,7 @@ type startup struct {
 // names; the features' names are the second.
 func ownTools() []string {
 	d := fstools.Defaults()
-	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, agentToolName}
+	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, agentToolName, askToolName, skillToolName}
 }
 
 // toolNames returns the one list of tool names of this program: gnosh's

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -264,6 +265,11 @@ type Session struct {
 	Parent    string
 	SubAgent  bool
 	AgentType string
+	// AgentDef is the definition of a sub-agent's kind, as the Agent tool
+	// found it: a feature that wants to know what the kind asks for reads
+	// it here and need not look for the file. It is nil in the session
+	// the person is in.
+	AgentDef *agentdef.Def
 
 	// Interactive says a person is there to be asked: the session was
 	// opened in a terminal. It is false in a run (-p, gnosh run).

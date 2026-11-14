@@ -589,3 +589,162 @@ func TestInTmuxSuspend(t *testing.T) {
 		t.Errorf("after leaving tmux shows:\n%s", shown)
 	}
 }
+
+// The real program with this interface: Esc twice in an empty box lists
+// the prompts sent, and going back to before one takes the conversation
+// there, with the prompt in the box again to change and send.
+func TestRewindWithTheProgram(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "First answer."}, apptest.Reply{Text: "Second answer."}, apptest.Reply{Text: "Third answer."},
+		apptest.Reply{Text: "The changed prompt is answered."},
+	)
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	for i, prompt := range []string{"the first prompt", "the second prompt", "the third prompt"} {
+		p.keys(`"` + prompt + `" <Enter>`)
+		p.has([]string{"First answer.", "Second answer.", "Third answer."}[i])
+	}
+	p.has("idle")
+
+	// Never mind, at either step, changes nothing.
+	p.keys(`<Esc> <Esc>`)
+	p.has("Go back to before which prompt?", "the third prompt", "Never mind")
+	p.keys(`<Esc>`)
+	p.keys(`<Esc> <Esc>`)
+	p.has("Go back to before which prompt?")
+	p.keys(`<Down> <Enter>`)
+	p.has("Go back to before: the second prompt", "Only the conversation goes back", "not restored")
+	p.keys(`<Down> <Enter>`)
+
+	// And for real: the second prompt, the middle of the three.
+	p.keys(`"/rewind" <Enter>`)
+	p.has("Go back to before which prompt?")
+	p.keys(`<Down> <Enter>`)
+	p.has("Go back to before: the second prompt")
+	p.keys(`<Enter>`)
+	p.has("The conversation is back to before this prompt of yours", "> the second prompt")
+	p.keys(`", changed" <Enter>`)
+	p.has("> the second prompt, changed", "The changed prompt is answered.")
+
+	reqs := w.Model.Requests()
+	if len(reqs) != 4 {
+		t.Fatalf("the model was sent %d requests, want 4", len(reqs))
+	}
+	sent := string(reqs[3].Body)
+	for _, want := range []string{"the first prompt", "First answer.", "the second prompt, changed"} {
+		if !strings.Contains(sent, want) {
+			t.Errorf("after the rewind the model was not sent %q", want)
+		}
+	}
+	for _, gone := range []string{"Second answer.", "the third prompt", "Third answer."} {
+		if strings.Contains(sent, gone) {
+			t.Errorf("after the rewind the model was still sent %q", gone)
+		}
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}
+
+// The keys of the queue, with the real program: Alt+Up takes back the one
+// prompt queued last and leaves the others, and Ctrl+X Ctrl+S (Ctrl+Enter
+// where the terminal tells it from Enter) has the model read the queue
+// now: here the model is writing, which cannot be moved aside, so the
+// turn is stopped and the queue starts the next one.
+func TestQueueKeysWithTheProgram(t *testing.T) {
+	hold := make(chan struct{})
+	defer close(hold)
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "A reply that is held back.", Hold: hold},
+		apptest.Reply{Text: "The queued prompt is answered."},
+	)
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	p.keys(`"start" <Enter>`)
+	p.has("A reply")
+	p.keys(`"queued one" <Enter> "queued two" <Enter>`)
+	p.has("queued one", "queued two")
+	p.keys(`<Alt+Up>`)
+	p.has("> queued two")
+	// Taken back, it is not sent: the box is emptied.
+	p.keys(`<Ctrl+U>`)
+	p.keys(`<Ctrl+X> <Ctrl+S>`)
+	p.has("stopped by you", "> queued one", "The queued prompt is answered.")
+	reqs := w.Model.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the model was sent %d requests, want 2", len(reqs))
+	}
+	if sent := string(reqs[1].Body); !strings.Contains(sent, "queued one") || strings.Contains(sent, "queued two") {
+		t.Errorf("after one prompt was taken back and the queue sent at once, the model was sent:\n%s", sent)
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}
+
+// Sent at once while a command runs: the command moves to the background,
+// where it goes on, and the model reads the queued prompt in the same
+// turn, which is not stopped.
+func TestSendAtOnceMovesACommandAside(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 300"}`}}},
+		apptest.Reply{Text: "I read what you sent, and the command goes on."},
+	)
+	w.RC("permissions allow 'Bash(sleep *)'")
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	p.keys(`"wait a while" <Enter>`)
+	p.has("running sleep 300")
+	p.keys(`"and tell me when" <Enter>`)
+	p.has("and tell me when")
+	p.keys(`<Ctrl+X> <Ctrl+S>`)
+	p.has("I read what you sent, and the command goes on.", "1 in the background")
+	if text := p.ft.text(); strings.Contains(text, "stopped by you") {
+		t.Errorf("the turn was stopped:\n%s", text)
+	}
+	reqs := w.Model.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the model was sent %d requests, want 2", len(reqs))
+	}
+	if sent := string(reqs[1].Body); !strings.Contains(sent, "and tell me when") || !strings.Contains(sent, "moved to the background") {
+		t.Errorf("in the same turn the model was sent:\n%s", sent)
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}
+
+// /resume with nothing after it lists the folder's other sessions, and
+// the one picked is opened in place of the session that is open.
+func TestResumeWithTheProgram(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "The first session's answer."}, apptest.Reply{Text: "The second session's answer."},
+		apptest.Reply{Text: "Back in the first session."},
+	)
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	p.keys(`"the first session's prompt" <Enter>`)
+	p.has("The first session's answer.")
+	p.keys(`"/clear" <Enter>`)
+	p.has("A new session is open")
+	p.keys(`"the second session's prompt" <Enter>`)
+	p.has("The second session's answer.")
+	p.keys(`"/resume" <Enter>`)
+	p.has("Open which session? This one is kept.", "the first session's prompt", "Never mind")
+	p.keys(`<Enter>`)
+	p.has("is open: the first session's prompt")
+	p.keys(`"where were we?" <Enter>`)
+	p.has("Back in the first session.")
+	reqs := w.Model.Requests()
+	sent := string(reqs[len(reqs)-1].Body)
+	if !strings.Contains(sent, "The first session's answer.") || strings.Contains(sent, "The second session's answer.") {
+		t.Errorf("after /resume the model was sent:\n%s", sent)
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}

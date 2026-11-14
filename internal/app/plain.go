@@ -72,8 +72,11 @@ type plain struct {
 	// being written as it arrives: "", "text", "thinking" or "prompt".
 	atStart bool
 	kind    string
-	// question is the question that waits for a line of input.
+	// question is the question that waits for a line of input, and form
+	// the model's questions when that is what it holds: they are asked
+	// one after another.
 	question *agent.Question
+	form     *plainForm
 	// nobody says no more lines will come: questions are answered no.
 	nobody bool
 	// waiting ticks while a request is out and nothing has come back.
@@ -345,6 +348,110 @@ func (f *plain) printQuestion(q agent.Question) {
 	}
 }
 
+// plainForm is the model's questions (AskUserQuestion) while the plain
+// session asks them: one at a time, each with its options numbered.
+type plainForm struct {
+	form QuestionForm
+	// at is the question that waits for its line.
+	at      int
+	answers map[string]string
+	said    []string
+}
+
+// printFormQuestion writes the question of the form that waits. The
+// caller holds the lock.
+func (f *plain) printFormQuestion() {
+	pf := f.form
+	q := pf.form.Questions[pf.at]
+	lead := ""
+	if n := len(pf.form.Questions); n > 1 {
+		lead = fmt.Sprintf("Question %d of %d", pf.at+1, n)
+	}
+	if q.Header != "" {
+		lead = strings.TrimSpace(lead + " [" + visible(oneLine(q.Header, 40)) + "]")
+	}
+	if lead != "" {
+		lead += ": "
+	}
+	fmt.Fprintln(f.out, lead+visible(q.Question))
+	for i, o := range q.Options {
+		line := fmt.Sprintf("  %d. %s", i+1, visible(o.Label))
+		if d := strings.TrimSpace(o.Description); d != "" {
+			line += ": " + visible(oneLine(d, 300))
+		}
+		fmt.Fprintln(f.out, line)
+		for _, p := range strings.Split(strings.TrimRight(o.Preview, "\n"), "\n") {
+			if strings.TrimSpace(p) != "" {
+				fmt.Fprintln(f.out, "       "+visible(p))
+			}
+		}
+	}
+	if q.MultiSelect {
+		fmt.Fprintln(f.out, "Type the numbers of all that apply, with commas between them, and Enter. Or answer in your own words.")
+	} else {
+		fmt.Fprintln(f.out, "Type a number and Enter. Or answer in your own words.")
+	}
+}
+
+// hint says how the question that waits is answered, after a line that
+// did not answer it.
+func (pf *plainForm) hint() string {
+	q := pf.form.Questions[pf.at]
+	if q.MultiSelect {
+		return fmt.Sprintf("That is not an answer. Type numbers from 1 to %d with commas between them, or your own words. (For an answer of your own that is only a number, put a word before it.)", len(q.Options))
+	}
+	return fmt.Sprintf("That is not an answer. Type one number from 1 to %d, or your own words. (For an answer of your own that is only a number, put a word before it.)", len(q.Options))
+}
+
+// take reads a line as the answer to the question that waits. good says
+// the line was an answer, and more that another question waits after it.
+// With the last answer it returns the answer to the whole form.
+func (pf *plainForm) take(line string) (ans agent.Answer, more, good bool) {
+	q := pf.form.Questions[pf.at]
+	said, ok := formAnswer(q, line)
+	if !ok {
+		return agent.Answer{}, false, false
+	}
+	pf.answers[q.Question] = said
+	pf.said = append(pf.said, firstOf(q.Header, q.Question)+": "+said)
+	pf.at++
+	if pf.at < len(pf.form.Questions) {
+		return agent.Answer{}, true, true
+	}
+	return agent.Answer{Data: pf.answers, Text: strings.Join(pf.said, "\n")}, false, true
+}
+
+// formAnswer reads a typed line as the answer to one question of the
+// model's: the number of an option (several, for a question that takes
+// several), which stands for its label, or the person's own words.
+func formAnswer(q FormQuestion, line string) (string, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", false
+	}
+	fields := strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == ';' })
+	var labels []string
+	seen := map[int]bool{}
+	for _, word := range fields {
+		n, err := strconv.Atoi(strings.TrimRight(word, "."))
+		if err != nil {
+			// Words: the line is the person's own answer, as typed.
+			return line, true
+		}
+		if n < 1 || n > len(q.Options) {
+			return "", false
+		}
+		if !seen[n] {
+			seen[n] = true
+			labels = append(labels, q.Options[n-1].Label)
+		}
+	}
+	if len(labels) == 0 || (len(labels) > 1 && !q.MultiSelect) {
+		return "", false
+	}
+	return strings.Join(labels, ", "), true
+}
+
 // answerHint says how a question is answered, after a line that did not
 // answer it.
 func (f *plain) answerHint(q agent.Question) string {
@@ -541,6 +648,11 @@ func (f *plain) refuse(c Controls, q agent.Question) {
 			ans.Choice = "no"
 		}
 	}
+	if q.Kind == questionKind {
+		// The model's own questions: they are left unanswered, which the
+		// tool that put them says in its own words.
+		ans = agent.Answer{}
+	}
 	_ = c.Answer(q.ID, ans)
 }
 
@@ -588,8 +700,23 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 	f.mu.Unlock()
 	if q != nil {
 		f.mu.Lock()
-		ans, good := f.parseAnswer(*q, line)
-		if !good {
+		var ans agent.Answer
+		var good bool
+		if f.form != nil {
+			var more bool
+			if ans, more, good = f.form.take(line); !good || more {
+				// Not an answer, or not the last one: the question that
+				// waits now is said (again).
+				if !good {
+					f.say("%s", f.form.hint())
+				} else {
+					f.printFormQuestion()
+				}
+				f.mu.Unlock()
+				return false
+			}
+			f.form = nil
+		} else if ans, good = f.parseAnswer(*q, line); !good {
 			f.say("%s", f.answerHint(*q))
 			f.mu.Unlock()
 			return false
@@ -826,9 +953,8 @@ func (f *plain) Event(ev any) {
 		f.stopWaiting()
 		f.say("waiting: %s", visible(ev.Message))
 	case *agent.PromptEvent:
-		if ev.Prompt.Hidden && ev.Prompt.Notice != "" {
-			f.say("(%s)", visible(ev.Prompt.Notice))
-		}
+		// One of gnosh's own prompts says why a turn started in a notice
+		// that the loop gives right after this event.
 	case *agent.ToolStartEvent:
 		indent := ""
 		if ev.Agent != "" {
@@ -853,7 +979,15 @@ func (f *plain) Event(ev any) {
 			return
 		}
 		f.question = &q
-		f.printQuestion(q)
+		if form, ok := q.Data.(QuestionForm); ok && q.Kind == questionKind && len(form.Questions) > 0 {
+			f.form = &plainForm{form: form, answers: map[string]string{}}
+			f.fresh()
+			fmt.Fprintln(f.out)
+			fmt.Fprintln(f.out, "? "+visible(q.Title))
+			f.printFormQuestion()
+		} else {
+			f.printQuestion(q)
+		}
 		f.poke()
 		if c := f.c; c != nil && c.Info().NotifyHooks {
 			title := q.Title
@@ -861,7 +995,7 @@ func (f *plain) Event(ev any) {
 		}
 	case *agent.AnswerEvent:
 		if f.question != nil && f.question.ID == ev.ID {
-			f.question = nil
+			f.question, f.form = nil, nil
 		}
 		f.showTyping()
 		if ev.Withdrawn {

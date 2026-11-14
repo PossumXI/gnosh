@@ -147,6 +147,9 @@ func (l *live) firstPromptLines(ctx context.Context, info agent.LineInfo) ([]age
 	if text := l.startAgentTypes(); text != "" {
 		parts = append(parts, agent.Part{Source: "agents", Text: text, Before: true})
 	}
+	if text := l.skillsLine(); text != "" {
+		parts = append(parts, agent.Part{Source: "skills", Text: text, Before: true})
+	}
 	return append(parts, agent.Part{Source: "environment", Text: l.environment(), Before: true}), nil
 }
 
@@ -407,6 +410,12 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	}
 	if text := l.startAgentTypes(); text != "" {
 		parts = append(parts, agent.Part{Source: "agents", Text: text})
+	}
+	if text := l.skillsLine(); text != "" {
+		parts = append(parts, agent.Part{Source: "skills", Text: text})
+	}
+	if text := l.skillsAfterSummary(); text != "" {
+		parts = append(parts, agent.Part{Source: "skills", Text: text})
 	}
 	if l.shell != nil {
 		var running []string

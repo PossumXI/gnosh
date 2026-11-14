@@ -289,9 +289,10 @@ func (d deadline) Deadline() time.Time { return time.Time(d) }
 func TestFormAndSecret(t *testing.T) {
 	g := newRig(t, 80, 30, text.NoColor)
 	g.keys(`"ask me" <Enter>`).start()
-	data := `{"questions":[
-		{"question":"Which database?","header":"Database","options":[{"label":"SQLite","description":"one file"},{"label":"Postgres","description":"a server"}],"multiSelect":false},
-		{"question":"Which checks?","header":"Checks","options":[{"label":"vet"},{"label":"race"},{"label":"fuzz"}],"multiSelect":true}]}`
+	data := app.QuestionForm{Questions: []app.FormQuestion{
+		{Question: "Which database?", Header: "Database", Options: []app.FormOption{{Label: "SQLite", Description: "one file"}, {Label: "Postgres", Description: "a server"}}},
+		{Question: "Which checks?", Header: "Checks", Options: []app.FormOption{{Label: "vet"}, {Label: "race"}, {Label: "fuzz"}}, MultiSelect: true},
+	}}
 	g.ev(&agent.QuestionEvent{Question: agent.Question{ID: "q1", Kind: "question", Title: "Questions", Data: data}})
 	g.liveHas("Which database?", "SQLite", "Postgres", "Database", "Checks")
 	g.show("the model's questions")
@@ -573,7 +574,10 @@ func TestTurnEnds(t *testing.T) {
 	g.once("The conversation was summarized: about 250k tokens before, about 4.5k after.")
 	g.ev(&agent.RoomEvent{Freed: 41000, Notice: "popped `write the tests`: about 41k tokens left the model's view"})
 	g.once("note: popped `write the tests`: about 41k tokens left the model's view")
-	g.ev(&agent.PromptEvent{ID: "h1", Prompt: agent.Prompt{Hidden: true, Text: "<system>...</system>", Notice: "A background command ended: go test (exit 0)"}})
+	// One of gnosh's own prompts is not shown; the line that says why a
+	// turn started comes from the loop as a notice, once.
+	g.ev(&agent.PromptEvent{ID: "h1", Prompt: agent.Prompt{Hidden: true, Text: "<system>...</system>", Notice: "A background command ended: go test (exit 0)"}},
+		&agent.NoticeEvent{Level: agent.LevelInfo, Source: "task-notification", Text: "A background command ended: go test (exit 0)"})
 	g.once("note: A background command ended: go test (exit 0)").committedLacks("<system>")
 	g.ev(&agent.LoopEvent{On: true}, &agent.LoopEvent{On: false, Turns: 3, Why: "the model showed the task is done"})
 	g.once("/loop is on", "/loop is off after 3 turns: the model showed the task is done.")

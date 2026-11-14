@@ -89,6 +89,12 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			// The rules judge the arguments the tool will run with.
 			changed = out.UpdatedInput
 			call.Input = changed
+			if call.Name == askToolName {
+				// A hook may answer the model's questions in the
+				// person's place; the tool is told that these arguments
+				// are a hook's.
+				l.hookChanged.Store(call.ID, true)
+			}
 			act, err := describe(req.Tool, call, req.Env)
 			if err != nil {
 				return agent.Decision{Reason: fmt.Sprintf("This call did not run: a PreToolUse hook the user set up changed its arguments, and with them the call cannot run (%v).", err)}, nil

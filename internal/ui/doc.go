@@ -146,19 +146,27 @@
 //	Ctrl+O                 detail on or off: reasoning and whole outputs are written out from then
 //	                       on, and the reasoning that was folded last is written out now (cc 3; ui UI-22)
 //	Ctrl+T                 hide or show the session's task list (cc 3)
-//	Ctrl+B                 move the running command to the background, when the session's controls
-//	                       can do that; they cannot yet, and the key says so (cc 3). In the prompt
-//	                       box Ctrl+X b does the same: Ctrl+B is tmux's own key (ui UI-31)
+//	Ctrl+B                 move the running command to the background (cc 3). In the prompt box
+//	                       Ctrl+X b does the same: Ctrl+B is tmux's own key (ui UI-31)
 //
 //	The prompt box has the keys (idle, or while a turn runs)
 //	Enter                  idle: send. Busy: queue the prompt (cc 2.1, 2.8)
-//	Ctrl+Enter             as Enter; sending at once is not built (cc 2.8, there P2)
+//	Ctrl+Enter             busy: send, and have the model read the queue now: the running commands
+//	                       move to the background and the queue is read at the end of that round;
+//	                       when something runs that cannot move, or the model is writing, the turn
+//	                       is stopped and the queue starts the next one (cc 2.8). Ctrl+X Ctrl+S
+//	                       does the same for what is queued, where Ctrl+Enter reads as Enter
 //	Esc                    busy: stop the turn, at once (ui UI-31, LOOP-5)
 //	Esc Esc                idle, text in the box: clear it; Up brings it back (ui UI-31)
-//	Esc Esc                idle, empty box: go back to an earlier prompt; not built, and says so (cc 3)
+//	Esc Esc                idle, empty box: the list of your prompts, to take the conversation back
+//	                       to before one of them; that prompt comes back into the box. Files are
+//	                       not restored, and the list says so (cc 3; sessions 5). /rewind is the same
 //	Ctrl+C                 busy: stop the turn. Idle: clear the box, and again to leave (cc 3)
 //	Ctrl+D                 empty box, twice: leave (cc 3)
 //	Up                     empty box, prompts queued: take the queue back for editing (ui UI-31)
+//	Alt+Up, Ctrl+X Up      take back the one prompt queued last, and leave the rest queued. Up
+//	                       takes all; this key is beside it, and Alt+Up is a key terminals and
+//	                       tmux leave alone. The chord is for a terminal that does not send Alt+Up
 //	Up, Down, Ctrl+R       history, as in the editor (cc 2.4)
 //	Shift+Tab              the next permission mode: default, acceptEdits, plan, and
 //	                       bypassPermissions when the session was started with it in reach (cc 3; perm 2.1)
@@ -256,29 +264,35 @@
 // # What is asked of the session beyond app.Controls
 //
 // A few things the specs list need more than app.Controls has. Each is
-// built here as far as it goes and switches itself on when the session
-// can do its part. The app's session does its part in each of them
-// (app.SessionControls, app.FrontendInfo, app.StatusEvent,
-// app.QuestionData), except that it has no question tool for the model
-// and no way back to an earlier prompt:
+// built here so that it switches itself on when the session's controls
+// can do their part, and says so plainly when they cannot, which is how
+// what stands in for a session in this package's tests is still a
+// Controls. The app's own controls can do all of it (app.SessionControls,
+// app.FrontendInfo, app.StatusEvent, app.QuestionData, app.QuestionForm):
 //
 //   - the prompt the command line gave (`gnosh "fix the test"`): sent as
-//     the session's first prompt when app.FrontendInfo has a field named
-//     Prompt.
-//   - shell lines ("!"): run when the controls have a method
-//     Shell(command string) error.
-//   - Ctrl+B: works when the controls have a method
-//     Background(callID string) bool.
-//   - the prompts of earlier sessions in the history: loaded when the
-//     controls have a method History() []string (oldest first). Without
-//     it, Up and Ctrl+R reach this session's prompts only.
+//     the session's first prompt, from app.FrontendInfo's field Prompt.
+//   - shell lines ("!"): a method Shell(command string) error.
+//   - Ctrl+B, and the part of Ctrl+Enter that moves commands aside: a
+//     method Background(callID string) bool.
+//   - the prompts of earlier sessions in the history: a method
+//     History() []string (oldest first). Without it, Up and Ctrl+R reach
+//     this session's prompts only.
+//   - Alt+Up: a method Withdraw(id string) (agent.Prompt, bool).
+//   - Esc Esc in an empty box and /rewind: a method RewindPoints()
+//     []app.RewindPoint for the list; going back is the command
+//     /rewind N, whose result says the session's state is to be forgotten
+//     (CommandResult.Reset) and gives the prompt back for the box (Draft).
+//   - /resume with nothing after it: a method ResumeChoices()
+//     []app.SessionChoice for the list; opening is /resume and an id.
 //   - the frame and the count of background commands on the status
-//     line: shown when the session reports an event that has a method
-//     StatusFacts() map[string]string (events.go names the facts).
-//   - the countdown on a question the session takes back by itself: shown
-//     when the question's Data has a method Deadline() time.Time.
-//   - the model's question tool and secrets: Question.Kind "question" with
-//     the tool's arguments in Data, and Kind "secret" (question.go).
-//   - going back to an earlier prompt (Esc Esc on an empty box): not
-//     built; the key says so.
+//     line: an event with a method StatusFacts() map[string]string
+//     (events.go names the facts).
+//   - the countdown on a question the session takes back by itself: a
+//     question whose Data has a method Deadline() time.Time.
+//   - the model's own questions: Question.Kind "question" with an
+//     app.QuestionForm in Data, shown as a form with a tab for each
+//     question; and Kind "secret", a masked line (question.go).
+//   - the person's skills in the completion of a command's name:
+//     SessionInfo.Skills.
 package ui

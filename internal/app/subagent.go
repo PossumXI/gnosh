@@ -152,66 +152,44 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 }
 
 // agentDefs reads the kinds of sub-agent there are for this session: the
-// person's own (~/.claude/agents), the project's (.claude/agents in the
-// working directory and every folder above it up to where the project
-// begins, and in the added directories), and gnosh's own. They are read
-// each time one is wanted, so a file that was just written is used by the
-// next call.
+// person's own, the project's, and gnosh's own (the folders are listed in
+// skills.go). They are read each time one is wanted, so a file that was
+// just written is used by the next call.
 //
 // The project's are read only in a folder the person has trusted: a
 // definition is a stranger's instructions for an agent that acts with the
 // person's permissions. Safe mode reads none but gnosh's own.
 func (l *live) agentDefs() *agentdef.Set {
-	if l.cfg.Switches.SafeMode.V {
-		return agentdef.Load("", nil)
-	}
-	var project []string
-	if l.st.trusted {
-		project = l.projectAgentDirs()
-	}
-	return agentdef.Load(filepath.Join(l.cfg.Paths.Home, ".claude", "agents"), project)
+	return loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots())
 }
 
-// projectAgentDirs lists the directories a project's agent definitions are
-// looked for in, the one closest to the working directory first.
-func (l *live) projectAgentDirs() []string {
-	var dirs []string
-	root := l.cfg.Paths.ProjectRoot
-	for dir := l.cfg.Paths.Cwd; ; dir = filepath.Dir(dir) {
-		dirs = append(dirs, filepath.Join(dir, ".claude", "agents"))
-		if dir == root || dir == filepath.Dir(dir) || !strings.HasPrefix(dir, root) {
-			break
-		}
+// moreRoots lists the folders that were added to the session, beside the
+// project's own.
+func (l *live) moreRoots() []string {
+	if len(l.roots) < 2 {
+		return nil
 	}
-	for _, r := range l.roots {
-		if d := filepath.Join(r, ".claude", "agents"); !slices.Contains(dirs, d) {
-			dirs = append(dirs, d)
-		}
-	}
-	return dirs
+	return l.roots[1:]
 }
 
 // agentNotices says, once at the start of a session, what of the agent
-// definitions is not in force: a project's, in a folder that is not
-// trusted, and files that hold no usable definition.
+// definitions and the skills is not in force: a project's, in a folder
+// that is not trusted, and files that hold nothing usable.
 func (l *live) agentNotices() {
-	if l.cfg.Switches.SafeMode.V || !l.engine.ToolEnabled(agentToolName) {
+	if l.cfg.Switches.SafeMode.V {
 		return
 	}
 	if !l.st.trusted {
-		held := 0
-		for _, d := range agentdef.Load("", l.projectAgentDirs()).All() {
-			if d.Scope == "project" {
-				held++
-			}
-		}
-		if held > 0 {
+		if agents, skills := heldDefs(l.cfg, l.moreRoots()); agents+skills > 0 {
 			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
-				"This folder defines %d kind(s) of sub-agent of its own (.claude/agents), which are not loaded because the folder is not trusted. To use them: gnosh trust, or --trust-folder for this one run.", held))
+				"This folder defines %d kind(s) of sub-agent and %d skill(s) of its own (in .gnosh or .claude), which are not read because the folder is not trusted. To use them: gnosh trust, or --trust-folder for this one run.", agents, skills))
 		}
 	}
 	for _, sk := range l.agentDefs().Skipped() {
 		l.flog.logf("config", "the agent definition %s is not used: %s", sk.Path, sk.Reason)
+	}
+	for _, sk := range l.skills().Skipped() {
+		l.flog.logf("config", "the skill file %s is not used: %s", sk.Path, sk.Reason)
 	}
 }
 
@@ -340,6 +318,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Parent:      l.ts.ID(),
 		SubAgent:    true,
 		AgentType:   def.Name,
+		AgentDef:    &def,
 		Interactive: l.interactive,
 		Source:      "subagent",
 		Trusted:     l.st.trusted,

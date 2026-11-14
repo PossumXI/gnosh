@@ -63,6 +63,11 @@ type sessionLog struct {
 	// can be given again.
 	onCut func()
 
+	// startedWith names the gnosh that begins the file, for its first
+	// entry; begun says the file has been looked at for one.
+	startedWith string
+	begun       bool
+
 	mu sync.Mutex
 	// prompts maps the loop's id of a prompt to the entry it was written
 	// as, so that a slide can be told which prompt to keep.
@@ -330,6 +335,19 @@ func foreign(te *transcript.Entry) []agent.Entry {
 func (l *sessionLog) Append(ctx context.Context, entries ...agent.Entry) error {
 	if len(entries) == 0 {
 		return nil
+	}
+	// A file that holds nothing yet is begun with an entry that says
+	// which gnosh began it. It is written with the first thing the loop
+	// stores, not before, so that a session nothing was ever said in
+	// leaves no file; and it is what a rewind to before the first prompt
+	// goes back to.
+	if l.startedWith != "" && !l.begun {
+		l.begun = true
+		if len(l.ts.Entries()) == 0 {
+			if _, err := l.ts.Append(transcript.MetaEntry("startedWith", l.startedWith)); err != nil {
+				return err
+			}
+		}
 	}
 	var out []transcript.Entry
 	at := make([]int, len(entries))

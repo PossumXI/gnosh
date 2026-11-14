@@ -24,6 +24,7 @@ package agentdef
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -118,15 +119,26 @@ type Set struct {
 	skipped []Skipped
 }
 
-// Load puts the definitions together, the more specific over the more
+// Load is LoadFrom with one directory for the person's own definitions,
+// or none when userDir is empty.
+func Load(userDir string, projectDirs []string) *Set {
+	if userDir == "" {
+		return LoadFrom(nil, projectDirs)
+	}
+	return LoadFrom([]string{userDir}, projectDirs)
+}
+
+// LoadFrom puts the definitions together, the more specific over the more
 // general where two share a name: the project's (projectDirs, the
 // directory closest to the working directory first), then the person's
-// (userDir), then gnosh's own. Each directory is searched with every
-// folder below it; a folder is only a way to keep files apart, and the
-// name in the file is what counts. A directory that is not there holds
-// nothing. Two files of one directory tree with the same name: the first
-// by path is the one that is used, and the other is listed as skipped.
-func Load(userDir string, projectDirs []string) *Set {
+// (userDirs), then gnosh's own. Within either list an earlier directory
+// wins over a later one, which is how gnosh's own folders come before
+// Claude Code's. Each directory is searched with every folder below it; a
+// folder is only a way to keep files apart, and the name in the file is
+// what counts. A directory that is not there holds nothing. Two files of
+// one directory tree with the same name: the first by path is the one
+// that is used, and the other is listed as skipped.
+func LoadFrom(userDirs, projectDirs []string) *Set {
 	s := &Set{}
 	have := map[string]bool{}
 	add := func(dir, scope string) {
@@ -177,7 +189,9 @@ func Load(userDir string, projectDirs []string) *Set {
 	for _, dir := range projectDirs {
 		add(dir, "project")
 	}
-	add(userDir, "user")
+	for _, dir := range userDirs {
+		add(dir, "user")
+	}
 	for _, d := range Builtin() {
 		if !have[d.Name] {
 			have[d.Name] = true
@@ -471,4 +485,57 @@ func unquote(v string) string {
 		}
 	}
 	return v
+}
+
+// Field is one setting of a definition file's frontmatter, as Split
+// returns it.
+type Field struct {
+	// Key is the setting's name.
+	Key string
+	// Scalar is the value written on the key's own line, or a block of
+	// text; Items are the entries of a list.
+	Scalar string
+	Items  []string
+	// Nested says the key holds a map of its own, which is not read.
+	Nested bool
+}
+
+// List returns the field's value as a list: its entries, or the scalar
+// split at commas.
+func (f Field) List() []string { return field{scalar: f.Scalar, items: f.Items}.list() }
+
+// Set reports whether the field says anything at all.
+func (f Field) Set() bool { return f.Scalar != "" || len(f.Items) > 0 || f.Nested }
+
+// Split takes a definition file apart: the settings between its two lines
+// of "---", and the text after them. A file whose first line is not "---"
+// has no settings and is all text. It is the reading that agent
+// definitions and skills share. An error says the settings could not be
+// read; the text is still returned.
+func Split(text string) (fields []Field, body string, err error) {
+	text = strings.TrimPrefix(text, string(rune(0xFEFF)))
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != "---" {
+		return nil, strings.TrimSpace(text), nil
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimRight(lines[i], " \t") == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return nil, strings.TrimSpace(text), errors.New(`the settings are not closed by a second line of "---"`)
+	}
+	body = strings.TrimSpace(strings.Join(lines[end+1:], "\n"))
+	raw, err := frontmatter(lines[1:end])
+	if err != nil {
+		return nil, body, err
+	}
+	for _, f := range raw {
+		fields = append(fields, Field{Key: f.key, Scalar: f.scalar, Items: f.items, Nested: f.nested})
+	}
+	return fields, body, nil
 }

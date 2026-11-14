@@ -216,6 +216,20 @@ type SessionControls interface {
 	// off the queue, by the id Submit returned, and returns it for
 	// editing. It reports false when the prompt no longer waits.
 	Withdraw(id string) (agent.Prompt, bool)
+	// RewindPoints lists the person's prompts of this conversation, the
+	// oldest first: the points Rewind can take it back to. Rewind takes
+	// the conversation back to before one of them and returns that
+	// prompt's text, for the prompt box. Only the conversation goes back
+	// (no file is restored), the session must be idle, and it is opened
+	// again from its file, as /clear opens a new one: the front end
+	// forgets what it held of the session's state. The command /rewind N
+	// does the same and says so in its result (CommandResult.Reset).
+	RewindPoints() []RewindPoint
+	Rewind(ctx context.Context, point string) (text string, err error)
+	// ResumeChoices lists the folder's other sessions, the one written
+	// to last first: what the command /resume offers, and opens in place
+	// of this session with an id after it (CommandResult.Reset).
+	ResumeChoices() []SessionChoice
 }
 
 // CommandResult is what running a slash command came to.
@@ -228,6 +242,17 @@ type CommandResult struct {
 	Quit bool
 	// Name is the command that ran, without its slash.
 	Name string
+	// Reset says the command put another session behind the controls, or
+	// this one at another point of its conversation (/clear, /rewind):
+	// what the front end holds of the session's state is to be forgotten.
+	// Draft is then a prompt to put back into the prompt box, when there
+	// is one: the prompt a rewind went back to.
+	Reset bool
+	Draft string
+	// Prompt is the id of a prompt the command sent to the model, when it
+	// sent one: a skill is such a command. What becomes of it arrives as
+	// events, as for a prompt the front end submits itself.
+	Prompt string
 }
 
 // SessionInfo describes a session to its front end.
@@ -252,6 +277,10 @@ type SessionInfo struct {
 	// each what a front end needs to complete it and to show it.
 	Commands    []string
 	CommandList []CommandInfo
+	// Skills are the person's skills that can be run by typing a slash
+	// and the name, as they stand now: Args is the hint for what follows
+	// the name, and Summary what the skill is for.
+	Skills []CommandInfo
 	// Version names the build.
 	Version string
 	// Interactive says a person is there to be asked.
