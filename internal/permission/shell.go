@@ -91,6 +91,9 @@ type simpleCmd struct {
 	nest    nesting
 	// bg is set when the list the command ends was put in the background.
 	bg bool
+	// neg is set when the pipeline the command is part of stands under a
+	// !: what comes after && then runs when the pipeline failed.
+	neg bool
 	// pieces and altRedirs are how a shell that has no [[ ]] (dash, and
 	// every plain sh) would read a [[ ]] test that holds && || | ( ) < >
 	// or a line break: as several commands, and as redirections. mixed is
@@ -523,9 +526,19 @@ func (p *parser) andOr() {
 // pipeline reads commands joined by | and |&.
 func (p *parser) pipeline() {
 	p.blanks()
+	neg := false
 	if p.reserved() == "!" {
 		p.pos++
+		neg = true
 	}
+	first := len(p.sc.cmds)
+	defer func() {
+		if neg {
+			for _, c := range p.sc.cmds[first:] {
+				c.neg = true
+			}
+		}
+	}()
 	if p.keywordAfterTime() {
 		// To bash, "time" opens a pipeline, and what stands after it is
 		// read as one, keywords and all: "time coproc rm x" runs rm, and

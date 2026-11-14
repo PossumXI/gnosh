@@ -59,9 +59,10 @@ type Options struct {
 	// them that never need asking.
 	KnownTools []string
 	QuietTools []string
-	// Protected lists more paths whose change always asks: files given to
-	// --settings, --mcp-config or --agents, gnosh's config and the mem
-	// store. Each covers itself and everything under it.
+	// Protected lists more paths whose change always asks: gnosh's own
+	// config, state and data directories, a file given to --settings,
+	// and what a feature keeps for itself (the mem store). Each covers
+	// itself and everything under it.
 	Protected []string
 	// DisableBypass forbids ModeBypass (the settings key
 	// disableBypassPermissionsMode).

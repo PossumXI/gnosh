@@ -7,9 +7,14 @@ import (
 
 // The dangerous-removal check: rm and rmdir commands whose target is the
 // filesystem root, a top-level directory, the home directory, the working
-// directory or something above it, or a target that could turn into one
-// of those when a variable is empty. No allow rule and no hook approves
-// one. It is a seat belt, not a wall: it catches the usual accidents.
+// directory or something above it, the repository's .git, one of gnosh's
+// own folders, or a target that could turn into one of those when a
+// variable is empty; and the other commands that destroy such a
+// directory as surely as rm does: mv that takes it away, chmod -R and
+// chown -R over it, git clean -fdx in it, dd, truncate and shred onto
+// it, find -delete in it, rsync --delete into it. No allow rule and no
+// hook approves one. It is a seat belt, not a wall: it catches the usual
+// accidents.
 
 // topLevelNames are directory names commonly found directly under the
 // filesystem root.
@@ -38,6 +43,28 @@ func (e *Engine) criticalDir(p string) string {
 		return "it is the working directory"
 	case inside(p, e.cwd) || inside(p, e.cur):
 		return p + " holds the working directory"
+	}
+	// The repository's own state: .git in a working directory, or in a
+	// directory above one (the project may be part of a larger checkout).
+	// A .git further down is some other repository's, vendored or cloned
+	// into the project, and is a directory like any.
+	if strings.EqualFold(path.Base(p), ".git") {
+		for _, d := range append([]string{e.cur}, e.workDirs()...) {
+			if inside(path.Dir(p), d) {
+				return p + " holds the repository's history"
+			}
+		}
+	}
+	// gnosh's own folders (its config, its state and data, what a feature
+	// keeps), and whatever holds one of them.
+	low := guardPath(p)
+	for _, x := range e.protected {
+		if inside(low, x) {
+			if low == x {
+				return p + " is one of gnosh's own folders or files"
+			}
+			return p + " holds one of gnosh's own folders"
+		}
 	}
 	return ""
 }
@@ -90,10 +117,21 @@ func (e *Engine) removalDanger(v *bashView, c *simpleCmd, dirs []string, fromSub
 			return ""
 		}
 	}
-	if name == "find" {
+	switch name {
+	case "find":
 		return e.findDanger(v, c, dirs, fromSubst)
-	}
-	if name != "rm" && name != "rmdir" {
+	case "mv":
+		return e.mvDanger(v, c, dirs, fromSubst)
+	case "chmod", "chown", "chgrp":
+		return e.modeDanger(v, name, c, dirs, fromSubst)
+	case "git":
+		return e.gitCleanDanger(v, c, dirs, fromSubst)
+	case "dd", "truncate", "shred":
+		return e.overwriteDanger(v, name, c, dirs, fromSubst)
+	case "rsync":
+		return e.rsyncDanger(v, c, dirs, fromSubst)
+	case "rm", "rmdir":
+	default:
 		return ""
 	}
 	recursive := false
@@ -113,6 +151,15 @@ func (e *Engine) removalDanger(v *bashView, c *simpleCmd, dirs []string, fromSub
 	// rmdir takes a directory whole, like rm -r: one whose name is only
 	// known when the line runs may be one to keep.
 	recursive = recursive || name == "rmdir"
+	return e.targetsDanger(v, v.place(c), name, targets, dirs, fromSubst, recursive)
+}
+
+// targetsDanger judges the targets of a command that removes what it is
+// handed, or changes it past mending: each as it is written, as the
+// words its braces make, and as what the line's own variables make of
+// it. name is the command, for the reason, and at where it stands among
+// the line's own commands (or noPlace).
+func (e *Engine) targetsDanger(v *bashView, at int, name string, targets []word, dirs []string, fromSubst map[string]bool, recursive bool) string {
 	// Braces around a variable are several targets too: "rm -rf {$d,x}".
 	for i := 0; i < len(targets); i++ {
 		if alts, ok := braceAlts(targets[i]); ok && len(targets)+len(alts) < 256 {
@@ -120,8 +167,15 @@ func (e *Engine) removalDanger(v *bashView, c *simpleCmd, dirs []string, fromSub
 		}
 	}
 	for _, w := range targets {
-		if why := e.targetDanger(w, dirs, fromSubst, recursive); why != "" {
-			return name + " " + w.raw + ": " + why
+		// A word whose variables the line itself set, each of them for
+		// sure by the time the command runs, is what they make it and
+		// nothing else: "d=build; rm -rf $d/" removes build/, and no
+		// variable in it can turn out empty. Any other word is judged as
+		// it is written, with what is not known in it left out.
+		if w.static() || !e.closedWord(v, w, at) {
+			if why := e.targetDanger(w, dirs, fromSubst, recursive); why != "" {
+				return name + " " + w.raw + ": " + why
+			}
 		}
 		// Braces are several targets: "rm -rf {.,x}".
 		if w.brace && w.static() && !w.quoted {
@@ -157,10 +211,378 @@ func (e *Engine) removalDanger(v *bashView, c *simpleCmd, dirs []string, fromSub
 				t := litOf(f)
 				t.glob = hasPathMagic(f) && (w.glob || !w.quoted || val.glob)
 				t.tilde = false
+				if val.loose {
+					// What is left of a value when a variable it was made
+					// of is empty ("w=$X/; rm -rf $w"): judged as the
+					// word it came from would be where it is written out
+					// ("rm -rf $X/"), by a variable nobody knows put
+					// after it.
+					t.parts = append(t.parts, wordPart{kind: partVar})
+				}
 				if why := e.targetDanger(t, dirs, fromSubst, recursive); why != "" {
 					return name + " " + w.raw + ": " + why
 				}
 			}
+		}
+	}
+	if why := e.takesAll(targets, dirs); why != "" {
+		return name + ": " + why
+	}
+	return ""
+}
+
+// takesAll reports whether the targets, taken together, are everything
+// in a directory that has to be kept, however that is written: "[!.]*"
+// and "*?" match what "*" does, "[a-m]* [n-z]*" between them, and so
+// does a list of every name. It needs a way to see what is there
+// (Options.Glob); without one a pattern is judged by how it is written.
+// A directory with a single entry is not counted: removing the one thing
+// in it is removing that thing.
+func (e *Engine) takesAll(targets []word, dirs []string) string {
+	if e.glob == nil {
+		return ""
+	}
+	for _, d := range dirs {
+		// What the targets name, by the directory each name lies in.
+		named := map[string]map[string]bool{}
+		note := func(p string) {
+			dir := parentDir(p)
+			if named[dir] == nil {
+				named[dir] = map[string]bool{}
+			}
+			named[dir][p] = true
+		}
+		for _, w := range targets {
+			ws := []word{w}
+			if w.brace && w.static() && !w.quoted {
+				if alts, ok := braceExpand(w.joined()); ok {
+					ws = ws[:0]
+					for _, alt := range alts {
+						part := litOf(alt)
+						part.glob, part.tilde = w.glob && hasPathMagic(alt), strings.HasPrefix(alt, "~")
+						ws = append(ws, part)
+					}
+				}
+			}
+			for _, t := range ws {
+				abs, pattern, ok := e.absAll(t, []string{d})
+				if !ok {
+					continue
+				}
+				for _, a := range abs {
+					if !pattern {
+						note(a)
+						continue
+					}
+					if ms, err := e.expandGlob(a); err == nil {
+						for _, m := range ms {
+							note(m)
+						}
+					}
+				}
+			}
+		}
+		for dir, names := range named {
+			why := e.criticalGlobDir(dir)
+			if why == "" || len(names) < 2 {
+				continue
+			}
+			entries, err := e.expandGlob(strings.TrimSuffix(dir, "/") + "/*")
+			if err != nil {
+				continue
+			}
+			n, all := 0, true
+			for _, en := range entries {
+				if strings.HasPrefix(path.Base(en), ".") {
+					continue // a * leaves these out
+				}
+				n++
+				all = all && names[en]
+			}
+			if n >= 2 && all {
+				return "between them the targets are everything in " + dir + ": " + strings.TrimPrefix(why, "the pattern covers everything in "+dir+": ")
+			}
+		}
+	}
+	return ""
+}
+
+// flagsAndOperands parts a command's arguments into the flags that are
+// written out and its operands. takes says of a flag whether the word
+// after it is its value, which is then neither. After "--" every word is
+// an operand, and so is one that is only known when the line runs.
+func flagsAndOperands(args []word, takes func(flag string) bool) (flags []string, ops []word) {
+	rest := false
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		l := w.lit()
+		switch {
+		case rest || !w.static() || !strings.HasPrefix(l, "-") || l == "-" || w.tilde:
+			ops = append(ops, w)
+		case l == "--":
+			rest = true
+		default:
+			flags = append(flags, l)
+			if takes != nil && takes(l) {
+				i++
+			}
+		}
+	}
+	return flags, ops
+}
+
+// mvDanger: mv takes a directory away as surely as rm does. What it is
+// handed to move is judged like rm -r's targets ("mv ~ /tmp/x", "mv .git
+// old", "mv * ../elsewhere" in the project); the place it moves things
+// to is not, unless -T makes mv put its one source in that place's
+// stead. Moving a thing into a directory that must be kept is what mv is
+// for.
+func (e *Engine) mvDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst map[string]bool) string {
+	short := func(f string, letter byte) bool {
+		return !strings.HasPrefix(f, "--") && strings.IndexByte(f, letter) >= 0
+	}
+	flags, ops := flagsAndOperands(c.words[1:], func(f string) bool {
+		// -t and -S take the next word, also at the end of a cluster.
+		return f == "--target-directory" || f == "--suffix" || !strings.HasPrefix(f, "--") && (strings.HasSuffix(f, "t") || strings.HasSuffix(f, "S"))
+	})
+	into, onto := false, false
+	for _, f := range flags {
+		into = into || f == "--target-directory" || strings.HasPrefix(f, "--target-directory=") || short(f, 't')
+		onto = onto || f == "--no-target-directory" || short(f, 'T')
+	}
+	sources := ops
+	var dest []word
+	if !into {
+		if len(ops) < 2 {
+			return ""
+		}
+		sources, dest = ops[:len(ops)-1], ops[len(ops)-1:]
+	}
+	if why := e.targetsDanger(v, v.place(c), "mv", sources, dirs, fromSubst, true); why != "" {
+		return why + " (it would be moved away)"
+	}
+	if onto {
+		if why := e.targetsDanger(v, v.place(c), "mv -T", dest, dirs, fromSubst, true); why != "" {
+			return why + " (it would be replaced)"
+		}
+	}
+	return ""
+}
+
+// modeDanger: chmod -R, chown -R and chgrp -R over a directory that must
+// be kept change every file in it at once. Without -R they change one
+// thing, which can be changed back.
+func (e *Engine) modeDanger(v *bashView, name string, c *simpleCmd, dirs []string, fromSubst map[string]bool) string {
+	flags, ops := flagsAndOperands(c.words[1:], func(f string) bool { return f == "--reference" || f == "--from" })
+	recursive, given := false, false
+	for _, f := range flags {
+		switch {
+		case f == "--recursive":
+			recursive = true
+		case strings.HasPrefix(f, "--reference"):
+			given = true // the mode or the owner comes from a file
+		case strings.HasPrefix(f, "--"):
+		case name == "chmod" && strings.Trim(f[1:], "rwxXstugoa+-=,") == "":
+			given = true // "-w", "-x": a mode that takes rights away
+		default:
+			recursive = recursive || strings.ContainsRune(f, 'R')
+		}
+	}
+	if !recursive {
+		return ""
+	}
+	// The first operand is the mode or the owner, unless a flag gave it.
+	if !given {
+		if len(ops) == 0 {
+			return ""
+		}
+		ops = ops[1:]
+	}
+	return e.targetsDanger(v, v.place(c), name+" -R", ops, dirs, fromSubst, true)
+}
+
+// gitCleanDanger: "git clean -fdx" removes every file git does not
+// track, the ignored ones too: local settings, keys, whatever was never
+// committed. In a directory that must be kept, or handed one, that is a
+// removal like rm's. A dry run (-n) removes nothing, and a clean that
+// leaves ignored files alone (no -x, no -X) is not asked about here.
+func (e *Engine) gitCleanDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst map[string]bool) string {
+	args := c.words[1:]
+	// The words before the subcommand: -C says where git runs.
+	var at []word
+	sub := -1
+	for i := 0; i < len(args) && sub < 0; i++ {
+		if !args[i].static() {
+			return ""
+		}
+		switch l := args[i].joined(); {
+		case l == "-C" && i+1 < len(args):
+			i++
+			at = append(at, args[i])
+		case l == "-c" || l == "--git-dir" || l == "--work-tree" || l == "--namespace" || l == "--super-prefix" || l == "--config-env":
+			i++
+		case strings.HasPrefix(l, "-"):
+		default:
+			sub = i
+		}
+	}
+	if sub < 0 || args[sub].joined() != "clean" {
+		return ""
+	}
+	flags, paths := flagsAndOperands(args[sub+1:], func(f string) bool {
+		return f == "--exclude" || !strings.HasPrefix(f, "--") && strings.HasSuffix(f, "e")
+	})
+	force, dry, ignored := false, false, false
+	for _, f := range flags {
+		switch {
+		case f == "--force":
+			force = true
+		case f == "--dry-run":
+			dry = true
+		case strings.HasPrefix(f, "--"):
+		default:
+			force = force || strings.ContainsRune(f, 'f')
+			dry = dry || strings.ContainsRune(f, 'n')
+			ignored = ignored || strings.ContainsAny(f, "xX")
+		}
+	}
+	if !force || dry || !ignored {
+		return ""
+	}
+	where := dirs
+	if len(at) > 0 {
+		where = nil
+		for _, w := range at {
+			abs, _, ok := e.absAll(w, dirs)
+			if !ok {
+				return "" // a directory that is only known when the line runs
+			}
+			where = append(where, abs...)
+		}
+	}
+	if len(paths) > 0 {
+		if why := e.targetsDanger(v, v.place(c), "git clean", paths, where, fromSubst, true); why != "" {
+			return why + " (every file there that git does not track would be removed, the ignored ones too)"
+		}
+		return ""
+	}
+	for _, d := range where {
+		if why := e.criticalDir(d); why != "" {
+			return "git clean in " + d + " removes every file there that git does not track, the ignored ones too: " + why
+		}
+	}
+	return ""
+}
+
+// overwriteDanger: dd, truncate and shred destroy what a file holds
+// where it lies. Their targets are judged like rm's (a pattern that takes
+// every file of a directory that must be kept, a name that an empty
+// variable would turn into one), and a disk as a whole is one more.
+func (e *Engine) overwriteDanger(v *bashView, name string, c *simpleCmd, dirs []string, fromSubst map[string]bool) string {
+	var targets []word
+	if name == "dd" {
+		for _, a := range c.words[1:] {
+			if w, ok := afterPrefix(a, "of="); ok {
+				targets = append(targets, w)
+			}
+		}
+	} else {
+		_, targets = flagsAndOperands(c.words[1:], func(f string) bool {
+			switch f {
+			case "-s", "--size", "-r", "--reference", "-n", "--iterations", "--random-source":
+				return true
+			}
+			return false
+		})
+	}
+	if why := e.targetsDanger(v, v.place(c), name, targets, dirs, fromSubst, true); why != "" {
+		return why + " (what it holds would be destroyed)"
+	}
+	for _, w := range targets {
+		abs, _, ok := e.absAll(w, dirs)
+		for _, p := range abs {
+			if ok && diskDevice(p) {
+				return name + " " + w.raw + ": it is a disk as a whole"
+			}
+		}
+	}
+	return ""
+}
+
+// afterPrefix returns what follows a prefix written at the head of a
+// word ("of=" in dd's of=file), as a word of its own. bash expands a
+// tilde after the = of such a word.
+func afterPrefix(a word, prefix string) (word, bool) {
+	if len(a.parts) == 0 || a.parts[0].kind != partLit || !strings.HasPrefix(a.parts[0].lit, prefix) {
+		return word{}, false
+	}
+	rest := a.parts[0].lit[len(prefix):]
+	out := a
+	out.raw = strings.TrimPrefix(a.raw, prefix)
+	out.parts = append([]wordPart{{lit: rest}}, a.parts[1:]...)
+	out.tilde = a.eqTilde && strings.HasPrefix(rest, "~")
+	out.eqHead, out.eqTilde = false, false
+	return out, true
+}
+
+// diskDevice reports whether a path names a disk, or a part of one, as
+// the kernel lists them under /dev.
+func diskDevice(p string) bool {
+	name, ok := strings.CutPrefix(oneDisk(p), "/dev/")
+	if !ok {
+		return false
+	}
+	for _, pre := range []string{"sd", "hd", "vd", "xvd", "nvme", "mmcblk", "disk", "rdisk", "dm-", "md", "loop", "mapper/", "sr"} {
+		if strings.HasPrefix(name, pre) {
+			return true
+		}
+	}
+	return false
+}
+
+// rsyncDanger: rsync --delete removes from the place it copies to
+// whatever the source does not hold, so that an empty or a wrong source
+// empties that place; and --remove-source-files takes the sources away
+// like mv. The place is judged where it is on this machine.
+func (e *Engine) rsyncDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst map[string]bool) string {
+	valued := map[string]bool{"-e": true, "--rsh": true, "-f": true, "--filter": true, "--exclude": true, "--include": true,
+		"--files-from": true, "--exclude-from": true, "--include-from": true, "-T": true, "--temp-dir": true, "--backup-dir": true,
+		"--suffix": true, "--compare-dest": true, "--copy-dest": true, "--link-dest": true, "--log-file": true, "--partial-dir": true,
+		"--chmod": true, "--chown": true, "--bwlimit": true, "--port": true, "--password-file": true, "--out-format": true,
+		"--timeout": true, "-B": true, "--block-size": true, "-M": true, "--max-size": true, "--min-size": true, "--info": true, "--debug": true}
+	flags, ops := flagsAndOperands(c.words[1:], func(f string) bool {
+		return valued[f] || !strings.HasPrefix(f, "--") && len(f) > 2 && strings.ContainsAny(f[len(f)-1:], "efTBM")
+	})
+	deletes, away := false, false
+	for _, f := range flags {
+		deletes = deletes || f == "--del" || strings.HasPrefix(f, "--delete")
+		away = away || f == "--remove-source-files" || f == "--remove-sent-files"
+	}
+	if len(ops) < 2 {
+		return ""
+	}
+	// (A name with a colon before any slash is a place on another
+	// machine.)
+	here := func(w word) bool {
+		l := w.lit()
+		i := strings.IndexByte(l, ':')
+		return i < 0 || strings.Contains(l[:i], "/")
+	}
+	dest := ops[len(ops)-1]
+	if deletes && here(dest) {
+		if why := e.targetsDanger(v, v.place(c), "rsync --delete", []word{dest}, dirs, fromSubst, true); why != "" {
+			return why + " (whatever is there and not in the source would be deleted)"
+		}
+	}
+	if away {
+		var sources []word
+		for _, w := range ops[:len(ops)-1] {
+			if here(w) {
+				sources = append(sources, w)
+			}
+		}
+		if why := e.targetsDanger(v, v.place(c), "rsync --remove-source-files", sources, dirs, fromSubst, true); why != "" {
+			return why + " (it would be moved away)"
 		}
 	}
 	return ""
@@ -249,7 +671,7 @@ func (e *Engine) findDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst 
 			removes = true
 		case l == "-exec" || l == "-execdir" || l == "-ok" || l == "-okdir":
 			for k := i + 1; k < len(args) && k < i+4; k++ {
-				if n := baseName(args[k].lit()); n == "rm" || n == "rmdir" {
+				if n := baseName(args[k].lit()); n == "rm" || n == "rmdir" || n == "shred" {
 					removes = true
 				}
 			}
@@ -262,8 +684,8 @@ func (e *Engine) findDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst 
 		// find removes what is in the starting point, and the starting
 		// point too when it can.
 		for _, t := range []word{w, {raw: w.raw + "/*", parts: append(append([]wordPart(nil), w.parts...), wordPart{lit: "/*"}), glob: true, quoted: w.quoted, tilde: w.tilde}} {
-			if why := e.targetDanger(t, dirs, fromSubst, true); why != "" {
-				return "find " + w.raw + " removes what it finds: " + why
+			if why := e.targetsDanger(v, v.place(c), "find", []word{t}, dirs, fromSubst, true); why != "" {
+				return "find " + w.raw + " removes what it finds: " + strings.TrimPrefix(why, "find "+t.raw+": ")
 			}
 		}
 	}
@@ -537,6 +959,14 @@ func (e *Engine) keepDirs() []string {
 	add(e.cur)
 	for _, d := range e.workDirs() {
 		add(d)
+	}
+	for _, d := range append([]string{e.cur}, e.workDirs()...) {
+		if d != "" {
+			out = unionStrings(out, []string{path.Join(d, ".git")})
+		}
+	}
+	for _, x := range e.protected {
+		add(x)
 	}
 	for name := range topLevelNames {
 		out = unionStrings(out, []string{"/" + name})

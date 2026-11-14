@@ -9,10 +9,20 @@ import (
 type lineState struct {
 	// dirs are the directories the next command may be running in.
 	dirs []string
-	// pending is where a cd that just ran would leave the shell. It
-	// takes effect for sure only after &&; after anything else the shell
-	// may be in either place.
+	// pending is where a cd that just ran would leave the shell, and sure
+	// says that it is the shell's own cd, standing by itself: not behind
+	// a wrapper (the cd of "nohup cd x" is a program that moves nobody
+	// but itself), not one side of a pipe (which runs in a shell of its
+	// own) and not under a ! (which turns its outcome round). Only after
+	// such a cd does && mean that the shell went there; after anything
+	// else it may be in either place.
 	pending []string
+	sure    bool
+	// before are the places the line was in ahead of the cds of the &&
+	// chain it is in. A cd that fails ends its chain, and what comes
+	// after the chain then runs where the line was before it: "cd nope
+	// && ls; cat ../x" reads ../x from the directory the line began in.
+	before []string
 	// moved is set once a cd has come earlier in the line.
 	moved bool
 	// unknown is set when the directory can no longer be worked out.
@@ -27,10 +37,17 @@ type lineState struct {
 
 // enter is called before judging c: it settles where the shell is.
 func (st *lineState) enter(c *simpleCmd) {
+	if st.before != nil && c.sep != sepAnd && c.sep != sepPipe {
+		// The chain is over, and this command runs whether or not the
+		// cds in it went anywhere.
+		st.dirs = unionStrings(st.dirs, st.before)
+		st.before = nil
+	}
 	if st.pending == nil {
 		return
 	}
-	if c.sep == sepAnd {
+	if c.sep == sepAnd && st.sure {
+		st.before = unionStrings(st.before, st.dirs)
 		st.dirs = st.pending
 	} else {
 		st.dirs = unionStrings(st.dirs, st.pending)
@@ -149,6 +166,11 @@ func (e *Engine) lineDir(target *word, into *[]string, lost *bool) {
 				e.lineDir(&alt, &dirs, lost)
 			}
 		}
+	}
+	if !target.static() && !target.quoted && target.unset() == "" && e.home != "" && len(dirs) < maxLineDirs {
+		// "cd $X" with nothing in X is a cd with no word after it: it
+		// goes home.
+		dirs = unionStrings(dirs, []string{e.home})
 	}
 	if !target.static() || target.joined() == "-" || len(dirs) >= maxLineDirs {
 		*lost = true
@@ -503,12 +525,6 @@ func (e *Engine) shellPaths(req *request) {
 		}
 	}
 	v.pwds = dirs
-	if v.index == nil {
-		v.index = map[*simpleCmd]int{}
-		for i, c := range v.sc.cmds {
-			v.index[c] = i
-		}
-	}
 	var reads, writes []string
 	hide := e.hidesDots(v)
 	// at is where the command whose words are being read stands among
@@ -597,6 +613,19 @@ func (e *Engine) shellPaths(req *request) {
 			// and matches the patterns in it: "x='.e*'; cat $x".
 			if l := w.unset(); !w.brace && (!w.tilde || l == "~" || strings.HasPrefix(l, "~/")) {
 				vals, _, _ := e.filledAll(v, w)
+				if e.glob != nil && mixesPattern(v, w) {
+					// A variable that went through what a pattern matched,
+					// with more text around it: the names are that text
+					// around each match ("for f in *.txt; do cp $f
+					// new_$f; done" writes new_a.txt), and not what a
+					// pattern made of the two would match.
+					named, _, ok := e.filledWith(v, w, func(pattern string) ([]string, bool) { return e.matchNames(pattern, dirs, hide) })
+					if ok {
+						vals = named
+					} else {
+						req.pathOpaque = "it names files by what a pattern matched earlier in the line (" + w.raw + "), and those could not be worked out"
+					}
+				}
 				known := len(vals)
 				if !e.closedWord(v, w, at) {
 					// (One of them may still be as it came, or not set.)
@@ -642,8 +671,8 @@ func (e *Engine) shellPaths(req *request) {
 	}
 	for _, u := range v.units {
 		at = noPlace
-		if i, ok := v.index[u.cmd]; ok && !u.derived {
-			at = i
+		if !u.derived {
+			at = v.place(u.cmd)
 		}
 		if len(u.cmd.words) > 0 {
 			w0 := u.cmd.words[0]
@@ -730,6 +759,68 @@ func (e *Engine) shellPaths(req *request) {
 	req.reads = e.expand(req, reads)
 	req.writes = e.expand(req, writes)
 	req.unresolved = false // links matter here only to the checks that allow
+}
+
+// matchNames returns the names a pattern matches from each of the
+// directories the line may be in, written as the shell writes them: as
+// the pattern is, from that directory. It reports false for a pattern
+// that could not be expanded, and for one whose matches cannot be
+// written back that way (it climbs with "..", or doubles a slash).
+func (e *Engine) matchNames(pattern string, dirs []string, hide bool) ([]string, bool) {
+	if e.glob == nil || pattern == "" {
+		return nil, false
+	}
+	segs := strings.Split(pattern, "/")
+	for i, seg := range segs {
+		if seg == "" && i == 0 && len(segs) > 1 {
+			continue // it starts at the root
+		}
+		if seg == "" || seg == "." || seg == ".." {
+			return nil, false
+		}
+	}
+	var out []string
+	// A part that starts with a dot may match . and .. themselves (bash
+	// before 5.2, and every sh): names like any, where it is the last.
+	for i, seg := range segs {
+		if !strings.HasPrefix(seg, ".") || !hasPathMagic(seg) {
+			continue
+		}
+		for _, name := range []string{".", ".."} {
+			if !segMatch(seg, name) {
+				continue
+			}
+			if i != len(segs)-1 {
+				return nil, false
+			}
+			out = unionStrings(out, []string{strings.Join(append(segs[:i:i], name), "/")})
+		}
+	}
+	for _, d := range dirs {
+		abs, base := pattern, ""
+		if !strings.HasPrefix(pattern, "/") {
+			base = strings.TrimSuffix(d, "/") + "/"
+			abs = base + pattern
+		}
+		ms, err := e.expandGlob(abs)
+		if err != nil {
+			return nil, false
+		}
+		if hide {
+			ms = dropHidden(abs, ms)
+		}
+		for _, m := range ms {
+			rel, ok := strings.CutPrefix(m, base)
+			if !ok || rel == "" {
+				return nil, false
+			}
+			out = unionStrings(out, []string{rel})
+		}
+		if base == "" {
+			break // the same from everywhere
+		}
+	}
+	return out, true
 }
 
 // unsetValue is the word with no variable in it set (see unset), and a
@@ -1029,13 +1120,13 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		relProg := strings.Contains(prog, "/") && !strings.HasPrefix(prog, "/")
 		if !plan && !((st.moved || st.unknown) && relProg) {
 			if r := e.allowCommand(words, viaXargs); r != nil {
-				e.afterPart(f, words, st)
+				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && !c.neg)
 				return partVerdict{ok: true, rule: r, state: state}
 			}
 		}
 		if !viaXargs {
 			if w := e.partRuns(c, f, st, depth, staticInput); w == "" {
-				e.afterPart(f, words, st)
+				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && !c.neg)
 				return partVerdict{ok: true}
 			} else if why == "" {
 				why = w
@@ -1048,7 +1139,7 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		viaXargs = viaXargs || words[0].joined() == "xargs"
 		words = inner
 	}
-	e.afterPart(first, c.words, st)
+	e.afterPart(first, c.words, st, c.sep != sepPipe && !c.neg)
 	pv := partVerdict{why: why}
 	if plainName(c.words[0]) {
 		pv.exact, pv.prefix = e.suggestRules(c, first, st)
@@ -1057,8 +1148,9 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 }
 
 // afterPart notes what a part that is going to run does to the shell's
-// directory, and to the files the rest of the line may name.
-func (e *Engine) afterPart(f cmdFacts, words []word, st *lineState) {
+// directory, and to the files the rest of the line may name. own says a
+// cd among them is the shell's own, standing by itself (see lineState).
+func (e *Engine) afterPart(f cmdFacts, words []word, st *lineState, own bool) {
 	switch f.name {
 	case "cd":
 		if f.cd == nil {
@@ -1070,7 +1162,7 @@ func (e *Engine) afterPart(f cmdFacts, words []word, st *lineState) {
 			st.unknown = true
 			return
 		}
-		st.pending = abs
+		st.pending, st.sure = abs, own
 	case "pushd", "popd":
 		st.unknown = true
 	case "ln":

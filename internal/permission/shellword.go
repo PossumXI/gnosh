@@ -51,6 +51,9 @@ type wordPart struct {
 	// body is the word after the operator of the forms that stand for
 	// it as it is: - and + and their kin.
 	body *word
+	// all marks ${name[@]} and ${name[*]}: every word of an array at
+	// once, each a word of its own where the shell cuts words.
+	all bool
 }
 
 // of returns the texts the part may stand for when its variable holds
@@ -928,8 +931,8 @@ func (p *parser) exoticParam(b *wordBuilder) {
 	// ${name[i]}, ${name[@]} and ${name[*]} are a variable's own value,
 	// or its values: the name is kept for a line that set them.
 	part := wordPart{kind: partVar}
-	if name, ok := elemName(p.src[p.pos+2 : end-1]); ok {
-		part.name = name
+	if name, all, ok := elemName(p.src[p.pos+2 : end-1]); ok {
+		part.name, part.all = name, all
 	}
 	p.pos = end
 	b.add(part)
@@ -940,21 +943,23 @@ func (p *parser) exoticParam(b *wordBuilder) {
 }
 
 // elemName returns the variable in the body of a ${name[subscript]}
-// whose subscript is a number, @ or *.
-func elemName(body string) (string, bool) {
+// whose subscript is a number, @ or *. all says it is one of the last
+// two: the form stands for every word of the array.
+func elemName(body string) (name string, all, ok bool) {
 	i := strings.IndexByte(body, '[')
 	if i <= 0 || !strings.HasSuffix(body, "]") || !isNameStart(body[0]) {
-		return "", false
+		return "", false, false
 	}
 	for k := 1; k < i; k++ {
 		if !isNameChar(body[k]) {
-			return "", false
+			return "", false, false
 		}
 	}
-	if sub := body[i+1 : len(body)-1]; sub != "@" && sub != "*" && !isDigits(sub) {
-		return "", false
+	sub := body[i+1 : len(body)-1]
+	if sub != "@" && sub != "*" && !isDigits(sub) {
+		return "", false, false
 	}
-	return body[:i], true
+	return body[:i], sub == "@" || sub == "*", true
 }
 
 // exoticEnd returns the index just past the "}" that closes a ${...} whose

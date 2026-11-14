@@ -4,6 +4,7 @@ package permission
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"regexp"
 	"sort"
@@ -83,6 +84,8 @@ func (j *jail) engine(rs ruleSet) *Engine {
 		Mode: rs.mode, Cwd: j.work, Home: j.home, Trusted: true, Resolve: realResolve,
 		Layers: []Layer{{Scope: ScopeUser, Name: "oracle", Base: j.home + "/.config/gnosh",
 			Allow: fillAll(rs.r.allow), Ask: fillAll(rs.r.ask), Deny: fillAll(rs.r.deny)}},
+		// gnosh's own folders, as the program names them to the engine.
+		Protected: []string{j.home + "/.config/gnosh", j.home + "/.local/share/gnosh"},
 	}
 	if rs.glob {
 		o.Glob = shellGlob
@@ -561,6 +564,29 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 				}
 			}
 		}
+		// The other commands that destroy what has to be kept (mv, chmod
+		// -R, git clean -fdx, dd, truncate, shred, rsync --delete): the
+		// engine's own judgement of the command as it ran, every word of
+		// it known by now, against the yes it gave to the line.
+		if b := baseName(rc.name); destroyers[b] && rc.path != "" {
+			ws := []word{litOf(b)}
+			for _, a := range rc.args {
+				ws = append(ws, litOf(a))
+			}
+			known := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
+			if why := e.removalDanger(known, &simpleCmd{words: ws}, []string{rc.cwd}, nil); why != "" && lc.wroteDestroyer(e, b, rc.args) {
+				return "ran a command that destroys what has to be kept: " + rc.text() + " (" + why + ")"
+			}
+		}
+		// Everything in a directory that has to be kept, between the
+		// words a command that removes or overwrites was handed. The
+		// engine can see what is in a directory only where it was given
+		// a way to (Options.Glob), so only there is it held to this.
+		if b := baseName(rc.name); rs.glob && rc.path != "" && (b == "rm" || b == "mv" || b == "shred" || b == "truncate") && lc.wroteDestroyer(e, b, rc.args) && lc.allWritten(e, b) {
+			if dir := tookAll(e, rc); dir != "" {
+				return "ran a command that was handed everything in " + dir + ": " + rc.text()
+			}
+		}
 	}
 	for _, ch := range r.changes {
 		if r.mode[0] != 'p' || lc.letGo(e, rs) || lc.leavesStubs(rcs) {
@@ -604,6 +630,112 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 		}
 		if seen {
 			return "the shell read a file a Read deny rule names: " + p
+		}
+	}
+	return ""
+}
+
+// destroyers are the commands, beside rm, rmdir and find, that the
+// engine asks about when they would destroy a directory that has to be
+// kept.
+var destroyers = map[string]bool{"mv": true, "chmod": true, "chown": true, "chgrp": true, "git": true, "dd": true,
+	"truncate": true, "shred": true, "rsync": true}
+
+// wroteDestroyer reports whether the line holds the command that ran as
+// the engine claims to judge it: a command of that name whose flags, as
+// they ran, are all written out in it, and none of whose operands is a
+// variable nobody knows. A flag that only running the line produces
+// (chmod $(echo -R) 000 .) is a blind spot the engine does not claim to
+// see into, like rm's; and a target that is only an unknown variable is
+// let go by design (doc.go), so that "mv "$tmp" x" runs unasked.
+func (lc *lineCheck) wroteDestroyer(e *Engine, name string, args []string) bool {
+	for _, u := range lc.view.units {
+		ws := u.cmd.words
+		if len(ws) == 0 {
+			continue
+		}
+		if n, ok := e.progName(ws[0]); !ok || progIsPattern(ws[0]) || progKey(baseName(n)) != name {
+			continue
+		}
+		static := map[string]bool{}
+		letGo := false
+		for _, w := range ws[1:] {
+			if w.static() {
+				static[w.joined()] = true
+				continue
+			}
+			if _, _, ok := e.filledAll(lc.view, w); !ok && onlyVars(w) {
+				letGo = true
+			}
+		}
+		written := true
+		for _, a := range args {
+			if strings.HasPrefix(a, "-") && a != "-" && !static[a] {
+				written = false
+			}
+		}
+		if written && !letGo {
+			return true
+		}
+	}
+	return false
+}
+
+// allWritten reports whether the line holds a command of that name all
+// of whose words are written out: the names it is handed, or the
+// patterns that make them, are then the line's own, and not what some
+// other command printed.
+func (lc *lineCheck) allWritten(e *Engine, name string) bool {
+	for _, u := range lc.view.units {
+		ws := u.cmd.words
+		if len(ws) == 0 {
+			continue
+		}
+		if n, ok := e.progName(ws[0]); !ok || progIsPattern(ws[0]) || progKey(baseName(n)) != name {
+			continue
+		}
+		if allStatic(ws) {
+			return true
+		}
+	}
+	return false
+}
+
+// tookAll returns the directory that has to be kept all of whose entries
+// (but those that start with a dot, which a * leaves out) are among the
+// words the command was handed, when there is one with two entries or
+// more. Every word counts as a name: a file may be named like a flag.
+func tookAll(e *Engine, rc ranCmd) string {
+	named := map[string]map[string]bool{}
+	for _, a := range rc.args {
+		abs, ok := cleanAbs(a, rc.cwd)
+		if !ok {
+			continue
+		}
+		dir := parentDir(abs)
+		if named[dir] == nil {
+			named[dir] = map[string]bool{}
+		}
+		named[dir][abs] = true
+	}
+	for dir, names := range named {
+		if len(names) < 2 || e.criticalGlobDir(dir) == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		n, all := 0, true
+		for _, en := range entries {
+			if strings.HasPrefix(en.Name(), ".") {
+				continue
+			}
+			n++
+			all = all && names[path.Join(dir, en.Name())]
+		}
+		if n >= 2 && all {
+			return dir
 		}
 	}
 	return ""
@@ -908,6 +1040,11 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 			// variables is an error that ends the line.
 			switch a.name {
 			case "BASHOPTS", "SHELLOPTS", "BASH_VERSINFO", "EUID", "PPID", "UID":
+				return ""
+			}
+			// So is a subscript bash cannot work out as a number
+			// ("a[function[[0]=1 pwd"): the command after it does not run.
+			if strings.HasPrefix(a.w.raw, a.name+"[") {
 				return ""
 			}
 		}

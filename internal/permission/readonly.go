@@ -472,6 +472,9 @@ func namedFiles(name string, args []word) []word {
 	case !ok || spec.ops == opsWords || spec.ops == opsNone:
 		return nil
 	}
+	if spec.ops == opsPattern {
+		return patternFiles(name, args)
+	}
 	var out []word
 	for _, a := range args {
 		if a.static() && strings.HasPrefix(a.joined(), "-") && !a.tilde {
@@ -484,7 +487,80 @@ func namedFiles(name string, args []word) []word {
 			}
 		}
 	}
-	if spec.ops == opsPattern && len(out) > 0 && !out[0].glob {
+	return out
+}
+
+// patternValued are the letters that take a value, for the programs
+// whose first operand is a pattern or a program text and not a file.
+var patternValued = map[string]string{
+	"grep": "efmABCdD", "egrep": "efmABCdD", "fgrep": "efmABCdD", "rg": "efgtTABCmjMdEr", "awk": "efvF",
+}
+
+// patternFiles returns the files such a program is handed: its operands
+// but the first, which is the pattern (to awk, the program), unless a
+// flag gave that (grep -e x, grep -ex, awk -f prog); and the file a flag
+// names for it (grep -f file). The value of any other flag is passed
+// over, wherever it is written: "grep -A 2 x f" reads f and nothing
+// named 2.
+func patternFiles(name string, args []word) []word {
+	valued := patternValued[progKey(name)]
+	var out []word
+	sawPat, rest := false, false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if rest || !a.static() || !strings.HasPrefix(a.joined(), "-") || a.tilde || a.joined() == "-" {
+			out = append(out, a)
+			continue
+		}
+		s := a.joined()
+		switch {
+		case s == "--":
+			rest = true
+		case strings.HasPrefix(s, "--"):
+			// --regexp=x gives the pattern (--source=x, to awk), --file=f
+			// a file of them.
+			switch flag, val, has := strings.Cut(s, "="); {
+			case flag == "--file" && has:
+				sawPat = true
+				out = append(out, partOf(a, val))
+			case flag == "--file" && i+1 < len(args):
+				sawPat = true
+				i++
+				out = append(out, args[i])
+			case flag == "--regexp" || flag == "--source" || flag == "--file":
+				sawPat = true
+				if !has {
+					i++ // the pattern is the next word
+				}
+			}
+		default:
+			// Letters: one that takes a value ends them, with the value
+			// written onto it or in the next word. -e gives the pattern
+			// and -f a file of them.
+		letters:
+			for j := 1; j < len(s); j++ {
+				c := s[j]
+				if strings.IndexByte(valued, c) < 0 {
+					continue
+				}
+				sawPat = sawPat || c == 'e' || c == 'f'
+				switch {
+				case j+1 < len(s) && c == 'f':
+					out = append(out, partOf(a, s[j+1:]))
+				case j+1 < len(s):
+				case i+1 < len(args):
+					i++
+					if c == 'f' {
+						out = append(out, args[i])
+					}
+				}
+				break letters
+			}
+		}
+	}
+	// (A first operand that is a file name pattern or braces is several
+	// words to the shell, and all but the first of those are files.)
+	if !sawPat && len(out) > 0 && !out[0].glob && !out[0].brace {
 		out = out[1:]
 	}
 	return out
@@ -639,14 +715,9 @@ func fillTargets(f *cmdFacts, args []word) {
 			}
 		}
 	case "grep", "egrep", "fgrep", "rg", "awk":
-		// The first operand is the pattern or the program, unless it is a
-		// file name pattern or braces: the shell then makes several words
-		// of it, and all but the first are files.
-		if len(ops) > 0 && (ops[0].glob || ops[0].brace) {
-			f.reads = ops
-		} else if len(ops) > 1 {
-			f.reads = ops[1:]
-		}
+		// The first operand is the pattern or the program, unless a flag
+		// gave that, or it is a file name pattern or braces.
+		f.reads = patternFiles(f.name, args)
 	case "tee", "touch", "mkdir", "rm", "rmdir", "truncate", "shred", "unlink", "chmod", "chown":
 		f.writes = ops
 	case "mv":

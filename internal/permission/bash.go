@@ -56,7 +56,11 @@ type bashView struct {
 	tight     bool
 	bare      map[string]bool
 	tightDone bool
-	// index is where each of the line's own commands stands in sc.cmds.
+	// closing are the variables closedVar is in the middle of asking
+	// about, so that one made of itself ("a=$b; b=$a") ends.
+	closing map[string]bool
+	// index is where each of the line's own commands stands in sc.cmds
+	// (see place).
 	index map[*simpleCmd]int
 	// dirsCapped is set when the line goes to more directories than
 	// maxLineDirs, and moves when it holds a cd or a pushd at all.
@@ -192,11 +196,11 @@ func (e *Engine) readBash(text string, before *bashView) *bashView {
 	if before != nil {
 		v.vars, v.pending = before.vars, before.pending
 	}
-	e.noteScript(v, v.sc)
-	for _, c := range v.sc.cmds {
-		e.noteVars(v, c)
+	e.noteScript(v, v.sc, true)
+	for i, c := range v.sc.cmds {
+		e.noteVars(v, c, i)
 	}
-	e.settleVars(v)
+	e.settleVars(v, nil)
 	v.grew = false
 	// The line's own commands always count; what is dug out of them is
 	// bounded.
@@ -243,8 +247,10 @@ func (e *Engine) readBash(text string, before *bashView) *bashView {
 			}
 		}
 	}
-	// (What the scripts inside the line give its variables.)
-	e.settleVars(v)
+	// (What the scripts inside the line give its variables. By now every
+	// command of the line is known, and with them the names that stand
+	// in it as text of their own: "read F", "unset F".)
+	e.settleVars(v, bareNames(v))
 	return v
 }
 
@@ -254,6 +260,14 @@ type lineVal struct {
 	// glob says the shell matched the text against file names where the
 	// value was made: the list of a for loop, the words of an array.
 	glob bool
+	// loose says the text is what is left of a value when a variable it
+	// is made of holds nothing: one the line does not set, or does not
+	// set for sure before the value is made. "w=$X/" may make w a lone
+	// slash, and "w=.e${X}nv" may make it .env. Such a text is held
+	// against the rules about files like any other, and by the removal
+	// check as the word it came from would be where it is written out
+	// ("rm -rf $X/"); it is never written into a command (filledArgs).
+	loose bool
 }
 
 // lineVar is what a line says of a variable it sets. The values are
@@ -274,6 +288,11 @@ type pendingVal struct {
 	w      word
 	assign bool
 	list   bool
+	// at is where the command that makes the value stands among the
+	// line's own (for a loop's list, where the loop's body begins), or
+	// noPlace for one found inside another command: what the variables
+	// in the word hold is what they hold there.
+	at int
 }
 
 // maxFilled bounds how many texts one word is read as when the line
@@ -312,15 +331,20 @@ func (v *bashView) openVar(name string) {
 // declares are the builtins whose arguments assign.
 var declares = map[string]bool{"export": true, "declare": true, "typeset": true, "readonly": true, "local": true}
 
-// noteScript records the variables a script's for loops go through.
-func (e *Engine) noteScript(v *bashView, sc *script) {
+// noteScript records the variables a script's for loops go through. own
+// says the script is the line itself, and not one found inside it.
+func (e *Engine) noteScript(v *bashView, sc *script, own bool) {
 	for _, l := range sc.loops {
 		if l.args {
 			v.openVar(l.name) // the words the script was started with
 			continue
 		}
+		at := noPlace
+		if own {
+			at = l.from
+		}
 		for _, w := range l.words {
-			e.noteWord(v, l.name, w, false, true)
+			e.noteWord(v, l.name, w, false, true, at)
 		}
 	}
 	for _, w := range sc.loose {
@@ -330,8 +354,9 @@ func (e *Engine) noteScript(v *bashView, sc *script) {
 
 // noteVars records what a command gives the line's variables: by an
 // assignment, as an argument of export and its kin, or by a
-// ${name:=word} in one of its words.
-func (e *Engine) noteVars(v *bashView, c *simpleCmd) {
+// ${name:=word} in one of its words. at is where the command stands
+// among the line's own, or noPlace.
+func (e *Engine) noteVars(v *bashView, c *simpleCmd, at int) {
 	for _, a := range c.assigns {
 		e.noteSets(v, a.w)
 		if len(c.words) > 0 {
@@ -348,12 +373,12 @@ func (e *Engine) noteVars(v *bashView, c *simpleCmd) {
 					v.openVar(a.name) // [i]=word: not followed
 					continue
 				}
-				e.noteWord(v, a.name, el, false, true)
+				e.noteWord(v, a.name, el, false, true, at)
 			}
 		case strings.HasPrefix(a.w.raw, a.name+"+="):
 			v.openVar(a.name) // text added to what is there: not followed
 		default:
-			e.noteWord(v, a.name, a.w, true, false)
+			e.noteWord(v, a.name, a.w, true, false, at)
 		}
 	}
 	for _, w := range c.words {
@@ -373,7 +398,7 @@ func (e *Engine) noteVars(v *bashView, c *simpleCmd) {
 				break
 			}
 			if strings.HasPrefix(w.raw, name+"=") {
-				e.noteWord(v, name, w, true, false)
+				e.noteWord(v, name, w, true, false, at)
 			}
 			v.openVar(name)
 		}
@@ -387,7 +412,7 @@ func (e *Engine) noteVars(v *bashView, c *simpleCmd) {
 					v.openVar(name)
 					continue
 				}
-				e.noteWord(v, name, w, true, true)
+				e.noteWord(v, name, w, true, true, at)
 			}
 		}
 	}
@@ -424,17 +449,18 @@ func assigned(name, text string) (string, bool) {
 // word is an assignment (name=value) and not the value alone; list says
 // the shell makes more words of the braces in it and, where it is the
 // value alone, matches its patterns: an argument of export, a word of an
-// array or of a for loop's list.
-func (e *Engine) noteWord(v *bashView, name string, w word, assign, list bool) {
+// array or of a for loop's list. at is where the command that holds the
+// word stands among the line's own, or noPlace.
+func (e *Engine) noteWord(v *bashView, name string, w word, assign, list bool, at int) {
 	if !w.static() {
 		// Made of other variables, perhaps ones the line sets
 		// ("a=.env; b=$a"): see settleVars.
 		for _, have := range v.pending {
-			if have.name == name && have.w.raw == w.raw && have.assign == assign && have.list == list {
+			if have.name == name && have.w.raw == w.raw && have.assign == assign && have.list == list && have.at == at {
 				return
 			}
 		}
-		v.pending = append(v.pending, pendingVal{name: name, w: w, assign: assign, list: list})
+		v.pending = append(v.pending, pendingVal{name: name, w: w, assign: assign, list: list, at: at})
 		return
 	}
 	texts := []string{w.value(e.home)}
@@ -465,55 +491,179 @@ func (e *Engine) noteWord(v *bashView, name string, w word, assign, list bool) {
 }
 
 // settleVars works out the values that are made of other variables the
-// line sets, a few links deep, and marks the rest as not known.
-func (e *Engine) settleVars(v *bashView) {
-	for round := 0; round < 3; round++ {
+// line sets, a few links deep, and marks as not known for sure every
+// value made of a variable that is not: one the line does not set, or
+// does not set for sure before the value is made ("w=$d/; d=x" makes w a
+// lone slash, whatever d is given afterwards). What is left of such a
+// value when that variable holds nothing is one more value the variable
+// may have, a loose one (see lineVal).
+//
+// bare are the names that stand on the line as text of their own (see
+// bareNames), once the whole line is read, and nil before that: a
+// variable some builtin may have been handed by name ("read d", "unset
+// d") is not known for sure either.
+func (e *Engine) settleVars(v *bashView, bare map[string]bool) {
+	fill := func() {
 		for _, pv := range v.pending {
-			vals, _, ok := e.filledAll(v, pv.w)
-			if !ok {
-				continue
-			}
-			for _, fv := range vals {
-				val := fv.text
-				if pv.assign {
-					if val, ok = assigned(pv.name, fv.text); !ok {
-						continue
-					}
+			for _, w := range e.pendingWords(pv) {
+				vals, _, ok := e.filledAll(v, w)
+				if !ok {
+					continue
 				}
-				texts := []string{val}
-				switch {
-				case pv.list && !pv.assign && !pv.w.quoted:
-					// A word of a list that nothing quotes is cut into
-					// as many words as its value has.
-					texts = e.fields(v, val)
-				case pv.list && pv.assign && !pv.w.quoted:
-					// An argument of export: a plain sh cuts it too, and
-					// the variable gets what stands before the first cut.
-					if f := e.fields(v, val); len(f) > 1 {
-						texts = append(texts, f[0])
-					}
-				}
-				for _, t := range texts {
-					v.give(pv.name, lineVal{text: t, glob: fv.glob || pv.list && !pv.assign && !pv.w.quoted && hasPathMagic(t)})
+				for _, fv := range vals {
+					e.giveFilled(v, pv, fv)
 				}
 			}
 		}
 	}
-	for _, pv := range v.pending {
-		if _, _, ok := e.filledAll(v, pv.w); !ok || !e.allSet(v, pv.w) {
+	for round := 0; round < 3; round++ {
+		fill()
+	}
+	// A value that is not sure makes the ones built on it unsure in
+	// their turn, so this goes round until nothing changes (or eight
+	// times: past that the chain is longer than anybody writes).
+	for round := 0; round < 8; round++ {
+		before := v.weight()
+		for _, pv := range v.pending {
+			if e.firmWord(v, pv.w, pv.at, bare) {
+				continue
+			}
 			v.openVar(pv.name)
+			for _, w := range e.pendingWords(pv) {
+				for _, t := range e.looseTexts(v, w, pv.at, bare) {
+					e.giveFilled(v, pv, lineVal{text: t, loose: true})
+				}
+			}
+		}
+		fill()
+		if v.weight() == before {
+			break
 		}
 	}
 }
 
-// allSet reports whether every variable in the word is one the line
-// gave its values, all of them known ahead of time.
-func (e *Engine) allSet(v *bashView, w word) bool {
+// weight counts what is recorded of the line's variables, so that a
+// round of settleVars can tell whether it added anything.
+func (v *bashView) weight() int {
+	n := 0
+	for _, lv := range v.vars {
+		n += len(lv.vals)
+		if lv.open {
+			n++
+		}
+	}
+	return n
+}
+
+// pendingWords returns the readings of a word that makes a value: the
+// word itself and, for an assignment with a ~ the shell expands
+// ("w=~/$d"), the word with the home directory in its place.
+func (e *Engine) pendingWords(pv pendingVal) []word {
+	out := []word{pv.w}
+	if pv.assign && pv.w.eqTilde && e.home != "" {
+		if w, ok := homeFilled(pv.w, e.home); ok {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// homeFilled returns an assignment word with each ~ the shell expands in
+// its value replaced by the home directory: one that opens the value or
+// follows a colon in it, and has a slash, a colon or the end of the word
+// after it. A ~ right before a variable is not expanded ("w=~$d" is a
+// ~ and what d holds), and neither is one a variable's value brings
+// along: the shell looks for tildes before it fills variables in.
+func homeFilled(w word, home string) (word, bool) {
+	out := w
+	out.parts = append([]wordPart(nil), w.parts...)
+	out.eqTilde = false
+	changed, afterEq, start := false, false, false
+	for i, p := range out.parts {
+		if p.kind != partLit {
+			start = false
+			continue
+		}
+		var b strings.Builder
+		for k := 0; k < len(p.lit); k++ {
+			c := p.lit[k]
+			switch {
+			case c == '~' && start:
+				start = false
+				last := k+1 == len(p.lit)
+				if !last && (p.lit[k+1] == '/' || p.lit[k+1] == ':') || last && i == len(out.parts)-1 {
+					b.WriteString(home)
+					changed = true
+					continue
+				}
+				b.WriteByte(c)
+			case c == '=' && !afterEq:
+				afterEq, start = true, true
+				b.WriteByte(c)
+			case c == ':' && afterEq:
+				start = true
+				b.WriteByte(c)
+			default:
+				start = false
+				b.WriteByte(c)
+			}
+		}
+		out.parts[i].lit = b.String()
+	}
+	return out, changed
+}
+
+// giveFilled records a text that a word which makes a value came to.
+func (e *Engine) giveFilled(v *bashView, pv pendingVal, fv lineVal) {
+	val := fv.text
+	if pv.assign {
+		var ok bool
+		if val, ok = assigned(pv.name, fv.text); !ok {
+			return
+		}
+	}
+	texts := []string{val}
+	switch {
+	case pv.list && !pv.assign && !pv.w.quoted:
+		// A word of a list that nothing quotes is cut into as many
+		// words as its value has.
+		texts = e.fields(v, val)
+	case pv.list && pv.assign && !pv.w.quoted:
+		// An argument of export: a plain sh cuts it too, and the
+		// variable gets what stands before the first cut.
+		if f := e.fields(v, val); len(f) > 1 {
+			texts = append(texts, f[0])
+		}
+	}
+	for _, t := range texts {
+		if fv.loose && t == "" {
+			continue // nothing is left, and nothing is known
+		}
+		v.give(pv.name, lineVal{text: t, glob: fv.glob || pv.list && !pv.assign && !pv.w.quoted && hasPathMagic(t), loose: fv.loose})
+	}
+}
+
+// firmVar reports whether a variable is one the line gave all its
+// values, with one of them in place where the command at index at
+// stands, and that no builtin was handed by name (bare, when the whole
+// line is read; closedVar asks what else can be asked then).
+func firmVar(v *bashView, name string, at int, bare map[string]bool) bool {
+	lv := v.vars[name]
+	return lv != nil && !lv.open && len(lv.vals) > 0 && !bare[name] && !shellOwned[name] && sureSet(v, name, at)
+}
+
+// firmWord reports whether a word that makes a value is known for sure
+// where the command at index at makes it: every variable in it is firm
+// there.
+func (e *Engine) firmWord(v *bashView, w word, at int, bare map[string]bool) bool {
+	if _, _, ok := e.filledAll(v, w); !ok {
+		return false
+	}
 	for _, p := range w.parts {
 		switch {
 		case p.kind == partLit:
 		case p.kind == partVar && p.name != "":
-			if lv := v.vars[p.name]; lv == nil || lv.open || len(lv.vals) == 0 {
+			if !firmVar(v, p.name, at, bare) {
 				return false
 			}
 		default:
@@ -521,6 +671,72 @@ func (e *Engine) allSet(v *bashView, w word) bool {
 		}
 	}
 	return true
+}
+
+// maxLoose bounds how many loose texts one word is read as.
+const maxLoose = 16
+
+// looseTexts returns what is left of a word that makes a value when
+// every variable in it that is not known for sure holds nothing (or what
+// its ${name:-word} says it then stands for): the variables that are firm
+// where the value is made keep their values, and so do HOME and PWD as
+// gnosh was told they are. It returns nothing for a word with no such
+// variable, and for one that holds what a command prints.
+func (e *Engine) looseTexts(v *bashView, w word, at int, bare map[string]bool) []string {
+	out := []string{""}
+	soft := false
+	for _, p := range w.parts {
+		var alts []string
+		switch {
+		case p.kind == partLit:
+			alts = []string{p.lit}
+		case p.kind != partVar:
+			return nil
+		case p.name != "" && firmVar(v, p.name, at, bare):
+			for _, val := range v.vars[p.name].vals {
+				texts, known := p.of(val.text, e.home)
+				if !known {
+					return nil
+				}
+				alts = unionStrings(alts, texts)
+			}
+		case v.vars[p.name] == nil && (p.name == "HOME" && e.home != "" || p.name == "PWD" && e.cur != ""):
+			base := e.home
+			if p.name == "PWD" {
+				base = e.cur
+			}
+			texts, known := p.of(base, e.home)
+			if !known {
+				return nil
+			}
+			alts = texts
+		default:
+			soft = true
+			alts = []string{p.defIn(e.home)}
+		}
+		if len(out)*len(alts) > maxLoose {
+			return nil
+		}
+		next := make([]string, 0, len(out)*len(alts))
+		for _, o := range out {
+			for _, a := range alts {
+				next = append(next, o+a)
+			}
+		}
+		out = next
+	}
+	if !soft {
+		return nil
+	}
+	if w.tilde && e.home != "" {
+		// (A word of a list: "for f in ~/$X".)
+		for i, t := range out {
+			if t == "~" || strings.HasPrefix(t, "~/") {
+				out[i] = e.home + t[1:]
+			}
+		}
+	}
+	return out
 }
 
 // closedWord reports whether the texts filledAll gives for the word are
@@ -566,10 +782,12 @@ const (
 // sureSet reports whether a variable is sure to hold a value the line
 // gave it when the command at index at runs: an assignment that stands
 // on its own, outside every group, loop, pipe and background job, comes
-// before the command; or the command is in the body of a for loop that
-// goes through the variable. (A value from "X=1 cmd", from a branch
-// that may not be taken or from a subshell may not be there, and the
-// variable is then what it was when the line began.)
+// before the command, and is not one that an && or an || before it may
+// have skipped (unless the command hangs on the same chain of &&); or
+// the command is in the body of a for loop that goes through the
+// variable. (A value from "X=1 cmd", from a branch that may not be taken
+// or from a subshell may not be there, and the variable is then what it
+// was when the line began.)
 func sureSet(v *bashView, name string, at int) bool {
 	if at < 0 || v.sc.piped || v.sc.background {
 		return false
@@ -588,7 +806,20 @@ func sureSet(v *bashView, name string, at int) bool {
 		if i >= at {
 			break
 		}
-		if c.nest != 0 || c.sep != sepStart || c.bg || len(c.redirs) > 0 {
+		if c.nest != 0 || c.bg || len(c.redirs) > 0 {
+			continue
+		}
+		switch c.sep {
+		case sepStart, sepSemi:
+			// It runs, whatever came before it.
+		case sepAnd:
+			// It runs only when what stands before it went well. The
+			// command at at knows that it did where it hangs on the same
+			// chain of &&: "cd x && d=y && cat $d".
+			if !andChain(v.sc.cmds, i+1, at) {
+				continue
+			}
+		default:
 			continue
 		}
 		for _, a := range c.assigns {
@@ -609,6 +840,22 @@ func sureSet(v *bashView, name string, at int) bool {
 	return false
 }
 
+// andChain reports whether the line's own commands from index from to
+// index to, both counted, are each joined to the one before by &&, at the
+// top of the line: the last of them then runs only when all the others,
+// and the one before them, went well.
+func andChain(cmds []*simpleCmd, from, to int) bool {
+	if from > to || to >= len(cmds) {
+		return false
+	}
+	for _, c := range cmds[from : to+1] {
+		if c.sep != sepAnd || c.nest != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // closedVar reports whether the values the line gave a variable are all
 // it can hold: the line was read to its end, every program in it is
 // known, none of them is a file read into this shell, no builtin that
@@ -622,7 +869,26 @@ func (e *Engine) closedVar(v *bashView, name string) bool {
 		v.tight, v.bare, v.tightDone = e.tightLine(v), bareNames(v), true
 	}
 	lv := v.vars[name]
-	return v.tight && lv != nil && len(lv.vals) > 0 && !lv.open && !v.bare[name] && !v.bare["IFS"] && v.vars["IFS"] == nil && !shellOwned[name]
+	if !v.tight || lv == nil || len(lv.vals) == 0 || lv.open || v.bare[name] || v.bare["IFS"] || v.vars["IFS"] != nil || shellOwned[name] {
+		return false
+	}
+	// A value made of other variables is all the variable can hold only
+	// where those were known for sure when it was made ("d=x; read d;
+	// w=$d": w is whatever was read).
+	if v.closing[name] {
+		return false // it is made of itself
+	}
+	if v.closing == nil {
+		v.closing = map[string]bool{}
+	}
+	v.closing[name] = true
+	defer delete(v.closing, name)
+	for _, pv := range v.pending {
+		if pv.name == name && !e.closedWord(v, pv.w, pv.at) {
+			return false
+		}
+	}
+	return true
 }
 
 // shellOwned are variables the shell gives a value of its own, whatever
@@ -771,6 +1037,19 @@ func lessExpansions(s string) string {
 // strict says there is one such text and no other: each variable was
 // given one value, known ahead of time.
 func (e *Engine) filledAll(v *bashView, w word) (out []lineVal, strict, ok bool) {
+	return e.filledWith(v, w, nil)
+}
+
+// filledWith is filledAll with a way to say what a pattern matched.
+// A variable that went through the matches of a pattern ("for f in
+// *.txt") is read by filledAll as the pattern, which serves where the
+// variable is all there is to a word: the word is then that pattern.
+// With more text around it, it is not: "new_$f" is new_a.txt, a name
+// the pattern new_*.txt may match nothing of. Given matches, every such
+// value is read as each name it says the pattern matched (and as the
+// pattern's own text, which is what a pattern that matches nothing
+// leaves): the texts are then names, and none of them a pattern.
+func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([]string, bool)) (out []lineVal, strict, ok bool) {
 	if w.static() || w.brace || w.eqHead {
 		return nil, false, false
 	}
@@ -839,18 +1118,28 @@ func (e *Engine) filledAll(v *bashView, w word) (out []lineVal, strict, ok bool)
 			// What the form makes of each value: ${v:+word} is the word,
 			// ${v%.txt} what is left of the value.
 			for _, val := range vals {
-				texts, known := p.of(val.text, e.home)
-				if !known {
-					return nil, false, false
-				}
-			texts:
-				for _, t := range texts {
-					for _, have := range alts {
-						if have.text == t && have.glob == val.glob {
-							continue texts
-						}
+				names, glob := []string{val.text}, val.glob
+				if val.glob && matches != nil {
+					ms, known := matches(val.text)
+					if !known || len(ms) > maxFilled {
+						return nil, false, false
 					}
-					alts = append(alts, lineVal{text: t, glob: val.glob})
+					names, glob = append(names, ms...), false
+				}
+				for _, name := range names {
+					texts, known := p.of(name, e.home)
+					if !known {
+						return nil, false, false
+					}
+				texts:
+					for _, t := range texts {
+						for _, have := range alts {
+							if have.text == t && have.glob == glob && have.loose == val.loose {
+								continue texts
+							}
+						}
+						alts = append(alts, lineVal{text: t, glob: glob, loose: val.loose})
+					}
 				}
 			}
 			strict = strict && len(alts) == 1
@@ -863,12 +1152,40 @@ func (e *Engine) filledAll(v *bashView, w word) (out []lineVal, strict, ok bool)
 		next := make([]lineVal, 0, len(out)*len(alts))
 		for _, o := range out {
 			for _, a := range alts {
-				next = append(next, lineVal{text: o.text + a.text, glob: o.glob || a.glob})
+				next = append(next, lineVal{text: o.text + a.text, glob: o.glob || a.glob, loose: o.loose || a.loose})
 			}
 		}
 		out = next
 	}
 	return out, strict, true
+}
+
+// mixesPattern reports whether a word holds a variable that went through
+// the matches of a pattern together with something that makes another
+// text of them: more text before or after it, or a form that cuts a
+// piece off its value (${f%.txt}).
+func mixesPattern(v *bashView, w word) bool {
+	pattern, parts, cut := false, 0, false
+	for _, p := range w.parts {
+		if p.kind == partLit && p.lit == "" {
+			continue
+		}
+		parts++
+		if p.kind != partVar || p.name == "" {
+			continue
+		}
+		lv := v.vars[p.name]
+		if lv == nil {
+			continue
+		}
+		for _, val := range lv.vals {
+			if val.glob {
+				pattern = true
+				cut = cut || !p.plainly()
+			}
+		}
+	}
+	return pattern && (parts > 1 || cut)
 }
 
 // fields cuts a value that nothing quotes into words, as the shell
@@ -970,19 +1287,37 @@ func braceWords(ws []word) (out []word, sure, ok bool) {
 // the line gives a variable several values (a for loop's list), there
 // is one command for each way of choosing among them, up to four; past
 // that, one command that holds them all, which names every file and
-// every flag the others would. It returns nothing when no argument
-// changes.
+// every flag the others would. That last one is also what "${a[@]}"
+// makes of an array, each of its words a word of the command ("a=(-rf
+// x); rm "${a[@]}"" is rm -rf x), so a command with such an argument is
+// read that way too. It returns nothing when no argument changes.
+//
+// A value that is only what is left when a variable is empty (see
+// lineVal) is not written into a command here: the removal check and the
+// rules about files try it by itself.
 func (e *Engine) filledArgs(v *bashView, ws []word) [][]word {
 	per := make([][][]word, len(ws)) // for each word, the words it may stand for
 	per[0] = [][]word{{ws[0]}}
-	changed, ways := false, 1
+	changed, ways, every := false, 1, false
 	for i, w := range ws[1:] {
 		vals, _, ok := e.filledAll(v, w)
-		if !ok || w.glob {
+		if ok {
+			firm := vals[:0:0]
+			for _, val := range vals {
+				if !val.loose {
+					firm = append(firm, val)
+				}
+			}
+			vals = firm
+		}
+		if !ok || w.glob || len(vals) == 0 {
 			per[i+1] = [][]word{{w}}
 			continue
 		}
 		changed = true
+		for _, p := range w.parts {
+			every = every || p.kind == partVar && p.all
+		}
 		for _, val := range vals {
 			var alt []word
 			if w.quoted {
@@ -1007,7 +1342,8 @@ func (e *Engine) filledArgs(v *bashView, ws []word) [][]word {
 	if !changed {
 		return nil
 	}
-	if ways > 4 {
+	var out [][]word
+	if ways > 4 || every && ways > 1 {
 		var all []word
 		for _, alts := range per {
 			for _, alt := range alts {
@@ -1017,19 +1353,41 @@ func (e *Engine) filledArgs(v *bashView, ws []word) [][]word {
 		if len(all) > 2048 {
 			return nil
 		}
-		return [][]word{all}
+		if ways > 4 {
+			return [][]word{all}
+		}
+		out = append(out, all)
 	}
-	out := [][]word{nil}
+	each := [][]word{nil}
 	for _, alts := range per {
 		var next [][]word
-		for _, o := range out {
+		for _, o := range each {
 			for _, alt := range alts {
 				next = append(next, append(append([]word(nil), o...), alt...))
 			}
 		}
-		out = next
+		each = next
 	}
-	return out
+	return append(out, each...)
+}
+
+// place returns where a command stands among the line's own, or noPlace
+// for one found inside another: only for the line's own is it known
+// which assignments come before it.
+func (v *bashView) place(c *simpleCmd) int {
+	if v.sc == nil {
+		return noPlace
+	}
+	if v.index == nil {
+		v.index = map[*simpleCmd]int{}
+		for i, own := range v.sc.cmds {
+			v.index[own] = i
+		}
+	}
+	if i, ok := v.index[c]; ok {
+		return i
+	}
+	return noPlace
 }
 
 // setOpaque records the first thing that could not be read.
@@ -1081,7 +1439,7 @@ func (e *Engine) addScript(v *bashView, text string, nest nesting, depth int, ho
 		}
 		v.frags = append(v.frags, crude...)
 	}
-	e.noteScript(v, sub)
+	e.noteScript(v, sub, false)
 	if sub.subst && (how == scriptText || how == scriptOperand) {
 		// A substitution in an operand a builtin evaluates is a
 		// substitution: "test -v 'a[$(cmd)]'" runs cmd, so no rule for
@@ -1268,7 +1626,7 @@ func (e *Engine) addDerived(v *bashView, c *simpleCmd, prev *simpleCmd, depth in
 	for len(c.words) > 0 && (c.words[0].raw == "!" && len(c.words) > 1 || isAssignWord(c.words[0].raw)) {
 		if name, ok := assignName(c.words[0].raw); ok {
 			if strings.HasPrefix(c.words[0].raw, name+"=") {
-				e.noteWord(v, name, c.words[0], true, false)
+				e.noteWord(v, name, c.words[0], true, false, noPlace)
 			}
 			v.openVar(name)
 		}
@@ -1291,7 +1649,7 @@ func (e *Engine) addDerived(v *bashView, c *simpleCmd, prev *simpleCmd, depth in
 		return
 	}
 	v.units = append(v.units, &unit{cmd: c, derived: true})
-	e.noteVars(v, c)
+	e.noteVars(v, c, noPlace)
 	e.derive(v, c, prev, depth+1)
 }
 

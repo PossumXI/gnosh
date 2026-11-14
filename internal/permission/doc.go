@@ -415,8 +415,13 @@
 // gnosh.json, and whatever Options.Protected lists. Only bypassPermissions
 // skips the question; dontAsk refuses.
 //
-// An rm or rmdir whose target is the root, a top-level directory, the
-// home directory, the working directory or something above it, or that
+// Some directories have to be kept: the root and the directories right
+// under it, the home directory, the working directory and what is above
+// it, the repository's .git (in a working directory or above one; a
+// .git further down is some other repository's), and gnosh's own folders
+// (Options.Protected: its config, its state and data, what a feature
+// keeps) with whatever holds one of them. An rm or rmdir whose target is
+// one of those, or that
 // could become one of those if a variable were empty, not set, or set
 // (rm -rf "$DIR"/*, rm -rf ~/$DIR, rm -rf $DIR/.., rm -rf ${DIR:-/},
 // rm -rf ${DIR:+/}, rm -rf ${X:-$HOME}), or that is some piece cut from
@@ -434,7 +439,30 @@
 // it finds (find . -delete, find . -exec rm -rf {} +) is the same
 // removal by another name; one with a test in front (-name, -type) is
 // not, because what it finds is not known. A variable the line itself
-// set is read as what it was set to (d=.; rm -rf $d).
+// set is read as what it was set to (d=.; rm -rf $d). Where the engine
+// is given a way to see what is in a directory (Options.Glob), targets
+// that between them are everything in one that has to be kept are a
+// sweep however they are written: "rm -rf [!.]*", "rm -rf [a-m]*
+// [n-z]*", a list of every name.
+//
+// The other commands that destroy such a directory as surely as rm are
+// asked about in the same way, with the same reading of their targets:
+// mv of one (mv ~ /tmp/x, mv .git old, mv * elsewhere in the project;
+// and mv -T onto one), chmod -R, chown -R and chgrp -R over one, git
+// clean with -f and -x or -X in one or handed one (not a dry run, and
+// not a clean that leaves ignored files alone), dd of=, truncate and
+// shred onto one or onto a whole disk under /dev, rsync --delete into
+// one and rsync --remove-source-files out of one, and a find that shreds
+// all it finds. Their ordinary uses are not asked about: mv into a
+// directory, chmod without -R, git clean -fd, rsync without --delete or
+// into some other place.
+//
+// One thing is let go on purpose, so that a session nobody watches can
+// clean up after itself: a target that is only a variable gnosh knows
+// nothing about (rm -rf "$tmp", mv "$f" "$f.bak") is not asked about,
+// whatever the command. What the line itself gives the variable is
+// followed (see above), and a variable with a slash or a pattern after
+// it is the doubt of the first paragraph.
 //
 // In acceptEdits the file commands that run are mkdir, touch, rm, rmdir,
 // mv, cp and sed -i with their everyday flags. cp -r is not one of them:

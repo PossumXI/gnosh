@@ -63,8 +63,14 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		}
 		for _, u := range v.units {
 			if why := e.removalDanger(v, u.cmd, dirs, fromSubst); why != "" {
+				what := "This removal looks dangerous"
+				if !strings.HasPrefix(why, "rm") && !strings.HasPrefix(why, "find ") {
+					// (mv, chmod -R, git clean, dd, rsync --delete: not
+					// removals by name, and as final.)
+					what = "This command could destroy something that has to be kept"
+				}
 				return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
-					Reason: "This removal looks dangerous (" + why + "). No rule approves it; a person decides."}, true
+					Reason: what + " (" + why + "). No rule approves it; a person decides."}, true
 			}
 		}
 		// A line, or a script inside it that will run (the argument of an

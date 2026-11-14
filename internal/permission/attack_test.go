@@ -274,6 +274,17 @@ func TestShellAttacks(t *testing.T) {
 		{"any program is handed the file after an @", ModeBypass, attackGuards, "mytool @.env", Deny},
 		{"bash expands the ~ after the = of a word that looks like an assignment", ModeBypass, attackGuards, "mytool cfg=~/.ssh/id_rsa", Deny},
 		{"bash expands the ~ after the = of a word that looks like an assignment", ModeBypass, attackGuards, "trap 'dd icdf=~/.ssh/id_rsa' EXIT", Deny},
+		// grep's pattern came with a flag, so its first operand is a file.
+		{"grep -ex takes x for the pattern and reads the file", ModeBypass, attackGuards, "grep -ex .e${x}nv", Deny},
+		{"grep -e x reads the file after it", ModeBypass, attackGuards, "grep -e x .e${x}nv", Deny},
+		{"grep -ie x reads the file after it", ModeBypass, attackGuards, "grep -ie x \"$EMPTY\".env", Deny},
+		{"grep --regexp=x reads the file after it", ModeBypass, attackGuards, "grep --regexp=x .e${x}nv", Deny},
+		{"grep -f reads its file of patterns", ModeBypass, attackGuards, "grep -f .e${x}nv a.txt", Deny},
+		{"grep -f.env reads its file of patterns", ModeBypass, attackGuards, "grep -f.env $F", Deny},
+		{"grep --file= reads its file of patterns", ModeBypass, attackGuards, "grep --file=.env $F", Deny},
+		{"rg -e x reads the file after it", ModeBypass, attackGuards, "rg -e x .e${x}nv", Deny},
+		{"rg -f reads its file of patterns", ModeBypass, attackGuards, "rg -f .env $DIR", Deny},
+		{"after -- every word is an operand", ModeBypass, attackGuards, "grep -e x -- .e${x}nv", Deny},
 		{"the braces are taken apart before the variable is looked at", ModeBypass, attackGuards, "F=.env; cat {$F,x}", Deny},
 		{"the braces are taken apart before the variable is looked at", ModeBypass, attackGuards, "D=.; cat $D/{.env,x}", Deny},
 		{"the program is eval, whatever its name turns out to be", ModeBypass, attackGuards, "ev${x}al 'rm x'", Deny},
@@ -539,7 +550,7 @@ func TestShellAttacks(t *testing.T) {
 		"find . -name node_modules -exec rm -rf {} +", "find . -name '*.pyc' -exec rm -f {} \\;", "find . -type f | xargs rm -f",
 		"rm -rf build/{a,b}", "rm -f *.{o,a}", "rm -rf {build,dist}",
 		"cd src; rm -rf ~-/build", "cd src; rm -rf $OLDPWD/build", "rm -rf ~+/build", "rm$X-rf${X}build", "rm${V}", "sudo $TOOL build", "env $X make", "timeout $T make clean",
-		"rm -f */*.o", "rm -rf */node_modules", "rm -rf src/*", "rm -rf build/*", "rm -f *.tmp", "rm -rf src/*/*", "rm -rf ~/D*", "rm -rf .[!.]*", "rm -rf /usr/*/x",
+		"rm -f */*.o", "rm -rf */node_modules", "rm -rf src/*", "rm -rf build/*", "rm -f *.tmp", "rm -rf src/*/*", "rm -rf ~/D*", "rm -rf src/.[!.]*", "rm -rf /usr/*/x",
 		"rm -rf */build", "rm -rf build/*/obj", "rm -f src/*.[oa]", "rm -rf /tmp/build-*", "rm -rf /home/u/proj/b*"} {
 		if d := bash(engine(t, ModeBypass, rules{}), cmd); d.Critical {
 			t.Errorf("%q: flagged as a dangerous removal (%s)", cmd, d.Reason)
@@ -1027,7 +1038,8 @@ func TestLineValues(t *testing.T) {
 		"A=(a.txt x); cat \"${A[@]}\"", ": ${F:=a.txt}; cat $F", "pushd src && cat c.go; popd", "for d in . src; do ls $d; done",
 		"SRC=src; for f in $SRC/*.go; do wc -l $f; done", "F=a.txt; cat ${F:-.env}", "export F=a.txt; cat ${F:-.env}",
 		"grep -n '$(' src/c.go", "grep -c '`' a.txt", "echo 'usage: x $(y'", "echo \"a${IFS}b\"", "ls${IFS}-la", "IFS=, read -r a b <<< x,y; echo $a",
-		"echo .env", "printf '%s\\n' .env", "export CONFIG=.env", "grep -rn .env src", "make build CONFIG=a.txt", "python3 x.py a.txt",
+		"echo .env", "printf '%s\\n' .env", "export CONFIG=.env", "grep -rn .env src", "grep -n .env $F", "grep -e .env $F", "grep -m 1 .env src/c.go", "grep -A 2 .env $F",
+		"rg .env $DIR", "grep --regexp .env $F", "grep --color=auto .env $F", "make build CONFIG=a.txt", "python3 x.py a.txt",
 		"tar cf out.tar a.txt src", "mytool --config=a.txt", "find . -name .env",
 		"for f in a.txt x; do cat ${f:-.env}; done",
 	} {
