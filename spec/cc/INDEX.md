@@ -1,5 +1,7 @@
 # spec/cc — what gnosh takes from Claude Code
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 Jae's rule for gnosh: "in terms of naming conventions and such i want it to
 be more like claude code whereever reasonable, because i'm familiar with
 claude code the most." These files say exactly which public conventions

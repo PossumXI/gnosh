@@ -1,5 +1,7 @@
 # harness-config.md — gnoshrc, settings, environment variables, doctor
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: how gnosh is configured. It covers the `gnoshrc` line format
 and every directive and option the earlier gnosh had by the end, where config
 and state live and which wins, the environment variables, the old names that

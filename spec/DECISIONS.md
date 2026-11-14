@@ -153,8 +153,9 @@ both are silent, the builder chooses, and says so in its report.
     decision 1 of ARCHITECTURE.md) or a hand-made reader of a format with
     many surprises; JSON is in the standard library and is what Jae already
     edits for Claude Code. The `gnoshrc` line language, the reading of the
-    earlier program's files, and every name taken from it go. This replaces
-    items 10 (first point) and 16 above. Jae's three existing files are
+    earlier program's files, and every name taken from it go (the second
+    similarity audit found names that had not gone; items 26 to 28 say what
+    became of each). This replaces items 10 (first point) and 16 above. Jae's three existing files are
     converted for him by hand at switch-over; gnosh ships no converter.
 18. **The licence** is the GNO Network General Public License, latest
     version, with the Strong Attribution terms. Jae: "GNO Network GPL latest
@@ -209,3 +210,60 @@ both are silent, the builder chooses, and says so in its report.
 25. **A leftover `gnoshrc` is neither read nor warned about**: no code for
     users who do not exist. Jae's own files are converted by hand at
     switch-over.
+
+## From the second similarity audit, 14 November 2026
+
+The audit (`tools/audit/similarity/README.md`) found no code of Charm's and
+no code shaped like it. It found names: parts of gnosh's interface that the
+specs had written down from the earlier gnosh, and that the earlier gnosh
+had from Crush. Jae had ruled that such names go (item 17) and left the
+choices to Claude ("use best judgement"). Each name is either changed (26)
+or kept with the reason said (27).
+
+26. **Names changed.**
+    - `discoverModels` is `listModels`: the provider APIs call the request
+      "list models".
+    - `disabledSkills` is `hiddenSkills`: what it does.
+    - The state file's two slots, `large` and `small`, are `model` and
+      `smallModel`, as the config's keys are.
+    - `GNOSH_PROFILE` is `GNOSH_DEBUG_PAGE`: what it serves.
+    - `GNOSH_EVENT`, the one hook variable that did not follow Claude
+      Code's field names, is `GNOSH_HOOK_EVENT_NAME` (the field is
+      `hook_event_name`).
+    - The terminal layer's `Options.EscTimeout` is `Options.EscWait`, with
+      its three fellows of the first audit.
+    - The command line loses what Claude Code's own flags already do:
+      `gnosh run` and its `-q` (print mode is `-p`), `-s`/`--session`
+      (`--resume` and `--session-id`), and `-D`/`--data-dir`. Commands
+      listed for parts that are not built are taken off the list.
+    - The provider types `ollama`, `lmstudio`, `litellm` and `omlx` go:
+      together with `llamacpp` they were the earlier program's set, nobody
+      uses them here, and `openai-compatible` speaks to all four servers.
+27. **Names kept, though Crush has them too, and why.**
+    - `options`, as the object that holds gnosh's own switches: a plain
+      word, and the layout Jae was shown in item 17.
+    - `debug` (Claude Code's `--debug`) and `requestTimeout` (the provider
+      SDKs' own term).
+    - `-y` and `--yolo`: Jae's own word for it (item 19).
+    - `--cwd` (item 10) and `--small-model`, which is the key `smallModel`
+      as a flag.
+    - The commands `session`, `models`, `logs`, `dirs`, `projects` and
+      `stats`, where they are built: plain nouns for what they show, which
+      other harnesses use as well.
+    - The variables a hook is given: each is a field of Claude Code's
+      documented hook input in upper case behind `GNOSH_`
+      (`session_id`, `cwd`, `tool_name`, `tool_input.command` and so on),
+      for a script that would rather not read JSON. `GNOSH_PROJECT_DIR`
+      stands beside `CLAUDE_PROJECT_DIR`.
+    - `llamacpp`, `openai-compatible`, `anthropic`, `openai`: the servers'
+      and the formats' own names.
+    - `gnosh.json`, `.gnosh/`, `GNOSH.md`: the program's own name in the
+      pattern Claude Code uses too (`.claude/`, `CLAUDE.md`).
+    - The front end's task type (`Content`, `ActiveForm`, `Status`): the
+      fields of Claude Code's `TodoWrite`.
+28. **The edit-distance routine of `internal/cli/suggest.go` stays.** It has
+    the shape of one in the earlier gnosh's own code (not Charm's). It is
+    the textbook routine, written again: the transcript of the builder that
+    wrote it shows no read of the earlier tree or of the staging folder,
+    and the earlier file's name does not occur in it. It was not carried,
+    so `CARRIED.md` does not list it.

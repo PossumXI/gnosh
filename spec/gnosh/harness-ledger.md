@@ -1,5 +1,7 @@
 # harness-ledger.md — every other behaviour change, one line each
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: the long tail. Every change to the earlier gnosh's harness
 behaviour that the sources record, one line each, so that nothing Jae had is
 dropped by accident. Things that have a full write-up elsewhere are here too,

@@ -1,5 +1,7 @@
 # harness-open-questions.md — what the sources leave unsettled, with a recommended reading for each
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: the places where the sources contradict each other, where
 a decision was put to Jae and never answered, or where the rewrite forces a
 choice the earlier gnosh never had to make. Each has a **recommended

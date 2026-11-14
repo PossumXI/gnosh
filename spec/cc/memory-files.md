@@ -1,5 +1,7 @@
 # memory-files.md — CLAUDE.md, AGENTS.md, rules, imports
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: which instruction files gnosh finds and loads, in what
 order, how one file pulls in another, and how the text reaches the model —
 all as Claude Code does it, so the `CLAUDE.md` and `AGENTS.md` files Jae

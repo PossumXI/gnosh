@@ -1,5 +1,7 @@
 # settings.md — settings files, precedence, the keys that matter
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: where Claude Code keeps its settings, which file wins
 when two disagree, the keys a harness cares about, and a recommendation for
 how gnosh — which has its own `gnoshrc` — should treat all of that.

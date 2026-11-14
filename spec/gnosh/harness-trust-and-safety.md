@@ -1,5 +1,7 @@
 # harness-trust-and-safety.md — the trust gate, reading outside the folder, untrusted text, what leaves the machine
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: the security behaviour Jae asked for and the holes that
 were found and closed while building it. Four parts: a project's own settings
 wait until the folder is trusted; the agent reads outside the folder only

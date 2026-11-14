@@ -1,5 +1,7 @@
 # hooks.md — hook events, their JSON, and how a hook answers
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: the hook system gnosh copies from Claude Code, exact
 enough that a `hooks` block from one of Jae's existing `settings.json` files
 runs unchanged, and that a hook script written for Claude Code reads the same

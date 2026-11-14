@@ -1,5 +1,7 @@
 # permissions.md — modes, rules, prompts, trust
 
+*Since 14 November 2026 gnosh is configured by one JSON file, `gnosh.json`, and no longer by `gnoshrc` (`spec/DECISIONS.md`, items 17 and 23 to 28). Where this file speaks of `gnoshrc`, of its directives or of its dashed option names, it records what the build was first given.*
+
 What this file is: how gnosh decides whether a tool call runs, asks, or is
 refused, using Claude Code's modes and rule syntax so that Jae's existing
 `permissions` blocks and `--allowedTools` habits carry over unchanged.
