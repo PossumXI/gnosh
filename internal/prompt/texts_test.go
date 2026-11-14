@@ -120,16 +120,22 @@ func TestEveryNameIsUsed(t *testing.T) {
 // instructions were 31,087 characters, about 7,800 tokens, and a quarter
 // of that was the part about mem. These are assertions, so that the fixed
 // part of every request cannot grow back unnoticed.
+//
+// The part about mem was given 115 tokens more on 14 November 2026, for two
+// sentences the first measured runs asked for: what the scratch machine is
+// not for (one run spent its hour trying the project's Go in Gno), and that
+// a note for later is written exactly (one run handed a later session a
+// method's name cut short).
 const (
 	budgetCore   = 1200 // the fixed core, security rule included
-	budgetMemory = 1500 // the part about mem
-	budgetSystem = 2700 // every part gnosh writes, all at once
+	budgetMemory = 1615 // the part about mem
+	budgetSystem = 2815 // every part gnosh writes, all at once
 	budgetLine   = 180  // any line, before its values
 
 	// The full text about mem has no figure it was cut to: its budget is
 	// what it comes to, so that it cannot grow unnoticed either. With it
 	// in place of the lean text, the whole may be that much larger.
-	budgetMemoryFull = 1750
+	budgetMemoryFull = 1865
 	budgetSystemFull = budgetSystem - budgetMemory + budgetMemoryFull
 )
 
