@@ -449,8 +449,9 @@ Night of 13 to 14 November 2026, the home AI box: llama.cpp serving Qwen 3.8
 `TIMEOUT=3600`. The binary was commit `2fa512c` and the bench's tree
 `5d80a4d`, the same for every run. One repetition of each pass, so every
 figure below is one run and a difference between two of them is not yet a
-finding. 39 runs in all; no request failed at the proxy, and no session
-needed a summary or a slide (the largest context was 48K of the 64K told).
+finding. 39 runs in all (47 with the eight of the newer build further
+down); no request failed at the proxy, and no session needed a summary or a
+slide (the largest context was 48K of the 64K told).
 
 Wall time is minutes and seconds. Tokens are read / generated: what the
 server had to read fresh, and what it wrote.
@@ -532,8 +533,29 @@ The first is weak evidence for its sentence and shows no cost. The second
 shows that a sentence at the end of the prompt does not stop it. Both
 sentences were then written into the text about mem itself, where the
 scratch machine is introduced and where stopping with work left is
-described (`internal/prompt/texts/memory.md`, `memory-full.md`); that
-wording has not been measured.
+described (`internal/prompt/texts/memory.md`, `memory-full.md`, commit
+`c8fb08e`).
+
+**The build with that wording, on the same two tasks.** Commit `34ef33a`
+(binary and bench tree), 14 November, mem with the lean text, two runs at a
+time:
+
+| task | runs | outcome | read beside |
+|---|---|---|---|
+| continue, thinking off | 4 | 4/4 passed, 18:39 to 26:29; the exact name reached mem in 4 of 4 | the earlier build without the sentence: 3 of 4 passed, 27 to 29 minutes, the exact name in 2 of 4 |
+| algos, thinking on | 4 | 2 passed 9/9, both cut by the cap; 1 stopped at 7/9; 1 stopped at 0/9 | the earlier build: 3 of 4 passed, the fourth stopped at 0/9 |
+
+- With the rule in the text or added to it, the exact name reached mem in 7
+  of 7 runs; without it, in 2 of 4.
+- The scratch machine was used for the project's code once in these four
+  runs of algos (one call), where the earlier build did it in 4 of 8 runs
+  (3 to 19 calls each).
+- algos with mem and thinking on does not reliably fit the hour when two
+  runs share the GPU: all four ran to the cap, and the time is thinking.
+  The run stopped at 0/9 read the 18 files and then wrote one thought of
+  72,696 characters, which was still being written 54 minutes later.
+  Nothing in gnosh bounds how long a thought may be. With thinking off,
+  which is how Jae runs, there is no such thought.
 
 **Not run:** the three repetitions the plan asked for, the 32K lane on a
 server whose slot really is 32,768, the fuller text with thinking off, and
