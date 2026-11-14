@@ -288,8 +288,9 @@ def check(d, expect_path, opts):
     if e["stopped"]:
         # The one request was cut off when the session was stopped: the
         # scripted server had answered it, and what the proxy made of the
-        # cut is not held to a number.
-        c.eq("how the session ended (no result object)", row["results"], [None])
+        # cut is not held to a number. A session the cap stops still prints
+        # its result object, which says that it was stopped mid-run.
+        c.eq("how the session ended (stopped, and its result says so)", row["results"], ["error_during_execution"])
     else:
         served_prompt = sum(len(json.dumps(b).encode()) // 4 for b in sent)
         c.eq("prompt tokens: the proxy's log, against a quarter of each body it sent", row["prompt_tokens"], served_prompt)
@@ -311,10 +312,7 @@ def check(d, expect_path, opts):
             c.eq("how each session ended", row["results"], ["success"] * e["sessions"])
 
     # What gnosh was told, and what it believed.
-    if e["stopped"]:
-        c.eq("the window gnosh believed (a stopped session prints no result to say it in)", row["window_believed"], None)
-    else:
-        c.eq("the window gnosh believed", row["window_believed"], row["window"])
+    c.eq("the window gnosh believed", row["window_believed"], row["window"])
     c.eq("the window the scripted server says it has", [row["window_server"], row["window_server_from"]], [100000, "props.n_ctx"])
     c.eq("so the window told is not the server's", row["window_true"], False)
     c.eq("requests past the window told", row["over_window"], 0)

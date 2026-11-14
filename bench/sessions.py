@@ -116,7 +116,8 @@ def frames(ents, op):
 def stream(path):
     """What a session printed (--output-format stream-json): its init line
     and its last result object, either None when it is not there. A session
-    that was stopped prints no result."""
+    stopped by a signal prints a result too ("error_during_execution"); one
+    that was killed outright prints none."""
     init = result = None
     try:
         f = open(path, errors="replace")
