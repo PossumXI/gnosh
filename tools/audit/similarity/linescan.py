@@ -63,7 +63,7 @@ def main_corpus():
 
 def load(name):
     """A corpus by name: (Corpus, tier). core and ext are the two tiers of the
-    main one; libs, old and deps are corpora of their own."""
+    main one; libs, since, old and deps are corpora of their own."""
     if name in ('core', 'ext'):
         return main_corpus(), name
     C = T.Corpus()
@@ -184,7 +184,7 @@ def show(path, name):
         print('   %5d| %s' % (i, lines[i - 1][:150]))
 
 
-ALL = ['core', 'ext', 'libs', 'old', 'deps']
+ALL = ['core', 'ext', 'libs', 'since', 'old', 'deps']
 
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'scan'

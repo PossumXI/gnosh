@@ -21,9 +21,11 @@
   names.py api        for each package of new code, the Charm package that
                       declares the most of the same exported names, with the
                       control programs' packages beside it. -> api.tsv
-  names.py rc         the words of the config-file language (flags and option
-                      names) that Crush's package for it and the new
-                      internal/config both hold. -> rc.tsv
+  names.py rc         the words of Crush's config-file language (flags and
+                      option names) that Crush's package for it and the new
+                      internal/config both hold; the names of the JSON file
+                      gnosh reads now are compared by configsurface.py.
+                      -> rc.tsv
   names.py terms      brand words, environment-variable names and config keys
                       of Crush's, counted in every text file of the new tree.
                       -> terms.tsv
@@ -57,7 +59,10 @@ def run(cmd, cwd=None, env=None, check=True):
 def gitsim():
     ident = dict(GIT_AUTHOR_NAME='audit', GIT_AUTHOR_EMAIL='audit@example.com',
                  GIT_COMMITTER_NAME='audit', GIT_COMMITTER_EMAIL='audit@example.com')
-    for label, trees in (('crush', (('base', X.FORK_POINT), ('up', X.UPSTREAM))), ('old', (('old', X.OLD_MAIN),))):
+    crush_trees = [('base', X.FORK_POINT), ('up', X.UPSTREAM)]
+    if X.SINCE_REPO and X.UPSTREAM_NOW:
+        crush_trees.append(('now', X.UPSTREAM_NOW))  # upstream's tree as fetched later
+    for label, trees in (('crush', tuple(crush_trees)), ('old', (('old', X.OLD_MAIN),))):
         if not all(rev for _, rev in trees):
             continue
         d = w('gitsim-' + label)
@@ -70,6 +75,9 @@ def gitsim():
             objs = os.path.join(X.CRUSH_REPO, objs)
         with open(os.path.join(d, '.git', 'objects', 'info', 'alternates'), 'w') as f:
             f.write(objs + '\n')
+            if X.SINCE_REPO:
+                more = run(['git', '-C', X.SINCE_REPO, 'rev-parse', '--git-path', 'objects']).strip()
+                f.write((more if os.path.isabs(more) else os.path.join(X.SINCE_REPO, more)) + '\n')
         for prefix, rev in trees:
             run(['git', 'read-tree', '--prefix=%s/' % prefix, rev + '^{tree}'], cwd=d)
         a = run(['git', 'commit-tree', '-m', 'crush', run(['git', 'write-tree'], cwd=d).strip()], cwd=d, env=ident).strip()
@@ -91,6 +99,15 @@ def gitsim():
 
 # ---- same file names --------------------------------------------------------
 
+def crush_list():
+    """The lines of the crush list and, when that corpus was built, of what
+    Charm has published since."""
+    out = list(open(w('lists/crush-core.tsv')))
+    if os.path.exists(w('lists/since.tsv')):
+        out += list(open(w('lists/since.tsv')))
+    return out
+
+
 def long_lines(lines):
     nl, _ = T.norm_lines(lines)
     return [n for n in nl if len(n) >= T.MIN_SIG and len(T.ALNUM.findall(n)) >= T.MIN_SIG_ALNUM and not T.IMPORT_LINE.match(n)]
@@ -98,7 +115,7 @@ def long_lines(lines):
 
 def basenames():
     crush = collections.defaultdict(list)  # basename -> [(shown, disk path)]
-    for l in open(w('lists/crush-core.tsv')):
+    for l in crush_list():
         path, shown = l.rstrip('\n').split('\t')
         name = shown.rsplit('@', 1)[0]
         if name.endswith('.go'):
@@ -158,6 +175,7 @@ def idents():
     crush = read_decl(w('decl-core.tsv'))
     ext = read_decl(w('decl-ext.tsv'))
     libs = read_decl(w('decl-libs.tsv'))
+    since = read_decl(w('decl-since.tsv'))
     ref = read_decl(w('decl-ref.tsv'))
     use = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0, []]))  # name -> group -> [files, count, examples]
     for l in open(w('use-targets.tsv'), encoding='utf-8', errors='replace'):
@@ -174,7 +192,7 @@ def idents():
     for name, groups in use.items():
         kinds = {}
         where = ''
-        for src, d in (('core', crush), ('ext', ext), ('libs', libs)):
+        for src, d in (('core', crush), ('since', since), ('ext', ext), ('libs', libs)):
             if name in d:
                 for k, v in d[name].items():
                     if not k.startswith('tag:'):
@@ -242,7 +260,9 @@ def api():
     library's) that declares the most of the same exported names; and the
     same for the control programs' packages, to show what chance gives."""
     corp = collections.defaultdict(set)   # package -> exported names
-    for fn, strip in (('crush-core.tsv', True), ('libs.tsv', False)):
+    for fn, strip in (('crush-core.tsv', True), ('since.tsv', True), ('libs.tsv', False)):
+        if not os.path.exists(w('lists/' + fn)):
+            continue
         for l in open(w('lists/' + fn)):
             path, shown = l.rstrip('\n').split('\t')
             name = shown.rsplit('@', 1)[0] if strip else shown
@@ -318,12 +338,15 @@ GOSTR = re.compile(r'"((?:[^"\\]|\\.)*)"')
 
 def rc():
     """Crush reads a config file of shell-like lines ("crushrc": provider
-    add ... --base-url ..., option request-timeout 900), and the new gnosh
-    reads the same language as "gnoshrc". This counts the words of that
-    language (flags, and option names with a dash in them) that stand as
-    string literals both in Crush's package for it (internal/shellconfig, at
-    the fork point or upstream) and in the new internal/config, tests left
-    out; and the same for the words the earlier gnosh added to that package."""
+    add ... --base-url ..., option request-timeout 900). At the first audit
+    the new gnosh read the same language as "gnoshrc"; since then it reads
+    one JSON file, and configsurface.py compares that file's names with
+    Crush's. This count is kept so that a word of the old language that
+    comes back is seen: the words of it (flags, and option names with a dash
+    in them) that stand as string literals both in Crush's package for it
+    (internal/shellconfig, at the fork point or upstream) and in the new
+    internal/config, tests left out; and the same for the words the earlier
+    gnosh added to that package."""
     def words(paths):
         out = set()
         for p in paths:
@@ -333,7 +356,7 @@ def rc():
                         out.add(m)
         return out
     crush = []
-    for l in open(w('lists/crush-core.tsv')):
+    for l in crush_list():
         path, shown = l.rstrip('\n').split('\t')
         name = shown.rsplit('@', 1)[0].split(':', 1)[1]
         if name.startswith('internal/shellconfig/') and name.endswith('.go') and not name.endswith('_test.go'):
@@ -396,10 +419,13 @@ def terms():
     if not os.path.exists(w('strings-ext-all.tsv')):
         print('missing strings-ext-all.tsv (tokscan -strings -uniq -minstr 3 of the ext list)')
     else:
-        for l in open(w('strings-ext-all.tsv'), encoding='utf-8', errors='replace'):
-            p = l.rstrip('\n').split('\t')
-            if len(p) >= 3 and ENVNAME.match(p[2].strip('"')):
-                env.add(p[2].strip('"'))
+        for fn in ('strings-ext-all.tsv', 'strings-since-all.tsv'):
+            if not os.path.exists(w(fn)):
+                continue
+            for l in open(w(fn), encoding='utf-8', errors='replace'):
+                p = l.rstrip('\n').split('\t')
+                if len(p) >= 3 and ENVNAME.match(p[2].strip('"')):
+                    env.add(p[2].strip('"'))
     ref_env = set()
     if os.path.exists(w('strings-ref-all.tsv')):
         for l in open(w('strings-ref-all.tsv'), encoding='utf-8', errors='replace'):
@@ -415,10 +441,11 @@ def terms():
     # less what unrelated code's tags also name
     crush = read_decl(w('decl-core.tsv'))
     ext = read_decl(w('decl-ext.tsv'))
+    since = read_decl(w('decl-since.tsv'))
     ref = read_decl(w('decl-ref.tsv'))
     reftags = {n for n, d in ref.items() if any(k.startswith('tag:') for k in d)}
     keys = set()
-    for d in (crush, ext):
+    for d in (crush, ext, since):
         for n, kinds in d.items():
             if any(k in ('tag:json', 'tag:yaml', 'tag:toml', 'tag:env', 'tag:flag', 'tag:mapstructure') for k in kinds):
                 if n not in reftags and re.match(r'^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)+$', n):

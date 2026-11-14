@@ -1,0 +1,320 @@
+name	what_it_is	where_in_gnosh	builder_says_from	match	crush_names	crush_kinds	crush_tiers	crush_example	earlier_gnosh_only	in_spec_cc	in_provider_sdks	in_unrelated_go
+providers	top-level key	internal/config/table.go:83	plain words	same	providers	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:857		1 files		field ctl:ollama/cmd/launch/opencode.go
+models	top-level key	internal/config/table.go:84	plain words	same	models	catwalk discover json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:150		4 files	identifier Models in anthropic-sdk-go	field ctl:ollama/api/types.go
+model	top-level key	internal/config/table.go:85	Claude Code: the settings key	same	model --model .model	discover json rc schema string	fork point, upstream, history only	base:internal/config/config.go:69		13 files	wire name model in anthropic-sdk-go	field ref:src/cmd/vendor/golang.org/x/sys/unix/ztypes_linux.go
+smallModel	top-level key	internal/config/table.go:86	plain words, after "model" and the --small-model flag									
+hosts	top-level key	internal/config/table.go:87	plain words						yes	1 files		field ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/tm2/pkg/toml/tomltree_create_test.go
+options	top-level key	internal/config/table.go:88	plain words	same	options --options	catwalk json rc schema	fork point, upstream, history only, libs	base:internal/config/config.go:338		7 files	identifier Options in anthropic-sdk-go	field ref:src/cmd/vendor/golang.org/x/sys/unix/ztypes_darwin_amd64.go
+permissions	top-level key	internal/config/table.go:89	Claude Code: the settings key	same	permissions	json rc schema	fork point, upstream, history only	base:internal/config/config.go:865		12 files	wire name permissions in openai-go	const ref:src/os/os_windows_test.go
+hooks	top-level key	internal/config/table.go:90	Claude Code: the settings key	same	hooks	json rc schema	fork point, upstream, history only	base:internal/config/config.go:869		12 files		field ctl:gh/internal/barista/observability/telemetry.twirp.go
+env	top-level key	internal/config/table.go:91	Claude Code: the settings key	same	env --env	catwalk json rc schema	fork point, upstream, history only, libs	base:internal/config/config.go:219		7 files	identifier Env in anthropic-sdk-go	const ref:src/math/rand/default_test.go
+disableAllHooks	top-level key	internal/config/table.go:92	Claude Code: the settings key							6 files		
+$schema	top-level key	internal/config/table.go:93	Claude Code: the settings key	same	$schema schema --schema	json rc schema	fork point, upstream, history only	base:internal/config/config.go:848		3 files	wire name schema in anthropic-sdk-go	field ref:src/crypto/internal/cryptotest/wycheproof/schema.go
+providers.<id>.type	provider field	internal/config/table.go:98	plain words	same	type --type .type	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:100		12 files	wire name type in anthropic-sdk-go	const ref:src/go/token/token.go
+providers.<id>.name	provider field	internal/config/table.go:99	plain words	same	name --name .name	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:96		13 files	wire name name in anthropic-sdk-go	const ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/gnovm/pkg/gnolang/nodes.go
+providers.<id>.baseUrl	provider field	internal/config/table.go:100	provider APIs: the base URL	respelled	base_url --base-url base-url .base_url	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:98			identifier BaseURL in anthropic-sdk-go	const ref:tools@v0.52.0/playground/playground.go
+providers.<id>.apiKey	provider field	internal/config/table.go:101	provider APIs: the API key	same	API_KEY api_key --api-key api-key .api_key apiKey	catwalk env json rc schema string	fork point, upstream, history only, libs	base:internal/agent/tools/crush_logs_test.go:241			identifier APIKey in anthropic-sdk-go	field ctl:ollama/cmd/launch/droid.go
+providers.<id>.headers	provider field	internal/config/table.go:102	Claude Code: the key of .mcp.json for a server's request headers	same	headers	json rc schema	fork point, upstream, history only	base:internal/config/config.go:247		4 files	wire name headers in genai	const ref:net@v0.61.0/html/atom/table.go
+providers.<id>.extraBody	provider field	internal/config/table.go:103	provider APIs: the extra_body of the OpenAI and Anthropic SDKs	respelled	extra_body --extra-body extra-body	json rc schema	fork point, upstream, history only	base:internal/config/config.go:128			wire name extraBody in genai	
+providers.<id>.discoverModels	provider field	internal/config/table.go:104	plain words	respelled	discover_models --discover-models discover-models	json rc schema	fork point, upstream, history only	base:internal/config/config.go:147				
+providers.<id>.disabled	provider field	internal/config/table.go:105	plain words	same	disabled .disabled --disabled	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:223		4 files	wire name disabled in genai	const ref:net@v0.61.0/html/atom/table.go
+models.<provider>/<model id>.name	model field	internal/config/table.go:110	plain words	same	name --name .name	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:96		13 files	wire name name in anthropic-sdk-go	const ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/gnovm/pkg/gnolang/nodes.go
+models.<provider>/<model id>.contextWindow	model field	internal/config/table.go:111	provider APIs: the context window	respelled	--context-window context_window context-window .context_window	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/shellconfig/model.go:65		1 files		field ctl:ollama/cmd/launch/codex_app.go
+models.<provider>/<model id>.maxOutputTokens	model field	internal/config/table.go:112	provider APIs: the max output tokens, and Claude Code's CLAUDE_CODE_MAX_OUTPUT_TOKENS	respelled	max_output_tokens	catwalk discover	fork point, upstream, history only, libs	base:internal/discover/litellm.go:28		1 files	wire name maxOutputTokens in genai	field ctl:ollama/api/types.go
+models.<provider>/<model id>.thinkingLevels	model field	internal/config/table.go:113	plain words									
+model. / smallModel.id	field of "model" and "smallModel"	internal/config/table.go:119	plain words	same	id --id .id	catwalk discover json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:94		10 files	wire name id in anthropic-sdk-go	const ref:net@v0.61.0/html/atom/table.go
+model. / smallModel.thinking	field of "model" and "smallModel"	internal/config/table.go:120	plain words	same	thinking --thinking -thinking	catwalk discover rc schema string	upstream, history only, libs	up:internal/config/load.go:206		7 files	wire name thinking in anthropic-sdk-go	field ctl:ollama/anthropic/anthropic.go
+model. / smallModel.temperature	field of "model" and "smallModel"	internal/config/table.go:121	provider APIs: the temperature	same	temperature --temperature	catwalk json rc schema	fork point, upstream, history only, libs	base:internal/config/config.go:82			wire name temperature in anthropic-sdk-go	field ctl:ollama/anthropic/anthropic.go
+hosts.<name>.ssh	host field	internal/config/table.go:126	plain words: the program's own name						yes			field ref:src/runtime/defs_linux_386.go
+hosts.<name>.description	host field	internal/config/table.go:127	plain words	same	description --description .description	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:759		9 files	wire name description in anthropic-sdk-go	field ref:src/cmd/vendor/golang.org/x/sys/windows/service.go
+permissions.allow	permissions key	internal/config/table.go:132	Claude Code	same	allow --allow	rc	fork point, upstream, history only	base:internal/shellconfig/permissions.go:33		8 files		field ref:src/cmd/go/internal/modload/query_test.go
+permissions.ask	permissions key	internal/config/table.go:133	Claude Code							9 files		field ctl:gh/pkg/cmd/codespace/common.go
+permissions.deny	permissions key	internal/config/table.go:134	Claude Code	same	deny	rc	fork point, upstream, history only	base:internal/shellconfig/permissions.go:35		8 files		field ref:src/net/http/csrf.go
+permissions.defaultMode	permissions key	internal/config/table.go:135	Claude Code							4 files		field ctl:ollama/mlxrunner/model/linear.go
+permissions.additionalDirectories	permissions key	internal/config/table.go:136	Claude Code							3 files		
+permissions.disableBypassPermissionsMode	permissions key	internal/config/table.go:137	Claude Code							3 files		
+permissions.disableAutoMode	permissions key	internal/config/table.go:138	Claude Code							1 files		
+permissions.denyInsteadOfPrompting	permissions key	internal/config/table.go:139	Claude Code							2 files		
+statusLine (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:148	Claude Code							2 files		
+cleanupPeriodDays (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:148	Claude Code							2 files		
+attribution (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:148	Claude Code	same	attribution	json rc schema	fork point, upstream, history only	base:internal/config/config.go:474		2 files		
+includeCoAuthoredBy (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:148	Claude Code							1 files		
+includeGitInstructions (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:148	Claude Code							1 files		
+fileCheckpointingEnabled (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:149	Claude Code							2 files		
+outputStyle (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:149	Claude Code							1 files		
+verbose (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:149	Claude Code							5 files	wire name verbose in ctl:ollama	const ref:src/cmd/vendor/github.com/ianlancetaylor/demangle/demangle.go
+viewMode (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:149	Claude Code							2 files		field ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/gno.land/pkg/gnoweb/feature/state/view.go
+editorMode (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:149	Claude Code							2 files		field ctl:gh/pkg/cmd/issue/create/create.go
+respondToBashCommands (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:149	Claude Code							2 files		
+respectGitignore (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:150	Claude Code							2 files		
+fileSuggestion (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:150	Claude Code							2 files		
+claudeMdExcludes (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:150	Claude Code							2 files		
+agent (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:150	Claude Code	same	agent	string	fork point, upstream, history only	base:internal/config/config.go:1040		13 files	wire name agent in anthropic-sdk-go	field ctl:ollama/app/store/store.go
+askUserQuestionTimeout (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:150	Claude Code							2 files		
+bashOutputMaxChars (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:151	Claude Code							2 files		
+showTurnDuration (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:151	Claude Code							2 files		
+language (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:151	Claude Code	same	language	catwalk string	history only, libs	hist:internal/config/config.go:634		2 files	wire name language in genai	field ref:src/cmd/go/scriptreadme_test.go
+spinnerVerbs (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:151	Claude Code							2 files		
+spinnerTipsEnabled (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:151	Claude Code							2 files		
+skipDangerousModePermissionPrompt (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:152	Claude Code							2 files		
+effortLevel (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:153	Claude Code							1 files		
+fallbackModel (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:153	Claude Code							2 files		field ctl:ollama/cmd/launch/codex_app.go
+alwaysThinkingEnabled (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:153	Claude Code							2 files		
+showThinkingSummaries (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:153	Claude Code							2 files		
+plansDirectory (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:153	Claude Code							1 files		
+autoMemoryEnabled (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:154	Claude Code							2 files		
+autoMemoryDirectory (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:154	Claude Code							2 files		
+idleCompaction (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:154	Claude Code						yes	1 files		
+tui (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:154	Claude Code	same	tui	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:462		3 files		field ctl:ollama/cmd/launch/muse_test.go
+theme (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:154	Claude Code	same	theme	json schema string	fork point, upstream, history only	base:internal/config/config.go:368		2 files		field ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/gno.land/pkg/gnoweb/components/layout_index.go
+enabledMcpjsonServers (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:154	Claude Code							2 files		
+disabledMcpjsonServers (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:155	Claude Code							2 files		
+enableAllProjectMcpServers (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:155	Claude Code							2 files		
+allowedMcpServers (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:155	Claude Code							1 files		
+deniedMcpServers (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:155	Claude Code							1 files		
+allowedHttpHookUrls (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:156	Claude Code							2 files		
+httpHookAllowedEnvVars (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:156	Claude Code							2 files		
+worktree (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:156	Claude Code	same	worktree	json	history only	hist:internal/config/config.go:656		8 files		field ctl:gh/pkg/cmd/issue/develop/develop.go
+sandbox (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:156	Claude Code							5 files		const ref:net@v0.61.0/html/atom/table.go
+apiKeyHelper (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:157	Claude Code							2 files		
+awsAuthRefresh (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:157	Claude Code	respelled	aws_auth_refresh	json schema	fork point, upstream, history only	base:internal/config/config.go:137		1 files		
+forceLoginMethod (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:157	Claude Code							1 files		
+allowedProviders (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:157	Claude Code							1 files		
+availableModels (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:157	Claude Code							1 files		var ctl:ollama/app/cmd/app/app_darwin.go
+modelPicker (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:157	Claude Code							1 files		
+modelPricing (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:158	Claude Code							1 files		
+advisorModel (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:158	Claude Code							1 files		
+fastMode (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:158	Claude Code							1 files		
+enabledPlugins (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:158	Claude Code							1 files		
+extraKnownMarketplaces (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:158	Claude Code							1 files		
+strictKnownMarketplaces (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:159	Claude Code							1 files		
+pluginConfigs (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:159	Claude Code							1 files		
+feedbackDrafts (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:159	Claude Code							1 files		
+feedbackSurveyRate (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:159	Claude Code							1 files		
+autoMode (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:159	Claude Code							2 files	wire name autoMode in genai	field ctl:ollama/app/cmd/app/claude_desktop_status.go
+useAutoModeDuringPlan (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:160	Claude Code							2 files		
+provider type llamacpp	provider type	internal/config/table.go:188	plain words: the server's own name	same	llamacpp	discover schema	fork point, upstream, history only	base:internal/discover/llamacpp.go:12				
+provider type openai-compatible	provider type	internal/config/table.go:189	plain words: the server's own name									
+provider type anthropic	provider type	internal/config/table.go:190	plain words: the server's own name	same	anthropic Anthropic	catwalk schema string	fork point, upstream, history only, libs	base:schema.json		2 files		package ctl:ollama/anthropic/anthropic.go
+provider type openai	provider type	internal/config/table.go:191	plain words: the server's own name	same	openai OpenAI	catwalk schema string	fork point, upstream, history only, libs	base:schema.json				package ctl:ollama/openai/openai.go
+provider type ollama	provider type	internal/config/table.go:192	plain words: the server's own name	same	ollama Ollama	discover schema string	fork point, upstream, history only	base:internal/discover/ollama.go:14				field ctl:ollama/internal/proxy/claude_desktop_test.go
+provider type lmstudio	provider type	internal/config/table.go:193	plain words: the server's own name	same	lmstudio	discover schema	fork point, upstream, history only	base:internal/discover/lmstudio.go:12				
+provider type litellm	provider type	internal/config/table.go:194	plain words: the server's own name	same	litellm	discover schema	fork point, upstream, history only	base:internal/discover/litellm.go:35				
+provider type omlx	provider type	internal/config/table.go:195	plain words: the server's own name	same	omlx	discover schema	fork point, upstream, history only	base:internal/discover/omlx.go:12				
+hook event PreToolUse	hook event	internal/config/table.go:231	Claude Code	same	pretooluse PreToolUse PRE_TOOL_USE pre_tool_use	env string	fork point, upstream, history only	base:internal/config/load.go:1435		6 files		
+hook event PostToolUse	hook event	internal/config/table.go:232	Claude Code	same	PostToolUse post_tool_use	string	upstream, history only	up:internal/config/hooks.go:13		5 files		
+hook event PostToolUseFailure	hook event	internal/config/table.go:233	Claude Code	same	PostToolUseFailure	string	upstream	up:internal/config/hooks.go:14		2 files		
+hook event UserPromptSubmit	hook event	internal/config/table.go:234	Claude Code	respelled	user_prompt_submit	string	history only	hist:internal/config/hooks.go:17		4 files		
+hook event SessionStart	hook event	internal/config/table.go:235	Claude Code	same	SessionStart	string	upstream	up:internal/config/hooks.go:17		7 files		
+hook event Stop	hook event	internal/config/table.go:236	Claude Code	same but for letter case	stop	string	history only	hist:internal/config/hooks.go:19		8 files	identifier Stop in anthropic-sdk-go	const ref:src/cmd/vendor/golang.org/x/arch/ppc64/ppc64asm/tables.go
+hook event SubagentStart	hook event	internal/config/table.go:237	Claude Code						yes	2 files		
+hook event SubagentStop	hook event	internal/config/table.go:238	Claude Code	respelled	subagent_stop	string	history only	hist:internal/config/hooks.go:21		2 files		
+hook event StopFailure	hook event	internal/config/table.go:239	Claude Code	same	StopFailure	string	upstream	up:internal/config/hooks.go:21		1 files		
+hook event PreCompact	hook event	internal/config/table.go:240	Claude Code	same	PreCompact pre_compact	string	upstream, history only	up:internal/config/hooks.go:23		2 files		
+hook event PostCompact	hook event	internal/config/table.go:241	Claude Code	same	PostCompact	string	upstream	up:internal/config/hooks.go:24		2 files		
+hook event SessionEnd	hook event	internal/config/table.go:242	Claude Code	same	SessionEnd	string	upstream	up:internal/config/hooks.go:18		6 files		
+hook event InstructionsLoaded	hook event	internal/config/table.go:243	Claude Code						yes	2 files		
+hook event PermissionRequest	hook event	internal/config/table.go:244	Claude Code	same	PermissionRequest	string	upstream	up:internal/config/hooks.go:15		3 files		
+hook event Notification	hook event	internal/config/table.go:245	Claude Code						yes	2 files		type ref:tools@v0.52.0/internal/jsonrpc2/messages.go
+hooks: handler field type	hook handler field	internal/config/table.go:287	Claude Code	same	type --type .type	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:100		12 files	wire name type in anthropic-sdk-go	const ref:src/go/token/token.go
+hooks: handler field command	hook handler field	internal/config/table.go:288	Claude Code	same	command --command .command	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:218		13 files	wire name command in anthropic-sdk-go	const ref:net@v0.61.0/html/atom/table.go
+hooks: handler field timeout	hook handler field	internal/config/table.go:289	Claude Code	same	timeout --timeout	json rc schema	fork point, upstream, history only	base:internal/config/config.go:226		8 files	wire name timeout in genai	const ref:net@v0.61.0/xsrftoken/xsrf.go
+hooks: handler field statusMessage	hook handler field	internal/config/table.go:290	Claude Code						yes	2 files		
+hooks: handler field once	hook handler field	internal/config/table.go:291	Claude Code						yes	11 files		field ref:src/cmd/cgo/internal/testsanitizers/cc_test.go
+hooks: handler field shell	hook handler field	internal/config/table.go:292	Claude Code	same	shell SHELL	json string	history only	hist:internal/config/config.go:95		12 files		field ref:src/internal/syscall/unix/user_darwin.go
+hooks: handler field async	hook handler field	internal/config/table.go:293	Claude Code						yes	1 files	wire name async in openai-go	const ref:src/cmd/internal/obj/mips/a.out.go
+hooks: handler field asyncRewake	hook handler field	internal/config/table.go:294	Claude Code						yes	1 files		
+hooks: handler field onFailure	hook handler field	internal/config/table.go:295	Claude Code						yes	1 files		
+hooks: handler field if	hook handler field	internal/config/table.go:296	Claude Code						yes	12 files		const ref:src/go/token/token.go
+hooks: handler field args	hook handler field	internal/config/table.go:297	Claude Code	same	args --args	json rc schema	fork point, upstream, history only	base:internal/config/config.go:220		5 files	wire name args in genai	field ref:src/cmd/compile/internal/ir/expr.go
+$GNOSH_CONFIG_DIR	environment variable gnosh reads	internal/config/table.go:324	Claude Code: CLAUDE_CONFIG_DIR									
+$GNOSH_DATA_DIR	environment variable gnosh reads	internal/config/table.go:325	plain words, after GNOSH_CONFIG_DIR	same but for the brand	CRUSH_DATA_DIR	env	upstream, history only	up:internal/config/load.go:243				
+$GNOSH_SAFE_MODE	environment variable gnosh reads	internal/config/table.go:326	Claude Code: CLAUDE_CODE_SAFE_MODE									
+$GNOSH_PROFILE	environment variable gnosh reads	internal/config/table.go:327	plain words	same but for the brand	CRUSH_PROFILE	env	fork point, history only	base:main.go:16				
+$GNOSH	environment variable gnosh sets for hooks and commands	internal/config/table.go:330		same but for the brand	crush Crush	catwalk string	fork point, upstream, history only, libs	base:internal/config/config.go:24		2 files		func ref:src/runtime/testdata/testprog/crash.go
+$GNOSH_EVENT	environment variable gnosh sets for hooks and commands	internal/config/table.go:331		same but for the brand	CRUSH_EVENT	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:191				
+$GNOSH_SESSION_ID	environment variable gnosh sets for hooks and commands	internal/config/table.go:332		same but for the brand	CRUSH_SESSION_ID	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:193				
+$GNOSH_CWD	environment variable gnosh sets for hooks and commands	internal/config/table.go:333		same but for the brand	CRUSH_CWD	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:194				
+$GNOSH_PROJECT_DIR	environment variable gnosh sets for hooks and commands	internal/config/table.go:334		same but for the brand	CRUSH_PROJECT_DIR	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:195		1 files		
+$GNOSH_TOOL_NAME	environment variable gnosh sets for hooks and commands	internal/config/table.go:335		same but for the brand	CRUSH_TOOL_NAME	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:192				
+$GNOSH_TOOL_USE_ID	environment variable gnosh sets for hooks and commands	internal/config/table.go:336										
+$GNOSH_TOOL_INPUT_COMMAND	environment variable gnosh sets for hooks and commands	internal/config/table.go:337		same but for the brand	CRUSH_TOOL_INPUT_COMMAND	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:196				
+$GNOSH_TOOL_INPUT_FILE_PATH	environment variable gnosh sets for hooks and commands	internal/config/table.go:338		same but for the brand	CRUSH_TOOL_INPUT_FILE_PATH	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:197				
+$GNOSH_STOP_HOOK_ACTIVE	environment variable gnosh sets for hooks and commands	internal/config/table.go:339										
+$GNOSH_AGENT_ID	environment variable gnosh sets for hooks and commands	internal/config/table.go:340										
+$GNOSH_AGENT_TYPE	environment variable gnosh sets for hooks and commands	internal/config/table.go:341										
+$GNOSH_SESSION_START_SOURCE	environment variable gnosh sets for hooks and commands	internal/config/table.go:342										
+$GNOSH_SESSION_END_REASON	environment variable gnosh sets for hooks and commands	internal/config/table.go:343										
+$GNOSH_PRE_COMPACT_TRIGGER	environment variable gnosh sets for hooks and commands	internal/config/table.go:344										
+$GNOSH_POST_COMPACT_TRIGGER	environment variable gnosh sets for hooks and commands	internal/config/table.go:345										
+$GNOSH_STOP_FAILURE_ERROR	environment variable gnosh sets for hooks and commands	internal/config/table.go:346										
+$GNOSH_INSTRUCTIONS_LOAD_REASON	environment variable gnosh sets for hooks and commands	internal/config/table.go:347										
+$GNOSH_NOTIFICATION_TYPE	environment variable gnosh sets for hooks and commands	internal/config/table.go:348										
+$GNOSH_ENV_FILE	environment variable gnosh sets for hooks and commands	internal/config/table.go:349										
+$GNOSH_MEM_STATUS	environment variable gnosh sets for hooks and commands	internal/config/table.go:350										
+$GNOSH_PEER_CHILD	environment switch of gnosh's own tests	internal/config/table.go:352										
+$GNOSH_PEERS_SWARM	environment switch of gnosh's own tests	internal/config/table.go:353										
+$GNOSH_PEER_WORK	environment switch of gnosh's own tests	internal/config/table.go:354										
+$GNOSH_IGNORE_ROUNDS	environment switch of gnosh's own tests	internal/config/table.go:355										
+$GNOSH_IGNORE_SEED	environment switch of gnosh's own tests	internal/config/table.go:356										
+blockReadsOutsideWorkingDirectories (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:165	Claude Code							1 files		
+blockWritesOutsideWorkingDirectories (refused)	a Claude Code key gnosh names only to refuse it	internal/config/table.go:165	Claude Code							1 files		
+permission mode default	permission mode	internal/config/table.go:310	Claude Code	same	default --default	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:411		13 files	identifier Default in anthropic-sdk-go	const ref:src/go/token/token.go
+permission mode plan	permission mode	internal/config/table.go:310	Claude Code	same	plan Plan	string	fork point, upstream, history only	base:internal/config/config.go:62		10 files	wire name plan in ctl:ollama	field ctl:ollama/api/types.go
+permission mode acceptEdits	permission mode	internal/config/table.go:310	Claude Code						yes	8 files		
+permission mode dontAsk	permission mode	internal/config/table.go:310	Claude Code						yes	7 files		
+permission mode bypassPermissions	permission mode	internal/config/table.go:310	Claude Code						yes	9 files		
+$GNOSH_TEST_*	environment prefix kept for tests	internal/config/table.go:361										type ref:src/runtime/crash_test.go
+$GNOSH_DEV_*	environment prefix kept for tests	internal/config/table.go:361										
+options.requestTimeout	option	internal/config/options.go:110	plain words	respelled	request_timeout request-timeout	json rc schema	fork point, upstream, history only	base:internal/config/config.go:481			identifier RequestTimeout in anthropic-sdk-go	const ref:src/net/http/internal/http2/server_test.go
+options.autoCompactEnabled	option	internal/config/options.go:116	Claude Code: the settings key							2 files		
+options.autoCompactWindow	option	internal/config/options.go:119	Claude Code: the settings key						yes	3 files		
+options.loopMaxTurns	option	internal/config/options.go:123	plain words, with the words of Claude Code's --max-turns						yes			
+options.maxBackgroundTasks	option	internal/config/options.go:126	plain words, with Claude Code's word for them (background tasks)									
+options.userInstructionFiles	option	internal/config/options.go:132	plain words									
+options.projectInstructionFiles	option	internal/config/options.go:136	plain words									
+options.disabledSkills	option	internal/config/options.go:140	plain words, shaped as Claude Code's disabled… lists are	respelled	disabled_skills disabled-skills --disabled-skills	json rc schema	fork point, upstream, history only	base:internal/config/config.go:480				
+options.memoryText	option	internal/config/options.go:146	plain words									
+options.memReviewCloses	option	internal/config/options.go:150	plain words						yes			
+options.memEmbeddingsUrl	option	internal/config/options.go:153	plain words, with the APIs' word (embeddings)						yes			
+options.debug	option	internal/config/options.go:159	Claude Code: the --debug flag	same	debug --debug	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:463		5 files		const ref:src/text/tabwriter/tabwriter.go
+options.projectDataDir	option	internal/config/options.go:162	plain words, after the --data-dir flag									
+$API_TIMEOUT_MS	environment variable gnosh reads	internal/config/env.go:47	Claude Code							1 files		
+$BASH_DEFAULT_TIMEOUT_MS	environment variable gnosh reads	internal/config/env.go:48	Claude Code							3 files		
+$BASH_MAX_TIMEOUT_MS	environment variable gnosh reads	internal/config/env.go:49	Claude Code							3 files		
+$BASH_MAX_OUTPUT_LENGTH	environment variable gnosh reads	internal/config/env.go:50	Claude Code							3 files		
+$CLAUDE_CODE_MAX_OUTPUT_TOKENS	environment variable gnosh reads	internal/config/env.go:51	Claude Code							1 files		
+$CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS	environment variable gnosh reads	internal/config/env.go:52	Claude Code							2 files		
+$CLAUDE_CODE_GLOB_TIMEOUT_SECONDS	environment variable gnosh reads	internal/config/env.go:53	Claude Code						yes	2 files		
+$CLAUDE_CODE_AUTO_COMPACT_WINDOW	environment variable gnosh reads	internal/config/env.go:54	Claude Code							2 files		
+$CLAUDE_AUTOCOMPACT_PCT_OVERRIDE	environment variable gnosh reads	internal/config/env.go:55	Claude Code							2 files		
+$CLAUDE_CODE_SAFE_MODE	environment variable gnosh reads	internal/config/env.go:56	Claude Code							2 files		
+$ANTHROPIC_API_KEY	environment variable gnosh reads	internal/config/env.go:57	provider APIs: Anthropic's own variable, which Claude Code reads too	same	ANTHROPIC_API_KEY $ANTHROPIC_API_KEY	env string	fork point, upstream, upstream since, history only, a branch, since	base:internal/agent/coordinator.go:1085		1 files		
+$OPENAI_API_KEY	environment variable gnosh reads	internal/config/env.go:58	provider APIs: OpenAI's own variable	same	OPENAI_API_KEY $OPENAI_API_KEY	env string	fork point, upstream, history only	base:internal/config/load_test.go:454				field ctl:ollama/cmd/launch/codex_app.go
+none	another string of internal/config	internal/config/build.go:85		same	none --none	catwalk rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:428		10 files		const ref:src/internal/syscall/windows/registry/value.go
+provider	another string of internal/config	internal/config/config.go:104		same	provider --provider	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:72		4 files	identifier Provider in anthropic-sdk-go	field ref:src/cmd/go/internal/work/action.go
+host	another string of internal/config	internal/config/config.go:106							yes	5 files		const ref:src/net/lookup_test.go
+hook	another string of internal/config	internal/config/config.go:107		same	hook	rc	fork point, history only	base:internal/shellconfig/register.go:27		12 files		type ref:src/internal/runtime/exithook/hooks.go
+hook-off	another string of internal/config	internal/config/config.go:108										
+allow-rule	another string of internal/config	internal/config/config.go:109										
+ask-rule	another string of internal/config	internal/config/config.go:110										
+deny-rule	another string of internal/config	internal/config/config.go:111										
+mode	another string of internal/config	internal/config/config.go:112		same	mode	discover	fork point, upstream, history only	base:internal/discover/litellm.go:31		13 files	wire name mode in anthropic-sdk-go	const ref:src/cmd/vendor/golang.org/x/tools/internal/refactor/inline/callee.go
+add-dir	another string of internal/config	internal/config/config.go:113								8 files		
+option	another string of internal/config	internal/config/config.go:115		same	option	rc	fork point, history only	base:internal/shellconfig/register.go:28		7 files		const ref:net@v0.61.0/html/atom/table.go
+extra-path	another string of internal/config	internal/config/config.go:116										
+address	another string of internal/config	internal/config/config.go:117										const ref:net@v0.61.0/html/atom/table.go
+disabled-skill	another string of internal/config	internal/config/config.go:118										
+removal	another string of internal/config	internal/config/config.go:119								3 files		
+note	another string of internal/config	internal/config/doctor.go:27								9 files		field ref:src/cmd/compile/internal/types/type.go
+FAIL	another string of internal/config	internal/config/doctor.go:29										field ref:src/context/context_test.go
+ok	another string of internal/config	internal/config/doctor.go:31		same but for letter case	OK	catwalk	libs	libs:charm.land/catwalk@v0.52.49/main.go:116		1 files		const ref:src/encoding/xml/read_test.go
+config	another string of internal/config	internal/config/doctor.go:105		same	config .config	discover string	fork point, upstream, history only	base:internal/discover/lmstudio.go:41		8 files	wire name config in anthropic-sdk-go	const ctl:ollama/mlxrunner/model/lfm3/lfm3speech/codec_test.go
+tools	another string of internal/config	internal/config/doctor.go:301		same	tools Tools	catwalk json rc schema	fork point, upstream, history only, libs	base:internal/config/config.go:867		12 files	wire name tools in anthropic-sdk-go	const ctl:ollama/internal/proxy/codex_desktop_test.go
+project	another string of internal/config	internal/config/doctor.go:332		same	project	json string	fork point, upstream, history only	base:internal/config/load.go:350		13 files	identifier Project in anthropic-sdk-go	field ctl:gh/api/queries_issue.go
+local	another string of internal/config	internal/config/doctor.go:332		same but for letter case	Local .local	string	fork point, upstream, history only	base:internal/config/load.go:1245		11 files		const ref:src/cmd/internal/obj/textflag.go
+trust	another string of internal/config	internal/config/doctor.go:335								8 files		field ref:crypto@v0.58.0/x509roots/nss/parser.go
+environment	another string of internal/config	internal/config/doctor.go:354								9 files	wire name environment in genai	const ctl:gh/pkg/cmd/secret/shared/shared.go
+test	another string of internal/config	internal/config/doctor.go:386								6 files	identifier Test in openai-go	const ref:src/cmd/vendor/golang.org/x/arch/x86/x86asm/tables.go
+for	another string of internal/config	internal/config/doctor.go:386								13 files		const ref:src/go/token/token.go
+while	another string of internal/config	internal/config/doctor.go:386								10 files		
+case	another string of internal/config	internal/config/doctor.go:386								5 files		const ref:src/go/token/token.go
+cd	another string of internal/config	internal/config/doctor.go:386								6 files		const ref:src/cmd/vendor/golang.org/x/arch/s390x/s390xasm/tables.go
+echo	another string of internal/config	internal/config/doctor.go:386								3 files	wire name echo in openai-go	const ref:src/cmd/vendor/golang.org/x/sys/unix/zerrors_aix_ppc.go
+printf	another string of internal/config	internal/config/doctor.go:386										field ref:src/cmd/go/internal/load/printer.go
+exit	another string of internal/config	internal/config/doctor.go:386								9 files		field ref:src/cmd/compile/internal/ssa/sparsetree.go
+true	another string of internal/config	internal/config/doctor.go:386		same	true	rc string	fork point, upstream, history only	base:internal/config/load.go:1302		10 files		const ref:src/builtin/builtin.go
+false	another string of internal/config	internal/config/doctor.go:386		same	false	rc	fork point, upstream, history only	base:internal/shellconfig/options.go:284		9 files		const ref:src/builtin/builtin.go
+export	another string of internal/config	internal/config/doctor.go:386								6 files		const ref:src/go/printer/printer_test.go
+set	another string of internal/config	internal/config/doctor.go:386								12 files	identifier Set in anthropic-sdk-go	const ref:src/vendor/golang.org/x/crypto/cryptobyte/asn1/asn1.go
+exec	another string of internal/config	internal/config/doctor.go:386								3 files	identifier Exec in anthropic-sdk-go	field ref:src/database/sql/driver/driver.go
+eval	another string of internal/config	internal/config/doctor.go:386										field ref:src/cmd/internal/script/engine.go
+source	another string of internal/config	internal/config/doctor.go:386		same	source	json rc	history only	hist:internal/config/config.go:907		7 files	wire name source in anthropic-sdk-go	const ref:src/cmd/internal/obj/link.go
+sh	another string of internal/config	internal/config/doctor.go:389		same	.sh sh	string	history only	hist:internal/config/load.go:1235		4 files		const ref:src/cmd/vendor/golang.org/x/arch/riscv64/riscv64asm/tables.go
+bash	another string of internal/config	internal/config/doctor.go:389		same	bash	json string	fork point, upstream, history only	base:internal/config/config.go:1041		5 files		field ctl:fzf/src/options.go
+zsh	another string of internal/config	internal/config/doctor.go:389		same	zsh	string	history only	hist:internal/config/load.go:349		2 files		field ctl:fzf/src/options.go
+dash	another string of internal/config	internal/config/doctor.go:389										var ref:src/unicode/tables.go
+ksh	another string of internal/config	internal/config/doctor.go:389		same	ksh	string	history only	hist:internal/config/load.go:349				
+python	another string of internal/config	internal/config/doctor.go:389								2 files	wire name python in openai-go	
+python3	another string of internal/config	internal/config/doctor.go:389										
+node	another string of internal/config	internal/config/doctor.go:389								1 files		field ref:src/cmd/vendor/golang.org/x/sys/unix/ztypes_linux.go
+ruby	another string of internal/config	internal/config/doctor.go:389										const ref:net@v0.61.0/html/atom/table.go
+perl	another string of internal/config	internal/config/doctor.go:389										const ref:src/regexp/syntax/parse.go
+deno	another string of internal/config	internal/config/doctor.go:389										
+bun	another string of internal/config	internal/config/doctor.go:389										
+php	another string of internal/config	internal/config/doctor.go:389										
+lua	another string of internal/config	internal/config/doctor.go:389		same	lua	string	history only	hist:internal/config/load.go:359				
+$CLAUDE_PROJECT_DIR	another string of internal/config	internal/config/doctor.go:466								4 files		
+$GNOSH_PROJECT_DIR	another string of internal/config	internal/config/doctor.go:467		same but for the brand	CRUSH_PROJECT_DIR	env	fork point, upstream, history only	base:internal/hooks/hooks_test.go:195		1 files		
+usable	another string of internal/config	internal/config/dump.go:47								7 files		field ctl:ollama/cmd/launch/pi_catalog_test.go
+elsewhere	another string of internal/config	internal/config/dump.go:56								1 files		
+matcher	another string of internal/config	internal/config/dump.go:263		same	matcher --matcher	json rc schema	fork point, upstream, history only	base:internal/config/config.go:821		5 files		field ref:text@v0.43.0/message/catalog/catalog.go
+yes	another string of internal/config	internal/config/env.go:103		same	yes	rc	fork point, upstream, history only	base:internal/shellconfig/options.go:282		9 files		const ref:src/cmd/internal/obj/x86/asm6.go
+on	another string of internal/config	internal/config/env.go:103								13 files		const ref:src/vendor/golang.org/x/text/unicode/bidi/trieval.go
+no	another string of internal/config	internal/config/env.go:105		same	no	rc	fork point, upstream, history only	base:internal/shellconfig/options.go:284		13 files		const ref:src/fmt/state_test.go
+off	another string of internal/config	internal/config/env.go:105								10 files		const ref:sys@v0.49.0/unix/readv_unix_test.go
+names	another string of internal/config	internal/config/file.go:762								13 files		field ref:src/cmd/compile/internal/ssa/func.go
+paths	another string of internal/config	internal/config/file.go:764								9 files		field ref:src/cmd/go/internal/load/test.go
+AGENTS.md	another string of internal/config	internal/config/finish.go:48		same	AGENTS.md agents.md Agents.md	string	fork point, upstream, history only	base:internal/config/config.go:26		4 files		
+GNOSH.md	another string of internal/config	internal/config/finish.go:48		same but for the brand	crush.md Crush.md CRUSH.md	string	fork point, upstream, history only	base:internal/config/config.go:37		1 files		
+CLAUDE.md	another string of internal/config	internal/config/finish.go:48		same	CLAUDE.md	string	fork point, upstream, history only	base:internal/config/config.go:33		7 files		
+CLAUDE.local.md	another string of internal/config	internal/config/finish.go:49		same	CLAUDE.local.md	string	fork point, upstream, history only	base:internal/config/config.go:34		2 files		
+--allowedTools	another string of internal/config	internal/config/finish.go:62		respelled	allowed_tools .allowed_tools	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:432		5 files	wire name allowed_tools in anthropic-sdk-go	
+--disallowedTools	another string of internal/config	internal/config/finish.go:67							yes	5 files		
+--add-dir	another string of internal/config	internal/config/finish.go:71								8 files		
+--safe-mode	another string of internal/config	internal/config/finish.go:142								3 files		
+--debug	another string of internal/config	internal/config/finish.go:148		same	debug --debug	json rc schema string	fork point, upstream, history only	base:internal/config/config.go:463		2 files		const ref:src/text/tabwriter/tabwriter.go
+--model	another string of internal/config	internal/config/finish.go:211		same	model --model .model	discover json rc schema string	fork point, upstream, history only	base:internal/config/config.go:69		3 files	wire name model in anthropic-sdk-go	field ref:src/cmd/vendor/golang.org/x/sys/unix/ztypes_linux.go
+--small-model	another string of internal/config	internal/config/finish.go:221										
+--reasoning-effort	another string of internal/config	internal/config/finish.go:227		same	reasoning_effort --reasoning-effort reasoning-effort reasoningEffort	catwalk json rc schema string	fork point, upstream, history only, libs	base:internal/config/config.go:75			wire name reasoning_effort in openai-go	field ctl:ollama/cmd/launch/droid.go
+-y	another string of internal/config	internal/config/finish.go:384								2 files	wire name y in openai-go	const ref:src/cmd/cgo/internal/test/issue30527/b.go
+--permission-mode	another string of internal/config	internal/config/finish.go:388								5 files		
+manual	another string of internal/config	internal/config/finish.go:389								7 files		field ref:cobra@v1.10.2/doc/man_docs.go
+auto	another string of internal/config	internal/config/finish.go:393		same	auto	rc schema	fork point, upstream, history only	base:schema.json		12 files		field ref:src/go/doc/comment/parse.go
+--allow-dangerously-skip-permissions	another string of internal/config	internal/config/finish.go:407								2 files		
+--tools	another string of internal/config	internal/config/finish.go:418		same	tools Tools	catwalk json rc schema	fork point, upstream, history only, libs	base:internal/config/config.go:867		4 files	wire name tools in anthropic-sdk-go	const ctl:ollama/internal/proxy/codex_desktop_test.go
+null	another string of internal/config	internal/config/jsonc.go:47		same	null	string	fork point, upstream, history only	base:internal/config/config.go:374		7 files		const ref:src/vendor/golang.org/x/crypto/cryptobyte/asn1/asn1.go
+settings	another string of internal/config	internal/config/load.go:340								12 files		field ref:src/net/http/internal/http2/server.go
+user	another string of internal/config	internal/config/load.go:355		same	user	catwalk json schema	fork point, upstream, history only, libs	base:internal/config/config.go:297		13 files	wire name user in openai-go	const ctl:gh/pkg/cmd/secret/shared/shared.go
+--setting-sources	another string of internal/config	internal/config/load.go:356								5 files		
+gnosh.json	another string of internal/config	internal/config/load.go:361		same but for the brand	crush.json .crush.json	string	history only	hist:internal/config/trust/trust.go:246				
+settings.local.json	another string of internal/config	internal/config/load.go:383								5 files		
+--settings	another string of internal/config	internal/config/load.go:391								6 files		field ref:src/net/http/internal/http2/server.go
+XDG_CONFIG_HOME	another string of internal/config	internal/config/load.go:451		same	XDG_CONFIG_HOME	env	fork point, upstream, history only	base:internal/backend/backend_skills_test.go:33		1 files		
+.config	another string of internal/config	internal/config/load.go:451		same	config .config	discover string	fork point, upstream, history only	base:internal/discover/lmstudio.go:41		2 files	wire name config in anthropic-sdk-go	const ctl:ollama/mlxrunner/model/lfm3/lfm3speech/codec_test.go
+gnosh	another string of internal/config	internal/config/load.go:454		same but for the brand	crush Crush	catwalk string	fork point, upstream, history only, libs	base:internal/config/config.go:24		13 files		func ref:src/runtime/testdata/testprog/crash.go
+XDG_DATA_HOME	another string of internal/config	internal/config/load.go:460		same	XDG_DATA_HOME	env	fork point, upstream, history only	base:internal/backend/backend_skills_test.go:34				
+.local	another string of internal/config	internal/config/load.go:460		same	Local .local	string	fork point, upstream, history only	base:internal/config/load.go:1245				const ref:src/cmd/internal/obj/textflag.go
+share	another string of internal/config	internal/config/load.go:460		same	share	string	fork point, upstream, history only	base:internal/config/load.go:1278		3 files		field ref:net@v0.61.0/ipv6/zsys_linux_386.go
+XDG_CACHE_HOME	another string of internal/config	internal/config/load.go:461		same	XDG_CACHE_HOME	env	fork point, upstream, history only	base:internal/backend/backend_skills_test.go:35				
+.cache	another string of internal/config	internal/config/load.go:461		same	cache .cache	string	fork point, upstream, history only	base:internal/config/load.go:1247				const ref:tools@v0.52.0/cmd/goimports/main_test.go
+state.json	another string of internal/config	internal/config/load.go:462										
+trusted-folders	another string of internal/config	internal/config/load.go:463										
+state	another string of internal/config	internal/config/load.go:520		same	state	catwalk	libs	libs:charm.land/catwalk@v0.52.49/cmd/copilot/main.go:74		7 files	wire name state in anthropic-sdk-go	field ref:src/cmd/vendor/golang.org/x/sys/unix/ztypes_darwin_amd64.go
+large	another string of internal/config	internal/config/load.go:522		same	large	json rc string	fork point, upstream, history only	base:internal/config/config.go:56		2 files		const ref:src/encoding/json/example_text_marshaling_test.go
+small	another string of internal/config	internal/config/load.go:522		same	small	json rc string	fork point, upstream, history only	base:internal/config/config.go:57		7 files		const ref:src/encoding/json/example_text_marshaling_test.go
+.localhost	another string of internal/config	internal/config/net.go:12										const ctl:gh/internal/ghinstance/host.go
+.lan	another string of internal/config	internal/config/net.go:12										const ref:src/cmd/vendor/golang.org/x/arch/s390x/s390xasm/tables.go
+.internal	another string of internal/config	internal/config/net.go:12										field ref:src/cmd/go/internal/load/pkg.go
+.home.arpa	another string of internal/config	internal/config/net.go:12										
+localhost	another string of internal/config	internal/config/net.go:35								1 files		const ctl:gh/internal/ghinstance/host.go
+always	another string of internal/config	internal/config/net.go:57		same	always	rc schema string	fork point, upstream, history only	base:internal/config/config.go:412		10 files	wire name always in openai-go	const ref:src/cmd/internal/obj/s390x/condition_code.go
+bare	another string of internal/config	internal/config/net.go:59								9 files		const ctl:gh/pkg/cmd/repo/create/create.go
+lean	another string of internal/config	internal/config/options.go:67								1 files		
+.gnosh	another string of internal/config	internal/config/options.go:68		same but for the brand	.crush	string	fork point, upstream, history only	base:internal/config/config.go:25		2 files		
+full	another string of internal/config	internal/config/options.go:148								9 files		const ref:text@v0.43.0/date/tables.go
+unset	another string of internal/config	internal/config/options.go:153		same	unset	rc	history only	hist:internal/shellconfig/model.go:40		2 files		const ctl:mvdan-sh/expand/environ.go
+warning	another string of internal/config	internal/config/problem.go:27								12 files		const ref:sys@v0.49.0/windows/svc/eventlog/install.go
+error	another string of internal/config	internal/config/problem.go:29		same	error	catwalk rc string	fork point, upstream, history only, libs	base:internal/config/catwalk.go:80		13 files	wire name error in anthropic-sdk-go	const ref:tools@v0.52.0/cmd/goyacc/yacc.go
+disable	another string of internal/config	internal/config/settings.go:52		same	disable --disable	json rc schema	fork point, upstream, history only	base:internal/config/config.go:108		6 files		field ref:src/cmd/vendor/golang.org/x/tools/cmd/bisect/main.go
+ignored	another string of internal/config	internal/config/settings.go:216								9 files		const ref:src/vendor/golang.org/x/net/idna/trieval.go
+same	another string of internal/config	internal/config/settings.go:217								12 files		field ref:src/encoding/asn1/asn1_test.go
+version	another string of internal/config	internal/config/state.go:51		same	version	catwalk string	fork point, history only, libs	base:internal/config/docker_mcp.go:12		13 files	wire name version in anthropic-sdk-go	const ref:src/cmd/vendor/golang.org/x/text/unicode/norm/tables15.0.0.go
+Ollama	another string of internal/config	internal/config/table.go:192		same	ollama Ollama	discover schema string	fork point, upstream, history only	base:internal/discover/ollama.go:14				field ctl:ollama/internal/proxy/claude_desktop_test.go
+LiteLLM	another string of internal/config	internal/config/table.go:194		same but for letter case	litellm	discover schema	fork point, upstream, history only	base:internal/discover/litellm.go:35				
+oMLX	another string of internal/config	internal/config/table.go:195		same but for letter case	omlx	discover schema	fork point, upstream, history only	base:internal/discover/omlx.go:12				
+reads	another string of internal/config	internal/config/table.go:315								11 files		field ref:src/os/os_test.go
+sets	another string of internal/config	internal/config/table.go:315								7 files		const ref:src/cmd/vendor/golang.org/x/arch/x86/x86asm/tables.go
+tests	another string of internal/config	internal/config/table.go:315										field ref:src/cmd/go/internal/load/test.go
+CLAUDE_PROJECT_DIR	another string of internal/config	internal/config/table.go:385								4 files		
+CLAUDE_ENV_FILE	another string of internal/config	internal/config/table.go:385								3 files		

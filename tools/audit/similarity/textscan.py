@@ -16,7 +16,9 @@ literal to the next; literals joined with + are one).
 
 Corpora: "core" and "ext" are Crush's (every text file that is not Go source,
 and every string literal of its Go source), "libs" the same of Charm's
-libraries, "old" the same of the earlier gnosh's tree less the carried files.
+libraries, "since" the same of what Charm has published after the crush
+corpus was fetched, "old" the same of the earlier gnosh's tree less the
+carried files.
 
 Per unit and corpus:
 
@@ -166,7 +168,7 @@ def target_units():
 
 def corpus_segments(name):
     """Yield (source name, text) for every text of a corpus."""
-    lists = {'core': 'crush-core.tsv', 'ext': 'crush-ext.tsv', 'libs': 'libs.tsv', 'old': 'old.tsv'}
+    lists = {'core': 'crush-core.tsv', 'ext': 'crush-ext.tsv', 'libs': 'libs.tsv', 'since': 'since.tsv', 'old': 'old.tsv'}
     for l in open(os.path.join(X.WORK, 'lists', lists[name])):
         path, shown = l.rstrip('\n').split('\t')
         if shown.rsplit('@', 1)[0].endswith(('.go', '.gno', '.sum', '.svg', '.lock')):

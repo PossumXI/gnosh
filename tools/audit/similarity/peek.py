@@ -29,7 +29,7 @@ def sources():
     global _src
     if _src is None:
         _src = {}
-        for fn in ('crush-ext.tsv', 'libs.tsv', 'old.tsv', 'deps.tsv'):
+        for fn in ('crush-ext.tsv', 'libs.tsv', 'since.tsv', 'old.tsv', 'deps.tsv'):
             p = os.path.join(X.WORK, 'lists', fn)
             if os.path.exists(p):
                 for l in open(p):

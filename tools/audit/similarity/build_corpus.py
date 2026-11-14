@@ -15,6 +15,12 @@ lists of files to compare.
                            CARRIED.md lists (those are in the new tree)
   build_corpus.py deps     corpus (f): the earlier gnosh's other dependencies
                            that the new go.mod no longer requires
+  build_corpus.py since    corpus "since", when SINCE_REPO is set: every text
+                           blob that upstream's branches and tags reach in
+                           SINCE_REPO (a later fetch) and that the crush
+                           corpus does not hold. It keeps the first audit's
+                           corpora as they were and still compares against
+                           what Charm has published after them.
   build_corpus.py targets  lists/targets.tsv: the new tree's files, the control
                            set and the calibration sets
   build_corpus.py ref      lists/ref.tsv: unrelated Go code (the generic-Go
@@ -196,7 +202,7 @@ def old():
     """The earlier gnosh at OLD_MAIN, less the files the new tree carries."""
     if not X.OLD_MAIN:
         return {}
-    carried = {r['old'] for r in X.carried_table().values()}
+    carried = {r['old'] for r in X.carried_table().values() if r['kind'] != 'bench: not brought'}
     cat = T.Cat(X.CRUSH_REPO)
     root = out_path('old', '.keep')
     root = os.path.dirname(root)
@@ -217,6 +223,91 @@ def old():
     cat.close()
     st = dir_corpus('old', [('gnosh-old', root)])
     st['left_out_as_carried'] = len(carried)
+    return st
+
+
+def since():
+    """What Charm has published since CRUSH_REPO was fetched. SINCE_REPO is a
+    clone fetched later (it may borrow CRUSH_REPO's objects through
+    objects/info/alternates). Every object its upstream branches and tags
+    reach, and that no upstream ref of CRUSH_REPO reaches, is walked; a text
+    blob the crush corpus does not already hold is written to blobs-since/
+    and listed. A blob is shown as now:path@blob when a commit of upstream's
+    main line after UPSTREAM brought it in (it would be in "crush" had the
+    corpus been built today), else as nowhist:path@blob (another branch or a
+    tag: it would be in "hist")."""
+    if not X.SINCE_REPO:
+        return {}
+    C0 = T.load_corpus()
+    have = C0.ext_blobs
+
+    def g(repo, *args):
+        return X.git(repo, *args)
+    def refs(repo):
+        out = {}
+        for l in g(repo, 'for-each-ref', '--format=%(objectname) %(refname)', 'refs/remotes/upstream', 'refs/tags').splitlines():
+            sha, name = l.split(' ', 1)
+            out[name] = sha
+        return out
+    then, new = refs(X.CRUSH_REPO), refs(X.SINCE_REPO)
+    old_refs = sorted(set(then.values()))
+    now = X.UPSTREAM_NOW or g(X.SINCE_REPO, 'rev-parse', 'refs/remotes/upstream/main').strip()
+    main_line = set()
+    for l in g(X.SINCE_REPO, 'rev-list', '--objects', X.UPSTREAM + '..' + now).splitlines():
+        if ' ' in l:
+            main_line.add(l.split(' ', 1)[0])
+    cat = T.Cat(X.SINCE_REPO)
+    C = T.Corpus()
+    rows = []
+    seen = set()
+    n = dict(now=0, nowhist=0)
+    ngo = dict(now=0, nowhist=0)
+    nlines = 0
+    walked = g(X.SINCE_REPO, 'rev-list', '--objects', '--remotes=upstream', '--tags', '--not', *old_refs).splitlines()
+    # main-line blobs first, so that a blob on both keeps the tier "now"
+    for want_main in (True, False):
+        for l in walked:
+            if ' ' not in l:
+                continue
+            sha, path = l.split(' ', 1)
+            if (sha in main_line) != want_main or sha in seen or sha in have:
+                continue
+            seen.add(sha)
+            data = cat.get(sha)
+            lines = T.text_lines(data) if data is not None else None
+            if lines is None:
+                continue
+            tier = 'now' if want_main else 'nowhist'
+            ext = os.path.splitext(path)[1]
+            if len(ext) > 12 or '/' in ext:
+                ext = ''
+            fn = out_path('blobs-since', sha[:2], sha + ext)
+            with open(fn, 'wb') as f:
+                f.write(data)
+            disp = '%s:%s@%s' % (tier, path, sha[:8])
+            pid = len(C.paths)
+            C.paths.append(disp)
+            nlines += C.add(lines, pid, True)
+            rows.append((fn, disp))
+            n[tier] += 1
+            ngo[tier] += 1 if path.endswith('.go') else 0
+    cat.close()
+    d = dict(C.__dict__)
+    d['generic'] = set()
+    d['stats'] = dict(files=len(rows), lines=nlines, distinct_lines=len(C.core_lines), shingles=len(C.core_sh))
+    with open(out_path('corpus-since.pkl'), 'wb') as f:
+        pickle.dump(d, f, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(out_path('lists', 'since.tsv'), 'w') as f:
+        for fn, disp in rows:
+            f.write('%s\t%s\n' % (fn, disp))
+    st = dict(d['stats'], upstream_now=now, text_blobs=n, go_blobs=ngo,
+              refs_then=len(then), refs_now=len(new),
+              refs_new=sorted(r for r in new if r not in then),
+              refs_moved=sorted(r for r in new if r in then and new[r] != then[r]),
+              refs_gone=sorted(r for r in then if r not in new),
+              main_commits_since=int(g(X.SINCE_REPO, 'rev-list', '--count', X.UPSTREAM + '..' + now).strip()),
+              main_commits_after_fork_point=int(g(X.SINCE_REPO, 'rev-list', '--count', X.FORK_POINT + '..' + now).strip()))
+    print('corpus since: %s' % st, flush=True)
     return st
 
 
@@ -317,7 +408,7 @@ def main():
     stats_fn = out_path('corpus-stats.json')
     stats = json.load(open(stats_fn)) if os.path.exists(stats_fn) else {}
     stats['commits'] = dict(fork_point=X.FORK_POINT, upstream=X.UPSTREAM, old_main=X.OLD_MAIN)
-    for name, fn in (('crush', crush), ('libs', libs), ('old', old), ('deps', deps), ('targets', targets), ('ref', ref)):
+    for name, fn in (('crush', crush), ('libs', libs), ('old', old), ('deps', deps), ('since', since), ('targets', targets), ('ref', ref)):
         if cmd in (name, 'all'):
             stats[name] = fn()
             with open(stats_fn, 'w') as f:

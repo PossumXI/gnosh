@@ -1,0 +1,59 @@
+what	in_gnosh	group	where	in_crush	crush_example	crush_spellings
+string	gnosh	carried	internal/gnochain/rpc.go:31	CRUSH	base:internal/event/event.go@91676592	7
+string	GNOSH_PROFILE	carried	internal/gnovm/client.go:595	CRUSH_PROFILE	base:main.go@5850141d	1
+string	klash	carried	internal/gnovm/memcmd.go:292	CRUSH	base:internal/event/event.go@91676592	7
+string	KLASH_PROFILE	carried	internal/gnovm/client.go:595	CRUSH_PROFILE	base:main.go@5850141d	1
+string	gnosh	carried (test)	internal/gnochain/client_test.go:233	CRUSH	base:internal/event/event.go@91676592	7
+string	klash	carried (test)	internal/gnovm/gnomem2_test.go:61	CRUSH	base:internal/event/event.go@91676592	7
+string	.gnosh	new	internal/app/skills.go:65	.crush	base:internal/backend/backend_skills_test.go@4f7dfa8f	1
+string	.gnoshrc	new	internal/permission/protect.go:38	.crushrc	base:internal/config/load_test.go@45e8d269	1
+string	AGENT=gnosh	new	internal/tools/shelltool/env.go:21	AGENT=crush	base:internal/shell/shell.go@eef3f424	1
+string	AI_AGENT=gnosh	new	internal/tools/shelltool/env.go:22	AI_AGENT=crush	base:internal/shell/shell.go@eef3f424	1
+string	crash	new	internal/app/misc.go:265	CRUSH	base:internal/event/event.go@91676592	7
+string	crash-	new	internal/app/misc.go:270	crush-	hist:internal/workspace/client_workspace_test.go@3b25d353	1
+string	gnosh	new	internal/app/misc.go:302	CRUSH	base:internal/event/event.go@91676592	7
+string	GNOSH	new	internal/config/load.go:497	CRUSH	base:internal/event/event.go@91676592	7
+string	gnosh 	new	internal/app/session.go:332	crush 	base:internal/ui/model/ui.go@88b36e66	2
+string	gnosh.json	new	internal/app/apptest/world.go:136	crush.json	base:internal/agent/coordinator_mcp_gate_test.go@1b3ad597	2
+string	gnosh.log	new	internal/app/misc.go:57	crush.log	base:internal/agent/coordinator.go@bb760cc8	2
+string	GNOSH.md	new	internal/config/finish.go:48	CRUSH.md	base:internal/config/config.go@1c79138f	3
+string	GNOSH=1	new	internal/tools/shelltool/env.go:20	CRUSH=1	base:internal/shell/shell.go@eef3f424	1
+string	GNOSH_	new	internal/config/load.go:497	CRUSH_	base:internal/config/load.go@b4bde55b	1
+string	GNOSH_CWD	new	internal/config/table.go:333	CRUSH_CWD	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_DATA_DIR	new	internal/app/trustcmd.go:20	CRUSH_DATA_DIR	up:internal/config/load.go@7fd2ee9f	1
+string	GNOSH_EVENT	new	internal/config/table.go:331	CRUSH_EVENT	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_PROFILE	new	internal/config/finish.go:144	CRUSH_PROFILE	base:main.go@5850141d	1
+string	GNOSH_PROJECT_DIR	new	internal/config/table.go:334	CRUSH_PROJECT_DIR	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_SESSION_ID	new	internal/config/table.go:332	CRUSH_SESSION_ID	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_TOOL_INPUT_COMMAND	new	internal/config/table.go:337	CRUSH_TOOL_INPUT_COMMAND	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_TOOL_INPUT_FILE_PATH	new	internal/config/table.go:338	CRUSH_TOOL_INPUT_FILE_PATH	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_TOOL_NAME	new	internal/config/table.go:335	CRUSH_TOOL_NAME	base:internal/hooks/hooks_test.go@df689c3f	1
+string	gnoshrc	new	internal/permission/protect.go:38	crushrc	base:internal/config/load_bench_test.go@d8a4afc8	1
+string	.gnosh	new (test)	internal/app/skill/skill_test.go:137	.crush	base:internal/backend/backend_skills_test.go@4f7dfa8f	1
+string	/.gnosh	new (test)	internal/config/load_test.go:357	/.crush	base:internal/projects/projects_test.go@9e8467d9	1
+string	/gnosh.json	new (test)	internal/trust/question_test.go:183	/crush.json	hist:internal/config/docker_mcp_test.go@5191cede	1
+string	/gnoshrc	new (test)	internal/config/load_test.go:128	/crushrc	base:internal/shellconfig/hook_test.go@887f36c0	1
+string	/home/user/.config/gnosh/gnosh.json	new (test)	internal/hooks/config_test.go:157	/home/user/.config/crush/crush.json	base:internal/agent/tools/crush_info_test.go@128957da	1
+string	agent=gnosh	new (test)	internal/app/moments_test.go:115	AGENT=crush	base:internal/shell/shell.go@eef3f424	1
+string	AGENT=gnosh	new (test)	internal/tools/shelltool/bash_test.go:310	AGENT=crush	base:internal/shell/shell.go@eef3f424	1
+string	AI_AGENT=gnosh	new (test)	internal/tools/shelltool/bash_test.go:311	AI_AGENT=crush	base:internal/shell/shell.go@eef3f424	1
+string	crash	new (test)	internal/ui/e2e_test.go:197	CRUSH	base:internal/event/event.go@91676592	7
+string	gnosh	new (test)	main_test.go:38	CRUSH	base:internal/event/event.go@91676592	7
+string	GNOSH	new (test)	tmux_test.go:158	CRUSH	base:internal/event/event.go@91676592	7
+string	gnosh 	new (test)	internal/cli/table_test.go:194	crush 	base:internal/ui/model/ui.go@88b36e66	2
+string	gnosh.json	new (test)	internal/app/hosts_test.go:237	crush.json	base:internal/agent/coordinator_mcp_gate_test.go@1b3ad597	2
+string	GNOSH.local.md	new (test)	internal/instructions/load_test.go:146	CRUSH.local.md	base:internal/config/config.go@1c79138f	3
+string	gnosh.log	new (test)	internal/app/flags_test.go:199	crush.log	base:internal/agent/coordinator.go@bb760cc8	2
+string	GNOSH.md	new (test)	internal/config/load_test.go:1625	CRUSH.md	base:internal/config/config.go@1c79138f	3
+string	GNOSH=0	new (test)	internal/hooks/input_test.go:350	CRUSH=0	hist:internal/shell/pty_test.go@4f353643	1
+string	GNOSH=1	new (test)	internal/config/load_test.go:462	CRUSH=1	base:internal/shell/shell.go@eef3f424	1
+string	GNOSH_CWD	new (test)	internal/hooks/input_test.go:367	CRUSH_CWD	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_DISABLE_METRICS=1	new (test)	internal/config/load_test.go:444	CRUSH_DISABLE_METRICS=1	hist:internal/cmd/clientserverrace/sandbox_test.go@7ea4feec	1
+string	GNOSH_EVENT	new (test)	internal/hooks/input_test.go:367	CRUSH_EVENT	base:internal/hooks/hooks_test.go@df689c3f	1
+string	gnosh_info	new (test)	internal/permission/rule_test.go:138	crush_info	base:internal/agent/tools/crush_info.go@a98dc026	1
+string	GNOSH_PROFILE	new (test)	internal/hooks/input_test.go:370	CRUSH_PROFILE	base:main.go@5850141d	1
+string	GNOSH_PROJECT_DIR	new (test)	internal/hooks/input_test.go:368	CRUSH_PROJECT_DIR	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_SESSION_ID	new (test)	internal/hooks/input_test.go:367	CRUSH_SESSION_ID	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_TOOL_INPUT_COMMAND	new (test)	internal/hooks/input_test.go:389	CRUSH_TOOL_INPUT_COMMAND	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_TOOL_INPUT_FILE_PATH	new (test)	internal/hooks/input_test.go:391	CRUSH_TOOL_INPUT_FILE_PATH	base:internal/hooks/hooks_test.go@df689c3f	1
+string	GNOSH_TOOL_NAME	new (test)	internal/hooks/input_test.go:389	CRUSH_TOOL_NAME	base:internal/hooks/hooks_test.go@df689c3f	1

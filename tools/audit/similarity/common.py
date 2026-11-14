@@ -19,6 +19,11 @@ defaults, so run.sh can point the audit at any checkout:
   CTLCACHE     a Go module cache holding the control programs
   INVENTORY    the earlier inventory's output folder (scan.tsv,
                classified.json); empty to leave out what needs it
+  SINCE_REPO   a second clone (it may borrow CRUSH_REPO's objects) whose
+               remote "upstream" was fetched later than CRUSH_REPO's; what it
+               holds that CRUSH_REPO's upstream refs do not reach is the
+               corpus "since". Empty to leave that corpus out.
+  UPSTREAM_NOW the commit of Crush's main branch in SINCE_REPO
 """
 import os
 import re
@@ -43,6 +48,8 @@ GOROOT_SRC = env('GOROOT_SRC', '/usr/local/go/src')
 MODCACHE = env('MODCACHE', '/root/go/pkg/mod')
 CTLCACHE = env('CTLCACHE', '/root/src/gnosh-new-audit/modcache')
 INVENTORY = env('INVENTORY', '/root/src/gnosh-old-scan/out')
+SINCE_REPO = env('SINCE_REPO', '')
+UPSTREAM_NOW = env('UPSTREAM_NOW', '')
 
 sys.path.insert(0, HERE)
 import taintscan as T  # noqa: E402  (the earlier inventory's script, unchanged)
@@ -161,10 +168,16 @@ def walk_files(root, exts=None, skip_dirs=('.git',)):
 
 ROW = re.compile(r'^\| `([^`]+)` \| `([^`]+)` \| ([^|]+?) \| ([\d,]+) \| ([\d.]+%|n/a \(binary\)) \| (\d+|n/a \(binary\)) \| `([0-9a-f]{64})` \| (.*?) \|$')
 TOOLROW = re.compile(r'^\| `([^`]+)` \| `([^`]+)` \| (\w+) \| (\d+) \| ([\d,]+) \| ([\d.]+)% \| (\d+) \| `([0-9a-f]{64})` \| (.*?) \|$')
+# "The bench": one path (the file kept the path it had), then how it came.
+BENCHROW = re.compile(r'^\| `([^`]+)` \| (carried|carried with changes|not brought) \| ([\d,]+) \| ([\d.]+)% \| (\d+) \| `([0-9a-f]{64})` \| ([^|]*?) \| (.*?) \|$')
 
 
 def carried_table(tree=None):
-    """CARRIED.md's two tables: {new path: dict(old, kind, bytes, share, run, sha, change)}."""
+    """CARRIED.md's three tables: {new path: dict(old, kind, bytes, share, run,
+    sha, change)}. The kinds: carried, carried with changes, third-party (the
+    table of files); carried with larger changes (the tools); and, for the
+    bench, "bench: carried", "bench: carried with changes" and "bench: not
+    brought" (a file that was staged and is not in the tree)."""
     tree = tree or NEW_TREE
     out = {}
     for line in open(os.path.join(tree, 'CARRIED.md'), encoding='utf-8'):
@@ -181,6 +194,12 @@ def carried_table(tree=None):
             out[m.group(1)] = dict(old=m.group(2), kind='carried with larger changes', verdict=m.group(3),
                                    bytes=int(m.group(5).replace(',', '')), share=float(m.group(6)), run=int(m.group(7)),
                                    sha=m.group(8), change=m.group(9))
+            continue
+        m = BENCHROW.match(line)
+        if m:
+            out[m.group(1)] = dict(old=m.group(1), kind='bench: ' + m.group(2), bytes=int(m.group(3).replace(',', '')),
+                                   share=float(m.group(4)), run=int(m.group(5)), sha=m.group(6), kept=m.group(7).strip(),
+                                   change=m.group(8))
     return out
 
 
@@ -213,7 +232,11 @@ def kind_of(path):
 
 def new_tree_files(tree=None):
     """[(path, group, kind)] for every file of the new tree. group is one of
-    new, carried, carried-tools, third-party."""
+    new, carried, carried-tools, carried-bench, third-party. carried holds
+    the files that are byte for byte the earlier gnosh's or differ by the few
+    lines CARRIED.md names; carried-tools (internal/gnovm/tools) and
+    carried-bench (the bench files CARRIED.md calls carried with changes)
+    are the ones whose changes are larger."""
     tree = tree or NEW_TREE
     car = carried_table(tree)
     out = []
@@ -221,7 +244,14 @@ def new_tree_files(tree=None):
         rel = os.path.relpath(p, tree)
         if rel in car:
             k = car[rel]['kind']
-            group = 'third-party' if k == 'third-party' else ('carried-tools' if k == 'carried with larger changes' else 'carried')
+            if k == 'third-party':
+                group = 'third-party'
+            elif k == 'carried with larger changes':
+                group = 'carried-tools'
+            elif k == 'bench: carried with changes':
+                group = 'carried-bench'
+            else:
+                group = 'carried'
         elif rel.startswith(THIRD_PARTY_DATA):
             group = 'third-party'
         else:

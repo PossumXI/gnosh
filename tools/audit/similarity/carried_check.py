@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """carried_check.py - the carried files, checked again from the outside.
 
-For every row of CARRIED.md's tables:
+For every row of CARRIED.md's tables (the table of files, the tools, the
+bench):
 
   bytes     the file in the new tree against the earlier gnosh's file at the
             row's old path (git blob at OLD_MAIN): identical, or how many
@@ -58,7 +59,9 @@ def main():
         p = os.path.join(X.NEW_TREE, path)
         mine = open(p, 'rb').read() if os.path.exists(p) else None
         old = cat.get(X.OLD_MAIN + ':' + r['old']) if X.OLD_MAIN else None
-        if mine is None:
+        if r['kind'] == 'bench: not brought':
+            state = 'not in the tree, as the table says' if mine is None else 'IN THE TREE, though the table says it was not brought'
+        elif mine is None:
             state = 'MISSING from the new tree'
         elif old is None:
             state = 'no such file in the earlier gnosh'
@@ -92,9 +95,18 @@ def main():
                                '' if run is None else str(run), cell(a, 1), cell(b, 1), cell(c, 1)]) + '\n')
     import collections
     say('rows in CARRIED.md\'s tables: %d' % len(rows))
-    by = collections.Counter((k, s if s == 'identical' else ('one line differs' if s.startswith('1 of') else s.split(' of ')[0] + ' ...' if 'kept' in s else s)) for _, k, s, *_ in rows)
+    def sort_of(s):
+        if s.endswith('lines differ'):
+            return 'one line differs' if s.startswith('1 of') else 'a few lines differ, none added or removed'
+        if s.endswith('kept in order'):
+            return 'lines added or removed'
+        return s
+    by = collections.Counter((k, sort_of(s)) for _, k, s, *_ in rows)
     for (k, s), n in sorted(by.items()):
-        say('  %-28s %-34s %d' % (k, s, n))
+        say('  %-28s %-44s %d' % (k, s, n))
+    for path, k, s, *_ in rows:
+        if s.endswith('lines differ') and not s.startswith('1 of'):
+            say('    %s [%s]: %s' % (path, k, s))
     say('SHA-256 of the earlier gnosh\'s file equals the one recorded: %d of %d' % (sum(1 for r in rows if r[3]), len(rows)))
     text = [r for r in rows if r[4] is not None]
     for label, idx in (('the earlier gnosh\'s file against the inventory\'s corpus', 6), ('the file as it stands against the inventory\'s corpus', 7), ('the file as it stands against this audit\'s corpus', 8)):

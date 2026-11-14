@@ -1,0 +1,100 @@
+what	name	short	of	where_in_gnosh	crush_has	crush_short	same_short	crush_tiers	crush_example	in_spec_cc
+flag	--continue	-c -C	a session	internal/cli/table.go:103	--continue	-C	-C	fork point, upstream, history only, a branch, since	base:internal/cmd/root.go:64	4 files
+flag	--resume	-r	a session	internal/cli/table.go:106						4 files
+flag	--session	-s	a session	internal/cli/table.go:109	--session	-s	-s	fork point, upstream, history only, a branch, since	base:internal/cmd/root.go:63	
+flag	--session-id		a session	internal/cli/table.go:112						3 files
+flag	--fork-session		a session	internal/cli/table.go:116						3 files
+flag	--name	-n	a session	internal/cli/table.go:119						2 files
+flag	--model	-m	a session	internal/cli/table.go:123	--model	-m	-m	fork point, upstream, history only	base:internal/cmd/run.go:72	3 files
+flag	--reasoning-effort		a session	internal/cli/table.go:126	--reasoning-effort			fork point, upstream, history only	base:internal/cmd/run.go:74	
+flag	--effort		a session	internal/cli/table.go:126						1 files
+flag	--yolo	-y	a session	internal/cli/table.go:130	--yolo	-y	-y	fork point, upstream, history only, a branch, since	base:internal/cmd/root.go:60	
+flag	--dangerously-skip-permissions	-y	a session	internal/cli/table.go:130						3 files
+flag	--allow-dangerously-skip-permissions		a session	internal/cli/table.go:132						2 files
+flag	--permission-mode		a session	internal/cli/table.go:135						5 files
+flag	--allowedTools		a session	internal/cli/table.go:143						5 files
+flag	--allowed-tools		a session	internal/cli/table.go:143						2 files
+flag	--disallowedTools		a session	internal/cli/table.go:146						5 files
+flag	--disallowed-tools		a session	internal/cli/table.go:146						2 files
+flag	--tools		a session	internal/cli/table.go:149						4 files
+flag	--add-dir		a session	internal/cli/table.go:155						8 files
+flag	--trust-folder		a session	internal/cli/table.go:158						
+flag	--system-prompt		a session	internal/cli/table.go:162						4 files
+flag	--system-prompt-file		a session	internal/cli/table.go:165						1 files
+flag	--append-system-prompt		a session	internal/cli/table.go:168						3 files
+flag	--append-system-prompt-file		a session	internal/cli/table.go:171						1 files
+flag	--cwd		a session	internal/cli/table.go:175	--cwd	-c		fork point, upstream, history only, a branch, since	base:internal/cmd/logs.go:28	
+flag	--data-dir	-D	a session	internal/cli/table.go:178	--data-dir	-D	-D	fork point, upstream, history only, a branch, since	base:internal/cmd/logs.go:33	
+flag	--settings		a session	internal/cli/table.go:181						6 files
+flag	--setting-sources		a session	internal/cli/table.go:184						5 files
+flag	--bare		a session	internal/cli/table.go:191						6 files
+flag	--safe-mode		a session	internal/cli/table.go:194						3 files
+flag	--disable-slash-commands		a session	internal/cli/table.go:197						2 files
+flag	--mcp-config		a session	internal/cli/table.go:200						5 files
+flag	--strict-mcp-config		a session	internal/cli/table.go:203						2 files
+flag	--agents		a session	internal/cli/table.go:206						3 files
+flag	--debug	-d	a session	internal/cli/table.go:209	--debug	-d	-d	fork point, upstream, history only, a branch, since	base:internal/cmd/models.go:34	2 files
+flag	--debug-file		a session	internal/cli/table.go:215						2 files
+flag	--verbose		a session	internal/cli/table.go:221	--verbose	-v		fork point, upstream, history only	base:internal/cmd/run.go:71	4 files
+flag	--print	-p	a session	internal/cli/table.go:225						2 files
+flag	--output-format		a session	internal/cli/table.go:227	--output-format	-f		history only	hist:cmd/root.go:57	4 files
+flag	--input-format		a session	internal/cli/table.go:231						3 files
+flag	--include-partial-messages		a session	internal/cli/table.go:235						2 files
+flag	--replay-user-messages		a session	internal/cli/table.go:238						2 files
+flag	--quiet	-q	a session	internal/cli/table.go:241	--quiet	-q	-q	fork point, upstream, history only	base:internal/cmd/run.go:70	
+flag	--goal		a session	internal/cli/table.go:244						
+flag	--max-turns		a session	internal/cli/table.go:247						4 files
+flag	--small-model		a session	internal/cli/table.go:250	--small-model			fork point, upstream, history only	base:internal/cmd/run.go:73	
+flag	--no-session-persistence		a session	internal/cli/table.go:253						2 files
+flag	--permission-prompts		a session	internal/cli/table.go:256						3 files
+flag	--help	-h	a session	internal/cli/table.go:261	--help	-h	-h	fork point, upstream, history only, a branch, since	base:internal/cmd/root.go:59	4 files
+flag	--version	-v	a session	internal/cli/table.go:263	--version	-v	-v	history only	hist:cmd/root.go:293	3 files
+flag	--hosts		doctor --hosts	internal/cli/table.go:280						
+flag	--list		trust --list	internal/cli/table.go:283						
+flag	--forget		trust --forget	internal/cli/table.go:286						
+flag	--json		session --json	internal/cli/table.go:289	--json			fork point, upstream, history only	base:internal/cmd/projects.go:26	
+flag	--port		session web --port	internal/cli/table.go:292						1 files
+flag	--force		prompt export --force	internal/cli/table.go:295	--force	-f		fork point, history only	base:internal/cmd/login.go:63	
+flag	--json		prompt tools --json	internal/cli/table.go:298	--json			fork point, upstream, history only	base:internal/cmd/projects.go:26	
+flag	--export		prompt tools --export	internal/cli/table.go:301						
+flag	--follow	-f	logs --follow	internal/cli/table.go:304	--follow	-f	-f	fork point, upstream, history only	base:internal/cmd/logs.go:38	
+flag	--tail	-t	logs --tail	internal/cli/table.go:307	--tail	-t	-t	fork point, upstream, history only	base:internal/cmd/logs.go:43	
+flag	--json		projects --json	internal/cli/table.go:310	--json			fork point, upstream, history only	base:internal/cmd/projects.go:26	
+flag	--all		stats --all	internal/cli/table.go:313	--all			fork point, upstream, history only	base:internal/cmd/stats.go:55	1 files
+flag	--crawl-dir		stats --crawl-dir	internal/cli/table.go:316	--crawl-dir			fork point, upstream, history only	base:internal/cmd/stats.go:54	
+flag	--scope	-s	mcp --scope	internal/cli/table.go:319						2 files
+flag	--transport	-t	mcp add --transport	internal/cli/table.go:323						2 files
+flag	--env	-e	mcp add --env	internal/cli/table.go:328						2 files
+flag	--header	-H	mcp add --header	internal/cli/table.go:332						2 files
+command	gnosh			internal/cli/table.go:341						1 files
+command	run			internal/cli/table.go:347	run			fork point, upstream, history only	base:internal/cmd/run.go:33	1 files
+command	doctor			internal/cli/table.go:353						1 files
+command	trust			internal/cli/table.go:358	trust			history only	hist:internal/cmd/plugin.go:115	1 files
+command	models			internal/cli/table.go:363	models			fork point, upstream, history only	base:internal/cmd/models.go:18	
+command	session			internal/cli/table.go:368	session			fork point, upstream, history only	base:internal/cmd/session.go:34	1 files
+command	list			internal/cli/table.go:373	list			fork point, upstream, history only	base:internal/cmd/session.go:49	1 files
+command	show			internal/cli/table.go:375	show			fork point, upstream, history only	base:internal/cmd/session.go:57	
+command	last			internal/cli/table.go:377	last			fork point, upstream, history only	base:internal/cmd/session.go:65	1 files
+command	delete			internal/cli/table.go:379	delete			fork point, upstream, history only	base:internal/cmd/session.go:72	
+command	rename			internal/cli/table.go:381	rename			fork point, upstream, history only	base:internal/cmd/session.go:81	1 files
+command	web			internal/cli/table.go:385						
+command	mem			internal/cli/table.go:389						
+command	prompt			internal/cli/table.go:396						1 files
+command	show			internal/cli/table.go:400	show			fork point, upstream, history only	base:internal/cmd/session.go:57	
+command	path			internal/cli/table.go:402						1 files
+command	export			internal/cli/table.go:404	export			history only	hist:internal/cmd/trajectory.go:24	
+command	tools			internal/cli/table.go:406						1 files
+command	context			internal/cli/table.go:408						1 files
+command	logs			internal/cli/table.go:417	logs			fork point, upstream, history only	base:internal/cmd/logs.go:24	1 files
+command	dirs			internal/cli/table.go:421	dirs			fork point, upstream, history only	base:internal/cmd/dirs.go:16	1 files
+command	ssh			internal/cli/table.go:425						
+command	projects			internal/cli/table.go:430	projects			fork point, history only	base:internal/cmd/projects.go:15	
+command	stats			internal/cli/table.go:434	stats			fork point, upstream, history only	base:internal/cmd/stats.go:47	
+command	mcp			internal/cli/table.go:438						1 files
+command	add			internal/cli/table.go:441						1 files
+command	add-json			internal/cli/table.go:447						1 files
+command	get			internal/cli/table.go:449						1 files
+command	list			internal/cli/table.go:451	list			fork point, upstream, history only	base:internal/cmd/session.go:49	1 files
+command	remove			internal/cli/table.go:453						1 files
+command	help			internal/cli/table.go:456						1 files
+command	version			internal/cli/table.go:459						1 files

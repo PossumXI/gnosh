@@ -1,0 +1,111 @@
+name	exported	in_gnosh	gnosh_kinds	gnosh_file	crush_tier	crush_kinds	crush_file	crush_files_declaring	unrelated_go_declares_it	where
+hookEvents	unexported	code	var	internal/config/table.go	fork point or upstream	var	up:internal/config/hooks.go	1		
+providerType	unexported	code	type	internal/config/table.go	fork point or upstream	field	up:internal/config/discovery.go	3		
+b	unexported	code	var,field	internal/config/dump.go	history only	var	hist:internal/config/custom_tool_test.go	3	yes	ref:src/database/sql/driver/types_test.go
+cwd	unexported	code	field	internal/config/source.go	history only	var	hist:internal/config/init.go	29	yes	ref:src/cmd/go/internal/fsys/fsys.go
+data	unexported	code	field	internal/config/load.go	fork point or upstream	var	base:internal/config/fileretry.go	1	yes	ref:src/net/http/serve_test.go
+dataDir	unexported	code	method	internal/config/load.go	fork point or upstream	var	base:internal/config/store.go	6	yes	ref:src/go/doc/doc_test.go
+enabled	unexported	code	var	internal/config/finish.go	fork point or upstream	var	base:internal/config/config.go	15	yes	ref:net@v0.61.0/quic/qlog/qlog.go
+env	unexported	code	field	internal/config/build.go	fork point or upstream	field	base:internal/config/resolve.go	4	yes	ref:src/syscall/env_unix_test.go
+exists	unexported	code	method	internal/config/load.go	fork point or upstream	var	base:internal/config/store.go	6	yes	ref:src/cmd/vendor/golang.org/x/tools/internal/refactor/inline/inline.go
+files	unexported	code	field	internal/config/load.go	fork point or upstream	var	base:internal/config/init.go	2	yes	ref:src/archive/tar/example_test.go
+headers	unexported	code	field	internal/config/file.go	fork point or upstream	var	base:internal/config/config.go	15	yes	ref:src/cmd/vendor/github.com/google/pprof/internal/elfexec/elfexec.go
+items	unexported	code	field	internal/config/jsonc.go	fork point or upstream	const	base:internal/config/load.go	8	yes	ctl:ollama/cmd/tui/selector_test.go
+key	unexported	code	field	internal/config/file.go	fork point or upstream	const	up:internal/config/skills.go	1	yes	ref:src/cmd/vendor/github.com/google/pprof/internal/report/stacks.go
+kind	unexported	code	field	internal/config/jsonc.go	fork point or upstream	field	base:internal/shellconfig/flags.go	4	yes	ref:src/internal/runtime/gc/internal/gen/val.go
+model	unexported	code	method	internal/config/build.go	history only	var,field	hist:internal/config/config.go	170	yes	ctl:ollama/cmd/tui/tui.go
+models	unexported	code	method,field	internal/config/file.go	fork point or upstream	field	base:internal/config/load.go	2	yes	ctl:ollama/app/cmd/app/codex_app_darwin.go
+msg	unexported	code	field	internal/config/jsonc.go	fork point or upstream	field	base:internal/config/resolve.go	1	yes	ref:src/runtime/race/testdata/chan_test.go
+name	unexported	code	field	internal/config/build.go	fork point or upstream	field	base:internal/config/attribution_migration_test.go	16	yes	ref:src/internal/reflectlite/type.go
+names	unexported	code	field	internal/config/file.go	history only	var	hist:internal/config/config.go	8	yes	ref:src/cmd/compile/internal/coverage/cover.go
+op	unexported	code	type	internal/config/source.go	fork point or upstream	field	base:internal/shellconfig/flags.go	2	yes	ref:src/cmd/compile/internal/test/testdata/gen/arithBoundaryGen.go
+options	unexported	code	method	internal/config/file.go	fork point or upstream	field	base:internal/config/options_max_background_jobs_test.go	2	yes	ref:src/cmd/vendor/golang.org/x/text/cases/cases.go
+opts	unexported	code	field	internal/config/build.go	fork point or upstream	var	base:internal/config/theme_config_test.go	3	yes	ref:text@v0.43.0/collate/collate_test.go
+out	unexported	code	var	internal/config/doctor.go	fork point or upstream	var	base:internal/config/recent_models_test.go	1	yes	ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/tm2/pkg/bft/privval/upstream/secret_connection_compat_test.go
+path	unexported	code	field	internal/config/load.go	fork point or upstream	field	base:internal/config/provider.go	4	yes	ref:src/cmd/cgo/internal/testerrors/errors_test.go
+paths	unexported	code	field	internal/config/load.go	history only	var,field	hist:internal/config/load.go	19	yes	ref:src/cmd/go/internal/doc/doc.go
+provider	unexported	code	method	internal/config/build.go	fork point or upstream	var,field	base:internal/config/provider.go	6	yes	ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/tm2/pkg/telemetry/metrics/metrics.go
+providers	unexported	code	method,field	internal/config/file.go	fork point or upstream	var,field	base:internal/config/provider.go	6	yes	ctl:ollama/cmd/launch/opencode.go
+readFile	unexported	code	func	internal/config/file.go	fork point or upstream	func	base:internal/config/fileretry.go	1	yes	ref:src/cmd/gofmt/gofmt.go
+reset	unexported	code	method	internal/config/options.go	history only	func	hist:internal/config/config_test.go	6	yes	ref:src/archive/tar/format.go
+small	unexported	code	field	internal/config/build.go	history only	var	hist:internal/config/plugin_catalog_test.go	4	yes	ref:src/internal/coverage/cfile/testdata/issue59563/repro.go
+source	unexported	code	type,method	internal/config/source.go	history only	field	hist:internal/shellconfig/builder.go	1	yes	ref:src/cmd/compile/internal/syntax/source.go
+str	unexported	code	field	internal/config/jsonc.go	history only	var	hist:internal/config/config.go	1	yes	ref:tools@v0.52.0/go/analysis/passes/stringintconv/testdata/src/fix/fixtarget.go
+url	unexported	code	field	internal/config/table.go	history only	field	hist:internal/config/config.go	2	yes	ctl:fzf/src/ansi.go
+v	unexported	code	field	internal/config/value.go	fork point or upstream	var	base:internal/config/provider.go	4	yes	ref:src/cmd/cgo/internal/testerrors/testdata/err2.go
+val	unexported	code	field	internal/config/jsonc.go	fork point or upstream	var	base:internal/shellconfig/options.go	2	yes	ref:tools@v0.52.0/go/callgraph/vta/propagation_test.go
+value	unexported	code	var	internal/config/jsonc.go	history only	field	hist:internal/config/resolve_test.go	9	yes	ref:src/context/x_test.go
+b	unexported	tests	var	internal/config/fuzz_test.go	history only	var	hist:internal/config/custom_tool_test.go	3	yes	ref:src/database/sql/driver/types_test.go
+dir	unexported	tests	field	internal/config/helpers_test.go	history only	field	hist:internal/config/resolve.go	1	yes	ref:src/cmd/compile/internal/types2/resolver.go
+files	unexported	tests	var,field	internal/config/load_test.go	fork point or upstream	var	base:internal/config/init.go	2	yes	ref:src/archive/tar/example_test.go
+got	unexported	tests	var	internal/config/load_test.go	fork point or upstream	var	up:internal/config/skills_test.go	1	yes	ref:src/cmd/compile/internal/syntax/parser.go
+models	unexported	tests	field	internal/config/doctor_test.go	fork point or upstream	field	base:internal/config/load.go	2	yes	ctl:ollama/app/cmd/app/codex_app_darwin.go
+mu	unexported	tests	field	internal/config/doctor_test.go	fork point or upstream	var,field	base:internal/config/load.go	16	yes	ref:src/internal/types/testdata/check/const1.go
+name	unexported	tests	field	internal/config/file_test.go	fork point or upstream	field	base:internal/config/attribution_migration_test.go	16	yes	ref:src/internal/reflectlite/type.go
+out	unexported	tests	var	internal/config/file_test.go	fork point or upstream	var	base:internal/config/recent_models_test.go	1	yes	ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/tm2/pkg/bft/privval/upstream/secret_connection_compat_test.go
+path	unexported	tests	field	internal/config/settings_test.go	fork point or upstream	field	base:internal/config/provider.go	4	yes	ref:src/cmd/cgo/internal/testerrors/errors_test.go
+provider	unexported	tests	const	internal/config/doctor_test.go	fork point or upstream	var,field	base:internal/config/provider.go	6	yes	ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/tm2/pkg/telemetry/metrics/metrics.go
+requests	unexported	tests	field	internal/config/doctor_test.go	fork point or upstream	field	up:internal/config/discovery_test.go	2	yes	ref:src/sync/atomic/example_test.go
+v	unexported	tests	var	internal/config/jsonc_test.go	fork point or upstream	var	base:internal/config/provider.go	4	yes	ref:src/cmd/cgo/internal/testerrors/testdata/err2.go
+want	unexported	tests	field	internal/config/load_test.go	fork point or upstream	field	base:internal/config/mcp_sessionless_test.go	6	yes	ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/gnovm/pkg/gnolang/types_test.go
+wg	unexported	tests	var	internal/config/state_test.go	fork point or upstream	var	base:internal/config/load.go	15	yes	ref:src/bufio/net_test.go
+AllowedTools	exported	code	field	internal/config/load.go	fork point or upstream	field	base:internal/config/config.go	30		
+ContextWindow	exported	code	field	internal/config/config.go	history only	field	hist:internal/config/config.go	21		
+DisabledSkills	exported	code	field	internal/config/options.go	fork point or upstream	field	base:internal/config/config.go	15		
+DiscoverModels	exported	code	field	internal/config/config.go	fork point or upstream	func	base:internal/discover/discover.go	2		
+ExtraBody	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15		
+Limits	exported	code	type,field	internal/config/env.go	fork point or upstream	method	base:internal/config/config.go	30		
+PermissionMode	exported	code	field	internal/config/load.go	fork point or upstream	field	up:internal/config/store.go	1		
+SmallModel	exported	code	field	internal/config/load.go	fork point or upstream	method	base:internal/config/config.go	15		
+APIKey	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	17	yes	ctl:ollama/cmd/launch/droid.go
+Command	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	33	yes	ref:src/cmd/go/internal/base/base.go
+Config	exported	code	type	internal/config/config.go	fork point or upstream	type,method,field	base:internal/config/config.go	26	yes	ref:src/cmd/compile/internal/ssa/config.go
+Debug	exported	code	field	internal/config/load.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:src/encoding/gob/debug.go
+Description	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:src/runtime/metrics/description.go
+Disabled	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	45	yes	ctl:ollama/internal/cloud/policy.go
+Env	exported	code	field	internal/config/config.go	fork point or upstream	type,method,field	base:internal/env/env.go	49	yes	ref:src/cmd/internal/script/cmds.go
+Error	exported	code	method,const	internal/config/problem.go	fork point or upstream	method	base:internal/config/resolve.go	1	yes	ref:src/cmd/api/testdata/src/pkg/p1/p1.go
+Errors	exported	code	func	internal/config/problem.go	fork point or upstream	field	base:internal/config/store.go	6	yes	ref:src/cmd/compile/internal/base/print.go
+Exists	exported	code	field	internal/config/doctor.go	fork point or upstream	field	base:internal/config/store.go	6	yes	ref:src/cmd/internal/script/cmds.go
+Flags	exported	code	type,field	internal/config/load.go	history only	field	hist:internal/config/config.go	1	yes	ref:src/cmd/link/internal/benchmark/bench.go
+Headers	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:net@v0.61.0/html/atom/table.go
+Hook	exported	code	type	internal/config/config.go	history only	type	hist:internal/config/hooks.go	1	yes	ref:src/internal/runtime/exithook/hooks.go
+Hooks	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:tools@v0.52.0/internal/event/bench_test.go
+ID	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	39	yes	ref:src/cmd/compile/internal/ssa/id.go
+Key	exported	code	field	internal/config/dump.go	fork point or upstream	field	base:internal/discover/lmstudio.go	3	yes	ref:src/internal/syscall/windows/registry/key.go
+Large	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/load.go	8	yes	ref:src/slices/slices_test.go
+Level	exported	code	type,field	internal/config/doctor.go	history only	field	hist:internal/config/config.go	6	yes	ref:src/log/slog/level.go
+Load	exported	code	func	internal/config/load.go	fork point or upstream	func	base:internal/config/load.go	8	yes	ref:src/debug/macho/file.go
+Matcher	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	3	yes	ref:src/cmd/vendor/golang.org/x/text/language/match.go
+MaxOutputTokens	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/discover/litellm.go	3	yes	ctl:ollama/api/types.go
+Message	exported	code	field	internal/config/problem.go	history only	field	hist:internal/config/config.go	18	yes	ref:src/encoding/json/example_test.go
+Mode	exported	code	method,field	internal/config/load.go	fork point or upstream	field	base:internal/discover/litellm.go	3	yes	ref:src/cmd/compile/internal/syntax/syntax.go
+Model	exported	code	type,method,field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	30	yes	ref:src/image/color/color.go
+Models	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	44	yes	ctl:ollama/envconfig/config.go
+ModTime	exported	code	method	internal/config/load.go	fork point or upstream	field	base:internal/config/store.go	6	yes	ref:src/archive/tar/common.go
+Name	exported	code	method,field	internal/config/load.go	fork point or upstream	field	base:internal/config/config.go	63	yes	ref:src/cmd/cgo/main.go
+Options	exported	code	type,field	internal/config/options.go	fork point or upstream	type,field	base:internal/config/config.go	45	yes	ref:src/cmd/vendor/github.com/google/pprof/driver/driver.go
+Path	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/store.go	6	yes	ref:src/cmd/vendor/golang.org/x/tools/go/types/objectpath/objectpath.go
+Permissions	exported	code	type,field	internal/config/config.go	fork point or upstream	type,field	base:internal/config/config.go	30	yes	ref:crypto@v0.58.0/ssh/server.go
+Provider	exported	code	type,method,field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:src/cmd/go/internal/work/action.go
+Providers	exported	code	field	internal/config/config.go	fork point or upstream	func,field	base:internal/config/provider.go	27	yes	ctl:ollama/cmd/launch/opencode.go
+ReasoningEffort	exported	code	field	internal/config/load.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ctl:ollama/cmd/launch/droid.go
+RequestTimeout	exported	code	field	internal/config/options.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:gno@v1.5.1-0.20260928125126-5cdbc25fcde0/tm2/pkg/bft/privval/signer/remote/client/config.go
+Scope	exported	code	field	internal/config/config.go	fork point or upstream	type	base:internal/config/scope.go	1	yes	ref:src/cmd/compile/internal/types2/scope.go
+Size	exported	code	method	internal/config/load.go	fork point or upstream	field	base:internal/config/store.go	9	yes	ref:src/cmd/vendor/golang.org/x/tools/internal/fmtstr/parse.go
+Small	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/load.go	8	yes	ref:src/encoding/json/decode_test.go
+String	exported	code	method	internal/config/config.go	fork point or upstream	method	base:internal/config/config.go	16	yes	ref:src/encoding/gob/codec_test.go
+Temperature	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ctl:ollama/anthropic/anthropic.go
+Timeout	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	63	yes	ref:src/runtime/testdata/testgoroutineleakprofile/commonpatterns.go
+Tools	exported	code	field	internal/config/config.go	fork point or upstream	type,field	base:internal/config/config.go	30	yes	ctl:ollama/api/types.go
+Type	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	30	yes	ref:src/builtin/builtin.go
+URL	exported	code	field	internal/config/config.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:src/cmd/api/testdata/src/pkg/p1/p1.go
+Command	exported	tests	field	internal/config/settings_test.go	fork point or upstream	field	base:internal/config/config.go	33	yes	ref:src/cmd/go/internal/base/base.go
+Hooks	exported	tests	field	internal/config/settings_test.go	fork point or upstream	field	base:internal/config/config.go	15	yes	ref:tools@v0.52.0/internal/event/bench_test.go
+Matcher	exported	tests	field	internal/config/settings_test.go	fork point or upstream	field	base:internal/config/config.go	3	yes	ref:src/cmd/vendor/golang.org/x/text/language/match.go
+Mode	exported	tests	method	internal/config/helpers_test.go	fork point or upstream	field	base:internal/discover/litellm.go	3	yes	ref:src/cmd/compile/internal/syntax/syntax.go
+ModTime	exported	tests	method	internal/config/helpers_test.go	fork point or upstream	field	base:internal/config/store.go	6	yes	ref:src/archive/tar/common.go
+Name	exported	tests	method	internal/config/helpers_test.go	fork point or upstream	field	base:internal/config/config.go	63	yes	ref:src/cmd/cgo/main.go
+Size	exported	tests	method	internal/config/helpers_test.go	fork point or upstream	field	base:internal/config/store.go	9	yes	ref:src/cmd/vendor/golang.org/x/tools/internal/fmtstr/parse.go
+Timeout	exported	tests	field	internal/config/settings_test.go	fork point or upstream	field	base:internal/config/config.go	63	yes	ref:src/runtime/testdata/testgoroutineleakprofile/commonpatterns.go
+Type	exported	tests	field	internal/config/settings_test.go	fork point or upstream	field	base:internal/config/config.go	30	yes	ref:src/builtin/builtin.go

@@ -18,6 +18,8 @@ The corpora, by the prefix of their columns:
          upstream commit since the fork point brought in: (a) to (c)
   hist   crush plus the rest of Crush's history, branches and tags
   libs   Charm's libraries at the pinned versions: (d)
+  since  what Charm has published after the crush corpus was fetched (a later
+         fetch of upstream's branches and tags), when that corpus was built
   old    the earlier gnosh's tree, less the carried files
   deps   the earlier gnosh's other dependencies that the new go.mod dropped
 """
@@ -28,7 +30,7 @@ import sys
 
 import common as X
 
-CORP = [('core', 'crush'), ('ext', 'hist'), ('libs', 'libs'), ('old', 'old'), ('deps', 'deps')]
+CORP = [('core', 'crush'), ('ext', 'hist'), ('libs', 'libs'), ('since', 'since'), ('old', 'old'), ('deps', 'deps')]
 LINE = ['share', 'run', 'run_lines', 'lrun', 'rawshare', 'rawrun', 'rawrun_lines']
 TOKX = [('single', 'tok_run'), ('cov', 'tok_cov'), ('vrun', 'tok_vrun'), ('vcov', 'tok_vcov')]
 TOKA = [('single', 'abs_run'), ('cov', 'abs_cov'), ('vrun', 'abs_vrun'), ('vcov', 'abs_vcov')]
@@ -58,6 +60,9 @@ def main():
     L = {(r['set'], r['path'], r['corpus']): r for r in lines}
     Tk = {(r['set'], r['path'], r['corpus'], r['form']): r for r in tok}
     Tx = {(r['set'], r['path'], r['corpus']): r for r in text}
+    # the corpora that are Charm's: crush, hist, libs, and since when it was built
+    have = {r['corpus'] for r in lines}
+    CHARM = [(c, p) for c, p in CORP[:4] if c in have]
 
     # ---- results.tsv: the new tree --------------------------------------
     files = []
@@ -66,7 +71,9 @@ def main():
         if p[0] == 'new-tree':
             files.append((p[4], p[1], p[2], p[3]))
     cols = ['path', 'group', 'kind', 'bytes', 'sig_lines', 'long_lines', 'tokens', 'words', 'sentences']
-    for _, pre in CORP:
+    for corp, pre in CORP:
+        if corp == 'since' and corp not in have:
+            continue  # no later fetch was compared: the columns are the first audit's
         cols += ['%s_%s' % (pre, c) for c in LINE]
         cols += ['%s_%s' % (pre, c) for _, c in TOKX]
         cols += ['%s_%s' % (pre, c) for _, c in TOKA]
@@ -127,7 +134,8 @@ def main():
             if k == 'code':
                 return 'new code'
             return 'new: ' + {'prompt': 'prompt texts', 'testdata': 'test data', 'doc': 'documents', 'other': 'go.mod, go.sum and the like'}.get(k, k)
-        return {'carried': 'carried', 'carried-tools': 'carried with larger changes', 'third-party': 'third-party'}[r['group']] + ('' if k == 'code' else ': ' + k)
+        return {'carried': 'carried', 'carried-tools': 'carried with larger changes', 'carried-bench': 'carried with larger changes',
+                'third-party': 'third-party'}[r['group']] + ('' if k == 'code' else ': ' + k)
 
     ORDER = ['new code', 'new: prompt texts', 'new: test data', 'new: documents', 'new: go.mod, go.sum and the like',
              'carried', 'carried with larger changes', 'third-party']
@@ -138,7 +146,7 @@ def main():
         rest = sorted(n for n in names if n not in head and not n.startswith(('ctl:', 'cal:')))
         return head + rest + sorted(n for n in names if n.startswith('ctl:')) + sorted(n for n in names if n.startswith('cal:'))
 
-    for corp, pre in CORP[:3]:
+    for corp, pre in CHARM:
         w('\n### Lines, against %s\n' % pre)
         w('| set | files | with 10+ significant lines | share p50 | p95 | max | files with a counted run | longest | files with any run of 4+ | longest | raw share p95 | max |')
         w('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
@@ -158,7 +166,7 @@ def main():
                 sum(1 for d in ds if int(d['rawrun']) > 0), max(int(d['rawrun']) for d in ds),
                 fmt(q(rs, 95)), fmt(q(rs, 100))))
     for form, label, k in (('exact', 'Exact tokens (windows of 40)', 40), ('abstract', 'Identifier-insensitive tokens (windows of 60)', 60)):
-        for corp, pre in CORP[:3]:
+        for corp, pre in CHARM:
             w('\n### %s, against %s\n' % (label, pre))
             w('| set | files of 100+ tokens | with a varied shared window | longest varied run p95 | p99 | max | varied cover p99 | max | with any shared window | longest run p99 | max | cover p99 | max |')
             w('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
@@ -175,7 +183,7 @@ def main():
                 w('| %s | %d | %d | %d | %d | %d | %s%% | %s%% | %d | %d | %d | %s%% | %s%% |' % (
                     name, len(ds), sum(1 for d in ds if int(d['vwin']) > 0), q(vr, 95), q(vr, 99), q(vr, 100), fmt(q(vc, 99)), fmt(q(vc, 100)),
                     sum(1 for d in ds if int(d['nwin']) > 0), q(sr, 99), q(sr, 100), fmt(q(cv, 99)), fmt(q(cv, 100))))
-    for corp, pre in CORP[:3]:
+    for corp, pre in CHARM:
         w('\n### Words, against %s\n' % pre)
         w('| set | units of 20+ words | longest shared word run p50 | p95 | p99 | max | units with a run of 12+ words | sentences | of them also in the corpus |')
         w('|---|---:|---:|---:|---:|---:|---:|---:|---:|')
@@ -209,9 +217,10 @@ def main():
 
     pct = lambda v: '%.1f%%' % v  # noqa: E731
     num = lambda v: '%d' % v  # noqa: E731
-    for corp, pre in CORP[:3]:
-        # hist's controls are in part inside Crush's history (vendored code), so the yardstick for hist is crush's
-        cc = 'core' if corp == 'ext' else corp
+    for corp, pre in CHARM:
+        # hist's controls are in part inside Crush's history (vendored code), so the yardstick for hist is crush's;
+        # and since is a few dozen files of Crush's, too few for the controls to have a range against: crush's again
+        cc = 'core' if corp in ('ext', 'since') else corp
         lc = [r for r in lines if r['set'].startswith('ctl:') and r['corpus'] == cc]
         ln = [r for r in lines if r['set'] == 'new-tree' and r['group'] == 'new' and r['kind'] == 'code' and r['corpus'] == corp]
         rng('line share (10+ significant lines)', corp, pre, [r for r in lc if int(r['sigd']) >= 10], [r for r in ln if int(r['sigd']) >= 10], lambda r: float(r['share']), pct)
@@ -232,7 +241,7 @@ def main():
     # the twenty highest of each measure, new code against crush, hist, libs
     w('\n### The twenty highest of each measure (new code)\n')
     tops = collections.OrderedDict()
-    for corp, pre in CORP[:3]:
+    for corp, pre in CHARM:
         ln = [r for r in lines if r['set'] == 'new-tree' and r['group'] == 'new' and r['kind'] in ('code', 'prompt') and r['corpus'] == corp]
         for label, sel, key, show, src in (
                 ('line share', [r for r in ln if int(r['sigd']) >= 10], lambda r: float(r['share']), pct, lambda r: r['best_src']),
@@ -255,5 +264,42 @@ def main():
     print('results.tsv: %d rows, %d columns; summary.md: %d lines; new-code files above the control range: %d' % (len(rows), len(cols), len(out), len(above)))
 
 
+def calibrate():
+    """The table of README.md that says how the setting for a "varied" window
+    was chosen: for each setting (the one run.sh uses, in tok.tsv, and the
+    others, in tok-div-E-A.tsv, which run.sh writes when CALIBRATE is set),
+    how many files of each set share a varied window with crush, and the
+    longest varied run. Files of 100 tokens or more, against crush only."""
+    import glob
+    import re
+    runs = [((12, 9), os.path.join(X.WORK, 'tok.tsv'))]
+    for fn in glob.glob(os.path.join(X.WORK, 'tok-div-*.tsv')):
+        m = re.search(r'tok-div-(\d+)-(\d+)\.tsv$', fn)
+        if m:
+            runs.append(((int(m.group(1)), int(m.group(2))), fn))
+    sets = (('Crush files the earlier gnosh modified', lambda r: r['set'] == 'cal:crush-modified'),
+            ('short-block files', lambda r: r['set'] == 'cal:old-shortblock'),
+            ('control files', lambda r: r['set'].startswith('ctl:')),
+            ('new code', lambda r: r['set'] == 'new-tree' and r['group'] == 'new'))
+    out = ['| a window is varied at (exact / abstract) | ' + ' | '.join('%s: with a varied window, exact / abstract; longest run' % n for n, _ in sets) + ' |',
+           '|---|' + '---|' * len(sets)]
+    for (e, a), fn in sorted(runs):
+        with open(fn, encoding='utf-8', errors='replace') as f:
+            rows = [r for r in csv.DictReader(f, delimiter='\t', quoting=csv.QUOTE_NONE) if r['corpus'] == 'core' and int(r['ntok']) >= 100]
+        cells = []
+        for name, sel in sets:
+            ex = [r for r in rows if sel(r) and r['form'] == 'exact']
+            ab = [r for r in rows if sel(r) and r['form'] == 'abstract']
+            cells.append('%d / %d of %d; %d / %d' % (sum(1 for r in ex if int(r['vwin']) > 0), sum(1 for r in ab if int(r['vwin']) > 0), len(ex),
+                                                     max((int(r['vrun']) for r in ex), default=0), max((int(r['vrun']) for r in ab), default=0)))
+        out.append('| %s%d / %d%s | %s |' % ('**' if (e, a) == (12, 9) else '', e, a, '**' if (e, a) == (12, 9) else '', ' | '.join(cells)))
+    with open(os.path.join(X.WORK, 'calibration.md'), 'w') as f:
+        f.write('\n'.join(out) + '\n')
+    print('\n'.join(out))
+
+
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['calibrate']:
+        calibrate()
+    else:
+        main()

@@ -17,6 +17,8 @@ third-party what they are said to be?
      and the tree's own extractor is run on it.
   4. The HTML entity table (internal/markdown/entity.go): the tree's own
      generator is run again and compared.
+  5. The licence at the root (LICENSE.md): the text of the licence in it is
+     compared with gno's LICENSE.md at the version the tree pins.
 
 Steps 2 and 3 need the network (unicode.org, spec.commonmark.org,
 github.github.com) and a Go toolchain; pass --offline to leave them out.
@@ -143,6 +145,29 @@ def markdown_spec():
         say('  could not fetch the GFM page: %s' % e)
 
 
+def root_licence():
+    """The root LICENSE.md is the licence of the whole program: the GNO
+    Network General Public License, which is gno's, between a preface and
+    notes that are gnosh's. The licence text is held to gno's."""
+    tree = X.NEW_TREE
+    p = os.path.join(tree, 'LICENSE.md')
+    if not os.path.exists(p):
+        say('root LICENSE.md: there is none')
+        return
+    version = read(os.path.join(tree, 'internal/gnovm/stdlibs/VERSION')).decode().strip()
+    mod = X.moddir('github.com/gnolang/gno@' + version)
+    if not mod:
+        say('root LICENSE.md: gno %s is not in the module cache, so its licence text was not compared' % version)
+        return
+    head = b'# GNO NETWORK GENERAL PUBLIC LICENSE'
+    mine, theirs = read(p), read(os.path.join(mod, 'LICENSE.md'))
+    i, j = mine.find(head), theirs.find(head)
+    body = theirs[j:].rstrip() if j >= 0 else b''
+    ok = i >= 0 and j >= 0 and mine[i:].startswith(body)
+    say('root LICENSE.md: %d bytes; from its heading "GNO NETWORK GENERAL PUBLIC LICENSE" it holds the whole of that text of gno\'s LICENSE.md, byte for byte: %s (%d bytes of licence; %d bytes of gnosh\'s own before it and %d after)' % (
+        len(mine), ok, len(body), max(i, 0), len(mine) - i - len(body) if ok else 0))
+
+
 def entities():
     tree = X.NEW_TREE
     d = os.path.join(tree, 'internal/markdown')
@@ -153,6 +178,7 @@ def entities():
 
 if __name__ == '__main__':
     gno()
+    root_licence()
     entities()
     if '--offline' not in sys.argv:
         unicode_data()
