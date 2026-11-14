@@ -33,10 +33,18 @@ func TestMemoryTextOption(t *testing.T) {
 			return &Contribution{Tools: []core.Tool{memTool{}}}, nil
 		},
 	}
-	system := func(lines ...string) string {
+	system := func(settings ...string) string {
 		w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
-		w.RC(lines...)
-		o := testOptions(w, "-p", "hello")
+		args := []string{"-p", "hello"}
+		// The first is the person's own file; a second is given for the
+		// run, and so is the stronger of the two.
+		if len(settings) > 0 {
+			w.Settings(settings[0])
+		}
+		if len(settings) > 1 {
+			args = []string{"--settings", settings[1], "-p", "hello"}
+		}
+		o := testOptions(w, args...)
 		o.Features = []Feature{feature}
 		runWith(t, t.Context(), o).wantCode(t, 0)
 		for _, m := range w.Model.Requests()[0].Messages() {
@@ -54,23 +62,23 @@ func TestMemoryTextOption(t *testing.T) {
 		t.Fatal("the two texts about mem are the same text")
 	}
 	for name, tt := range map[string]struct {
-		lines     []string
+		settings  []string
 		want, not string
 	}{
-		"nothing set":     {nil, lean, full},
-		"lean asked for":  {[]string{"option memory-text lean"}, lean, full},
-		"full asked for":  {[]string{"option memory-text full"}, full, lean},
-		"the later wins":  {[]string{"option memory-text full", "option memory-text lean"}, lean, full},
-		"reset to unset":  {[]string{"option memory-text full", "option reset memory-text"}, lean, full},
-		"full, and hosts": {[]string{"option memory-text full", "host add render --ssh root@203.0.113.7"}, full, lean},
+		"nothing set":       {nil, lean, full},
+		"lean asked for":    {[]string{`{"options": {"memoryText": "lean"}}`}, lean, full},
+		"full asked for":    {[]string{`{"options": {"memoryText": "full"}}`}, full, lean},
+		"the stronger wins": {[]string{`{"options": {"memoryText": "full"}}`, `{"options": {"memoryText": "lean"}}`}, lean, full},
+		"put back by null":  {[]string{`{"options": {"memoryText": "full"}}`, `{"options": {"memoryText": null}}`}, lean, full},
+		"full, and hosts":   {[]string{`{"options": {"memoryText": "full"}, "hosts": {"render": {"ssh": "root@203.0.113.7"}}}`}, full, lean},
 	} {
-		got := system(tt.lines...)
+		got := system(tt.settings...)
 		if !strings.Contains(got, tt.want) || strings.Contains(got, tt.not) {
 			t.Errorf("%s: the system prompt holds the wrong text about mem:\n%s", name, clip(got))
 		}
 	}
 	// A value that is neither is a mistake, like any other.
 	w := apptest.NewWorld(t)
-	w.RC("option memory-text long")
-	has(t, "stderr", run(t, w, "-p", "hello").wantCode(t, 1).err, "memory-text", "lean, full")
+	w.Settings(`{"options": {"memoryText": "long"}}`)
+	has(t, "stderr", run(t, w, "-p", "hello").wantCode(t, 1).err, "options.memoryText", `"lean", "full"`)
 }

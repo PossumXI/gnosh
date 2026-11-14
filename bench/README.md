@@ -115,7 +115,7 @@ switches more).
 | what | how | default |
 |---|---|---|
 | The server and the model | `UPSTREAM` (its address), `MODEL` (the one model every request names) | none: both must be given |
-| How gnosh speaks to it | `PROVIDER_TYPE`: `llamacpp`, or `openai-compat` for vLLM and the like | `llamacpp` |
+| How gnosh speaks to it | `PROVIDER_TYPE`: `llamacpp`, or `openai-compatible` for vLLM and the like | `llamacpp` |
 | Thinking | `THINKING=on` or `off`, for a model that thinks or does not; `REASONING=low`, `medium` or `high` for one with levels; `SERVER_REASONING` makes the proxy put a level on every request | gnosh's own default, which is on |
 | The window | `WINDOW`: what gnosh is told the model's context is. `SERVER_WINDOW`: what the server really gives a slot, when the server cannot be asked | 65536 |
 | mem | `MEM=off`, or the harness name `gnosh-nomem`: the machine tools are disallowed, so the model has no mem and no frames, and gnosh sends neither its text about mem nor its line about it. This is the plain-harness baseline | on |
@@ -130,13 +130,19 @@ How each reaches gnosh: every run has a home of its own (`HOME` and the four
 and its mem are its own and no run sees another's. The config written there
 names one model with its window and turns discovery off:
 
-    provider add box --type llamacpp --base-url "http://127.0.0.1:<the proxy>" --discover-models false
-    model add box/<MODEL> --context-window <WINDOW>
-    model large box/<MODEL>
+    {
+      "providers": {
+        "box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:<the proxy>", "discoverModels": false}
+      },
+      "models": {
+        "box/<MODEL>": {"contextWindow": <WINDOW>}
+      },
+      "model": {"id": "box/<MODEL>"}
+    }
 
 so gnosh asks the server for no list and can name no other model. A slot is
-the provider's `--extra-body '{"id_slot": n}'`; thinking is `--think` on the
-`model large` line; the fuller text about mem is put in the home as the
+the provider's `"extraBody": {"id_slot": n}`; thinking is `"thinking"` beside
+the `"id"` of `"model"`; the fuller text about mem is put in the home as the
 user's own text `prompts/memory.md`; and a session is
 
     gnosh run -q -y --cwd <the task's folder> --output-format stream-json \
@@ -408,7 +414,7 @@ What differs from the box:
 - **The format.** The earlier gnosh spoke to vLLM as it spoke to llama.cpp.
   The new gnosh's `llamacpp` type adds a field of llama.cpp's own
   (`cache_prompt`) that vLLM does not know; whether vLLM passes it over or
-  refuses it has not been tried. `PROVIDER_TYPE=openai-compat` leaves it
+  refuses it has not been tried. `PROVIDER_TYPE=openai-compatible` leaves it
   out.
 
 The commands, on the machine, once a server is up at 127.0.0.1:8000 serving
@@ -422,7 +428,7 @@ URL=http://127.0.0.1:8000/v1/chat/completions MODEL=qwen3.8-27b python3 bench/st
 
 cat > ~/gpu-64k.env <<'EOF'
 export LANE=gpu-qwen-64k UPSTREAM=http://127.0.0.1:8000 MODEL=qwen3.8-27b WINDOW=65536
-export PROVIDER_TYPE=openai-compat THINKING=on
+export PROVIDER_TYPE=openai-compatible THINKING=on
 export GNOSH_BIN=$HOME/bin/gnosh GO=/usr/local/go/bin/go
 export TIMEOUT=2400 RUNS=$HOME/runs RESULTS=$HOME/results-gpu.jsonl
 export HARNESSES="${HARNESSES:-gnosh gnosh-full gnosh-nomem}"

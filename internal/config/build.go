@@ -5,18 +5,23 @@ import (
 )
 
 // builder holds the configuration while the ops of each file are put in
-// force, weakest file first. Its add and remove methods are what the
-// directives do; a mistake that only shows against what earlier lines set
-// (a model on a provider that does not exist) is reported from here, at
-// the line that made it.
+// force, weakest file first. A mistake that only shows against what the
+// files before set (a model on a provider that does not exist) is reported
+// from here, at the place that made it.
 type builder struct {
 	in    *Inputs
 	probs *problems
 
 	providers []*Provider
-	models    []*Model
-	large     Slot
-	small     Slot
+	// unset holds, for each provider and each of its fields that is filled
+	// in from the environment, the variables that are not set. A provider
+	// with any is left out, and says which.
+	unset  map[string]map[string]unsetVars
+	models []*Model
+	// large is the session's model ("model"), and small the one for the
+	// short side jobs ("smallModel").
+	large Slot
+	small Slot
 	// stateThinking is the thinking level the state file holds for each
 	// model, keyed by provider/id.
 	stateThinking map[string]Value[string]
@@ -39,8 +44,6 @@ type builder struct {
 	dirs           []ListItem
 
 	env  map[string]EnvVar
-	mcp  []MCPServer
-	lsp  []LSPServer
 	opts Options
 }
 
@@ -49,6 +52,7 @@ func newBuilder(in *Inputs, probs *problems) *builder {
 	return &builder{
 		in:            in,
 		probs:         probs,
+		unset:         map[string]map[string]unsetVars{},
 		stateThinking: map[string]Value[string]{},
 		env:           map[string]EnvVar{},
 		opts:          defaultOptions(),
@@ -87,13 +91,14 @@ func (b *builder) providerIDs() string {
 	return list(ids)
 }
 
-// addProvider adds a provider or updates the one with the same ID. What
-// the line gave replaces what was there; what it left out stays.
+// addProvider declares a provider, or changes the one a weaker file
+// declared under the same ID: what this file gives replaces what was
+// there, field by field, and what it leaves out stays.
 func (b *builder) addProvider(id string, ch providerChange, o Origin) {
 	p := b.provider(id)
 	if p == nil {
 		if ch.typ == nil {
-			b.probs.at(Error, o, "provider add %s needs --type the first time a provider is named, so gnosh knows how to talk to it. The types are: %s.", id, list(providerTypeNames()))
+			b.probs.at(Error, o, "the provider %s has no \"type\", and no file read before this one declares it. A provider needs its \"type\" where it is first declared, so that gnosh knows how to talk to it. The types are: %s.", id, list(providerTypeNames()))
 			return
 		}
 		p = &Provider{ID: id, Name: id}
@@ -116,8 +121,11 @@ func (b *builder) addProvider(id string, ch providerChange, o Origin) {
 	if ch.key != nil {
 		p.APIKey, p.KeyFrom = *ch.key, ch.keyFrom
 	}
+	if ch.noDiscover {
+		p.DiscoverModels = Value[bool]{}
+	}
 	if ch.discover != nil {
-		p.DiscoverModels.put(*ch.discover, o)
+		p.DiscoverModels.put(*ch.discover, ch.discoverAt)
 	}
 	if ch.hasExtraBody {
 		p.ExtraBody = ch.extraBody
@@ -125,30 +133,33 @@ func (b *builder) addProvider(id string, ch providerChange, o Origin) {
 	if ch.hasHeaders {
 		p.Headers = ch.headers
 	}
-	if ch.disable != nil {
-		p.Disabled = *ch.disable
+	if ch.disabled != nil {
+		p.Disabled = *ch.disabled
 	}
-	if ch.prefix != nil {
-		p.SystemPromptPrefix = *ch.prefix
+	// A field this file gives stands for what a weaker file gave, and so
+	// do the variables it could not fill in.
+	for _, field := range ch.filled {
+		delete(b.unset[id], field)
 	}
-	if ch.options != nil {
-		p.ProviderOptions = ch.options
-	}
-	if ch.flatRate != nil {
-		p.FlatRate = *ch.flatRate
+	for field, vars := range ch.unset {
+		if b.unset[id] == nil {
+			b.unset[id] = map[string]unsetVars{}
+		}
+		b.unset[id][field] = vars
 	}
 	p.Origin = o
 }
 
-// removeProvider removes a provider, the models registered on it, and any
-// model choice that named it.
+// removeProvider takes away a provider, the models registered on it, and
+// any model choice that named it.
 func (b *builder) removeProvider(id string, o Origin) {
 	if b.provider(id) == nil {
-		b.probs.at(Error, o, "provider remove %s: there is no provider of that name to remove. The providers so far are: %s.", id, b.providerIDs())
+		b.probs.at(Error, o, "\"providers\" takes %s away with null, and no file read before this one declares a provider of that name, so there is nothing to take away. The providers so far are: %s.", id, b.providerIDs())
 		return
 	}
 	b.providers = slices.DeleteFunc(b.providers, func(p *Provider) bool { return p.ID == id })
 	b.models = slices.DeleteFunc(b.models, func(m *Model) bool { return m.Provider == id })
+	delete(b.unset, id)
 	for _, sl := range []*Slot{&b.large, &b.small} {
 		if sl.Model.Set && sl.Model.V.Provider == id {
 			sl.Model = Value[ModelRef]{}
@@ -166,10 +177,11 @@ func (b *builder) model(ref ModelRef) *Model {
 	return nil
 }
 
-// addModel registers a model on an existing provider, or updates it.
+// addModel registers a model on an existing provider, or changes the one a
+// weaker file registered under the same name, field by field.
 func (b *builder) addModel(ref ModelRef, ch modelChange, o Origin) {
 	if b.provider(ref.Provider) == nil {
-		b.probs.at(Error, o, "model add %s: there is no provider named %s. Add it first, with provider add, on a line above this one. The providers so far are: %s.", ref, ref.Provider, b.providerIDs())
+		b.probs.at(Error, o, "\"models\" registers %s, and there is no provider named %s. Declare it under \"providers\", in this file or in one read before it. The providers so far are: %s.", ref, ref.Provider, b.providerIDs())
 		return
 	}
 	m := b.model(ref)
@@ -182,28 +194,23 @@ func (b *builder) addModel(ref ModelRef, ch modelChange, o Origin) {
 			m.Name = ref.ID
 		}
 	}
-	if ch.window != nil {
-		m.ContextWindow.put(*ch.window, o)
+	if ch.noWindow {
+		m.ContextWindow = Value[int]{}
 	}
-	if ch.maxTokens != nil {
-		m.DefaultMaxTokens.put(*ch.maxTokens, o)
+	if ch.window != nil {
+		m.ContextWindow.put(*ch.window, ch.windowAt)
+	}
+	if ch.noMax {
+		m.MaxOutputTokens = Value[int]{}
+	}
+	if ch.maxOutput != nil {
+		m.MaxOutputTokens.put(*ch.maxOutput, ch.maxAt)
+	}
+	if ch.noLevels {
+		m.ThinkingLevels = Value[[]string]{}
 	}
 	if ch.hasLevels {
-		m.ReasoningLevels = ch.levels
-	}
-	if ch.canReason != nil {
-		m.CanReason.put(*ch.canReason, o)
-	}
-	if ch.images != nil {
-		m.SupportsImages.put(*ch.images, o)
-	}
-	if ch.effort != nil {
-		m.ReasoningEffort.put(*ch.effort, o)
-	}
-	for i, v := range []*Value[float64]{&m.PriceInput, &m.PriceOutput, &m.PriceCacheCreate, &m.PriceCacheHit} {
-		if ch.prices[i] != nil {
-			v.put(*ch.prices[i], o)
-		}
+		m.ThinkingLevels.put(ch.levels, ch.levelsAt)
 	}
 	m.Origin = o
 }
@@ -211,48 +218,43 @@ func (b *builder) addModel(ref ModelRef, ch modelChange, o Origin) {
 // removeModel takes a registered model away.
 func (b *builder) removeModel(ref ModelRef, o Origin) {
 	if b.model(ref) == nil {
-		b.probs.at(Error, o, "model remove %s: no model of that name was added with model add, so there is nothing to remove.", ref)
+		b.probs.at(Error, o, "\"models\" takes %s away with null, and no file read before this one registers a model of that name, so there is nothing to take away.", ref)
 		return
 	}
 	b.models = slices.DeleteFunc(b.models, func(m *Model) bool { return m.Provider == ref.Provider && m.ID == ref.ID })
 }
 
-// setSlot applies a model large or model small line.
-func (b *builder) setSlot(slot string, ch slotChange, o Origin) {
+// setSlot puts in force what a file says of "model" or "smallModel".
+func (b *builder) setSlot(which string, ch slotChange, o Origin) {
 	sl := &b.large
-	if slot == "small" {
+	if which == "smallModel" {
 		sl = &b.small
+	}
+	if ch.all {
+		*sl = Slot{}
+		return
+	}
+	if ch.noRef {
+		sl.Model = Value[ModelRef]{}
 	}
 	if ch.ref != nil {
 		if b.provider(ch.ref.Provider) == nil {
-			b.probs.at(Error, o, "model %s %s: there is no provider named %s. Add it first, with provider add, on a line above this one. The providers so far are: %s.", slot, ch.ref, ch.ref.Provider, b.providerIDs())
+			b.probs.at(Error, ch.refAt, "%q names %s, and there is no provider named %s. Declare it under \"providers\", in this file or in one read before it. The providers so far are: %s.", which, ch.ref, ch.ref.Provider, b.providerIDs())
 			return
 		}
-		sl.Model.put(*ch.ref, o)
+		sl.Model.put(*ch.ref, ch.refAt)
+	}
+	if ch.noThinking {
+		sl.Thinking = Value[string]{}
 	}
 	if ch.thinking != nil {
-		sl.Thinking.put(*ch.thinking, o)
+		sl.Thinking.put(*ch.thinking, ch.thinkingAt)
+	}
+	if ch.noTemperature {
+		sl.Temperature = Value[float64]{}
 	}
 	if ch.temperature != nil {
-		sl.Temperature.put(*ch.temperature, o)
-	}
-	if ch.maxTokens != nil {
-		sl.MaxTokens.put(*ch.maxTokens, o)
-	}
-	if ch.topP != nil {
-		sl.TopP.put(*ch.topP, o)
-	}
-	if ch.topK != nil {
-		sl.TopK.put(*ch.topK, o)
-	}
-	if ch.frequencyPenalty != nil {
-		sl.FrequencyPenalty.put(*ch.frequencyPenalty, o)
-	}
-	if ch.presencePenalty != nil {
-		sl.PresencePenalty.put(*ch.presencePenalty, o)
-	}
-	if ch.options != nil {
-		sl.ProviderOptions = ch.options
+		sl.Temperature.put(*ch.temperature, ch.temperatureAt)
 	}
 }
 
@@ -267,38 +269,19 @@ func (b *builder) addHost(h Host) {
 // removeHost takes a declared machine away.
 func (b *builder) removeHost(name string, o Origin) {
 	if !slices.ContainsFunc(b.hosts, func(h Host) bool { return h.Name == name }) {
-		b.probs.at(Error, o, "host remove %s: there is no host of that name to remove.", name)
+		b.probs.at(Error, o, "\"hosts\" takes %s away with null, and no file read before this one declares a host of that name, so there is nothing to take away.", showName(name))
 		return
 	}
 	b.hosts = slices.DeleteFunc(b.hosts, func(h Host) bool { return h.Name == name })
 }
 
-// addHook adds a hook. A named hook replaces the hook of the same event
-// and name.
+// addHook adds a hook. Hooks add up: every file's hooks are kept, in the
+// order they were read.
 func (b *builder) addHook(h Hook) {
 	if b.in.Built.Hooks && b.in.Built.HookEvents != nil && !slices.Contains(b.in.Built.HookEvents, h.Event) {
 		b.probs.at(Error, h.Origin, "a hook is configured on %s, and this gnosh does not fire that event yet, so the hook would never run. gnosh does not start with a hook like that: take it out, or use a gnosh that fires %s. This one fires: %s.", h.Event, h.Event, list(b.in.Built.HookEvents))
 	}
-	if h.Name != "" {
-		for i := range b.hooks {
-			if b.hooks[i].Event == h.Event && b.hooks[i].Name == h.Name {
-				b.hooks[i] = h
-				return
-			}
-		}
-	}
 	b.hooks = append(b.hooks, h)
-}
-
-// removeHooks removes the hook of an event that has the given name, or,
-// with no name, every hook of the event that earlier lines and files set.
-func (b *builder) removeHooks(event, name string, o Origin) {
-	match := func(h Hook) bool { return h.Event == event && (name == "" || h.Name == name) }
-	if name != "" && !slices.ContainsFunc(b.hooks, match) {
-		b.probs.at(Error, o, "hook remove %s --name %s: no hook of that name is configured on that event, so there is nothing to remove.", event, name)
-		return
-	}
-	b.hooks = slices.DeleteFunc(b.hooks, match)
 }
 
 // addRule adds a permission rule to the layer of the file or flag it came
@@ -334,46 +317,6 @@ func (b *builder) setEnv(v EnvVar) {
 	b.env[v.Name] = v
 }
 
-// addMCP adds an MCP server, or replaces the one of the same name.
-func (b *builder) addMCP(m MCPServer) {
-	for i := range b.mcp {
-		if b.mcp[i].Name == m.Name {
-			b.mcp[i] = m
-			return
-		}
-	}
-	b.mcp = append(b.mcp, m)
-}
-
-// removeMCP takes an MCP server away.
-func (b *builder) removeMCP(name string, o Origin) {
-	if !slices.ContainsFunc(b.mcp, func(m MCPServer) bool { return m.Name == name }) {
-		b.probs.at(Error, o, "mcp remove %s: there is no MCP server of that name to remove.", name)
-		return
-	}
-	b.mcp = slices.DeleteFunc(b.mcp, func(m MCPServer) bool { return m.Name == name })
-}
-
-// addLSP adds a language server, or replaces the one of the same name.
-func (b *builder) addLSP(l LSPServer) {
-	for i := range b.lsp {
-		if b.lsp[i].Name == l.Name {
-			b.lsp[i] = l
-			return
-		}
-	}
-	b.lsp = append(b.lsp, l)
-}
-
-// removeLSP takes a language server away.
-func (b *builder) removeLSP(name string, o Origin) {
-	if !slices.ContainsFunc(b.lsp, func(l LSPServer) bool { return l.Name == name }) {
-		b.probs.at(Error, o, "lsp remove %s: there is no language server of that name to remove.", name)
-		return
-	}
-	b.lsp = slices.DeleteFunc(b.lsp, func(l LSPServer) bool { return l.Name == name })
-}
-
 // sweep takes out of the builder everything a project's file put there
 // that an untrusted folder may not contribute. Ops of a held file are never
 // applied in the first place; this runs after every merge all the same, so
@@ -388,10 +331,17 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 		b.providers = slices.DeleteFunc(b.providers, func(p *Provider) bool {
 			if from(p.Origin) {
 				note("provider " + p.ID)
+				delete(b.unset, p.ID)
 				return true
 			}
 			return false
 		})
+		for _, p := range b.providers {
+			if p.DiscoverModels.Set && from(p.DiscoverModels.Origin) {
+				note("discoverModels of provider " + p.ID)
+				p.DiscoverModels = Value[bool]{}
+			}
+		}
 	}
 	if !ok(KindModel) {
 		b.models = slices.DeleteFunc(b.models, func(m *Model) bool {
@@ -401,14 +351,36 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 			}
 			return false
 		})
-		for name, sl := range map[string]*Slot{"large": &b.large, "small": &b.small} {
+		for _, m := range b.models {
+			if m.ContextWindow.Set && from(m.ContextWindow.Origin) {
+				note("contextWindow of model " + m.Ref())
+				m.ContextWindow = Value[int]{}
+			}
+			if m.MaxOutputTokens.Set && from(m.MaxOutputTokens.Origin) {
+				note("maxOutputTokens of model " + m.Ref())
+				m.MaxOutputTokens = Value[int]{}
+			}
+			if m.ThinkingLevels.Set && from(m.ThinkingLevels.Origin) {
+				note("thinkingLevels of model " + m.Ref())
+				m.ThinkingLevels = Value[[]string]{}
+			}
+		}
+		for _, slot := range []struct {
+			name string
+			sl   *Slot
+		}{{"model", &b.large}, {"smallModel", &b.small}} {
+			sl := slot.sl
 			if sl.Model.Set && from(sl.Model.Origin) {
-				note("model " + name)
+				note(slot.name)
 				sl.Model = Value[ModelRef]{}
 			}
 			if sl.Thinking.Set && from(sl.Thinking.Origin) {
-				note("thinking level of model " + name)
+				note("thinking of " + slot.name)
 				sl.Thinking = Value[string]{}
+			}
+			if sl.Temperature.Set && from(sl.Temperature.Origin) {
+				note("temperature of " + slot.name)
+				sl.Temperature = Value[float64]{}
 			}
 		}
 	}
@@ -482,62 +454,38 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 			}
 		}
 	}
-	b.mcp = slices.DeleteFunc(b.mcp, func(m MCPServer) bool {
-		kind := KindMCPOnline
-		if m.Type == "stdio" {
-			kind = KindMCPLocal
-		}
-		if !ok(kind) && from(m.Origin) {
-			note("mcp " + m.Name)
-			return true
-		}
-		return false
-	})
-	if !ok(KindLSP) {
-		b.lsp = slices.DeleteFunc(b.lsp, func(l LSPServer) bool {
-			if from(l.Origin) {
-				note("lsp " + l.Name)
-				return true
-			}
-			return false
-		})
-	}
 	def := defaultOptions()
-	for i := range optionSpecs {
-		spec := &optionSpecs[i]
-		if ok(spec.trustKind()) {
+	for i := range optionDefs {
+		d := &optionDefs[i]
+		if ok(d.trustKind()) {
 			continue
 		}
 		var origin Origin
 		switch {
-		case spec.truth != nil:
-			origin = spec.truth(&b.opts).Origin
-		case spec.num != nil:
-			origin = spec.num(&b.opts).Origin
-		case spec.text != nil:
-			origin = spec.text(&b.opts).Origin
-		case spec.secret != nil:
-			origin = spec.secret(&b.opts).Origin
-		case spec.list != nil:
-			items := spec.list(&b.opts)
+		case d.truth != nil:
+			origin = d.truth(&b.opts).Origin
+		case d.num != nil:
+			origin = d.num(&b.opts).Origin
+		case d.text != nil:
+			origin = d.text(&b.opts).Origin
+		case d.list != nil:
+			items := d.list(&b.opts)
 			before := len(*items)
 			*items = slices.DeleteFunc(*items, func(it ListItem) bool { return from(it.Origin) })
 			if len(*items) != before {
-				note("option " + spec.key)
+				note("options." + d.key)
 			}
 			continue
 		}
 		if from(origin) {
-			note("option " + spec.key)
+			note("options." + d.key)
 			switch {
-			case spec.truth != nil:
-				*spec.truth(&b.opts) = *spec.truth(&def)
-			case spec.num != nil:
-				*spec.num(&b.opts) = *spec.num(&def)
-			case spec.text != nil:
-				*spec.text(&b.opts) = *spec.text(&def)
-			case spec.secret != nil:
-				*spec.secret(&b.opts) = *spec.secret(&def)
+			case d.truth != nil:
+				*d.truth(&b.opts) = *d.truth(&def)
+			case d.num != nil:
+				*d.num(&b.opts) = *d.num(&def)
+			case d.text != nil:
+				*d.text(&b.opts) = *d.text(&def)
 			}
 		}
 	}

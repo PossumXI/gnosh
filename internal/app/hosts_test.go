@@ -23,7 +23,7 @@ func hostWorld(t *testing.T, replies ...apptest.Reply) (*apptest.World, *apptest
 	t.Helper()
 	w := apptest.NewWorld(t, replies...)
 	far := w.FarMachine()
-	w.RC(`host add render --ssh root@203.0.113.7 --description "the render box"`, "host add web --ssh deploy@203.0.113.8")
+	w.Settings(`{"hosts": {"render": {"ssh": "root@203.0.113.7", "description": "the render box"}, "web": {"ssh": "deploy@203.0.113.8"}}}`)
 	return w, far
 }
 
@@ -38,7 +38,7 @@ func TestCommandOnAHost(t *testing.T) {
 		apptest.Reply{Text: "Both ran."})
 	seen := filepath.Join(w.Home, "hook-input.json")
 	hook := w.Script(w.Home+"/hooks/note.sh", `cat >> "`+seen+`"`)
-	w.RC("hook add PreToolUse --matcher Bash --command " + hook)
+	w.Hook("PreToolUse", "Bash", hook)
 	r := run(t, w, "-y", "-p", "--verbose", "--output-format", "stream-json", "run it on the render box").wantCode(t, 0)
 
 	// What the model read: the machine first, then the output.
@@ -138,7 +138,7 @@ func TestHostCallsAndPermissions(t *testing.T) {
 	})
 	t.Run("an allow rule is about this machine", func(t *testing.T) {
 		w, far := hostWorld(t, onRender("touch made.txt")...)
-		w.RC("permissions allow 'Bash(touch *)'")
+		w.Allow("Bash(touch *)")
 		run(t, w, "-p", "make it").wantCode(t, 0)
 		has(t, "what the model read", toolResult(t, w, 1, "c1"), "needs a person's approval", "The command runs on the host render")
 		if calls := far.Calls(); len(calls) != 0 {
@@ -147,7 +147,7 @@ func TestHostCallsAndPermissions(t *testing.T) {
 	})
 	t.Run("a deny rule stops the command before it leaves", func(t *testing.T) {
 		w, far := hostWorld(t, onRender("cd /srv && rm -rf build")...)
-		w.RC("permissions deny 'Bash(rm *)'")
+		w.Deny("Bash(rm *)")
 		run(t, w, "-y", "-p", "clean up").wantCode(t, 0)
 		has(t, "what the model read", toolResult(t, w, 1, "c1"), "Bash(rm *)")
 		if calls := far.Calls(); len(calls) != 0 {
@@ -234,7 +234,7 @@ func TestHostsOfAFolderWaitForTrust(t *testing.T) {
 	}
 	w := apptest.NewWorld(t, script()...)
 	far := w.FarMachine()
-	w.Write(".gnoshrc", "host add far --ssh root@203.0.113.9 --description \"a stranger's machine\"\n")
+	w.Write("gnosh.json", `{"hosts": {"far": {"ssh": "root@203.0.113.9", "description": "a stranger's machine"}}}`+"\n")
 	r := run(t, w, "-y", "-p", "make it there").wantCode(t, 0)
 	has(t, "stderr", r.err, "is not trusted")
 	has(t, "what the model read", toolResult(t, w, 1, "c1"), `the host "far" was given`, "no other machine is declared for this session", "ask the user to declare it")
@@ -249,7 +249,7 @@ func TestHostsOfAFolderWaitForTrust(t *testing.T) {
 	// Trusted for the run, the host is declared and the command runs there.
 	w = apptest.NewWorld(t, script()...)
 	far = w.FarMachine()
-	w.Write(".gnoshrc", "host add far --ssh root@203.0.113.9 --description \"a stranger's machine\"\n")
+	w.Write("gnosh.json", `{"hosts": {"far": {"ssh": "root@203.0.113.9", "description": "a stranger's machine"}}}`+"\n")
 	run(t, w, "--trust-folder", "-y", "-p", "make it there").wantCode(t, 0)
 	has(t, "the first prompt", strings.Join(userTexts(w.Model.Requests()[0]), "\n"), "  - far (root@203.0.113.9): a stranger's machine")
 	if calls := far.Calls(); !slices.Equal(calls, []string{"root@203.0.113.9"}) {
@@ -368,19 +368,30 @@ func TestDoctorAndStatusListHosts(t *testing.T) {
 // A mistake in a host's declaration stops startup like any other, with the
 // file and the line.
 func TestHostMistakesStopStartup(t *testing.T) {
-	for line, pieces := range map[string][]string{
-		"host add render --ssh root@203.0.113.9": {"gnoshrc:5:", "the host render is declared twice", `here as "root@203.0.113.9"`, `gnoshrc:3 as "root@203.0.113.7"`},
-		"host add Local --ssh root@203.0.113.9":  {"gnoshrc:5:", "a host cannot be named Local", "local is the name of this machine"},
-		"host add far --ssh root@":               {"gnoshrc:5:", "the ssh destination of the host far", "is not a user and an address with one @ between them"},
-		"host add far --ssh root@203.0.113.9:22": {"gnoshrc:5:", "ends in a port number"},
-		"host add far":                           {"gnoshrc:5:", "needs --ssh and a destination"},
+	// Each is one more host in the person's own file, which declares two
+	// already; the mistake is on the line the host is written on.
+	for host, pieces := range map[string][]string{
+		`"Local": {"ssh": "root@203.0.113.9"}`:  {"a host cannot be named Local", "local is the name of this machine"},
+		`"far": {"ssh": "root@"}`:               {"the ssh destination of the host far", "is not a user and an address with one @ between them"},
+		`"far": {"ssh": "root@203.0.113.9:22"}`: {"ends in a port number"},
+		`"far": {"description": "no machine"}`:  {"the host far has no ssh destination"},
+		`"far": "root@203.0.113.9"`:             {"a host is an object", `"ssh"`},
 	} {
 		w, far := hostWorld(t)
-		w.RC(line)
+		w.Write(w.SettingsFile(), "{\n  \"hosts\": {\n    \"render\": {\"ssh\": \"root@203.0.113.7\"},\n    "+host+"\n  }\n}\n")
 		r := run(t, w, "-p", "hello").wantCode(t, 1)
-		has(t, "stderr for "+line, r.err, append(pieces, "the configuration has a mistake, so nothing was started")...)
+		has(t, "stderr for "+host, r.err, append(pieces, "gnosh.json:4:", "the configuration has a mistake, so nothing was started")...)
 		if n := len(w.Model.Requests()); n != 0 || len(far.Calls()) != 0 {
-			t.Errorf("%q: the model was sent %d requests and ssh was called %d times", line, n, len(far.Calls()))
+			t.Errorf("%q: the model was sent %d requests and ssh was called %d times", host, n, len(far.Calls()))
 		}
+	}
+	// A name stands for one machine: the folder's file may not declare a
+	// host the person's own file declares, and both places are named.
+	w, far := hostWorld(t)
+	w.Write("gnosh.json", "{\n  \"hosts\": {\"render\": {\"ssh\": \"root@203.0.113.9\"}}\n}\n")
+	r := run(t, w, "--trust-folder", "-p", "hello").wantCode(t, 1)
+	has(t, "stderr", r.err, w.Path("gnosh.json")+":2:", "the host render is declared twice", `here as "root@203.0.113.9"`, w.SettingsFile()+":", `as "root@203.0.113.7"`)
+	if n := len(w.Model.Requests()); n != 0 || len(far.Calls()) != 0 {
+		t.Errorf("the model was sent %d requests and ssh was called %d times", n, len(far.Calls()))
 	}
 }

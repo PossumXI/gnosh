@@ -96,7 +96,7 @@ func TestAskUserQuestionAnsweredByAHook(t *testing.T) {
 	updated := strings.Replace(twoQuestions, `{"questions":`, `{"answers":{"Which database should the service use?":"SQLite"},"questions":`, 1)
 	answer := `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":` + strings.Join(strings.Fields(updated), " ") + `}}`
 	hook := w.Script(w.Home+"/hooks/answer.sh", "cat > /dev/null\ncat <<'JSON'\n"+answer+"\nJSON")
-	w.RC("hook add PreToolUse --matcher AskUserQuestion --command " + hook)
+	w.Hook("PreToolUse", "AskUserQuestion", hook)
 	run(t, w, "-p", "set the project up").wantCode(t, 0)
 	got := toolResult(t, w, 1, "c1")
 	has(t, "what the model read", got, "The user answered (a hook the user set up answered in their place):",

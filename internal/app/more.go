@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
@@ -274,8 +276,12 @@ func (p *program) dirsCommand(ctx context.Context, inv cli.Invocation) int {
 		return max(code, cli.ExitFailure)
 	}
 	d := st.dirs("")
+	settings := st.cfg.Paths.UserSettings
+	if !slices.ContainsFunc(st.cfg.Files, func(f config.File) bool { return f.Path == settings }) {
+		settings = "(not there yet) " + settings
+	}
 	rows := [][2]string{
-		{"config", d.Config}, {"your settings", firstOf(st.cfg.Paths.UserRC, "(no gnoshrc yet) "+filepath.Join(d.Config, "gnoshrc"))},
+		{"config", d.Config}, {"your settings", settings},
 		{"state", d.State}, {"cache", d.Cache},
 		{"working folder", d.Cwd}, {"project root", d.ProjectRoot}, {"project data", d.Project},
 		{"sessions", st.sessions().ProjectDir(d.Cwd)}, {"log", filepath.Join(st.sessions().ProjectDir(d.Cwd), "gnosh.log")},

@@ -90,11 +90,14 @@ next:
 	t.Errorf("no %s finding (%s) holding %q; got:\n  %s", area, level, pieces, strings.Join(all, "\n  "))
 }
 
-const boxRC = "provider add qwen --type llamacpp --base-url http://127.0.0.1:8080\nmodel add qwen/qwen3.8-27b --context-window 262144\nmodel large qwen/qwen3.8-27b\n"
+// box is a file's worth of settings for one model server on this machine,
+// with its model registered and chosen, without the braces around it, so
+// that a test can add to it.
+const box = `"providers": {"qwen": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:8080"}}, "models": {"qwen/qwen3.8-27b": {"contextWindow": 262144}}, "model": "qwen/qwen3.8-27b"`
 
 func TestDoctorAllWell(t *testing.T) {
 	m := &fakeMachine{}
-	findings := doctor(t, inputs(newFS().put(userRC, boxRC)), m)
+	findings := doctor(t, withConfig("{"+box+"}"), m)
 	if !CanRun(findings) {
 		t.Errorf("a good setup can run a turn: %v", findings)
 	}
@@ -103,10 +106,10 @@ func TestDoctorAllWell(t *testing.T) {
 			t.Errorf("a good setup has nothing to note: %s", f)
 		}
 	}
-	wantFinding(t, findings, "config", Fine, "read "+userRC, "user gnoshrc")
+	wantFinding(t, findings, "config", Fine, "read "+userJSON, "user settings")
 	wantFinding(t, findings, "providers", Fine, "qwen at http://127.0.0.1:8080/v1", "1 models")
-	wantFinding(t, findings, "models", Fine, "large model: qwen/qwen3.8-27b", "thinking on")
-	wantFinding(t, findings, "models", Fine, "small model: not chosen", "large model does the side jobs")
+	wantFinding(t, findings, "models", Fine, "model: qwen/qwen3.8-27b", "thinking on")
+	wantFinding(t, findings, "models", Fine, "small model: not chosen", "the session's model does the side jobs")
 	wantFinding(t, findings, "tools", Fine, "needs no outside program")
 	wantFinding(t, findings, "trust", Fine, "no settings of its own")
 	wantFinding(t, findings, "environment", Fine)
@@ -116,8 +119,9 @@ func TestDoctorAllWell(t *testing.T) {
 // asks for the list of models, and it asks nothing else of any server.
 func TestDoctorOnlyListsModels(t *testing.T) {
 	m := &fakeMachine{models: map[string][]string{"a": {"one", "two"}, "b": {"three"}}}
-	rc := "provider add a --type llamacpp --base-url http://127.0.0.1:8080\nprovider add b --type openai-compat --base-url http://10.0.0.5:9000/v1\nmodel large a/one\nmodel small b/three\n"
-	findings := doctor(t, inputs(newFS().put(userRC, rc)), m)
+	text := `{"providers": {"a": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:8080"}, "b": {"type": "openai-compatible", "baseUrl": "http://10.0.0.5:9000/v1"}},
+  "model": "a/one", "smallModel": "b/three"}`
+	findings := doctor(t, withConfig(text), m)
 	if !CanRun(findings) {
 		t.Errorf("findings: %v", findings)
 	}
@@ -136,35 +140,37 @@ func TestDoctorOnlyListsModels(t *testing.T) {
 		}
 	}
 	wantFinding(t, findings, "providers", Fine, "a at http://127.0.0.1:8080/v1", "2 models")
-	wantFinding(t, findings, "models", Fine, "large model: a/one", "context window is not configured", "32768")
+	wantFinding(t, findings, "models", Fine, "model: a/one", "context window is not configured", "32768")
+	wantFinding(t, findings, "models", Fine, "small model: b/three")
 }
 
 func TestDoctorProviders(t *testing.T) {
-	// No provider at all.
+	// No provider at all: doctor shows what to write, and where.
 	findings := doctor(t, inputs(newFS()), &fakeMachine{})
 	if CanRun(findings) {
 		t.Errorf("with no provider a turn cannot run")
 	}
-	wantFinding(t, findings, "providers", Fail, "no provider is configured", "provider add local --type llamacpp")
-	wantFinding(t, findings, "config", Note, "no config file was found", userDir)
+	wantFinding(t, findings, "providers", Fail, "no provider is configured", "Add one to "+userJSON, `{"providers": {"local": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:8080"}}}`)
+	wantFinding(t, findings, "config", Note, "no config file was found", userJSON)
 
 	// A server that does not answer: the provider is left out, with the
 	// reason, and a turn cannot run on nothing.
-	findings = doctor(t, inputs(newFS().put(userRC, boxRC)), &fakeMachine{down: []string{"127.0.0.1:8080"}})
+	findings = doctor(t, withConfig("{"+box+"}"), &fakeMachine{down: []string{"127.0.0.1:8080"}})
 	wantFinding(t, findings, "providers", Note, "qwen is left out", "did not answer at http://127.0.0.1:8080/v1")
 	wantFinding(t, findings, "providers", Fail, "none of the configured providers can be used")
-	wantFinding(t, findings, "models", Fail, "large model: qwen/qwen3.8-27b", "cannot be used right now")
+	wantFinding(t, findings, "models", Fail, "model: qwen/qwen3.8-27b", "cannot be used right now")
 
 	// Several addresses: doctor says which answered.
-	two := "provider add qwen --type llamacpp --base-url http://192.168.1.9:8080 --base-url http://127.0.0.1:18080\nmodel add qwen/m\nmodel large qwen/m\n"
-	findings = doctor(t, inputs(newFS().put(userRC, two)), &fakeMachine{down: []string{"192.168.1.9"}})
+	two := `{"providers": {"qwen": {"type": "llamacpp", "baseUrl": ["http://192.168.1.9:8080", "http://127.0.0.1:18080"]}}, "models": {"qwen/m": {}}, "model": "qwen/m"}`
+	findings = doctor(t, withConfig(two), &fakeMachine{down: []string{"192.168.1.9"}})
 	wantFinding(t, findings, "providers", Fine, "qwen at http://127.0.0.1:18080/v1", "address 2 of 2", "http://192.168.1.9:8080/v1 did not answer")
 	if !CanRun(findings) {
 		t.Errorf("the second address answers, so a turn can run: %v", findings)
 	}
 
 	// Left out by the configuration, and disabled.
-	findings = doctor(t, inputs(newFS().put(userRC, boxRC+"provider add claude --type anthropic\nprovider add off --type llamacpp --disable\n")), &fakeMachine{})
+	more := strings.Replace(box, `"providers": {`, `"providers": {"claude": {"type": "anthropic"}, "off": {"type": "llamacpp", "disabled": true}, `, 1)
+	findings = doctor(t, withConfig("{"+more+"}"), &fakeMachine{})
 	wantFinding(t, findings, "providers", Note, "claude is left out", "ANTHROPIC_API_KEY")
 	wantFinding(t, findings, "providers", Note, "off is disabled")
 	if !CanRun(findings) {
@@ -172,7 +178,7 @@ func TestDoctorProviders(t *testing.T) {
 	}
 
 	// With no probes, nothing is claimed about the servers.
-	cfg, problems, _ := Load(inputs(newFS().put(userRC, boxRC)))
+	cfg, problems, _ := Load(withConfig("{" + box + "}"))
 	findings = Doctor(context.Background(), cfg, problems, Probes{})
 	wantFinding(t, findings, "providers", Note, "was not checked")
 }
@@ -180,53 +186,69 @@ func TestDoctorProviders(t *testing.T) {
 // With more than one model available and none chosen, gnosh does not
 // guess, and doctor says a turn cannot run.
 func TestDoctorModels(t *testing.T) {
-	rc := "provider add box --type llamacpp --base-url http://127.0.0.1:8080\n"
+	const provider = `"providers": {"box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:8080"}}`
 	several := &fakeMachine{models: map[string][]string{"box": {"qwen3.8-27b", "gpt-oss-120b"}}}
-	findings := doctor(t, inputs(newFS().put(userRC, rc)), several)
+	findings := doctor(t, withConfig("{"+provider+"}"), several)
 	if CanRun(findings) {
 		t.Errorf("several models and none chosen: a turn cannot run")
 	}
-	wantFinding(t, findings, "models", Fail, "not chosen", "2 models are available", "does not guess", "box/qwen3.8-27b, box/gpt-oss-120b", "-m")
+	wantFinding(t, findings, "models", Fail, "model: not chosen", "2 models are available", "does not guess", "box/qwen3.8-27b, box/gpt-oss-120b", "-m", `with "model" in gnosh.json`)
 
-	one := &fakeMachine{models: map[string][]string{"box": {"qwen3.8-27b"}}}
-	findings = doctor(t, inputs(newFS().put(userRC, rc)), one)
+	single := &fakeMachine{models: map[string][]string{"box": {"qwen3.8-27b"}}}
+	findings = doctor(t, withConfig("{"+provider+"}"), single)
 	wantFinding(t, findings, "models", Fine, "box/qwen3.8-27b is the only model there is")
 	if !CanRun(findings) {
 		t.Errorf("one model: %v", findings)
 	}
 
-	findings = doctor(t, inputs(newFS().put(userRC, rc+"model large box/llama\n")), several)
-	wantFinding(t, findings, "models", Fail, "provider box does not offer llama", "qwen3.8-27b, gpt-oss-120b")
+	// A server that answers and lists nothing.
+	findings = doctor(t, withConfig("{"+provider+"}"), &fakeMachine{models: map[string][]string{"box": {}}})
+	wantFinding(t, findings, "models", Fail, "model: not chosen, and no model is known", `register one under "models" in gnosh.json`)
+
+	findings = doctor(t, withConfig("{"+provider+`, "model": "box/llama"}`), several)
+	wantFinding(t, findings, "models", Fail, "model: provider box does not offer llama", "qwen3.8-27b, gpt-oss-120b")
+	findings = doctor(t, withConfig("{"+provider+`, "model": "box/qwen3.8-27b", "smallModel": "box/llama"}`), several)
+	wantFinding(t, findings, "models", Note, "small model: provider box does not offer llama")
+	if !CanRun(findings) {
+		t.Errorf("a small model that is missing stops nothing: %s", showFindings(findings))
+	}
 
 	// A model named without its provider on the command line.
-	in := inputs(newFS().put(userRC, rc+"provider add other --type llamacpp --base-url http://127.0.0.1:8081\n"))
+	in := withConfig("{" + strings.Replace(provider, `"providers": {`, `"providers": {"other": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:8081"}, `, 1) + "}")
 	in.Flags.Model = "gpt-oss-120b"
 	findings = doctor(t, in, &fakeMachine{models: map[string][]string{"box": {"qwen3.8-27b", "gpt-oss-120b"}, "other": {"x"}}})
-	wantFinding(t, findings, "models", Fine, "large model: box/gpt-oss-120b", "--model")
+	wantFinding(t, findings, "models", Fine, "model: box/gpt-oss-120b", "--model")
 	in.Flags.Model = "nothing-has-this"
 	findings = doctor(t, in, &fakeMachine{models: map[string][]string{"box": {"a"}, "other": {"b"}}})
 	wantFinding(t, findings, "models", Fail, "no provider is known to offer nothing-has-this")
 
 	// A server whose list cannot be read.
-	findings = doctor(t, inputs(newFS().put(userRC, rc+"model large box/qwen\n")), &fakeMachine{})
+	findings = doctor(t, withConfig("{"+provider+`, "model": "box/qwen"}`), &fakeMachine{})
 	wantFinding(t, findings, "providers", Note, "list of models could not be read", "HTTP 500")
-	wantFinding(t, findings, "models", Fine, "large model: box/qwen")
+	wantFinding(t, findings, "models", Fine, "model: box/qwen")
 }
+
+// hookFile is a file with a hook of every kind doctor tells apart.
+const hookFile = `{` + box + `,
+  "hooks": {
+    "Stop": [{"hooks": [
+      {"type": "command", "command": "${CLAUDE_PROJECT_DIR}/hooks/tests.sh"},
+      {"type": "command", "command": "$GNOSH_PROJECT_DIR/hooks/present.sh"}]}],
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 ./hooks/guard.py --strict"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "NO_COLOR=1 nosuchprogram --check"}]}],
+    "PostToolUse": [
+      {"matcher": "Edit", "hooks": [{"type": "command", "command": "gofmt -l ."}]},
+      {"hooks": [{"type": "command", "command": "./hooks/missing.sh"}]}],
+    "PermissionRequest": [{"hooks": [{"type": "command", "command": "./hooks/answer.sh"}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "[ -f .env ] && echo ready"}]}]
+  }
+}`
 
 // A hook that cannot run is a failure where it would block, and a note
 // elsewhere.
 func TestDoctorHooks(t *testing.T) {
-	rc := boxRC + `hook add Stop --command '${CLAUDE_PROJECT_DIR}/hooks/tests.sh'
-hook add PreToolUse --matcher Bash --command "python3 ./hooks/guard.py --strict"
-hook add UserPromptSubmit --command "NO_COLOR=1 nosuchprogram --check"
-hook add PostToolUse --matcher Edit --command "gofmt -l ."
-hook add PostToolUse --command ./hooks/missing.sh
-hook add PermissionRequest --command ./hooks/answer.sh
-hook add SessionStart --command "[ -f .env ] && echo ready"
-hook add Stop --command '$GNOSH_PROJECT_DIR/hooks/present.sh'
-`
 	m := &fakeMachine{programs: []string{"python3"}, files: []string{"/work/proj/hooks/present.sh"}}
-	findings := doctor(t, inputs(newFS().put(userRC, rc)), m)
+	findings := doctor(t, withConfig(hookFile), m)
 	if CanRun(findings) {
 		t.Errorf("a Stop hook that cannot run holds every turn open: a turn cannot run")
 	}
@@ -242,44 +264,38 @@ hook add Stop --command '$GNOSH_PROJECT_DIR/hooks/present.sh'
 	// With everything in place there is nothing to fail on.
 	m = &fakeMachine{programs: []string{"python3", "gofmt", "nosuchprogram"}, files: []string{
 		"/work/proj/hooks/present.sh", "/work/proj/hooks/tests.sh", "/work/proj/hooks/guard.py", "/work/proj/hooks/missing.sh", "/work/proj/hooks/answer.sh"}}
-	if findings = doctor(t, inputs(newFS().put(userRC, rc)), m); !CanRun(findings) {
+	if findings = doctor(t, withConfig(hookFile), m); !CanRun(findings) {
 		t.Errorf("with every program and script there, a turn can run: %v", findings)
 	}
 
 	// Hooks switched off cannot hold anything up.
-	in := inputs(newFS().put(userRC, rc))
+	in := withConfig(hookFile)
 	in.Flags.SafeMode = true
 	findings = doctor(t, in, &fakeMachine{})
 	if !CanRun(findings) {
 		t.Errorf("in safe mode a hook that cannot run holds nothing up: %v", findings)
 	}
 	wantFinding(t, findings, "hooks", Note, "8 hooks are configured and none runs", "safe mode")
-	wantFinding(t, findings, "config", Note, "safe mode is on", "--safe-mode")
+	wantFinding(t, findings, "config", Note, "safe mode is on", "--safe-mode", "hooks, instruction files, skills on disk and custom commands are off")
 }
 
 func TestDoctorTheRest(t *testing.T) {
-	// Language servers, looked up the way they will be run.
-	rc := boxRC + "lsp add gnopls --command gnopls\nlsp add mine --command ~/bin/my-lsp\nlsp add off --command x --disabled\n"
-	findings := doctor(t, inputs(newFS().put(userRC, rc)), &fakeMachine{programs: []string{"gnopls"}})
-	wantFinding(t, findings, "tools", Fine, "language server gnopls")
-	wantFinding(t, findings, "tools", Note, "language server mine cannot start", "/home/dev/bin/my-lsp is not there")
-	wantFinding(t, findings, "tools", Note, "language server off is disabled")
-
 	// Trust: what is held.
 	in := inputs(untrustedProject())
 	in.Trusted = false
-	findings = doctor(t, in, &fakeMachine{})
-	wantFinding(t, findings, "trust", Note, "not trusted", "19 of its settings are held", `"allow Edit"`, "and 14 more", "gnosh trust", "--trust-folder")
-	wantFinding(t, findings, "config", Note, "held: "+projRC, "only what restricts the agent")
+	findings := doctor(t, in, &fakeMachine{})
+	wantFinding(t, findings, "trust", Note, "not trusted", "22 of its settings are held", `"provider evil (openai-compatible) at https://203.0.113.5/v1"`, "and 17 more", "gnosh trust", "--trust-folder")
+	wantFinding(t, findings, "config", Note, "held: "+projJSON, "the project's settings", "only what restricts the agent")
+	wantFinding(t, findings, "config", Note, "held: "+localJSON)
 	in.Trusted = true
 	findings = doctor(t, in, &fakeMachine{})
 	wantFinding(t, findings, "trust", Fine, "is trusted", "in force")
-	in = inputs(newFS().put(projRC, "permissions deny Bash\n"))
+	in = inputs(newFS().put(projJSON, `{"permissions": {"deny": ["Bash"]}}`))
 	in.Trusted = false
 	wantFinding(t, doctor(t, in, &fakeMachine{}), "trust", Fine, "none of its settings waits for trust")
 
 	// The environment: a value gnosh could not use.
-	in = inputs(newFS().put(userRC, boxRC))
+	in = withConfig("{" + box + "}")
 	in.Environ = append(in.Environ, "BASH_MAX_OUTPUT_LENGTH=lots")
 	findings = doctor(t, in, &fakeMachine{})
 	wantFinding(t, findings, "environment", Note, "$BASH_MAX_OUTPUT_LENGTH", `"lots"`)
@@ -288,33 +304,39 @@ func TestDoctorTheRest(t *testing.T) {
 	}
 
 	// A warning from loading is kept and shown.
-	in = inputs(newFS().put(userRC, boxRC+"option mem-embeddings-url \"http://$EMBED_HOST:8090\"\n"))
-	in.Environ = append(in.Environ, "EMBED_HOST=127.0.0.1")
-	mustLoad(t, in)
-	in = inputs(newFS().put(userRC, boxRC+"provider add x --type llamacpp --base-url http://127.0.0.1:1 --name \"$NOPE\"\n"))
-	wantFinding(t, doctor(t, in, &fakeMachine{}), "config", Note, "NOPE is not set")
+	in = withConfig("{" + box + `, "permissions": {"defaultMode": "auto"}}`)
+	wantFinding(t, doctor(t, in, &fakeMachine{}), "config", Note, userJSON+":1:", `"auto"`, "asks more, not less")
+
+	// A provider whose variable is not set is said once, with the
+	// providers, and the reason is whole.
+	in = withConfig("{" + strings.Replace(box, `"providers": {`, `"providers": {"x": {"type": "llamacpp", "baseUrl": "http://${NOPE}:1"}, `, 1) + "}")
+	findings = doctor(t, in, &fakeMachine{})
+	wantFinding(t, findings, "providers", Note, "x is left out", `its "baseUrl" is filled in from the environment variable NOPE, which is not set`)
+	for _, f := range findings {
+		if f.Area == "config" && strings.Contains(f.Text, "NOPE") {
+			t.Errorf("the provider left out is said twice: %s", f)
+		}
+	}
 
 	// A configuration that does not load is printed with its mistakes,
 	// and a turn cannot run.
-	findings = doctor(t, withRC("provder add x\noption nope\n"), &fakeMachine{})
+	findings = doctor(t, withConfig("{\n\"provders\": {},\n\"options\": {\"nope\": 1}}"), &fakeMachine{})
 	if CanRun(findings) || len(findings) != 2 {
 		t.Errorf("a refused configuration: %v", findings)
 	}
-	wantFinding(t, findings, "config", Fail, userRC+":1:", "not a directive")
-	wantFinding(t, findings, "config", Fail, userRC+":2:", "not an option")
+	wantFinding(t, findings, "config", Fail, userJSON+":2:", "not a key gnosh knows")
+	wantFinding(t, findings, "config", Fail, userJSON+":3:", "not an option")
 }
 
 // Doctor lists every declared host and reaches none of them unless it was
 // asked to: a host that was not tried is never called fine.
 func TestDoctorHosts(t *testing.T) {
-	in := inputs(newFS().put(userRC, boxRC+`host add render --ssh root@203.0.113.10 --description "the render box"
-host add web --ssh deploy@203.0.113.11
-`))
+	in := withConfig("{" + box + `, "hosts": {"render": {"ssh": "root@203.0.113.10", "description": "the render box"}, "web": {"ssh": "deploy@203.0.113.11"}}}`)
 	m := &fakeMachine{models: map[string][]string{"qwen": {"qwen3.8-27b"}}, programs: []string{"ssh"}}
 
 	// Not asked: listed, not tried, and not marked ok.
 	findings := doctor(t, in, m)
-	wantFinding(t, findings, "hosts", Note, "render → root@203.0.113.10 (the render box) is declared ("+userRC+":", "It was not tried", "gnosh doctor --hosts logs in to each host with ssh and runs nothing there")
+	wantFinding(t, findings, "hosts", Note, "render → root@203.0.113.10 (the render box) is declared ("+userJSON+":", "It was not tried", "gnosh doctor --hosts logs in to each host with ssh and runs nothing there")
 	wantFinding(t, findings, "hosts", Note, "web → deploy@203.0.113.11 is declared", "It was not tried")
 	for _, f := range findings {
 		if f.Area == "hosts" && f.Level == Fine {
@@ -361,7 +383,7 @@ host add web --ssh deploy@203.0.113.11
 	}
 
 	// No hosts: nothing is said of them.
-	for _, f := range doctor(t, inputs(newFS().put(userRC, boxRC)), m) {
+	for _, f := range doctor(t, withConfig("{"+box+"}"), m) {
 		if f.Area == "hosts" {
 			t.Errorf("a finding about hosts with none declared: %s", f)
 		}

@@ -204,7 +204,7 @@ func TestRunAllowRules(t *testing.T) {
 	t.Run("settings file", func(t *testing.T) {
 		w := apptest.NewWorld(t, script()...)
 		w.Write("a.txt", "two plus two\n")
-		w.Write(w.ConfigDir()+"/gnosh.json", `{"permissions":{"allow":["Edit","Bash(touch *)"]}}`)
+		w.Allow("Edit", "Bash(touch *)")
 		run(t, w, "-p", "change it").wantCode(t, 0)
 		if w.Read("a.txt") != "three plus two\n" || !w.Exists("b.txt") {
 			t.Errorf("a.txt = %q, b.txt exists = %v", w.Read("a.txt"), w.Exists("b.txt"))
@@ -239,7 +239,7 @@ func TestRunDenyRule(t *testing.T) {
 		apptest.Reply{Text: "Both were refused."})
 	w.Write("a.txt", "keep me\n")
 	w.Write("secret.txt", "the secret\n")
-	w.RC(`permissions deny 'Read(./secret.txt)'`)
+	w.Deny("Read(./secret.txt)")
 	r := run(t, w, "-y", "-p", "--output-format", "json", "--disallowedTools", "Bash(rm *)", "--", "clean up").wantCode(t, 0)
 	if !w.Exists("a.txt") {
 		t.Errorf("a.txt was removed although a deny rule covers the command")

@@ -25,10 +25,8 @@ const (
 	testHome  = "/home/dev"
 	testCwd   = "/work/proj"
 	userDir   = "/home/dev/.config/gnosh"
-	userRC    = "/home/dev/.config/gnosh/gnoshrc"
 	userJSON  = "/home/dev/.config/gnosh/gnosh.json"
 	statePath = "/home/dev/.local/share/gnosh/state.json"
-	projRC    = "/work/proj/gnoshrc"
 	projJSON  = "/work/proj/gnosh.json"
 	localJSON = "/work/proj/.gnosh/settings.local.json"
 	testUID   = 1000
@@ -156,9 +154,20 @@ func restricts(kind string) bool {
 	return kind == KindDenyRule || kind == KindAskRule || kind == KindDisabledSkill || kind == "disabled-tool"
 }
 
-// withRC returns Inputs whose user gnoshrc holds text.
-func withRC(text string) Inputs {
-	return inputs(newFS().put(userRC, text))
+// withConfig returns Inputs whose user gnosh.json holds text.
+func withConfig(text string) Inputs {
+	return inputs(newFS().put(userJSON, text))
+}
+
+// lineOf returns the line of a file's text on which a piece of it first
+// stands, counted from 1, so that a test can name a line by what is on it.
+func lineOf(t *testing.T, text, piece string) int {
+	t.Helper()
+	i := strings.Index(text, piece)
+	if i < 0 {
+		t.Fatalf("the text does not hold %q:\n%s", piece, text)
+	}
+	return 1 + strings.Count(text[:i], "\n")
 }
 
 // load runs Load and fails the test on anything but a refusal.
@@ -217,14 +226,19 @@ next:
 	t.Errorf("no %s at %s:%d holding %q; got:\n%s", sev, file, line, pieces, showProblems(problems))
 }
 
-// refuse loads a user gnoshrc holding one line and checks that it is
-// refused on line 1 with a message holding every piece.
-func refuse(t *testing.T, line string, pieces ...string) {
+// refuse loads a user gnosh.json holding text and checks that it is
+// refused, with a mistake on the line that holds at (or on any line, when
+// at is empty) whose message holds every piece.
+func refuse(t *testing.T, text, at string, pieces ...string) {
 	t.Helper()
-	cfg, problems := load(t, withRC(line+"\n"))
+	cfg, problems := load(t, withConfig(text))
 	if cfg != nil {
-		t.Errorf("%q loaded; it should have been refused", line)
+		t.Errorf("%s loaded; it should have been refused", text)
 		return
 	}
-	wantProblem(t, problems, Error, userRC, 1, pieces...)
+	line := 0
+	if at != "" {
+		line = lineOf(t, text, at)
+	}
+	wantProblem(t, problems, Error, userJSON, line, pieces...)
 }

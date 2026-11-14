@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 // and puts it in the user's config for the Bash tool.
 func preToolUse(w *apptest.World, name, answer string) {
 	hook := w.Script(w.Home+"/hooks/"+name+".sh", "cat > /dev/null\ncat <<'JSON'\n"+answer+"\nJSON")
-	w.RC("hook add PreToolUse --matcher Bash --command " + hook)
+	w.Hook("PreToolUse", "Bash", hook)
 }
 
 // toolResult returns what the model read as the result of a call, from
@@ -47,7 +48,7 @@ func TestGateDenyRuleBeatsAHooksApproval(t *testing.T) {
 		apptest.Reply{Text: "Refused."})
 	w.Write("a.txt", "keep me\n")
 	preToolUse(w, "allow", hookAllows)
-	w.RC(`permissions deny 'Bash(rm *)'`)
+	w.Deny("Bash(rm *)")
 	run(t, w, "-y", "-p", "remove it").wantCode(t, 0)
 	if !w.Exists("a.txt") {
 		t.Errorf("the file was removed: a hook's approval lifted a deny rule")
@@ -103,7 +104,7 @@ func TestGateRulesJudgeWhatAHookMadeOfTheCall(t *testing.T) {
 			apptest.Reply{Text: "Refused."})
 		w.Write("a.txt", "keep me\n")
 		preToolUse(w, "rewrite", `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"rm -f a.txt"}}}`)
-		w.RC(`permissions deny 'Bash(rm *)'`)
+		w.Deny("Bash(rm *)")
 		run(t, w, "-y", "-p", "say something").wantCode(t, 0)
 		if !w.Exists("a.txt") {
 			t.Errorf("the file was removed: the deny rule was checked against the call as the model wrote it")
@@ -124,7 +125,7 @@ func TestGatePermissionRequestHookAnswers(t *testing.T) {
 	answer := func(w *apptest.World, behavior string) {
 		hook := w.Script(w.Home+"/hooks/permission.sh", "cat > /dev/null\ncat <<'JSON'\n"+
 			`{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"`+behavior+`","message":"the hook has spoken"}}}`+"\nJSON")
-		w.RC("hook add PermissionRequest --command " + hook)
+		w.Hook("PermissionRequest", "", hook)
 	}
 	t.Run("allow", func(t *testing.T) {
 		w := apptest.NewWorld(t, script()...)
@@ -212,6 +213,46 @@ func TestGateAnswersOfThePerson(t *testing.T) {
 	checkSession(t, w, w.Sessions()[0])
 }
 
+// The settings file approvals are kept in is read as every config file is,
+// so what a person wrote in it by hand, with comments and a comma after a
+// last item, does not stop an approval from being saved. The file is then
+// written again whole, as plain JSON: the rules that were in it are kept,
+// and the comments are not.
+func TestSavedApprovalReadsWhatAPersonWrote(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Made."})
+	const local = ".gnosh/settings.local.json"
+	w.Write(local, "{\n  // what I never want run here\n  \"permissions\": {\n    \"deny\": [\"Bash(rm *)\",],  /* and no more */\n  },\n}\n")
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("make it")
+	s.see("? Allow Bash?")
+	s.see("  2. Yes, and don't ask again for Bash(touch made.txt)")
+	s.typeLine("2")
+	s.see("Made.")
+	s.see("-- done in ")
+	s.typeLine("/exit")
+	s.exit()
+	hasNot(t, "what the session said", s.out.String(), "could not be written down")
+
+	got := w.Read(local)
+	has(t, "the settings file", got, "Bash(touch made.txt)", "Bash(rm *)")
+	hasNot(t, "the settings file", got, "//", "/*", "never want")
+	var doc struct {
+		Permissions struct{ Allow, Deny []string }
+	}
+	if err := json.Unmarshal([]byte(got), &doc); err != nil {
+		t.Fatalf("the settings file gnosh wrote is not plain JSON: %v\n%s", err, got)
+	}
+	if !slices.Equal(doc.Permissions.Allow, []string{"Bash(touch made.txt)"}) || !slices.Equal(doc.Permissions.Deny, []string{"Bash(rm *)"}) {
+		t.Errorf("the rules after the save: %+v", doc.Permissions)
+	}
+	// And gnosh loads what it wrote: the deny rule is still in force.
+	out := run(t, w, "-p", "/permissions").wantCode(t, 0).out
+	has(t, "/permissions after the save", out, "Bash(rm *)")
+}
+
 // dropTool is a tool whose every call throws something away for good: it
 // says so in what it reports of a call (core.Action.Confirm).
 type dropTool struct{ dropped *[]string }
@@ -276,12 +317,12 @@ func TestGateConfirmAlwaysAsksAPerson(t *testing.T) {
 		{"with an allow rule for the tool", nil, []string{"--allowedTools", "Drop", "--"}},
 		{"with a hook that approves", func(w *apptest.World) {
 			hook := w.Script(w.Home+"/hooks/allow.sh", "cat > /dev/null\ncat <<'JSON'\n"+hookAllows+"\nJSON")
-			w.RC("hook add PreToolUse --command " + hook)
+			w.Hook("PreToolUse", "", hook)
 		}, nil},
 		{"with a PermissionRequest hook that allows", func(w *apptest.World) {
 			hook := w.Script(w.Home+"/hooks/permission.sh", "cat > /dev/null\ncat <<'JSON'\n"+
 				`{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`+"\nJSON")
-			w.RC("hook add PermissionRequest --command " + hook)
+			w.Hook("PermissionRequest", "", hook)
 		}, nil},
 	} {
 		t.Run("nobody to ask, "+tc.name, func(t *testing.T) {

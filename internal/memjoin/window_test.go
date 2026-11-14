@@ -22,7 +22,7 @@ import (
 func reviewOff(s *app.Session) {
 	cfg := &config.Config{}
 	cfg.Permissions.Mode.V = "default"
-	cfg.Options.AutoSummarize.V = true
+	cfg.Options.AutoCompactEnabled.V = true
 	cfg.Options.MemReviewCloses.V = false
 	s.Config = cfg
 }

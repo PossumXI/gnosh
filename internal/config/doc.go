@@ -2,7 +2,7 @@
 //
 // The rule it is built on: a mistake in the configuration stops gnosh at
 // startup and says plainly what is wrong, where, and what to do about it.
-// Nothing is ever accepted and then quietly left unused. A word gnosh does
+// Nothing is ever accepted and then quietly left unused. A key gnosh does
 // not know, a name it cannot match, a value it cannot use, a setting for a
 // part of gnosh that is not built: each is a Problem with the file and the
 // line, and Load returns all of them at once.
@@ -10,177 +10,247 @@
 // # What is read, weakest first
 //
 //  1. gnosh's built-in defaults.
-//  2. The user's own files in the config directory: gnosh.json, then
-//     gnoshrc.
+//  2. The user's own file: gnosh.json in the config directory.
 //  3. The state file: what was chosen inside gnosh with /model, /think and
-//     /autocompact. It outranks the user's gnoshrc, so a choice sticks.
-//  4. The project's files, in the working directory: gnosh.json, then
-//     .gnoshrc (or gnoshrc; the dotted name wins), then the
+//     /autocompact. It outranks the user's gnosh.json, so a choice sticks.
+//  4. The project's files: gnosh.json in the working directory, then the
 //     settings.local.json in the project's data folder, where approvals a
 //     person saves are written. They are in force only in a trusted folder.
 //  5. Environment variables.
 //  6. The command line (--settings, then the single flags), which holds for
 //     the one run and is never saved.
 //
-// Within one file, later lines win. Lists (permission rules, hooks,
-// directories, list options) add up across files instead of replacing each
-// other. Every value in the Config carries its Origin: the layer, and the
-// file and line or the flag or variable that set it.
+// The user's file, the project's two files and what --settings names all
+// have one format and take the same keys. Every value in the Config
+// carries its Origin: the layer, and the file and line or the flag or
+// variable that set it.
 //
 // # Where things live
 //
-// The user's config directory is $GNOSH_GLOBAL_CONFIG, else
+// The user's config directory is $GNOSH_CONFIG_DIR, else
 // $XDG_CONFIG_HOME/gnosh, else ~/.config/gnosh. The user's state directory
-// (the state file, the trust record) is $GNOSH_GLOBAL_DATA, else
+// (the state file, the trust record) is $GNOSH_DATA_DIR, else
 // $XDG_DATA_HOME/gnosh, else ~/.local/share/gnosh; no config file is ever
 // read from it. A project's data folder is .gnosh: the closest one on the
 // way up to the project root, or a new one at the root, or the directory
 // given with -D. Paths has them all.
 //
-// Three names from the earlier gnosh are still read, because Jae's own
-// files still have them, and for no other reason: the table oldNames in
-// table.go lists them, and is deleted when his files have moved.
+// # The format
 //
-// # gnoshrc
+// A config file is JSON, with two allowances for people who edit by hand:
 //
-// gnoshrc is a list of settings, one to a line, written as commands. It is
-// not a script: there is no shell behind it.
+//   - comments, from // to the end of the line or between /* and */,
+//     wherever white space may stand;
+//   - a comma after the last member of an object or a list.
 //
-//	file       = { line }
-//	line       = [ directive ] [ "#" comment ] newline
-//	directive  = word { word }
-//	word       = part { part }
-//	part       = bare | 'single-quoted' | "double-quoted"
+// Nothing else is relaxed: no single quotes, no keys without quotes. That
+// is so by construction. The comments and the trailing commas are blanked
+// out, byte for byte, and what is left is read by the standard library's
+// JSON reader (jsonc.go). A file may nest 64 levels deep and hold 2 MiB.
 //
-// The rules that go with the grammar:
+// A file holds one object. A key given twice in one object is a mistake,
+// and so is a key gnosh does not know, anywhere: the message names the
+// key, the file and the line. For a setting that Claude Code has and gnosh
+// has not built, it says that.
 //
-//   - One directive to a line. A backslash at the end of a line joins the
-//     next line to it (not inside a comment, and not inside single quotes).
-//   - "#" starts a comment where a word would begin. Blank lines are
-//     skipped.
-//   - Single quotes keep everything as written. Double quotes keep spaces,
-//     and a backslash in them keeps a double quote, a backslash, a dollar
-//     sign or a backquote. A quote closes on the line it opens on. Parts
-//     written against each other make one word: --base-url "http://"$HOST.
-//   - In a bare or double-quoted part, $NAME and ${NAME} are replaced by
-//     the environment variable, or by nothing when it is not set (with a
-//     warning). ${NAME:?message} stops startup with the message when the
-//     variable is not set or empty. A value is never split into words, and
-//     an empty one stays a word.
-//   - The variables gnosh itself sets for the hooks and commands it runs
-//     ($CLAUDE_PROJECT_DIR, $GNOSH_TOOL_NAME and the rest) are not filled
-//     in here, since their value belongs to one run of a hook. Outside
-//     single quotes they are a mistake; inside, they reach the command as
-//     written.
-//   - A leading ~ or ~/ in a value that is a path is the home directory.
-//   - The first word is the directive: provider, model, option, host, hook,
-//     permissions, mcp, lsp.
-//   - Things named by an ID (a provider, a model, a host, an MCP or
-//     language server, a named hook) take "add" to create or update and
-//     "remove" (or "rm") to delete. On an update, what the line gives
-//     replaces what was there and what it leaves out stays.
-//   - A flag is written --name value, or --name=value. A value that begins
-//     with two dashes goes in quotes. A flag that takes a truth value
-//     accepts true, false, 1, 0, yes or no in any letter case, and the
-//     value may be left out, which means true. Some flags may be given
-//     more than once; some take two words, a key and a value.
-//   - Anything of the shell's is a mistake, with a message that says so and
-//     names what gnoshrc offers instead: a variable assignment, if, for,
-//     case, source, a semicolon, &&, a pipe, a redirection, $(...),
-//     backquotes, and parentheses outside quotes.
+// # The keys
 //
-// The directives:
+// The keys gnosh shares with Claude Code's settings files have Claude
+// Code's names, shape and meaning, so that a block copied out of one works
+// as it is:
 //
-//	provider add <id> --type <type> [--base-url <url>]... [--name <text>]
-//	             [--api-key <key>] [--discover-models <truth>]
-//	             [--extra-body <json>] [--extra-header <name> <value>]...
-//	             [--disable <truth>]
-//	provider remove <id>
-//	model add <provider>/<id> [--context-window <tokens>] [--name <text>]
-//	             [--default-max-tokens <tokens>] [--reasoning-levels <list>]
-//	             [--can-reason <truth>] [--supports-images <truth>]
-//	model remove <provider>/<id>
-//	model large [<provider>/<id>] [--think <truth>] [--reasoning-effort <level>]
-//	             [--temperature <number>]
-//	model small [<provider>/<id>] (the same flags)
-//	option <key> [value]
-//	option reset <key>
-//	host add <name> --ssh <destination> [--description <text>]
-//	host remove <name>
-//	hook add <event> --command <command> [--name <name>] [--matcher <matcher>]
-//	             [--timeout <seconds>]
-//	hook remove <event> [--name <name>]
-//	permissions allow <rule>...
-//	permissions deny <rule>...
-//	mcp add <name> [--type stdio|sse|http] [--command <program>] [--args <word>]...
-//	             [--env <name> <value>]... [--url <url>] [--header <name> <value>]...
-//	             [--timeout <seconds>] [--disabled <truth>]
-//	             [--enabled-tools <list>] [--disabled-tools <list>]
-//	mcp remove <name>
-//	lsp add <name> --command <program> [--args <word>]... [--env <name> <value>]...
-//	             [--filetypes <list>] [--root-markers <list>] [--timeout <seconds>]
-//	             [--disabled <truth>] [--init-options <json>] [--options <json>]
-//	lsp remove <name>
+//	permissions      allow, ask and deny (lists of rules), defaultMode,
+//	                 additionalDirectories, disableBypassPermissionsMode,
+//	                 disableAutoMode, denyInsteadOfPrompting
+//	hooks            event, then matcher groups, then command handlers
+//	env              variables for the commands and hooks gnosh starts
+//	disableAllHooks  true switches every hook off
+//	model            the session's model
+//	$schema          accepted and not read
 //
-// Table lists every directive, flag, option, settings key and variable
-// with what gnosh does about it today: it works, it is read and kept for
-// later, or it stops startup because the part it is for is not built.
+// gnosh's own keys stand beside them:
+//
+//	providers   the model servers, each under an id of the person's choosing
+//	  type            which kind of server it is: llamacpp, openai-compatible,
+//	                  anthropic, openai, ollama, lmstudio, litellm, omlx
+//	  name            the name shown to the person
+//	  baseUrl         where the API is: one address, or a list tried in
+//	                  order, the first that answers being used
+//	  apiKey          the key; none for a server on the person's own machine
+//	  headers         more request headers, as an object of names and values
+//	  extraBody       an object merged into the body of every request
+//	  discoverModels  ask the server which models it has
+//	  disabled        keep the entry and do not use it
+//	models      what gnosh should know about a model, each under
+//	            "<provider>/<model id>"
+//	  name            the name shown to the person
+//	  contextWindow   the model's window, in tokens
+//	  maxOutputTokens the reply limit sent with a request
+//	  thinkingLevels  its thinking levels, the least thinking first; an
+//	                  empty list says the model has no thinking switch
+//	model       the session's model, as "<provider>/<model id>"
+//	smallModel  the model for the short side jobs (titles, summaries,
+//	            checks); the session's model does them when none is named
+//	hosts       other machines the model may run commands on, each under
+//	            the name the model calls it by
+//	  ssh             user@address, or a Host alias of the person's ssh
+//	                  configuration
+//	  description     what the machine is for
+//	options     gnosh's own switches and limits
+//	  requestTimeout           seconds a model request may go quiet; 0 waits
+//	                           for ever
+//	  autoCompactEnabled       make room in the model's window when it fills
+//	  autoCompactWindow        tokens of context before room is made
+//	  loopMaxTurns             an optional cap on /loop
+//	  maxBackgroundTasks       background commands that may run at once
+//	  userInstructionFiles     more instruction files of the person's own
+//	  projectInstructionFiles  more instruction files of the project
+//	  disabledSkills           skills to hide from the model
+//	  memoryText               "lean" or "full": which of gnosh's two texts
+//	                           about mem the model is given
+//	  memReviewCloses          review a todo when it is closed
+//	  memEmbeddingsUrl         the embedding server for mem
+//	  debug                    write more to the log
+//	  projectDataDir           the name of the project's data folder
+//
+// "model" and "smallModel" are each the model as a string, or an object
+// when how the model is asked matters:
+//
+//	"model": {"id": "qwen/qwen3.8-27b", "thinking": false, "temperature": 0.7}
+//
+// "thinking" is true, false, or one of the model's own levels, such as
+// "low".
+//
+// Table lists every key, provider type, hook event and environment
+// variable with what it is for and where its name comes from. The names
+// follow one rule: the key or the variable Claude Code documents for the
+// same thing, where there is one; else the public term of the model
+// providers' APIs; else plain words for what the thing does.
 //
 // An example file:
 //
-//	# the model server on this machine, and by its LAN address from elsewhere
-//	provider add qwen --name "Qwen (ai box)" --type llamacpp \
-//	    --base-url http://192.0.2.91:8080 --base-url http://127.0.0.1:18080
-//	model add qwen/qwen3.8-27b --context-window 262144
-//	model large qwen/qwen3.8-27b
+//	{
+//	  // a model server, tried at each address in order; the first that answers wins
+//	  "providers": {
+//	    "qwen": {
+//	      "type": "llamacpp",
+//	      "name": "Qwen (ai box)",
+//	      "baseUrl": ["http://192.0.2.91:8080", "http://127.0.0.1:18080"],  // or one string
+//	      "discoverModels": false
+//	    },
+//	    // a hosted provider; the key comes from the environment
+//	    "claude": { "type": "anthropic", "apiKey": "${ANTHROPIC_API_KEY}" }
+//	  },
+//	  // what gnosh should know about a model: "<provider>/<model id>"
+//	  "models": {
+//	    "qwen/qwen3.8-27b": { "name": "Qwen 3.8 27B", "contextWindow": 262144 }
+//	  },
+//	  "model": "qwen/qwen3.8-27b",        // the session's model
+//	  "smallModel": "qwen/qwen3.8-27b",   // the model for side jobs (titles, summaries)
+//	  "hosts": {
+//	    "render": { "ssh": "root@203.0.113.10", "description": "the render box" }
+//	  },
+//	  "options": { "requestTimeout": 900 },  /* seconds a reply may go quiet */
+//	  "permissions": { "allow": ["Read", "Bash(git diff *)"], "deny": ["Bash(git push *)"] },
+//	  "hooks": {
+//	    "Stop": [ { "hooks": [ { "type": "command", "command": "~/.config/gnosh/hooks/tests-must-pass.sh", "timeout": 1800 } ] } ]
+//	  },
+//	}
 //
-//	# a hosted provider; the key comes from the environment
-//	provider add claude --type anthropic --api-key "${ANTHROPIC_API_KEY:?export it first}"
+// # The environment
 //
-//	option request-timeout 900      # seconds a reply may go quiet
-//	option notifications disabled
+// gnosh reads four variables of its own: GNOSH_CONFIG_DIR and
+// GNOSH_DATA_DIR, which name the two directories above; GNOSH_SAFE_MODE,
+// which is --safe-mode; and GNOSH_PROFILE, which serves a debugging page
+// on this machine. Any other variable whose name begins with GNOSH_ stops
+// startup: it is most likely a misspelling, and would do nothing. (The
+// variables gnosh sets for the hooks and commands it runs are known too,
+// since a gnosh started from inside one inherits them.)
 //
-//	host add render --ssh root@203.0.113.10 --description "the render box"
-//	hook add Stop --name tests --command "./hooks/tests-must-pass.sh" --timeout 1800
-//	permissions allow Read 'Bash(git diff *)'
-//	permissions deny 'Bash(git push *)'
+// Of Claude Code's variables it reads, with Claude Code's meaning:
+// API_TIMEOUT_MS, BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS,
+// BASH_MAX_OUTPUT_LENGTH, CLAUDE_CODE_MAX_OUTPUT_TOKENS,
+// CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS,
+// CLAUDE_CODE_GLOB_TIMEOUT_SECONDS, CLAUDE_CODE_AUTO_COMPACT_WINDOW,
+// CLAUDE_AUTOCOMPACT_PCT_OVERRIDE and CLAUDE_CODE_SAFE_MODE; and
+// ANTHROPIC_API_KEY and OPENAI_API_KEY for a provider of that type that is
+// given no key. One of them in the env block of a config file wins over
+// the shell's. A value that cannot be used is passed over with a warning,
+// never a mistake.
 //
-// # gnosh.json
+// # Variables in a config file
 //
-// Beside a gnoshrc, gnosh.json holds settings in Claude Code's shape, so
-// that a block copied from a Claude Code settings file works: permissions
-// (allow, ask, deny, defaultMode, additionalDirectories and a few
-// switches), hooks, env and disableAllHooks. It is strict JSON. Any other
-// key is a mistake that names the key and the file, a key given twice is a
-// mistake, and so is a value of the wrong shape. Everything that is
-// gnosh's own is set in gnoshrc. --settings gives one more such file, or
-// the JSON itself, for one run.
+// In the string values of "providers" that say where a server is and how
+// to be let in (each address of baseUrl, apiKey, each value of headers),
+// ${NAME} is replaced by the environment variable NAME, and
+// ${NAME:-default} by the text after :- when the variable is not set. That
+// is the form Claude Code documents for .mcp.json, with its meaning: a
+// variable that is set and empty counts as set. Nothing else is filled in,
+// anywhere: $NAME without braces is plain text, and so is ${NAME} under
+// any other key. There is no way to write a literal ${ in those three
+// places; put such a value in a variable.
+//
+// A variable that is not set and has no default is never read as nothing:
+// the provider is left out, as one whose server cannot be reached is, and
+// a warning names the variable, the key and the line. gnosh starts, and
+// every place that lists providers says why that one is missing. A ${ that
+// is not closed, or that holds something other than a name, is a mistake
+// and stops startup; so is the name of a variable gnosh itself sets for
+// the hooks and commands it runs ($CLAUDE_PROJECT_DIR, $GNOSH_TOOL_NAME and
+// the rest), since its value belongs to one run of a hook. Inside a hook's
+// command those reach the command as written.
+//
+// # How the files are put together
+//
+// Files are read weakest first, and what a stronger file says is laid over
+// what the weaker ones said:
+//
+//   - "providers" and "models" are merged by key, and then field by field:
+//     what a stronger file gives for a field replaces what was there
+//     (headers, extraBody and baseUrl each as a whole), and what it leaves
+//     out stays. A provider needs its "type" where it is first declared.
+//   - null takes away what a weaker file said, as in a JSON merge patch
+//     (RFC 7396): null for a provider, a model or a host takes it away;
+//     null for one of their fields, for "model" or "smallModel" or one of
+//     their fields, puts it back to not given; null for an option puts it
+//     back to its default. Taking away what no weaker file declared is a
+//     mistake: it is most likely a misspelt name.
+//   - Lists add up instead of replacing each other: permission rules,
+//     additional directories, hooks, and the options that are lists.
+//   - A host is declared once. Its name in two files is a mistake that
+//     names both places, unless the stronger file takes it away first: a
+//     name stands for one machine.
+//   - Everything else is one value, from the strongest file that sets it.
 //
 // # A folder that is not trusted
 //
-// A project's files can add a hook, start a server, let tools run without
-// asking, or point a provider somewhere else. So until the folder is
-// trusted (Inputs.Trusted) they are read by the same reader, checked in
-// full, and then held: only settings of a kind that Inputs.KeepUntrusted
-// accepts are put in force, which with the trust package's rule means deny
-// rules, ask rules and switched-off skills. Config.Held lists everything
-// that waits, for the trust question and for doctor. What is held is also
-// taken out again after the last merge, so that no later step can put it
-// back. A mistake in a project's file stops startup whether or not the
-// folder is trusted: a deny rule in a file that could not be read would
-// not be in force.
+// A project's files can add a hook, let tools run without asking, or point
+// a provider somewhere else. So until the folder is trusted
+// (Inputs.Trusted) they are read by the same reader, checked in full, and
+// then held: only settings of a kind that Inputs.KeepUntrusted accepts are
+// put in force, which with the trust package's rule means deny rules, ask
+// rules and switched-off skills. Every setting of a file is one of the
+// Kind constants, whatever key it stands under and however deep, and
+// there is no key by which a file can name another file to read.
+// Config.Held lists everything that waits, for the trust question and for
+// doctor. What is held is also taken out again after the last merge, so
+// that no later step can put it back, and naming one of the folder's two
+// files with --settings does not put it in force either: that stops
+// startup and says why. A mistake in a project's file stops
+// startup whether or not the folder is trusted: a deny rule in a file that
+// could not be read would not be in force.
 //
 // # Hosts
 //
 // A host is another machine the model may run commands on: a name, the
 // destination ssh is given, and what the person wrote about it. The
-// declarations are checked as plain values, once every file has been read
-// (checkHosts), so that the same mistakes are found whichever file, in
-// whichever format, made the declaration: a name that is this machine's
-// own ("local"), a name declared twice, a destination that is missing or
-// is not user@address or one word ssh's own configuration can know. Each
-// is a Problem that names the host and the place that declared it, and
-// like every other mistake it stops startup.
+// declarations are checked as plain values (checkHosts), each one where it
+// is read and all of them together once every file has been read, so that
+// the same mistakes are found whichever file made the declaration: a name
+// that is this machine's own ("local"), a name declared twice, a
+// destination that is missing or is not user@address or one word ssh's own
+// configuration can know. Each is a Problem that names the host and the
+// place that declared it, and like every other mistake it stops startup.
 //
 // # Secrets
 //
@@ -188,6 +258,18 @@
 // address are kept as Secret, which prints as "[hidden]" with every verb,
 // in logs and in JSON. No Problem and no line of Config.String or Doctor
 // holds one.
+//
+// # What gnosh writes
+//
+// gnosh never writes a gnosh.json: that file is the person's, comments and
+// all. The one settings file gnosh writes is settings.local.json in the
+// project's data folder, when a person answers a permission question with
+// "don't ask again". It reads the file as any other, so a person may edit
+// it and put comments in it; but when gnosh next saves an approval it
+// writes the whole file again as plain JSON, and the comments and trailing
+// commas that were in it are gone. What is to be written is checked first
+// (CheckWrite), so gnosh cannot write a file it would then refuse to load.
+// The state file is gnosh's alone and is strict JSON.
 //
 // # What a caller does with the Config
 //

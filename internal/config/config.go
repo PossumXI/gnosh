@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"time"
 )
 
@@ -25,17 +24,18 @@ type Config struct {
 	Held []Held
 
 	// Providers are the model providers, in the order they were first
-	// added. Disabled ones and ones that cannot be used are included, each
-	// saying why; Usable picks the rest.
+	// declared. Disabled ones and ones that cannot be used are included,
+	// each saying why; Usable picks the rest.
 	Providers []Provider
-	// Models are the models registered by hand with model add.
+	// Models are the models registered by hand, under "models".
 	Models []Model
-	// Large is the model that does the work, and Small the one that does
-	// the short side jobs. A slot whose Model is not set has no choice
-	// made for it: Small then follows Large, and Large is asked for.
+	// Large is the session's model, the one that does the work ("model"),
+	// and Small the one that does the short side jobs ("smallModel"). A
+	// slot whose Model is not set has no choice made for it: Small then
+	// follows Large, and Large is asked for.
 	Large, Small Slot
 
-	// Options are the option directive's settings.
+	// Options are the settings of the "options" object.
 	Options Options
 	// Limits are the tool and request limits that Claude Code's
 	// environment variables set.
@@ -61,10 +61,6 @@ type Config struct {
 	Env []EnvVar
 	// Context says which instruction files gnosh reads, and in what order.
 	Context ContextFiles
-	// MCP are the MCP servers.
-	MCP []MCPServer
-	// LSP are the language servers.
-	LSP []LSPServer
 
 	// BadEnv are the environment variables whose values could not be
 	// used, for doctor.
@@ -78,16 +74,15 @@ type File struct {
 	// Path is where the file is. "--settings" stands for settings given on
 	// the command line as JSON.
 	Path string
-	// Role is "gnoshrc", "settings" or "state".
+	// Role is "settings" for a file a person or gnosh writes settings in
+	// (gnosh.json, settings.local.json, what --settings names), and
+	// "state" for the state file.
 	Role string
 	// Scope is "user", "project", "local" or "command line".
 	Scope string
 	// Held reports that the file is the project's and the folder is not
 	// trusted, so only what restricts the agent was taken from it.
 	Held bool
-	// OldName reports that the file was found under a name from before the
-	// rewrite (see CFG-5).
-	OldName bool
 }
 
 // Held is one thing a project's file says that waits for the folder to be
@@ -110,10 +105,7 @@ const (
 	KindModel         = "model"
 	KindHost          = "host"
 	KindHook          = "hook"
-	KindHookOff       = "hook-off" // removing a hook, or switching all hooks off
-	KindMCPLocal      = "mcp-local"
-	KindMCPOnline     = "mcp-online"
-	KindLSP           = "lsp"
+	KindHookOff       = "hook-off" // switching all hooks off
 	KindAllowRule     = "allow-rule"
 	KindAskRule       = "ask-rule"
 	KindDenyRule      = "deny-rule"
@@ -124,27 +116,20 @@ const (
 	KindExtraPath     = "extra-path"
 	KindAddress       = "address"
 	KindDisabledSkill = "disabled-skill"
-	KindRemoval       = "removal" // removing a provider, model, host or server
-)
-
-// Unexported spellings, so the tables read evenly.
-const (
-	kindOption        = KindOption
-	kindExtraPath     = KindExtraPath
-	kindAddress       = KindAddress
-	kindDisabledSkill = KindDisabledSkill
+	KindRemoval       = "removal" // taking away a provider, a model or a host a weaker file declared
 )
 
 // Provider is one model provider.
 type Provider struct {
-	// ID is the name it was added under.
+	// ID is the name it is declared under.
 	ID string
 	// Name is the name shown to the user; ID when none was given.
 	Name string
-	// Type is the type as configured: llamacpp, openai-compat, and so on.
+	// Type is the type as configured: llamacpp, openai-compatible, and so
+	// on.
 	Type string
 	// Wire is the request format the type speaks: "llamacpp", "openai" or
-	// "anthropic". It is empty for a type that is not built yet.
+	// "anthropic".
 	Wire string
 	// Endpoints are the addresses, in the order given. The first that
 	// accepts a connection is the one to use (see SelectEndpoint).
@@ -170,12 +155,7 @@ type Provider struct {
 	// provider that is left out stops nothing: gnosh starts, and every
 	// place that lists providers shows the reason.
 	LeftOut string
-	// SystemPromptPrefix, ProviderOptions and FlatRate are read and not
-	// used yet.
-	SystemPromptPrefix string
-	ProviderOptions    json.RawMessage
-	FlatRate           bool
-	// Origin is the last line that set the provider.
+	// Origin is the last place that set the provider.
 	Origin Origin
 }
 
@@ -185,7 +165,8 @@ func (p Provider) Usable() bool { return !p.Disabled && p.LeftOut == "" }
 
 // Endpoint is one address of a provider.
 type Endpoint struct {
-	// Given is the address as it was configured.
+	// Given is the address as it was configured, with its variables filled
+	// in.
 	Given string
 	// URL is the root of the API: what "/chat/completions", "/messages" or
 	// "/models" is added to. For a server on the user's own machine it
@@ -237,22 +218,14 @@ type Model struct {
 	// ContextWindow is the model's window in tokens. Not set means: ask
 	// the server, and take 32,768 if it cannot say.
 	ContextWindow Value[int]
-	// DefaultMaxTokens is the reply limit sent with a request. Not set
+	// MaxOutputTokens is the reply limit sent with a request. Not set
 	// means none is sent to a local server.
-	DefaultMaxTokens Value[int]
-	// ReasoningLevels are the model's thinking levels, weakest first. Nil
-	// means the model's ID decides.
-	ReasoningLevels []string
-	// CanReason and SupportsImages say what the model can do.
-	CanReason      Value[bool]
-	SupportsImages Value[bool]
-	// ReasoningEffort and the prices are read and not used yet.
-	ReasoningEffort  Value[string]
-	PriceInput       Value[float64]
-	PriceOutput      Value[float64]
-	PriceCacheCreate Value[float64]
-	PriceCacheHit    Value[float64]
-	// Origin is the last line that set the model.
+	MaxOutputTokens Value[int]
+	// ThinkingLevels are the model's thinking levels, the least thinking
+	// first. Not set means the model's ID decides; set and empty means the
+	// model has no thinking switch.
+	ThinkingLevels Value[[]string]
+	// Origin is the last place that set the model.
 	Origin Origin
 }
 
@@ -277,8 +250,8 @@ func (r ModelRef) String() string {
 	return r.Provider + "/" + r.ID
 }
 
-// Slot is one of the two model choices, large or small, with the settings
-// that go with it.
+// Slot is one of the two model choices, the session's model or the small
+// one, with how the model is asked.
 type Slot struct {
 	// Model is the model chosen. Not set means no choice has been made.
 	Model Value[ModelRef]
@@ -288,13 +261,6 @@ type Slot struct {
 	Thinking Value[string]
 	// Temperature is left to the provider when not set.
 	Temperature Value[float64]
-	// The rest are read and not used yet.
-	MaxTokens        Value[int]
-	TopP             Value[float64]
-	TopK             Value[int]
-	FrequencyPenalty Value[float64]
-	PresencePenalty  Value[float64]
-	ProviderOptions  json.RawMessage
 }
 
 // Host is another machine the model may run commands on.
@@ -311,8 +277,6 @@ type Host struct {
 type Hook struct {
 	// Event is the moment, one of HookEventNames.
 	Event string
-	// Name is the name given with --name in gnoshrc, or "".
-	Name string
 	// Matcher says which tools or sources the hook runs for. Empty means
 	// all of them.
 	Matcher string
@@ -359,7 +323,7 @@ type RuleLayer struct {
 	// File is the file the rules are in, or "" for a flag.
 	File string
 	// BaseDir is what a rule path that starts with a single slash is
-	// under: the config directory for the user's files, the working
+	// under: the config directory for the user's file, the working
 	// directory for the project's files and for flags, and the file's own
 	// directory for a file given with --settings.
 	BaseDir          string
@@ -383,56 +347,14 @@ type EnvVar struct {
 	Origin Origin
 }
 
-// MCPServer is one MCP server.
-type MCPServer struct {
-	Name string
-	// Type is stdio, sse or http.
-	Type    string
-	Command string
-	Args    []string
-	Env     []EnvVar
-	URL     string
-	Headers []Header
-	// Timeout is how long a tool call may take. Zero means the default.
-	Timeout       time.Duration
-	Disabled      bool
-	EnabledTools  []string
-	DisabledTools []string
-	Origin        Origin
-}
-
-// LSPServer is one language server.
-type LSPServer struct {
-	Name        string
-	Command     string
-	Args        []string
-	Env         []EnvVar
-	FileTypes   []string
-	RootMarkers []string
-	// Timeout is how long a request may take. Zero means the default.
-	Timeout     time.Duration
-	Disabled    bool
-	InitOptions json.RawMessage
-	Options     json.RawMessage
-	Origin      Origin
-}
-
 // Switches are the on/off settings that gnosh's own environment variables
 // and flags control.
 type Switches struct {
 	// SafeMode starts gnosh with the config's customizations off: hooks,
-	// MCP servers not given on the command line, context files, skills
-	// found on disk and custom commands.
+	// context files, skills found on disk and custom commands.
 	SafeMode Value[bool]
 	// Profile serves a debugging page on loopback.
 	Profile Value[bool]
-	// Metrics says whether usage events may be sent, after the option, the
-	// variables and DO_NOT_TRACK have been weighed. Not set means nothing
-	// decided it, which is off.
-	Metrics Value[bool]
-	// UpdateCheck says whether the update check runs. It is on only when a
-	// repository is named and the check is not switched off.
-	UpdateCheck Value[bool]
 }
 
 // ContextFiles says which instruction files the model is given, as data
@@ -453,10 +375,13 @@ type ContextFiles struct {
 	// user or by root.
 	Cwd, ProjectRoot string
 	// Global are the user's global files and folders, in the order they
-	// are read. A folder gives every Markdown file in it. A file that does
+	// are read: GNOSH.md in the config directory, the AGENTS.md shared
+	// with other programs, then what the userInstructionFiles option
+	// names. A folder gives every Markdown file in it. A file that does
 	// not exist is passed over.
 	Global []ListItem
-	// Extra are more project context files, from option context-path.
+	// Extra are more instruction files of the project, from the
+	// projectInstructionFiles option.
 	Extra []ListItem
 	// ImportDepth is how many levels deep an @path line is followed.
 	ImportDepth int

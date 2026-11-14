@@ -15,11 +15,12 @@ import (
 // models picked with /model, the thinking level picked for each model with
 // /think, /no_think or /model, and the window picked with /autocompact. It
 // lives in the user's state directory, never in a project, and it outranks
-// the user's gnoshrc: a choice made inside gnosh sticks. A model given on
-// the command line is never written here.
+// the user's gnosh.json: a choice made inside gnosh sticks. A model given
+// on the command line is never written here.
 type State struct {
-	// Large and Small are the models chosen, as provider/id. Empty means
-	// no choice.
+	// Large and Small are the models chosen, as provider/id: the
+	// session's model, and the one for the short side jobs. Empty means no
+	// choice.
 	Large, Small string
 	// Thinking is the level chosen for each model, keyed by provider/id.
 	Thinking map[string]string

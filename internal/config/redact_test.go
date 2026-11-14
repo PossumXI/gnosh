@@ -17,29 +17,32 @@ var testSecrets = []string{
 	"url-password-0123456789",
 	"url-query-token-0123456789",
 	"env-block-value-0123456789",
-	"metrics-key-0123456789",
-	"mcp-env-value-0123456789",
-	"mcp-header-value-0123456789",
-	"lsp-env-value-0123456789",
 	"sk-ant-from-env-0123456789",
 	"embed-password-0123456789",
+	"header-from-env-0123456789",
+	"path-from-env-0123456789",
 }
+
+// secretEnv is the environment the secrets that come from variables are
+// in.
+var secretEnv = []string{"ANTHROPIC_API_KEY=sk-ant-from-env-0123456789", "HEADER_SECRET=header-from-env-0123456789", "PATH_SECRET=path-from-env-0123456789"}
 
 // secretConfig is a configuration with a secret in every place one can be.
 func secretConfig() Inputs {
-	fsys := newFS().
-		put(userRC, `provider add hosted --type openai-compat --base-url "https://user:url-password-0123456789@api.example.com/v1?token=url-query-token-0123456789" \
-    --api-key sk-provider-key-0123456789 --extra-header Authorization "Bearer header-value-0123456789"
-provider add claude --type anthropic
-option metrics-key metrics-key-0123456789
-option mem-embeddings-url https://embed:embed-password-0123456789@embed.example.com/
-mcp add tool --command tool --env TOKEN mcp-env-value-0123456789
-mcp add web --type http --url https://mcp.example.com --header X-Key mcp-header-value-0123456789
-lsp add gopls --command gopls --env TOKEN lsp-env-value-0123456789
-`).
-		put(userJSON, `{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789"}}`)
-	in := inputs(fsys)
-	in.Environ = append(in.Environ, "ANTHROPIC_API_KEY=sk-ant-from-env-0123456789")
+	in := withConfig(`{
+  "providers": {
+    "hosted": {
+      "type": "openai-compatible",
+      "baseUrl": "https://user:url-password-0123456789@api.example.com/v1?token=url-query-token-0123456789",
+      "apiKey": "sk-provider-key-0123456789",
+      "headers": {"Authorization": "Bearer header-value-0123456789", "X-From-Env": "${HEADER_SECRET}"}
+    },
+    "claude": {"type": "anthropic"}
+  },
+  "options": {"memEmbeddingsUrl": "https://embed:embed-password-0123456789@embed.example.com/"},
+  "env": {"DEPLOY_TOKEN": "env-block-value-0123456789"}
+}`)
+	in.Environ = append(in.Environ, secretEnv...)
 	return in
 }
 
@@ -60,13 +63,14 @@ func TestDumpsShowNoSecret(t *testing.T) {
 	}
 	// The secrets are there for the code that needs them.
 	if cfg.Providers[0].APIKey.Reveal() != "sk-provider-key-0123456789" || cfg.Providers[1].APIKey.Reveal() != "sk-ant-from-env-0123456789" ||
+		cfg.Providers[0].Headers[1].Value.Reveal() != "header-from-env-0123456789" ||
 		cfg.Env[0].Value.Reveal() != "env-block-value-0123456789" || cfg.CommandEnv()[0] != "DEPLOY_TOKEN=env-block-value-0123456789" {
 		t.Fatalf("the secrets must be in the Config for whoever sends them: %v", cfg.Providers)
 	}
 
 	dump := cfg.String()
 	noSecret(t, "Config.String", dump)
-	for _, want := range []string{"hosted (openai-compat)", "https://api.example.com/v1?…", "key: set", "key: from $ANTHROPIC_API_KEY", "header Authorization: [hidden]", "DEPLOY_TOKEN", "metrics-key", "[hidden]"} {
+	for _, want := range []string{"hosted (openai-compatible)", "https://api.example.com/v1?…", "key: set", "key: from $ANTHROPIC_API_KEY", "header Authorization: [hidden]", "header X-From-Env: [hidden]", "DEPLOY_TOKEN", "memEmbeddingsUrl", "https://embed.example.com/"} {
 		if !strings.Contains(dump, want) {
 			t.Errorf("the dump should still say %q:\n%s", want, dump)
 		}
@@ -90,15 +94,12 @@ func TestDumpsShowNoSecret(t *testing.T) {
 		noSecret(t, verb+" of the providers", fmt.Sprintf(verb, cfg.Providers))
 		noSecret(t, verb+" of the env block", fmt.Sprintf(verb, cfg.Env))
 		noSecret(t, verb+" of the options", fmt.Sprintf(verb, cfg.Options))
-		noSecret(t, verb+" of the servers", fmt.Sprintf(verb, cfg.MCP)+fmt.Sprintf(verb, cfg.LSP))
 	}
 	data, err := json.Marshal(struct {
 		P []Provider
 		E []EnvVar
 		O Options
-		M []MCPServer
-		L []LSPServer
-	}{cfg.Providers, cfg.Env, cfg.Options, cfg.MCP, cfg.LSP})
+	}{cfg.Providers, cfg.Env, cfg.Options})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
@@ -116,58 +117,91 @@ func TestDumpsShowNoSecret(t *testing.T) {
 	noSecret(t, "the hooks block", string(cfg.HooksJSON()))
 }
 
-// No mistake and no warning shows a secret, wherever on a bad line the
-// secret sits.
-func TestProblemsShowNoSecret(t *testing.T) {
-	lines := []string{
-		// The secret is a flag's value on a line that is wrong elsewhere.
-		`provider add x --type nope --api-key sk-provider-key-0123456789`,
-		`provider add x --type llamacpp --api-key sk-provider-key-0123456789 --bogus`,
-		`provider add x --type llamacpp --api-key sk-provider-key-0123456789 --api-key sk-ant-from-env-0123456789`,
-		`provider add x --type llamacpp --extra-header "Bad Name" "Bearer header-value-0123456789"`,
-		`provider add x --type llamacpp --extra-header Authorization`,
-		// The secret is in an address that is refused.
-		`provider add x --type llamacpp --base-url ftp://user:url-password-0123456789@host/`,
-		`provider add x --type llamacpp --base-url "https://user:url-password-0123456789@/v1?token=url-query-token-0123456789"`,
-		`option mem-embeddings-url //embed:embed-password-0123456789@embed.example.com`,
-		`mcp add web --type http --url "user:url-password-0123456789@nowhere"`,
-		// The secret landed where a flag or a name was expected.
-		`provider add x --type llamacpp --name y sk-provider-key-0123456789`,
-		`provider add x sk-provider-key-0123456789 --type llamacpp`,
-		`provider add sk-provider-key-0123456789/x --type llamacpp`,
-		`option metrics-key metrics-key-0123456789 extra`,
-		`option metrics-key`,
-		`mcp add tool --command x --env "BAD NAME" mcp-env-value-0123456789`,
-		`mcp add tool --env TOKEN mcp-env-value-0123456789`,
-		`mcp add web --type http --url https://h --header "Bad Name" mcp-header-value-0123456789`,
-		`lsp add l --env TOKEN lsp-env-value-0123456789`,
-		// The secret is on a line of shell.
-		`OPENAI_API_KEY=sk-provider-key-0123456789`,
-		`export OPENAI_API_KEY=sk-provider-key-0123456789`,
-		`provider add x --type llamacpp --api-key sk-provider-key-0123456789; echo done`,
-		// A continuation was forgotten, so the key is a line of its own.
-		`sk-provider-key-0123456789`,
-		`"Bearer header-value-0123456789"`,
+// What a stranger's file would do is shown before the folder is trusted.
+// Whatever that file reads from the environment is named there, and its
+// value is not: a file cannot get a secret onto the screen by asking for
+// it.
+func TestHeldShowsNoSecret(t *testing.T) {
+	in := inputs(newFS().put(projJSON, `{
+  "providers": {
+    "x": {"type": "openai-compatible", "baseUrl": ["https://203.0.113.5/${PATH_SECRET}/v1", "https://${HEADER_SECRET}@203.0.113.5", "https://203.0.113.5/plain"],
+          "apiKey": "${ANTHROPIC_API_KEY}", "headers": {"X-One": "Bearer ${HEADER_SECRET}", "X-Two": "sk-provider-key-0123456789"}}
+  },
+  "env": {"DEPLOY_TOKEN": "env-block-value-0123456789"},
+  "options": {"memEmbeddingsUrl": "https://embed:embed-password-0123456789@203.0.113.5/"}
+}`))
+	in.Trusted = false
+	in.Environ = append(in.Environ, secretEnv...)
+	cfg, problems := load(t, in)
+	if cfg == nil || len(problems) != 0 || len(cfg.Held) != 3 {
+		t.Fatalf("the project's file is read and held:\n%s", showProblems(problems))
 	}
-	for _, line := range lines {
-		in := withRC(line + "\n")
-		in.Environ = append(in.Environ, "ANTHROPIC_API_KEY=sk-ant-from-env-0123456789")
-		cfg, problems := load(t, in)
-		if cfg != nil {
-			t.Errorf("%q loaded; it should have been refused", line)
-		}
-		for _, p := range problems {
-			noSecret(t, "a problem for "+line, p.String())
-		}
+	want := "provider x (openai-compatible) at an address filled in from the environment at an address filled in from the environment at https://203.0.113.5/plain, reading $PATH_SECRET, $HEADER_SECRET, $ANTHROPIC_API_KEY"
+	if cfg.Held[0].Text != want {
+		t.Errorf("what is held of the provider:\n got %q\nwant %q", cfg.Held[0].Text, want)
 	}
+	for _, h := range cfg.Held {
+		noSecret(t, "what is held", h.Text)
+	}
+	noSecret(t, "Config.String", cfg.String())
+	for _, f := range Doctor(context.Background(), cfg, problems, Probes{}) {
+		noSecret(t, "doctor", f.Text)
+	}
+}
 
-	// In a settings file.
-	for _, text := range []string{
-		`{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789", "BAD NAME": "env-block-value-0123456789"}}`,
-		`{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789"}, "nope": 1}`,
-		`{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789", "DEPLOY_TOKEN": "env-block-value-0123456789"}}`,
-	} {
-		cfg, problems := load(t, inputs(newFS().put(userJSON, text)))
+// No mistake and no warning shows a secret, wherever in a file with a
+// mistake the secret sits.
+func TestProblemsShowNoSecret(t *testing.T) {
+	files := []string{
+		// The secret is a value in a provider that is wrong elsewhere.
+		`{"providers": {"x": {"type": "nope", "apiKey": "sk-provider-key-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": "sk-provider-key-0123456789", "bogus": true}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": "sk-provider-key-0123456789", "apiKey": "sk-ant-from-env-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "headers": {"Bad Name": "Bearer header-value-0123456789"}}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "headers": {"Authorization": "Bearer header-value-0123456789", "Authorization": "x"}}}}`,
+		`{"providers": {"x": {"apiKey": "sk-provider-key-0123456789"}}}`,
+		// The secret is in an address that is refused.
+		`{"providers": {"x": {"type": "llamacpp", "baseUrl": "ftp://user:url-password-0123456789@host/"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "baseUrl": "https://user:url-password-0123456789@/v1?token=url-query-token-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "baseUrl": ["http://127.0.0.1:1", "url-password-0123456789"]}}}`,
+		`{"options": {"memEmbeddingsUrl": "//embed:embed-password-0123456789@embed.example.com"}}`,
+		// The secret landed where a name, a word or another kind of value
+		// was expected.
+		`{"providers": {"sk-provider-key-0123456789/x": {"type": "llamacpp"}}}`,
+		`{"providers": {"x": {"type": "sk-provider-key-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "disabled": "sk-provider-key-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "discoverModels": "sk-provider-key-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": ["sk-provider-key-0123456789"]}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "headers": "Bearer header-value-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "headers": {"Authorization": ["Bearer header-value-0123456789"]}}}}`,
+		`{"providers": {"x": "sk-provider-key-0123456789"}}`,
+		`{"providers": "sk-provider-key-0123456789"}`,
+		`{"sk-provider-key-0123456789": true}`,
+		`{"model": "sk-provider-key-0123456789"}`,
+		`{"models": {"sk-provider-key-0123456789": {}}}`,
+		`{"options": {"sk-provider-key-0123456789": 1}}`,
+		`{"options": {"memoryText": "sk-provider-key-0123456789"}}`,
+		`{"options": {"debug": "sk-provider-key-0123456789"}}`,
+		`{"options": {"requestTimeout": "sk-provider-key-0123456789"}}`,
+		`{"hosts": {"h": {"ssh": "a@203.0.113.1", "sk-provider-key-0123456789": 1}}}`,
+		`{"hooks": {"sk-provider-key-0123456789": []}}`,
+		// The secret is in a variable that is written wrongly, or comes
+		// from one into a value that is refused.
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": "${sk-provider-key-0123456789"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": "${sk-provider-key-0123456789}"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "headers": {"X-One": "Bearer header-value-0123456789 ${"}}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "baseUrl": "ftp://${HEADER_SECRET}@host/"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "baseUrl": "https://u:${HEADER_SECRET}@"}}}`,
+		// The file is not JSON, at the secret or after it.
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": sk-provider-key-0123456789}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": "sk-provider-key-0123456789" "extra"}}}`,
+		`{"providers": {"x": {"type": "llamacpp", "apiKey": "sk-provider-key-0123456789`,
+		`"sk-provider-key-0123456789"`,
+	}
+	for _, text := range files {
+		in := withConfig(text)
+		in.Environ = append(in.Environ, secretEnv...)
+		cfg, problems := load(t, in)
 		if cfg != nil {
 			t.Errorf("%s loaded; it should have been refused", text)
 		}
@@ -176,20 +210,37 @@ func TestProblemsShowNoSecret(t *testing.T) {
 		}
 	}
 
-	// A good line with a secret, beside a bad line that has none: the
+	// In the env block.
+	for _, text := range []string{
+		`{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789", "BAD NAME": "env-block-value-0123456789"}}`,
+		`{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789"}, "nope": 1}`,
+		`{"env": {"DEPLOY_TOKEN": "env-block-value-0123456789", "DEPLOY_TOKEN": "env-block-value-0123456789"}}`,
+	} {
+		cfg, problems := load(t, withConfig(text))
+		if cfg != nil {
+			t.Errorf("%s loaded; it should have been refused", text)
+		}
+		for _, p := range problems {
+			noSecret(t, "a problem for "+text, p.String())
+		}
+	}
+
+	// A good provider with a secret, beside a mistake that has none: the
 	// load error as a whole, which a caller may print or log.
-	_, _, err := Load(withRC("provider add x --type llamacpp --api-key sk-provider-key-0123456789\noption nope\n"))
+	_, _, err := Load(withConfig(`{"providers": {"x": {"type": "llamacpp", "apiKey": "sk-provider-key-0123456789"}}, "options": {"nope": 1}}`))
 	if err == nil {
 		t.Fatal("want a refusal")
 	}
 	noSecret(t, "the load error", err.Error())
 
-	// A warning about a provider that is left out, and one about a
-	// variable that is not set.
-	in := withRC("provider add gpt --type openai --extra-header X \"$UNSET_HEADER\"\nprovider add c --type anthropic --base-url https://u:url-password-0123456789@api.example.com\n")
+	// A warning about a provider that is left out for a variable that is
+	// not set, and one about a provider with no key.
+	in := withConfig(`{"providers": {
+  "gpt": {"type": "openai", "apiKey": "sk-provider-key-0123456789", "headers": {"X": "${UNSET_HEADER} Bearer header-value-0123456789"}},
+  "c": {"type": "anthropic", "baseUrl": "https://u:url-password-0123456789@api.example.com"}}}`)
 	cfg, problems := load(t, in)
-	if cfg == nil || len(Warnings(problems)) != 3 {
-		t.Fatalf("want three warnings:\n%s", showProblems(problems))
+	if cfg == nil || len(Warnings(problems)) != 2 {
+		t.Fatalf("want two warnings:\n%s", showProblems(problems))
 	}
 	for _, p := range problems {
 		noSecret(t, "a warning", p.String())

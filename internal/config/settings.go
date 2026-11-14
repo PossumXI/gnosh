@@ -8,89 +8,16 @@ import (
 	"time"
 )
 
-// settingsKeyNames lists the keys a settings file may hold, for a message.
-func settingsKeyNames() string {
-	var names []string
-	for _, k := range settingsKeys {
-		if k.key != "$schema" {
-			names = append(names, k.key)
-		}
-	}
-	return list(names)
-}
-
-// readSettings reads a JSON settings file in Claude Code's shape into ops.
-// With onlyHooks set, only the file's hooks block is read and its other
-// keys are passed over: that is how the one old-named project file is
-// read (see oldNames).
-func readSettings(s *source, data []byte, onlyHooks bool) {
-	root, jerr := parseJSON(data)
-	if jerr != nil {
-		s.errorf(jerr.line, "this settings file is not JSON gnosh can read (%s), so none of it is in force. It must be plain JSON: no comments, no comma after the last item.", clip(jerr.msg, 160))
-		return
-	}
-	if root.kind != jObject {
-		s.errorf(root.line, "a settings file holds one JSON object, in braces, with the keys %s. This one holds %s, so none of it is in force.", settingsKeyNames(), root.kind.word())
-		return
-	}
-	for _, f := range s.unique(root, "") {
-		if onlyHooks && f.key != "hooks" {
-			continue
-		}
-		switch f.key {
-		case "$schema":
-		case "permissions":
-			s.settingsPermissions(f)
-		case "hooks":
-			s.settingsHooks(f)
-		case "env":
-			s.settingsEnv(f)
-		case "disableAllHooks":
-			if f.val.kind != jBool {
-				s.errorf(f.line, "\"disableAllHooks\" is true or false, and here it is %s.", f.val.kind.word())
-				continue
-			}
-			off, o := f.val.b, s.at(f.line)
-			s.add(op{kind: KindHookOff, text: "disableAllHooks " + strconv.FormatBool(off), origin: o,
-				apply: func(b *builder) { b.hooksOff.put(off, o) }})
-		default:
-			hint := ""
-			if f.key == "model" {
-				hint = " The model is chosen in gnoshrc, with model large <provider>/<id>."
-			}
-			s.errorf(f.line, "%s is not a key gnosh reads in a settings file. The file holds only %s, in Claude Code's shape; everything else is set in gnoshrc.%s", showName(f.key), settingsKeyNames(), hint)
-		}
-	}
-}
-
-// unique returns an object's members, reporting any key given twice. Which
-// of two copies would count is anyone's guess, so neither does.
-func (s *source) unique(n *jnode, under string) []jfield {
-	seen := map[string]int{}
-	var out []jfield
-	for _, f := range n.fields {
-		if first, twice := seen[f.key]; twice {
-			s.errorf(f.line, "the key %s is given twice (it is also on line %d). Give it once.", showName(under+f.key), first)
-			continue
-		}
-		seen[f.key] = f.line
-		out = append(out, f)
-	}
-	return out
-}
+// This file reads the keys a config file shares with Claude Code's
+// settings files, in Claude Code's shape and with its meaning:
+// permissions, hooks and env. A block copied out of a Claude Code settings
+// file works as it is.
 
 // settingsPermissions reads the permissions object.
 func (s *source) settingsPermissions(f jfield) {
 	if f.val.kind != jObject {
 		s.errorf(f.line, "\"permissions\" is an object holding lists named allow, ask and deny, and here it is %s, so none of it is in force.", f.val.kind.word())
 		return
-	}
-	keys := func() string {
-		var names []string
-		for _, k := range permissionKeys {
-			names = append(names, k.key)
-		}
-		return list(names)
 	}
 	for _, m := range s.unique(f.val, "permissions.") {
 		o := s.at(m.line)
@@ -144,10 +71,12 @@ func (s *source) settingsPermissions(f jfield) {
 			v := m.val.b
 			s.add(op{kind: KindMode, text: "denyInsteadOfPrompting", origin: o, feature: FeaturePermissions, what: "a permission setting",
 				apply: func(b *builder) { b.denyInstead.put(v, o) }})
-		case "blockReadsOutsideWorkingDirectories", "blockWritesOutsideWorkingDirectories":
-			s.errorf(m.line, "\"permissions.%s\" is planned and not built yet, so it would not hold anything back. Take it out until it is built.", m.key)
 		default:
-			s.errorf(m.line, "%s is not a key gnosh reads under \"permissions\". The keys are: %s.", showName(m.key), keys())
+			if slices.Contains(claudeCodePermissionKeys, m.key) {
+				s.errorf(m.line, "\"permissions.%s\" is a setting Claude Code has and gnosh has not built, so it would not hold anything back here. Take it out of this file.", m.key)
+				continue
+			}
+			s.errorf(m.line, "%s is not a key gnosh reads under \"permissions\". The keys are: %s.", showName(m.key), keyNames(permissionKeys))
 		}
 	}
 }

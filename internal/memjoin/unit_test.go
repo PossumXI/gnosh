@@ -479,7 +479,7 @@ func TestPlanMode(t *testing.T) {
 		cfg := &config.Config{}
 		cfg.Permissions.Mode.V = "plan"
 		cfg.Options.MemReviewCloses.V = true
-		cfg.Options.AutoSummarize.V = true
+		cfg.Options.AutoCompactEnabled.V = true
 		s.Config = cfg
 	})
 	b.setMode("plan")

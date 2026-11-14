@@ -253,7 +253,7 @@ func TestPlainEndOfInput(t *testing.T) {
 func TestPlainTrustQuestion(t *testing.T) {
 	w := apptest.NewWorld(t, editScript()...)
 	w.Write("a.txt", "two plus two\n")
-	w.Write(".gnoshrc", "permissions allow Edit\n")
+	w.Write("gnosh.json", `{"permissions": {"allow": ["Edit"]}}`+"\n")
 	s := sit(t, w)
 	s.see("? Trust this folder?")
 	s.see("Edit")

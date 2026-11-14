@@ -83,7 +83,7 @@ func TestGnoshMem(t *testing.T) {
 	w.run("-y", "-p", "plan the release").wantCode(t, 0)
 
 	// From here on no provider is configured at all.
-	if err := os.WriteFile(filepath.Join(w.ConfigDir(), "gnoshrc"), nil, 0o600); err != nil {
+	if err := os.WriteFile(w.SettingsFile(), []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	asked := len(w.Model.Paths())
@@ -120,7 +120,7 @@ func TestGnoshMem(t *testing.T) {
 	// A mistake in the config stops a session from starting, and not
 	// this: where mem is kept does not depend on the config, and reading
 	// it needs nothing the config holds.
-	if err := os.WriteFile(filepath.Join(w.ConfigDir(), "gnoshrc"), []byte("frobnicate yes\n"), 0o600); err != nil {
+	if err := os.WriteFile(w.SettingsFile(), []byte(`{"frobnicate": true}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	r = w.run("mem")

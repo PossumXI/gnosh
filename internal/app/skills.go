@@ -219,8 +219,8 @@ func (l *live) typedSkills() []CommandInfo {
 	return out
 }
 
-// skillHidden says the person's settings keep a skill from the model
-// (disable-skill).
+// skillHidden says the person's settings keep a skill from the model (the
+// disabledSkills option).
 func (l *live) skillHidden(name string) bool {
 	for _, d := range l.cfg.Options.DisabledSkills {
 		if d.V == name {

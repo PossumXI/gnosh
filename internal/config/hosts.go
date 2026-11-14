@@ -29,10 +29,10 @@ var (
 // declared it (the host's Origin).
 //
 // A declaration is right when its name is a usable one that is not this
-// machine's and is not declared twice, and its destination is user@address
-// or one word: an address, or a Host alias of the person's ssh
-// configuration. Whether an alias exists is ssh's to say; gnosh does not
-// read the ssh configuration.
+// machine's and is not declared twice, its destination is user@address or
+// one word (an address, or a Host alias of the person's ssh configuration),
+// and what is written about it is one line of plain words. Whether an
+// alias exists is ssh's to say; gnosh does not read the ssh configuration.
 func checkHosts(hosts []Host) []Problem {
 	var out []Problem
 	bad := func(h Host, format string, args ...any) {
@@ -63,6 +63,8 @@ func checkHosts(hosts []Host) []Problem {
 			bad(h, "the ssh destination of the host %s, %s, is not a user and an address with one @ between them. %s.", h.Name, show(h.SSH), form)
 		case hostPort.MatchString(h.SSH):
 			bad(h, "the ssh destination of the host %s, %s, ends in a port number, which ssh would take for part of the machine's name. %s; a port belongs in ~/.ssh/config, under a Host alias (Port 2222).", h.Name, show(h.SSH), form)
+		case !printable(h.Description):
+			bad(h, "the description of the host %s holds a line break or another control character. A description is one line of plain words: the model is shown it as written.", h.Name)
 		default:
 			if was, twice := first[h.Name]; twice {
 				bad(h, "the host %s is declared twice: here as %s, and at %s as %s. A name stands for one machine, so that a command for it can only go to that one: take one of the two declarations out.",

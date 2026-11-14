@@ -67,7 +67,7 @@ func (l *live) buildTools() error {
 		DefaultTimeout:      limits.BashDefaultTimeout.V,
 		MaxTimeout:          limits.BashMaxTimeout.V,
 		TimeoutToBackground: true,
-		MaxBackground:       l.cfg.Options.MaxBackgroundJobs.V,
+		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
 		MaxOutputChars:      limits.BashMaxOutput.V,
 		NoOutputTool:        true,
 		// The machines the config declares, and this one as every result

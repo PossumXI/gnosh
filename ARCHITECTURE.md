@@ -43,7 +43,7 @@ on disk. It is written in Go, from scratch (see PROVENANCE.md).
 | `internal/transcript` | Sessions as append-only JSONL files, and the view the model is sent: rewinds, summaries, the frame rule, the slide, repair. `CONFORMANCE.md` ties it to `spec/gnosh/frames.md`. |
 | `internal/permission` | The decision engine: modes, rules, its own reader of shell command lines, path rules, the read-only command table, protected paths. |
 | `internal/hooks` | Hook events and their protocol, strict configuration, failing closed. |
-| `internal/config`, `internal/trust` | `gnoshrc` (a list of settings), the JSON settings files, the state file, `doctor`; the folder-trust record and what an untrusted folder may still do. |
+| `internal/config`, `internal/trust` | `gnosh.json` (JSON with comments: Claude Code's `permissions`, `hooks` and `env`, and gnosh's own `providers`, `models`, `hosts` and `options` beside them), the state file, `doctor`; the folder-trust record and what an untrusted folder may still do. |
 | `internal/cli` | The argument parser and the table of commands and flags. |
 | `internal/instructions` | The instruction files a project and a person keep for the model. |
 | `internal/prompt` | Every word gnosh says to a model, one text per file, and the defusing of control tokens. |

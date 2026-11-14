@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -110,15 +111,13 @@ func TestSettingsRefusals(t *testing.T) {
 		line   int
 		pieces []string
 	}{
-		{"not JSON", `{"permissions": `, 1, []string{"not JSON gnosh can read", "none of it is in force"}},
-		{"a comment", "{\n  // why\n  \"env\": {}\n}", 2, []string{"not JSON gnosh can read", "no comments"}},
-		{"a trailing comma", "{\n  \"env\": {},\n}", 2, []string{"not JSON gnosh can read", "no comma after the last item"}},
+		{"not JSON", `{"permissions": `, 1, []string{"not JSON gnosh can read", "none of it is in force", "comments and a comma after the last item are allowed, and nothing else is"}},
+		{"single quotes", "{\n  'env': {}\n}", 2, []string{"not JSON gnosh can read", "invalid character"}},
+		{"a comment left open", "{\n  /* why\n  \"env\": {}\n}", 2, []string{"not JSON gnosh can read", "never closed"}},
 		{"text after the end", "{}\n{}", 2, []string{"more text after the end"}},
 		{"a bare list", `["Bash"]`, 1, []string{"holds one JSON object", "a list", "none of it is in force"}},
 		{"a bare string", `"x"`, 1, []string{"holds one JSON object", "a string"}},
-		{"an unknown key", "{\n  \"permisions\": {}\n}", 2, []string{`"permisions"`, "not a key gnosh reads in a settings file", "permissions, hooks, env, disableAllHooks", "gnoshrc"}},
-		{"a Claude Code key gnosh does not read", "{\n  \"model\": \"opus\"\n}", 2, []string{`"model"`, "not a key gnosh reads", "model large <provider>/<id>"}},
-		{"the earlier gnosh's shape", "{\n  \"providers\": {}\n}", 2, []string{`"providers"`, "everything else is set in gnoshrc"}},
+		{"an unknown key", "{\n  \"permisions\": {}\n}", 2, []string{`"permisions"`, "not a key gnosh knows", "permissions, hooks, env, disableAllHooks"}},
 		{"a key given twice", "{\n  \"env\": {},\n  \"env\": {}\n}", 3, []string{`"env"`, "given twice", "line 2"}},
 		{"hooks of the wrong shape", "{\n  \"hooks\": \"x\"\n}", 2, []string{`"hooks" is an object`, "a string", "none of the file's hooks is in force"}},
 		{"permissions of the wrong shape", `{"permissions": ["Bash"]}`, 1, []string{`"permissions" is an object`, "a list"}},
@@ -135,7 +134,8 @@ func TestSettingsRefusals(t *testing.T) {
 		{"a mode gnosh does not have", `{"permissions": {"defaultMode": "yolo"}}`, 1, []string{`"yolo"`, "not a permission mode", "default, plan, acceptEdits, dontAsk, bypassPermissions"}},
 		{"a mode that is not a string", `{"permissions": {"defaultMode": true}}`, 1, []string{`"permissions.defaultMode" is one of`}},
 		{"a switch with another value", `{"permissions": {"disableBypassPermissionsMode": true}}`, 1, []string{`takes the one value "disable"`}},
-		{"a guard that is not built", `{"permissions": {"blockReadsOutsideWorkingDirectories": true}}`, 1, []string{"planned and not built yet", "would not hold anything back"}},
+		{"a guard Claude Code has and gnosh has not built", `{"permissions": {"blockReadsOutsideWorkingDirectories": true}}`, 1, []string{`"permissions.blockReadsOutsideWorkingDirectories" is a setting Claude Code has and gnosh has not built`, "would not hold anything back"}},
+		{"the other one", `{"permissions": {"blockWritesOutsideWorkingDirectories": true}}`, 1, []string{"a setting Claude Code has and gnosh has not built"}},
 		{"directories that are not a list", `{"permissions": {"additionalDirectories": "/x"}}`, 1, []string{"is a list of directories"}},
 
 		{"an event gnosh does not fire", "{\"hooks\": {\n \"pre_tool_use\": []}}", 2, []string{`"pre_tool_use"`, "Did you mean PreToolUse?"}},
@@ -250,12 +250,10 @@ func TestDisableAllHooks(t *testing.T) {
 // given twice in one file is kept once.
 func TestSettingsListsMerge(t *testing.T) {
 	fsys := newFS().
-		put(userJSON, `{"permissions": {"allow": ["Read", "Read"], "deny": ["WebFetch"], "additionalDirectories": ["/a"]},
-  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./user.sh"}]}]}}`).
-		put(userRC, "permissions allow Grep\npermissions deny WebSearch\nhook add Stop --command ./rc.sh\n").
-		put(projJSON, `{"permissions": {"allow": ["Read", "Glob"], "deny": ["Bash(rm *)"], "additionalDirectories": ["/a", "/b"]},
+		put(userJSON, `{"permissions": {"allow": ["Read", "Read", "Grep"], "deny": ["WebFetch", "WebSearch"], "additionalDirectories": ["/a"]},
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./user.sh"}]}, {"hooks": [{"type": "command", "command": "./more.sh"}]}]}}`).
+		put(projJSON, `{"permissions": {"allow": ["Read", "Glob", "Bash(go test *)"], "deny": ["Bash(rm *)"], "additionalDirectories": ["/a", "/b"]},
   "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./project.sh"}]}]}}`).
-		put(projRC, "permissions allow 'Bash(go test *)'\n").
 		put(localJSON, `{"permissions": {"allow": ["Bash(npm test *)"]}}`)
 	in := inputs(fsys)
 	in.Flags.Settings = `{"permissions": {"deny": ["Agent"]}}`
@@ -275,9 +273,7 @@ func TestSettingsListsMerge(t *testing.T) {
 	}
 	want := []string{
 		"user " + userJSON + " " + userDir,
-		"user " + userRC + " " + userDir,
 		"project " + projJSON + " " + testCwd,
-		"project " + projRC + " " + testCwd,
 		"local " + localJSON + " " + testCwd,
 		"command line --settings " + testCwd,
 		"command line  " + testCwd,
@@ -289,7 +285,7 @@ func TestSettingsListsMerge(t *testing.T) {
 	for _, h := range cfg.Hooks {
 		hooks = append(hooks, h.Scope+":"+h.Command)
 	}
-	if !slices.Equal(hooks, []string{"user:./user.sh", "user:./rc.sh", "project:./project.sh"}) {
+	if !slices.Equal(hooks, []string{"user:./user.sh", "user:./more.sh", "project:./project.sh"}) {
 		t.Errorf("hooks of every file run: %q", hooks)
 	}
 	var dirs []string
@@ -326,7 +322,14 @@ func TestSettingsFlag(t *testing.T) {
 	wantProblem(t, problems, Error, "--settings", 0, "/work/proj/nope.json is not there", "the JSON itself")
 	in.Flags.Settings = "{\n\"nope\": 1}"
 	_, problems = load(t, in)
-	wantProblem(t, problems, Error, "--settings", 2, `"nope"`, "not a key gnosh reads")
+	wantProblem(t, problems, Error, "--settings", 2, `"nope"`, "not a key gnosh knows")
+
+	// It takes every key a config file takes, and comments too.
+	in.Flags.Settings = "{ // for this run\n" + one + ", \"model\": \"p/m\", \"options\": {\"debug\": true,}, }"
+	cfg = mustLoad(t, in)
+	if len(cfg.Providers) != 1 || cfg.Large.Model.V.String() != "p/m" || !cfg.Options.Debug.V || cfg.Options.Debug.Origin.Layer != LayerFlag {
+		t.Errorf("--settings with gnosh's own keys: %+v", cfg)
+	}
 }
 
 // A repository cannot switch the questions off: bypassPermissions as a
@@ -359,33 +362,41 @@ func TestSettingsModesThatAreNotHonoured(t *testing.T) {
 	}
 }
 
-// The one old-named project file: klash.json is read for its hooks block
-// only, and only when there is no gnosh.json.
-func TestOldProjectSettingsName(t *testing.T) {
-	old := `{"providers": {"x": {}}, "options": {"debug": true},
- "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./video-exists.sh"}]}]}}`
-	fsys := newFS().put("/work/proj/klash.json", old)
-	cfg, problems := load(t, inputs(fsys))
-	if cfg == nil {
-		t.Fatalf("klash.json should load for its hooks:\n%s", showProblems(problems))
+// The hooks in force come back out in Claude Code's shape, for a hook
+// runner that reads that shape.
+func TestHooksJSON(t *testing.T) {
+	cfg := mustLoad(t, withConfig(`{"hooks": {
+  "Stop": [{"hooks": [{"type": "command", "command": "/hooks/tests-must-pass.sh", "timeout": 1800}]}],
+  "PreToolUse": [
+    {"matcher": "Bash", "hooks": [{"type": "command", "command": "/hooks/no-force-push.sh"}]},
+    {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "/fmt.sh", "timeout": 1.5}]}
+  ],
+  "PostToolUse": [{"matcher": "mcp__github__.*", "hooks": [{"type": "command", "command": "/log.sh"}]}]
+}}`))
+	var got []string
+	for _, h := range cfg.Hooks {
+		got = append(got, h.Event+"|"+h.Matcher+"|"+h.Command+"|"+h.Timeout.String())
 	}
-	if len(problems) != 0 {
-		t.Errorf("no warning is printed about an old name:\n%s", showProblems(problems))
+	want := []string{
+		"Stop||/hooks/tests-must-pass.sh|30m0s",
+		"PreToolUse|Bash|/hooks/no-force-push.sh|0s",
+		"PreToolUse|Edit|Write|/fmt.sh|1.5s",
+		"PostToolUse|mcp__github__.*|/log.sh|0s",
 	}
-	if len(cfg.Hooks) != 1 || cfg.Hooks[0].Command != "./video-exists.sh" || cfg.Hooks[0].Scope != "project" {
-		t.Errorf("hooks from klash.json: %+v", cfg.Hooks)
+	if !slices.Equal(got, want) {
+		t.Errorf("hooks:\n got %q\nwant %q", got, want)
 	}
-	if f := cfg.Files[0]; f.Path != "/work/proj/klash.json" || !f.OldName {
-		t.Errorf("files: %+v", cfg.Files)
+	var block map[string][]struct {
+		Matcher string
+		Hooks   []struct {
+			Type, Command string
+			Timeout       float64
+		}
 	}
-
-	fsys.put(projJSON, `{"env": {"A": "b"}}`)
-	cfg = mustLoad(t, inputs(fsys))
-	if len(cfg.Hooks) != 0 {
-		t.Errorf("with a gnosh.json there, klash.json is not read: %+v", cfg.Hooks)
+	if err := json.Unmarshal(cfg.HooksJSON(), &block); err != nil {
+		t.Fatalf("HooksJSON: %v", err)
 	}
-
-	// Its hooks block is held to the same rules as any other.
-	_, problems = load(t, inputs(newFS().put("/work/proj/klash.json", `{"hooks": {"stop": []}}`)))
-	wantProblem(t, problems, Error, "/work/proj/klash.json", 1, "Did you mean Stop?")
+	if g := block["PreToolUse"]; len(g) != 2 || g[1].Matcher != "Edit|Write" || g[1].Hooks[0].Type != "command" || g[1].Hooks[0].Timeout != 1.5 {
+		t.Errorf("HooksJSON PreToolUse: %+v", g)
+	}
 }

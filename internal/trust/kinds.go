@@ -2,16 +2,17 @@ package trust
 
 // The kinds of thing a folder's own settings can hold. The config package
 // sorts every setting of a project's files into one of these words (it has
-// the same list, as its Kind constants), and Restricts says which of them
-// still apply in a folder that is not trusted. A word that is not in this
-// list is treated as the most dangerous kind: it is held, and the question
-// mentions it.
+// the ones a config file can say today, as its Kind constants; the rest
+// are for what is found some other way, or not read from a config file
+// yet), and Restricts says which of them still apply in a folder that is
+// not trusted. A word that is not in this list is treated as the most
+// dangerous kind: it is held, and the question mentions it.
 const (
 	KindProvider      = "provider"       // a model provider: its address, its key
 	KindModel         = "model"          // a model registered or chosen
 	KindHost          = "host"           // a machine to log in to
 	KindHook          = "hook"           // a command run at a named moment
-	KindHookOff       = "hook-off"       // removing a hook, or switching all hooks off
+	KindHookOff       = "hook-off"       // switching all hooks off
 	KindMCPLocal      = "mcp-local"      // an MCP server started on this machine
 	KindMCPOnline     = "mcp-online"     // an MCP server at an address
 	KindLSP           = "lsp"            // a language server
@@ -26,7 +27,7 @@ const (
 	KindAddress       = "address"        // an address for analytics, embeddings or deliverables
 	KindDisabledSkill = "disabled-skill" // a skill hidden from the model
 	KindDisabledTool  = "disabled-tool"  // a tool taken away from the model
-	KindRemoval       = "removal"        // removing a provider, model, host or server
+	KindRemoval       = "removal"        // taking away a provider, a model or a host
 	KindRunsCommand   = "runs-command"   // a value gnosh would expand by running something
 	KindGitProgram    = "git-program"    // a program the repository's own git settings name
 	KindSkillsLink    = "skills-link"    // a skills folder that is a link out of the folder

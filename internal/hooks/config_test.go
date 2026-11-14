@@ -221,11 +221,11 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 }
 
 func TestNewHook(t *testing.T) {
-	h, err := NewHook(Spec{Event: "Stop", Command: "./hooks/tests-must-pass.sh", Name: "tests", Timeout: 1800 * time.Second, Source: "gnoshrc:7", Global: true})
+	h, err := NewHook(Spec{Event: "Stop", Command: "./hooks/tests-must-pass.sh", Name: "tests", Timeout: 1800 * time.Second, Source: "gnosh.json:7", Global: true})
 	if err != nil {
 		t.Fatalf("NewHook: %v", err)
 	}
-	want := Hook{Event: Stop, Command: "./hooks/tests-must-pass.sh", Name: "tests", Timeout: 1800 * time.Second, Source: "gnoshrc:7", Global: true}
+	want := Hook{Event: Stop, Command: "./hooks/tests-must-pass.sh", Name: "tests", Timeout: 1800 * time.Second, Source: "gnosh.json:7", Global: true}
 	if h != want {
 		t.Errorf("got %+v\nwant %+v", h, want)
 	}
@@ -254,13 +254,13 @@ func TestNewHookRefuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.spec.Source = "gnoshrc:3"
+			tt.spec.Source = "gnosh.json:3"
 			h, err := NewHook(tt.spec)
 			var ce *ConfigError
 			if !errors.As(err, &ce) {
 				t.Fatalf("NewHook returned %+v, %v; want a *ConfigError", h, err)
 			}
-			contains(t, "the error", err.Error(), append(tt.want, "gnoshrc:3: ")...)
+			contains(t, "the error", err.Error(), append(tt.want, "gnosh.json:3: ")...)
 			if h != (Hook{}) {
 				t.Errorf("a refused line still gave a hook: %+v", h)
 			}
@@ -356,13 +356,13 @@ func TestCheckRefusesARelativeCommandInTheUsersOwnConfig(t *testing.T) {
 		"[ -f go.mod ] && go vet ./...", "LOG=logs/hook.log check", "echo a/b",
 	}
 	for _, command := range relative {
-		global := Config{Hooks: []Hook{{Event: Stop, Command: command, Global: true, Source: "gnoshrc:2"}}}
+		global := Config{Hooks: []Hook{{Event: Stop, Command: command, Global: true, Source: "gnosh.json:2"}}}
 		problems := Check(global, Options{Fires: Events()})
 		if len(problems) != 1 || problems[0].Warning {
 			t.Errorf("%q in the user's own config: got %s, want one problem", command, problemsText(problems))
 			continue
 		}
-		contains(t, "the problem", problems[0].String(), "gnoshrc:2: ", "starts with a relative path", "every folder", "full path")
+		contains(t, "the problem", problems[0].String(), "gnosh.json:2: ", "starts with a relative path", "every folder", "full path")
 		project := Config{Hooks: []Hook{{Event: Stop, Command: command}}}
 		if problems := Check(project, Options{Fires: Events()}); len(problems) != 0 {
 			t.Errorf("%q in a project's config was refused: %s", command, problemsText(problems))
@@ -450,23 +450,23 @@ func TestCheckWarnsAboutMatchersThatFitNothing(t *testing.T) {
 }
 
 func TestMergeKeepsEveryLayerInOrder(t *testing.T) {
-	userRC := Config{}
-	userRC.Add(Hook{Event: Stop, Name: "tests", Command: "/opt/hooks/tests.sh", Source: "user gnoshrc:1"})
-	userRC.Add(Hook{Event: PreToolUse, Matcher: "Bash", Command: "/opt/hooks/guard.sh", Source: "user gnoshrc:2"})
+	userOwn := Config{}
+	userOwn.Add(Hook{Event: Stop, Name: "tests", Command: "/opt/hooks/tests.sh", Source: "user file:1"})
+	userOwn.Add(Hook{Event: PreToolUse, Matcher: "Bash", Command: "/opt/hooks/guard.sh", Source: "user file:2"})
 	userJSON, err := ParseConfig(json.RawMessage(`{"PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "/opt/hooks/fmt.sh"}]}]}`), "user gnosh.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectRC := Config{}
-	projectRC.Add(Hook{Event: Stop, Name: "tests", Command: "./hooks/tests.sh", Timeout: time.Hour, Source: "project gnoshrc:1"})
-	projectRC.Add(Hook{Event: Stop, Name: "lint", Command: "./hooks/lint.sh", Source: "project gnoshrc:2"})
-	projectRC.Add(Hook{Event: PreToolUse, Matcher: "Bash", Command: "/opt/hooks/guard.sh", Source: "project gnoshrc:3"})
+	projectOwn := Config{}
+	projectOwn.Add(Hook{Event: Stop, Name: "tests", Command: "./hooks/tests.sh", Timeout: time.Hour, Source: "project file:1"})
+	projectOwn.Add(Hook{Event: Stop, Name: "lint", Command: "./hooks/lint.sh", Source: "project file:2"})
+	projectOwn.Add(Hook{Event: PreToolUse, Matcher: "Bash", Command: "/opt/hooks/guard.sh", Source: "project file:3"})
 	projectJSON, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./hooks/video.sh"}]}]}`), "project gnosh.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	all := Merge(userRC, userJSON, projectRC, projectJSON)
+	all := Merge(userOwn, userJSON, projectOwn, projectJSON)
 	var got []string
 	for _, h := range all.Hooks {
 		got = append(got, string(h.Event)+" "+h.Command+" <"+h.Source+">")
@@ -474,20 +474,20 @@ func TestMergeKeepsEveryLayerInOrder(t *testing.T) {
 	want := []string{
 		// The named hook of a later layer took the place of the earlier
 		// one, where that one stood.
-		"Stop ./hooks/tests.sh <project gnoshrc:1>",
-		"PreToolUse /opt/hooks/guard.sh <user gnoshrc:2>",
+		"Stop ./hooks/tests.sh <project file:1>",
+		"PreToolUse /opt/hooks/guard.sh <user file:2>",
 		"PreToolUse /opt/hooks/fmt.sh <user gnosh.json: PreToolUse group 1, hook 1>",
-		"Stop ./hooks/lint.sh <project gnoshrc:2>",
+		"Stop ./hooks/lint.sh <project file:2>",
 		// Hooks without a name never replace each other, even when they
 		// are the same.
-		"PreToolUse /opt/hooks/guard.sh <project gnoshrc:3>",
+		"PreToolUse /opt/hooks/guard.sh <project file:3>",
 		"Stop ./hooks/video.sh <project gnosh.json: Stop group 1, hook 1>",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("merged hooks:\n got %s\nwant %s", strings.Join(got, "\n     "), strings.Join(want, "\n     "))
 	}
-	if len(userRC.Hooks) != 2 || userRC.Hooks[0].Command != "/opt/hooks/tests.sh" {
-		t.Errorf("Merge changed a layer it was given: %+v", userRC.Hooks)
+	if len(userOwn.Hooks) != 2 || userOwn.Hooks[0].Command != "/opt/hooks/tests.sh" {
+		t.Errorf("Merge changed a layer it was given: %+v", userOwn.Hooks)
 	}
 
 	r, err := NewRunner(all, Options{Fires: Events(), ProjectDir: "/project"})

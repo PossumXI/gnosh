@@ -497,7 +497,6 @@ func hooksConfig(cfg *config.Config) (hooks.Config, []hooks.Problem) {
 			Event:   h.Event,
 			Command: h.Command,
 			Matcher: h.Matcher,
-			Name:    h.Name,
 			Timeout: h.Timeout,
 			Source:  h.Origin.String(),
 			Global:  h.Scope == "user",

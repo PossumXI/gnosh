@@ -54,6 +54,8 @@ func TestCheckHosts(t *testing.T) {
 		{"a port after the address", Host{Name: "h", SSH: "root@203.0.113.9:2222"},
 			[]string{`the ssh destination of the host h, "root@203.0.113.9:2222", ends in a port number`, "a port belongs in ~/.ssh/config, under a Host alias"}},
 		{"a port after an alias", Host{Name: "h", SSH: "render:22"}, []string{"ends in a port number"}},
+		{"a description of two lines", Host{Name: "h", SSH: "a@203.0.113.9", Description: "one\ntwo"}, []string{"the description of the host h holds a line break or another control character", "one line of plain words"}},
+		{"a description that writes to the terminal", Host{Name: "h", SSH: "a@203.0.113.9", Description: "red \x1b[31m"}, []string{"the description of the host h holds a line break or another control character"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -93,14 +95,16 @@ func TestCheckHosts(t *testing.T) {
 // project's declaration is weighed against the person's only once the
 // folder is trusted.
 func TestHostMistakesStopStartup(t *testing.T) {
-	_, problems := load(t, withRC(`
-host add render --ssh root@203.0.113.10
-host add web --ssh deploy@203.0.113.11
-host add render --ssh root@203.0.113.99 --description "another machine"
-host add far --ssh root@203.0.113.12:2222
-`))
-	wantProblem(t, problems, Error, userRC, 4, "the host render is declared twice", `here as "root@203.0.113.99"`, "at "+userRC+`:2 as "root@203.0.113.10"`)
-	wantProblem(t, problems, Error, userRC, 5, "the ssh destination of the host far", "ends in a port number")
+	_, problems := load(t, withConfig(`{
+  "hosts": {
+    "render": {"ssh": "root@203.0.113.10"},
+    "web": {"ssh": "deploy@203.0.113.11"},
+    "far": {"ssh": "root@203.0.113.12:2222"},
+    "web": {"ssh": "deploy@203.0.113.99", "description": "another machine"}
+  }
+}`))
+	wantProblem(t, problems, Error, userJSON, 5, "the ssh destination of the host far", "ends in a port number")
+	wantProblem(t, problems, Error, userJSON, 6, `"hosts.web"`, "given twice", "line 4")
 	if n := len(Errors(problems)); n != 2 {
 		t.Errorf("want the two mistakes, got %d:\n%s", n, showProblems(problems))
 	}
@@ -109,13 +113,13 @@ host add far --ssh root@203.0.113.12:2222
 	// machine: in a trusted folder its declaration of the name is a
 	// mistake, with both places named.
 	in := inputs(newFS().
-		put(userRC, "host add render --ssh root@203.0.113.10\n").
-		put(projRC, "host add render --ssh root@203.0.113.66\n"))
+		put(userJSON, `{"hosts": {"render": {"ssh": "root@203.0.113.10"}}}`).
+		put(projJSON, "{\"hosts\": {\n\"render\": {\"ssh\": \"root@203.0.113.66\"}}}"))
 	cfg, problems := load(t, in)
 	if cfg != nil {
 		t.Fatalf("a project's host of the same name as the person's loaded: %+v", cfg.Hosts)
 	}
-	wantProblem(t, problems, Error, projRC, 1, "the host render is declared twice", `here as "root@203.0.113.66"`, "at "+userRC+`:1 as "root@203.0.113.10"`)
+	wantProblem(t, problems, Error, projJSON, 2, "the host render is declared twice", `here as "root@203.0.113.66"`, "at "+userJSON+`:1 as "root@203.0.113.10"`)
 
 	// While the folder is not trusted its declaration waits, and the
 	// person's host is the one in force.
@@ -125,16 +129,22 @@ host add far --ssh root@203.0.113.12:2222
 		t.Errorf("in an untrusted folder: hosts %+v, held %+v", cfg.Hosts, cfg.Held)
 	}
 
-	// A file that would not load is never written by gnosh itself.
-	if _, err := CheckWrite(inputs(newFS().put(userRC, "host add render --ssh root@203.0.113.10\n")), userRC,
-		[]byte("host add render --ssh root@203.0.113.10\nhost add render --ssh root@203.0.113.11\n")); err == nil {
-		t.Errorf("a config file that declares a host twice passed the check before a write")
+	// The settings file gnosh writes is in the same count: a name the
+	// person declared is not declared again there, and gnosh itself never
+	// writes a file that would not load.
+	in.Trusted = true
+	in.FS = newFS().put(userJSON, `{"hosts": {"render": {"ssh": "root@203.0.113.10"}}}`)
+	if _, err := CheckWrite(in, localJSON, []byte(`{"hosts": {"render": {"ssh": "root@203.0.113.11"}}}`)); err == nil {
+		t.Errorf("a settings file that declares a host a second time passed the check before a write")
+	}
+	if _, err := CheckWrite(in, localJSON, []byte(`{"hosts": {"other": {"ssh": "root@203.0.113.11"}}}`)); err != nil {
+		t.Errorf("a settings file that declares another host was refused: %v", err)
 	}
 
 	// The listing of the configuration shows each host with what was
 	// written about it and where it came from.
-	cfg = mustLoad(t, withRC("host add render --ssh root@203.0.113.10 --description \"the render box\"\n"))
-	if text := cfg.String(); !strings.Contains(text, "render → root@203.0.113.10: the render box  ["+userRC+":1]") {
+	cfg = mustLoad(t, withConfig(`{"hosts": {"render": {"ssh": "root@203.0.113.10", "description": "the render box"}}}`))
+	if text := cfg.String(); !strings.Contains(text, "render → root@203.0.113.10: the render box  ["+userJSON+":1]") {
 		t.Errorf("the listing does not show the host:\n%s", text)
 	}
 }

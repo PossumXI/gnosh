@@ -11,36 +11,42 @@ import (
 // line it is on: nothing is sent to a model and nothing is printed on
 // standard output.
 func TestConfigMistakesStopStartup(t *testing.T) {
-	rc := func(lines ...string) func(w *apptest.World) []string {
-		return func(w *apptest.World) []string { w.RC(lines...); return nil }
+	// own writes the person's own gnosh.json: the world's provider on its
+	// first lines, and then the lines given, so that the first of them is
+	// line 4 of the file.
+	own := func(lines ...string) func(w *apptest.World) []string {
+		return func(w *apptest.World) []string {
+			w.Write(w.SettingsFile(), "{\n  \"providers\": {\"local\": {\"type\": \"llamacpp\", \"baseUrl\": \""+w.Model.URL+"\"}},\n  \"model\": \"local/test-model\",\n"+strings.Join(lines, "\n")+"\n}\n")
+			return nil
+		}
 	}
 	cases := []struct {
 		name string
 		prep func(w *apptest.World) []string
 		want []string
 	}{
-		{"a directive gnosh does not know", rc("frobnicate yes"), []string{"/home/.config/gnosh/gnoshrc:3:", `"frobnicate" is not a directive`}},
-		{"a provider type gnosh does not know", rc("provider add broken --type nosuchtype"), []string{"gnoshrc:3:", `"nosuchtype" is not a provider type`}},
-		{"shell syntax", rc("FOO=bar"), []string{"gnoshrc:3:", "not a shell script"}},
-		{"an option gnosh does not know", rc("option no-such-option 3"), []string{"gnoshrc:3:", `"no-such-option" is not an option`}},
-		{"a rule that cannot be read", rc("permissions allow 'Bash('"), []string{"gnoshrc:3:", `the allow rule "Bash(" cannot be used`}},
-		{"a hook on an event that does not exist", rc("hook add NoSuchEvent --command /bin/true"), []string{"gnoshrc:3:", `"NoSuchEvent" is not a hook event`}},
-		{"a settings key gnosh does not know", func(w *apptest.World) []string {
-			w.Write(w.ConfigDir()+"/gnosh.json", "{\n  \"nonsense\": 1\n}\n")
+		{"a key gnosh does not know", own(`  "frobnicate": true`), []string{"/home/.config/gnosh/gnosh.json:4:", `"frobnicate" is not a key gnosh knows`}},
+		{"a provider type gnosh does not know", func(w *apptest.World) []string {
+			w.Write(w.SettingsFile(), "{\n  \"providers\": {\n    \"broken\": {\"type\": \"nosuchtype\"}\n  }\n}\n")
 			return nil
-		}, []string{"/home/.config/gnosh/gnosh.json:2:", `"nonsense" is not a key`}},
+		}, []string{"gnosh.json:3:", `"nosuchtype" is not a provider type`}},
+		{"a line of the format gnosh had before", own(`  provider add local --type llamacpp`), []string{"gnosh.json:4:", "is not JSON gnosh can read", "none of it is in force"}},
+		{"an option gnosh does not know", own(`  "options": {"noSuchOption": 3}`), []string{"gnosh.json:4:", `"noSuchOption" is not an option`}},
+		{"a rule that cannot be read", own(`  "permissions": {"allow": ["Bash("]}`), []string{"gnosh.json:4:", `the allow rule "Bash(" cannot be used`}},
+		{"a hook on an event that does not exist", own(`  "hooks": {"NoSuchEvent": []}`), []string{"gnosh.json:4:", `"NoSuchEvent" is not a hook event`}},
+		{"a key given twice", own(`  "model": "local/other"`), []string{"gnosh.json:4:", `the key "model" is given twice`}},
 		{"a settings file that is not JSON", func(w *apptest.World) []string {
-			w.Write(w.ConfigDir()+"/gnosh.json", "{\n  \"permissions\": {\n")
+			w.Write(w.SettingsFile(), "{\n  \"permissions\": {\n")
 			return nil
 		}, []string{"gnosh.json:", "is not JSON gnosh can read"}},
 		{"a mistake in the project's own file", func(w *apptest.World) []string {
-			w.Write(".gnoshrc", "# a comment\nfrobnicate yes\n")
+			w.Write("gnosh.json", "{\n  // a comment\n  \"frobnicate\": true,\n}\n")
 			return nil
-		}, []string{"/proj/.gnoshrc:2:", `"frobnicate" is not a directive`}},
+		}, []string{"/proj/gnosh.json:3:", `"frobnicate" is not a key gnosh knows`}},
 		{"a rule for a tool that does not exist", func(w *apptest.World) []string {
 			return []string{"--allowedTools", "NoSuchTool(x)", "--"}
 		}, []string{"--allowedTools:", `"NoSuchTool" is not a tool gnosh has`, "Read, Write, Edit, Glob, Grep, Bash, TaskStop"}},
-		{"two mistakes are both told", rc("frobnicate yes", "option no-such-option 3"), []string{"has 2 mistakes", "gnoshrc:3:", "gnoshrc:4:"}},
+		{"two mistakes are both told", own(`  "frobnicate": true,`, `  "options": {"noSuchOption": 3}`), []string{"has 2 mistakes", "gnosh.json:4:", "gnosh.json:5:"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -73,6 +79,28 @@ func TestConfigMistakesStopStartup(t *testing.T) {
 	})
 }
 
+// A provider whose key is to come from a variable that is not set is left
+// out, and the run says so and goes on with the provider it has: a config
+// file that names a hosted provider beside a local one works on a machine
+// where the hosted one's key is not exported.
+func TestProviderWaitsForItsVariable(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "The local model answers."})
+	w.Settings(`{"providers": {"hosted": {"type": "anthropic", "apiKey": "${GNOSH_TEST_NO_SUCH_KEY}"}}}`)
+	r := run(t, w, "-p", "hello").wantCode(t, 0)
+	if r.out != "The local model answers.\n" {
+		t.Errorf("stdout = %q", r.out)
+	}
+	has(t, "stderr", r.err, "provider hosted is left out", `its "apiKey" is filled in from the environment variable GNOSH_TEST_NO_SUCH_KEY, which is not set`, "gnosh.json:")
+
+	// With the variable set, nothing is said, and the key is never shown.
+	o := testOptions(w, "-p", "/status")
+	o.Environ = append(o.Environ, "GNOSH_TEST_NO_SUCH_KEY=sk-ant-test-0123456789")
+	r = runWith(t, t.Context(), o).wantCode(t, 0)
+	hasNot(t, "stderr", r.err, "left out")
+	has(t, "/status", r.out, "hosted (anthropic)", "key: from $GNOSH_TEST_NO_SUCH_KEY")
+	hasNot(t, "/status", r.out+r.err, "sk-ant-test-0123456789")
+}
+
 // editScript is a turn that reads a file and changes it.
 func editScript() []apptest.Reply {
 	return []apptest.Reply{
@@ -89,7 +117,7 @@ func editScript() []apptest.Reply {
 func TestFolderTrust(t *testing.T) {
 	project := func(w *apptest.World) {
 		w.Write("a.txt", "two plus two\n")
-		w.Write(".gnoshrc", "permissions allow Edit\npermissions deny 'Read(./secret.txt)'\n")
+		w.Write("gnosh.json", `{"permissions": {"allow": ["Edit"], "deny": ["Read(./secret.txt)"]}}`+"\n")
 	}
 	t.Run("not trusted: the allow rule is held", func(t *testing.T) {
 		w := apptest.NewWorld(t, editScript()...)
@@ -242,7 +270,7 @@ func TestModelIsNeverGuessed(t *testing.T) {
 	bare := func(t *testing.T, replies ...apptest.Reply) *apptest.World {
 		w := apptest.NewWorld(t, replies...)
 		w.Model.SetModels("first-model", "second-model")
-		w.Write(w.ConfigDir()+"/gnoshrc", "provider add local --type llamacpp --base-url "+w.Model.URL+"\n")
+		w.Write(w.SettingsFile(), `{"providers": {"local": {"type": "llamacpp", "baseUrl": "`+w.Model.URL+`"}}}`+"\n")
 		return w
 	}
 	w := bare(t)
@@ -270,7 +298,7 @@ func TestModelIsNeverGuessed(t *testing.T) {
 
 	// With one model there is nothing to choose.
 	w = apptest.NewWorld(t, apptest.Reply{Text: "The only model answers."})
-	w.Write(w.ConfigDir()+"/gnoshrc", "provider add local --type llamacpp --base-url "+w.Model.URL+"\n")
+	w.Write(w.SettingsFile(), `{"providers": {"local": {"type": "llamacpp", "baseUrl": "`+w.Model.URL+`"}}}`+"\n")
 	if out := run(t, w, "-p", "hello").wantCode(t, 0).out; out != "The only model answers.\n" {
 		t.Errorf("stdout = %q", out)
 	}

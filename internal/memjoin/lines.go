@@ -223,7 +223,7 @@ func (j *join) beforeRequest(_ context.Context, info agent.RequestInfo) ([]agent
 // comes well before the point itself, so that the model can pop or split
 // the todo while there is room.
 func (j *join) largeStep(info agent.RequestInfo) string {
-	if info.Point <= 0 || (j.s.Config != nil && !j.s.Config.Options.AutoSummarize.V) {
+	if info.Point <= 0 || (j.s.Config != nil && !j.s.Config.Options.AutoCompactEnabled.V) {
 		return ""
 	}
 	stack := j.ts.Stack()

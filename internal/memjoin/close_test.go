@@ -223,7 +223,7 @@ func TestCloseReviewFailsOpenAndCanBeTurnedOff(t *testing.T) {
 	t.Run("the option turned off", func(t *testing.T) {
 		w := newWorld(t, script...)
 		w.Write("README.md", "# The docs\n")
-		w.RC("option mem-review-closes false")
+		w.Settings(`{"options": {"memReviewCloses": false}}`)
 		r := w.run("-y", "-p", "tidy the docs")
 		r.wantCode(t, 0)
 		has(t, "the pop's result", lastResult(t, w.script.requests()[4]), "done `"+docsTypo+"`")

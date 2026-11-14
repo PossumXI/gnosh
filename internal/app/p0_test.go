@@ -151,18 +151,15 @@ func TestInstructionFilesAreRead(t *testing.T) {
 	}
 }
 
-// What the config names and this build does not have stops startup, with
-// a message that says so. It is never taken and left out.
+// A setting Claude Code has and this gnosh has not built stops startup,
+// with a message that says so. It is never taken and left unused.
 func TestConfigForWhatIsNotBuiltStopsStartup(t *testing.T) {
-	for _, line := range []string{
-		"mcp add files --command /usr/bin/true",
-		"lsp add gopls --command gopls",
-	} {
-		t.Run(strings.Fields(line)[0], func(t *testing.T) {
+	for _, key := range []string{"statusLine", "enabledMcpjsonServers", "sandbox"} {
+		t.Run(key, func(t *testing.T) {
 			w := apptest.NewWorld(t)
-			w.RC(line)
+			w.Write(w.SettingsFile(), "{\n  \""+key+"\": {}\n}\n")
 			r := run(t, w, "-p", "hello").wantCode(t, 1)
-			has(t, "stderr", r.err, "gnoshrc:3:", "yet, so the setting would look in force and do nothing", "gnosh does not start with a setting like that")
+			has(t, "stderr", r.err, "gnosh.json:2:", `"`+key+`" is a setting Claude Code has and gnosh has not built`, "would do nothing here", "so nothing was started")
 			if n := len(w.Model.Requests()); n != 0 {
 				t.Errorf("the model was sent %d requests", n)
 			}

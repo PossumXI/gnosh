@@ -204,7 +204,7 @@ func (l *live) resolveRef(ctx context.Context, ref config.ModelRef, chosen bool,
 	if len(usable) == 0 {
 		why := "no model provider can be used, so there is no model to send a prompt to."
 		if len(l.cfg.Providers) == 0 {
-			why = fmt.Sprintf("no model provider is configured, so there is no model to send a prompt to. Add one to gnoshrc in %s, for example: provider add local --type llamacpp --base-url http://127.0.0.1:8080", l.cfg.Paths.ConfigDir)
+			why = fmt.Sprintf("no model provider is configured, so there is no model to send a prompt to. Add one to %s, for example: {%s}", l.cfg.Paths.UserSettings, config.ProviderExample)
 		}
 		for _, p := range l.cfg.Providers {
 			switch {
@@ -248,7 +248,7 @@ func (l *live) resolveRef(ctx context.Context, ref config.ModelRef, chosen bool,
 	}
 	switch len(all) {
 	case 0:
-		return ref, &errNoModel{fmt.Sprintf("no model is chosen and none is known: no provider lists one. Name one with -m provider/model, or register one in gnoshrc with model add.%s", noteText)}
+		return ref, &errNoModel{fmt.Sprintf("no model is chosen and none is known: no provider lists one. Name one with -m provider/model, or register one under \"models\" in gnosh.json.%s", noteText)}
 	case 1:
 		prov, id, _ := strings.Cut(all[0], "/")
 		return config.ModelRef{Provider: prov, ID: id}, nil
@@ -259,7 +259,7 @@ func (l *live) resolveRef(ctx context.Context, ref config.ModelRef, chosen bool,
 			return config.ModelRef{Provider: prov, ID: id}, nil
 		}
 	}
-	return ref, &errNoModel{fmt.Sprintf("no model is chosen, and %d are available. gnosh does not guess, because naming the wrong one makes a model server unload the one in use. Choose one with -m provider/model, or with model large in gnoshrc. They are: %s.", len(all), strings.Join(all, ", "))}
+	return ref, &errNoModel{fmt.Sprintf("no model is chosen, and %d are available. gnosh does not guess, because naming the wrong one makes a model server unload the one in use. Choose one with -m provider/model, or with \"model\" in gnosh.json. They are: %s.", len(all), strings.Join(all, ", "))}
 }
 
 // buildModel makes a model ready for the loop: its provider's client, its
@@ -317,8 +317,8 @@ func (l *live) buildModel(ctx context.Context, ref config.ModelRef, slot config.
 		Level:    level,
 	}
 	switch {
-	case registered && cm.DefaultMaxTokens.Set:
-		m.MaxTokens = cm.DefaultMaxTokens.V
+	case registered && cm.MaxOutputTokens.Set:
+		m.MaxTokens = cm.MaxOutputTokens.V
 	case l.cfg.Limits.MaxOutputTokens.Set:
 		m.MaxTokens = l.cfg.Limits.MaxOutputTokens.V
 	}
@@ -333,17 +333,18 @@ func (l *live) buildModel(ctx context.Context, ref config.ModelRef, slot config.
 }
 
 // thinkingLevels returns a model's thinking levels, the least thinking
-// first. The config's own list wins; without one the provider's type and
-// the model's name decide. A model with no known switch has none, and the
-// thinking commands then say so.
+// first. The config's own list wins, an empty one saying the model has no
+// switch; without one the provider's type and the model's name decide. A
+// model with no known switch has none, and the thinking commands then say
+// so.
 func thinkingLevels(pc config.Provider, cm config.Model, registered bool, id string) []string {
-	if registered {
-		if len(cm.ReasoningLevels) > 0 {
-			return slices.Clone(cm.ReasoningLevels)
-		}
-		if cm.CanReason.Set && !cm.CanReason.V {
+	if registered && cm.ThinkingLevels.Set {
+		// What the config says of the model is the last word: its levels,
+		// or, with an empty list, that it has no switch.
+		if len(cm.ThinkingLevels.V) == 0 {
 			return nil
 		}
+		return slices.Clone(cm.ThinkingLevels.V)
 	}
 	name := strings.ToLower(id)
 	switch {
@@ -453,7 +454,7 @@ func (l *live) outgoing(req *core.Request) {
 	typ := l.types[req.Model]
 	l.typeMu.Unlock()
 	switch typ {
-	case "openai-compat", "ollama", "litellm", "omlx":
+	case "openai-compatible", "ollama", "litellm", "omlx":
 		// These read the switch from the chat template's arguments, as
 		// llama.cpp's own server does.
 		kw := map[string]any{}

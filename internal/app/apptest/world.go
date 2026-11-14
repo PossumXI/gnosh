@@ -1,6 +1,7 @@
 package apptest
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,7 +11,7 @@ import (
 
 // World is a place for one test to run gnosh in: a home directory of its
 // own, a project folder, and a scripted model server that the home's
-// gnoshrc names as the model to use. Nothing in it is the real machine's:
+// gnosh.json names as the model to use. Nothing in it is the real machine's:
 // HOME and the three XDG directories lie inside a temporary directory.
 type World struct {
 	// Root is the temporary directory that holds everything. Home is the
@@ -40,10 +41,7 @@ func NewWorld(t testing.TB, replies ...Reply) *World {
 		}
 	}
 	w.Model = NewModel(t, replies...)
-	w.RC(
-		"provider add local --type llamacpp --base-url "+w.Model.URL,
-		"model large local/test-model",
-	)
+	w.Settings(`{"providers": {"local": {"type": "llamacpp", "baseUrl": "` + w.Model.URL + `"}}, "model": "local/test-model"}`)
 	return w
 }
 
@@ -134,15 +132,91 @@ func (f *FarMachine) Fail(words string) {
 	}
 }
 
-// RC adds lines to the user's gnoshrc.
-func (w *World) RC(lines ...string) {
+// SettingsFile is the user's gnosh.json.
+func (w *World) SettingsFile() string { return filepath.Join(w.ConfigDir(), "gnosh.json") }
+
+// Settings lays more settings over the user's gnosh.json. text is a JSON
+// object, and what it holds is merged into what the file has: objects key
+// by key, lists by adding to them, and anything else by taking the place
+// of what was there. The file is written again whole, as plain JSON with
+// its keys in order, so a test that needs a setting on a line of its
+// choosing writes the file itself.
+func (w *World) Settings(text string) {
 	w.t.Helper()
-	path := filepath.Join(w.ConfigDir(), "gnoshrc")
-	old, _ := os.ReadFile(path)
-	text := string(old) + strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+	have := map[string]any{}
+	if old, err := os.ReadFile(w.SettingsFile()); err == nil {
+		if err := json.Unmarshal(old, &have); err != nil {
+			w.t.Fatalf("the world's gnosh.json is not plain JSON, so nothing can be added to it: %v", err)
+		}
+	}
+	var more map[string]any
+	if err := json.Unmarshal([]byte(text), &more); err != nil {
+		w.t.Fatalf("the settings to add are not a JSON object: %v\n%s", err, text)
+	}
+	data, err := json.MarshalIndent(overlay(have, more), "", "  ")
+	if err != nil {
 		w.t.Fatal(err)
 	}
+	if err := os.WriteFile(w.SettingsFile(), append(data, '\n'), 0o600); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+// overlay lays more over have, as Settings says.
+func overlay(have, more any) any {
+	switch m := more.(type) {
+	case map[string]any:
+		h, ok := have.(map[string]any)
+		if !ok {
+			return more
+		}
+		for key, value := range m {
+			h[key] = overlay(h[key], value)
+		}
+		return h
+	case []any:
+		if h, ok := have.([]any); ok {
+			return append(h, m...)
+		}
+	}
+	return more
+}
+
+// Hook adds a hook to the user's gnosh.json: a command to run at an event.
+// matcher says which tools or sources it runs for, and is "" for all of
+// them; a timeout, when one is given, is in seconds.
+func (w *World) Hook(event, matcher, command string, timeout ...float64) {
+	w.t.Helper()
+	handler := map[string]any{"type": "command", "command": command}
+	if len(timeout) > 0 {
+		handler["timeout"] = timeout[0]
+	}
+	group := map[string]any{"hooks": []any{handler}}
+	if matcher != "" {
+		group["matcher"] = matcher
+	}
+	data, err := json.Marshal(map[string]any{"hooks": map[string]any{event: []any{group}}})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	w.Settings(string(data))
+}
+
+// Allow adds allow rules to the user's gnosh.json.
+func (w *World) Allow(rules ...string) { w.rules("allow", rules) }
+
+// Deny adds deny rules to the user's gnosh.json.
+func (w *World) Deny(rules ...string) { w.rules("deny", rules) }
+
+// rules adds permission rules to one of the lists of the user's
+// gnosh.json.
+func (w *World) rules(list string, rules []string) {
+	w.t.Helper()
+	data, err := json.Marshal(map[string]any{"permissions": map[string]any{list: rules}})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	w.Settings(string(data))
 }
 
 // Write writes a file. A relative name is under the project folder.

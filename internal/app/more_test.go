@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -104,6 +105,11 @@ func TestSubcommandsThatLook(t *testing.T) {
 		t.Fatalf("gnosh dirs: exit code %d\n%s\n%s", r.code, r.out, r.err)
 	}
 	has(t, "dirs", r.out, "config", w.ConfigDir(), "sessions", "working folder", w.Dir, "gnosh.log", w.ConfigDir()+"/skills")
+	// Where the person's own settings are, and whether the file is there.
+	has(t, "dirs", r.out, "your settings          "+w.SettingsFile()+"\n")
+	bare := apptest.NewWorld(t)
+	os.Remove(bare.SettingsFile())
+	has(t, "dirs with no settings file", run(t, bare, "dirs").wantCode(t, 0).out, "your settings          (not there yet) "+bare.SettingsFile()+"\n")
 
 	r = run(t, w, "logs").wantCode(t, 0)
 	has(t, "logs", r.out, "session "+id)

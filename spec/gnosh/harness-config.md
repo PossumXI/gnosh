@@ -167,6 +167,8 @@ him, after which this table is deleted (OQ-1).
 
 ## 3. The gnoshrc line format
 
+*13 November 2026: this line format was replaced by one JSON file, `gnosh.json` (`spec/DECISIONS.md`, item 17); this section records what was asked before that ruling.*
+
 ### CFG-10 Grammar (P0)
 
 ```

@@ -414,7 +414,7 @@ func TestRecords(t *testing.T) {
 		return now
 	}
 	r := newRunner(t, opts, Hook{
-		Event: PreToolUse, Matcher: "Bash|Edit", Name: "no-force-push", Source: "gnoshrc:4",
+		Event: PreToolUse, Matcher: "Bash|Edit", Name: "no-force-push", Source: "gnosh.json:4",
 		Command: "echo 'checking the command' >&2; echo 'force pushes are not allowed' >&2; exit 2",
 	})
 	out := run(t, r, input(PreToolUse))
@@ -424,7 +424,7 @@ func TestRecords(t *testing.T) {
 	rec := out.Records[0]
 	want := Record{
 		Event: PreToolUse, Matcher: "Bash|Edit", Command: "echo 'checking the command' >&2; echo 'force pushes are not allowed' >&2; exit 2",
-		Name: "no-force-push", Source: "gnoshrc:4",
+		Name: "no-force-push", Source: "gnosh.json:4",
 		Duration: 250 * time.Millisecond, ExitCode: 2,
 		Result: ResultBlocked, Reason: "checking the command\nforce pushes are not allowed",
 		Stderr: "checking the command\nforce pushes are not allowed",

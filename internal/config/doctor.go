@@ -123,7 +123,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		}
 	}
 	if len(cfg.Files) == 0 {
-		add("config", Note, "no config file was found, so gnosh runs on its defaults. The user's gnoshrc belongs in %s.", cfg.Paths.ConfigDir)
+		add("config", Note, "no config file was found, so gnosh runs on its defaults. Your own settings belong in %s.", cfg.Paths.UserSettings)
 	}
 	for _, p := range Warnings(problems) {
 		if slices.Contains(cfg.BadEnv, p) || strings.HasPrefix(p.Message, "provider ") && strings.Contains(p.Message, " is left out: ") {
@@ -132,7 +132,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		add("config", Note, "%s", p)
 	}
 	if cfg.Switches.SafeMode.V {
-		add("config", Note, "safe mode is on (%s): hooks, MCP servers, context files, skills on disk and custom commands are off.", cfg.Switches.SafeMode.Origin)
+		add("config", Note, "safe mode is on (%s): hooks, instruction files, skills on disk and custom commands are off.", cfg.Switches.SafeMode.Origin)
 	}
 
 	// 2. Providers. offers holds, for each provider that answered, the
@@ -204,7 +204,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 	}
 	switch {
 	case len(cfg.Providers) == 0:
-		add("providers", Fail, "no provider is configured, so a turn cannot run. Add one to gnoshrc in %s, for example: provider add local --type llamacpp --base-url http://127.0.0.1:8080", cfg.Paths.ConfigDir)
+		add("providers", Fail, "no provider is configured, so a turn cannot run. Add one to %s, for example: {%s}", cfg.Paths.UserSettings, ProviderExample)
 	case answering == 0:
 		add("providers", Fail, "none of the configured providers can be used, so a turn cannot run.")
 	}
@@ -216,24 +216,28 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 			all = append(all, p.ID+"/"+id)
 		}
 	}
+	// The session's model must be there for a turn to run; the small one
+	// is only worth a note, since the session's model does its work when
+	// it is missing.
 	for _, slot := range []struct {
-		name string
-		s    Slot
-	}{{"large", cfg.Large}, {"small", cfg.Small}} {
+		name  string
+		s     Slot
+		small bool
+	}{{"model", cfg.Large, false}, {"small model", cfg.Small, true}} {
 		miss := Fail
-		if slot.name == "small" {
+		if slot.small {
 			miss = Note
 		}
 		if !slot.s.Model.Set {
 			switch {
-			case slot.name == "small":
-				add("models", Fine, "small model: not chosen, so the large model does the side jobs.")
+			case slot.small:
+				add("models", Fine, "small model: not chosen, so the session's model does the side jobs.")
 			case len(all) == 1:
-				add("models", Fine, "large model: not chosen; %s is the only model there is, so it is used.", all[0])
+				add("models", Fine, "model: not chosen; %s is the only model there is, so it is used.", all[0])
 			case len(all) > 1:
-				add("models", Fail, "large model: not chosen, and %d models are available. gnosh does not guess: choose one with -m, with /model, or with model large in gnoshrc. They are: %s.", len(all), list(all))
+				add("models", Fail, "model: not chosen, and %d models are available. gnosh does not guess: choose one with -m, with /model, or with \"model\" in gnosh.json. They are: %s.", len(all), list(all))
 			case answering > 0:
-				add("models", Fail, "large model: not chosen, and no model is known. Name one with -m, or register one with model add.")
+				add("models", Fail, "model: not chosen, and no model is known. Name one with -m, or register one under \"models\" in gnosh.json.")
 			}
 			continue
 		}
@@ -247,26 +251,26 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 			}
 			switch len(owners) {
 			case 0:
-				add("models", miss, "%s model: no provider is known to offer %s. Name it as provider/model.", slot.name, ref.ID)
+				add("models", miss, "%s: no provider is known to offer %s. Name it as provider/model.", slot.name, ref.ID)
 			case 1:
-				add("models", Fine, "%s model: %s/%s (%s), thinking %s.", slot.name, owners[0], ref.ID, slot.s.Model.Origin, slot.s.Thinking.V)
+				add("models", Fine, "%s: %s/%s (%s), thinking %s.", slot.name, owners[0], ref.ID, slot.s.Model.Origin, slot.s.Thinking.V)
 			default:
-				add("models", miss, "%s model: %s is offered by more than one provider (%s). Name it as provider/model.", slot.name, ref.ID, list(owners))
+				add("models", miss, "%s: %s is offered by more than one provider (%s). Name it as provider/model.", slot.name, ref.ID, list(owners))
 			}
 			continue
 		}
 		_, answers := offers[ref.Provider]
 		switch {
 		case !answers:
-			add("models", miss, "%s model: %s is on a provider that cannot be used right now.", slot.name, ref)
+			add("models", miss, "%s: %s is on a provider that cannot be used right now.", slot.name, ref)
 		case known[ref.Provider] && !slices.Contains(offers[ref.Provider], ref.ID):
-			add("models", miss, "%s model: provider %s does not offer %s. It has: %s.", slot.name, ref.Provider, ref.ID, list(offers[ref.Provider]))
+			add("models", miss, "%s: provider %s does not offer %s. It has: %s.", slot.name, ref.Provider, ref.ID, list(offers[ref.Provider]))
 		default:
 			window := ""
 			if m, ok := cfg.Model(ref); !ok || !m.ContextWindow.Set {
 				window = " Its context window is not configured: the server is asked, and 32768 tokens is assumed if it cannot say."
 			}
-			add("models", Fine, "%s model: %s (%s), thinking %s.%s", slot.name, ref, slot.s.Model.Origin, slot.s.Thinking.V, window)
+			add("models", Fine, "%s: %s (%s), thinking %s.%s", slot.name, ref, slot.s.Model.Origin, slot.s.Thinking.V, window)
 		}
 	}
 
@@ -295,20 +299,6 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 
 	// 5. Tools.
 	add("tools", Fine, "file search (Glob, Grep) is gnosh's own and needs no outside program.")
-	for _, l := range cfg.LSP {
-		switch {
-		case l.Disabled:
-			add("tools", Note, "language server %s is disabled.", l.Name)
-		case pr.LookPath == nil:
-			add("tools", Note, "language server %s: whether %s is installed was not checked.", l.Name, l.Command)
-		default:
-			if why := programTrouble(cfg, l.Command, pr); why != "" {
-				add("tools", Note, "language server %s cannot start: %s.", l.Name, why)
-			} else {
-				add("tools", Fine, "language server %s: %s", l.Name, l.Command)
-			}
-		}
-	}
 
 	// 6. Hosts. A host that was not tried is never called fine: nothing
 	// reads as checked that was not.

@@ -159,7 +159,7 @@ echo "$GNOSH_EVENT tool=$GNOSH_TOOL_NAME type=$GNOSH_AGENT_TYPE agent=${GNOSH_AG
 if [ "$GNOSH_EVENT" = SubagentStart ]; then echo '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"The reviewer wants one-line reports."}}'; fi
 if [ "$GNOSH_EVENT" = SubagentStop ] && [ ! -e "$HOME/objected" ]; then touch "$HOME/objected"; echo "check your work before you report" >&2; exit 2; fi`)
 		for _, e := range []string{"PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop", "Stop"} {
-			w.RC("hook add " + e + " --command " + hook)
+			w.Hook(e, "", hook)
 		}
 		return w
 	}
@@ -457,7 +457,7 @@ func TestHaltInsideASubAgentEndsTheTurn(t *testing.T) {
 		apptest.Reply{Text: "I looked."},
 		apptest.Reply{Text: "never reached"})
 	hook := w.Script(w.Home+"/hooks/stop.sh", "cat > /dev/null\ncat <<'JSON'\n"+`{"continue":false,"stopReason":"the budget for sub-agents is spent"}`+"\nJSON")
-	w.RC("hook add SubagentStop --command " + hook)
+	w.Hook("SubagentStop", "", hook)
 	r := run(t, w, "-p", "--output-format", "json", "look around").wantCode(t, 1)
 	if n := len(w.Model.Requests()); n != 2 {
 		t.Errorf("the model was sent %d requests, want 2: the turn ends with the sub-agent", n)

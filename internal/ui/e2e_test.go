@@ -692,7 +692,7 @@ func TestSendAtOnceMovesACommandAside(t *testing.T) {
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 300"}`}}},
 		apptest.Reply{Text: "I read what you sent, and the command goes on."},
 	)
-	w.RC("permissions allow 'Bash(sleep *)'")
+	w.Allow("Bash(sleep *)")
 	p := runProgram(t, w)
 	p.has("manual mode", "idle")
 	p.keys(`"wait a while" <Enter>`)

@@ -350,6 +350,11 @@ func (l *live) keepApproval(s permission.Suggestion) {
 // place gnosh itself writes settings. The file as it would then be is
 // checked the way every config file is checked before a byte is written,
 // so that gnosh can never write a file it would then refuse to load.
+//
+// The file is read as every config file is, so comments a person put in it
+// and a comma after a last item do not stop an approval from being saved;
+// but it is written again whole, as plain JSON, and they are not in what
+// is written.
 func (l *live) saveRules(rules []string) error {
 	path := l.cfg.Paths.LocalSettings
 	dir := filepath.Dir(path)
@@ -372,7 +377,11 @@ func (l *live) saveRules(rules []string) error {
 
 	doc := map[string]json.RawMessage{}
 	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) > 0 {
-		if err := json.Unmarshal(data, &doc); err != nil {
+		plain, err := config.StandardJSON(data)
+		if err == nil {
+			err = json.Unmarshal(plain, &doc)
+		}
+		if err != nil {
 			return fmt.Errorf("%s is not JSON gnosh can read (%v); it was left as it is", path, err)
 		}
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {

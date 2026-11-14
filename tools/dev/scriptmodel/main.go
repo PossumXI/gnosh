@@ -12,10 +12,12 @@
 //	  {"thinking": "It is a sum.", "text": "The answer is 4."}
 //	]
 //
-// Point gnosh at it with two lines of gnoshrc:
+// Point gnosh at it with a gnosh.json of two keys:
 //
-//	provider add local --type llamacpp --base-url http://127.0.0.1:PORT
-//	model large local/test-model
+//	{
+//	  "providers": {"local": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:PORT"}},
+//	  "model": "local/test-model"
+//	}
 //
 // It is the same server the tests of internal/app run against
 // (internal/app/apptest).

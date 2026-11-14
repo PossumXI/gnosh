@@ -261,7 +261,7 @@ func (l *live) slashThink(c *SlashContext, most bool) error {
 		level, ok = c.Agent.NoThink()
 	}
 	if !ok {
-		c.Say("gnosh knows of no thinking switch for %s, so nothing changed. If the model has levels, declare them in gnoshrc: model add %s --reasoning-levels low,medium,high", ref, ref)
+		c.Say("gnosh knows of no thinking switch for %s, so nothing changed. If the model has levels, declare them in gnosh.json: \"models\": {%q: {\"thinkingLevels\": [\"low\", \"medium\", \"high\"]}}", ref, ref.String())
 		return nil
 	}
 	l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, level) })
@@ -432,7 +432,7 @@ func (l *live) listModelsFor(ctx context.Context, c *SlashContext) error {
 			c.Say("%s", line)
 		}
 		if len(ids) == 0 {
-			c.Say("    (no model is known: none is registered in gnoshrc, and the server lists none)")
+			c.Say("    (no model is known: none is registered under \"models\" in gnosh.json, and the server lists none)")
 		}
 		if note != "" {
 			c.Say("    note: %s", note)
@@ -447,7 +447,7 @@ func (l *live) listModelsFor(ctx context.Context, c *SlashContext) error {
 		}
 	}
 	if len(usable) == 0 {
-		c.Say("No provider can be used. Add one to gnoshrc in %s, for example: provider add local --type llamacpp --base-url http://127.0.0.1:8080", l.cfg.Paths.ConfigDir)
+		c.Say("No provider can be used. Add one to %s, for example: {%s}", l.cfg.Paths.UserSettings, config.ProviderExample)
 	}
 	c.Say("To switch: /model provider/model, and a thinking level after it if you want one. The choice is saved.")
 	return nil

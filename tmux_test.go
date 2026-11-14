@@ -142,7 +142,7 @@ func TestBinaryInTmux(t *testing.T) {
 	// A command that runs until it is stopped, and that the person's
 	// rules let the model run without a question.
 	job := w.Script(w.Home+"/job.sh", `echo $$ > job.pid; exec sleep 300`)
-	w.RC("permissions allow 'Bash(" + job + ")'")
+	w.Allow("Bash(" + job + ")")
 	w.Model.Add(
 		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"` + job + `"}`}}},
 		apptest.Reply{Text: "It runs in the background now."},

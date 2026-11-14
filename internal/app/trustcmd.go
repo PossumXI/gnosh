@@ -17,7 +17,7 @@ import (
 // configuration has mistakes: listing the trusted folders and forgetting
 // one.
 func (p *program) stateDir() string {
-	if v := p.env["GNOSH_GLOBAL_DATA"]; filepath.IsAbs(v) {
+	if v := p.env["GNOSH_DATA_DIR"]; filepath.IsAbs(v) {
 		return filepath.Clean(v)
 	}
 	if v := p.env["XDG_DATA_HOME"]; filepath.IsAbs(v) {
@@ -30,7 +30,7 @@ func (p *program) stateDir() string {
 // directory, worked out from the environment alone as stateDir is: what
 // the config loader calls Paths.ConfigDir and Paths.CacheDir.
 func (p *program) configDir() string {
-	if v := p.env["GNOSH_GLOBAL_CONFIG"]; filepath.IsAbs(v) {
+	if v := p.env["GNOSH_CONFIG_DIR"]; filepath.IsAbs(v) {
 		return filepath.Clean(v)
 	}
 	if v := p.env["XDG_CONFIG_HOME"]; filepath.IsAbs(v) {

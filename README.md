@@ -27,8 +27,7 @@ with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 
 Not built yet: MCP servers, rewind, background sub-agents, web search. The
 interface has been tried in tmux only. Its wording to the model has not yet
-been compared run against run. Hosts have been tested against a stand-in
-for ssh only, not yet against a real machine. Nothing here is released.
+been compared run against run. Nothing here is released.
 
 ## Licence
 
@@ -46,9 +45,21 @@ Go 1.27 or newer. The harness uses the standard library and the Go team's
 
 ## A model
 
-In `~/.config/gnosh/gnoshrc`, for a llama.cpp server on this machine:
+In `~/.config/gnosh/gnosh.json`, for a llama.cpp server on this machine:
 
-    provider add local --type llamacpp --base-url "http://127.0.0.1:8080"
+    {
+      // a model server on this machine
+      "providers": {
+        "local": { "type": "llamacpp", "baseUrl": "http://127.0.0.1:8080" }
+      }
+    }
+
+The file is JSON in which comments and a comma after the last item are
+allowed. It holds `permissions`, `hooks`, `env` and `model` with Claude
+Code's names and meaning, and gnosh's own `providers`, `models`,
+`smallModel`, `hosts` and `options` beside them; a project may keep a
+`gnosh.json` of its own, which counts once the folder is trusted. The
+package documentation of `internal/config` lists every key.
 
 Then `gnosh doctor` says whether a turn can run, and `gnosh` starts a
 session. Nothing leaves the machine except what is sent to the model server

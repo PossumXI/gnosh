@@ -28,8 +28,8 @@ const (
 	// RemoteIdleTimeout is how long a service's answer may go quiet
 	// between pieces.
 	RemoteIdleTimeout = 60 * time.Second
-	// firstPieceFactor is how many times option request-timeout a server
-	// may take before the first piece of its answer.
+	// firstPieceFactor is how many times the requestTimeout option a
+	// server may take before the first piece of its answer.
 	firstPieceFactor = 5
 )
 
@@ -96,7 +96,6 @@ func (ld *loader) finish() *Config {
 	cfg.Options = b.opts
 	cfg.Hosts = b.hosts
 	ld.probs.list = append(ld.probs.list, checkHosts(cfg.Hosts)...)
-	cfg.LSP = b.lsp
 
 	cfg.AllHooks = b.hooks
 	switch {
@@ -108,10 +107,6 @@ func (ld *loader) finish() *Config {
 	default:
 		cfg.Hooks = b.hooks
 	}
-	// Safe mode starts no MCP server from the config files.
-	if !cfg.Switches.SafeMode.V {
-		cfg.MCP = b.mcp
-	}
 	for _, name := range slices.Sorted(maps.Keys(b.env)) {
 		cfg.Env = append(cfg.Env, b.env[name])
 	}
@@ -122,19 +117,13 @@ func (ld *loader) finish() *Config {
 		LocalNames:     slices.Clone(contextLocalNames),
 		Cwd:            in.Cwd,
 		ProjectRoot:    in.ProjectRoot,
-		Extra:          b.opts.ContextPaths,
+		Extra:          b.opts.ProjectInstructionFiles,
 		ImportDepth:    contextImportDepth,
 		MaxFileBytes:   contextMaxFileBytes,
 		NestedMaxChars: contextNestedMaxChars,
 	}
-	global := filepath.Join(ld.paths.ConfigDir, filepath.Base(oldNames[1].now))
-	if !ld.exists(global) && ld.oldDir != "" {
-		if was := filepath.Join(ld.oldDir, filepath.Base(oldNames[1].old)); ld.exists(was) {
-			global = was
-		}
-	}
-	cfg.Context.Global = []ListItem{{V: global}, {V: ld.agentsFile}}
-	cfg.Context.Global = append(cfg.Context.Global, b.opts.GlobalContextPaths...)
+	cfg.Context.Global = []ListItem{{V: filepath.Join(ld.paths.ConfigDir, "GNOSH.md")}, {V: ld.agentsFile}}
+	cfg.Context.Global = append(cfg.Context.Global, b.opts.UserInstructionFiles...)
 
 	cfg.BadEnv = ld.badEnv
 	return cfg
@@ -159,38 +148,6 @@ func (ld *loader) switches() Switches {
 		b.opts.Debug.put(true, flagOrigin("--debug"))
 	}
 
-	if v := ld.env["GNOSH_METRICS_URL"]; v != "" {
-		ld.secrets.addURL(v)
-		if why := checkURL(v); why != "" {
-			ld.bad(envOrigin("GNOSH_METRICS_URL"), "GNOSH_METRICS_URL", "holds an address that cannot be used (%s), so it was not used.", why)
-		} else {
-			b.opts.MetricsURL.put(v, envOrigin("GNOSH_METRICS_URL"))
-		}
-	}
-	s.Metrics = b.opts.Metrics
-	if off, set := ld.onOff("GNOSH_DISABLE_METRICS"); set {
-		s.Metrics.put(!off, envOrigin("GNOSH_DISABLE_METRICS"))
-	}
-	if strings.TrimSpace(ld.env["DO_NOT_TRACK"]) == "1" {
-		s.Metrics = Value[bool]{V: false, Set: true, Origin: envOrigin("DO_NOT_TRACK")}
-	}
-
-	if v := ld.env["GNOSH_UPDATE_REPO"]; v != "" {
-		if why := checkRepo(v); why != "" {
-			ld.bad(envOrigin("GNOSH_UPDATE_REPO"), "GNOSH_UPDATE_REPO", "holds %s, which cannot be used (%s), so it was not used.", show(v), why)
-		} else {
-			b.opts.UpdateRepo.put(v, envOrigin("GNOSH_UPDATE_REPO"))
-		}
-	}
-	off, set := ld.onOff("GNOSH_DISABLE_UPDATE_CHECK")
-	switch {
-	case set && off:
-		s.UpdateCheck.put(false, envOrigin("GNOSH_DISABLE_UPDATE_CHECK"))
-	case b.opts.UpdateRepo.Set:
-		s.UpdateCheck.put(true, b.opts.UpdateRepo.Origin)
-	case set:
-		ld.bad(envOrigin("GNOSH_DISABLE_UPDATE_CHECK"), "GNOSH_DISABLE_UPDATE_CHECK", "is 0, which asks for the update check, but no repository is named (option update-repo), so nothing is checked.")
-	}
 	return s
 }
 
@@ -213,7 +170,7 @@ func (ld *loader) modelFlag(flag, text string) (ModelRef, bool) {
 		return ModelRef{}, false
 	}
 	if len(b.providers) == 0 {
-		ld.probs.at(Error, o, "%s was asked for, and no provider is configured, so there is no model to use. Add one in gnoshrc with provider add.%s", showName(text), ld.heldNote())
+		ld.probs.at(Error, o, "%s was asked for, and no provider is configured, so there is no model to use. Add one to %s, as in {%s}.%s", showName(text), ld.paths.UserSettings, ProviderExample, ld.heldNote())
 		return ModelRef{}, false
 	}
 	if prov, id, ok := strings.Cut(text, "/"); ok && id != "" && b.provider(prov) != nil {
@@ -277,7 +234,7 @@ func (ld *loader) models() {
 		name   string
 		sl     *Slot
 		before Value[ModelRef]
-	}{{"large", &b.large, b.largeBefore}, {"small", &b.small, b.smallBefore}} {
+	}{{"model", &b.large, b.largeBefore}, {"small model", &b.small, b.smallBefore}} {
 		sl := slot.sl
 		if sl.Model.Set {
 			ref, o := sl.Model.V, sl.Model.Origin
@@ -296,23 +253,23 @@ func (ld *loader) models() {
 			switch {
 			case ref.Provider == "":
 			case p == nil:
-				stale("the %s model chosen here, %s, is on a provider that is not configured, so it was not used. Choose a model with /model or -m. The providers are: %s.%s", slot.name, ref, b.providerIDs(), ld.heldNote())
+				stale("the %s chosen here, %s, is on a provider that is not configured, so it was not used. Choose a model with /model or -m. The providers are: %s.%s", slot.name, ref, b.providerIDs(), ld.heldNote())
 			case p.DiscoverModels.Set && !p.DiscoverModels.V && b.model(ref) == nil:
-				stale("the %s model chosen here, %s, is not one provider %s lists, and that provider is set not to ask its server (--discover-models false). Add the model with model add %s, or choose another.", slot.name, ref, ref.Provider, ref)
+				stale("the %s chosen here, %s, is not one provider %s lists, and that provider is set not to ask its server (\"discoverModels\": false). Register the model under \"models\", as %q: {}, or choose another.", slot.name, ref, ref.Provider, ref.String())
 			}
 		}
 		if sl.Model.Set {
 			if saved, ok := b.stateThinking[sl.Model.V.String()]; ok {
 				sl.Thinking.put(saved.V, saved.Origin)
 			}
-			if m := b.model(sl.Model.V); m != nil && sl.Thinking.Set && len(m.ReasoningLevels) > 0 {
-				level := sl.Thinking.V
-				if level != "on" && level != "off" && !slices.Contains(m.ReasoningLevels, level) {
+			if m := b.model(sl.Model.V); m != nil && sl.Thinking.Set && len(m.ThinkingLevels.V) > 0 {
+				level, levels := sl.Thinking.V, m.ThinkingLevels.V
+				if level != "on" && level != "off" && !slices.Contains(levels, level) {
 					if sl.Thinking.Origin.Layer == LayerState {
-						ld.probs.at(Warning, sl.Thinking.Origin, "the thinking level saved for %s, %s, is not one of that model's levels (%s), so it was not used.", sl.Model.V, level, list(m.ReasoningLevels))
+						ld.probs.at(Warning, sl.Thinking.Origin, "the thinking level saved for %s, %s, is not one of that model's levels (%s), so it was not used.", sl.Model.V, level, list(levels))
 						sl.Thinking = Value[string]{}
 					} else {
-						ld.probs.at(Error, sl.Thinking.Origin, "the thinking level %s is not one of the levels of %s, which are: %s. (on and off are always understood, as the top and the bottom.)", showName(level), sl.Model.V, list(m.ReasoningLevels))
+						ld.probs.at(Error, sl.Thinking.Origin, "the thinking level %s is not one of the levels of %s, which are: %s. (on and off are always understood, as the top and the bottom.)", showName(level), sl.Model.V, list(levels))
 					}
 				}
 			}
@@ -353,17 +310,32 @@ func (ld *loader) providers(limits Limits) {
 		if !p.DiscoverModels.Set {
 			p.DiscoverModels.V = !slices.ContainsFunc(b.models, func(m *Model) bool { return m.Provider == p.ID })
 		}
+		at, hint := p.Origin, ""
 		switch {
 		case p.Disabled:
-		case t.wire == "":
-			p.LeftOut = fmt.Sprintf("the %s provider type is planned and not built yet", t.name)
+		case len(b.unset[p.ID]) > 0:
+			// A value that could not be filled in is never used as if it
+			// had been: the provider waits for the variable.
+			for _, field := range []string{"baseUrl", "apiKey", "headers"} {
+				u, ok := b.unset[p.ID][field]
+				if !ok {
+					continue
+				}
+				which := "variable " + u.names[0] + ", which is not set"
+				if len(u.names) > 1 {
+					which = "variables " + list(u.names) + ", which are not set"
+				}
+				p.LeftOut = fmt.Sprintf("its %q is filled in from the environment %s", field, which)
+				at, hint = u.origin, fmt.Sprintf(" Set it, or write ${%s:-} for a value that is empty when it is not set.", u.names[0])
+				break
+			}
 		case len(p.Endpoints) == 0:
-			p.LeftOut = "no address was given for it: add --base-url"
+			p.LeftOut = "no address was given for it: give it a \"baseUrl\""
 		case p.APIKey.Empty() && t.keyVar != "" && !allLocal:
-			p.LeftOut = fmt.Sprintf("it has no key: give --api-key, or set %s in the environment", t.keyVar)
+			p.LeftOut = fmt.Sprintf("it has no key: give it an \"apiKey\", or set %s in the environment", t.keyVar)
 		}
 		if p.LeftOut != "" {
-			ld.probs.at(Warning, p.Origin, "provider %s is left out: %s. gnosh starts without it.", p.ID, p.LeftOut)
+			ld.probs.at(Warning, at, "provider %s is left out: %s. gnosh starts without it.%s", p.ID, p.LeftOut, hint)
 		}
 	}
 }
@@ -376,8 +348,8 @@ func (ld *loader) timeouts(local bool, limits Limits) Timeouts {
 	} else {
 		t.FirstToken, t.Idle = RemoteFirstTokenTimeout, RemoteIdleTimeout
 	}
-	// option request-timeout sets the quiet time between pieces, and five
-	// times it before the first piece; zero waits for ever.
+	// The requestTimeout option sets the quiet time between pieces, and
+	// five times it before the first piece; zero waits for ever.
 	if rt := ld.b.opts.RequestTimeout; rt.Set {
 		t.Idle = time.Duration(rt.V) * time.Second
 		t.FirstToken = firstPieceFactor * t.Idle
@@ -503,7 +475,7 @@ func (c *Config) Provider(id string) (Provider, bool) {
 	return Provider{}, false
 }
 
-// Model finds a model that was registered by hand.
+// Model finds a model that was registered by hand, under "models".
 func (c *Config) Model(ref ModelRef) (Model, bool) {
 	for _, m := range c.Models {
 		if m.Provider == ref.Provider && m.ID == ref.ID {

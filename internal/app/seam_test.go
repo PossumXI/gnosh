@@ -462,7 +462,7 @@ func TestFeatureCommandHasItsDirectoriesWithoutAConfig(t *testing.T) {
 		}}},
 	}
 	w := apptest.NewWorld(t)
-	w.RC("frobnicate yes")
+	w.Settings(`{"frobnicate": true}`)
 	w.Write("sub/a.txt", "x\n")
 	o := testOptions(w, "mem", "show")
 	o.Cwd = w.Path("sub")

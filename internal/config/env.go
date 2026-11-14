@@ -39,28 +39,23 @@ type Limits struct {
 	// the auto-compact window, which can make the backstop run earlier and
 	// never later. Not set means none.
 	AutoCompactPct Value[int]
-	// IdleCompactMinTokens is CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS: the
-	// size from which idle compaction applies, at least 100,000. Default:
-	// 200,000.
-	IdleCompactMinTokens Value[int]
 }
 
-// limitVars are Claude Code's variables that gnosh reads.
-var limitVars = []struct{ name, what string }{
-	{"API_TIMEOUT_MS", "milliseconds a model API that is not local may take to start answering; 0 is no limit"},
-	{"BASH_DEFAULT_TIMEOUT_MS", "milliseconds a command runs before it moves to the background"},
-	{"BASH_MAX_TIMEOUT_MS", "the most a command's own timeout may ask for"},
-	{"BASH_MAX_OUTPUT_LENGTH", "characters of a command's output the model reads"},
-	{"CLAUDE_CODE_MAX_OUTPUT_TOKENS", "how long one reply may run"},
-	{"CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", "the most one read returns"},
-	{"CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "seconds a file search may run"},
-	{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "tokens of context before the backstop runs; outranks option auto-compact-window"},
-	{"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "a percentage of that window; earlier only"},
-	{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS", "the size from which idle compaction applies"},
-	{"CLAUDE_CODE_SAFE_MODE", "the same as --safe-mode"},
-	{"ANTHROPIC_API_KEY", "the key of an anthropic provider that gives none"},
-	{"OPENAI_API_KEY", "the key of an openai provider that gives none"},
-	{"DO_NOT_TRACK", "1 switches analytics off, whatever else says"},
+// limitVars are the variables of Claude Code's, and the two provider keys,
+// that gnosh reads.
+var limitVars = []struct{ name, what, from string }{
+	{"API_TIMEOUT_MS", "milliseconds a model API that is not local may take to start answering; 0 is no limit", fromClaudeCode},
+	{"BASH_DEFAULT_TIMEOUT_MS", "milliseconds a command runs before it moves to the background", fromClaudeCode},
+	{"BASH_MAX_TIMEOUT_MS", "the most a command's own timeout may ask for", fromClaudeCode},
+	{"BASH_MAX_OUTPUT_LENGTH", "characters of a command's output the model reads", fromClaudeCode},
+	{"CLAUDE_CODE_MAX_OUTPUT_TOKENS", "how long one reply may run", fromClaudeCode},
+	{"CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", "the most one read returns", fromClaudeCode},
+	{"CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "seconds a file search may run", fromClaudeCode},
+	{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "tokens of context before room is made; outranks the autoCompactWindow option", fromClaudeCode},
+	{"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "a percentage of that window; earlier only", fromClaudeCode},
+	{"CLAUDE_CODE_SAFE_MODE", "the same as --safe-mode", fromClaudeCode},
+	{"ANTHROPIC_API_KEY", "the key of an anthropic provider that gives none", fromAPIs + ": Anthropic's own variable, which Claude Code reads too"},
+	{"OPENAI_API_KEY", "the key of an openai provider that gives none", fromAPIs + ": OpenAI's own variable"},
 }
 
 // limitVar looks up one of Claude Code's variables: in the env block of
@@ -118,11 +113,10 @@ func (ld *loader) onOff(name string) (on, set bool) {
 func (ld *loader) limits() Limits {
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	l := Limits{
-		BashDefaultTimeout:   Value[time.Duration]{V: 2 * time.Minute},
-		BashMaxTimeout:       Value[time.Duration]{V: 10 * time.Minute},
-		BashMaxOutput:        Value[int]{V: 30000},
-		FileReadMaxTokens:    Value[int]{V: 25000},
-		IdleCompactMinTokens: Value[int]{V: 200000},
+		BashDefaultTimeout: Value[time.Duration]{V: 2 * time.Minute},
+		BashMaxTimeout:     Value[time.Duration]{V: 10 * time.Minute},
+		BashMaxOutput:      Value[int]{V: 30000},
+		FileReadMaxTokens:  Value[int]{V: 25000},
 	}
 	if n, o, ok := ld.whole("API_TIMEOUT_MS", 0); ok {
 		l.APITimeout.put(ms(n), o)
@@ -169,14 +163,6 @@ func (ld *loader) limits() Limits {
 		} else {
 			l.AutoCompactPct.put(n, o)
 		}
-	}
-	if n, o, ok := ld.whole("CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS", 1); ok {
-		const least = 100000
-		if n < least {
-			ld.bad(o, "CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS", "is %d, and idle compaction never applies below %d tokens, so %d is used.", n, least, least)
-			n = least
-		}
-		l.IdleCompactMinTokens.put(n, o)
 	}
 	return l
 }

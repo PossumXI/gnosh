@@ -170,7 +170,7 @@ if want ways; then
   one short gnosh-nomem mem=off harness=gnosh-nomem not_memory="$LEAN,$FULL"
   one planned gnosh-full harness=gnosh-full memory="$FULL"
   THINKING=off one short gnosh thinking=off harness=gnosh
-  PROVIDER_TYPE=openai-compat THINKING=off one short gnosh provider=openai-compat thinking=off
+  PROVIDER_TYPE=openai-compatible THINKING=off one short gnosh provider=openai-compatible thinking=off
   SLOT=2 SIDE_SLOT=1 one planned gnosh slot=2 side_slot=1
   # The switches of a prompt experiment: a text added to the system prompt,
   # one added to the prompt, the user's own prompt texts, and their names
@@ -241,7 +241,7 @@ if want ways; then
     --model test-model --window 65536 --log "$d/proxy.jsonl" > "$d/proxy.err" 2>&1 & proxy=$!
   echo "$proxy" > "$d/proxy.pid"
   for _ in $(seq 100); do [ -s "$d/port" ] && break; sleep 0.1; done
-  printf 'provider add box --type llamacpp --base-url "http://127.0.0.1:%s" --discover-models false\nmodel add box/test-model --context-window 65536\nmodel large box/test-model\n' "$(cat "$d/port")" > "$d/home/.config/gnosh/gnoshrc"
+  printf '{"providers": {"box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:%s", "discoverModels": false}},\n "models": {"box/test-model": {"contextWindow": 65536}},\n "model": "box/test-model"}\n' "$(cat "$d/port")" > "$d/home/.config/gnosh/gnosh.json"
   g=(env -i PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" XDG_DATA_HOME="$d/home/.local/share" XDG_CACHE_HOME="$d/home/.cache" TERM=dumb
      "$DRY/bin/gnosh" run -q -y --cwd "$d/work" --output-format stream-json)
   "${g[@]}" -- "Say something." < /dev/null > "$d/session-1.out" 2> "$d/session-1.err"

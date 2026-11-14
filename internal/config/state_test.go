@@ -82,7 +82,7 @@ func TestStateKeepsUnknownKeys(t *testing.T) {
 // cannot be understood, or that names things that are gone, is passed
 // over with a word.
 func TestStaleStateNeverStopsStartup(t *testing.T) {
-	const rc = "provider add p --type llamacpp --base-url http://127.0.0.1:1\nmodel add p/m --reasoning-levels 'off on'\nmodel large p/m\n"
+	const text = "{" + one + `, "models": {"p/m": {"thinkingLevels": ["off", "on"]}}, "model": "p/m"}`
 	cases := []struct {
 		name, state string
 		pieces      []string
@@ -93,7 +93,7 @@ func TestStaleStateNeverStopsStartup(t *testing.T) {
 		{"a provider that is gone", `{"models": {"large": "gone/m"}}`, []string{"gone/m", "provider that is not configured", "Choose a model"},
 			func(c *Config) {
 				if m := c.Large.Model; m.V.String() != "p/m" || m.Origin.Layer != LayerUser {
-					t.Errorf("a stale choice is dropped, and the gnoshrc's counts again: %+v", m)
+					t.Errorf("a stale choice is dropped, and the user's own file counts again: %+v", m)
 				}
 			}},
 		{"a model name of the wrong form", `{"models": {"small": "justaname"}}`, []string{"not of the form provider/id"}, nil},
@@ -108,7 +108,7 @@ func TestStaleStateNeverStopsStartup(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, problems := load(t, inputs(newFS().put(userRC, rc).put(statePath, tt.state)))
+			cfg, problems := load(t, inputs(newFS().put(userJSON, text).put(statePath, tt.state)))
 			if cfg == nil {
 				t.Fatalf("a stale state file stopped startup:\n%s", showProblems(problems))
 			}
@@ -121,27 +121,27 @@ func TestStaleStateNeverStopsStartup(t *testing.T) {
 }
 
 // The thinking level chosen inside gnosh is kept per model, and sits
-// between the user's gnoshrc and the project's.
+// between the user's gnosh.json and the project's.
 func TestStateThinking(t *testing.T) {
-	const rc = "provider add p --type llamacpp --base-url http://127.0.0.1:1\nmodel large p/m --think true\n"
-	fsys := newFS().put(userRC, rc).put(statePath, `{"thinking": {"p/m": "off", "p/other": "low"}}`)
+	const text = "{" + one + `, "model": {"id": "p/m", "thinking": true}}`
+	fsys := newFS().put(userJSON, text).put(statePath, `{"thinking": {"p/m": "off", "p/other": "low"}}`)
 	cfg := mustLoad(t, inputs(fsys))
 	if th := cfg.Large.Thinking; th.V != "off" || th.Origin.Layer != LayerState {
-		t.Errorf("state over the user's gnoshrc: %+v", th)
+		t.Errorf("state over the user's gnosh.json: %+v", th)
 	}
-	fsys.put(projRC, "model large --think true\n")
+	fsys.put(projJSON, `{"model": {"thinking": true}}`)
 	cfg = mustLoad(t, inputs(fsys))
 	if th := cfg.Large.Thinking; th.V != "on" || th.Origin.Layer != LayerProject {
-		t.Errorf("the project's gnoshrc over state: %+v", th)
+		t.Errorf("the project's gnosh.json over state: %+v", th)
 	}
 	in := inputs(fsys)
 	in.Flags.Model = "p/other"
 	cfg = mustLoad(t, in)
 	if th := cfg.Large.Thinking; th.V != "on" {
-		// The project line set the slot's level, which outranks the state.
+		// The project's file set the level, which outranks the state.
 		t.Errorf("another model, the project's level still holds: %+v", th)
 	}
-	in = inputs(newFS().put(userRC, "provider add p --type llamacpp --base-url http://127.0.0.1:1\n").put(statePath, `{"thinking": {"p/m": "off", "p/other": "low"}}`))
+	in = inputs(newFS().put(userJSON, "{"+one+"}").put(statePath, `{"thinking": {"p/m": "off", "p/other": "low"}}`))
 	in.Flags.Model = "p/other"
 	cfg = mustLoad(t, in)
 	if th := cfg.Large.Thinking; th.V != "low" || th.Origin.Layer != LayerState {

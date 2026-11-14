@@ -112,7 +112,7 @@ func TestAddDir(t *testing.T) {
 func TestSafeMode(t *testing.T) {
 	prep := func(w *apptest.World) {
 		hook := w.Script(w.Home+"/hooks/no-shell.sh", `echo "no shell today" >&2; exit 2`)
-		w.RC("hook add PreToolUse --matcher Bash --command " + hook)
+		w.Hook("PreToolUse", "Bash", hook)
 		w.Write("AGENTS.md", "Always sign your answers with a rose.\n")
 	}
 	script := func() []apptest.Reply {

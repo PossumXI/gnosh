@@ -16,7 +16,7 @@ func TestHookBlocksTool(t *testing.T) {
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
 		apptest.Reply{Text: "The hook refused it."})
 	hook := w.Script(w.Home+"/hooks/no-shell.sh", `echo "no shell today: policy 7" >&2; exit 2`)
-	w.RC("hook add PreToolUse --matcher Bash --command " + hook)
+	w.Hook("PreToolUse", "Bash", hook)
 	r := run(t, w, "-y", "-p", "make the file").wantCode(t, 0)
 	if w.Exists("made.txt") {
 		t.Errorf("the command ran although the hook blocked it")
@@ -31,7 +31,7 @@ func TestHookBlocksTool(t *testing.T) {
 func TestHookAddsContext(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Noted."})
 	hook := w.Script(w.Home+"/hooks/context.sh", `echo "the build is green as of 14:02"`)
-	w.RC("hook add UserPromptSubmit --command " + hook)
+	w.Hook("UserPromptSubmit", "", hook)
 	run(t, w, "-p", "how is the build?").wantCode(t, 0)
 	msgs := w.Model.Requests()[0].Messages()
 	last := apptest.Text(msgs[len(msgs)-1])
@@ -46,7 +46,7 @@ func TestHookThatCannotRunFailsClosed(t *testing.T) {
 	w := apptest.NewWorld(t,
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
 		apptest.Reply{Text: "It was not run."})
-	w.RC("hook add PreToolUse --matcher Bash --command " + w.Home + "/hooks/is-not-there.sh")
+	w.Hook("PreToolUse", "Bash", w.Home+"/hooks/is-not-there.sh")
 	r := run(t, w, "-y", "-p", "make the file").wantCode(t, 0)
 	if w.Exists("made.txt") {
 		t.Errorf("the command ran although its check could not")
@@ -74,7 +74,7 @@ if [ $n -le 2 ]; then
   exit 2
 fi
 exit 0`)
-	w.RC("hook add Stop --command " + hook)
+	w.Hook("Stop", "", hook)
 	r := run(t, w, "-p", "finish the work").wantCode(t, 0)
 	if r.out != "Done, I think.\n\nRan the tests.\n\nNow it is done.\n" {
 		t.Errorf("stdout = %q", r.out)
@@ -99,7 +99,7 @@ func TestHookEventsInOrder(t *testing.T) {
 cat > /dev/null
 echo "$GNOSH_EVENT session=$GNOSH_SESSION_ID project=$GNOSH_PROJECT_DIR claude=$CLAUDE_PROJECT_DIR agent=$AGENT tool=$GNOSH_TOOL_NAME source=$GNOSH_SESSION_START_SOURCE reason=$GNOSH_SESSION_END_REASON" >> "$HOME/events.log"`)
 	for _, e := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"} {
-		w.RC("hook add " + e + " --command " + hook)
+		w.Hook(e, "", hook)
 	}
 	r := run(t, w, "-y", "-p", "--output-format", "json", "do it").wantCode(t, 0)
 	id := jsonLines(t, r.out)[0]["session_id"].(string)
@@ -149,7 +149,7 @@ func eventLog(w *apptest.World, events ...string) {
 cat > /dev/null
 echo "$GNOSH_EVENT $GNOSH_TOOL_NAME$GNOSH_STOP_FAILURE_ERROR$GNOSH_PRE_COMPACT_TRIGGER$GNOSH_POST_COMPACT_TRIGGER$GNOSH_INSTRUCTIONS_LOAD_REASON$GNOSH_NOTIFICATION_TYPE$GNOSH_SESSION_START_SOURCE" >> "$HOME/events.log"`)
 	for _, e := range events {
-		w.RC("hook add " + e + " --command " + hook)
+		w.Hook(e, "", hook)
 	}
 }
 

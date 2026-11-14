@@ -175,7 +175,7 @@ func TestProviderErrors(t *testing.T) {
 	}
 	t.Run("the server is not running", func(t *testing.T) {
 		w := apptest.NewWorld(t)
-		w.RC("provider add gone --type llamacpp --base-url http://127.0.0.1:1", "model add gone/m --context-window 50000", "model large gone/m")
+		w.Settings(`{"providers": {"gone": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1"}}, "models": {"gone/m": {"contextWindow": 50000}}, "model": "gone/m"}`)
 		r := run(t, w, "-p", "hello").wantCode(t, 1)
 		if r.out != "" {
 			t.Errorf("stdout = %q", r.out)

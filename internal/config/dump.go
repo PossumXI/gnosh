@@ -10,9 +10,9 @@ import (
 )
 
 // String describes the whole configuration, one setting to a line, each
-// with where it came from. It is what /status and gnosh doctor can print,
-// and it is safe to log: no key, header value, variable value or password
-// is in it.
+// with where it came from, under the keys a person writes in gnosh.json.
+// It is what /status and gnosh doctor can print, and it is safe to log: no
+// key, header value, variable value or password is in it.
 func (c *Config) String() string {
 	if c == nil {
 		return "no configuration"
@@ -73,7 +73,7 @@ func (c *Config) String() string {
 		if len(p.ExtraBody) > 0 {
 			line("    extra body fields: %s", list(slices.Sorted(maps.Keys(p.ExtraBody))))
 		}
-		line("    discover models: %v", p.DiscoverModels.V)
+		line("    discoverModels: %v", p.DiscoverModels.V)
 	}
 	if len(c.Providers) == 0 {
 		line("  none")
@@ -81,21 +81,37 @@ func (c *Config) String() string {
 
 	line("models:")
 	for _, m := range c.Models {
-		window := "ask the server"
+		about := "  contextWindow: ask the server"
 		if m.ContextWindow.Set {
-			window = fmt.Sprint(m.ContextWindow.V)
+			about = fmt.Sprintf("  contextWindow: %d", m.ContextWindow.V)
 		}
-		line("  %s  window %s%s", m.Ref(), window, from(m.Origin))
+		if m.Name != m.ID {
+			about = fmt.Sprintf(" %q", m.Name) + about
+		}
+		if m.MaxOutputTokens.Set {
+			about += fmt.Sprintf("  maxOutputTokens: %d", m.MaxOutputTokens.V)
+		}
+		if m.ThinkingLevels.Set {
+			about += "  thinkingLevels: [" + list(m.ThinkingLevels.V) + "]"
+		}
+		line("  %s%s%s", m.Ref(), about, from(m.Origin))
+	}
+	if len(c.Models) == 0 {
+		line("  none registered")
 	}
 	for _, sl := range []struct {
 		name string
 		s    Slot
-	}{{"large", c.Large}, {"small", c.Small}} {
-		if sl.s.Model.Set {
-			line("  %s: %s%s  thinking %s%s", sl.name, sl.s.Model.V, from(sl.s.Model.Origin), sl.s.Thinking.V, from(sl.s.Thinking.Origin))
-		} else {
-			line("  %s: not chosen", sl.name)
+	}{{"model", c.Large}, {"smallModel", c.Small}} {
+		if !sl.s.Model.Set {
+			line("%s: not chosen", sl.name)
+			continue
 		}
+		how := fmt.Sprintf("  thinking: %s%s", sl.s.Thinking.V, from(sl.s.Thinking.Origin))
+		if sl.s.Temperature.Set {
+			how += fmt.Sprintf("  temperature: %v%s", sl.s.Temperature.V, from(sl.s.Temperature.Origin))
+		}
+		line("%s: %s%s%s", sl.name, sl.s.Model.V, from(sl.s.Model.Origin), how)
 	}
 
 	line("options:")
@@ -147,30 +163,14 @@ func (c *Config) String() string {
 			line("  %s → %s%s%s", h.Name, h.SSH, about, from(h.Origin))
 		}
 	}
-	if len(c.MCP) > 0 {
-		line("mcp servers:")
-		for _, m := range c.MCP {
-			what := m.Command
-			if m.Type != "stdio" {
-				what = displayURL(m.URL)
-			}
-			line("  %s (%s) %s%s", m.Name, m.Type, what, from(m.Origin))
-		}
-	}
-	if len(c.LSP) > 0 {
-		line("language servers:")
-		for _, l := range c.LSP {
-			line("  %s: %s%s", l.Name, l.Command, from(l.Origin))
-		}
-	}
 	if len(c.Env) > 0 {
-		line("variables for commands (values not shown):")
+		line("env (values not shown):")
 		for _, v := range c.Env {
 			line("  %s%s", v.Name, from(v.Origin))
 		}
 	}
 
-	line("context files:")
+	line("instruction files:")
 	if c.Context.Off {
 		line("  off (safe mode)")
 	} else {
@@ -203,7 +203,7 @@ func limit(d time.Duration) string {
 // OptionValue is one option as /status shows it.
 type OptionValue struct {
 	Key string
-	// Text is the value in force, as text. A secret shows as "[hidden]".
+	// Text is the value in force, as text.
 	Text string
 	// Set reports whether something other than the default set it.
 	Set    bool
@@ -211,31 +211,28 @@ type OptionValue struct {
 }
 
 // All lists every option with its value in force and where it came from,
-// in the order of the docs.
+// in the order of the table of options.
 func (o *Options) All() []OptionValue {
-	out := make([]OptionValue, 0, len(optionSpecs))
-	for i := range optionSpecs {
-		spec := &optionSpecs[i]
-		v := OptionValue{Key: spec.key}
+	out := make([]OptionValue, 0, len(optionDefs))
+	for i := range optionDefs {
+		d := &optionDefs[i]
+		v := OptionValue{Key: d.key}
 		switch {
-		case spec.truth != nil:
-			x := spec.truth(o)
+		case d.truth != nil:
+			x := d.truth(o)
 			v.Text, v.Set, v.Origin = fmt.Sprint(x.V), x.Set, x.Origin
-		case spec.num != nil:
-			x := spec.num(o)
+		case d.num != nil:
+			x := d.num(o)
 			v.Text, v.Set, v.Origin = fmt.Sprint(x.V), x.Set, x.Origin
-		case spec.text != nil:
-			x := spec.text(o)
+		case d.text != nil:
+			x := d.text(o)
 			v.Text, v.Set, v.Origin = x.V, x.Set, x.Origin
-			if spec.kind == oURL && x.Set {
+			if d.kind == oURL && x.Set {
 				// An address can carry a password; it is shown without.
 				v.Text = displayURL(x.V)
 			}
-		case spec.secret != nil:
-			x := spec.secret(o)
-			v.Text, v.Set, v.Origin = x.V.String(), x.Set, x.Origin
-		case spec.list != nil:
-			items := *spec.list(o)
+		case d.list != nil:
+			items := *d.list(o)
 			vals := make([]string, len(items))
 			for j, it := range items {
 				vals[j] = it.V
@@ -246,7 +243,7 @@ func (o *Options) All() []OptionValue {
 			}
 		}
 		if !v.Set {
-			v.Text = spec.def
+			v.Text = d.def
 		}
 		out = append(out, v)
 	}

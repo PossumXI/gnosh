@@ -233,7 +233,7 @@ func TestVersionHelpDoctor(t *testing.T) {
 	// The model server is there: doctor looks without disturbing it, and
 	// says a turn can run.
 	o := gnosh(t, w, "doctor").wantCode(t, 0)
-	for _, piece := range []string{"local at " + w.Model.URL, "large model: local/test-model", "A turn can run."} {
+	for _, piece := range []string{"local at " + w.Model.URL, "model: local/test-model", "A turn can run."} {
 		if !strings.Contains(o.out, piece) {
 			t.Errorf("doctor does not say %q:\n%s", piece, o.out)
 		}
@@ -245,7 +245,7 @@ func TestVersionHelpDoctor(t *testing.T) {
 	}
 	// With no provider at all it says so and exits 1.
 	bare := apptest.NewWorld(t)
-	os.Remove(filepath.Join(bare.ConfigDir(), "gnoshrc"))
+	os.Remove(bare.SettingsFile())
 	o = gnosh(t, bare, "doctor").wantCode(t, 1)
 	if !strings.Contains(o.out, "no provider is configured") || !strings.Contains(o.out, "A turn cannot run") {
 		t.Errorf("doctor with no provider:\n%s", o.out)
@@ -328,7 +328,7 @@ func longJob() apptest.Reply {
 // given to a file.
 func sessionEndHook(w *apptest.World) {
 	hook := w.Script(w.Home+"/hooks/end.sh", `cat > /dev/null; echo "$GNOSH_SESSION_END_REASON" > "$HOME/ended"`)
-	w.RC("hook add SessionEnd --command " + hook)
+	w.Hook("SessionEnd", "", hook)
 }
 
 // Ctrl-C in the middle of a turn: the turn is cancelled, the command it
@@ -425,7 +425,7 @@ func TestBinarySecondSignalDoesNotWaitForTheResult(t *testing.T) {
 func TestBinarySecondSignalDoesNotWait(t *testing.T) {
 	w := apptest.NewWorld(t, longJob())
 	hook := w.Script(w.Home+"/hooks/slow-end.sh", `cat > /dev/null; echo $$ > "$HOME/ending"; sleep 40`)
-	w.RC("hook add SessionEnd --timeout 60 --command " + hook)
+	w.Hook("SessionEnd", "", hook, 60)
 	p := start(t, w, "-y", "-p", "run the long job")
 	pid := readPid(t, w, "pid.txt")
 	p.cmd.Process.Signal(os.Interrupt)

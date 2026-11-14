@@ -156,10 +156,10 @@ func show(s string) string {
 // isRuneStart reports whether b can begin a UTF-8 sequence.
 func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }
 
-// showName quotes a word that was found where a name was expected (a
-// directive, an ID, an option key). A word that looks like a name is shown
-// whole. Anything else may be a key that landed in the wrong place, so only
-// its first characters are shown.
+// showName quotes a word that was found where a name was expected (a key
+// of the file, an id, an option). A word that looks like a name is shown
+// whole. Anything else may be a secret that landed in the wrong place, so
+// only its first characters are shown.
 func showName(s string) string {
 	plain := len(s) <= 40
 	for i := 0; plain && i < len(s); i++ {

@@ -30,7 +30,7 @@
 #   REASONING  optional reasoning effort passed to every harness (low|medium|high),
 #              for a model whose thinking has levels
 #   THINKING   gnosh only: "on" or "off" for a model that thinks or does not
-#              (gnoshrc's model large --think); unset leaves gnosh's default, on
+#              ("thinking" of its config's "model"); unset leaves gnosh's default, on
 #   CODEX_REASONING  reasoning effort for Codex alone (its model_reasoning_effort)
 #   SERVER_REASONING  the proxy puts this reasoning effort on every request of every
 #              harness, as a local server's default would be (the fair way to set it)
@@ -50,7 +50,7 @@
 #              (--max-turns); the row's outcome is then "stopped"
 #   PROVIDER_TYPE  gnosh only: how gnosh speaks to the server: llamacpp (the
 #              default: llama.cpp's own additions to the format) or
-#              openai-compat (the plain format, for vLLM and the like)
+#              openai-compatible (the plain format, for vLLM and the like)
 #   SERVER_WINDOW  the context per slot the server was started with, for a
 #              server that cannot be asked (serverfacts.py); the row keeps it
 #              apart from what the server itself said
@@ -161,18 +161,20 @@ case $harness in
     # discovery is off, so gnosh asks the server for nothing and can name no
     # other model. The model's own line is the thinking switch.
     mkdir -p "$H/.config/gnosh"
-    pin=""; [ -n "${SLOT:-}" ] && pin=" --extra-body '{\"id_slot\": $SLOT}'"
-    think=""; [ "$thinking" = on ] && think=" --think true"; [ "$thinking" = off ] && think=" --think false"
+    pin=""; [ -n "${SLOT:-}" ] && pin=", \"extraBody\": {\"id_slot\": $SLOT}"
+    think=""; [ "$thinking" = on ] && think=", \"thinking\": true"; [ "$thinking" = off ] && think=", \"thinking\": false"
     small="box/$MODEL"
+    side=""; sidemodel=""
+    if [ -n "${SIDE_SLOT:-}" ]; then  # the short side requests, on a slot of their own
+      side=$(printf ',\n    "side": {"type": "%s", "baseUrl": "http://127.0.0.1:%s", "discoverModels": false, "extraBody": {"id_slot": %s}}' "$ptype" "$port" "$SIDE_SLOT")
+      sidemodel=$(printf ',\n    "side/%s": {"contextWindow": %s}' "$MODEL" "$WINDOW")
+    fi
     {
-      printf 'provider add box --type %s --base-url "http://127.0.0.1:%s" --discover-models false%s\n' "$ptype" "$port" "$pin"
-      printf 'model add box/%s --context-window %s\n' "$MODEL" "$WINDOW"
-      printf 'model large box/%s%s\n' "$MODEL" "$think"
-      if [ -n "${SIDE_SLOT:-}" ]; then  # the short side requests, on a slot of their own
-        printf 'provider add side --type %s --base-url "http://127.0.0.1:%s" --discover-models false --extra-body %s\n' "$ptype" "$port" "'{\"id_slot\": $SIDE_SLOT}'"
-        printf 'model add side/%s --context-window %s\n' "$MODEL" "$WINDOW"
-      fi
-    } > "$H/.config/gnosh/gnoshrc"
+      printf '{\n  "providers": {\n'
+      printf '    "box": {"type": "%s", "baseUrl": "http://127.0.0.1:%s", "discoverModels": false%s}%s\n  },\n' "$ptype" "$port" "$pin" "$side"
+      printf '  "models": {\n    "box/%s": {"contextWindow": %s}%s\n  },\n' "$MODEL" "$WINDOW" "$sidemodel"
+      printf '  "model": {"id": "box/%s"%s}\n}\n' "$MODEL" "$think"
+    } > "$H/.config/gnosh/gnosh.json"
     [ -n "${SIDE_SLOT:-}" ] && small="side/$MODEL"
     if [ -n "${GNOSH_PROMPTS:-}" ]; then  # experiments: the user's own prompt texts
       mkdir -p "$H/.config/gnosh/prompts" && cp "$GNOSH_PROMPTS"/*.md "$H/.config/gnosh/prompts/"

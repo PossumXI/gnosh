@@ -104,10 +104,9 @@ type Flags struct {
 	// itself.
 	Settings string
 	// SettingSources is --setting-sources: whose files are read at all,
-	// any of "user" (the user's gnosh.json and gnoshrc), "project" (the
-	// project's) and "local" (the settings file in the project's data
-	// folder). Nil means all three. The state file and --settings are
-	// read either way.
+	// any of "user" (the user's gnosh.json), "project" (the project's)
+	// and "local" (the settings file in the project's data folder). Nil
+	// means all three. The state file and --settings are read either way.
 	SettingSources []string
 	// SafeMode is --safe-mode.
 	SafeMode bool
@@ -131,17 +130,13 @@ type Built struct {
 	Permissions bool
 	// Hosts is commands on declared machines.
 	Hosts bool
-	// MCP is MCP servers.
-	MCP bool
-	// LSP is language servers.
-	LSP bool
 	// Env is the env block reaching the commands and hooks gnosh starts.
 	Env bool
 }
 
 // Everything is a Built with every part present.
 func Everything() Built {
-	return Built{Hooks: true, Permissions: true, Hosts: true, MCP: true, LSP: true, Env: true}
+	return Built{Hooks: true, Permissions: true, Hosts: true, Env: true}
 }
 
 // has reports whether the program has a part.
@@ -153,20 +148,13 @@ func (b Built) has(f Feature) bool {
 		return b.Permissions
 	case FeatureHosts:
 		return b.Hosts
-	case FeatureMCP:
-		return b.MCP
-	case FeatureLSP:
-		return b.LSP
 	case FeatureEnv:
 		return b.Env
 	}
 	return false
 }
 
-// maxConfigBytes is the most a config file may hold.
-const maxConfigBytes = 2 << 20
-
-// Load reads the configuration: the user's files, the state file, the
+// Load reads the configuration: the user's file, the state file, the
 // project's files, the environment and the command line, weakest first.
 //
 // It returns every problem it found, not only the first: mistakes
@@ -235,12 +223,10 @@ type loader struct {
 	paths Paths
 	files []File
 	held  []Held
-	// projectFiles are the paths of the project's own config files.
+	// projectFiles are the paths of the project's own config files,
+	// whether or not they are there and whether or not they were read.
 	projectFiles []string
 
-	// oldDir is the earlier program's config directory, beside gnosh's
-	// own, or "" when old names are not looked for.
-	oldDir string
 	// agentsFile is the shared AGENTS.md of the user's config home.
 	agentsFile string
 	badEnv     []Problem
@@ -256,7 +242,7 @@ func (ld *loader) getenv(name string) (string, bool) {
 func (ld *loader) source(file string, layer Layer, scope, baseDir, ruleDir string) *source {
 	return &source{
 		file: file, layer: layer, scope: scope, baseDir: baseDir, ruleDir: ruleDir,
-		home: ld.in.Home, cwd: ld.in.Cwd, tools: ld.in.Tools,
+		home: ld.in.Home, cwd: ld.in.Cwd, tools: ld.in.Tools, getenv: ld.getenv,
 		probs: ld.probs, secrets: ld.secrets,
 	}
 }
@@ -330,9 +316,6 @@ func (ld *loader) ownedByFolderOwner(path string) bool {
 func (ld *loader) apply(src *source, f File, project bool) {
 	f.Held = project && !ld.in.Trusted
 	ld.files = append(ld.files, f)
-	if project {
-		ld.projectFiles = append(ld.projectFiles, f.Path)
-	}
 	for _, o := range src.ops {
 		if f.Held && !(ld.in.KeepUntrusted != nil && ld.in.KeepUntrusted(o.kind)) {
 			ld.held = append(ld.held, Held{Kind: o.kind, Text: o.text, Origin: o.origin})
@@ -342,27 +325,9 @@ func (ld *loader) apply(src *source, f File, project bool) {
 	}
 }
 
-// rcFile reads a gnoshrc, if it is there.
-func (ld *loader) rcFile(path string, layer Layer, scope string, project, old bool) bool {
-	data, ok := ld.read(path)
-	if !ok {
-		return false
-	}
-	if project && !ld.ownedByFolderOwner(path) {
-		return false
-	}
-	ruleDir := ld.paths.ConfigDir
-	if project {
-		ruleDir = ld.in.Cwd
-	}
-	src := ld.source(path, layer, scope, filepath.Dir(path), ruleDir)
-	readRC(src, data, ld.getenv)
-	ld.apply(src, File{Path: path, Role: "gnoshrc", Scope: scope, OldName: old}, project)
-	return true
-}
-
-// settingsFile reads a JSON settings file, if it is there.
-func (ld *loader) settingsFile(path string, layer Layer, scope, ruleDir string, project, onlyHooks bool) bool {
+// file reads a config file, if it is there, and puts what it says in
+// force or holds it. ruleDir is what a permission rule's "/path" is under.
+func (ld *loader) file(path string, layer Layer, scope, ruleDir string, project bool) bool {
 	data, ok := ld.read(path)
 	if !ok {
 		return false
@@ -371,8 +336,8 @@ func (ld *loader) settingsFile(path string, layer Layer, scope, ruleDir string, 
 		return false
 	}
 	src := ld.source(path, layer, scope, filepath.Dir(path), ruleDir)
-	readSettings(src, data, onlyHooks)
-	ld.apply(src, File{Path: path, Role: "settings", Scope: scope, OldName: onlyHooks}, project)
+	readFile(src, data)
+	ld.apply(src, File{Path: path, Role: "settings", Scope: scope}, project)
 	return true
 }
 
@@ -392,67 +357,52 @@ func (ld *loader) run() *Config {
 		}
 	}
 
-	// The user's own files: gnosh.json, then gnoshrc.
+	// The user's own file.
 	p.UserSettings = filepath.Join(p.ConfigDir, "gnosh.json")
-	rc, old := filepath.Join(p.ConfigDir, "gnoshrc"), false
-	if !ld.exists(rc) && ld.oldDir != "" {
-		if was := filepath.Join(ld.oldDir, filepath.Base(oldNames[0].old)); ld.exists(was) {
-			rc, old = was, true
-		}
-	}
 	if reads("user") {
-		ld.settingsFile(p.UserSettings, LayerUser, "user", p.ConfigDir, false, false)
-		if ld.rcFile(rc, LayerUser, "user", false, old) {
-			p.UserRC = rc
-		}
+		ld.file(p.UserSettings, LayerUser, "user", p.ConfigDir, false)
 	}
 
 	// What was chosen inside gnosh.
 	ld.state()
 
-	// The project's files, in the working directory. They are passed over
-	// when the working directory is the config directory itself, where
-	// they would be the user's files read twice.
-	settings, onlyHooks := filepath.Join(in.Cwd, oldNames[2].now), false
-	if !ld.exists(settings) {
-		if was := filepath.Join(in.Cwd, oldNames[2].old); ld.exists(was) {
-			settings, onlyHooks = was, true
+	// The project's file, in the working directory. It is passed over
+	// when the working directory is the config directory itself, where it
+	// would be the user's file read twice.
+	project := filepath.Join(in.Cwd, "gnosh.json")
+	if project != p.UserSettings {
+		ld.projectFiles = append(ld.projectFiles, project)
+		if reads("project") && ld.file(project, LayerProject, "project", in.Cwd, true) {
+			p.ProjectSettings = project
 		}
-	}
-	if reads("project") && settings != p.UserSettings && ld.settingsFile(settings, LayerProject, "project", in.Cwd, true, onlyHooks) {
-		p.ProjectSettings = settings
-	}
-	dotted, plain := filepath.Join(in.Cwd, ".gnoshrc"), filepath.Join(in.Cwd, "gnoshrc")
-	prc := dotted
-	switch {
-	case !ld.exists(dotted):
-		prc = plain
-	case ld.exists(plain) && plain != rc && reads("project"):
-		ld.probs.warnf(plain, 0, "both .gnoshrc and gnoshrc are in this folder. The dotted name wins, so this file was not read.")
-	}
-	if reads("project") && prc != rc && ld.rcFile(prc, LayerProject, "project", true, false) {
-		p.ProjectRC = prc
 	}
 
 	// The project's data folder, and the settings file gnosh itself
 	// writes there (saved approvals).
 	ld.dataDir()
 	p.LocalSettings = filepath.Join(p.DataDir, "settings.local.json")
+	ld.projectFiles = append(ld.projectFiles, p.LocalSettings)
 	if reads("local") {
-		ld.settingsFile(p.LocalSettings, LayerProject, "local", in.Cwd, true, false)
+		ld.file(p.LocalSettings, LayerProject, "local", in.Cwd, true)
 	}
 
 	// --settings: a file, or the JSON itself.
 	if given := strings.TrimSpace(in.Flags.Settings); strings.HasPrefix(given, "{") {
 		src := ld.source("--settings", LayerFlag, "command line", in.Cwd, in.Cwd)
-		readSettings(src, []byte(given), false)
+		readFile(src, []byte(given))
 		ld.apply(src, File{Path: "--settings", Role: "settings", Scope: "command line"}, false)
 	} else if given != "" {
 		path := absPath(given, in.Home, in.Cwd)
-		if !ld.exists(path) {
+		switch {
+		case !ld.exists(path):
 			ld.probs.at(Error, flagOrigin("--settings"), "the file %s is not there. --settings takes the path of a settings file, or the JSON itself, starting with a brace.", path)
-		} else {
-			ld.settingsFile(path, LayerFlag, "command line", filepath.Dir(path), false, false)
+		case !in.Trusted && slices.Contains(ld.projectFiles, path):
+			// Naming the folder's own file is not a way round the gate,
+			// and neither is naming it while --setting-sources leaves
+			// the folder's files out.
+			ld.probs.at(Error, flagOrigin("--settings"), "%s is one of this folder's own settings files, and the folder is not trusted, so naming it with --settings does not put it in force. To use the folder's settings, trust the folder (gnosh trust), or start with --trust-folder for this one run.", path)
+		default:
+			ld.file(path, LayerFlag, "command line", filepath.Dir(path), false)
 		}
 	}
 
@@ -499,17 +449,15 @@ func (ld *loader) dirs() {
 		return filepath.Clean(v), true
 	}
 	configHome := xdg("XDG_CONFIG_HOME", ".config")
-	ld.oldDir = filepath.Join(configHome, filepath.Dir(oldNames[0].old))
 	ld.agentsFile = filepath.Join(configHome, "AGENTS.md")
 	var explicit bool
-	if p.ConfigDir, explicit = own("GNOSH_GLOBAL_CONFIG", filepath.Join(configHome, "gnosh")); explicit {
+	if p.ConfigDir, explicit = own("GNOSH_CONFIG_DIR", filepath.Join(configHome, "gnosh")); explicit {
 		// A directory named outright is the only place the user's files
-		// are read from: no old names beside it, and no shared file from
-		// a config home that was not named.
-		ld.oldDir = ""
+		// are read from: no shared file from a config home that was not
+		// named.
 		ld.agentsFile = filepath.Join(p.ConfigDir, "AGENTS.md")
 	}
-	p.StateDir, _ = own("GNOSH_GLOBAL_DATA", filepath.Join(xdg("XDG_DATA_HOME", filepath.Join(".local", "share")), "gnosh"))
+	p.StateDir, _ = own("GNOSH_DATA_DIR", filepath.Join(xdg("XDG_DATA_HOME", filepath.Join(".local", "share")), "gnosh"))
 	p.CacheDir = filepath.Join(xdg("XDG_CACHE_HOME", ".cache"), "gnosh")
 	p.StateFile = filepath.Join(p.StateDir, "state.json")
 	p.TrustDir = filepath.Join(p.StateDir, "trusted-folders")
@@ -524,7 +472,7 @@ func (ld *loader) dataDir() {
 		p.DataDir = absPath(in.Flags.DataDir, in.Home, in.Cwd)
 		return
 	}
-	name := ld.b.opts.DataDirectory.V
+	name := ld.b.opts.ProjectDataDir.V
 	if filepath.IsAbs(name) {
 		p.DataDir = filepath.Clean(name)
 		return
@@ -557,7 +505,8 @@ func (ld *loader) ownEnv() {
 }
 
 // state reads the state file and puts its choices in force, above the
-// user's gnoshrc and below the project's. Nothing in it can stop startup.
+// user's gnosh.json and below the project's. Nothing in it can stop
+// startup.
 func (ld *loader) state() {
 	path := ld.paths.StateFile
 	st, probs := ReadState(ld.in.FS, path)

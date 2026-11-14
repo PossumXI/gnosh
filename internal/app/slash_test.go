@@ -12,9 +12,9 @@ import (
 func TestSlashCommandsInASession(t *testing.T) {
 	w := apptest.NewWorld(t)
 	w.Model.SetModels("test-model", "other-model")
-	w.RC("permissions deny 'Bash(rm *)'")
+	w.Deny("Bash(rm *)")
 	hook := w.Script(w.Home+"/hooks/noop.sh", "cat > /dev/null")
-	w.RC("hook add Stop --name tests --command " + hook)
+	w.Hook("Stop", "", hook)
 	turns := 0
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		if isSummaryRequest(r) {
@@ -69,9 +69,10 @@ func TestSlashCommandsInASession(t *testing.T) {
 	s.see("Bash(rm *)")
 	s.typeLine("/hooks")
 	s.see("Stop:")
-	s.see("tests: ")
+	s.see("  " + hook)
+	s.see("from " + w.SettingsFile())
 	s.typeLine("/doctor")
-	s.see("large model: local/test-model")
+	s.see("model: local/test-model")
 	s.see("A turn can run.")
 
 	// /model lists what there is and switches; the choice is kept.

@@ -29,9 +29,10 @@ type Hook struct {
 	// (where a hook's own timeout counts up to 60 seconds).
 	Timeout time.Duration
 
-	// Name is the name a gnoshrc line gave the hook. A hook from a JSON
-	// settings block has none. Within one event a name belongs to one
-	// hook: adding a hook under a name that is taken replaces it.
+	// Name is a name for the hook, for messages, given by code that makes
+	// a Hook by hand. A hook read from a settings file has none. Within
+	// one event a name belongs to one hook: adding a hook under a name
+	// that is taken replaces it.
 	Name string
 
 	// Source says where the hook is written, for messages: a file, and a
@@ -54,37 +55,35 @@ func (h Hook) label() string {
 	return "`" + shorten(h.Command, 100) + "`"
 }
 
-// Spec is a hook as a settings line writes it, before it has been checked:
-// the fields of a gnoshrc line such as
-//
-//	hook add Stop --name tests --command "./hooks/tests-must-pass.sh" --timeout 1800
-//
-// with the event's name as the line has it.
+// Spec is a hook as a caller that has already read the settings hands it
+// over, before it has been checked: one handler of a settings file, with
+// the event's name as the file has it.
 type Spec struct {
 	// Event is the event's name as written.
 	Event string
-	// Command is the value of --command.
+	// Command is the command line to run.
 	Command string
-	// Matcher is the value of --matcher, or empty.
+	// Matcher is the matcher of the handler's group, or empty.
 	Matcher string
-	// Name is the value of --name, or empty.
+	// Name is a name for the hook, or empty.
 	Name string
-	// Timeout is the value of --timeout. Zero means the event's default.
+	// Timeout is how long the command may run. Zero means the event's
+	// default.
 	Timeout time.Duration
-	// Source says where the line is, such as "~/.config/gnosh/gnoshrc:12".
+	// Source says where the hook is written, such as
+	// "~/.config/gnosh/gnosh.json:12".
 	Source string
-	// Global is true for a line in the user's own configuration and false
-	// for one in a project's.
+	// Global is true for a hook of the user's own configuration and false
+	// for one of a project's.
 	Global bool
 }
 
-// NewHook checks a hook written as a settings line and returns it ready to
-// be added to a Config. The error says everything that is wrong with the
-// line, in plain sentences.
+// NewHook checks a hook that was read from a settings file by someone else
+// and returns it ready to be added to a Config. The error says everything
+// that is wrong with it, in plain sentences.
 //
-// It refuses exactly what ParseConfig refuses in a JSON block, so a command
-// that writes a hook line can call it first and never write a line gnosh
-// would then refuse to load.
+// It refuses exactly what ParseConfig refuses in a JSON block, so a hook
+// that passes here is one gnosh would load.
 func NewHook(s Spec) (Hook, error) {
 	h := Hook{
 		Event:   Event(s.Event),
@@ -168,9 +167,9 @@ type Config struct {
 	problems []Problem
 }
 
-// Add puts h into the configuration, as a gnoshrc "hook add" line does. A
-// hook with a name replaces the hook of the same event that has that name,
-// where it stands; any other hook goes to the end.
+// Add puts h into the configuration. A hook with a name replaces the hook
+// of the same event that has that name, where it stands; any other hook
+// goes to the end.
 func (c *Config) Add(h Hook) {
 	if h.Name != "" {
 		for i := range c.Hooks {
@@ -183,11 +182,10 @@ func (c *Config) Add(h Hook) {
 	c.Hooks = append(c.Hooks, h)
 }
 
-// Remove takes hooks out of the configuration, as a gnoshrc "hook remove"
-// line does: the hook of the event that has the name, or with an empty
-// name every hook of the event. It returns how many it took out. An event
-// name that is not one of gnosh's is an error, so that a misspelt line is
-// not read as "nothing to remove".
+// Remove takes hooks out of the configuration: the hook of the event that
+// has the name, or with an empty name every hook of the event. It returns
+// how many it took out. An event name that is not one of gnosh's is an
+// error, so that a misspelt name is not read as "nothing to remove".
 func (c *Config) Remove(event, name string) (int, error) {
 	if msg := eventProblem(event); msg != "" {
 		return 0, &ConfigError{Problems: []Problem{{Message: msg}}}
@@ -210,9 +208,8 @@ func (c Config) AsGlobal() Config {
 }
 
 // Merge puts the configurations of several layers together. Give the
-// layers weakest first: the user's own gnoshrc, the user's own JSON
-// settings, then a trusted project's gnoshrc and JSON settings, then
-// anything given on the command line.
+// layers weakest first: the user's own settings, then a trusted project's,
+// then anything given on the command line.
 //
 // Hooks do not override each other: every layer's hooks are kept, and they
 // run and report in the order given, a layer's own order inside it. The one

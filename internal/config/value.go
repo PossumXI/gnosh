@@ -13,13 +13,13 @@ type Layer int
 const (
 	// LayerDefault is gnosh's built-in default.
 	LayerDefault Layer = iota
-	// LayerUser is the user's own gnoshrc or gnosh.json.
+	// LayerUser is the user's own gnosh.json.
 	LayerUser
 	// LayerState is the user's state file: what was chosen inside gnosh
 	// with /model, /think and /autocompact.
 	LayerState
-	// LayerProject is a file of the project's: its gnoshrc, its gnosh.json,
-	// or the settings file in its data folder.
+	// LayerProject is a file of the project's: its gnosh.json, or the
+	// settings file in its data folder.
 	LayerProject
 	// LayerEnv is an environment variable.
 	LayerEnv
@@ -57,7 +57,7 @@ type Origin struct {
 	Name string
 }
 
-// String is short enough for one column: "default", "gnoshrc:3",
+// String is short enough for one column: "default", "gnosh.json:3",
 // "$API_TIMEOUT_MS", "--model".
 func (o Origin) String() string {
 	switch {

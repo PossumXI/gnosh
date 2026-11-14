@@ -27,7 +27,7 @@
 // # Using it
 //
 //	cfg, err := hooks.ParseConfig(block, "~/.config/gnosh/gnosh.json") // Claude Code's "hooks" block
-//	h, err := hooks.NewHook(hooks.Spec{Event: "Stop", Command: "./tests.sh"}) // a gnoshrc "hook add" line
+//	h, err := hooks.NewHook(hooks.Spec{Event: "Stop", Command: "./tests.sh"}) // a hook read by someone else
 //	cfg.Add(h)
 //	all := hooks.Merge(userConfig.AsGlobal(), projectConfig) // weakest layer first
 //

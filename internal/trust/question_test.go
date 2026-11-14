@@ -33,12 +33,12 @@ func TestRestricts(t *testing.T) {
 // side and its test fails until both agree.
 func TestKindsMatchTheConfigPackage(t *testing.T) {
 	got := []string{
-		KindProvider, KindModel, KindHost, KindHook, KindHookOff, KindMCPLocal, KindMCPOnline, KindLSP,
+		KindProvider, KindModel, KindHost, KindHook, KindHookOff,
 		KindAllowRule, KindAskRule, KindDenyRule, KindMode, KindAddDir, KindEnv, KindOption, KindExtraPath,
 		KindAddress, KindDisabledSkill, KindRemoval,
 	}
 	want := []string{
-		"provider", "model", "host", "hook", "hook-off", "mcp-local", "mcp-online", "lsp",
+		"provider", "model", "host", "hook", "hook-off",
 		"allow-rule", "ask-rule", "deny-rule", "mode", "add-dir", "env", "option", "extra-path",
 		"address", "disabled-skill", "removal",
 	}
@@ -106,16 +106,16 @@ func TestQuestion(t *testing.T) {
 	f := Folder{Start: "/work/proj/sub", Root: "/work/proj", Key: "/work/proj"}
 	held := []Holding{
 		{Kind: KindHook, Text: "hook Stop: ./hooks/gate.sh", File: "/work/proj/gnosh.json", Line: 4},
-		{Kind: KindAllowRule, Text: "allow Bash", File: "/work/proj/gnoshrc", Line: 2},
+		{Kind: KindAllowRule, Text: "allow Bash", File: "/work/proj/.gnosh/settings.local.json", Line: 2},
 		{Kind: KindGitProgram, Text: "git core.fsmonitor = ./watch.sh", File: "/work/proj/.git/config"},
 	}
-	q := NewQuestion(f, []string{"/work/proj/gnosh.json", "/work/proj/gnoshrc"}, held)
+	q := NewQuestion(f, []string{"/work/proj/gnosh.json", "/work/proj/.gnosh/settings.local.json"}, held)
 	if q.Folder != "/work/proj" || q.SessionOnly || len(q.Files) != 2 {
 		t.Errorf("question: %+v", q)
 	}
 	want := []string{
 		"hook Stop: ./hooks/gate.sh  (/work/proj/gnosh.json, line 4)",
-		"allow Bash  (/work/proj/gnoshrc, line 2)",
+		"allow Bash  (/work/proj/.gnosh/settings.local.json, line 2)",
 		"git core.fsmonitor = ./watch.sh  (/work/proj/.git/config)",
 	}
 	if !slices.Equal(q.Would, want) {
@@ -126,7 +126,7 @@ func TestQuestion(t *testing.T) {
 	}
 	text := q.String()
 	for _, piece := range []string{
-		"Do you trust the files in this folder?", "/work/proj", "these files would be read", "  - /work/proj/gnoshrc\n",
+		"Do you trust the files in this folder?", "/work/proj", "these files would be read", "  - /work/proj/.gnosh/settings.local.json\n",
 		"hook Stop: ./hooks/gate.sh", "What could go wrong",
 		"run as you", "without asking you", "Git would run them", "asks again next time", "gnosh trust --forget",
 	} {
@@ -180,9 +180,9 @@ func TestEscape(t *testing.T) {
 	// The whole question, notice and report, built from hostile text.
 	evil := "evil\x1b[31m\nrm -rf ~" + string(rune(0x202e))
 	f := Folder{Root: "/work/" + evil, Key: "/work/" + evil}
-	held := []Holding{{Kind: KindHook, Text: "hook Stop: " + evil, File: "/work/" + evil + "/gnoshrc", Line: 1}}
+	held := []Holding{{Kind: KindHook, Text: "hook Stop: " + evil, File: "/work/" + evil + "/gnosh.json", Line: 1}}
 	for name, text := range map[string]string{
-		"question": NewQuestion(f, []string{"/work/" + evil + "/gnoshrc"}, held).String(),
+		"question": NewQuestion(f, []string{"/work/" + evil + "/gnosh.json"}, held).String(),
 		"notice":   Notice(f),
 		"report":   Report(f, held),
 	} {
@@ -248,7 +248,7 @@ func TestDecide(t *testing.T) {
 // could go wrong", and how to undo it.
 func TestReport(t *testing.T) {
 	f := Folder{Root: "/work/feature", Key: "/work/main", Worktree: true}
-	text := Report(f, []Holding{{Kind: KindProvider, Text: "provider x at https://203.0.113.5/v1", File: "/work/feature/gnoshrc", Line: 1}})
+	text := Report(f, []Holding{{Kind: KindProvider, Text: "provider x at https://203.0.113.5/v1", File: "/work/feature/gnosh.json", Line: 1}})
 	for _, piece := range []string{
 		"Trusted: /work/main", "main checkout", "provider x at https://203.0.113.5/v1", "What could go wrong",
 		"could take your API key", "To undo: gnosh trust --forget /work/main",
