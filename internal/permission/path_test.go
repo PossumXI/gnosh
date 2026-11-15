@@ -364,3 +364,34 @@ func TestProtectedPaths(t *testing.T) {
 		t.Errorf("a link to a protected file: %+v", d)
 	}
 }
+
+// CommandDirs: where the shell may be while a command runs, or that it
+// cannot be told.
+func TestCommandDirs(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeDefault, rules{}))
+	for _, c := range []struct {
+		dir, cmd string
+		want     string // "" with ok false
+	}{
+		{"/proj", "ls", "/proj"},
+		{"/proj/src", "git status", "/proj/src"},
+		{"/proj", "cd src && ls", "/proj /proj/src"},
+		{"/proj", "cd /tmp; git status", "/proj /tmp"},
+		{"/proj", "cd .. && ls", "/proj /"},
+		{"/proj", "cd $X && ls", ""},
+		{"/proj", `eval "$CMD"`, ""},
+		{"/proj", "ls 'unclosed", ""},
+	} {
+		dirs, ok := e.CommandDirs(c.dir, c.cmd)
+		got := strings.Join(dirs, " ")
+		if c.want == "" {
+			if ok {
+				t.Errorf("CommandDirs(%q, %q) = %q, want that it cannot be told", c.dir, c.cmd, got)
+			}
+			continue
+		}
+		if !ok || got != c.want {
+			t.Errorf("CommandDirs(%q, %q) = %q, %v; want %q", c.dir, c.cmd, got, ok, c.want)
+		}
+	}
+}

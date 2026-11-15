@@ -520,8 +520,13 @@ or kept with the reason said (27).
       outside its work tree, whatever the rules and the mode allow, and
       names the same file in the work tree. Its system prompt says where
       it works (`agent-work-tree`), and a sub-agent it starts is held to
-      the same work tree. A Bash command is not held to it: a shell
-      reaches wherever it can. Box 1's Qwen showed the need: handed the
+      the same work tree. Its commands (Bash, Monitor) are held to it as
+      Claude Code holds them: one that would run in the person's
+      checkout, by a cd in it or because the shell is there, is refused
+      with the same folder in the work tree named, and so is one whose
+      folder cannot be told from its text. What a command writes there by
+      its own paths ("cp a /repo/b") is left to the rules, as Claude
+      Code leaves it. Box 1's Qwen showed the need: handed the
       checkout's absolute path in its task, it wrote there, and its own
       work tree, unchanged, was removed.
     - **A session in a kept work tree** works on its files as on any

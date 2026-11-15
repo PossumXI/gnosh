@@ -82,3 +82,21 @@ func TestWorktreeFlagRefusals(t *testing.T) {
 	plain := apptest.NewWorld(t)
 	has(t, "no repository", run(t, plain, "--trust-folder", "--worktree", "x", "-p", "hi").wantCode(t, 1).err, "is not in one")
 }
+
+// A command of a --worktree session runs in its work tree: one that would
+// run in the person's checkout is refused, and so is one whose folder
+// cannot be told from its text; one that stays runs.
+func TestWorktreeFlagCommandsStay(t *testing.T) {
+	w := repoWorld(t)
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "cd "+w.Dir+" && ls")}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"cd $X && ls"}`}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"ls"}`}}})
+	w.Model.Add(apptest.Reply{Text: "Done."})
+	run(t, w, "--trust-folder", "--worktree", "cmds", "-p", "look").wantCode(t, 0)
+	tree := filepath.Join(w.Dir, ".gnosh", "worktrees", "cmds")
+	has(t, "the first", toolResult(t, w, 1, "c1"), "This call did not run", "this command would run in "+w.Dir+", in the person's checkout", "the same folder there is "+tree)
+	has(t, "the second", toolResult(t, w, 2, "c2"), "This call did not run", "cannot be told from its text")
+	if got := toolResult(t, w, 3, "c3"); strings.Contains(got, "did not run") || !strings.Contains(got, "main.go") {
+		t.Errorf("ls in the work tree: %q", got)
+	}
+}

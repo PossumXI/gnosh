@@ -174,6 +174,26 @@ func (e *Engine) DecideAt(dir, tool string, call core.ToolCall, action core.Acti
 	return at.decideLocked(tool, call, action)
 }
 
+// CommandDirs is where the shell may be while the parts of a command run,
+// for a shell started in dir: dir itself, and wherever a cd or a pushd in
+// the line may lead. ok is false when that cannot be told: a line gnosh
+// cannot read to its end, text run as a script that gnosh cannot read, or
+// a cd to a place only known when the line runs.
+func (e *Engine) CommandDirs(dir, command string) (dirs []string, ok bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	at := *e
+	if strings.HasPrefix(dir, "/") {
+		at.cur = path.Clean(dir)
+	}
+	v := at.viewBash(command)
+	if !v.sc.ok || v.opaque != "" || v.tooMany {
+		return nil, false
+	}
+	dirs, unknown := at.lineDirsKnown(v)
+	return dirs, !unknown && !v.dirsCapped
+}
+
 // decideLocked is Decide with the lock already held.
 func (e *Engine) decideLocked(tool string, call core.ToolCall, action core.Action) Decision {
 	d := e.decide(CanonicalTool(tool), call, action)

@@ -123,11 +123,19 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 		hookReason = out.Reason
 	}
 
-	// A sub-agent with a git work tree of its own changes files there, and
-	// not in the person's checkout it was made from, whatever the rules
-	// and the mode allow: that is what the work tree is for.
-	if req.Env != nil && req.Env.Tree != nil && action.Kind == core.ActionEdit {
-		if why := outsideTree(*req.Env.Tree, cwd, action.Paths); why != "" {
+	// A session or sub-agent with a git work tree of its own (--worktree,
+	// isolation worktree) changes files and runs its commands there, not in
+	// the person's checkout it was made from, whatever the rules and the
+	// mode allow: that is what the work tree is for.
+	if req.Env != nil && req.Env.Tree != nil {
+		why := ""
+		switch {
+		case action.Kind == core.ActionEdit:
+			why = outsideTree(*req.Env.Tree, cwd, action.Paths)
+		case action.Kind == core.ActionExecute && onThisMachine(call):
+			why = l.commandOutsideTree(*req.Env.Tree, cwd, action.Command)
+		}
+		if why != "" {
 			return agent.Decision{Reason: "This call did not run. " + why}, nil
 		}
 	}
@@ -621,9 +629,7 @@ func (l *live) saveRules(rules []string) error {
 // and not in the work tree; "" when none is. A relative path is read from
 // cwd.
 func outsideTree(t core.WorkTree, cwd string, paths []string) string {
-	in := func(p, dir string) bool {
-		return p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, "/")+"/")
-	}
+	in := within
 	for _, p := range paths {
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(cwd, p)
@@ -640,4 +646,56 @@ func outsideTree(t core.WorkTree, cwd string, paths []string) string {
 			t.Path, t.Repo, p, filepath.Join(t.Path, rel))
 	}
 	return ""
+}
+
+// within reports whether the path p is dir or inside it.
+func within(p, dir string) bool {
+	return p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, "/")+"/")
+}
+
+// commandOutsideTree says why a shell command of a session with the work
+// tree t may not run, when it may run in the checkout the work tree was
+// made from and not in the work tree, or when where it runs cannot be
+// told from its text; "" when it stays in the work tree, or elsewhere.
+// Claude Code checks a command's working directory the same way. What a
+// command writes into the checkout by its own paths ("cp a /repo/b") is
+// not looked at here; the rules judge that as for any command.
+func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
+	if strings.TrimSpace(command) == "" {
+		return ""
+	}
+	dirs, ok := l.engine.CommandDirs(cwd, command)
+	if !ok {
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and where this command runs cannot be told from its text: it could run in the person's checkout at %s. Write every cd in it plainly, to a folder of your work tree.", t.Path, t.Repo)
+	}
+	for _, d := range dirs {
+		if !within(d, t.Repo) || within(d, t.Path) {
+			continue
+		}
+		same := t.Path
+		if rel, err := filepath.Rel(t.Repo, d); err == nil {
+			same = filepath.Join(t.Path, rel)
+		}
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command would run in %s, in the person's checkout at %s. Run it in your work tree instead: the same folder there is %s.", t.Path, d, t.Repo, same)
+	}
+	return ""
+}
+
+// onThisMachine reports whether a shell call runs here: its host is left
+// out, empty, or this machine's own name.
+func onThisMachine(call core.ToolCall) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(call.Input, &fields) != nil {
+		return true
+	}
+	raw, named := fields["host"]
+	if !named {
+		return true
+	}
+	var name string
+	if json.Unmarshal(raw, &name) != nil {
+		return false
+	}
+	name = strings.TrimSpace(name)
+	return name == "" || name == shelltool.LocalName
 }
