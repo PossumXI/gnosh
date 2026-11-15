@@ -76,7 +76,7 @@ func FromJSON(text string) ([]Def, error) {
 					return nil, bad("a list of tool names, or one string of them with commas")
 				}
 				if key == "tools" {
-					d.Tools, d.ToolsSet = toolNames(list), true
+					d.Tools, d.ToolsSet, d.AgentTypes = toolNames(list), true, agentTypes(list)
 				} else {
 					d.Disallowed = toolNames(list)
 				}
@@ -109,7 +109,7 @@ func FromJSON(text string) ([]Def, error) {
 			return nil, fmt.Errorf("%s", why)
 		}
 		if d.Model == "inherit" {
-			d.Model = ""
+			d.Model, d.InheritModel = "", true
 		}
 		out = append(out, d)
 	}

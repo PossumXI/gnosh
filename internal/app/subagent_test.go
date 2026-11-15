@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,6 +232,43 @@ func TestAgentPreloadsSkillsAndEffort(t *testing.T) {
 	setup(w)
 	run(t, w, "-p", "--agent", "careful", "--effort", "high", "go").wantCode(t, 0)
 	has(t, "the session's thinking", requestText(t, w, 0), `"reasoning_effort":"high"`)
+}
+
+// A sub-agent's model: the call's, then its kind's (inherit is the
+// session's), then CLAUDE_CODE_SUBAGENT_MODEL; with
+// CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 the variable is over the first two.
+func TestSubAgentModelFromTheEnvironment(t *testing.T) {
+	models := func(env ...string) string {
+		w := apptest.NewWorld(t,
+			apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"a","prompt":"A.","subagent_type":"plain"}`}}},
+			apptest.Reply{Text: "A done."},
+			apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Agent", Args: `{"description":"b","prompt":"B.","subagent_type":"same"}`}}},
+			apptest.Reply{Text: "B done."},
+			apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Agent", Args: `{"description":"c","prompt":"C.","subagent_type":"plain","model":"local/third-model"}`}}},
+			apptest.Reply{Text: "C done."},
+			apptest.Reply{Text: "All done."},
+		)
+		w.Model.SetModels("test-model", "other-model", "third-model")
+		w.Write(w.ConfigDir()+"/agents/plain.md", "---\nname: plain\ndescription: Plain.\n---\nPlain.\n")
+		w.Write(w.ConfigDir()+"/agents/same.md", "---\nname: same\ndescription: Same.\nmodel: inherit\n---\nSame.\n")
+		o := testOptions(w, "-p", "go")
+		o.Environ = append(o.Environ, env...)
+		runWith(t, t.Context(), o).wantCode(t, 0)
+		reqs := w.Model.Requests()
+		return fmt.Sprint(reqs[1].JSON["model"], " ", reqs[3].JSON["model"], " ", reqs[5].JSON["model"])
+	}
+	for _, c := range []struct {
+		env  []string
+		want string
+	}{
+		{nil, "test-model test-model third-model"},
+		{[]string{"CLAUDE_CODE_SUBAGENT_MODEL=local/other-model"}, "other-model test-model third-model"},
+		{[]string{"CLAUDE_CODE_SUBAGENT_MODEL=local/other-model", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1"}, "other-model other-model other-model"},
+	} {
+		if got := models(c.env...); got != c.want {
+			t.Errorf("with %q the sub-agents ran on %s, want %s", c.env, got, c.want)
+		}
+	}
 }
 
 // A kind of sub-agent that a project defines: it is loaded in a folder

@@ -9,7 +9,7 @@ import (
 // prompt for its body, and the scope "command line".
 func TestFromJSON(t *testing.T) {
 	defs, err := FromJSON(`{
-		"reviewer": {"description": "Reviews a change.", "prompt": "You review code.", "tools": ["Read", "Grep(*.go)"], "model": "inherit", "maxTurns": 5, "color": "red"},
+		"reviewer": {"description": "Reviews a change.", "prompt": "You review code.", "tools": "Read, Grep(*.go), Agent(helper, x)", "model": "inherit", "maxTurns": 5, "color": "red"},
 		"writer": {"description": "Writes the docs.", "prompt": "", "tools": "Read, Edit", "disallowedTools": "Bash", "background": true, "hooks": {}, "skills": ["style", "terms"], "effort": "max"}
 	}`)
 	if err != nil {
@@ -19,8 +19,8 @@ func TestFromJSON(t *testing.T) {
 		t.Fatalf("defs = %+v", defs)
 	}
 	r, w := defs[0], defs[1]
-	if r.Description != "Reviews a change." || r.Prompt != "You review code." || !r.ToolsSet || strings.Join(r.Tools, ",") != "Read,Grep" ||
-		r.Model != "" || r.MaxTurns != 5 || r.Scope != ScopeCommandLine || r.Source != "--agents" {
+	if r.Description != "Reviews a change." || r.Prompt != "You review code." || !r.ToolsSet || strings.Join(r.Tools, ",") != "Read,Grep,Agent" ||
+		strings.Join(r.AgentTypes, ",") != "helper,x" || r.Model != "" || !r.InheritModel || r.MaxTurns != 5 || r.Scope != ScopeCommandLine || r.Source != "--agents" {
 		t.Errorf("reviewer = %+v", r)
 	}
 	if strings.Join(w.Tools, ",") != "Read,Edit" || strings.Join(w.Disallowed, ",") != "Bash" || !w.Background || strings.Join(w.Other, ",") != "hooks" ||

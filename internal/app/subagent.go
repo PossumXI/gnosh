@@ -127,6 +127,9 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 		return core.ErrorResult("No sub-agent was started: this gnosh cannot run a sub-agent in a work tree of its own yet. Leave isolation out; the sub-agent then works in this folder."), nil
 	}
 	kind := firstOf(strings.TrimSpace(in.Type), agentdef.DefaultType)
+	if t.owner == nil && l.agentKinds != nil && !slices.Contains(l.agentKinds, kind) {
+		return core.ErrorResult(fmt.Sprintf("No sub-agent was started: this session runs as the agent %s, whose tools let it start only these kinds of sub-agent: %s. Name one of them as subagent_type.", l.agentName(), strings.Join(l.agentKinds, ", "))), nil
+	}
 	defs := l.agentDefs()
 	def, ok := defs.Get(kind)
 	if !ok {
@@ -248,17 +251,41 @@ func (l *live) agentNotices() {
 // besides gnosh's own two. It goes out with a session's first prompt, and
 // again after a summary. With no such kind it is empty.
 func (l *live) agentTypesLine() string {
-	var lines []string
+	var lines, builtin []string
 	for _, d := range l.agentDefs().All() {
-		if d.Scope == "built-in" {
-			continue
+		switch {
+		case l.agentKinds != nil:
+			// A session that may start only some kinds is told of those.
+			if slices.Contains(l.agentKinds, d.Name) {
+				lines = append(lines, "- `"+d.Name+"`: "+oneLine(d.Description, 300))
+			}
+		case d.Scope == "built-in":
+			builtin = append(builtin, d.Name)
+		default:
+			lines = append(lines, "- `"+d.Name+"`: "+oneLine(d.Description, 300))
 		}
-		lines = append(lines, "- `"+d.Name+"`: "+oneLine(d.Description, 300))
+	}
+	if l.agentKinds != nil {
+		if len(lines) == 0 {
+			return prompt.Wrap("This session runs as the agent " + l.agentName() + ", whose tools name kinds of sub-agent that do not exist here (" + strings.Join(l.agentKinds, ", ") + "), so the Agent tool can start none.")
+		}
+		return prompt.Wrap("This session runs as the agent " + l.agentName() + ", and the Agent tool can start only these kinds of sub-agent. Name one as subagent_type:\n" + strings.Join(lines, "\n"))
 	}
 	if len(lines) == 0 {
 		return ""
 	}
-	return prompt.Wrap("Besides general-purpose and Explore, the Agent tool can start these kinds of sub-agent, which the user or this project defined. Name one as subagent_type:\n" + strings.Join(lines, "\n"))
+	return prompt.Wrap("Besides " + andList(builtin) + ", the Agent tool can start these kinds of sub-agent, which the user or this project defined. Name one as subagent_type:\n" + strings.Join(lines, "\n"))
+}
+
+// andList joins names as a sentence does: "a", "a and b", "a, b and c".
+func andList(names []string) string {
+	switch len(names) {
+	case 0:
+		return "gnosh's own kinds"
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // cannotRunAgent says why a kind of sub-agent cannot be run by this build
@@ -463,7 +490,18 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Moments: s.moments(),
 		Drivers: s.drivers(),
 	}
-	if name := firstOf(model, def.Model); name != "" {
+	// The model: the call's, then the kind's (inherit is the session's),
+	// then CLAUDE_CODE_SUBAGENT_MODEL, which with
+	// CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 is over the first two.
+	name := firstOf(model, def.Model)
+	envModel := strings.TrimSpace(l.p.env["CLAUDE_CODE_SUBAGENT_MODEL"])
+	switch {
+	case envModel != "" && l.p.env["CLAUDE_CODE_SUBAGENT_MODEL_FORCE"] == "1":
+		name = envModel
+	case name == "" && !def.InheritModel:
+		name = envModel
+	}
+	if name != "" {
 		m, err := l.modelNamed(ctx, name)
 		if err != nil {
 			return s, fmt.Errorf("the model %s cannot be used for it: %w", name, err)

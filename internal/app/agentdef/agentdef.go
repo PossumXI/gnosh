@@ -68,6 +68,13 @@ type Def struct {
 	// Background says the definition asks to be run in the background
 	// always.
 	Background bool
+	// AgentTypes are the kinds an Agent(kind, ...) entry of Tools lets the
+	// agent start, when it runs as the session (--agent): nil lets it
+	// start any. Inside an ordinary sub-agent the list is not used.
+	AgentTypes []string
+	// InheritModel says Model was written as inherit: the session's model,
+	// whatever else would name one.
+	InheritModel bool
 	// Skills names the skills whose whole text the agent starts with
 	// (skills), and Effort the thinking level it asks for (effort): a
 	// level of its model, max, or auto.
@@ -315,7 +322,7 @@ func Parse(text string) (d Def, reason string) {
 		case "description":
 			d.Description = f.scalar
 		case "tools":
-			d.Tools, d.ToolsSet = toolNames(f.list()), true
+			d.Tools, d.ToolsSet, d.AgentTypes = toolNames(f.list()), true, agentTypes(f.list())
 		case "disallowedTools":
 			d.Disallowed = toolNames(f.list())
 		case "model":
@@ -346,7 +353,7 @@ func Parse(text string) (d Def, reason string) {
 		return d, why
 	}
 	if d.Model == "inherit" {
-		d.Model = ""
+		d.Model, d.InheritModel = "", true
 	}
 	return d, ""
 }
@@ -401,6 +408,52 @@ func toolNames(entries []string) []string {
 	return out
 }
 
+// agentTypes reads the kinds the Agent(kind, ...) entries of a tool list
+// name. It is nil when the list has no such entry, or has Agent bare,
+// which lets any kind be started. (Task is Agent's old name.)
+func agentTypes(entries []string) []string {
+	var out []string
+	for _, e := range entries {
+		name, spec, paren := strings.Cut(strings.TrimSpace(e), "(")
+		if name = strings.TrimSpace(name); name != "Agent" && name != "Task" {
+			continue
+		}
+		if !paren {
+			return nil
+		}
+		for _, k := range strings.Split(strings.TrimSuffix(strings.TrimSpace(spec), ")"), ",") {
+			if k = strings.TrimSpace(k); k != "" && !slices.Contains(out, k) {
+				out = append(out, k)
+			}
+		}
+	}
+	return out
+}
+
+// splitList cuts a list written on one line at its commas, but not at a
+// comma inside parentheses: "Read, Agent(worker, researcher)" is two
+// entries.
+func splitList(s string) []string {
+	var out []string
+	depth, from := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				out = append(out, s[from:i])
+				from = i + 1
+			}
+		}
+	}
+	return append(out, s[from:])
+}
+
 // field is one setting of the frontmatter.
 type field struct {
 	key    string
@@ -411,13 +464,13 @@ type field struct {
 }
 
 // list returns the field's value as a list: its entries, or the scalar
-// split at commas.
+// split at the commas outside parentheses.
 func (f field) list() []string {
 	if len(f.items) > 0 {
 		return f.items
 	}
 	var out []string
-	for _, part := range strings.Split(f.scalar, ",") {
+	for _, part := range splitList(f.scalar) {
 		if part = unquote(strings.TrimSpace(part)); part != "" {
 			out = append(out, part)
 		}
@@ -471,7 +524,7 @@ func frontmatter(lines []string) ([]field, error) {
 			if !strings.HasSuffix(value, "]") {
 				return nil, fmt.Errorf("the list of %q on line %d is not closed", key, i+2-len(under))
 			}
-			for _, part := range strings.Split(value[1:len(value)-1], ",") {
+			for _, part := range splitList(value[1 : len(value)-1]) {
 				if part = unquote(strings.TrimSpace(part)); part != "" {
 					f.items = append(f.items, part)
 				}

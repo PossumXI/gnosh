@@ -80,6 +80,10 @@ func (l *live) runAsAgent() error {
 			return fmt.Errorf("the tools of the agent %s cannot be put in force (%v). Nothing was started", def.Name, err)
 		}
 	}
+	if def.ToolsSet {
+		// Agent(worker, researcher) among its tools: only those kinds.
+		l.agentKinds = def.AgentTypes
+	}
 	l.asAgent = &def
 	return nil
 }

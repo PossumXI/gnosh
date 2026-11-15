@@ -80,6 +80,10 @@ type live struct {
 	large *modelUse
 	// asAgent is the kind of agent the session runs as (runas.go), or nil.
 	asAgent *agentdef.Def
+	// agentKinds are the only kinds of sub-agent the session may start,
+	// when the kind it runs as lists Agent(kind, ...) among its tools; nil
+	// for any.
+	agentKinds []string
 	// preloaded are the skills the kind it runs as preloads, as parts,
 	// once its first request has gone out (agentskills.go).
 	preloaded []agent.Part

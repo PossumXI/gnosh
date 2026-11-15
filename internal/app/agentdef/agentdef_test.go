@@ -63,6 +63,19 @@ func TestParse(t *testing.T) {
 		t.Errorf("read as %+v", d)
 	}
 
+	// Agent(kind, ...) among its tools: one entry, whatever its commas;
+	// and a model written as inherit.
+	d, reason = Parse("---\nname: lead\ndescription: Leads.\ntools: Read, Agent(worker, researcher), Grep\nmodel: inherit\n---\nLead.")
+	if reason != "" || strings.Join(d.Tools, ",") != "Read,Agent,Grep" || strings.Join(d.AgentTypes, ",") != "worker,researcher" || !d.InheritModel || d.Model != "" {
+		t.Errorf("read as %+v (%s)", d, reason)
+	}
+	if d, _ = Parse("---\nname: lead\ndescription: Leads.\ntools: [Agent(worker, x), Read]\n---\nLead."); strings.Join(d.Tools, ",") != "Agent,Read" || strings.Join(d.AgentTypes, ",") != "worker,x" {
+		t.Errorf("a list in brackets read as %q, %q", d.Tools, d.AgentTypes)
+	}
+	if d, _ = Parse("---\nname: lead\ndescription: Leads.\ntools: Agent, Read\n---\nLead."); d.AgentTypes != nil || d.InheritModel {
+		t.Errorf("Agent bare read as %q, inherit %v", d.AgentTypes, d.InheritModel)
+	}
+
 	// The skills it preloads, as a list or with commas, and its effort.
 	d, reason = Parse("---\nname: careful\ndescription: Checks.\nskills:\n  - review-list\n  - ' style '\neffort: high\n---\nCheck.")
 	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" || len(d.Other) != 0 {
