@@ -34,20 +34,24 @@ How long it may run:
 - %s is in milliseconds. Without it a command gets %d (%s); you can ask for up to %d (%s), and a larger number is lowered to that.
 `, filepath.Base(m.shell), o.MaxOutputChars, o.MaxFailedOutputChars, argTimeout,
 		o.DefaultTimeout.Milliseconds(), seconds(o.DefaultTimeout), o.MaxTimeout.Milliseconds(), seconds(o.MaxTimeout))
-	if o.TimeoutToBackground {
+	if o.TimeoutToBackground && !o.NoBackground {
 		fmt.Fprintf(&b, "- A command still running when its time is up is not stopped: it goes on in the background, and the result gives you its task id and what it has printed so far.\n")
 	} else {
 		fmt.Fprintf(&b, "- When the time is up, the command and everything it started are stopped, and you get what it printed until then.\n")
 	}
-	fmt.Fprintf(&b, "- For a server, a watcher, or anything that may take longer, set %s to true. The call then returns at once with a task id and the file that collects the output.", argBackground)
-	switch {
-	case m.opt.NoOutputTool:
-		fmt.Fprintf(&b, " Read that file to see the output, and stop the command with %s.", StopName)
-	default:
-		fmt.Fprintf(&b, " %s returns what it has printed since you last asked, and %s stops it.", OutputName, StopName)
-	}
-	if o.OnEnd != nil {
-		b.WriteString(" You are told when it ends, so there is no need to wait for it or to keep checking.")
+	if o.NoBackground {
+		fmt.Fprintf(&b, "- Background commands are off in this session: %s is refused, and every command must end within its time.", argBackground)
+	} else {
+		fmt.Fprintf(&b, "- For a server, a watcher, or anything that may take longer, set %s to true. The call then returns at once with a task id and the file that collects the output.", argBackground)
+		switch {
+		case m.opt.NoOutputTool:
+			fmt.Fprintf(&b, " Read that file to see the output, and stop the command with %s.", StopName)
+		default:
+			fmt.Fprintf(&b, " %s returns what it has printed since you last asked, and %s stops it.", OutputName, StopName)
+		}
+		if o.OnEnd != nil {
+			b.WriteString(" You are told when it ends, so there is no need to wait for it or to keep checking.")
+		}
 	}
 	fmt.Fprintf(&b, "\n- Do not keep a process alive by ending the command with &. It stays tied to this call's output and is reported as left running; %s is the way.", argBackground)
 

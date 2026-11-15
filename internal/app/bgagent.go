@@ -54,6 +54,8 @@ func (l *live) backgroundOff(owner *subSession) string {
 		return "in a run with nobody attending (-p), nothing would read its report later"
 	case l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1":
 		return "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS is set"
+	case l.inv.Bare:
+		return "minimal mode (--bare) has no background work"
 	}
 	return ""
 }

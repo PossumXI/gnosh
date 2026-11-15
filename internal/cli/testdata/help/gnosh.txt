@@ -113,6 +113,12 @@ Settings for this run
       Start with your customizations off (hooks, MCP servers, context files,
       skills on disk, custom commands), to fix a broken one. Providers, the
       model, built-in tools and permissions stay as they are. (Not built yet.)
+  --bare
+      Minimal mode: no hooks, skills, custom commands, MCP servers from files,
+      context files or mem; only Bash, Read, Edit and Write (unless --tools
+      says otherwise); no background commands or sub-agents. Give the run what
+      it needs with flags: --append-system-prompt, --settings, --mcp-config,
+      --add-dir. (Not built yet.)
   --disable-slash-commands
       Turn off skills and slash commands for this session. (Not built yet.)
   -d, --debug[=filter]

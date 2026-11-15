@@ -69,6 +69,12 @@ type Options struct {
 	// that have ended do not count. Default: 50.
 	MaxBackground int
 
+	// NoBackground turns background commands off (--bare): a call that
+	// asks for one is refused, a command whose time is up is stopped
+	// whatever TimeoutToBackground says, and the person's control that
+	// moves a command to the background does nothing.
+	NoBackground bool
+
 	// TermGrace is how long a command being stopped has between SIGTERM and
 	// SIGKILL. Default: 2 seconds.
 	TermGrace time.Duration

@@ -194,6 +194,9 @@ func Default() *Table {
 	safeMode := t.add(&flag{names: "--safe-mode", group: groupSettings, pri: 1,
 		help: "Start with your customizations off (hooks, MCP servers, context files, skills on disk, custom commands), to fix a broken one. Providers, the model, built-in tools and permissions stay as they are.",
 		set:  func(i *Invocation, _ flagValue) { i.SafeMode = true }})
+	bare := t.add(&flag{names: "--bare", group: groupSettings, pri: 1,
+		help: "Minimal mode: no hooks, skills, custom commands, MCP servers from files, context files or mem; only Bash, Read, Edit and Write (unless --tools says otherwise); no background commands or sub-agents. Give the run what it needs with flags: --append-system-prompt, --settings, --mcp-config, --add-dir.",
+		set:  func(i *Invocation, _ flagValue) { i.Bare = true }})
 	noSlash := t.add(&flag{names: "--disable-slash-commands", group: groupSettings, pri: 1,
 		help: "Turn off skills and slash commands for this session.",
 		set:  func(i *Invocation, _ flagValue) { i.DisableSlashCommands = true }})
@@ -246,7 +249,7 @@ func Default() *Table {
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile,
-		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, noSlash, debug, debugFile, verbose,
+		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel, noPersist,
 		help, version,
 	}

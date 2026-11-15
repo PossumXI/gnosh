@@ -332,3 +332,13 @@ or kept with the reason said (27).
     filter on an event that is not about a tool call keeps its hook from
     running, as in Claude Code; the session says so of both when it
     starts.
+33. **`--bare` is safe mode with less in it.** Claude Code's minimal
+    mode skips the discovery of everything a person or a project set up
+    and keeps Bash and the file tools. In gnosh it is safe mode (no
+    hooks, also none from `--settings`; no context files, skills on disk,
+    custom commands, MCP servers from files or the person's own prompt
+    texts), the tools Bash, Read, Edit and Write unless `--tools` names
+    others, none of the features (no mem, so neither its tool nor its
+    lines on the prompt), and no background commands or sub-agents: a
+    command whose time is up is stopped, as `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`
+    now also has it. What a run needs is given with flags.

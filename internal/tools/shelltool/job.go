@@ -350,7 +350,7 @@ func (j *job) attend(ctx context.Context, limit time.Duration) attended {
 			// Manager.Background.
 			continue
 		}
-		if !asked && (why != endTimeout || !j.m.opt.TimeoutToBackground || j.host != nil || startsWithSleep(j.command)) {
+		if !asked && (why != endTimeout || !j.m.opt.TimeoutToBackground || j.m.opt.NoBackground || j.host != nil || startsWithSleep(j.command)) {
 			j.finish(why, limit)
 			return attendEnded
 		}

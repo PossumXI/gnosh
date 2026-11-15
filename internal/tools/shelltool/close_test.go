@@ -370,6 +370,34 @@ func TestSleepIsNotMovedToBackground(t *testing.T) {
 	}
 }
 
+// With background commands off (--bare), a call that asks for one is
+// refused, a command whose time is up is stopped although
+// TimeoutToBackground is set, the person's move does nothing, and the
+// tool's description says so.
+func TestNoBackground(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{TimeoutToBackground: true, NoBackground: true})
+	env := newEnv(t)
+	res := run(t, t.Context(), m, BashName, env, args{argCommand: "echo hi", argBackground: true})
+	if !res.IsError || !strings.Contains(core.TextOf(res.Content), "Background commands are off in this session") {
+		t.Errorf("a background call: IsError %v, %q", res.IsError, core.TextOf(res.Content))
+	}
+	res = run(t, t.Context(), m, BashName, env, args{argCommand: "while :; do sleep 0.02; done", argTimeout: 300})
+	if headline, _, _ := parts(res); !res.IsError || !strings.HasPrefix(headline, "timed out after 0.3 s and was stopped") {
+		t.Errorf("a command whose time was up: %q", headline)
+	}
+	if len(m.Tasks()) != 0 {
+		t.Errorf("Tasks() = %+v", m.Tasks())
+	}
+	if m.Background("no-such-call") {
+		t.Errorf("Background reported a command to move")
+	}
+	desc := m.bashSpec().Description
+	if !strings.Contains(desc, "Background commands are off in this session") || strings.Contains(desc, "goes on in the background") {
+		t.Errorf("the description does not say background commands are off:\n%s", desc)
+	}
+}
+
 func TestMoveToBackgroundOnRequest(t *testing.T) {
 	t.Parallel()
 	m := newManager(t, Options{})

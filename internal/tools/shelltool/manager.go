@@ -179,7 +179,7 @@ func (m *Manager) Background(callID string) bool {
 	m.mu.Lock()
 	j := m.calls[callID]
 	m.mu.Unlock()
-	if j == nil || j.host != nil {
+	if j == nil || j.host != nil || m.opt.NoBackground {
 		return false
 	}
 	select {
@@ -329,6 +329,9 @@ func (m *Manager) admit(j *job, background bool, callID string) (name string, er
 	defer m.mu.Unlock()
 	if m.closed {
 		return "", errClosed
+	}
+	if background && m.opt.NoBackground {
+		return "", refusal("Background commands are off in this session. Run the command in the foreground, with a timeout that leaves it room.")
 	}
 	if background && m.bgRunning >= m.opt.MaxBackground {
 		return "", refusal(fmt.Sprintf("%d background commands are already running, which is the most allowed at once. Stop one with %s first, or run this command in the foreground.", m.bgRunning, StopName))

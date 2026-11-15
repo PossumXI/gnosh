@@ -275,7 +275,8 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.facts = l.sessionFacts()
 	var protected []string
 	for _, f := range p.o.Features {
-		if f.Session == nil {
+		if f.Session == nil || l.inv.Bare {
+			// (Minimal mode has none of the features: no mem.)
 			continue
 		}
 		c, err := f.Session(ctx, l.facts)

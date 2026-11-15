@@ -254,3 +254,31 @@ func TestSubcommandsThatLook(t *testing.T) {
 		t.Errorf("the subcommands sent the model %d request(s)", n-asked)
 	}
 }
+
+// --bare is minimal mode: the tools are Bash, Read, Edit and Write, the
+// features are off (no mem, so no line about it on the prompt), no hook
+// runs even from --settings, and no context file is read.
+func TestBareMode(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Bare."})
+	w.Write("AGENTS.md", "Always answer in French.\n")
+	hookRan := w.Home + "/hook-ran"
+	hook := w.Script(w.Home+"/hooks/h.sh", "cat > /dev/null; touch "+hookRan)
+	r := run(t, w, "-p", "--bare", "--trust-folder", "--settings", `{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "`+hook+`"}]}]}}`, "say it").wantCode(t, 0)
+	has(t, "the answer", r.out, "Bare.")
+	reqs := w.Model.Requests()
+	body := string(reqs[len(reqs)-1].Body)
+	for _, name := range []string{"Bash", "Read", "Edit", "Write"} {
+		has(t, "the tools sent", body, `"name":"`+name+`"`)
+	}
+	hasNot(t, "the tools sent", body, `"name":"Glob"`, `"name":"Agent"`, `"name":"gnovm_run"`, "Always answer in French", "Use mem and Gno")
+	if _, err := os.Stat(hookRan); err == nil {
+		t.Errorf("a hook from --settings ran in minimal mode")
+	}
+	// --tools names others where it is given.
+	w.Model.Add(apptest.Reply{Text: "Bare again."})
+	run(t, w, "-p", "again", "--bare", "--tools", "Read,Glob").wantCode(t, 0)
+	reqs = w.Model.Requests()
+	body = string(reqs[len(reqs)-1].Body)
+	has(t, "the tools sent with --tools", body, `"name":"Glob"`, `"name":"Read"`)
+	hasNot(t, "the tools sent with --tools", body, `"name":"Bash"`)
+}

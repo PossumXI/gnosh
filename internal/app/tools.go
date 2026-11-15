@@ -68,6 +68,7 @@ func (l *live) buildTools() error {
 		DefaultTimeout:      limits.BashDefaultTimeout.V,
 		MaxTimeout:          limits.BashMaxTimeout.V,
 		TimeoutToBackground: true,
+		NoBackground:        l.inv.Bare || l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1",
 		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
 		MaxOutputChars:      limits.BashMaxOutput.V,
 		NoOutputTool:        true,

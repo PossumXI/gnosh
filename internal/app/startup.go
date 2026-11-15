@@ -212,6 +212,9 @@ func (p *program) prepare(ctx context.Context, inv cli.Invocation, interactive b
 	return st, cli.ExitOK
 }
 
+// bareTools are the tools of minimal mode (--bare).
+var bareTools = []string{"Bash", "Read", "Edit", "Write"}
+
 // load reads the configuration, treating the folder as trusted or not.
 func (st *startup) load(trusted bool) {
 	p, inv := st.p, st.inv
@@ -230,6 +233,15 @@ func (st *startup) load(trusted bool) {
 		SettingSources:       inv.SettingSources,
 		SafeMode:             inv.SafeMode,
 		Debug:                inv.Debug,
+	}
+	if inv.Bare {
+		// Minimal mode is safe mode with the tools cut down to running
+		// commands and reading and changing files, unless --tools names
+		// others.
+		flags.SafeMode = true
+		if !inv.ToolsGiven {
+			flags.ToolsGiven, flags.Tools = true, slices.Clone(bareTools)
+		}
 	}
 	// What was typed as a path is meant from where it was typed, not from
 	// the folder --cwd names.

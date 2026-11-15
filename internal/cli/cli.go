@@ -143,6 +143,10 @@ type Invocation struct {
 	// NoSessionPersistence keeps nothing of a run: its session is not
 	// saved and cannot be resumed (print mode only).
 	NoSessionPersistence bool
+	// Bare is minimal mode: safe mode's customizations off, mem and the
+	// other features off, only Bash, Read, Edit and Write unless --tools
+	// says otherwise, and no background commands or sub-agents.
+	Bare bool
 
 	// Model is the model for this run, as typed: `model` or `provider/model`.
 	Model string
