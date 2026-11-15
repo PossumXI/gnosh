@@ -1120,7 +1120,7 @@ func (c *controls) SetMode(mode string) error {
 	case fell:
 		return errors.New("gnosh has no auto mode: it needs a second model to review each action")
 	case m == permission.ModeBypass && !l.cfg.Permissions.BypassAvailable:
-		return errors.New("skipping permissions can only be switched to in a session that was started with it (-y)")
+		return errors.New("skipping permissions can only be switched to in a session that was started with it (-y) or with it within reach (--allow-dangerously-skip-permissions)")
 	}
 	return l.setMode(m)
 }

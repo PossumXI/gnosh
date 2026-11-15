@@ -207,6 +207,7 @@ var built = []string{
 	"--permission-mode",
 	"--permission-mode=default", "--permission-mode=plan", "--permission-mode=acceptEdits",
 	"--permission-mode=dontAsk", "--permission-mode=bypassPermissions",
+	"--allow-dangerously-skip-permissions",
 	"--allowedTools", "--disallowedTools", "--tools", "--add-dir", "--trust-folder",
 	"--system-prompt", "--system-prompt-file", "--append-system-prompt", "--append-system-prompt-file",
 	"--setting-sources", "--safe-mode", "--disable-slash-commands",

@@ -88,8 +88,7 @@ type Flags struct {
 	SkipPermissions bool
 	// AllowSkipPermissions is --allow-dangerously-skip-permissions: the
 	// session may switch to skipping permissions later, without starting
-	// that way. (The command line does not take that flag yet, so nothing
-	// sets this today: internal/cli lists a flag once its part is built.)
+	// that way.
 	AllowSkipPermissions bool
 	// AllowedTools and DisallowedTools are the rules of --allowedTools and
 	// --disallowedTools. Each element may itself be a list, split as

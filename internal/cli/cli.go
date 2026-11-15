@@ -145,6 +145,10 @@ type Invocation struct {
 	// --dangerously-skip-permissions set ModeBypassPermissions, and `manual`
 	// is recorded as ModeDefault.
 	PermissionMode string
+	// AllowSkipPermissions is --allow-dangerously-skip-permissions: the
+	// session may switch to skipping permissions later, with Shift+Tab,
+	// without starting that way.
+	AllowSkipPermissions bool
 	// AllowedTools holds the allow rules, one per item, as typed.
 	AllowedTools []string
 	// DisallowedTools holds the deny rules, one per item, as typed.

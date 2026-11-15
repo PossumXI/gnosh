@@ -217,12 +217,15 @@ func (st *startup) load(trusted bool) {
 		ReasoningEffort: inv.Effort,
 		PermissionMode:  inv.PermissionMode,
 		AllowedTools:    inv.AllowedTools,
-		DisallowedTools: inv.DisallowedTools,
-		ToolsGiven:      inv.ToolsGiven,
-		Tools:           inv.Tools,
-		SettingSources:  inv.SettingSources,
-		SafeMode:        inv.SafeMode,
-		Debug:           inv.Debug,
+		// (-y and its other spellings are folded into the mode by the
+		// command line; this one only puts the mode within reach.)
+		AllowSkipPermissions: inv.AllowSkipPermissions,
+		DisallowedTools:      inv.DisallowedTools,
+		ToolsGiven:           inv.ToolsGiven,
+		Tools:                inv.Tools,
+		SettingSources:       inv.SettingSources,
+		SafeMode:             inv.SafeMode,
+		Debug:                inv.Debug,
 	}
 	// What was typed as a path is meant from where it was typed, not from
 	// the folder --cwd names.

@@ -62,6 +62,9 @@ Permissions
   --permission-mode <mode>
       Start in this permission mode: default (also written manual), plan,
       acceptEdits, dontAsk or bypassPermissions. (Not built yet.)
+  --allow-dangerously-skip-permissions
+      Let the session switch to skipping permissions later, with Shift+Tab,
+      without starting that way. (Not built yet.)
   --allowedTools, --allowed-tools <rules...>
       Let these run without asking. A rule is a tool's name, or a name with a
       pattern in parentheses: Read, "Bash(git diff *)". (Not built yet.)

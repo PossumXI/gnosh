@@ -267,3 +267,11 @@ or kept with the reason said (27).
     wrote it shows no read of the earlier tree or of the staging folder,
     and the earlier file's name does not occur in it. It was not carried,
     so `CARRIED.md` does not list it.
+29. **`--allow-dangerously-skip-permissions` is on the command line.** Item
+    26 took it off with every name whose part was not built. Its part was
+    built all but the flag: the config already knew a session in which
+    skipping is within reach without being the mode it starts in, the
+    session refused the switch anywhere else, and Shift+Tab already passed
+    over the mode where it was refused. The flag is Claude Code's, by its
+    name and its meaning (`spec/cc/cli.md`). Where a setting forbids
+    skipping, the flag is refused as `-y` is.

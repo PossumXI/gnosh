@@ -136,6 +136,9 @@ func Default() *Table {
 			{name: "auto", refuse: "gnosh has no auto mode (it is Claude Code's, where a second model reviews each action)"},
 		},
 		set: func(i *Invocation, v flagValue) { i.PermissionMode = v.text }})
+	allowSkip := t.add(&flag{names: "--allow-dangerously-skip-permissions", group: groupPermissions, pri: 1,
+		help: "Let the session switch to skipping permissions later, with Shift+Tab, without starting that way.",
+		set:  func(i *Invocation, _ flagValue) { i.AllowSkipPermissions = true }})
 	allowed := t.add(&flag{names: "--allowedTools --allowed-tools", kind: kindList, list: listRules, arg: "rules...", group: groupPermissions, pri: 1,
 		help: `Let these run without asking. A rule is a tool's name, or a name with a pattern in parentheses: Read, "Bash(git` + nbsp + `diff` + nbsp + `*)".`,
 		set:  func(i *Invocation, v flagValue) { i.AllowedTools = append(i.AllowedTools, v.items...) }})
@@ -231,7 +234,7 @@ func Default() *Table {
 	sessionFlags := []*flag{
 		cont, resume, sessionID, fork, name,
 		model, effort,
-		yolo, mode, allowed, disallowed, tools, addDir, trustFolder,
+		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile,
 		cwd, settings, settingSrc, safeMode, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel,

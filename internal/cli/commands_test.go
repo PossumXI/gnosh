@@ -187,7 +187,6 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		{line: `gnosh --agents '{}'`, kind: ErrUnknownFlag, say: []string{"--agents is not a flag of gnosh"}},
 		{line: `gnosh --mcp-config ./mcp.json`, kind: ErrUnknownFlag, say: []string{"--mcp-config is not a flag of gnosh"}},
 		{line: `gnosh --strict-mcp-config`, kind: ErrUnknownFlag, say: []string{"--strict-mcp-config is not a flag of gnosh"}},
-		{line: `gnosh --allow-dangerously-skip-permissions`, kind: ErrUnknownFlag, say: []string{"--allow-dangerously-skip-permissions is not a flag of gnosh"}},
 		{line: `gnosh -p x --no-session-persistence`, kind: ErrUnknownFlag, say: []string{"--no-session-persistence is not a flag of gnosh"}},
 		{line: `gnosh -p x --permission-prompts none`, kind: ErrUnknownFlag, say: []string{"--permission-prompts is not a flag of gnosh"}},
 		{line: `gnosh -p x --output-format stream-json --include-partial-messages`, kind: ErrUnknownFlag, say: []string{"--include-partial-messages is not a flag of gnosh"}},
@@ -218,7 +217,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 	}
 	for _, gone := range []string{
 		"run", "--quiet", "--session", "--data-dir",
-		"--bare", "--agents", "--mcp-config", "--strict-mcp-config", "--allow-dangerously-skip-permissions",
+		"--bare", "--agents", "--mcp-config", "--strict-mcp-config",
 		"--no-session-persistence", "--permission-prompts", "--include-partial-messages", "--replay-user-messages",
 		"--input-format=stream-json",
 		"session delete", "session web", "session web --port",

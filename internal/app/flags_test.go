@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,6 +46,48 @@ func TestSystemPromptFlags(t *testing.T) {
 	w := apptest.NewWorld(t)
 	r := run(t, w, "--system-prompt-file", "is-not-there.txt", "-p", "hello").wantCode(t, 1)
 	has(t, "stderr", r.err, "--system-prompt-file", "is-not-there.txt", "could not be read")
+}
+
+// Skipping permissions can be switched to only in a session that was
+// started with it, or with it put within reach: --allow-dangerously-skip-
+// permissions starts the session in the mode it would have had and lets an
+// interface (Shift+Tab) go on to skipping later.
+func TestSkippingWithinReach(t *testing.T) {
+	for _, tc := range []struct {
+		args  []string
+		start string
+		reach bool
+	}{
+		{nil, "default", false},
+		{[]string{"--permission-mode", "plan"}, "plan", false},
+		{[]string{"--allow-dangerously-skip-permissions"}, "default", true},
+		{[]string{"--allow-dangerously-skip-permissions", "--permission-mode", "acceptEdits"}, "acceptEdits", true},
+		{[]string{"-y"}, "bypassPermissions", true},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			w := apptest.NewWorld(t)
+			var start, after string
+			var err error
+			_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+				start = c.Mode()
+				err = c.SetMode("bypassPermissions")
+				after = c.Mode()
+				return 0
+			}, tc.args...)
+			r.wantCode(t, 0)
+			if start != tc.start {
+				t.Errorf("the session started in %s, want %s", start, tc.start)
+			}
+			switch {
+			case tc.reach && (err != nil || after != "bypassPermissions"):
+				t.Errorf("skipping was within reach, and the switch to it came to %v, in the mode %s", err, after)
+			case !tc.reach && (err == nil || after != tc.start):
+				t.Errorf("skipping was not within reach, and the switch to it came to %v, in the mode %s", err, after)
+			case !tc.reach && !strings.Contains(err.Error(), "--allow-dangerously-skip-permissions"):
+				t.Errorf("the refusal does not name the flag that puts it within reach: %v", err)
+			}
+		})
+	}
 }
 
 // The permission modes a run can be started in.

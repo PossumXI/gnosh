@@ -74,6 +74,10 @@ func TestHarnessSpecExamples(t *testing.T) {
 
 		// CLI-6.
 		{line: `gnosh --yolo`, want: inter(Invocation{PermissionMode: skip})},
+		// Skipping within reach, without starting that way: the mode is
+		// whatever else the line says.
+		{line: `gnosh --allow-dangerously-skip-permissions`, want: inter(Invocation{AllowSkipPermissions: true})},
+		{line: `gnosh --allow-dangerously-skip-permissions --permission-mode plan`, want: inter(Invocation{AllowSkipPermissions: true, PermissionMode: ModePlan})},
 		{line: `gnosh --dangerously-skip-permissions`, want: inter(Invocation{PermissionMode: skip})},
 		{line: `gnosh -p --yolo "task"`, want: pr(Invocation{PermissionMode: skip, Prompt: "task"})},
 		{line: `gnosh --permission-mode default`, want: inter(Invocation{PermissionMode: ModeDefault})},

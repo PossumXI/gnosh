@@ -208,7 +208,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh sessions list", "gnosh s list", "gnosh session ls",
 		"gnosh session list --json", "gnosh session show --json", "gnosh session last --json", "gnosh session rename --json",
 		"gnosh mem", "gnosh logs", "gnosh logs -f", "gnosh logs --follow", "gnosh logs -t", "gnosh logs --tail", "gnosh dirs",
-		"gnosh help", "gnosh version",
+		"gnosh help", "gnosh version", "gnosh --allow-dangerously-skip-permissions",
 	} {
 		if !have[want] {
 			t.Errorf("the table has no %s", want)
@@ -225,7 +225,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh run", "gnosh r", "gnosh -q", "gnosh --quiet", "gnosh -s", "gnosh --session", "gnosh -D", "gnosh --data-dir",
 		// What the specs name and nothing builds yet.
 		"gnosh --bare", "gnosh --agents", "gnosh --mcp-config", "gnosh --strict-mcp-config",
-		"gnosh --allow-dangerously-skip-permissions", "gnosh --include-partial-messages", "gnosh --replay-user-messages",
+		"gnosh --include-partial-messages", "gnosh --replay-user-messages",
 		"gnosh --no-session-persistence", "gnosh --permission-prompts",
 		"gnosh session delete", "gnosh session rm", "gnosh session web",
 		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
