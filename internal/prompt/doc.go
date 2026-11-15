@@ -247,6 +247,9 @@
 //     how, and where its output is, and that it is news and not a request.
 //   - agent-ended (AgentEnded) says the same of a sub-agent the model
 //     started in the background, with its report, marked as its own words.
+//   - btw (Btw) stands before a side question the person asks with /btw,
+//     in a request beside the session's own that is not kept: answer in
+//     words from the conversation, call no tool, start on nothing.
 //   - summary, with summary-extra for what the person asked of it
 //     (Summary), is the request for a summary. It is about 200 tokens and
 //     asks for at most 500 words: what the user asked, in their words;
@@ -284,7 +287,8 @@
 //     once the plan is approved.
 //   - missing-result (MissingResult) stands for the result of a call that
 //     has none: it never started, it was stopped, its reply was cut off,
-//     or gnosh itself was stopped. It says whether the call ran at all,
+//     or gnosh itself was stopped; or, in a side question's request, it
+//     is still running. It says whether the call ran at all,
 //     and when it may have run in part, to check before relying on it. It
 //     is the whole result, so it needs no brackets.
 //   - close-entered-here, close-unbacked, close-not-made,

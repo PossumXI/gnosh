@@ -241,6 +241,64 @@ func (l *live) slashResume(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
+// slashBranch is /branch: the conversation so far is copied into a new
+// session, which the session's controls then open in place of this one.
+// The original is kept as it is, and can be resumed.
+func (l *live) slashBranch(ctx context.Context, c *SlashContext) error {
+	if l.agent.State().Busy {
+		return errors.New("a turn is running. Stop it first, then branch")
+	}
+	if !slices.ContainsFunc(l.ts.Entries(), func(e transcript.Entry) bool { return e.Type == transcript.TypeUser }) {
+		return errors.New("there is nothing to copy yet: the conversation has not begun")
+	}
+	name := cleanTitle(c.Args)
+	l.branchTo = &name
+	return nil
+}
+
+// branch copies the conversation into a new session, names the copy, and
+// opens it behind the same controls. The original is kept.
+func (c *controls) branch(ctx context.Context, name string) (string, error) {
+	old := c.cur()
+	copied, err := old.store.Branch(old.ts, "")
+	if err != nil {
+		return "", fmt.Errorf("the conversation could not be copied, so this session stays open: %w", err)
+	}
+	source := transcript.SourceUser
+	if name == "" {
+		// The copy would carry the original's name: it is told apart.
+		if was, byPerson := old.title(); was != "" {
+			name = was + " (branch)"
+			if !byPerson {
+				source = transcript.SourceAuto
+			}
+		}
+	}
+	if name != "" {
+		_, err = copied.Append(transcript.TitleEntry(name, source))
+	}
+	id := copied.ID()
+	if cerr := copied.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return "", fmt.Errorf("the copy %s could not be named, so this session stays open: %w", id, err)
+	}
+	old.close("resume")
+	next, err := c.p.openSession(ctx, c.st, c.front, "fork", id)
+	if err != nil {
+		return "", fmt.Errorf("the session was closed, and its copy %s could not be opened: %w. gnosh -r %s opens the original again", id, err, old.ts.ID())
+	}
+	c.mu.Lock()
+	c.l = next
+	c.mu.Unlock()
+	said := "You are in a copy of the conversation, session " + id
+	if name != "" {
+		said += ": " + name
+	}
+	return said + ". The original is kept as it was; /resume " + old.ts.ID() + " opens it again.", nil
+}
+
 // resume opens another session of the folder behind the same controls,
 // and keeps the one that was open.
 func (c *controls) resume(ctx context.Context, id string) (string, error) {

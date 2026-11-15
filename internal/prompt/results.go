@@ -163,6 +163,9 @@ const (
 	// stopped when gnosh gave up waiting. The detail says how long it
 	// waited.
 	StillRunning
+	// Running: the call is still running, and a request beside the
+	// session's (a side question) is sent meanwhile.
+	Running
 )
 
 // MissingResult returns the text that stands in for the result of a tool
@@ -187,6 +190,8 @@ func (s *Set) MissingResult(why NoResult, detail string) string {
 	case StillRunning:
 		vals.flag("still", true)
 		vals["waited"] = detail
+	case Running:
+		vals.flag("running", true)
 	default:
 		vals.flag("not_started", true)
 	}

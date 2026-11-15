@@ -37,12 +37,13 @@ the model names what was asked for, `/deliverables`, and each delivered file
 served at an address on this machine.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
-`/compact`, `/resume`, `/rewind` (the conversation, the files Write and Edit
-changed, or both), `/model`, `/plan`, `/permissions`, `/add-dir`, `/status`,
-`/context`, `/cost`, `/tasks`, `/diff`, `/export`, `/copy`, `/init`, `/memory`,
-`/agents`, `/mcp` (with reconnect, enable and disable), `/skills`, `/hooks`
-and `/doctor`, with gnosh's own `/mem`,
-`/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
+`/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write
+and Edit changed, or both), `/model`, `/effort`, `/plan`, `/permissions`,
+`/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
+model works; nothing of it is kept), `/cost`, `/tasks`, `/diff`, `/export`,
+`/copy`, `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and
+disable), `/skills`, `/reload-skills`, `/hooks` and `/doctor`, with gnosh's
+own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
 permission modes, Esc stops a turn and Esc twice goes back to an earlier
 prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, and a line that begins with `!` is a command of your own.

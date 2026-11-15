@@ -504,6 +504,13 @@ func (s *Set) AgentEnded(a AgentEnd) string {
 	return s.fill(textAgentEnded, vals)
 }
 
+// Btw returns the line that stands before a side question the person asks
+// with /btw: answer from the conversation, call no tool, keep nothing.
+// The question follows it, in the person's own words.
+func (s *Set) Btw() string {
+	return s.fill(textBtw, nil)
+}
+
 // SummaryIntro returns the line that stands just before a summary, where
 // the summary takes the place of the conversation it replaced. The summary
 // itself follows it, outside the marker: it is the model's own text.

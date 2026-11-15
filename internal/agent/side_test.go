@@ -276,3 +276,80 @@ func TestJSONObject(t *testing.T) {
 		}
 	}
 }
+
+// A side question about the conversation is the session's own next
+// request with the question after it: the same system prompt, tools and
+// messages, so that a model server that kept the conversation reads only
+// the question. The session's own model answers, never the small one, and
+// nothing of the exchange is kept.
+func TestSideQuestionAboutTheConversation(t *testing.T) {
+	r, small := sideRig(t)
+	r.model.push(say("The number is 7."))
+	if res := r.run("remember the number 7"); res.Reason != EndCompleted {
+		t.Fatalf("turn = %+v", res)
+	}
+	before := len(r.log.all())
+	r.model.push(say("<think>easy</think>It was 7."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "btw", Session: true, Prompt: "which number was it?", MaxTokens: 64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Text != "It was 7." || res.Fallback || small.count() != 0 {
+		t.Errorf("result = %+v (the small model was asked %d times)", res, small.count())
+	}
+	reqs := r.model.requests()
+	main, side := reqs[0], reqs[len(reqs)-1]
+	if len(side.Tools) != len(main.Tools) || len(side.Tools) == 0 || strings.Join(side.System, "|") != strings.Join(main.System, "|") {
+		t.Errorf("the side question's request does not begin as the session's: tools %d against %d, system %q against %q", len(side.Tools), len(main.Tools), side.System, main.System)
+	}
+	if n := len(side.Messages); n != 3 || side.Messages[0].Text() != main.Messages[0].Text() || side.Messages[2].Text() != "which number was it?" {
+		t.Errorf("the side question's messages: %+v", side.Messages)
+	}
+	if side.MaxTokens != 64 || side.Thinking != (core.Thinking{Mode: "off"}) {
+		t.Errorf("max tokens %d, thinking %+v", side.MaxTokens, side.Thinking)
+	}
+	if after := len(r.log.all()); after != before {
+		t.Errorf("the side question left %d entries in the log", after-before)
+	}
+}
+
+// A side question asked while a call runs answers that call as still
+// running, so that the conversation reads as one a model can be sent; the
+// session's own next request holds the call's real result.
+func TestSideQuestionWhileACallRuns(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{tool("Bash", func(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+			close(started)
+			<-release
+			return core.TextResult("done at last"), nil
+		})}
+	})
+	r.model.push(use(tc("c1", "Bash", `{"command":"sleep 9"}`)))
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("run the slow thing") }()
+	<-started
+	// The side question is asked first, and the session's own request
+	// after the call returns.
+	r.model.push(say("It is still sleeping."), say("All done."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "btw", Session: true, Prompt: "what is it doing?"})
+	if err != nil || res.Text != "It is still sleeping." {
+		t.Fatalf("result = %+v, err = %v", res, err)
+	}
+	reqs := r.model.requests()
+	side := reqs[len(reqs)-1]
+	last := side.Messages[len(side.Messages)-1]
+	if len(last.Blocks) != 2 || last.Blocks[0].Type != core.BlockToolResult || last.Blocks[0].ToolUseID != "c1" ||
+		!strings.Contains(core.TextOf(last.Blocks[0].Content), "still running") || last.Blocks[1].Text != "what is it doing?" {
+		t.Errorf("the side question's last message: %+v", last)
+	}
+	close(release)
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("turn = %+v", res)
+	}
+	reqs = r.model.requests()
+	next := reqs[len(reqs)-1]
+	if got := core.TextOf(next.Messages[len(next.Messages)-1].Blocks[0].Content); got != "done at last" {
+		t.Errorf("the session's own request after the side question holds %q as the call's result", got)
+	}
+}

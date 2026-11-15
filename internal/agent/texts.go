@@ -61,6 +61,10 @@ type Texts struct {
 	// DidNotStop answers a call that was still running when the loop gave
 	// up waiting for it to stop. It is given how long the loop waited.
 	DidNotStop string
+	// AsideRunning answers, in a side question about the conversation
+	// (SideRequest.Session), a call of the last reply that is still
+	// running.
+	AsideRunning string
 
 	// UnknownTool answers a call to a tool that does not exist. It is
 	// given the name and the list of tools.
@@ -146,6 +150,7 @@ var defaultTexts = Texts{
 	HaltedDuring:  "The turn was ended while this call was running. It may have partly run; check before relying on it.",
 	ReplyCut:      "This call did not run: the reply that asked for it was cut off before it was complete.",
 	Killed:        "gnosh was stopped before this call finished. It may have partly run; check before relying on it.",
+	AsideRunning:  "This call is still running; its result is not here yet.",
 	DidNotStop: "This call was told to stop when the turn ended, and %s later it still had not. " +
 		"gnosh went on without it; it may still be running, and it may have partly run.",
 
@@ -209,6 +214,7 @@ func (t Texts) fill() Texts {
 	set(&d.HaltedDuring, t.HaltedDuring)
 	set(&d.ReplyCut, t.ReplyCut)
 	set(&d.Killed, t.Killed)
+	set(&d.AsideRunning, t.AsideRunning)
 	set(&d.DidNotStop, t.DidNotStop)
 	set(&d.UnknownTool, t.UnknownTool)
 	set(&d.BadInput, t.BadInput)
@@ -232,7 +238,7 @@ func (t Texts) fill() Texts {
 	// The texts that are given nothing are read as the formats they are,
 	// once, here; the loop then uses them as they stand.
 	for _, p := range []*string{
-		&d.EmptyNudge, &d.StoppedBefore, &d.StoppedDuring, &d.HaltedDuring, &d.ReplyCut, &d.Killed,
+		&d.EmptyNudge, &d.StoppedBefore, &d.StoppedDuring, &d.HaltedDuring, &d.ReplyCut, &d.Killed, &d.AsideRunning,
 		&d.Denied, &d.Unattended, &d.SummaryRequest, &d.SummaryIntro, &d.SummaryAfter,
 		&d.TrimNote, &d.LoopContinue, &d.LoopQuestion,
 	} {

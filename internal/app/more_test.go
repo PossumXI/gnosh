@@ -93,6 +93,73 @@ func TestResumeInsideASession(t *testing.T) {
 	}
 }
 
+// /branch copies the conversation into a new session and goes on in the
+// copy, under the name given; the original is kept as it was, and what is
+// said in the copy is not in it.
+func TestBranchInsideASession(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "The first answer."}, apptest.Reply{Text: "An answer in the copy."})
+	starts := w.Home + "/starts"
+	w.Hook("SessionStart", "", w.Script(w.Home+"/hooks/start.sh", "cat >> "+starts+"\necho >> "+starts))
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/branch")
+	s.see("error: there is nothing to copy yet")
+	s.typeLine("the first prompt")
+	s.see("The first answer.")
+	s.see("-- done in ")
+	s.typeLine("/branch the experiment")
+	s.see("You are in a copy of the conversation, session ")
+	s.see(": the experiment. The original is kept as it was; /resume ")
+	s.typeLine("try it the other way")
+	s.see("An answer in the copy.")
+	s.see("-- done in ")
+	reqs := w.Model.Requests()
+	has(t, "what the model was sent in the copy", string(reqs[len(reqs)-1].Body), "the first prompt", "The first answer.", "try it the other way")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+	paths := w.Sessions()
+	if len(paths) != 2 {
+		t.Fatalf("%d session files, want the original and the copy", len(paths))
+	}
+	var withCopy int
+	for _, path := range paths {
+		checkSession(t, w, path)
+		data, _ := os.ReadFile(path)
+		if strings.Contains(string(data), "try it the other way") {
+			withCopy++
+			has(t, "the copy", string(data), "the experiment")
+		}
+	}
+	if withCopy != 1 {
+		t.Errorf("%d session files hold what was said after /branch, want the copy alone", withCopy)
+	}
+	data, _ := os.ReadFile(starts)
+	has(t, "the SessionStart hooks' input", string(data), `"source":"startup"`, `"source":"fork"`)
+}
+
+// /btw asks the session's model a side question: the request is the
+// session's own (its tools and its conversation) with the question after
+// it, the answer is the command's output, and neither is kept.
+func TestBtwSideQuestion(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Noted: seven."})
+	run(t, w, "-p", "remember the number seven").wantCode(t, 0)
+	w.Model.Add(apptest.Reply{Text: "It was seven.\n\nNothing else was said."})
+	r := run(t, w, "-c", "-p", "/btw which number was it?").wantCode(t, 0)
+	has(t, "the answer", r.out, "It was seven.", "Nothing else was said.")
+	if strings.Contains(r.out, "\n\n") {
+		t.Errorf("the answer kept an empty line: %q", r.out)
+	}
+	reqs := w.Model.Requests()
+	sent := string(reqs[len(reqs)-1].Body)
+	has(t, "the side question's request", sent, "remember the number seven", "Noted: seven.", "which number was it?", "side question", `"name":"Bash"`)
+	data, _ := os.ReadFile(w.Sessions()[0])
+	hasNot(t, "the session's file", string(data), "which number was it?", "It was seven.")
+	r = run(t, w, "-c", "-p", "/btw").wantCode(t, 1)
+	has(t, "/btw with no question", r.err, "/btw takes a question")
+}
+
 // The subcommands that look at what gnosh keeps, without a model: the
 // folders, the log, the models a server offers, and the sessions.
 func TestSubcommandsThatLook(t *testing.T) {

@@ -146,6 +146,9 @@ type live struct {
 	bgWG     sync.WaitGroup
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
+	// branchTo is set by /branch: the name of the copy it asked for, which
+	// may be empty.
+	branchTo *string
 	// system is what the model is told as its instructions, and named
 	// says the session has a name or was given one after its first
 	// prompt.
@@ -441,12 +444,16 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 func (l *live) openTranscript(ctx context.Context) error {
 	inv, cwd := l.inv, l.cfg.Paths.Cwd
 	if l.reopen != "" {
-		// The session that was just closed, again: a rewind.
+		// The session that was just closed, again (a rewind), another
+		// session of the folder (/resume), or the copy /branch made.
 		ts, err := l.store.Open(ctx, l.reopen)
 		if err != nil {
 			return fmt.Errorf("the session %s could not be opened again: %w", l.reopen, err)
 		}
-		l.ts, l.source = ts, "resume"
+		l.ts = ts
+		if l.source != "fork" {
+			l.source = "resume"
+		}
 		return nil
 	}
 	if l.source == "clear" || inv.Conversation == cli.ConversationNew || inv.Conversation == "" {
@@ -1213,6 +1220,14 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 		said, rerr := c.resume(ctx, id)
 		if rerr != nil {
 			return res, rerr
+		}
+		res.Reset, res.Text = true, said
+	}
+	if name := l.branchTo; err == nil && res.Handled && res.Name == "branch" && name != nil {
+		l.branchTo = nil
+		said, berr := c.branch(ctx, *name)
+		if berr != nil {
+			return res, berr
 		}
 		res.Reset, res.Text = true, said
 	}

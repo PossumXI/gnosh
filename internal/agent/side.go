@@ -36,6 +36,15 @@ type SideRequest struct {
 	// Timeout is how long each model is given to answer, in real time.
 	// Zero means two minutes.
 	Timeout time.Duration
+	// Session makes the request the session's own next one, with Prompt
+	// after the conversation: its system prompt, its tools and its
+	// messages as they stand, so that a model server that kept the
+	// conversation reads only the question. System and Messages are then
+	// not used, the session's own model answers (never the small one), a
+	// call of the last reply that has no result yet is answered as still
+	// running (Texts.AsideRunning), and a tool call in the answer is
+	// dropped: nothing runs, and nothing is kept.
+	Session bool
 }
 
 // SideResult is the answer to a SideRequest.
@@ -76,8 +85,11 @@ func (a *Agent) Side(ctx context.Context, sr SideRequest) (SideResult, error) {
 		return SideResult{}, errors.New("agent: a side request needs a prompt")
 	}
 	su := a.setup()
+	if sr.Session && strings.TrimSpace(sr.Prompt) == "" {
+		return SideResult{}, errors.New("agent: a side question about the conversation needs a question")
+	}
 	models := []Model{su.model}
-	if su.small != nil && su.small.Provider != nil && modelKey(*su.small) != modelKey(su.model) {
+	if !sr.Session && su.small != nil && su.small.Provider != nil && modelKey(*su.small) != modelKey(su.model) {
 		models = []Model{*su.small, su.model}
 	}
 	purpose := sr.Purpose
@@ -132,26 +144,29 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 	}
 	defer func() { <-a.modelLock }()
 
-	msgs := slices.Clone(sr.Messages)
-	if sr.Prompt != "" {
-		if n := len(msgs); n > 0 && msgs[n-1].Role == core.RoleUser {
-			last := msgs[n-1]
-			last.Blocks = append(slices.Clone(last.Blocks), core.Text(sr.Prompt))
-			msgs[n-1] = last
-		} else {
-			msgs = append(msgs, core.UserText(sr.Prompt))
+	var req *core.Request
+	if sr.Session {
+		r, err := a.asideRequest(sr, m)
+		if err != nil {
+			return res, fail("could not be sent", err)
 		}
-	}
-	req := &core.Request{
-		Model:       m.Info.ID,
-		Messages:    msgs,
-		MaxTokens:   sr.MaxTokens,
-		Temperature: sr.Temperature,
-		Thinking:    m.lowestThinking(),
-		Extra:       maps.Clone(m.Extra),
-	}
-	if sr.System != "" {
-		req.System = []string{sr.System}
+		req = r
+	} else {
+		msgs := slices.Clone(sr.Messages)
+		if sr.Prompt != "" {
+			msgs = withQuestion(msgs, core.Text(sr.Prompt))
+		}
+		req = &core.Request{
+			Model:       m.Info.ID,
+			Messages:    msgs,
+			MaxTokens:   sr.MaxTokens,
+			Temperature: sr.Temperature,
+			Thinking:    m.lowestThinking(),
+			Extra:       maps.Clone(m.Extra),
+		}
+		if sr.System != "" {
+			req.System = []string{sr.System}
+		}
 	}
 	if f := a.opts.Outgoing; f != nil {
 		req = cloneRequest(req)
@@ -200,13 +215,70 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 		return res, fail("could not answer", ans.err)
 	}
 	res.Text = AnswerText(ans.msg.Text())
+	var calls []string
+	for _, b := range ans.msg.Blocks {
+		if b.Type == core.BlockToolUse {
+			calls = append(calls, b.Name)
+		}
+	}
 	switch {
 	case ans.stop == core.StopMaxTokens:
 		return res, fmt.Errorf("%s answering the %s request: %w", m.label(), purpose, ErrCutOff)
+	case res.Text == "" && len(calls) > 0:
+		return res, fmt.Errorf("%s answered the %s request with a call to %s and no words, and nothing runs for a side request", m.label(), purpose, strings.Join(calls, ", "))
 	case res.Text == "":
 		return res, fmt.Errorf("%s answered the %s request with nothing", m.label(), purpose)
 	}
 	return res, nil
+}
+
+// withQuestion puts blocks after a conversation as the user's words: into
+// its last message when that is the user's, or in a new one.
+func withQuestion(msgs []core.Message, blocks ...core.Block) []core.Message {
+	if n := len(msgs); n > 0 && msgs[n-1].Role == core.RoleUser {
+		last := msgs[n-1]
+		last.Blocks = append(slices.Clone(last.Blocks), blocks...)
+		msgs[n-1] = last
+		return msgs
+	}
+	return append(msgs, core.Message{Role: core.RoleUser, Blocks: blocks})
+}
+
+// asideRequest is the request of a side question about the conversation
+// (SideRequest.Session): the session's next request as it stands, with the
+// question after the conversation. A call of the last reply that has no
+// result yet is answered as still running, so that the conversation reads
+// as one a model can be sent; the session's own request, later, holds the
+// real result in that place.
+func (a *Agent) asideRequest(sr SideRequest, m Model) (*core.Request, error) {
+	su := a.setup()
+	v, err := a.view()
+	if err != nil {
+		return nil, err
+	}
+	msgs := slices.Clone(v.Messages)
+	var blocks []core.Block
+	if n := len(msgs); n > 0 && msgs[n-1].Role == core.RoleAssistant {
+		for _, b := range msgs[n-1].Blocks {
+			if b.Type == core.BlockToolUse {
+				blocks = append(blocks, core.ToolResultBlock(b.ID, core.TextResult(a.texts.AsideRunning)))
+			}
+		}
+	}
+	msgs = withQuestion(msgs, append(blocks, core.Text(sr.Prompt))...)
+	if err := checkView(msgs); err != nil {
+		return nil, fmt.Errorf("the conversation does not read as one a model can be sent: %w", err)
+	}
+	req := a.assemble(su, msgs)
+	req.Model = m.Info.ID
+	req.Thinking = m.lowestThinking()
+	if sr.MaxTokens > 0 {
+		req.MaxTokens = sr.MaxTokens
+	}
+	if sr.Temperature != nil {
+		req.Temperature = sr.Temperature
+	}
+	return req, nil
 }
 
 // AnswerText returns a model's short answer read past any thinking it

@@ -49,3 +49,6 @@ The user stopped the turn, and this call had still not stopped 10s later. gnosh 
 === the same, with no time given ===
 The user stopped the turn, and this call had still not stopped. gnosh went on without it: it may still be running, and it may have run in part.
 
+=== a call still running, in a side question's request ===
+This call is still running: its result is not here yet.
+

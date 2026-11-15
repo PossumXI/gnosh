@@ -170,6 +170,7 @@ func (s *slashSet) own() []SlashCommand {
 			Run: func(ctx context.Context, c *SlashContext) error { return l.slashThink(c, true) }},
 		{Name: "no_think", Aliases: []string{"nothink", "no-think"}, Summary: "The least thinking the model has, for every later request. It sticks.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error { return l.slashThink(c, false) }},
+		{Name: "effort", Args: "[level|max|auto]", Summary: "Show or set how much the model thinks: one of its levels, max for the most, or auto for its own default. It sticks.", InRun: true, Run: l.slashEffort},
 		{Name: "model", Args: "[provider/model [level]]", Summary: "List the models, or switch to one. The choice is saved.", InRun: true, Run: l.slashModel},
 		{Name: "status", Summary: "What this session is, what it is doing, and every setting with where it came from.", InRun: true, Run: l.slashStatus},
 		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done.", Run: l.slashLoop},
@@ -186,9 +187,12 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "permissions", Summary: "The permission mode, the folders, and every rule with where it came from.", InRun: true, Run: l.slashPermissions},
 		{Name: "hooks", Summary: "Every hook that is configured, by the moment it runs at.", InRun: true, Run: l.slashHooks},
 		{Name: "skills", Summary: "Every skill there is, where it came from, and who may run it.", InRun: true, Run: l.slashSkills},
+		{Name: "reload-skills", Summary: "Read the skill and command folders again now, and say what changed.", InRun: true, Run: l.slashReloadSkills},
 		{Name: "context", Args: "[all]", Summary: "What fills the model's window, by kind.", InRun: true, Run: l.slashContext},
+		{Name: "btw", Args: "<question>", Summary: "Ask the model a side question about the conversation, also while it works. Neither the question nor the answer is kept.", InRun: true, Run: l.slashBtw},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
+		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
 		{Name: "add-dir", Args: "<directory>", Summary: "Add a working directory for the rest of this session. With nothing after it, lists them.", Run: l.slashAddDir},
@@ -293,6 +297,90 @@ func (l *live) slashThink(c *SlashContext, most bool) error {
 	if len(levels) > 2 {
 		c.Say("Its levels are %s; /model %s <level> sets one in between.", strings.Join(levels, ", "), ref)
 	}
+	return nil
+}
+
+// btwTokens caps the answer to a side question, and btwWait is how long
+// one may take, the wait for a running request of the session's own
+// included.
+const (
+	btwTokens = 4096
+	btwWait   = 10 * time.Minute
+)
+
+// slashBtw is /btw: a side question about the conversation, asked of the
+// session's own model beside the work. The request is the session's next
+// one with the question after it (agent.SideRequest.Session), so that a
+// model server that kept the conversation reads only the question; nothing
+// of it is kept, and a turn that is running goes on meanwhile. The answer
+// is the command's output.
+func (l *live) slashBtw(ctx context.Context, c *SlashContext) error {
+	q := strings.TrimSpace(c.Args)
+	if q == "" {
+		return errors.New("/btw takes a question after it, such as /btw which test was failing?")
+	}
+	res, err := c.Agent.Side(ctx, agent.SideRequest{
+		Purpose: "btw", Session: true, Prompt: l.texts.Btw() + "\n\n" + q,
+		MaxTokens: btwTokens, Timeout: btwWait,
+	})
+	switch {
+	case errors.Is(err, agent.ErrCutOff) && res.Text != "":
+		res.Text += "\n(The answer was cut off at its length limit.)"
+	case err != nil:
+		return fmt.Errorf("the side question was not answered: %w", err)
+	}
+	for _, line := range strings.Split(res.Text, "\n") {
+		if strings.TrimSpace(line) != "" {
+			c.Say("%s", line)
+		}
+	}
+	return nil
+}
+
+// slashEffort is /effort, Claude Code's name for the thinking level. With
+// nothing after it, or status, it says the level in force and the model's
+// levels; with one of them, or max for the most, it sets that one; with
+// auto it goes back to the model's own default. What it sets is saved for
+// later sessions, as /think's is.
+func (l *live) slashEffort(ctx context.Context, c *SlashContext) error {
+	ref, ok := l.modelRef()
+	if !ok {
+		return errors.New("this session has no model, so there is no thinking level. Choose a model with /model")
+	}
+	m := c.Agent.Model()
+	word := strings.ToLower(strings.TrimSpace(c.Args))
+	switch word {
+	case "", "status":
+		if len(m.Levels) == 0 {
+			c.Say("gnosh knows of no thinking levels for %s. If the model has them, declare them in gnosh.json: \"models\": {%q: {\"thinkingLevels\": [\"low\", \"medium\", \"high\"]}}", ref, ref.String())
+			return nil
+		}
+		c.Say("Thinking for %s: %s. Its levels are %s; /effort and one of them sets it, /effort auto goes back to the model's own default.",
+			ref, firstOf(m.Level, "the model's own default"), strings.Join(m.Levels, ", "))
+		return nil
+	case "auto":
+		if _, err := c.Agent.SetThinking(""); err != nil {
+			return err
+		}
+		l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, "") })
+		c.Say("Thinking for %s is the model's own default, from the next request on, in this session and in later ones.", ref)
+		return nil
+	case "max":
+		if len(m.Levels) > 0 {
+			word = m.Levels[len(m.Levels)-1]
+		}
+	}
+	switch {
+	case len(m.Levels) == 0:
+		return fmt.Errorf("gnosh knows of no thinking levels for %s, so %q cannot be set. Nothing changed", ref, word)
+	case !slices.Contains(m.Levels, word):
+		return fmt.Errorf("%q is not one of the thinking levels of %s (%s). Nothing changed", word, ref, strings.Join(m.Levels, ", "))
+	}
+	if _, err := c.Agent.SetThinking(word); err != nil {
+		return err
+	}
+	l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, word) })
+	c.Say("Thinking is %s for %s, from the next request on, in this session and in later ones.", word, ref)
 	return nil
 }
 

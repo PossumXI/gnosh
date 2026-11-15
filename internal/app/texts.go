@@ -52,6 +52,7 @@ func loopTexts(set *prompt.Set, mem bool) (agent.Texts, error) {
 	format(&t.ReplyCut, "missing-result", map[string]string{"cut_off": yes})
 	format(&t.Killed, "missing-result", map[string]string{"killed": yes})
 	format(&t.DidNotStop, "missing-result", map[string]string{"still": yes, "waited": "%[1]s"})
+	format(&t.AsideRunning, "missing-result", map[string]string{"running": yes})
 
 	summary := map[string]string{"words": fmt.Sprint(prompt.SummaryWords)}
 	if mem {

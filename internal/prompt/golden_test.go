@@ -217,7 +217,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded},
+			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -229,6 +229,7 @@ func goldenFiles() []goldenFile {
 					{"a background sub-agent finished", s.AgentEnded(AgentEnd{ID: "3f2a91c4", Description: "find the port", Report: "The server listens on 8080 (main.go:3).", Output: "/home/dev/.local/share/gnosh/projects/p/s/subagents/a.jsonl"})},
 					{"one stopped before it finished", s.AgentEnded(AgentEnd{ID: "77b0e1d2", Description: "review the patch", State: AgentFailed, Why: "its model request failed: connection refused", Report: "Half of it is read."})},
 					{"one was stopped", s.AgentEnded(AgentEnd{ID: "9c4d", Description: "search the logs", State: AgentStopped})},
+					{"before a side question (/btw)", s.Btw()},
 				}
 			},
 		},
@@ -303,6 +304,7 @@ func goldenFiles() []goldenFile {
 					{"a call cut off when gnosh was stopped", s.MissingResult(ProcessStopped, "")},
 					{"a call that would not stop", s.MissingResult(StillRunning, "10s")},
 					{"the same, with no time given", s.MissingResult(StillRunning, "")},
+					{"a call still running, in a side question's request", s.MissingResult(Running, "")},
 				}
 			},
 		},

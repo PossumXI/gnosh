@@ -207,6 +207,35 @@ func (l *live) skills() *skill.Set {
 // skillsFresh is how long a reading of the skill folders is used.
 const skillsFresh = time.Second
 
+// slashReloadSkills is /reload-skills: the skill and command folders are
+// read again now, and the skills found are named. (gnosh reads them again
+// on its own a moment after a change, so the command is for the person
+// who wants to see what it found.)
+func (l *live) slashReloadSkills(ctx context.Context, c *SlashContext) error {
+	if l.skillsOff() {
+		c.Say("Skills are off in this session (safe mode, or --disable-slash-commands), so there is nothing to read.")
+		return nil
+	}
+	l.skillMu.Lock()
+	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
+	all := l.skillSet.All()
+	l.skillMu.Unlock()
+	var names []string
+	for _, sk := range all {
+		names = append(names, sk.Name)
+	}
+	slices.Sort(names)
+	switch {
+	case len(names) == 0:
+		c.Say("The skill and command folders were read again, and hold no skill.")
+	case len(names) > 30:
+		c.Say("The skill and command folders were read again: %d skills, among them %s. /skills lists them all.", len(names), strings.Join(names[:30], ", "))
+	default:
+		c.Say("The skill and command folders were read again: %d skills, %s. /skills says more of each.", len(names), strings.Join(names, ", "))
+	}
+	return nil
+}
+
 // typedSkills describes the skills the person can run by typing them, for
 // a front end.
 func (l *live) typedSkills() []CommandInfo {

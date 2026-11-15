@@ -1,0 +1,1 @@
+The user asks a side question while the work goes on; it follows. Answer it briefly, in words, from what this conversation already holds. Call no tool and start on nothing: neither the question nor your answer stays in the conversation, and the work goes on as it was.

@@ -82,7 +82,7 @@ var atOnce = map[string]bool{
 	"deliverables": true, "artifacts": true,
 	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
 	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true, "diff": true, "mcp": true, "copy": true,
-	"think": true, "no_think": true, "nothink": true, "no-think": true,
+	"think": true, "no_think": true, "nothink": true, "no-think": true, "effort": true, "btw": true, "reload-skills": true,
 	"loop": true, "noloop": true, "no_loop": true, "no-loop": true,
 	"exit": true, "quit": true,
 }
