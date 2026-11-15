@@ -349,6 +349,7 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 //	87     42,000  stopped                0 (the engine changed under it)
 //	88    308,000  stopped                2
 //	89     80,000    474,602   43m19s    0 (the generator of file commands only)
+//	90     34,000  stopped                1 (the generator of tricks only)
 //
 // Seed 86 ran on the code with those four closed, and showed one line:
 // "time>& - -p teepwned", which in bash runs a program named -p, because
@@ -368,7 +369,14 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 // go as "a variable nobody knows". Both are closed in the reader and the
 // engine, and the generator of tricks makes such lines now (trickShapes).
 // Seed 89 was the generator of file commands alone, after a change to how
-// a cp into a directory is judged in acceptEdits.
+// a cp into a directory is judged in acceptEdits. Seed 90, the generator
+// of tricks alone, showed a line of four commands: d is given HOME, w is
+// given $d/, w is declared a name for d, and a recursive removal is
+// handed ${!d} (the row is in attack_test.go). In bash that removes the
+// home directory. The name and what it names share values that feed each
+// other, the engine gave up on the word for more of them than it follows,
+// and the count that turns that into a doubt did not follow a ${!name}
+// and came out small. It is now what filledAll itself ran into.
 //
 // (A run was stopped as soon as it had shown something new, the hole was
 // closed, and the next one started with another seed; the seeds between

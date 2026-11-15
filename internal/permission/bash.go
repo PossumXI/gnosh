@@ -1175,8 +1175,18 @@ func braced(w word) bool {
 // pattern's own text, which is what a pattern that matches nothing
 // leaves): the texts are then names, and none of them a pattern.
 func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([]string, bool)) (out []lineVal, strict, ok bool) {
+	out, strict, ok, _ = e.filledWhy(v, w, matches)
+	return out, strict, ok
+}
+
+// filledWhy is filledWith, and says of a word it gave nothing for whether
+// that was because the line gives its variables more values than
+// maxFilled ways of choosing among them (many), and not because one of
+// them is not known. A target like that is a doubt, not something nobody
+// knows: the values are on the line.
+func (e *Engine) filledWhy(v *bashView, w word, matches func(pattern string) ([]string, bool)) (out []lineVal, strict, ok, many bool) {
 	if w.static() || braced(w) || w.eqHead {
-		return nil, false, false
+		return nil, false, false, false
 	}
 	// A ~ at the head of the word is the home directory where a slash
 	// follows it ("~/$d/x"), and stays a ~ where a variable does
@@ -1192,7 +1202,7 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 		case strings.HasPrefix(first, "~/") && e.home != "":
 			home = true
 		default:
-			return nil, false, false
+			return nil, false, false, false
 		}
 	}
 	defer func() {
@@ -1213,7 +1223,7 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 			// rm -rf ${!v}" is the home directory.
 			lv := v.vars[p.name]
 			if lv == nil || len(lv.vals) == 0 {
-				return nil, false, false
+				return nil, false, false, false
 			}
 			strict = false
 			for _, val := range lv.vals {
@@ -1226,13 +1236,21 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 						alts = append(alts, lineVal{text: d})
 					}
 				case to != nil && len(to.vals) > 0:
-					alts = append(alts, to.vals...)
+				vals:
+					for _, x := range to.vals {
+						for _, have := range alts {
+							if have == x {
+								continue vals
+							}
+						}
+						alts = append(alts, x)
+					}
 				}
 				// (A value that names no variable gnosh knows of is one
 				// more thing the form may stand for, and nothing to try.)
 			}
 			if len(alts) == 0 {
-				return nil, false, false
+				return nil, false, false, false
 			}
 		case p.kind == partVar && p.name != "":
 			var vals []lineVal
@@ -1242,7 +1260,7 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 				vals = lv.vals
 				strict = strict && len(lv.vals) == 1 && !lv.open && !lv.vals[0].glob
 			case lv != nil:
-				return nil, false, false
+				return nil, false, false, false
 			case p.name == "HOME" && e.home != "":
 				vals = []lineVal{{text: e.home}}
 			case p.name == "PWD" && len(v.pwds) > 0:
@@ -1264,7 +1282,7 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 				}
 				strict = false
 			default:
-				return nil, false, false
+				return nil, false, false, false
 			}
 			// What the form makes of each value: ${v:+word} is the word,
 			// ${v%.txt} what is left of the value.
@@ -1273,14 +1291,14 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 				if val.glob && matches != nil {
 					ms, known := matches(val.text)
 					if !known || len(ms) > maxFilled {
-						return nil, false, false
+						return nil, false, false, known
 					}
 					names, glob = append(names, ms...), false
 				}
 				for _, name := range names {
 					texts, known := p.of(name, e.home)
 					if !known {
-						return nil, false, false
+						return nil, false, false, false
 					}
 				texts:
 					for _, t := range texts {
@@ -1295,10 +1313,10 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 			}
 			strict = strict && len(alts) == 1
 		default:
-			return nil, false, false
+			return nil, false, false, false
 		}
 		if len(out)*len(alts) > maxFilled {
-			return nil, false, false
+			return nil, false, false, true
 		}
 		next := make([]lineVal, 0, len(out)*len(alts))
 		for _, o := range out {
@@ -1308,7 +1326,7 @@ func (e *Engine) filledWith(v *bashView, w word, matches func(pattern string) ([
 		}
 		out = next
 	}
-	return out, strict, true
+	return out, strict, true, false
 }
 
 // partFills returns a word that holds both variables the line itself set
@@ -1423,6 +1441,13 @@ func (e *Engine) fields(v *bashView, s string) []string {
 func (e *Engine) tooManyFills(v *bashView, w word) bool {
 	if w.static() || braced(w) || w.eqHead {
 		return false
+	}
+	// (What filledAll itself ran into: the count below does not follow a
+	// ${!name} to the variables that name's values name, where the ways
+	// multiply. "d=HOME; w=$d/; declare -n w=d; rm -rf ${!d}" gave d and
+	// HOME some thirty values each.)
+	if _, _, ok, many := e.filledWhy(v, w, nil); !ok && many {
+		return true
 	}
 	ways := 1
 	for _, p := range w.parts {

@@ -586,6 +586,11 @@ func TestShellAttacks(t *testing.T) {
 		// A default or an alternative written with blanks is several words
 		// where its ${...} stands for it.
 		"rm -rf ${X:-. x}", "rm -rf ${HOME:+. x}", "${X:-rm -rf} .", "rm ${X:--rf .}", "rm -rf ${X:-x .}/", "rm -rf ${X:-. x}''", "rm -rf a${X:- . }b",
+		// A name for another variable, given a value made of that variable
+		// before it became a name: the two then share values that feed each
+		// other, more of them than gnosh follows. That is a doubt, and not
+		// a target nobody knows.
+		"d=HOME; w=$d/; declare -n w=d; rm -rf ${!d}", "d=HOME; w=$d; declare -n w=d; rm -rf ${!w}", "d=PWD; w=$d/; typeset -n w=d; rm -rf ${!d}",
 		// What a variable holds is cut into words wherever the variable
 		// stands outside double quotes, whatever is quoted beside it.
 		"x='. y'; rm -rf $x''", "x='. y'; rm -rf \"\"$x", "x='. y'; rm -rf ${x}''", "x='y .'; rm -rf $x\\ z", "x='-rf .'; rm $x''", "x='rm -rf .'; $x''",
