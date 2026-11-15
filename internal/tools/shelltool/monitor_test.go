@@ -139,7 +139,12 @@ func TestMonitorKeepsWhatIsNotTaken(t *testing.T) {
 	if !strings.Contains(got[0], "one / two") {
 		t.Errorf("the first offer taken = %q, want both lines in it", got[0])
 	}
-	run(t, t.Context(), m, StopName, env, args{argTaskID: id})
+	// Stopping it does not speak of output not read: its lines came as
+	// notes.
+	stop := core.TextOf(run(t, t.Context(), m, StopName, env, args{argTaskID: id}).Content)
+	if !strings.Contains(stop, "Stopped "+id) || strings.Contains(stop, "not been read") || !strings.Contains(stop, "Everything it printed is in ") {
+		t.Errorf("TaskStop of a Monitor: %s", stop)
+	}
 }
 
 // One offer holds at most monitorLines lines and monitorBytes bytes, and a

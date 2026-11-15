@@ -324,7 +324,12 @@ func (t stopTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	total, _, _ := j.out.size()
 	unread := total - j.offset
 	j.readMu.Unlock()
-	if unread > 0 {
+	switch {
+	case j.mon != nil:
+		// A Monitor's lines came as notes, not by reading: what is left
+		// of them is in the file.
+		text += fmt.Sprintf(" Everything it printed is in %s.", j.out.path)
+	case unread > 0:
 		text += fmt.Sprintf(" %s of its output have not been read; the whole output is in %s.", byteSize(unread), j.out.path)
 	}
 	meta := map[string]any{
