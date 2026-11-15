@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"time"
 )
 
@@ -302,8 +303,12 @@ type Hook struct {
 	// Matcher says which tools or sources the hook runs for. Empty means
 	// all of them.
 	Matcher string
-	// Command is the command line, handed to the shell.
+	// Command is the command line, handed to the shell; or, when Args is
+	// not nil, the program to run (Claude Code's exec form).
 	Command string
+	// Args are the program's arguments in the exec form: no shell reads
+	// them. Nil is the shell form.
+	Args []string
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event
@@ -315,6 +320,28 @@ type Hook struct {
 	// BaseDir is the directory of the file that configured the hook.
 	BaseDir string
 	Origin  Origin
+}
+
+// CommandLine is the hook's command as a person reads it: the shell
+// command line, or in the exec form the program and its arguments, each
+// quoted where a shell would need it.
+func (h Hook) CommandLine() string {
+	if h.Args == nil {
+		return h.Command
+	}
+	words := []string{shellWord(h.Command)}
+	for _, a := range h.Args {
+		words = append(words, shellWord(a))
+	}
+	return strings.Join(words, " ")
+}
+
+// shellWord writes s so that a shell would read it as one word.
+func shellWord(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./=:,+@%") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Permissions are the permission settings.

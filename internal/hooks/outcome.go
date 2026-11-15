@@ -437,7 +437,7 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		rec := Record{
 			Event:             h.Event,
 			Matcher:           h.Matcher,
-			Command:           h.Command,
+			Command:           h.CommandLine(),
 			Name:              h.Name,
 			Source:            h.Source,
 			GuardOnly:         h.guardOnly,

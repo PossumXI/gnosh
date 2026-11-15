@@ -191,7 +191,7 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		how, known := hookFields[m.key]
 		switch {
 		case !known:
-			bad(m.line, "%s is not a field of a hook handler that gnosh knows, so the hook might not run as it was written. gnosh reads \"type\", \"command\" and \"timeout\".", showName(m.key))
+			bad(m.line, "%s is not a field of a hook handler that gnosh knows, so the hook might not run as it was written. gnosh reads \"type\", \"command\", \"args\", \"timeout\" and \"if\".", showName(m.key))
 		case m.key == "type":
 			if m.val.kind != jString {
 				bad(m.line, "a hook's \"type\" is a string, and here it is %s.", m.val.kind.word())
@@ -206,6 +206,16 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 				break
 			}
 			h.Command = m.val.str
+		case m.key == "args":
+			items, isList := m.val.strings()
+			if !isList {
+				bad(m.line, "a hook's \"args\" is a list of strings, one argument each, and here it is %s.", m.val.kind.word())
+				break
+			}
+			h.Args = make([]string, 0, len(items))
+			for _, it := range items {
+				h.Args = append(h.Args, it.str)
+			}
 		case m.key == "timeout":
 			secs, err := strconv.ParseFloat(m.val.str, 64)
 			if m.val.kind != jNumber || err != nil || secs <= 0 || secs > 1e7 {
@@ -242,7 +252,11 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 	if !good {
 		return
 	}
-	s.add(op{kind: KindHook, text: "hook " + e.name + ": " + h.Command, origin: h.Origin, feature: FeatureHooks, what: "a hook",
+	text := h.Command
+	for _, a := range h.Args {
+		text += " " + strconv.Quote(a)
+	}
+	s.add(op{kind: KindHook, text: "hook " + e.name + ": " + text, origin: h.Origin, feature: FeatureHooks, what: "a hook",
 		apply: func(b *builder) { b.addHook(h) }})
 }
 

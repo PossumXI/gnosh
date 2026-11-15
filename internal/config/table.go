@@ -301,7 +301,7 @@ var hookFields = map[string]string{
 	"asyncRewake":   "same",
 	"onFailure":     "same",
 	"if":            "",
-	"args":          "gnosh runs a hook's command through the shell and has no \"args\" form. Write the arguments into the command",
+	"args":          "",
 }
 
 // hookFieldSame is the one value each "same" field may have.

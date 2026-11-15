@@ -126,7 +126,9 @@ func TestParseConfigRefuses(t *testing.T) {
 
 		{"an if filter that is not a string", hook(`"type": "command", "command": "true", "if": ["Bash(rm *)"]`), []string{`"if" is one permission rule`, "this one is a list"}},
 		{"an empty if filter", hook(`"type": "command", "command": "true", "if": " "`), []string{`"if" is empty`, `leave "if" out`}},
-		{"args", hook(`"type": "command", "command": "check", "args": ["--strict"]`), []string{`"args"`, "through the shell"}},
+		{"args that are not a list", hook(`"type": "command", "command": "check", "args": "--strict"`), []string{`"args" is a list of strings`, "this one is a string"}},
+		{"args that are not strings", hook(`"type": "command", "command": "check", "args": ["-n", 3]`), []string{`"args" is a list of strings`, "this one is a list"}},
+		{"an argument with a NUL in it", hook(`"type": "command", "command": "check", "args": ["a\u0000b"]`), []string{"an argument of the hook holds a NUL character"}},
 		{"a background hook", hook(`"type": "command", "command": "true", "async": true`), []string{`"async": true`, "background", "cannot stop anything"}},
 		{"a background hook that wakes the model", hook(`"type": "command", "command": "true", "asyncRewake": true`), []string{`"asyncRewake": true`, "background"}},
 		{"async that is not true or false", hook(`"type": "command", "command": "true", "async": "no"`), []string{`"async": "no"`}},
@@ -227,7 +229,7 @@ func TestNewHook(t *testing.T) {
 		t.Fatalf("NewHook: %v", err)
 	}
 	want := Hook{Event: Stop, Command: "./hooks/tests-must-pass.sh", Name: "tests", Timeout: 1800 * time.Second, Source: "gnosh.json:7", Global: true}
-	if h != want {
+	if !reflect.DeepEqual(h, want) {
 		t.Errorf("got %+v\nwant %+v", h, want)
 	}
 	if h, err := NewHook(Spec{Event: "PreToolUse", Matcher: "Bash", Command: "./no-force-push.sh", Timeout: 1500 * time.Millisecond}); err != nil || h.Timeout != 1500*time.Millisecond || h.Matcher != "Bash" {
@@ -262,7 +264,7 @@ func TestNewHookRefuses(t *testing.T) {
 				t.Fatalf("NewHook returned %+v, %v; want a *ConfigError", h, err)
 			}
 			contains(t, "the error", err.Error(), append(tt.want, "gnosh.json:3: ")...)
-			if h != (Hook{}) {
+			if !reflect.DeepEqual(h, Hook{}) {
 				t.Errorf("a refused line still gave a hook: %+v", h)
 			}
 		})

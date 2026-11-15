@@ -147,7 +147,7 @@ func (c *Config) String() string {
 		if h.Matcher != "" {
 			matcher = " [" + h.Matcher + "]"
 		}
-		line("  %s%s: %s%s", h.Event, matcher, h.Command, from(h.Origin))
+		line("  %s%s: %s%s", h.Event, matcher, h.CommandLine(), from(h.Origin))
 	}
 	if len(c.AllHooks) == 0 {
 		line("  none")
@@ -271,9 +271,10 @@ func jsonOf(v any) json.RawMessage {
 // runner that reads that shape. Timeouts are in seconds.
 func (c *Config) HooksJSON() []byte {
 	type handler struct {
-		Type    string  `json:"type"`
-		Command string  `json:"command"`
-		Timeout float64 `json:"timeout,omitempty"`
+		Type    string    `json:"type"`
+		Command string    `json:"command"`
+		Args    *[]string `json:"args,omitempty"`
+		Timeout float64   `json:"timeout,omitempty"`
 	}
 	type group struct {
 		Matcher string    `json:"matcher,omitempty"`
@@ -281,7 +282,13 @@ func (c *Config) HooksJSON() []byte {
 	}
 	block := map[string][]group{}
 	for _, h := range c.Hooks {
-		block[h.Event] = append(block[h.Event], group{Matcher: h.Matcher, Hooks: []handler{{Type: "command", Command: h.Command, Timeout: h.Timeout.Seconds()}}})
+		hd := handler{Type: "command", Command: h.Command, Timeout: h.Timeout.Seconds()}
+		if h.Args != nil {
+			// (An empty list is still the exec form.)
+			args := h.Args
+			hd.Args = &args
+		}
+		block[h.Event] = append(block[h.Event], group{Matcher: h.Matcher, Hooks: []handler{hd}})
 	}
 	data, err := json.Marshal(block)
 	if err != nil {

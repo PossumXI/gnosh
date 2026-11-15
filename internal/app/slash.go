@@ -812,7 +812,7 @@ func (l *live) slashHooks(ctx context.Context, c *SlashContext) error {
 			if h.Name != "" {
 				line += h.Name + ": "
 			}
-			line += oneLine(h.Command, 200)
+			line += oneLine(h.CommandLine(), 200)
 			if h.Matcher != "" && h.Matcher != "*" {
 				line += "  [matches " + h.Matcher + "]"
 			}

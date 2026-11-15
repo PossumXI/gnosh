@@ -153,7 +153,8 @@ func TestSettingsRefusals(t *testing.T) {
 		{"a prompt hook", `{"hooks": {"Stop": [{"hooks": [{"type": "prompt", "prompt": "ok?"}]}]}}`, 1, []string{`"type": "prompt"`}},
 		{"a hook whose if is not a string", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "if": 1}]}]}}`, 1, []string{`a hook's "if" is one permission rule`}},
 		{"a hook whose if is empty", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "if": ""}]}]}}`, 1, []string{`a hook's "if" is one permission rule`}},
-		{"a hook with args", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "args": []}]}]}}`, 1, []string{`this hook has "args"`, "through the shell"}},
+		{"a hook whose args are not a list", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "args": "-n"}]}]}}`, 1, []string{`a hook's "args" is a list of strings`, "a string"}},
+		{"a hook whose args are not strings", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "args": [1]}]}]}}`, 1, []string{`a hook's "args" is a list of strings`, "a list"}},
 		{"a background hook", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "async": true}]}]}}`, 1, []string{`this hook sets "async"`, "false"}},
 		{"a hook that wakes the model", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "asyncRewake": true}]}]}}`, 1, []string{`this hook sets "asyncRewake"`}},
 		{"a powershell hook", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "shell": "powershell"}]}]}}`, 1, []string{`this hook sets "shell"`, `"bash"`}},
@@ -399,5 +400,37 @@ func TestHooksJSON(t *testing.T) {
 	}
 	if g := block["PreToolUse"]; len(g) != 2 || g[1].Matcher != "Edit|Write" || g[1].Hooks[0].Type != "command" || g[1].Hooks[0].Timeout != 1.5 {
 		t.Errorf("HooksJSON PreToolUse: %+v", g)
+	}
+}
+
+// A hook in Claude Code's exec form keeps its arguments as they are, an
+// empty list included, and shows them as a shell would need them written.
+func TestSettingsHookArgs(t *testing.T) {
+	cfg := mustLoad(t, withConfig("{"+one+`, "hooks": {"Stop": [{"hooks": [
+		{"type": "command", "command": "${CLAUDE_PROJECT_DIR}/check", "args": ["--strict", "a b", "$HOME", "it's"]},
+		{"type": "command", "command": "true", "args": []},
+		{"type": "command", "command": "true"}]}]}}`))
+	if len(cfg.Hooks) != 3 {
+		t.Fatalf("hooks: %+v", cfg.Hooks)
+	}
+	if h := cfg.Hooks[0]; !slices.Equal(h.Args, []string{"--strict", "a b", "$HOME", "it's"}) || h.CommandLine() != `'${CLAUDE_PROJECT_DIR}/check' --strict 'a b' '$HOME' 'it'\''s'` {
+		t.Errorf("the exec form: %q, shown as %s", h.Args, h.CommandLine())
+	}
+	if h := cfg.Hooks[1]; h.Args == nil || len(h.Args) != 0 || h.CommandLine() != "true" {
+		t.Errorf("an empty list is still the exec form: %#v", h.Args)
+	}
+	if h := cfg.Hooks[2]; h.Args != nil {
+		t.Errorf("no args is the shell form: %#v", h.Args)
+	}
+	var block map[string][]struct {
+		Hooks []struct {
+			Args *[]string `json:"args"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(cfg.HooksJSON(), &block); err != nil {
+		t.Fatal(err)
+	}
+	if g := block["Stop"]; len(g) != 3 || g[0].Hooks[0].Args == nil || len(*g[0].Hooks[0].Args) != 4 || g[1].Hooks[0].Args == nil || g[2].Hooks[0].Args != nil {
+		t.Errorf("the hooks block keeps the exec form, an empty list too: %s", cfg.HooksJSON())
 	}
 }

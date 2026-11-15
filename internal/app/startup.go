@@ -518,6 +518,7 @@ func hooksConfig(cfg *config.Config) (hooks.Config, []hooks.Problem) {
 		hk, err := hooks.NewHook(hooks.Spec{
 			Event:   h.Event,
 			Command: h.Command,
+			Args:    h.Args,
 			Matcher: h.Matcher,
 			Timeout: h.Timeout,
 			Source:  h.Origin.String(),

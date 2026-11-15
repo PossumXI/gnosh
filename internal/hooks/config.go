@@ -21,8 +21,16 @@ type Hook struct {
 
 	// Command is a shell command line. A relative path in it is found
 	// from the session's working directory, not from the file the hook is
-	// written in.
+	// written in. When Args is not nil, Command is instead the program to
+	// run: Claude Code's exec form.
 	Command string
+
+	// Args, when it is not nil, are the program's arguments, each one
+	// argument as it is, with no shell to read it: the program is found on
+	// the PATH the hook is given, unless it holds a slash.
+	// ${CLAUDE_PROJECT_DIR} and ${GNOSH_PROJECT_DIR} in Command and in each
+	// argument are the project's directory.
+	Args []string
 
 	// Timeout is how long the command may run. Zero means the event's
 	// default: 600 seconds, 30 for UserPromptSubmit, 1.5 for SessionEnd
@@ -57,7 +65,29 @@ func (h Hook) label() string {
 	if h.Name != "" {
 		return quote(h.Name)
 	}
-	return "`" + shorten(h.Command, 100) + "`"
+	return "`" + shorten(h.CommandLine(), 100) + "`"
+}
+
+// CommandLine is the hook's command as a person reads it: the shell
+// command line, or in the exec form the program and its arguments, each
+// argument quoted where a shell would need it.
+func (h Hook) CommandLine() string {
+	if h.Args == nil {
+		return h.Command
+	}
+	words := []string{shellWord(h.Command)}
+	for _, a := range h.Args {
+		words = append(words, shellWord(a))
+	}
+	return strings.Join(words, " ")
+}
+
+// shellWord writes s so that a shell would read it as one word.
+func shellWord(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./=:,+@%") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Spec is a hook as a caller that has already read the settings hands it
@@ -66,8 +96,11 @@ func (h Hook) label() string {
 type Spec struct {
 	// Event is the event's name as written.
 	Event string
-	// Command is the command line to run.
+	// Command is the command line to run, or with Args the program.
 	Command string
+	// Args are the program's arguments in the exec form; nil is the
+	// shell form.
+	Args []string
 	// Matcher is the matcher of the handler's group, or empty.
 	Matcher string
 	// Name is a name for the hook, or empty.
@@ -96,6 +129,7 @@ func NewHook(s Spec) (Hook, error) {
 		Event:   Event(s.Event),
 		Matcher: s.Matcher,
 		Command: s.Command,
+		Args:    s.Args,
 		Timeout: s.Timeout,
 		Name:    s.Name,
 		Source:  s.Source,
@@ -144,6 +178,9 @@ func hookProblems(h Hook) []string {
 	}
 	if strings.ContainsRune(h.Command, 0) {
 		msgs = append(msgs, "the hook's command holds a NUL character, which no command line can.")
+	}
+	if slices.ContainsFunc(h.Args, func(a string) bool { return strings.ContainsRune(a, 0) }) {
+		msgs = append(msgs, "an argument of the hook holds a NUL character, which no argument can.")
 	}
 	if h.Timeout < 0 {
 		msgs = append(msgs, "the hook's timeout is less than zero. A timeout is a time greater than zero; leave it out for the event's default.")

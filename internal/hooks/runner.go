@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -280,7 +281,7 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	var all sync.WaitGroup
 	for i, h := range sel {
 		all.Go(func() {
-			procs[i] = r.exec(ctx, h.Command, stdin, env, dir, timeoutFor(h.Event, h.Timeout))
+			procs[i] = r.exec(ctx, h.Hook, stdin, env, dir, timeoutFor(h.Event, h.Timeout))
 		})
 	}
 	all.Wait()
@@ -338,7 +339,7 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		}
 		// The same command configured twice runs once. It is a guard
 		// only if every hook that brought it here is one.
-		if i := slices.IndexFunc(out, func(s selected) bool { return s.Command == h.Command }); i >= 0 {
+		if i := slices.IndexFunc(out, func(s selected) bool { return s.CommandLine() == h.CommandLine() && (s.Args == nil) == (h.Args == nil) }); i >= 0 {
 			out[i].guardOnly = out[i].guardOnly && guardOnly
 			continue
 		}
@@ -447,17 +448,32 @@ func closeFiles(files ...*os.File) {
 // process group, and it does not return before its own goroutines have
 // finished (but for the one that waits on a process the system would not
 // kill, which ends when that process does).
-func (r *Runner) exec(ctx context.Context, command string, stdin []byte, env []string, dir string, limit time.Duration) (p proc) {
+func (r *Runner) exec(ctx context.Context, h Hook, stdin []byte, env []string, dir string, limit time.Duration) (p proc) {
 	p.exit, p.limit = -1, limit
 	began := r.now()
 	defer func() { p.took = r.now().Sub(began) }()
 
+	cmd := exec.Command(r.shell, "-c", h.Command)
+	if h.Args != nil {
+		// The exec form: the program and its arguments as they are, with
+		// the project's directory put in for its placeholder.
+		fill := strings.NewReplacer("${CLAUDE_PROJECT_DIR}", r.projectDir, "${GNOSH_PROJECT_DIR}", r.projectDir)
+		prog, err := program(fill.Replace(h.Command), env, dir)
+		if err != nil {
+			p.startErr = err
+			return p
+		}
+		args := make([]string, len(h.Args))
+		for i, a := range h.Args {
+			args[i] = fill.Replace(a)
+		}
+		cmd = exec.Command(prog, args...)
+	}
 	pp, err := openPipes()
 	if err != nil {
 		p.startErr = err
 		return p
 	}
-	cmd := exec.Command(r.shell, "-c", command)
 	cmd.Dir, cmd.Env = dir, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = pp.inR, pp.outW, pp.errW
 	ownGroup(cmd)
@@ -603,4 +619,34 @@ func isClosed(ch <-chan struct{}) bool {
 	default:
 		return false
 	}
+}
+
+// program finds the program of a hook in the exec form: a name that holds
+// a slash is a path, from dir when it is relative, and a bare name is
+// looked for on the PATH the hook is given.
+func program(name string, env []string, dir string) (string, error) {
+	if strings.Contains(name, "/") {
+		if !filepath.IsAbs(name) {
+			name = filepath.Join(dir, name)
+		}
+		return name, nil
+	}
+	path := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			path = v
+		}
+	}
+	for _, d := range filepath.SplitList(path) {
+		if !filepath.IsAbs(d) {
+			// (An empty or relative entry is the hook's own directory, or
+			// under it.)
+			d = filepath.Join(dir, d)
+		}
+		p := filepath.Join(d, name)
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("%s is not a program on the PATH the hook is given", name)
 }

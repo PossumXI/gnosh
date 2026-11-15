@@ -91,8 +91,10 @@
 //
 // All the hooks that fit one occurrence of an event start at the same
 // time; two with the same command run once. Each is a shell command
-// (Options.Shell -c) in the session's working directory, in a session and
-// process group of its own with no terminal. All are waited for. A hook
+// (Options.Shell -c), or in Claude Code's exec form (Hook.Args) a program
+// found on the hook's PATH run with its arguments as they are, in the
+// session's working directory, in a session and process group of its own
+// with no terminal. All are waited for. A hook
 // that passes its timeout, or is still running when the turn is cancelled,
 // is stopped with its whole process group: SIGTERM, and SIGKILL after
 // Options.KillGrace.
@@ -272,12 +274,13 @@
 //     directory" on stderr still blocks. (The agent loop asks the model to
 //     reflect at every tenth block in a row.)
 //   - PreCompact cannot stop a summary, and SubagentStop takes no matcher.
-//   - "${CLAUDE_PROJECT_DIR}" in a command is filled in by the shell from
-//     the environment, not pasted into the command's text.
+//   - "${CLAUDE_PROJECT_DIR}" in a shell command is filled in by the
+//     shell from the environment, not pasted into the command's text. (In
+//     the exec form, where no shell reads it, gnosh puts it in, as Claude
+//     Code does.)
 //   - A hook's answer is read strictly, as above, and text that is too
 //     long is cut rather than saved to a file.
-//   - A hook's command always goes through the shell ("args" is refused),
-//     and "onFailure" may only say "continue", which changes nothing.
+//   - "onFailure" may only say "continue", which changes nothing.
 //
 // # What the agent loop does around this package
 //

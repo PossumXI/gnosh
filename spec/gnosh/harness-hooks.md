@@ -114,10 +114,16 @@ Rules:
 - Fields of a CC hook that are **accepted and change nothing**:
   `statusMessage`, `once`, and the default values of `shell` (`bash`),
   `async` and `asyncRewake` (`false`) and `onFailure` (`continue`).
+- `args` is Claude Code's exec form, run as written: `command` is the
+  program, found on the hook's PATH unless it holds a slash, and each
+  element of `args` is one argument that no shell reads;
+  `${CLAUDE_PROJECT_DIR}` (and `${GNOSH_PROJECT_DIR}`) in either is the
+  project's directory (15 November 2026).
 - Anything else a CC hook can ask for is a **startup error that names it**:
-  another `type` (`http`, `mcp_tool`, `prompt`, `agent`), an `if` filter,
-  `args`, a background hook, a matcher on an event that takes none (CC
-  ignores it), a matcher gnosh's regular expressions cannot read. The
+  another `type` (`http`, `mcp_tool`, `prompt`, `agent`), a background
+  hook, a matcher on an event that takes none (CC ignores it), a matcher
+  gnosh's regular expressions cannot read. (The `if` filter is built:
+  `spec/DECISIONS.md`, item 32.) The
   reasoning: a guard run some other way than written may fail open. To
   support `if`, gnosh would have to match commands exactly as CC does.
 - A relative `command` is found from the **working directory**, not from the

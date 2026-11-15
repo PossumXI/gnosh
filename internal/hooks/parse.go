@@ -33,9 +33,9 @@ import (
 //   - a name written twice in one object (JSON readers keep only one of
 //     the two, so a list of hooks would vanish);
 //   - a hook type other than "command" (http, mcp_tool, prompt, agent);
-//   - "args", a background hook ("async", "asyncRewake"), a shell other
-//     than bash, an "onFailure" other than "continue", an "if" that is
-//     not a string;
+//   - a background hook ("async", "asyncRewake"), a shell other than
+//     bash, an "onFailure" other than "continue", an "if" that is not a
+//     string, "args" that are not a list of strings;
 //   - any field gnosh does not know;
 //   - a matcher on an event that takes none, or one that cannot be read;
 //   - no command, or a timeout that is not a number of seconds above zero.
@@ -278,7 +278,12 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 				p.fail(place, "\"if\" is one permission rule, as a string, such as \"Bash(git push *)\"; this one is %s.", kindOf(f.value))
 			}
 		case "args":
-			p.fail(place, "the hook has \"args\". gnosh runs a hook's command through the shell and takes no separate list of arguments. Write the arguments into \"command\".")
+			var args []string
+			if kindOf(f.value) != "a list" || json.Unmarshal(f.value, &args) != nil {
+				p.fail(place, "\"args\" is a list of strings, one argument each; this one is %s.", kindOf(f.value))
+				break
+			}
+			h.Args = append([]string{}, args...)
 		default:
 			p.fail(place, "the hook has %s, which gnosh does not know. A command hook has \"type\", \"command\" and \"timeout\".", quote(f.key))
 		}

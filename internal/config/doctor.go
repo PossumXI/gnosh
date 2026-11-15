@@ -281,19 +281,25 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 	for _, h := range cfg.AllHooks {
 		e := findHookEvent(h.Event)
 		why := commandTrouble(cfg, h.Command, pr)
+		if h.Args != nil {
+			// The exec form names the program alone, and no shell reads it.
+			root := cfg.Paths.ProjectRoot
+			why = programTrouble(cfg, strings.NewReplacer("${CLAUDE_PROJECT_DIR}", root, "${GNOSH_PROJECT_DIR}", root).Replace(h.Command), pr)
+		}
 		matcher := ""
 		if h.Matcher != "" {
 			matcher = " [" + h.Matcher + "]"
 		}
+		command := h.CommandLine()
 		switch {
 		case why == "":
-			add("hooks", Fine, "%s%s: %s (%s)", h.Event, matcher, h.Command, h.Origin)
+			add("hooks", Fine, "%s%s: %s (%s)", h.Event, matcher, command, h.Origin)
 		case h.Event == "PermissionRequest":
-			add("hooks", Note, "%s%s: %s cannot run (%s), so every question it matches is put to you instead. (%s)", h.Event, matcher, h.Command, why, h.Origin)
+			add("hooks", Note, "%s%s: %s cannot run (%s), so every question it matches is put to you instead. (%s)", h.Event, matcher, command, why, h.Origin)
 		case e != nil && e.blocks && cfg.HooksOff == "":
-			add("hooks", Fail, "%s%s: %s cannot run (%s). A check that cannot run does not pass, so this would hold up %s. (%s)", h.Event, matcher, h.Command, why, blocksWhat(h.Event), h.Origin)
+			add("hooks", Fail, "%s%s: %s cannot run (%s). A check that cannot run does not pass, so this would hold up %s. (%s)", h.Event, matcher, command, why, blocksWhat(h.Event), h.Origin)
 		default:
-			add("hooks", Note, "%s%s: %s cannot run (%s). (%s)", h.Event, matcher, h.Command, why, h.Origin)
+			add("hooks", Note, "%s%s: %s cannot run (%s). (%s)", h.Event, matcher, command, why, h.Origin)
 		}
 	}
 
