@@ -216,6 +216,12 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 			for _, it := range items {
 				h.Args = append(h.Args, it.str)
 			}
+		case m.key == "statusMessage":
+			if m.val.kind != jString {
+				bad(m.line, "a hook's \"statusMessage\" is the text shown while it runs, as a string, and here it is %s.", m.val.kind.word())
+				break
+			}
+			h.StatusMessage = m.val.str
 		case m.key == "async" || m.key == "asyncRewake":
 			if m.val.kind != jBool {
 				bad(m.line, "a hook's \"%s\" is true or false, and here it is %s.", m.key, m.val.kind.word())

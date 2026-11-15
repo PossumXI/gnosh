@@ -325,6 +325,15 @@ type HookEvent struct {
 	Records []hooks.Record
 }
 
+// HookStatusEvent says that hooks with a status message have started at
+// one of the session's moments (Status is their messages), or, with an
+// empty Status, that they have finished. A front end shows the status in
+// place of its working line's own words while they run.
+type HookStatusEvent struct {
+	Event  hooks.Event
+	Status string
+}
+
 // CommandInfo describes a slash command to a front end.
 type CommandInfo struct {
 	// Name is the command's name without its slash, and Aliases its other

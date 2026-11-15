@@ -156,6 +156,8 @@ func (s *session) handle(ev any) {
 		s.reply.lossy = true
 	case *app.HookEvent:
 		s.hooks(ev)
+	case *app.HookStatusEvent:
+		s.hookStatus = oneLine(ev.Status)
 	case *app.TasksEvent:
 		s.tasks = ev.Tasks
 		s.dirty = true

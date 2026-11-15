@@ -63,6 +63,10 @@ type Hook struct {
 	// with the next request. AsyncRewake does the same, and an exit with
 	// 2 also wakes the model at once (see Background).
 	Async, AsyncRewake bool
+
+	// StatusMessage is what the person is shown while the hook runs, in
+	// place of the working line's own words (Runner.StatusMessages).
+	StatusMessage string
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -124,6 +128,8 @@ type Spec struct {
 	If string
 	// Async and AsyncRewake run the hook in the background.
 	Async, AsyncRewake bool
+	// StatusMessage is shown while the hook runs.
+	StatusMessage string
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -143,9 +149,11 @@ func NewHook(s Spec) (Hook, error) {
 		Async:   s.Async,
 
 		AsyncRewake: s.AsyncRewake,
-		Source:      s.Source,
-		Global:      s.Global,
-		If:          strings.TrimSpace(s.If),
+
+		StatusMessage: s.StatusMessage,
+		Source:        s.Source,
+		Global:        s.Global,
+		If:            strings.TrimSpace(s.If),
 	}
 	if msgs := hookProblems(h); len(msgs) > 0 {
 		problems := make([]Problem, len(msgs))

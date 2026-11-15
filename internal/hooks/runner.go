@@ -685,3 +685,20 @@ func program(name string, env []string, dir string) (string, error) {
 	}
 	return "", fmt.Errorf("%s is not a program on the PATH the hook is given", name)
 }
+
+// StatusMessages returns the status messages of the hooks that would run,
+// and be waited for, on this occurrence of the event, in the order they
+// are configured: what a front end shows while they run. It runs nothing.
+func (r *Runner) StatusMessages(in Input) []string {
+	info, ok := describe(in.Event)
+	if !ok || !slices.Contains(r.fires, in.Event) {
+		return nil
+	}
+	var out []string
+	for _, h := range r.choose(&in, info) {
+		if msg := strings.TrimSpace(h.StatusMessage); msg != "" && !h.Async && !h.AsyncRewake && !slices.Contains(out, msg) {
+			out = append(out, msg)
+		}
+	}
+	return out
+}

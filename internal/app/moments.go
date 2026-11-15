@@ -58,7 +58,14 @@ func (h *hookRunner) run(ctx context.Context, in hooks.Input) (hooks.Outcome, er
 		in.Cwd = l.cwd()
 	}
 	in.PermissionMode = string(l.engine.Mode())
+	status := strings.Join(h.r.StatusMessages(in), "; ")
+	if status != "" {
+		l.deliver(&HookStatusEvent{Event: in.Event, Status: status})
+	}
 	out, err := h.r.Run(ctx, in)
+	if status != "" {
+		l.deliver(&HookStatusEvent{Event: in.Event})
+	}
 	l.showHooks(in, out)
 	return out, err
 }
@@ -88,7 +95,11 @@ func (l *live) backgroundHook(b hooks.Background) {
 	if l.closing.Load() || l.agent == nil {
 		return
 	}
-	l.deliver(&HookEvent{Event: b.Event, Records: []hooks.Record{b.Record}})
+	if b.Wake == "" && b.Warning == "" {
+		// (A hook that wakes the model or could not be evaluated is said
+		// once, below, and not also as its record.)
+		l.deliver(&HookEvent{Event: b.Event, Records: []hooks.Record{b.Record}})
+	}
 	source := "hook:" + string(b.Event)
 	if b.Warning != "" {
 		l.notice(agent.LevelWarning, source, b.Warning)

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
@@ -195,4 +197,19 @@ func TestActivityLine(t *testing.T) {
 		core.ToolResult{Content: []core.Block{core.Text("ok\n")}, Meta: map[string]any{"exitCode": 0}}, 3*time.Second))
 	g.ev(request(2), said("All good."), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
 	g.liveLacks("* ").liveHas("idle")
+}
+
+// While hooks with a status message run, the line above the box says what
+// they say they do, and goes back to its own words after.
+func TestActivityLineHookStatus(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"go" <Enter>`)
+	g.c.state = agent.State{Busy: true, Phase: agent.PhaseStarting, Waiting: "taking the session's turn"}
+	g.ev(busy())
+	g.liveHas("* taking the session's turn")
+	g.ev(&app.HookStatusEvent{Event: hooks.UserPromptSubmit, Status: "Checking the prompt"})
+	g.liveHas("* Checking the prompt")
+	g.liveLacks("taking the session's turn")
+	g.ev(&app.HookStatusEvent{Event: hooks.UserPromptSubmit})
+	g.liveHas("* taking the session's turn")
 }

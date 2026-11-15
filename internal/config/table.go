@@ -294,7 +294,7 @@ var hookFields = map[string]string{
 	"type":          "",
 	"command":       "",
 	"timeout":       "",
-	"statusMessage": "ignored",
+	"statusMessage": "",
 	"once":          "ignored",
 	"shell":         "same",
 	"async":         "",

@@ -183,6 +183,9 @@ type session struct {
 	// stopping says the person stopped the turn and its end has not
 	// come yet.
 	stopping bool
+	// hookStatus is what the hooks running now say they do (their
+	// statusMessage), shown in place of the working line's own words.
+	hookStatus string
 	// model is the model main requests go to, estimate about how many
 	// tokens the request that is out holds, and attempt which try it is.
 	model    string

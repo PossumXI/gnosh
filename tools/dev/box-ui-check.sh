@@ -111,7 +111,7 @@ config)
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
-	done_when() { screen | grep -q "exited with 2: HOOK-WAKE" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	done_when() { screen | grep -q "HOOK-WAKE" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
 	;;
 btw)
 	tmux send-keys -t "$S" "Run this exact shell command with the Bash tool and nothing else: sleep 40 && echo slept" Enter

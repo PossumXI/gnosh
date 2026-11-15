@@ -445,6 +445,9 @@ func (s *session) activityLine(width int, now time.Time) string {
 		what = "running " + oneLine(shown)
 	case !s.busy:
 		return ""
+	case s.hookStatus != "":
+		// A hook's own words for what it does, while it runs.
+		what = s.hookStatus
 	default:
 		switch s.ph {
 		case phStarting:

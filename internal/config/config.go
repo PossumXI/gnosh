@@ -313,6 +313,8 @@ type Hook struct {
 	// for it and it decides nothing; with AsyncRewake an exit with 2 wakes
 	// the model.
 	Async, AsyncRewake bool
+	// StatusMessage is what the person is shown while the hook runs.
+	StatusMessage string
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event

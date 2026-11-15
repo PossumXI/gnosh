@@ -127,3 +127,25 @@ func TestBackgroundHooks(t *testing.T) {
 		t.Errorf("processes of the hooks left running: %v", left)
 	}
 }
+
+// A hook's statusMessage is what a front end shows while it runs:
+// StatusMessages gives those of the hooks that would run and be waited
+// for, each once, and runs nothing.
+func TestStatusMessages(t *testing.T) {
+	r := newRunner(t, options(t),
+		Hook{Event: PreToolUse, Matcher: "Bash", Command: "true", StatusMessage: "Checking the command"},
+		Hook{Event: PreToolUse, Matcher: "Edit", Command: "true", StatusMessage: "Checking the edit"},
+		Hook{Event: PreToolUse, Matcher: "Bash", Command: "true; true", StatusMessage: "Checking the command"},
+		Hook{Event: PreToolUse, Matcher: "Bash", Command: "sleep 0", Async: true, StatusMessage: "In the background"},
+		Hook{Event: PreToolUse, Matcher: "Bash", Command: "exit 0"})
+	if got := r.StatusMessages(input(PreToolUse)); len(got) != 1 || got[0] != "Checking the command" {
+		t.Errorf("StatusMessages: %q", got)
+	}
+	if got := r.StatusMessages(input(Stop)); len(got) != 0 {
+		t.Errorf("StatusMessages of an event with no hooks: %q", got)
+	}
+	cfg, err := ParseConfig([]byte(`{"Stop": [{"hooks": [{"type": "command", "command": "true", "statusMessage": "Running the tests"}]}]}`), "gnosh.json")
+	if err != nil || len(cfg.Hooks) != 1 || cfg.Hooks[0].StatusMessage != "Running the tests" {
+		t.Errorf("ParseConfig: %+v, %v", cfg.Hooks, err)
+	}
+}

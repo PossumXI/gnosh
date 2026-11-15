@@ -111,9 +111,10 @@ In JSON settings, Claude Code's own block, pasted as it is:
 Rules:
 
 - gnosh runs `command` hooks only.
-- Fields of a CC hook that are **accepted and change nothing**:
-  `statusMessage`, `once`, and the default values of `shell` (`bash`),
-  `async` and `asyncRewake` (`false`) and `onFailure` (`continue`).
+- `statusMessage` is shown in place of the working line's own words while
+  the hook runs, as CC's spinner text is.
+- Fields of a CC hook that are **accepted and change nothing**: `once`,
+  and the default values of `shell` (`bash`) and `onFailure` (`continue`).
 - `args` is Claude Code's exec form, run as written: `command` is the
   program, found on the hook's PATH unless it holds a slash, and each
   element of `args` is one argument that no shell reads;

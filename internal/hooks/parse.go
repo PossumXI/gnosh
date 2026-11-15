@@ -40,8 +40,8 @@ import (
 //   - a matcher on an event that takes none, or one that cannot be read;
 //   - no command, or a timeout that is not a number of seconds above zero.
 //
-// Accepted, and changing nothing: "statusMessage", "once", and the default
-// values "shell": "bash" and "onFailure": "continue". (gnosh blocks when a
+// Accepted, and changing nothing: "once", and the default values "shell":
+// "bash" and "onFailure": "continue". (gnosh blocks when a
 // hook fails, whatever "onFailure" says.)
 //
 // When anything is wrong the error is a *ConfigError listing every
@@ -243,7 +243,7 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 				p.fail(place, "%s", timeoutProblem(written))
 			}
 		case "statusMessage":
-			if _, ok := asString(f.value); !ok {
+			if h.StatusMessage, ok = asString(f.value); !ok {
 				p.fail(place, "\"statusMessage\" must be a string; this one is %s.", kindOf(f.value))
 			}
 		case "once":
