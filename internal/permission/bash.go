@@ -285,6 +285,9 @@ type lineVal struct {
 	// check as the word it came from would be where it is written out
 	// ("rm -rf $X/"); it is never written into a command (filledArgs).
 	loose bool
+	// hole says a part not known stood in the loose text's last name
+	// ("t=/tmp$X-a"): what is left there is not the name written out.
+	hole bool
 }
 
 // lineVar is what a line says of a variable it sets. The values are
@@ -631,12 +634,12 @@ func (e *Engine) settleVars(v *bashView, bare map[string]bool) {
 			}
 			v.openVar(pv.name)
 			for _, w := range e.pendingWords(pv) {
-				texts, capped := e.looseTexts(v, w, pv.at, bare)
+				texts, holes, capped := e.looseTexts(v, w, pv.at, bare)
 				if capped && !v.vars[pv.name].capped {
 					v.vars[pv.name].capped, v.grew = true, true
 				}
-				for _, t := range texts {
-					e.giveFilled(v, pv, lineVal{text: t, loose: true})
+				for i, t := range texts {
+					e.giveFilled(v, pv, lineVal{text: t, loose: true, hole: holes[i]})
 				}
 			}
 		}
@@ -747,7 +750,7 @@ func (e *Engine) giveFilled(v *bashView, pv pendingVal, fv lineVal) {
 		if fv.loose && t == "" {
 			continue // nothing is left, and nothing is known
 		}
-		v.give(pv.name, lineVal{text: t, glob: fv.glob || pv.list && !pv.assign && !pv.w.quoted && hasPathMagic(t), loose: fv.loose})
+		v.give(pv.name, lineVal{text: t, glob: fv.glob || pv.list && !pv.assign && !pv.w.quoted && hasPathMagic(t), loose: fv.loose, hole: fv.hole})
 	}
 }
 
@@ -797,21 +800,22 @@ const maxLoose = 64
 // d; w=$X$d" may make w the home directory), so each of those values is
 // tried beside the nothing. capped says there were more texts than
 // maxLoose, and none is returned.
-func (e *Engine) looseTexts(v *bashView, w word, at int, bare map[string]bool) (out []string, capped bool) {
-	out = []string{""}
+func (e *Engine) looseTexts(v *bashView, w word, at int, bare map[string]bool) (out []string, holes []bool, capped bool) {
+	out, holes = []string{""}, []bool{false}
 	soft := false
 	for _, p := range w.parts {
 		var alts []string
+		partSoft := false
 		switch {
 		case p.kind == partLit:
 			alts = []string{p.lit}
 		case p.kind != partVar || p.op == "!":
-			return nil, false
+			return nil, nil, false
 		case p.name != "" && p.op != "~" && firmVar(v, p.name, at, bare):
 			for _, val := range v.vars[p.name].vals {
 				texts, known := p.of(val.text, e.home)
 				if !known {
-					return nil, false
+					return nil, nil, false
 				}
 				alts = unionStrings(alts, texts)
 			}
@@ -822,11 +826,11 @@ func (e *Engine) looseTexts(v *bashView, w word, at int, bare map[string]bool) (
 			}
 			texts, known := p.of(base, e.home)
 			if !known {
-				return nil, false
+				return nil, nil, false
 			}
 			alts = texts
 		default:
-			soft = true
+			soft, partSoft = true, true
 			alts = []string{p.defIn(e.home)}
 			if lv := v.vars[p.name]; lv != nil {
 				for _, val := range lv.vals {
@@ -837,18 +841,28 @@ func (e *Engine) looseTexts(v *bashView, w word, at int, bare map[string]bool) (
 			}
 		}
 		if len(out)*len(alts) > maxLoose {
-			return nil, true
+			return nil, nil, true
 		}
 		next := make([]string, 0, len(out)*len(alts))
-		for _, o := range out {
+		nextHoles := make([]bool, 0, len(out)*len(alts))
+		for i, o := range out {
 			for _, a := range alts {
-				next = append(next, o+a)
+				// A part not known stands in the last name until a known
+				// one begins a name after it.
+				hole := holes[i]
+				switch {
+				case partSoft:
+					hole = true
+				case strings.Contains(a, "/"):
+					hole = false
+				}
+				next, nextHoles = append(next, o+a), append(nextHoles, hole)
 			}
 		}
-		out = next
+		out, holes = next, nextHoles
 	}
 	if !soft {
-		return nil, false
+		return nil, nil, false
 	}
 	if w.tilde && e.home != "" {
 		// (A word of a list: "for f in ~/$X".)
@@ -858,7 +872,7 @@ func (e *Engine) looseTexts(v *bashView, w word, at int, bare map[string]bool) (
 			}
 		}
 	}
-	return out, false
+	return out, holes, false
 }
 
 // closedWord reports whether the texts filledAll gives for the word are
@@ -1309,11 +1323,11 @@ func (e *Engine) filledWhy(v *bashView, w word, matches func(pattern string) ([]
 				texts:
 					for _, t := range texts {
 						for _, have := range alts {
-							if have.text == t && have.glob == glob && have.loose == val.loose {
+							if have.text == t && have.glob == glob && have.loose == val.loose && have.hole == val.hole {
 								continue texts
 							}
 						}
-						alts = append(alts, lineVal{text: t, glob: glob, loose: val.loose})
+						alts = append(alts, lineVal{text: t, glob: glob, loose: val.loose, hole: val.hole})
 					}
 				}
 			}
@@ -1327,7 +1341,9 @@ func (e *Engine) filledWhy(v *bashView, w word, matches func(pattern string) ([]
 		next := make([]lineVal, 0, len(out)*len(alts))
 		for _, o := range out {
 			for _, a := range alts {
-				next = append(next, lineVal{text: o.text + a.text, glob: o.glob || a.glob, loose: o.loose || a.loose})
+				// A hole stays in the last name until a name begins after it.
+				hole := a.hole || o.hole && !strings.Contains(a.text, "/")
+				next = append(next, lineVal{text: o.text + a.text, glob: o.glob || a.glob, loose: o.loose || a.loose, hole: hole})
 			}
 		}
 		out = next

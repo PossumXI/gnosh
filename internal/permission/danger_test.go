@@ -115,6 +115,8 @@ func TestOtherDestroyers(t *testing.T) {
 		// A variable inside a name right under the root leaves that name
 		// where it is empty (oracle seed 105): /tmp-a, /tmp:--rf.
 		"mv /tmp$X-a /tmp", "mv /tmp$X:--rf /tmp", "mv $X:--rf x} /tmp$X:--rf x} /tmp", "mv /tm${X}p /x",
+		// The same through a variable made of it.
+		"t=/tmp$X-a; mv $t /tmp", "t=/tm${X}p; rm -rf $t",
 		// A default written with blanks is cut into words where its
 		// variable is not set: this is mv .git /tmp/g /tmp.
 		"mv ${X:-.git /tmp/g} /tmp", "mv ${X:-.git /tmp/g}\\ /tmp", "mv ${X:-.git /tmp/g}", "mv ${X:-.git /tmp/g}''", "mv ${HOME:+.git /tmp/g}",

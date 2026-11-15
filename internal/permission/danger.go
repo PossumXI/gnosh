@@ -245,8 +245,14 @@ func (e *Engine) targetsDanger(v *bashView, at int, name string, targets []word,
 					// of is empty ("w=$X/; rm -rf $w"): judged as the
 					// word it came from would be where it is written out
 					// ("rm -rf $X/"), by a variable nobody knows put
-					// after it.
-					t.parts = append(t.parts, wordPart{kind: partVar})
+					// after it. One that stood in the value's last name
+					// ("t=/tmp$X-a") is put there by name, so that the
+					// name is not taken for one written out.
+					hole := wordPart{kind: partVar}
+					if val.hole {
+						hole.name = holeVar
+					}
+					t.parts = append(t.parts, hole)
 				}
 				if why := e.targetDanger(t, dirs, fromSubst, recursive); why != "" {
 					return name + " " + w.raw + ": " + why
@@ -900,6 +906,10 @@ func (e *Engine) leadsTo(p string) string {
 	}
 	return r
 }
+
+// holeVar names the variable put after a loose value whose last name had
+// a part not known in it: no shell variable can have the name.
+const holeVar = "(not known)"
 
 // targetDanger judges one target of a removal.
 func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, recursive bool) string {
