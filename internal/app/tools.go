@@ -103,7 +103,13 @@ func (l *live) buildTools() error {
 	// The tools a sub-agent never has: its own Agent tool is made for it
 	// at its depth, only the session the person is in may ask them a
 	// question, and plan mode is the session's to switch.
-	all = append(all, &agentTool{l: l}, &askTool{l: l}, &enterPlanTool{l: l}, &exitPlanTool{l: l})
+	all = append(all, &agentTool{l: l})
+	if l.inv.PermissionPrompts != "none" {
+		// (With --permission-prompts none nobody answers, and a tool that
+		// asks a person is no tool.)
+		all = append(all, &askTool{l: l})
+	}
+	all = append(all, &enterPlanTool{l: l}, &exitPlanTool{l: l})
 	if len(l.forModel()) > 0 {
 		// The Skill tool is there when there is a skill a model may
 		// load, as the session starts.

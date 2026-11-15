@@ -213,6 +213,7 @@ var built = []string{
 	"--setting-sources", "--safe-mode", "--bare", "--disable-slash-commands", "--agents",
 	"--debug", "--debug-file", "--verbose",
 	"--output-format=json", "--output-format=stream-json", "--input-format=stream-json", "--replay-user-messages", "--json-schema",
+	"--permission-prompts", "--permission-prompts=host", "--permission-prompts=none",
 	"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove",
 	"mcp --scope", "mcp --scope=local", "mcp --scope=user", "mcp --scope=project",
 	"mcp --transport", "mcp --transport=stdio", "mcp --transport=http",

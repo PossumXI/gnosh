@@ -21,7 +21,8 @@ vets and tests every package from a clean copy.
 Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output,
 streamed JSON input for a conversation over standard input, `--json-schema`
 for a result as JSON that conforms to a schema,
-`--bare` for minimal mode, `--no-session-persistence` to keep nothing, and
+`--bare` for minimal mode, `--no-session-persistence` to keep nothing,
+`--permission-prompts none` for a run nobody is there to answer, and
 `--agents` for kinds of sub-agent of the run's own), an
 interactive session in the terminal's own scrollback, the file and shell
 tools, WebFetch (a page read by the small model with the model's request,

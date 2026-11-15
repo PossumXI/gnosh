@@ -111,7 +111,7 @@ func (c *controls) RewindPoints() []RewindPoint { return c.cur().rewindPoints() 
 // names, and returns the prompt's text. The session must be idle.
 func (c *controls) Rewind(ctx context.Context, point string) (string, error) {
 	old := c.cur()
-	if old.agent.State().Busy {
+	if old.busy(ctx) {
 		return "", errors.New("a turn is running. Stop it first (Esc, or Ctrl+C in the plain session), then go back")
 	}
 	points, before := old.rewindGroup()
@@ -180,7 +180,7 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 	if len(args) > 2 || how != "" && how != "all" && how != "files" {
 		return errors.New("/rewind takes the number of one of your prompts, and then all (the files too) or files (the files alone), or nothing")
 	}
-	if l.agent.State().Busy {
+	if l.busy(ctx) {
 		return errors.New("a turn is running. Stop it first, then go back")
 	}
 	point := points[n-1]

@@ -66,7 +66,10 @@ func TestUnknownFlags(t *testing.T) {
 		// the start is enough for a suggestion.
 		{line: `gnosh --verb`, kind: ErrUnknownFlag, hint: "--verbose"},
 		{line: `gnosh --dangerously`, kind: ErrUnknownFlag, hint: "--dangerously-skip-permissions"},
-		{line: `gnosh --permission`, kind: ErrUnknownFlag, hint: "--permission-mode"},
+		{line: `gnosh --permission-mo`, kind: ErrUnknownFlag, hint: "--permission-mode"},
+		{line: `gnosh --permission-pr`, kind: ErrUnknownFlag, hint: "--permission-prompts"},
+		// A start that two flags share suggests neither.
+		{line: `gnosh --permission`, kind: ErrUnknownFlag, say: []string{"--permission is not a flag of gnosh"}},
 		{line: `gnosh --system`, kind: ErrUnknownFlag, say: []string{"--system is not a flag of gnosh", `"gnosh --help" lists the flags`}},
 	})
 }

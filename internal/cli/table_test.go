@@ -228,7 +228,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		// session is named with --resume, and there is no other data folder.
 		"gnosh run", "gnosh r", "gnosh -q", "gnosh --quiet", "gnosh -s", "gnosh --session", "gnosh -D", "gnosh --data-dir",
 		// What the specs name and nothing builds yet.
-		"gnosh --permission-prompts",
+
 		"gnosh session delete", "gnosh session rm", "gnosh session web",
 		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
 		"gnosh ssh", "gnosh projects", "gnosh stats",

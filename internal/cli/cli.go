@@ -143,6 +143,9 @@ type Invocation struct {
 	// NoSessionPersistence keeps nothing of a run: its session is not
 	// saved and cannot be resumed (print mode only).
 	NoSessionPersistence bool
+	// PermissionPrompts is --permission-prompts: who answers a permission
+	// question in a run, "host" (the default) or "none".
+	PermissionPrompts string
 	// JSONSchema is --json-schema: after the turn, the result as JSON that
 	// conforms to this schema, in the result's structured_output.
 	JSONSchema string

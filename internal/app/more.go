@@ -221,7 +221,7 @@ func (l *live) slashResume(ctx context.Context, c *SlashContext) error {
 		c.Say("/resume N opens one in place of this session, which is kept. An id or a name works too.")
 		return nil
 	}
-	if l.agent.State().Busy {
+	if l.busy(ctx) {
 		return errors.New("a turn is running. Stop it first, then open another session")
 	}
 	id := ""
@@ -241,11 +241,29 @@ func (l *live) slashResume(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
+// settleWait is how long a command that needs an idle session waits for
+// one that is busy to go idle before it refuses.
+const settleWait = 3 * time.Second
+
+// busy reports whether a turn is still running, after waiting up to
+// settleWait for the session to go idle. The screen shows a turn done when
+// it ends, but the moments after it (the turn-ended hooks, the idle
+// moment) keep the session busy a little longer, and a command typed at
+// once must not be refused for that.
+func (l *live) busy(ctx context.Context) bool {
+	if !l.agent.State().Busy {
+		return false
+	}
+	wctx, cancel := context.WithTimeout(ctx, settleWait)
+	defer cancel()
+	return l.agent.Wait(wctx) != nil
+}
+
 // slashBranch is /branch: the conversation so far is copied into a new
 // session, which the session's controls then open in place of this one.
 // The original is kept as it is, and can be resumed.
 func (l *live) slashBranch(ctx context.Context, c *SlashContext) error {
-	if l.agent.State().Busy {
+	if l.busy(ctx) {
 		return errors.New("a turn is running. Stop it first, then branch")
 	}
 	if !slices.ContainsFunc(l.ts.Entries(), func(e transcript.Entry) bool { return e.Type == transcript.TypeUser }) {

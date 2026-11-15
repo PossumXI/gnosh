@@ -238,6 +238,10 @@ func Default() *Table {
 	smallModel := t.add(&flag{names: "--small-model", kind: kindText, arg: "model", group: groupPrint, pri: 1, printOnly: true,
 		help: "The model for the run's short side jobs. Without it they use the main model.",
 		set:  func(i *Invocation, v flagValue) { i.SmallModel = v.text }})
+	prompts := t.add(&flag{names: "--permission-prompts", kind: kindText, arg: "who", group: groupPrint, pri: 1, printOnly: true,
+		help:    "Who answers a call that needs a person's yes: host (the default; a run has no host to ask, so the call is refused) or none (refused, the model is told not to send it again, and the tools that ask a person are taken away).",
+		choices: []choice{{name: "host"}, {name: "none", pri: 1}},
+		set:     func(i *Invocation, v flagValue) { i.PermissionPrompts = v.text }})
 	schema := t.add(&flag{names: "--json-schema", kind: kindText, arg: "schema", group: groupPrint, pri: 1, printOnly: true, freeText: true,
 		help: "After the turn, have the result as JSON that conforms to this JSON Schema: in the result's structured_output with --output-format json, and alone on standard output with text.",
 		set:  func(i *Invocation, v flagValue) { i.JSONSchema = v.text }})
@@ -262,7 +266,7 @@ func Default() *Table {
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents,
 		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
-		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, noPersist,
+		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, prompts, noPersist,
 		help, version,
 	}
 

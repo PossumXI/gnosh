@@ -158,7 +158,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 		if l.interactive {
 			return agent.Decision{Allow: true}, nil
 		}
-		return agent.Decision{Reason: unattended(d), Unattended: true}, nil
+		return agent.Decision{Reason: l.unattended(d), Unattended: true}, nil
 	}
 	if !confirm && l.hooks.has(hooks.PermissionRequest) {
 		out, err := l.hooks.run(ctx, hooks.Input{
@@ -197,7 +197,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	ans, err := req.Ask(askCtx, q)
 	switch {
 	case errors.Is(err, agent.ErrNobodyToAsk):
-		return agent.Decision{Reason: unattended(d), Unattended: true}, nil
+		return agent.Decision{Reason: l.unattended(d), Unattended: true}, nil
 	case err != nil && ctx.Err() == nil && askCtx.Err() != nil:
 		return agent.Decision{Reason: "This call did not run: it is a removal gnosh always asks about, and nobody approved it within two minutes. If it is really wanted, say what you were about to remove and why, and let the user run it."}, nil
 	case err != nil:
@@ -398,9 +398,13 @@ func describe(tool core.Tool, call core.ToolCall, env *core.ToolEnv) (act core.A
 
 // unattended is what the model reads when a call needs a person's yes and
 // nobody is there to give it.
-func unattended(d permission.Decision) string {
-	return "This call did not run: it needs a person's approval, and nobody is here to give it (" + strings.TrimSuffix(d.Reason, ".") +
+func (l *live) unattended(d permission.Decision) string {
+	text := "This call did not run: it needs a person's approval, and nobody is here to give it (" + strings.TrimSuffix(d.Reason, ".") +
 		"). Do the work another way if there is one, or say what you could not do."
+	if l.inv.PermissionPrompts == "none" {
+		text += " Nobody answers permission questions in this run: do not send this call again."
+	}
+	return text
 }
 
 // permissionQuestion writes the question about one call: exactly what

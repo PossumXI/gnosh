@@ -462,3 +462,24 @@ func TestSlashHooksShowsTheFilter(t *testing.T) {
 	r := run(t, w, "-p", "/hooks").wantCode(t, 0)
 	has(t, "/hooks", r.out, "PreToolUse:", "[matches Bash]", "[if Bash(git push *)]")
 }
+
+// --permission-prompts none: nobody answers, so the tool that asks a
+// person is not offered, and a call that needs a yes is refused with word
+// not to send it again. host (the default) refuses as a run always has.
+func TestPermissionPromptsNone(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Could not."})
+	run(t, w, "-p", "make it", "--permission-prompts", "none").wantCode(t, 0)
+	body := string(w.Model.Requests()[0].Body)
+	hasNot(t, "the tools offered", body, `"name":"AskUserQuestion"`)
+	has(t, "what the model read", toolResult(t, w, 1, "c1"), "nobody is here to give it", "do not send this call again")
+	if w.Exists("made.txt") {
+		t.Errorf("the call ran")
+	}
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}}, apptest.Reply{Text: "Could not."})
+	run(t, w, "-p", "make it", "--permission-prompts", "host").wantCode(t, 0)
+	reqs := w.Model.Requests()
+	has(t, "the tools offered with host", string(reqs[2].Body), `"name":"AskUserQuestion"`)
+	hasNot(t, "what the model read with host", toolResult(t, w, 3, "c1"), "do not send this call again")
+}
