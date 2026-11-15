@@ -511,6 +511,39 @@ func (s *Set) Btw() string {
 	return s.fill(textBtw, nil)
 }
 
+// MentionKind says what a mention of a path with @ came to.
+type MentionKind int
+
+const (
+	// MentionFile: what Read returns for the file follows the line.
+	MentionFile MentionKind = iota
+	// MentionDir: a listing of the directory follows the line.
+	MentionDir
+	// MentionDenied: a deny rule keeps the path from being read.
+	MentionDenied
+	// MentionFailed: the path could not be read; why says why.
+	MentionFailed
+)
+
+// Mention returns the line that stands before what a person's @ mention
+// of a path brings: a file as Read returns it, a directory's listing, or
+// why nothing came.
+func (s *Set) Mention(kind MentionKind, path, why string) string {
+	vals := values{"path": oneLine(path, maxQuote)}
+	switch kind {
+	case MentionDir:
+		vals.flag("dir", true)
+	case MentionDenied:
+		vals.flag("denied", true)
+	case MentionFailed:
+		vals.flag("failed", true)
+		vals["why"] = strings.TrimRight(oneLine(why, maxQuote), ". ")
+	default:
+		vals.flag("file", true)
+	}
+	return s.fill(textMention, vals)
+}
+
 // Recap returns the question of /recap: the session in one line, for the
 // person, in a request beside the session's that is not kept.
 func (s *Set) Recap() string {

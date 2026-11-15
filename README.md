@@ -49,7 +49,8 @@ disable), `/skills`, `/reload-skills`, `/hooks` and `/doctor`, with gnosh's
 own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
 permission modes, Esc stops a turn and Esc twice goes back to an earlier
 prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
-to the background, and a line that begins with `!` is a command of your own.
+to the background, `@path` in a prompt brings that file (or a directory's
+listing) along with it, and a line that begins with `!` is a command of your own.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
 `headers`), and a WebSearch tool of gnosh's own (a search engine's MCP

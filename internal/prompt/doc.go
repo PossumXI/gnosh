@@ -252,6 +252,10 @@
 //     words from the conversation, call no tool, start on nothing.
 //   - recap (Recap) is the question of /recap, asked the same way: the
 //     session in one line, for the person.
+//   - mention (Mention) stands after a typed prompt for each path it
+//     mentions with @: what Read returns for a file follows it, or a
+//     directory's listing, or it says a deny rule kept the path out or
+//     why it could not be read.
 //   - summary, with summary-extra for what the person asked of it
 //     (Summary), is the request for a summary. It is about 200 tokens and
 //     asks for at most 500 words: what the user asked, in their words;

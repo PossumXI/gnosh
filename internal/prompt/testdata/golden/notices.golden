@@ -33,3 +33,15 @@ Half of it is read.</gnosh>
 === the question of /recap ===
 <gnosh>In one line, say what this session has done so far and where it stands now. Call no tool, and start on nothing: the line is for the user, and it is not kept in the conversation.</gnosh>
 
+=== a file mentioned with @ ===
+<gnosh>The user mentioned the file src/main.go in the prompt above. What Read returns for it follows, and it counts as read.</gnosh>
+
+=== a directory mentioned with @ ===
+<gnosh>The user mentioned the directory src/ in the prompt above. What is in it follows.</gnosh>
+
+=== a path a deny rule keeps out ===
+<gnosh>The user mentioned .env in the prompt above, and a deny rule keeps it from being read, so it is left out.</gnosh>
+
+=== a path that could not be read ===
+<gnosh>The user mentioned big.log in the prompt above, and it could not be read: it is larger than 256 KB.</gnosh>
+

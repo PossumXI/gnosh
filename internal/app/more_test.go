@@ -304,3 +304,26 @@ func TestAgentsFlag(t *testing.T) {
 		t.Errorf("the model was asked although --agents could not be read")
 	}
 }
+
+// @ mentions: a file mentioned in a prompt goes to the model with it, as
+// Read returns it, and counts as read, so that an Edit of it at once
+// works; a directory brings its listing; a file a deny rule refuses is
+// named and left out; a word after @ that names nothing is left alone.
+func TestMentions(t *testing.T) {
+	w := apptest.NewWorld(t)
+	notes := filepath.Join(w.Dir, "notes.txt")
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Edit", Args: `{"file_path":"` + notes + `","old_string":"alpha","new_string":"ALPHA"}`}}},
+		apptest.Reply{Text: "Done."})
+	w.Write("notes.txt", "alpha\nbeta\n")
+	w.Write("docs/a.md", "x\n")
+	w.Write(".env", "SECRET=1\n")
+	w.Deny("Read(./.env)")
+	run(t, w, "-y", "-p", "capitalize alpha in @notes.txt, see @docs and @.env, and ask @someone").wantCode(t, 0)
+	body := string(w.Model.Requests()[0].Body)
+	has(t, "the first request", body, "The user mentioned the file notes.txt", "beta", "The user mentioned the directory docs", "a.md", "The user mentioned .env", "a deny rule keeps it from being read")
+	hasNot(t, "the first request", body, "SECRET=1", "mentioned someone")
+	if data, _ := os.ReadFile(notes); string(data) != "ALPHA\nbeta\n" {
+		t.Errorf("the Edit right after the mention did not work: %q; it read %s", data, toolResult(t, w, 1, "c1"))
+	}
+}
