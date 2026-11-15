@@ -159,7 +159,8 @@
 //	Ctrl+Z                 suspend gnosh; fg brings it back. Where no shell could bring it
 //	                       back, nothing is stopped and the key says so (cc 3)
 //	Ctrl+O                 detail on or off: reasoning and whole outputs are written out from then
-//	                       on, and the reasoning that was folded last is written out now (cc 3; ui UI-22)
+//	                       on, and the reasoning that was folded is written out now, every thought
+//	                       of the turn that is under way or of the last one (cc 3; ui UI-22)
 //	Ctrl+T                 hide or show the session's task list (cc 3)
 //	Ctrl+B                 move the running command to the background (cc 3). In the prompt box
 //	                       Ctrl+X b does the same: Ctrl+B is tmux's own key (ui UI-31)

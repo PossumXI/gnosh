@@ -190,10 +190,15 @@ type session struct {
 	retrySince time.Time
 
 	reply reply
-	// lastThinking is the reasoning of the last reply that was shown
-	// folded, kept so that Ctrl+O can show it afterwards.
-	lastThinking string
-	calls        []*call
+	// folded is the reasoning of the replies that were shown folded,
+	// oldest first, kept so that Ctrl+O can show it afterwards: every
+	// thought of the turn, not only the last. foldedOld says the turn they
+	// belong to is over and another has begun, so that the next thought to
+	// be folded starts the list anew; until then the last turn's thoughts
+	// can still be asked for.
+	folded    []foldedThought
+	foldedOld bool
+	calls     []*call
 	// queue is the prompts that wait for their turn, as the session
 	// reports them, and loop whether /loop is on.
 	queue []agent.QueuedPrompt

@@ -425,7 +425,7 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.busy, s.stopping, s.ph = false, false, phIdle
 			s.reply, s.calls, s.queue, s.sending = reply{}, nil, nil, nil
 			s.q, s.qwait = nil, nil
-			s.lastThinking, s.loop = "", false
+			s.folded, s.foldedOld, s.loop = nil, false, false
 			s.facts = map[string]string{}
 			s.lock()
 		}
@@ -593,7 +593,8 @@ func (s *session) allowEdits(q *question) bool {
 // toggleDetail turns detail on or off: with it on, the model's reasoning
 // and every tool's whole output are written into the scrollback from then
 // on. What is in the scrollback already is never drawn again, so the
-// reasoning that was folded last is written out now.
+// reasoning that was folded is written out now: every thought of the turn
+// that is under way, or of the last one.
 func (s *session) toggleDetail() {
 	s.detail = !s.detail
 	if !s.detail {
@@ -601,22 +602,16 @@ func (s *session) toggleDetail() {
 		return
 	}
 	s.flash("Detail on: reasoning and whole outputs are written out from here on. Ctrl+O turns it off.")
-	rp := &s.reply
-	if rp.thinking {
-		// Reasoning that is arriving right now: all of it so far.
+	// What was folded before, oldest first, and then the reasoning that is
+	// arriving right now: all of it so far.
+	s.unfold()
+	if rp := &s.reply; rp.thinking {
 		rp.thinkRest = rp.think.String()
 		if i := strings.LastIndexByte(rp.thinkRest, '\n'); i >= 0 {
 			s.thought(rp.thinkRest[:i])
 			rp.thinkRest = rp.thinkRest[i+1:]
 		}
-		return
 	}
-	if rows := s.thinkRows(s.lastThinking, s.cols); len(rows) > 0 {
-		s.begin(blkThinking)
-		s.put(s.th.Thinking.Render(s.th.ThinkMark + " thinking, of the reply before"))
-		s.put(rows...)
-	}
-	s.lastThinking = ""
 }
 
 // background moves the commands that are running to the background, when
