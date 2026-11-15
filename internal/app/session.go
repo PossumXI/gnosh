@@ -128,6 +128,13 @@ type live struct {
 	// the controls then do.
 	reopen   string
 	rewindTo string
+	// rewindAll says /rewind asked for the files to be put back with the
+	// conversation.
+	rewindAll bool
+	// checks keeps what the files the model changes held, for a rewind,
+	// and checkWarn says once that one could not be kept.
+	checks    *checkpoints
+	checkWarn sync.Once
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
 	// system is what the model is told as its instructions, and named
@@ -300,7 +307,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	l.hooks = &hookRunner{l: l, r: runner}
 
-	// The tools, the instruction files and the system prompt.
+	// The tools, the instruction files and the system prompt. What the
+	// files the tools change held is kept beside the session's file.
+	l.checks = openCheckpoints(filepath.Join(l.st.dirs(l.ts.ID()).Session, "checkpoints"), l.p.now)
 	if err := l.buildTools(); err != nil {
 		return l, err
 	}
@@ -1141,13 +1150,30 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 		res.Text = "A new session is open: " + c.cur().ts.ID() + ". The one before is kept; " + l.info().Resume + " opens it again."
 	}
 	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
-		l.rewindTo = ""
+		all := l.rewindAll
+		l.rewindTo, l.rewindAll = "", false
+		files := ""
+		if all {
+			// The files first, while the session that changed them is the
+			// one behind the controls.
+			done, failed := l.checks.restore(l.rewindFiles(point))
+			l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point, len(done), len(failed))
+			files = restoreSaid(done, failed)
+		}
 		text, rerr := c.Rewind(ctx, point)
 		if rerr != nil {
+			if files != "" {
+				return res, fmt.Errorf("%s But the conversation could not be taken back: %w", files, rerr)
+			}
 			return res, rerr
 		}
 		res.Reset, res.Draft = true, text
-		res.Text = "The conversation is back to before this prompt of yours, which you can send again or change:\n" + text + "\n" + rewindNote
+		res.Text = "The conversation is back to before this prompt of yours, which you can send again or change:\n" + text
+		if files != "" {
+			res.Text += "\n" + files
+		} else {
+			res.Text += "\nThe files stay as they are now. " + rewindNote
+		}
 	}
 	if id := l.resumeTo; err == nil && res.Handled && res.Name == "resume" && id != "" {
 		l.resumeTo = ""

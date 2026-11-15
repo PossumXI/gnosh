@@ -2,6 +2,7 @@ package fstools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -700,5 +701,50 @@ func TestEditStopsWhenCancelled(t *testing.T) {
 	}
 	if got := f.content(p); got != "keep\n" {
 		t.Errorf("a cancelled edit changed the file: %q", got)
+	}
+}
+
+// BeforeChange is told of each file Write and Edit are about to change,
+// with the file still as it was; its refusal stops the change; and a Write
+// that changes nothing tells it nothing.
+func TestBeforeChange(t *testing.T) {
+	type seen struct{ path, content string }
+	var told []seen
+	refuse := false
+	var f *fixture
+	f = newFixture(t, Options{BeforeChange: func(env *core.ToolEnv, path string) error {
+		if refuse {
+			return errors.New("it could not be kept")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			data = []byte("(none)")
+		}
+		told = append(told, seen{path, string(data)})
+		return nil
+	}})
+	a := f.file("a.txt", "one\n")
+	f.ok(f.read, in{"file_path": a})
+	f.ok(f.edit, in{"file_path": a, "old_string": "one", "new_string": "two"})
+	f.ok(f.write, in{"file_path": a, "content": "three\n"})
+	f.ok(f.write, in{"file_path": a, "content": "three\n"}) // the same bytes: nothing is written
+	n := f.path("new.txt")
+	f.ok(f.write, in{"file_path": n, "content": "new\n"})
+	want := []seen{{a, "one\n"}, {a, "two\n"}, {n, "(none)"}}
+	if len(told) != len(want) {
+		t.Fatalf("BeforeChange was told %v, want %v", told, want)
+	}
+	for i := range want {
+		if told[i] != want[i] {
+			t.Errorf("call %d: told %v, want %v", i, told[i], want[i])
+		}
+	}
+
+	// A refusal stops the change, and the model reads why.
+	refuse = true
+	f.fails(f.write, in{"file_path": a, "content": "four\n"}, "was not changed", "it could not be kept")
+	f.fails(f.edit, in{"file_path": a, "old_string": "three", "new_string": "five"}, "was not changed", "it could not be kept")
+	if got := f.content(a); got != "three\n" {
+		t.Errorf("after the refusals the file holds %q", got)
 	}
 }

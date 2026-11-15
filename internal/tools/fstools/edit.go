@@ -335,6 +335,9 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	if err := ctx.Err(); err != nil {
 		return core.ToolResult{}, fmt.Errorf("%s of %s stopped before anything was changed: %w", o.EditName, c.loc.abs, context.Cause(ctx))
 	}
+	if f := o.beforeChange(env, c); f != nil {
+		return refused(f)
+	}
 	info, inPlace, f := commit(t.sys, c)
 	if f != nil {
 		return refused(f)

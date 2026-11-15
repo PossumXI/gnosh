@@ -590,6 +590,46 @@ func TestInTmuxSuspend(t *testing.T) {
 	}
 }
 
+// With files that Write changed since a prompt, the menu offers to put
+// them back, with the conversation or alone; the first choice does both.
+func TestRewindFilesWithTheProgram(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "Nothing to do yet."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"made.txt","content":"made\n"}`}}},
+		apptest.Reply{Text: "The file is made."},
+	)
+	p := runProgram(t, w, "--permission-mode", "acceptEdits")
+	p.has("idle")
+	p.keys(`"hello" <Enter>`)
+	p.has("Nothing to do yet.")
+	p.eventually("the first turn has ended", func(s string) bool { return strings.Count(s, "done in") >= 1 })
+	p.has("idle")
+	p.keys(`"make the file" <Enter>`)
+	p.has("The file is made.")
+	p.eventually("the second turn has ended", func(s string) bool { return strings.Count(s, "done in") >= 2 })
+	p.has("idle")
+	if !w.Exists("made.txt") {
+		t.Fatal("the model's Write did not make the file")
+	}
+	p.keys(`<Esc> <Esc>`)
+	p.has("Go back to before which prompt?", "make the file")
+	p.keys(`<Enter>`)
+	p.has("Go back to before: make the file", "Write and Edit changed 1 file since then: made.txt",
+		"Go back, and put the files back", "Go back, the conversation only", "Put the files back only")
+	p.keys(`<Enter>`)
+	p.has("The conversation is back to before this prompt of yours", "Put back: ")
+	if w.Exists("made.txt") {
+		t.Error("the file Write made after that prompt is still there after going back with the files")
+	}
+	// The prompt is back in the box; Ctrl+C clears it, and then Ctrl+D
+	// twice leaves.
+	p.has("> make the file")
+	p.keys(`<Ctrl+C> <Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+}
+
 // The real program with this interface: Esc twice in an empty box lists
 // the prompts sent, and going back to before one takes the conversation
 // there, with the prompt in the box again to change and send.
@@ -619,7 +659,7 @@ func TestRewindWithTheProgram(t *testing.T) {
 	p.keys(`<Esc> <Esc>`)
 	p.has("Go back to before which prompt?")
 	p.keys(`<Down> <Enter>`)
-	p.has("Go back to before: the second prompt", "Only the conversation goes back", "not restored")
+	p.has("Go back to before: the second prompt", "Write and Edit changed no file since then", "Go back, the conversation only")
 	p.keys(`<Down> <Enter>`)
 
 	// And for real: the second prompt, the middle of the three.

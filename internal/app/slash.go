@@ -188,7 +188,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "context", Args: "[all]", Summary: "What fills the model's window, by kind.", InRun: true, Run: l.slashContext},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
-		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number]", Summary: "Take the conversation back to before one of your prompts. Files stay as they are.", Run: l.slashRewind},
+		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
 		{Name: "add-dir", Args: "<directory>", Summary: "Add a working directory for the rest of this session. With nothing after it, lists them.", Run: l.slashAddDir},
 		{Name: "tasks", Aliases: []string{"bashes"}, Args: "[stop <id>]", Summary: "The commands running in the background, and the ones that ran; stop <id> stops one.", InRun: true, Run: l.slashTasks},

@@ -28,8 +28,8 @@ the model names what was asked for, `/deliverables`, and each delivered file
 served at an address on this machine.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
-`/compact`, `/resume`, `/rewind` (the conversation goes back; files stay as
-they are), `/model`, `/plan`, `/permissions`, `/add-dir`, `/status`,
+`/compact`, `/resume`, `/rewind` (the conversation, the files Write and Edit
+changed, or both), `/model`, `/plan`, `/permissions`, `/add-dir`, `/status`,
 `/context`, `/cost`, `/tasks`, `/diff`, `/export`, `/init`, `/memory`,
 `/agents`, `/skills`, `/hooks` and `/doctor`, with gnosh's own `/mem`,
 `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
@@ -37,8 +37,7 @@ permission modes, Esc stops a turn and Esc twice goes back to an earlier
 prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, and a line that begins with `!` is a command of your own.
 
-Not built yet: MCP servers, putting files back on a rewind, background
-sub-agents, web search. The interface is in use over ssh, in tmux. Its
+Not built yet: MCP servers, background sub-agents, web search. The interface is in use over ssh, in tmux. Its
 wording to the model has not yet been compared run against run. Nothing
 here is released.
 

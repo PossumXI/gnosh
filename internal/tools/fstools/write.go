@@ -139,6 +139,18 @@ func staleFailure(o *Options, loc *location) *failure {
 	return failf("%s has changed on disk since this session last read it, so what you know of it is out of date. Nothing was written. Read it again with %s, then make the change.", loc.abs, o.ReadName)
 }
 
+// beforeChange tells the harness, when it asked, that the file of a change
+// is about to change (Options.BeforeChange).
+func (o *Options) beforeChange(env *core.ToolEnv, c *change) *failure {
+	if o.BeforeChange == nil {
+		return nil
+	}
+	if err := o.BeforeChange(env, c.loc.real); err != nil {
+		return failf("%s was not changed: %v.", c.loc.abs, err)
+	}
+	return nil
+}
+
 // commit makes a change: it writes the file and takes back whatever it
 // had made if the write fails. It returns the info of the written file and
 // whether it had to be written in place.
@@ -357,6 +369,9 @@ func (t *writeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 		res.Display = c.display()
 		res.Meta = meta
 		return res, nil
+	}
+	if f := o.beforeChange(env, c); f != nil {
+		return refused(f)
 	}
 	info, inPlace, f := commit(t.sys, c)
 	if f != nil {

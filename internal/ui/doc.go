@@ -175,8 +175,9 @@
 //	Esc                    busy: stop the turn, at once (ui UI-31, LOOP-5)
 //	Esc Esc                idle, text in the box: clear it; Up brings it back (ui UI-31)
 //	Esc Esc                idle, empty box: the list of your prompts, to take the conversation back
-//	                       to before one of them; that prompt comes back into the box. Files are
-//	                       not restored, and the list says so (cc 3; sessions 5). /rewind is the same
+//	                       to before one of them; that prompt comes back into the box. Where Write
+//	                       or Edit changed files since, they can be put back with it, or alone
+//	                       (cc 3; sessions 5). /rewind is the same
 //	Ctrl+C                 busy: stop the turn. Idle: clear the box, and again to leave (cc 3)
 //	Ctrl+D                 empty box, twice: leave (cc 3)
 //	Up                     empty box, prompts queued: take the queue back for editing (ui UI-31)

@@ -65,6 +65,14 @@ type Options struct {
 	// model in its result. Default 3; a negative value shows none.
 	EditContextLines int
 
+	// BeforeChange, when set, is called by Write and Edit just before they
+	// change a file, with the call's environment and the file's real path:
+	// the file is then as it was, and locked against the session's other
+	// changes to it. A harness that keeps what files held, to put them back
+	// later, reads the file there. An error stops the change: nothing is
+	// written, and the model reads why.
+	BeforeChange func(env *core.ToolEnv, path string) error
+
 	// RefuseLinkWrites makes Write and Edit refuse a path that is itself a
 	// symbolic link and name the link's target instead, as Claude Code
 	// does. By default they write the file the link leads to and leave the

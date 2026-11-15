@@ -30,13 +30,13 @@ func TestRewindInThePlainSession(t *testing.T) {
 	s.see("the first prompt")
 	s.see("the third prompt")
 	s.see("/rewind N takes the conversation back to before prompt N")
-	s.see("Files are not restored")
+	s.see("what shell commands changed cannot")
 	s.typeLine("/rewind 9")
 	s.see("is not the number of one of your prompts")
 	s.typeLine("/rewind 2")
 	s.see("The conversation is back to before this prompt of yours")
 	s.see("the second prompt")
-	s.see("Only the conversation goes back.")
+	s.see("The files stay as they are now.")
 
 	s.typeLine("the second prompt, changed")
 	s.see("The answer to the changed prompt.")
@@ -67,6 +67,80 @@ func TestRewindInThePlainSession(t *testing.T) {
 	sent = string(reqs[len(reqs)-1].Body)
 	has(t, "what a later run was sent", sent, "the first prompt", "the second prompt, changed", "The answer to the changed prompt.", "go on")
 	hasNot(t, "what a later run was sent", sent, "Second answer.", "Third answer.")
+}
+
+// The files: what Write and Edit changed from a prompt on is put back with
+// the conversation ("/rewind N all") or alone ("/rewind N files"), as it was
+// before the first of those changes; a file that was not there is taken away
+// again. Copies are kept beside the session's file, so a later process can
+// put the files back too.
+func TestRewindPutsFilesBack(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Read", Args: `{"file_path":"keep.txt"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Edit", Args: `{"file_path":"keep.txt","old_string":"kept","new_string":"changed"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Write", Args: `{"file_path":"notes.txt","content":"second\n"}`}}},
+		apptest.Reply{Text: "Changed both."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c5", Name: "Edit", Args: `{"file_path":"notes.txt","old_string":"second","new_string":"third"}`}}},
+		apptest.Reply{Text: "Third."},
+		apptest.Reply{Text: "The model knows the files went back."},
+	)
+	w.Write("keep.txt", "kept\n")
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("change both files")
+	s.see("Changed both.")
+	s.typeLine("one more change")
+	s.see("Third.")
+	if got := w.Read("notes.txt") + w.Read("keep.txt"); got != "third\nchanged\n" {
+		t.Fatalf("before the rewind the files hold %q", got)
+	}
+
+	// The list says which prompts files were changed after.
+	s.typeLine("/rewind")
+	s.see("1. ")
+	s.see("write the notes  (2 files changed since)")
+	s.see("change both files  (2 files changed since)")
+	s.see("one more change  (1 file changed since)")
+
+	// The files alone, back to before the second prompt: notes.txt as the
+	// first prompt left it, keep.txt as it was; the conversation stays.
+	s.typeLine("/rewind 2 files")
+	s.see("The files are back as they were before your prompt: change both files")
+	s.see("Put back 2 files")
+	if got := w.Read("notes.txt") + w.Read("keep.txt"); got != "first\nkept\n" {
+		t.Errorf("after /rewind 2 files the files hold %q", got)
+	}
+	s.typeLine("what happened?")
+	s.see("The model knows the files went back.")
+	reqs := w.Model.Requests()
+	has(t, "the request after the files went back", string(reqs[len(reqs)-1].Body), "back as they were before it", "Third.")
+
+	// The session is left, and taken up again in a new process: the copies
+	// are still there.
+	s.typeLine("/exit")
+	s.exit()
+	s = sit(t, w, "-c", "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/rewind")
+	s.see("write the notes  (2 files changed since)")
+
+	// Conversation and files, back to before the first prompt: notes.txt
+	// was not there, and goes.
+	s.typeLine("/rewind 1 all")
+	s.see("The conversation is back to before this prompt of yours")
+	s.see("Put back 2 files")
+	if w.Exists("notes.txt") {
+		t.Errorf("notes.txt was not there before the first prompt, and is there after the rewind")
+	}
+	if got := w.Read("keep.txt"); got != "kept\n" {
+		t.Errorf("keep.txt holds %q after the rewind", got)
+	}
+	s.typeLine("/exit")
+	s.exit()
 }
 
 // Back to before the very first prompt: the conversation is empty again,

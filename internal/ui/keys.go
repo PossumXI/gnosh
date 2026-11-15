@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -779,8 +780,9 @@ func (s *session) help() {
 	}
 }
 
-// rewindNote is what the menu says a rewind does and does not do.
-const rewindNote = "Only the conversation goes back: the model forgets that prompt and everything after it. Files are not restored (this gnosh keeps no checkpoints of them yet), so what was changed on disk stays as it is. Commands running in the background are stopped."
+// rewindNote is what the menu says of the files a rewind can and cannot
+// put back.
+const rewindNote = "What shell commands changed is not kept, and stays as it is."
 
 // rewind opens the list of the person's prompts, the newest first, to
 // take the conversation back to before one of them. It is what Esc Esc
@@ -817,20 +819,46 @@ func (s *session) rewind() {
 		// oldest.
 		number := len(points) - res.Index
 		point := points[number-1]
+		// The choices, as Claude Code offers them: the conversation and the
+		// files, the conversation alone, or the files alone; the ones about
+		// files only where Write or Edit changed one since.
 		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + oneLine(point.Text)}}
+		var opts []menu.Option
+		var commands []string
+		body := []string{"Write and Edit changed no file since then. " + rewindNote}
+		if n := len(point.Files); n > 0 {
+			shown := point.Files
+			if len(shown) > 5 {
+				shown = shown[:5]
+			}
+			names := make([]string, len(shown))
+			for i, f := range shown {
+				names[i] = filepath.Base(f)
+			}
+			more := ""
+			if n > len(shown) {
+				more = fmt.Sprintf(" and %d more", n-len(shown))
+			}
+			body = []string{fmt.Sprintf("Write and Edit changed %s since then: %s%s. %s", count(n, "file", "files"), strings.Join(names, ", "), more, rewindNote)}
+			opts = append(opts, menu.Option{Label: "Go back, and put the files back", Description: "the conversation and the files as they were"})
+			commands = append(commands, fmt.Sprintf("/rewind %d all", number))
+		}
+		opts = append(opts, menu.Option{Label: "Go back, the conversation only", Description: "the prompt is put in the box; the files stay as they are"})
+		commands = append(commands, fmt.Sprintf("/rewind %d", number))
+		if len(point.Files) > 0 {
+			opts = append(opts, menu.Option{Label: "Put the files back only", Description: "the conversation stays as it is"})
+			commands = append(commands, fmt.Sprintf("/rewind %d files", number))
+		}
+		opts = append(opts, menu.Option{Label: "Never mind"})
 		sure.ui = menu.NewSelect(menu.SelectOptions{
-			Title: sure.q.Title, Body: []string{rewindNote},
-			Options: []menu.Option{
-				{Label: "Go back", Description: "the prompt is put in the box, to send again or change"},
-				{Label: "Never mind"},
-			},
+			Title: sure.q.Title, Body: body, Options: opts,
 			CancelHint: "never mind", Theme: s.th.Menu, Metrics: s.m,
 		})
 		sure.local = func(res menu.Result) {
-			if res.Cancelled || res.Index != 0 {
+			if res.Cancelled || res.Index < 0 || res.Index >= len(commands) {
 				return
 			}
-			s.run(fmt.Sprintf("/rewind %d", number))
+			s.run(commands[res.Index])
 		}
 		s.openLocal(sure)
 	}
