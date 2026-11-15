@@ -628,3 +628,62 @@ func TestConcurrentUse(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestDecideAt: the shell's directory goes with the question. Agents that
+// share an engine and stand in different directories are each judged
+// where they stand, whatever another asked last, and the engine's own
+// directory stays where it was.
+func TestDecideAt(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeBypass, rules{deny: []string{"Read(./.env)"}}))
+	at := func(dir, cmd string) Behavior {
+		return e.DecideAt(dir, "Bash", core.ToolCall{Name: "Bash", Input: input("command", cmd)},
+			core.Action{Kind: core.ActionExecute, Command: cmd}).Behavior
+	}
+	// In the project "cat .env" reads the file the rule names. In a folder
+	// under it the same words read another file.
+	const cmd = "cat .env"
+	if got := at("/proj", cmd); got != Deny {
+		t.Fatalf("in the project: %s, want deny", got)
+	}
+	if got := at("/proj/build/", cmd); got != Allow {
+		t.Fatalf("in a folder of the project: %s, want allow", got)
+	}
+	// The engine itself is where it was, and a directory that is no
+	// absolute path changes nothing.
+	for _, dir := range []string{"", "build", "./build"} {
+		if got := at(dir, cmd); got != Deny {
+			t.Errorf("with the directory %q: %s, want the engine's own directory, where it is denied", dir, got)
+		}
+	}
+	if d := bash(e, cmd); d.Behavior != Deny {
+		t.Errorf("Decide after a DecideAt elsewhere: %s (%s): the engine's own directory moved", d.Behavior, d.Reason)
+	}
+	// Told where the shell is, the engine is asked from there, and a
+	// question that brings its own directory is still judged in that one.
+	e.SetCwd("/proj/build")
+	if d := bash(e, cmd); d.Behavior != Allow {
+		t.Errorf("Decide after SetCwd: %s (%s), want allow", d.Behavior, d.Reason)
+	}
+	if got := at("/proj", cmd); got != Deny {
+		t.Errorf("DecideAt the project after SetCwd elsewhere: %s, want deny", got)
+	}
+	// Many agents at once, half of them in each directory.
+	var wg sync.WaitGroup
+	for i := range 32 {
+		dir, want := "/proj", Deny
+		if i%2 == 1 {
+			dir, want = "/proj/build", Allow
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				if got := at(dir, cmd); got != want {
+					t.Errorf("in %s among others: %s, want %s", dir, got, want)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}

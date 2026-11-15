@@ -154,6 +154,26 @@ func (e *Engine) DecideAs(mode Mode, tool string, call core.ToolCall, action cor
 	return as.decideLocked(tool, call, action)
 }
 
+// DecideAt judges a call as Decide does, with the shell in dir: relative
+// paths in a command are read from there. It is for a program in which
+// several agents share one engine and each has a shell of its own, in a
+// directory of its own: telling the engine where the shell is (SetCwd) and
+// asking it (Decide) are two steps, and between them another agent's call
+// may have told it something else, so that "rm -rf *" in the project would
+// be judged as the same words in some folder under it. Here the directory
+// and the question are one step, and the engine's own directory is left as
+// it is. A dir that is not an absolute path changes nothing.
+func (e *Engine) DecideAt(dir, tool string, call core.ToolCall, action core.Action) Decision {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if !strings.HasPrefix(dir, "/") {
+		return e.decideLocked(tool, call, action)
+	}
+	at := *e
+	at.cur = path.Clean(dir)
+	return at.decideLocked(tool, call, action)
+}
+
 // decideLocked is Decide with the lock already held.
 func (e *Engine) decideLocked(tool string, call core.ToolCall, action core.Action) Decision {
 	d := e.decide(CanonicalTool(tool), call, action)

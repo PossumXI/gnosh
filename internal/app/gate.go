@@ -123,13 +123,15 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	}
 
 	// 2. The rules and the mode, on the final arguments. A relative path
-	// in a command is read from where the session's shell now is. The
-	// engine is given the arguments whole, a shell call's host among
-	// them: it judges a call whose host is this machine (left blank, or
-	// named "local") as the call for this machine that it is, and any
-	// other as a command on another machine, which always asks.
-	l.engine.SetCwd(cwd)
-	d := l.reach(call, action, l.engine.Decide(call.Name, call, action)).WithHook(verdict, hookReason)
+	// in a command is read from where the shell of the agent that made the
+	// call now is: the directory goes with the question, in one step,
+	// because the session and its sub-agents share the engine and each has
+	// a directory of its own. The engine is given the arguments whole, a
+	// shell call's host among them: it judges a call whose host is this
+	// machine (left blank, or named "local") as the call for this machine
+	// that it is, and any other as a command on another machine, which
+	// always asks.
+	d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action)).WithHook(verdict, hookReason)
 	confirm := action.Confirm && cannot == nil
 	if confirm {
 		// Asked every time: a kept approval would be the rule that this
@@ -243,7 +245,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 //     the tool's own answer stands.)
 //
 // Nothing here makes an answer milder than the engine's own.
-func (l *live) reach(call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
+func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
 	if own.Behavior == permission.Deny || !l.featureTool(call.Name) {
 		return own
 	}
@@ -283,7 +285,7 @@ func (l *live) reach(call core.ToolCall, action core.Action, own permission.Deci
 		}
 		input := json.RawMessage(`{"command":` + string(quoted) + `,"host":` + string(host) + `}`)
 		stricter(call.Name+" runs a command on another machine for this call, which is judged as that command is.",
-			l.engine.Decide(shelltool.BashName,
+			l.engine.DecideAt(cwd, shelltool.BashName,
 				core.ToolCall{ID: call.ID, Name: shelltool.BashName, Input: input},
 				core.Action{Kind: core.ActionExecute, Command: action.Command, Summary: action.Summary}))
 	case core.ActionRead:
@@ -296,7 +298,7 @@ func (l *live) reach(call core.ToolCall, action core.Action, own permission.Deci
 			if err != nil {
 				continue
 			}
-			d := l.engine.Decide(read,
+			d := l.engine.DecideAt(cwd, read,
 				core.ToolCall{ID: call.ID, Name: read, Input: json.RawMessage(`{"file_path":` + string(quoted) + `}`)},
 				core.Action{Kind: core.ActionRead, Paths: []string{path}, Summary: action.Summary})
 			if d.Stage == permission.StageTool {
