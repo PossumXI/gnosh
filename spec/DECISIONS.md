@@ -524,6 +524,10 @@ or kept with the reason said (27).
       reaches wherever it can. Box 1's Qwen showed the need: handed the
       checkout's absolute path in its task, it wrote there, and its own
       work tree, unchanged, was removed.
+    - **A session in a kept work tree** works on its files as on any
+      project's: the folder of work trees its project lies in counts as
+      one of the engine's (`Options.WorkTrees` is a list), so the
+      repository's .gnosh above them does not make them gnosh's own.
 44. **The side panel takes the whole screen, and only when asked.** Jae
     asked for "a real side panel as an option" (15 November 2026). A
     panel the height of the screen cannot live in the terminal's

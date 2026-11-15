@@ -404,8 +404,12 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	}
 	o.Protected = append(o.Protected, protected...)
 	// What is inside the work trees made for sub-agents (worktree.go) is
-	// the project's, though they lie in its data folder.
-	o.WorkTrees = filepath.Join(cfg.Paths.DataDir, worktreesDir)
+	// the project's, though they lie in its data folder; and so is a
+	// session's own project when it is one of those work trees, kept.
+	o.WorkTrees = []string{filepath.Join(cfg.Paths.DataDir, worktreesDir)}
+	if outer := outerTrees(cfg.Paths.ProjectRoot, filepath.Base(cfg.Paths.DataDir)); outer != "" {
+		o.WorkTrees = append(o.WorkTrees, outer)
+	}
 
 	for _, l := range cfg.Permissions.Layers {
 		o.Layers = append(o.Layers, ruleLayer(l))

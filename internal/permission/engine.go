@@ -65,13 +65,15 @@ type Options struct {
 	// and what a feature keeps for itself (the mem store). Each covers
 	// itself and everything under it.
 	Protected []string
-	// WorkTrees is the folder the git work trees gnosh makes for
-	// sub-agents are in (the project's data folder's worktrees). What is
-	// inside one of those work trees is a checkout of the project and is
-	// judged as the project's files are: the protected folder the work
-	// trees lie in does not protect it, while a protected name inside the
-	// work tree (its .git, its own .gnosh) still does. Empty: none.
-	WorkTrees string
+	// WorkTrees are the folders the git work trees gnosh makes for
+	// sub-agents are in: the project's data folder's worktrees, and, for a
+	// session that runs in such a work tree (one that was kept), the
+	// folder that one lies in. What is inside one of those work trees is a
+	// checkout of the project and is judged as the project's files are:
+	// the protected folder the work trees lie in does not protect it,
+	// while a protected name inside the work tree (its .git, its own
+	// .gnosh) still does.
+	WorkTrees []string
 	// DisableBypass forbids ModeBypass (the settings key
 	// disableBypassPermissionsMode).
 	DisableBypass bool
@@ -181,11 +183,14 @@ func New(o Options) (*Engine, error) {
 			e.protected = append(e.protected, guardPath(path.Clean(p)))
 		}
 	}
-	if trees := path.Clean(o.WorkTrees); strings.HasPrefix(trees, "/") {
-		// The folder of work trees counts only where it is what it says:
-		// in a data folder that has no other protected folder's name
-		// (.git), and not itself a link, which would carry the exemption
-		// somewhere else (a repository can ship ".gnosh/worktrees -> ..").
+	for _, trees := range o.WorkTrees {
+		if trees = path.Clean(trees); !strings.HasPrefix(trees, "/") {
+			continue
+		}
+		// A folder of work trees counts only where it is what it says: in
+		// a data folder that has no other protected folder's name (.git),
+		// and not itself a link, which would carry the exemption somewhere
+		// else (a repository can ship ".gnosh/worktrees -> ..").
 		data := path.Base(path.Dir(trees))
 		ok, real := data == ".gnosh" || !ProtectsName(data), trees
 		if ok && o.Resolve != nil {
@@ -193,9 +198,11 @@ func New(o Options) (*Engine, error) {
 			r, err2 := o.Resolve(trees)
 			ok, real = err1 == nil && err2 == nil && r == path.Join(parent, path.Base(trees)), r
 		}
-		if ok {
-			e.workTrees = append(e.workTrees, guardPath(trees))
-			if g := guardPath(real); !slices.Contains(e.workTrees, g) {
+		if !ok {
+			continue
+		}
+		for _, g := range []string{guardPath(trees), guardPath(real)} {
+			if !slices.Contains(e.workTrees, g) {
 				e.workTrees = append(e.workTrees, g)
 			}
 		}

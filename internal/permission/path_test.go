@@ -250,10 +250,32 @@ func (e errString) Error() string { return string(e) }
 // its place (a repository can ship ".gnosh/worktrees -> ..") or a data
 // folder named like another protected one (.git) gives no exemption, and
 // the project's .git and the rest stay protected.
+// A session whose project is a work tree gnosh made, and kept, has two
+// folders of work trees: its own data folder's, and the one its project
+// lies in. Its project's files are open; the data folders' own files and
+// the work tree's .git are not.
+func TestSessionInAKeptWorkTree(t *testing.T) {
+	o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write"}})
+	o.Cwd = "/proj/.gnosh/worktrees/agent-1"
+	o.Protected = []string{"/proj/.gnosh/worktrees/agent-1/.gnosh"}
+	o.WorkTrees = []string{"/proj/.gnosh/worktrees/agent-1/.gnosh/worktrees", "/proj/.gnosh/worktrees"}
+	e := mustEngine(t, o)
+	for _, p := range []string{"/proj/.gnosh/worktrees/agent-1/a.go", "/proj/.gnosh/worktrees/agent-1/sub/b.go"} {
+		if d := file(e, "Write", p); d.Behavior != Allow {
+			t.Errorf("%s: got %s (%s), want allow", p, d.Behavior, d.Reason)
+		}
+	}
+	for _, p := range []string{"/proj/.gnosh/worktrees/agent-1/.gnosh/settings.json", "/proj/.gnosh/worktrees/agent-1/.git", "/proj/.gnosh/settings.json"} {
+		if d := file(e, "Write", p); d.Behavior != Ask {
+			t.Errorf("%s: got %s (%s), want ask", p, d.Behavior, d.Reason)
+		}
+	}
+}
+
 func TestWorkTreesThatAreNot(t *testing.T) {
 	for name, set := range map[string]func(o *Options){
 		"a link to the project": func(o *Options) {
-			o.WorkTrees = "/proj/.gnosh/worktrees"
+			o.WorkTrees = []string{"/proj/.gnosh/worktrees"}
 			o.Resolve = func(p string) (string, error) {
 				if rest, ok := strings.CutPrefix(p, "/proj/.gnosh/worktrees"); ok {
 					return path.Clean("/proj/" + rest), nil
@@ -261,7 +283,7 @@ func TestWorkTreesThatAreNot(t *testing.T) {
 				return p, nil
 			}
 		},
-		"a data folder named .git": func(o *Options) { o.WorkTrees = "/proj/.git/worktrees" },
+		"a data folder named .git": func(o *Options) { o.WorkTrees = []string{"/proj/.git/worktrees"} },
 	} {
 		o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
 		set(&o)
@@ -303,7 +325,7 @@ func TestProtectedPaths(t *testing.T) {
 	}
 	o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
 	o.Protected = []string{"/custom/settings.json", "/var/mem/store", "/proj/.gnosh"}
-	o.WorkTrees = "/proj/.gnosh/worktrees"
+	o.WorkTrees = []string{"/proj/.gnosh/worktrees"}
 	e := mustEngine(t, o)
 	for _, p := range protected {
 		// An allow rule and acceptEdits do not pre-approve it.

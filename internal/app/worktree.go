@@ -203,3 +203,20 @@ func shortCommit(id string) string {
 	}
 	return id
 }
+
+// outerTrees is the folder of work trees a session's project lies in,
+// when the project is one of the git work trees gnosh makes, kept after
+// its sub-agent ended: <repo>/<data>/worktrees/<name>, whose .git is the
+// file a work tree has. Its files are a checkout of the project like any
+// other, and the data folder above them must not make them gnosh's own.
+// "" otherwise. data is the data folder's name.
+func outerTrees(root, data string) string {
+	trees := filepath.Dir(root)
+	if filepath.Base(trees) != worktreesDir || filepath.Base(filepath.Dir(trees)) != data {
+		return ""
+	}
+	if info, err := os.Lstat(filepath.Join(root, ".git")); err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return trees
+}

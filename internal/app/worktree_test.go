@@ -194,3 +194,21 @@ func TestSubAgentWorktreeKeepsToItsTree(t *testing.T) {
 		t.Errorf("notes.txt in the work tree: %q", made)
 	}
 }
+
+// A session started in a work tree gnosh made for a sub-agent, and kept,
+// works on its files as on any project's: the data folder the work tree
+// lies in does not make them gnosh's own.
+func TestSessionInAKeptWorktree(t *testing.T) {
+	w := repoWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "w", Name: "Write", Args: `{"file_path":"kept.txt","content":"carried on\n"}`}}},
+		apptest.Reply{Text: "Done."},
+	)
+	tree := filepath.Join(w.Dir, ".gnosh", "worktrees", "agent-0123456789ab")
+	gitIn(t, w.Dir, "worktree", "add", "-q", "-b", "gnosh-agent-0123456789ab", tree)
+	o := testOptions(w, "--permission-mode", "acceptEdits", "-p", "carry on")
+	o.Cwd = tree
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	if got, err := os.ReadFile(filepath.Join(tree, "kept.txt")); err != nil || string(got) != "carried on\n" {
+		t.Errorf("the write in the kept work tree: %q, %v", got, err)
+	}
+}
