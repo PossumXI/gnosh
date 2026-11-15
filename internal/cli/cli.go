@@ -143,6 +143,9 @@ type Invocation struct {
 	// NoSessionPersistence keeps nothing of a run: its session is not
 	// saved and cannot be resumed (print mode only).
 	NoSessionPersistence bool
+	// IncludePartialMessages is --include-partial-messages: stream-json
+	// also carries the main agent's replies as streaming events.
+	IncludePartialMessages bool
 	// Agents is --agents: sub-agents defined for this run, as a JSON
 	// object of agents by name, or the path of a file that holds one.
 	Agents string

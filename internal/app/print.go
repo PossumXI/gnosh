@@ -63,6 +63,9 @@ type printer struct {
 	// The state of stream-json output.
 	started bool // the first line has been written
 	msgSeq  int
+	// sm is the reply being streamed as stream events
+	// (--include-partial-messages).
+	sm streamed
 
 	capped bool
 	// rounds counts the run's own replies as they are reported, for a
@@ -349,9 +352,26 @@ func (f *printer) Event(ev any) {
 	switch ev := ev.(type) {
 	case *agent.TurnStartEvent:
 		f.init()
+	case *agent.RequestEvent:
+		if ev.Purpose == "main" && ev.Agent == "" {
+			f.sm.model, f.sm.sent = ev.Model, ev.Time
+		}
 	case *agent.TextEvent:
 		if ev.Agent == "" {
 			f.text(ev.Text)
+			f.partialPiece(ev)
+		}
+	case *agent.ThinkingEvent:
+		if ev.Agent == "" {
+			f.partialPiece(ev)
+		}
+	case *agent.ToolCallEvent:
+		if ev.Agent == "" {
+			f.partialPiece(ev)
+		}
+	case *agent.ToolInputEvent:
+		if ev.Agent == "" {
+			f.partialPiece(ev)
 		}
 	case *agent.ReplyEvent:
 		if ev.Purpose != "main" {
@@ -360,14 +380,19 @@ func (f *printer) Event(ev any) {
 		if ev.Agent == "" {
 			f.rounds++
 			f.endReply()
+			f.partialWhole(ev.Message)
 		}
 		f.replyLines(ev)
+		if ev.Agent == "" {
+			f.partialEnd(ev.StopReason, ev.Usage)
+		}
 	case *agent.RetryEvent:
 		if ev.Discarded {
 			// What had arrived of the reply is thrown away; the next try
 			// writes it afresh.
 			f.buf.Reset()
 			f.inMessage = false
+			f.partialEnd(core.StopCancelled, core.Usage{})
 		}
 		f.stderr("%s", ev.Message)
 		f.line(retryLine{Type: "system", Subtype: "api_retry", UUID: newUUID(), SessionID: f.sessionID(),
@@ -851,8 +876,13 @@ func (f *printer) replyLines(ev *agent.ReplyEvent) {
 		return
 	}
 	f.init()
-	f.msgSeq++
-	id := fmt.Sprintf("msg_%s_%d", shortID(strings.ReplaceAll(f.sessionID(), "-", "")), f.msgSeq)
+	var id string
+	if f.partialOn() && f.sm.open && ev.Agent == "" {
+		id = f.sm.id // the message the stream events told
+	} else {
+		f.msgSeq++
+		id = f.messageID(f.msgSeq)
+	}
 	aborted := ev.StopReason == core.StopCancelled || ev.StopReason == core.StopError
 	for _, b := range ev.Message.Blocks {
 		var block any

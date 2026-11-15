@@ -112,6 +112,9 @@ func (u flagUse) around() (before, args []string) {
 	if u.f.id == idFork {
 		before = append(before, "-C")
 	}
+	if u.f.id == "--include-partial-messages" {
+		before = append(before, "--output-format", "stream-json")
+	}
 	if u.c.session {
 		return before, []string{"the prompt"}
 	}

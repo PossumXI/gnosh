@@ -155,6 +155,10 @@ Print mode
   --small-model <model>
       The model for the run's short side jobs. Without it they use the main
       model. (Not built yet.)
+  --include-partial-messages
+      With --output-format stream-json: also write the replies as they arrive,
+      as the Messages API's streaming events (stream_event lines). (Not built
+      yet.)
   --no-session-persistence
       Keep nothing of the run: its session is not saved, and cannot be
       resumed. (Not built yet.)

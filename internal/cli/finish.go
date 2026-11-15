@@ -66,6 +66,11 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			"%s gives a new conversation its ID, and %s goes on with an earlier one, so nothing was started. Add --fork-session to go on in a copy that has the new ID, or drop one of the two.",
 			o.typed, chosen.typed)
 	}
+	if o := p.given("--include-partial-messages"); o != nil && printing && inv.OutputFormat != FormatStreamJSON {
+		return fail(ErrUsage, o.typed,
+			"%s only does something with --output-format stream-json, so nothing was started. Add --output-format stream-json.",
+			o.typed)
+	}
 	if o := p.given(idNoPersist); o != nil {
 		// Nothing of the run is kept: it cannot go on with a saved
 		// session, or give the one it starts an id or a name to find it by.

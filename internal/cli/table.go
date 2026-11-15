@@ -238,6 +238,9 @@ func Default() *Table {
 	smallModel := t.add(&flag{names: "--small-model", kind: kindText, arg: "model", group: groupPrint, pri: 1, printOnly: true,
 		help: "The model for the run's short side jobs. Without it they use the main model.",
 		set:  func(i *Invocation, v flagValue) { i.SmallModel = v.text }})
+	partial := t.add(&flag{names: "--include-partial-messages", group: groupPrint, pri: 1, printOnly: true,
+		help: "With --output-format stream-json: also write the replies as they arrive, as the Messages API's streaming events (stream_event lines).",
+		set:  func(i *Invocation, _ flagValue) { i.IncludePartialMessages = true }})
 	noPersist := t.add(&flag{names: "--no-session-persistence", group: groupPrint, pri: 1, printOnly: true,
 		help: "Keep nothing of the run: its session is not saved, and cannot be resumed.",
 		set:  func(i *Invocation, _ flagValue) { i.NoSessionPersistence = true }})
@@ -253,7 +256,7 @@ func Default() *Table {
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents,
 		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
-		printMode, output, input, goal, maxTurns, smallModel, noPersist,
+		printMode, output, input, goal, maxTurns, smallModel, partial, noPersist,
 		help, version,
 	}
 

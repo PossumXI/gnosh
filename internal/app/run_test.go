@@ -75,6 +75,67 @@ func TestRunStreamJSONFormat(t *testing.T) {
 	}
 }
 
+// --include-partial-messages adds each reply as the Messages API's
+// streaming events: message_start; each block's start, pieces and stop,
+// the last block's stop after the reply's assistant lines; message_delta
+// and message_stop; all of the reply's one message id, and the text
+// pieces add up to the text.
+func TestRunPartialMessages(t *testing.T) {
+	w := apptest.NewWorld(t, twoReplies()...)
+	w.Write("a.txt", "two plus two\n")
+	r := run(t, w, "-p", "--output-format", "stream-json", "--include-partial-messages", "what is 2+2?").wantCode(t, 0).wantNoErr(t)
+	var kinds []string
+	var text, input strings.Builder
+	ids := map[string]int{}
+	for _, l := range jsonLines(t, r.out) {
+		kind, _ := l["type"].(string)
+		switch kind {
+		case "stream_event":
+			ev, _ := l["event"].(map[string]any)
+			kind, _ = ev["type"].(string)
+			if d, ok := ev["delta"].(map[string]any); ok {
+				switch d["type"] {
+				case "text_delta":
+					text.WriteString(d["text"].(string))
+				case "input_json_delta":
+					input.WriteString(d["partial_json"].(string))
+				}
+			}
+			if m, ok := ev["message"].(map[string]any); ok {
+				ids[m["id"].(string)]++
+			}
+			if kind == "message_start" {
+				if _, ok := l["ttft_ms"]; !ok {
+					t.Errorf("message_start without ttft_ms: %v", l)
+				}
+			}
+		case "assistant":
+			ids[l["message"].(map[string]any)["id"].(string)]++
+		}
+		if n := len(kinds); kind == "content_block_delta" && n > 0 && kinds[n-1] == kind {
+			continue // pieces: how many is the provider's business
+		}
+		kinds = append(kinds, kind)
+	}
+	want := "system " +
+		"message_start content_block_start content_block_delta content_block_stop content_block_start content_block_delta assistant assistant content_block_stop message_delta message_stop " +
+		"user " +
+		"message_start content_block_start content_block_delta assistant content_block_stop message_delta message_stop " +
+		"result"
+	if got := strings.Join(kinds, " "); got != want {
+		t.Errorf("the lines:\n got %s\nwant %s", got, want)
+	}
+	if text.String() != "Let me look.The answer is 4." || input.String() != `{"file_path":"a.txt"}` {
+		t.Errorf("the pieces: text %q, input %q", text.String(), input.String())
+	}
+	if len(ids) != 2 {
+		t.Errorf("message ids %v: want the two replies' own, each on its message_start and its assistant lines", ids)
+	}
+	// Without stream-json it is refused before anything starts.
+	r = run(t, w, "-p", "--include-partial-messages", "again").wantCode(t, 1)
+	has(t, "without stream-json", r.err, "only does something with --output-format stream-json")
+}
+
 // checkSession opens a session's file as gnosh itself would, and fails
 // the test unless it reads without a warning and what a model would be
 // sent from it is a conversation a provider accepts: every tool call
