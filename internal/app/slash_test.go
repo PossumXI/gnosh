@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -194,6 +196,46 @@ func TestClaudeCodeCommands(t *testing.T) {
 	has(t, "the request /init sent", string(reqs[len(reqs)-1].Body), "The user typed /init", "GNOSH.md is there already")
 	s.typeLine("/exit")
 	s.exit()
+}
+
+// /diff: what changed since the last commit, in a trusted folder only.
+func TestDiffCommand(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("there is no git on this machine")
+	}
+	w := apptest.NewWorld(t)
+	w.Write("a.txt", "one\ntwo\n")
+	gitIn := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", w.Dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+w.Home)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	// An untrusted folder: git is not run at all.
+	r := run(t, w, "-p", "/diff")
+	has(t, "/diff in a folder that is not trusted", r.out+r.err, "this folder is not trusted")
+
+	// Trusted, but no repository.
+	r = run(t, w, "--trust-folder", "-p", "/diff").wantCode(t, 0)
+	has(t, "/diff outside a repository", r.out, "is not in a git repository")
+
+	// A repository with no commit yet: everything is new.
+	gitIn("init", "-q")
+	r = run(t, w, "--trust-folder", "-p", "/diff").wantCode(t, 0)
+	has(t, "/diff before the first commit", r.out, "New files git does not track yet (1): a.txt")
+
+	gitIn("add", ".")
+	gitIn("commit", "-q", "-m", "first")
+	r = run(t, w, "--trust-folder", "-p", "/diff").wantCode(t, 0)
+	has(t, "/diff with nothing changed", r.out, "Nothing has changed since the last commit.")
+
+	w.Write("a.txt", "one\nTWO\n")
+	w.Write("new.txt", "x\n")
+	r = run(t, w, "--trust-folder", "-p", "/diff").wantCode(t, 0)
+	has(t, "/diff with changes", r.out, "Changed since the last commit:", "a.txt | 2", "New files git does not track yet (1): new.txt", "-two", "+TWO")
 }
 
 // A slash command given as the prompt of a run is run, not sent to the

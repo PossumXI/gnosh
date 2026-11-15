@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -21,7 +22,7 @@ import (
 
 // This file holds the slash commands that follow Claude Code's own of the
 // same names (spec/cc/slash-commands-and-skills.md): /plan, /add-dir,
-// /tasks, /cost, /agents, /memory, /init and /export.
+// /tasks, /cost, /agents, /memory, /init, /export and /diff.
 
 // slashPlan is /plan [task]: plan mode, and the task, if one is given, as
 // the prompt that starts it.
@@ -413,6 +414,92 @@ func exportText(entries []transcript.Entry) string {
 		}
 	}
 	return b.String()
+}
+
+// diffMaxLines is how many lines of the diff itself /diff shows; the rest
+// is counted, and git diff shows it.
+const diffMaxLines = 400
+
+// emptyTree is git's object id of a tree with nothing in it: what a
+// repository with no commit yet is compared with.
+const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+// slashDiff is /diff: what has changed in the working tree since the last
+// commit, the model's edits among it: a line a file, the files git does not
+// track yet, and then the changes themselves.
+//
+// It runs git, which gnosh otherwise never does itself, and only in a
+// folder the person has trusted: a repository's own settings can name
+// programs git runs (a diff driver, a text converter, a file-system
+// monitor). Those three are switched off all the same; a filter a trusted
+// repository names still runs, as it would for the person's own git diff.
+func (l *live) slashDiff(ctx context.Context, c *SlashContext) error {
+	root := l.cfg.Paths.ProjectRoot
+	if !l.st.trusted {
+		return errors.New("/diff runs git, and this folder is not trusted: a repository's own settings can name programs git runs. gnosh trust trusts it")
+	}
+	git := func(args ...string) (string, error) {
+		base := []string{"--no-pager", "-c", "core.fsmonitor=false", "-c", "diff.external=", "-c", "core.quotePath=false", "-C", root}
+		cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_EXTERNAL_DIFF=", "GIT_PAGER=cat", "PAGER=cat")
+		out, err := cmd.Output()
+		return string(out), err
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return errors.New("/diff needs git, and there is none on this machine's PATH")
+	}
+	if _, err := git("rev-parse", "--is-inside-work-tree"); err != nil {
+		c.Say("%s is not in a git repository, so there is no last commit to compare with.", root)
+		return nil
+	}
+	against := "HEAD"
+	if _, err := git("rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		against = emptyTree
+	}
+	diffArgs := []string{"diff", "--no-ext-diff", "--no-textconv", "--no-color"}
+	stat, err := git(append(diffArgs, "--stat", against)...)
+	if err != nil {
+		return fmt.Errorf("git diff did not work: %v", err)
+	}
+	untracked, _ := git("ls-files", "--others", "--exclude-standard")
+	stat, untracked = strings.TrimRight(stat, "\n"), strings.TrimRight(untracked, "\n")
+	if stat == "" && untracked == "" {
+		c.Say("Nothing has changed since the last commit.")
+		return nil
+	}
+	if stat != "" {
+		c.Say("Changed since the last commit:")
+		c.Say("%s", stat)
+	}
+	if untracked != "" {
+		files := strings.Split(untracked, "\n")
+		shown := files
+		if len(shown) > 20 {
+			shown = shown[:20]
+		}
+		c.Say("New files git does not track yet (%d): %s", len(files), strings.Join(shown, ", "))
+		if len(files) > len(shown) {
+			c.Say("  and %d more; git status lists them all.", len(files)-len(shown))
+		}
+	}
+	if stat == "" {
+		return nil
+	}
+	full, err := git(append(diffArgs, against)...)
+	if err != nil {
+		return fmt.Errorf("git diff did not work: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(full, "\n"), "\n")
+	cut := 0
+	if len(lines) > diffMaxLines {
+		cut = len(lines) - diffMaxLines
+		lines = lines[:diffMaxLines]
+	}
+	c.Say("%s", strings.Join(lines, "\n"))
+	if cut > 0 {
+		c.Say("(%d more lines of the diff; git diff shows them all.)", cut)
+	}
+	return nil
 }
 
 // initTask is what /init asks of the model. %s is the file it writes.

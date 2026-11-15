@@ -80,7 +80,7 @@ var atOnce = map[string]bool{
 	"status": true, "tasks": true, "model": true, "permissions": true,
 	"deliverables": true, "artifacts": true,
 	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
-	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true,
+	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true, "diff": true,
 	"think": true, "no_think": true, "nothink": true, "no-think": true,
 	"loop": true, "noloop": true, "no_loop": true, "no-loop": true,
 	"exit": true, "quit": true,
