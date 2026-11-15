@@ -246,6 +246,9 @@ func (s *session) prompt(ev *agent.PromptEvent) {
 	if n := len(ev.Prompt.Attachments); n > 0 {
 		lines = append(lines, "["+count(n, "attachment", "attachments")+"]")
 	}
+	if said := mentionsSaid(ev.Parts); said != "" {
+		lines = append(lines, "["+said+"]")
+	}
 	for i, l := range lines {
 		first := indent
 		if i == 0 {
@@ -257,6 +260,25 @@ func (s *session) prompt(ev *agent.PromptEvent) {
 	// of a prompt that still waits in the queue.
 	s.ed.AddHistory(d)
 	s.queued()
+}
+
+// mentionsSaid says what the paths a prompt mentioned with @ brought, from
+// the Source of their parts ("mention:file:notes.txt"): "@notes.txt read ·
+// @docs listed · @.env denied".
+func mentionsSaid(parts []agent.Part) string {
+	words := map[string]string{"file": "read", "dir": "listed", "denied": "denied by a rule", "failed": "could not be read"}
+	var out []string
+	for _, p := range parts {
+		rest, ok := strings.CutPrefix(p.Source, "mention:")
+		if !ok {
+			continue
+		}
+		kind, path, ok := strings.Cut(rest, ":")
+		if w := words[kind]; ok && w != "" {
+			out = append(out, "@"+oneLine(path)+" "+w)
+		}
+	}
+	return strings.Join(out, " · ")
 }
 
 // request notes that a request is on its way to a model.

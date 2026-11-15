@@ -78,26 +78,26 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 		call := core.ToolCall{ID: newCallID(), Name: readName, Input: input}
 		act := core.Action{Kind: core.ActionRead, Paths: []string{path}}
 		if d := l.engine.DecideAt(cwd, readName, call, act); d.Behavior == permission.Deny {
-			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionDenied, raw, "")})
+			parts = append(parts, agent.Part{Source: mentionSource("denied", raw), Text: l.texts.Mention(prompt.MentionDenied, raw, "")})
 			continue
 		}
 		if st.IsDir() {
 			text, err := listing(path)
 			if err != nil {
-				parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionFailed, raw, err.Error())})
+				parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, err.Error())})
 				continue
 			}
-			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionDir, raw, "") + "\n" + prompt.Defuse(text)})
+			parts = append(parts, agent.Part{Source: mentionSource("dir", raw), Text: l.texts.Mention(prompt.MentionDir, raw, "") + "\n" + prompt.Defuse(text)})
 			continue
 		}
 		res, err := read.Run(ctx, call, l.env())
 		switch {
 		case err != nil:
-			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionFailed, raw, err.Error())})
+			parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, err.Error())})
 		case res.IsError:
-			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionFailed, raw, core.TextOf(res.Content))})
+			parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, core.TextOf(res.Content))})
 		default:
-			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Defuse(core.TextOf(res.Content))})
+			parts = append(parts, agent.Part{Source: mentionSource("file", raw), Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Defuse(core.TextOf(res.Content))})
 			// The instruction files of the file's folders come with it, as
 			// they would after a Read.
 			parts = append(parts, l.lateInstructions(ctx, agent.ToolDone{Call: call, Tool: read, Result: res})...)
@@ -105,6 +105,11 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 	}
 	return parts, nil
 }
+
+// mentionSource is the Source of a mention's part: "mention:", what came
+// of it (file, dir, denied, failed), ":" and the path as written, so that
+// a front end can say under the prompt what each mention brought.
+func mentionSource(kind, path string) string { return "mention:" + kind + ":" + path }
 
 // readTool is the session's Read tool, or nil when it has none.
 func (l *live) readTool() core.Tool {
