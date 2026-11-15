@@ -64,7 +64,7 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		for _, u := range v.units {
 			if why := e.removalDanger(v, u.cmd, dirs, fromSubst); why != "" {
 				what := "This removal looks dangerous"
-				if !strings.HasPrefix(why, "rm") && !strings.HasPrefix(why, "find ") {
+				if !strings.HasPrefix(why, "rm") && !strings.Contains(why, " removes what it finds: ") {
 					// (mv, chmod -R, git clean, dd, rsync --delete: not
 					// removals by name, and as final.)
 					what = "This command could destroy something that has to be kept"
@@ -72,6 +72,13 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 				return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
 					Reason: what + " (" + why + "). No rule approves it; a person decides."}, true
 			}
+		}
+		if v.manyNames != "" {
+			// What runs is one of more programs than gnosh follows, each
+			// of them written out in the line: an rm among them is not
+			// ruled out, and padding a line is not a way past this check.
+			return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
+				Reason: "A dangerous removal cannot be ruled out: the line gives the program it runs (" + v.manyNames + ") more values than gnosh follows."}, true
 		}
 		// A line, or a script inside it that will run (the argument of an
 		// eval), that could not be read and that holds an rm: its crude
@@ -86,6 +93,29 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 				if n := baseName(fields[i]); n == "rm" || n == "rmdir" {
 					return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
 						Reason: "A dangerous removal cannot be ruled out: gnosh could not read the whole command (" + why + "), and the shell may read it differently."}, true
+				}
+			}
+			// The other commands that destroy a directory which has to be
+			// kept are judged by what the piece says they are handed, when
+			// the piece can be read as a line of its own: "coproc mv .git
+			// /tmp/g" holds the piece "mv .git /tmp/g".
+			if danger := e.crudeDanger(f, dirs); danger != "" {
+				return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
+					Reason: "This command could destroy something that has to be kept (" + danger + "). gnosh could not read the whole command (" + why + "), so this is what a piece of it says. No rule approves it; a person decides."}, true
+			}
+		}
+		// And where what could not be read is the very word such a command
+		// is handed ("mv ${HOME:0:${#HOME}} /tmp/h"), the pieces say
+		// nothing: a line that names one of those commands and the home
+		// or the working directory is not ruled out either.
+		if len(crude) > 0 && (strings.Contains(v.text, "HOME") || strings.Contains(v.text, "PWD") || strings.Contains(v.text, "~")) {
+			for _, f := range crude {
+				for _, field := range strings.Fields(f) {
+					switch progKey(baseName(field)) {
+					case "mv", "chmod", "chown", "chgrp", "truncate", "shred", "rsync":
+						return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
+							Reason: "A command that could destroy the home or the working directory cannot be ruled out: gnosh could not read the whole command (" + why + "), and it names " + field + " and one of those directories."}, true
+					}
 				}
 			}
 		}
@@ -128,6 +158,44 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		}
 	}
 	return Decision{}, false
+}
+
+// crudeDanger reads one crude piece of a line that could not be followed
+// and says why a command in it would destroy something that has to be
+// kept, or "". The piece is read as a line of its own where it can be;
+// where it cannot ("chmod -R 00$[0 ."), its words are taken as they are
+// written, from each word on that names such a command.
+func (e *Engine) crudeDanger(piece string, dirs []string) string {
+	fields := strings.Fields(piece)
+	var from []int
+	for i, f := range fields {
+		switch progKey(baseName(f)) {
+		case "mv", "chmod", "chown", "chgrp", "git", "dd", "truncate", "shred", "rsync", "find":
+			from = append(from, i)
+		}
+	}
+	if len(from) == 0 {
+		return ""
+	}
+	if pv := e.viewBash(piece); pv.sc.ok {
+		for _, u := range pv.units {
+			if why := e.removalDanger(pv, u.cmd, dirs, nil); why != "" {
+				return why
+			}
+		}
+		return ""
+	}
+	plain := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
+	for _, i := range from {
+		var ws []word
+		for _, f := range fields[i:] {
+			ws = append(ws, litOf(f))
+		}
+		if why := e.removalDanger(plain, &simpleCmd{words: ws}, dirs, nil); why != "" {
+			return why
+		}
+	}
+	return ""
 }
 
 // decideRead judges Read, Grep and Glob: inside the working directories,

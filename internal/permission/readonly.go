@@ -124,6 +124,9 @@ type cmdFacts struct {
 	// sedFacts): nothing in them changes, but a link among them would be
 	// replaced by a copy of what it leads to.
 	rewrites []word
+	// tree is set for a cp that copies a directory with all that is in it
+	// (-R, -a).
+	tree bool
 	// cd is set for a cd command: the directory it changes to.
 	cd *word
 	// git is set for any git command.
@@ -1583,6 +1586,9 @@ func fsFacts(f *cmdFacts, args []word) {
 			if !strings.ContainsRune(flags, c) || strings.HasPrefix(l, "--") {
 				f.why = f.name + "'s " + l + " is not one of its everyday flags"
 				return
+			}
+			if f.name == "cp" && (c == 'R' || c == 'a') {
+				f.tree = true
 			}
 		}
 	}

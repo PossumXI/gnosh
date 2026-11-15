@@ -32,7 +32,10 @@ var (
 		`"$X"`, `"${X}"`, `'$X'`, `\$X`, `$'a\tb'`, `$"x"`, `a\ b`, `a\;b`, `"a\"b"`, `'a'\''b'`, `$'\x72\x6d'`,
 		`"$HOME/x"`, "$PWD/a.txt", "${HOME}/notes.txt", "*.md", ".*", "-*", "$IFS", "${IFS}x", `"a;b"`, `'a|b'`, "a#b", "#c",
 		"[!x]*", "[^a]*", "[[:alpha:]]*", "[!.]*", "[]a]*", "[a-s]*", "*[", "s[!x]*", "{.env,x}", ".en{v,}", "{a,b}.txt", "sn${x}eaky.txt", ".e${x}nv",
-		"${X:-.env}", "${X-sneaky.txt}", "${X:=@OUT@/secret.txt}", "${X:-/}", "${X:-.}", "${X:-~}", "${X:+/}", "${D:-build}/out.o", "@{.env,x}", "HEAD:{.env,x}"}
+		"${X:-.env}", "${X-sneaky.txt}", "${X:=@OUT@/secret.txt}", "${X:-/}", "${X:-.}", "${X:-~}", "${X:+/}", "${D:-build}/out.o", "@{.env,x}", "HEAD:{.env,x}",
+		"${HOME/x/y}", "${HOME:0:1}", "${PWD//zz/y}", "${HOME,,}", "${PWD:0:1}", "${HOME/home/home}", "$X$HOME", "${X}$PWD", "$X@HOME@", "$X@WORK@/.git",
+		"${}", "${!}", "${X:}", "${X/}", "${HOME:}", "${HOME, ,}", "${HOME@U}", "${PWD/#zz/y}", "${HOME@Q}", "${HOME^h}", "${PWD@E}", "${HOME/*zz/y}",
+		"-f${X:-.env}", "-o${X:-.env}", "--file=${X:-.env}", "-f$X.env", "-rf${X:-sneaky.txt}", "--output=${X}build/out.o", "-f$X@OUT@/secret.txt"}
 	genRedirs = []string{"> out.txt", ">> out.txt", "2> err.txt", "&> all.txt", ">& all.txt", ">| out.txt", "< a.txt",
 		"<<< word", "2>&1", ">&2", "1>&2", "<&0", ">&-", "3>&1", "10>&1", "{fd}> out.txt", "{PATH}>&1", "< /dev/null",
 		"> /dev/null", "2>/dev/null", "&>/dev/null", ">/dev/tcp/203.0.113.1/9", "<> rw.txt", "< @OUT@/secret.txt",
@@ -345,6 +348,18 @@ var genJoiners = []string{
 	"sudo ${NOPE:-%H} %T", "env $NOPE %P", "timeout 5 %H${IFS}%T", "nice ${NOPE-%H} %T", "nohup $NOPE %P", "env X=1 ${NOPE:-%H} %T",
 	"mv %T /tmp/x", "chmod -R 000 %T", "chown -R u %T", "shred -u %T", "truncate -s 0 %T", "rsync -a --delete src/ %T", "git clean -fdx %T", "git -C %T clean -fdx",
 	"mv -t /tmp %T", "cd %T && git clean -fdx", "d=%T; mv $d /tmp", "for d in %T; do chmod -R 000 $d; done", "mv ${X:-%T} /tmp", "rsync --del a/ ${X:+%T}",
+	// The words after an alias, after the command of a callback, and
+	// every word of an array where the program's name goes.
+	"alias zz=%H\nzz %T", "alias zz='%H'\nzz %T", "alias zz=%Q\nzz x", "alias zz=%H; zz %T", "shopt -s expand_aliases\nalias zz=%H\nzz %T", "alias zz=%H\nalias yy=zz\nyy %T", "alias zz=\nzz %P", "alias zz=' '\nzz %P", "alias zz=\n%B; zz %P", "alias zz='env '\nalias yy=%H\nzz yy %T",
+	"hash -p @BIN@/p0/%H zz; zz %T", "BASH_CMDS[zz]=@BIN@/p0/%H; zz %T", "alias zz=${x}%H\nzz %T", "zz() { %H \"$@\"; }; zz %T", "mapfile $x-C %Q -c 1 a <<< x",
+	"shopt -s expand_aliases; BASH_ALIASES[zz]=%H\nzz %T", "hash -p @BIN@/p0/%H ls; %B; ls %T",
+	"nice -n $(echo 5 %P)", "env -u $(echo X %P)", "exec -a $(echo x %P)", "timeout -s $(echo KILL 5 %P)", "sudo -u $(echo root %P)", "timeout $(echo 5 %P)",
+	"mapfile -t -C %Q -c 1 a <<< x", "mapfile -t -C '%H' -c 1 a <<< x", "readarray -t -C %Q -c 1 a <<< @WORK@", "compgen -C %Q",
+	"a=(%P); ${a[@]}", "a=(%P); \"${a[@]}\"", "a=(%H); a+=(%T); ${a[@]}", "a=(x %P); \"${a[@]:1}\"", "a=(%P); ${a[*]}", "a=(%T); %H \"${a[@]}\" x", "a=(/tmp/g %T /tmp/g); %H \"${a[@]}\"", "a=(%T %T); %H \"${a[@]}\"", "a=(%T); %H \"${a[@]}\".bak", "a=(x %T); %H ${a[*]}[*]}", "a=(%T x); %H pre\"${a[@]}\"", "a=(%T); %H ${a[@]}*", "a=(x %T x); %H -R \"${a[@]}\"",
+	"echo %T | xargs -n9 %H x", "echo x | xargs %P", "echo %T | xargs %H -t /tmp", "%H {fd}>log %T", "%P {fd}>log", "%P {fd}>&2 x",
+	"coproc %P", "select x in a; do %P; break; done", "echo $[1]; %P", "%P $[1]", "v=%H; ${v/x/y} %T", "v=x%H; ${v:1} %T", "d=HOME; %H ${!d}", "%P$x", "%H$x %T", "%H ${X:-%T}", "%H $X %T", "sh -c '%P$x'", "%H -${x}%T", "%H $x%T", "%H ${x}%T",
+	"f() { %H \"$@\"; }; f %T", "f() { \"$@\"; }; f %P", "set -- %T; %H \"$@\"", "set -- %P; \"$@\"", "sh -c '%H \"$@\"' sh %T", "bash -c '\"$@\"' _ %P",
+	"f() { %H $1 $2 $3; }; f %T", "function f { %H $*; }; f %T", "sh -c '%H \"$0\" \"$1\"' %T", "f() { shift; %H \"$@\"; }; f x %T", "set -- x %T; shift; %H $*",
 	"%B &>f echo &>g %P", "x &>f y &>g %P", "%B &>>f %B &>g %P &>h",
 	"%H${IFS}%T", "%H$IFS%T", "IFS=_; x=%H_x; $x", "X=$IFS; %H$X%T", "%B;%H${IFS}%T", "eval \"%H${IFS%??}%T\"", "${HOME:+${PATH:+%H}} %T", "%B ${HOME:+>} pwned", "sh ${HOME:+-c} %Q", "timeout ${HOME:+5} %P",
 	"exp${x}ort V=%H; $V %T", "command export V=%H; $V %T", "decl${x}are V=%H; $V %T", "export F=.env; cat $F", "exp${x}ort F=.env; cat $F",
@@ -545,7 +560,7 @@ var (
 		"rm -rf ../x", "rm -rf *", "rm ../a.txt"}
 	trickSeps = []string{" && ", " && ", "; ", "; ", " || ", " | ", "\n", " & ", " && ! ", "; ! "}
 
-	trickSets = []string{"d=x", "d=nv", "d=.env", "d=", "d=src", "d=..", "d=build", "d=/", "d=.", "d=usr", "d=$X", "d=~", "d=.ssh",
+	trickSets = []string{"d=x", "d=nv", "d=.env", "d=", "d=src", "d=..", "d=build", "d=/", "d=.", "d=usr", "d=$X", "d=~", "d=.ssh", "d=HOME", "d=w", "d=PWD",
 		"d=id_ed25519", "d='*'", "d=a.txt", "d=secret.txt", "d=outside", "d=-rf", "d=.git", "d=sneaky", "d=\"a b\"", "d=$HOME"}
 	trickMade = []string{"w=.e${d}nv", "w=$d/", "w=./$d", "w=~/$d", "w=~/.ssh/$d", "w=$d", "w=${d}y", "w=/$d", "w=$d*", "w=\"$d\"/",
 		"w=$HOME/$d", "w=${d:-.env}", "w=${d%x}", "w=(.git $d)", "w=$d:~/x", "w=../$d/secret.txt", "w=$d.txt", "w=../$d", "w=$d/..",
@@ -553,7 +568,9 @@ var (
 	trickUses = []string{"cat $w", "cat \"$w\"", "rm -rf $w", "rm -rf \"$w\"/*", "rm -rf $w/", "shred $w", "chmod -R 000 $w", "mv $w /tmp/x",
 		"cd $w && cat id_ed25519", "cat ${w}", "touch $w", "echo x > $w", "cat $w/id_ed25519", "mv \"${w[@]}\"", "ls $w", "find $w -delete",
 		"git -C $w clean -fdx", "cat .e${d}nv", "rm -rf $d/", "rm -rf ./$d", "cat ~/$d/id_ed25519", "cat $w $d", "rm -rf \"$w\"", "cd $w; cat *",
-		"cat ../$w", "rm -r $w .", "cp a.txt $w", "chown -R u \"$w\"/", "truncate -s 0 $w", "rsync -a --delete src/ $w", "head -1 \"${w}\"", "cat ${w:-.env}"}
+		"cat ../$w", "rm -r $w .", "cp a.txt $w", "chown -R u \"$w\"/", "truncate -s 0 $w", "rsync -a --delete src/ $w", "head -1 \"${w}\"", "cat ${w:-.env}",
+		"rm -rf $X$w", "rm -rf ${X}$d", "cat $X$w", "mv $X$w /tmp/x", "rm -rf ${w/zz/y}", "rm -rf ${w:0:1}", "cat ${w//zz/y}", "rm -rf ${w,,}", "mv $w {fd}>log",
+		"git -C $w clean -dx", "git -C \"$w\" clean -fdx .", "chmod --rec 000 $w", "mv --t=/tmp $w", "rm -rf ${!d}", "cat ${!d}"}
 	trickOrders = []string{"%S; %M; %U", "%M; %S; %U", "%M %S; %U", "%S %M; %U", "false && %S; %M; %U", "true || %S; %M; %U",
 		"%S && %M && %U", "ls && %S && %M; %U", "(%S); %M; %U", "%S | cat; %M; %U", "%S & %M; %U", "if true; then %S; fi; %M; %U",
 		"f() { %S; }; %M; f; %U", "%S; unset d; %M; %U", "%S; read d </dev/null; %M; %U", "%S; d=y true; %M; %U",
@@ -561,12 +578,15 @@ var (
 		"%S; false || %M; %U", "%S; %M && %U", "%S; { %M; }; %U", "%S; %M\n%U", "%S;%M;%U", "%S; %M; (%U)", "%S; f() { %U; }; %M; f",
 		"f() { %U; }; %S; %M; f", "%S; %M; echo x | %U", "cd src && %S && %M && %U", "%S; %M; unset w; %U", "%S; declare -n d=w; %M; %U",
 		"%S; ((d++)); %M; %U", "%S; d+=x; %M; %U", "%S; %M; w+=x; %U", "%S; printf -v d x; %M; %U", "! %S; %M; %U", "%S; time %M; %U",
-		"%S; eval '%M'; %U", "%S; %M 2>/dev/null; %U", "while %S; do %M; break; done; %U", "%S; for i in 1; do %M; done; %U"}
+		"%S; eval '%M'; %U", "%S; %M 2>/dev/null; %U", "while %S; do %M; break; done; %U", "%S; for i in 1; do %M; done; %U",
+		"%S; declare -n r=d; r=.; %M; %U", "%S; declare -n r=d; r=~; %M; %U", "%S; %M; declare -n r=w; r=/; %U", "%S; %M; declare -n r=w; r=.git; %U",
+		"declare -n d; %S; %M; %U", "%S; typeset -n r=d; r=..; %M; %U", "%S; declare -n r; r=d; r=/; %M; %U", "%S; %M; declare -n w=d; %U",
+		"%S; local -n r=d 2>/dev/null; %M; %U", "f() { declare -n r=d; r=.; }; %S; f; %M; %U", "%S; %M; for r in w; do declare -n r; r=~; done; %U"}
 
 	trickPatterns = []string{"*", "*.txt", ".*", "* .*", "src/*", "[a-b]*", "?", "*.md x", ".e*", "*v", "s*", "[!.]*", "*/", "da/*", "/*"}
 	trickBodies   = []string{"cp $f new_$f", "mv if$f", "cat .e$f", "touch $f.bak", "cp $f build/$f", "cat src/$f", "cp $f ${f%.txt}.md",
 		"rm x$f", "echo x > out_$f", "cat ../$f", "cp a.txt \"$f\"x", "tee p$f </dev/null", "cat ${f}nv", "cat ${f#a}", "mv $f ${f%.*}",
-		"cat link-out/$f", "rm -rf $f/..", "cat \"$f\"/../../outside/secret.txt", "cp $f ~/$f", "cat ~/.ssh/$f", "ln -s $f l$f", "cat ./$f",
+		"cat link-out/$f", "cp a.txt b.txt $f", "mv a.txt b.txt \"$f\"", "cp a.txt notes.md $f", "ln -s a.txt b.txt $f", "rm -rf $f/..", "cat \"$f\"/../../outside/secret.txt", "cp $f ~/$f", "cat ~/.ssh/$f", "ln -s $f l$f", "cat ./$f",
 		"rm -rf ../$f", "chmod -R 000 ./$f", "cat $f$f", "echo x > build/$f", "cat ${f:-.env}", "cat .${f}"}
 )
 
@@ -599,6 +619,25 @@ func (g *lineGen) tricks() string {
 // shells are shown the same bytes.
 func (g *lineGen) line() string {
 	return strings.ToValidUTF8(g.rawLine(), "\uFFFD")
+}
+
+// only makes a line by the one generator named.
+func (g *lineGen) only(which string) string {
+	switch which {
+	case "list":
+		return g.list(0)
+	case "smuggle":
+		return g.smuggle()
+	case "readonly":
+		return g.readOnly()
+	case "edits":
+		return g.edits()
+	case "tricks":
+		return g.tricks()
+	case "soup":
+		return g.soup()
+	}
+	return g.rawLine()
 }
 
 func (g *lineGen) rawLine() string {
@@ -871,6 +910,7 @@ var attackLines = []string{
 	"nice cd sub && cat sneaky.txt", "stdbuf -o0 cd sub && cat sneaky.txt", "! cd nope && cat sneaky.txt", "! cd nope && cat ../outside/secret.txt",
 	"time cd nope && cat sneaky.txt", "command cd nope && true; cat sneaky.txt", "builtin cd nope && true; cat sneaky.txt", "cd nope 2>/dev/null && true; cat sneaky.txt",
 	"cd src && cd nope && ls; cat ../../outside/secret.txt", "cd nope && ls || cat sneaky.txt", "cd a.txt && ls; cat ../outside/secret.txt", "cd nope && ls\ncat sneaky.txt",
+	"ls | cd link-in || cd sub/nope </dev/null && cat ../outside/secret.txt", "true || cd sub/deep && cat ../../../outside/secret.txt", "cd nope || cd sub && cat sneaky.txt",
 	"cd src && cat main.go", "cd src && cat main.go && cat ../a.txt", "cd src && cat main.go | head -1", "cd sub && cd deep && cat file.txt", "cd src && ls; ls",
 	// A value made of a variable that is set later, or not for sure, or
 	// with a ~ that the shell expands where it is assigned.
@@ -886,6 +926,72 @@ var attackLines = []string{
 	// A variable that went through what a pattern matched, with more text around it.
 	"for f in * .*; do mv if$f; done", "for f in *.txt; do cp $f new_$f; done", "for f in *v; do cat .e$f; done", "touch nv; for f in *v; do cat .e$f; done",
 	"for f in *.txt; do cp $f build/$f; done", "for f in *.txt; do cp $f ${f%.txt}.md; done", "for f in src/*; do cat ../$f; done",
+	// The words a function, a set -- or a script after sh -c is handed.
+	"f() { rm -rf \"$1\"; }; f ~", "clean() { rm -rf \"$1\"; }; clean build; clean .", "f() { mv \"$@\"; }; f .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"",
+	"sh -c 'rm -rf \"$1\"' sh .", "bash -c 'rm -rf \"$0\"' ~", "bash -c 'mv \"$@\"' _ .git /tmp/g", "f() { \"$@\"; }; f rm -rf .", "set -- .env; cat $1",
+	"f() { \"$@\"; }; f git push origin", "f() { rm -rf \"$1\"; }; f build", "f() { shift; cat \"$1\"; }; f a.txt .env", "function g { chmod -R 000 $1; }; g .",
+	"set -- rm -rf x; \"$@\"", "f() { echo \"$@\"; }; f . / ~", "set -euo pipefail; ls", "sh -c 'git \"$@\"' sh clean -fdx", "f() { git \"$@\"; }; f status; f clean -fdx",
+	"a=(status); a+=(clean -fdx); git \"${a[@]}\"", "set -- clean -fdx; git \"$@\"", "f() { git \"$@\"; }; f status; f diff", "f() { git $1 $2 $3; }; f clean -fdx", "f() { mv $1 $2; }; f /tmp/g .git",
+	"f() { shift; git \"$@\"; }; f x clean -fdx", "f() { mv $1 $2; }; f a.txt b.txt", "a=(-fdx build); git clean \"${a[@]}\"",
+	// A pattern in one of the line's values, beside a variable nobody set.
+	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
+	// A name that starts with a dash is a flag to the command it is handed to.
+	"for f in * .*; do cp a.txt \"$f\"x; done", "for f in *; do cp a.txt b.txt $f; done", "cp a.txt b.txt -[n]", "f=-n; cp a.txt b.txt $f", "for f in -*; do mv a.txt b.txt $f; done",
 	// Where the oracle itself was wrong: dash's trace after text with no line break, and a subscript that is no number.
 	"printf x; { . ~/../outside/secret.txt; }", "a[function[[0]=1 pwd sneaky.txt .env",
+	// What takes over from the first round of the second attack. To a plain sh a {name} before a redirection is an argument.
+	"mv . {H}>1", "mv .git {fd}>log", "sudo mv . {fd}>&2", "mv a.txt {fd}>log", "chmod -R 000 {fd}>log .", "rm -rf {fd}>log .", "cat {fd}>log .env",
+	// What xargs adds is as many words as it read.
+	"echo .git /tmp/g | xargs mv", "echo . /tmp/g | xargs mv", "echo 000 . | xargs chmod -R", "echo src/ . | xargs rsync -a --delete", "echo /tmp . | xargs mv -t",
+	"echo . | xargs chmod -R 000", "echo . | xargs git clean -fdx", "echo * | xargs shred -u", "echo x | xargs mv a.txt", "echo clean -fdx | xargs timeout 5 git",
+	"echo clean -fdx | xargs git", "echo -R 000 . | xargs chmod", "echo -rf . | xargs rm", "mv $(echo . /tmp/x)", "chmod -R $(echo 000 .)", "rsync -a --delete $(echo src/ .)",
+	"mv a.txt $(echo b.txt)", "chown -R $(echo u) x", "mv a.txt \"$(echo b.txt)\"",
+	// The words after an alias, and after the command of a callback.
+	"alias g=git\ng push origin main", "alias r='rm -rf'\nr .", "alias zz='mv .git'\nzz /tmp/g", "alias c=cat\nc .env", "alias g=git; g push origin main",
+	"alias a=b\nalias b='rm -rf'\na .", "alias zz=\nzz rm -rf x", "alias zz=\nzz git push origin", "alias zz=' '\nzz cat .env", "alias s='sudo '\nalias r='rm -rf'\ns r x",
+	"alias g=git\neval 'g push origin'", "alias ls='ls -l'\nls src", "mapfile -t -C 'rm -rf' -c 1 a <<< .", "mapfile -C 'mv !* /tmp/' -c 1 a <<< x", "mapfile -t -C 'mv .git' -c 1 a <<< /tmp",
+	"mapfile -t -C git -c 1 a <<< push", "alias ll='ls -l'\nll src",
+	// A name the shell's own tables make another program, with the words that follow it.
+	"hash -p @BIN@/p0/rm ls; ls -rf .", "BASH_CMDS[ls]=@BIN@/p0/rm; ls -rf .", "shopt -s expand_aliases; BASH_ALIASES[zz]='rm -rf'\nzz .", "ls() { rm \"$@\"; }; ls -rf .",
+	"hash -p @BIN@/p0/git ls; ls push origin", "compgen $x-C'mv EOF* /tmp/'", "mapfile $x-C'rm -rf' -c 1 a <<< .", "alias zz=${x}rm\nzz -rf .", "hash -r; ls src",
+	// What a command prints, where a wrapper takes a flag's value: it may be the value and the command after it.
+	"nice -n $(echo 5 git push origin)", "exec -la $(echo x git push origin)", "env -u $(echo X rm -rf x)", "timeout -s $(echo KILL 5 cat .env)", "sudo -u \"$(whoami)\" make",
+	"exec -la $(git -c --output=out.txt `which`) || ( cd src && git stash )",
+	// Every word of an array where the program's name goes.
+	"a=(mv .git /tmp/g); ${a[@]}", "a=(rm -rf .); \"${a[@]}\"", "a=(git push origin); \"${a[@]}\"", "a=(x); a=(rm -rf .); ${a[@]}", "a=(cat .env); ${a[*]}",
+	// The words of an array are known as a set: one that stands twice may be the place the others are moved to.
+	"a=(/tmp/g .git /tmp/g); mv \"${a[@]}\"", "d=.git; w=(.git $d); d=.git; mv \"${w[@]}\"", "a=(x x); mv \"${a[@]}\"", "mv .git .git",
+	"files=(a.txt b.txt); mv \"${files[@]}\" build/", "a=(000 . 000); chmod -R \"${a[@]}\"", "a=(. src/ .); rsync -a --delete \"${a[@]}\"",
+	"a=(x); a+=(.git /tmp/g); mv ${a[*]}[*]}", "a=(x .git /tmp/g); mv \"${a[@]}\".bak", "a=(.git /tmp/g); mv pre\"${a[@]}\"", "a=(.env x); cat \"${a[@]}\".txt",
+	"a=(.git /tmp/g); mv ${a[@]}*", "a=(x .env y); cat ${a[*]}[*]}", "a=(a.txt b.txt); cat \"${a[@]}\".bak", "a=(clean -fdx); git ${a[@]}*",
+	"a=(-R 000 .); chmod \"${a[@]}\"/", "a=(push origin); git ${a[@]}x", "a=(clean -fdx); git pre\"${a[@]}\"post",
+	// A variable that is a name for another.
+	"d=.ssh; declare -n d=w; w=$d/; truncate -s 0 $w", "d=build; declare -n r=d; r=.; rm -rf $d", "d=a.txt; declare -n d=w; w=$d; rm -rf ./$d",
+	"d=build; declare -n r; r=d; r=.; rm -rf $d", "F=a.txt; declare -n r=F; r=.env; cat $F", "d=build; typeset -n r=d; r=~; rm -rf \"$d\"",
+	"declare -n d; d=PWD; w=$d; chmod -R 000 $w", "declare -n d=HOME; rm -rf $d", "declare -n d=PWD; cat $d/.env", "cd src; declare -n d=PWD; rm -rf $d/..",
+	// One of the line's variables beside one nobody set, and a line-set value in the place git is sent to.
+	"d=~; ((d++)); w=${X}$d; rm -rf $w", "d=~; rm -rf $PREFIX$d", "d=.env; cat $X$d", "rm -rf $X@HOME@", "rm -rf ${X}$HOME", "d=.git; mv $X$d /tmp/g",
+	"f() { d=x; }; w=~/$d; f; git -C $w clean -fdx", "d=outside; read d </dev/null; w=./$d; git -C $w clean -fdx", "(d=a.txt); w=./$d; git -C $w clean -fdx",
+	"d=src | cat; w=../$d; git -C $w clean -fdx", "d=build; rm -rf $ROOT/$d", "d=x; rm -rf \"$DIR\"/$d", "rm -rf $DESTDIR/usr/local/lib/foo",
+	// Options written short, a clean that needs no -f, find that hands everything to mv, and lines nobody can read.
+	"chmod --rec 000 .", "chown --recursiv u .", "chown -R --ref=a.txt .", "mv --t=/tmp .git", "mv --no-t /tmp/x .git", "mv --target /tmp .git",
+	"git clean --forc -dx", "git -c clean.requireForce=false clean -dx", "git clean -dx", "git clean -fdx --dry", "find . -maxdepth 1 -exec mv -t /tmp {} +",
+	"find . -exec chmod -R 000 {} +", "find . -name x -exec mv -t /tmp {} +", "coproc mv .git /tmp/g", "coproc git clean -fdx", "select x in a; do chmod -R 000 .; break; done",
+	"chmod -R 00$[0 .", "echo $[1+1]; mv build moved", "select x in a b; do mv $x build/; done", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
+	// The forms bash adds to ${...}, on a value the line knows.
+	"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",
+	"d=.Env; cat ${d,,}", "v=d; d=.env; cat ${!v}", "d=src/app; rm -rf \"${d/src/build}\"", "dir=build/; rm -rf \"${dir:0:-1}\"", "rm -rf ${PATH:0:1}x",
+	// A file written onto a flag, in a word that is not all written out.
+	"awk -rf${X:-.env} ./src/../a.txt", "grep -f${X:-.env} a.txt", "sort -o${X:-.env} a.txt", "awk -rf$X.env a.txt", "mytool --config=${X:-.env}",
+	"x=.env; awk -f$x a.txt", "sort -o$X.env a.txt", "grep --file=${X:-.env} a.txt", "make -j$(nproc)", "head -n${N:-5} a.txt",
+	// A form of a known value that is not worked out may leave it as it is.
+	"rmdir ${HOME, ,}", "rm -rf ${HOME@U}", "rm -rf ${HOME/#x/y}", "rm -rf ${PWD/*zz/y}", "d=.; rm -rf ${d@Q}", "F=.env; cat ${F@E}", "d=build; rm -rf ${d@Q}",
+	// A flag, or git's subcommand, with a variable written onto it.
+	"sh -c 'git clean$x -fdx'", "git clean$x -fdx", "git $X clean -fdx", "git clean -fdx$x", "rm -r$x .", "chmod -R$v 000 .", "mv -t$X/tmp .git",
+	"rsync -a --delete$x src/ .", "rm -f$v build/out.o", "git $cmd -fdx", "git ${X:-clean} -fdx", "chmod $x-R 000 .", "mv $x-t /tmp .git",
+	"git $x-C .. clean -fdx", "rm ${X:--rf} .", "awk $x-f.env a.txt", "rm -rf $X-backup",
+	// A real shell reached past the stubs, handed a file: the file is a program of its own.
+	"command -p bash notes.md", "command -p bash notes.md src/.env < sneaky.txt >| out.txt", "/bin/sh notes.md", "command -p sh -c 'rm x'", "exec -a x /bin/bash notes.md",
+	// What dash prints for a bare set: PS4's own value, which is the trace's mark.
+	"set", "PAGER=rm set", "! { set; }", "f() { set; }; f", "seq \"$(set)\"", "echo \"$(set)\" | head -1", "ls \"$(set | grep PS4)\"", "printf '%s' \"$PS4\"; ls",
 }

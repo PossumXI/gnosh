@@ -3,6 +3,7 @@
 package permission
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ var (
 	oracleSeed    = flag.Int64("oracle.seed", 1, "the seed of the oracle's generators")
 	oracleWorkers = flag.Int("oracle.workers", 0, "how many jails the oracle runs at once (0: half the processors)")
 	oracleShow    = flag.Int("oracle.show", 300, "how many distinct findings the oracle shrinks and prints")
+	oracleOnly    = flag.String("oracle.only", "", "one generator for every line of the long run: list, smuggle, readonly, edits, tricks or soup")
 )
 
 // randomSets makes rule sets out of a line's own commands, so that the
@@ -87,6 +89,24 @@ func progress(msg string) {
 	if f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644); err == nil {
 		f.WriteString(msg)
 		f.Close()
+	}
+}
+
+// noteFinding appends one finding to the file named in
+// GNOSH_ORACLE_FINDINGS, if any, as it was found: not shrunk, and every
+// one of them. The report at the end of a run shows one line for each
+// kind of finding, the shortest; several holes can stand behind one kind,
+// and this file is where they can be told apart.
+func noteFinding(j *jail, f finding) {
+	p := os.Getenv("GNOSH_ORACLE_FINDINGS")
+	if p == "" {
+		return
+	}
+	unfill := strings.NewReplacer(j.work, "@WORK@", j.home, "@HOME@", j.outside, "@OUT@", j.root+"/bin", "@BIN@")
+	msg := fmt.Sprintf("[%s] %q | %s | %s %s | %s\n", f.kind, unfill.Replace(f.line), unfill.Replace(f.set), f.shell, f.mode, unfill.Replace(f.detail))
+	if file, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644); err == nil {
+		file.WriteString(msg)
+		file.Close()
 	}
 }
 
@@ -189,6 +209,7 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 				atomic.AddInt64(&stats.findings, int64(len(fs)))
 				mu.Lock()
 				for _, f := range fs {
+					noteFinding(j, f)
 					// Findings are grouped by what went wrong; with each set,
 					// by the line as well, so that every line is reported.
 					key := f.key()
@@ -287,10 +308,61 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 // and, between them, a dozen runs of 60,000 to 150,000 lines. Every kind
 // found was fixed in the engine, or in the oracle where the oracle was
 // the one that was wrong, and is a line of attackLines and a row of
-// attack_test.go. Seed 46 was run on the code as it stands after the
-// last of those fixes. A run of 400,000 lines that finds nothing has not
-// been made yet: each one so far turned up something new, fewer each
-// time.
+// attack_test.go. Seed 46 was run on the code as it stood after the
+// last of those fixes.
+//
+// The second round, which added the other commands that destroy a
+// directory (mv, chmod -R, git clean, shred, truncate, dd, rsync) and the
+// generator of tricks (a cd that may not happen, values made of
+// variables set before, after and beside them, loops over a pattern):
+//
+//	seed  lines    shell runs  time      kinds of finding
+//	48    400,000  1,883,421   1h07m06s  9
+//	49     80,000    378,541   13m56s    6 (17 different lines)
+//	50     39,000  stopped                3
+//	51     28,000  stopped                0
+//	52     74,000  stopped                1
+//	53     11,000  stopped                1
+//	56     46,000  stopped                1
+//	60     57,000  stopped                1
+//	66     10,000  stopped                1
+//	70     31,000  stopped                1 (the oracle's)
+//	72      3,600  the reader crashed on "${}"
+//	74     29,000  stopped                3
+//	77      3,300  stopped                1
+//	78    316,000  stopped                1 (the oracle's)
+//	79     60,000    284,350   1h11m35s  0 (4 jails)
+//	80     17,000  stopped                2
+//	84    400,000  1,874,393   1h31m21s  5 (17 findings)
+//
+// Seed 84's five kinds were four holes: the words with an = that env takes
+// for variables of its own after "--" (env -- 0=1 rm x), what a command
+// prints beside text where a wrapper takes a flag's value (env -u $(echo X
+// rm x)m), a pattern that is all mv is handed (mv .*, which in dash is
+// also "." and ".."), and a cp that lands on a link inside the directory
+// it is handed (cp db/s da in acceptEdits, with da/s a link that leads
+// out). Each was then judged by hand against the shells with
+// TestOracleProbe, and stands in attack_test.go and danger_test.go.
+//
+// (A run was stopped as soon as it had shown something new, the hole was
+// closed, and the next one started with another seed; the seeds between
+// those listed were stopped within minutes for the same reason.) Beside
+// them ran passes of one generator only (-oracle.only=tricks), which
+// found three more kinds in some 100,000 lines of their own, and the
+// whole cross product of the joiners with the payloads, 13,118 lines,
+// judged one by one with TestOracleProbe: nothing.
+//
+// One kind is one line of the report, the shortest of its group, and
+// several holes can stand behind it: the 193 findings seed 48 filed under
+// mv were the {name} that a plain sh takes for an argument, the words
+// xargs adds and more. From seed 49 on every finding was written out as
+// it was found (GNOSH_ORACLE_FINDINGS) and read one by one; what those
+// showed, and what reading the engine against them turned up beyond what
+// the generators made then (aliases with words after them, name
+// references, the words a function is handed, the forms bash adds to
+// ${...}, options written short, lines nobody can read), is closed in the
+// engine and stands in attackLines, in the generators, and as rows of
+// attack_test.go and danger_test.go.
 //
 // TestOracle asks real shells what generated command lines do and holds
 // the engine's answers against it. With no flag it judges every line of
@@ -311,11 +383,129 @@ func TestOracle(t *testing.T) {
 		}
 	}
 	runOracle(t, n, seed, false, func(i int) string {
-		return newLineGen(seed*1_000_003 + int64(i)).line()
+		g := newLineGen(seed*1_000_003 + int64(i))
+		if *oracleOnly != "" {
+			// One generator's lines only: a run that goes deep into one
+			// kind of line, where the usual mix would touch it now and then.
+			return strings.ToValidUTF8(g.only(*oracleOnly), "\uFFFD")
+		}
+		return g.line()
 	})
 }
 
 // TestOracleAttacks runs the hand-written lines.
 func TestOracleAttacks(t *testing.T) {
 	runOracle(t, len(attackLines), 1, true, func(i int) string { return attackLines[i] })
+}
+
+// TestOracleProbe is for looking at single lines by hand. It judges the
+// lines of the file named in GNOSH_ORACLE_PROBE, one JSON object to a
+// line of the file:
+//
+//	{"line": "cd s&&ls;cat *"}
+//	{"line": "for f in *;do mv i$f;done", "mode": "bypassPermissions", "allow": ["Bash(mv if$f)"], "ask": ["Edit(*.txt)"]}
+//
+// under the fixed rule sets and under the one the object gives, if it
+// gives one ("glob": false takes the way to expand patterns away from
+// it), and says for each what the engine read, what it decided under
+// every set, what each shell ran and every disagreement. A line and a
+// rule may hold the jail's placeholders (@WORK@, @HOME@, @OUT@, @BIN@).
+// Run it with -v.
+func TestOracleProbe(t *testing.T) {
+	file := os.Getenv("GNOSH_ORACLE_PROBE")
+	if file == "" {
+		t.Skip("GNOSH_ORACLE_PROBE names no file of lines to look at")
+	}
+	if why := oracleSkip(); why != "" {
+		t.Skip(why)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stub, err := buildStub(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := newJail(stub, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.close()
+	unfill := strings.NewReplacer(j.work, "@WORK@", j.home, "@HOME@", j.outside, "@OUT@", j.root+"/bin", "@BIN@")
+	for _, ln := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(ln) == "" {
+			continue
+		}
+		var p struct {
+			Line, Mode       string
+			Allow, Deny, Ask []string
+			Glob             *bool
+		}
+		if err := json.Unmarshal([]byte(ln), &p); err != nil {
+			t.Fatalf("%s: %v", ln, err)
+		}
+		line := j.fill(p.Line)
+		sets := fixedRuleSets()
+		if p.Mode != "" || len(p.Allow)+len(p.Deny)+len(p.Ask) > 0 {
+			mode := Mode(p.Mode)
+			if p.Mode == "" {
+				mode = ModeDefault
+			}
+			sets = append(sets, ruleSet{name: "the line's own rules", mode: mode,
+				r: rules{allow: p.Allow, ask: p.Ask, deny: p.Deny}, glob: p.Glob == nil || *p.Glob})
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%q\n", p.Line)
+		plain := j.engine(ruleSet{name: "plain", mode: ModeDefault})
+		v := plain.viewBash(line)
+		fmt.Fprintf(&b, "  read: %s (followed to the end: %v; not known: %q)\n", unfill.Replace(unitsText(v)), v.sc.ok, v.opaque)
+		for _, rs := range sets {
+			e := j.engine(rs)
+			if e == nil {
+				fmt.Fprintf(&b, "  %s: a rule of the set cannot be applied\n", rs.name)
+				continue
+			}
+			d := bash(e, line)
+			critical := ""
+			if d.Critical {
+				critical = ", critical"
+			}
+			fmt.Fprintf(&b, "  %s: %s at %s%s: %s\n", rs.name, d.Behavior, d.Stage, critical, unfill.Replace(d.Reason))
+		}
+		passes := [][2]string{{"bash", "p0"}, {"dash", "p0"}}
+		if mentions(line, realNames) {
+			passes = append(passes, [2]string{"bash", "r0"})
+		}
+		for _, ps := range passes {
+			r := j.run(ps[0], ps[1], line)
+			if r.broken != "" {
+				fmt.Fprintf(&b, "  %s %s: %s\n", ps[0], ps[1], r.broken)
+				continue
+			}
+			var ran []string
+			for _, rc := range j.ran(r) {
+				where := ""
+				if rc.cwd != "" && rc.cwd != j.work {
+					where = " (in " + rc.cwd + ")"
+				}
+				ran = append(ran, "["+j.render(rc)+where+"]")
+			}
+			var changed []string
+			for _, ch := range r.changes {
+				changed = append(changed, ch.path+" "+ch.what)
+			}
+			fmt.Fprintf(&b, "  %s %s ran: %s; exit %d; changed: %s\n", ps[0], ps[1], unfill.Replace(strings.Join(ran, " ")), r.exit, unfill.Replace(strings.Join(changed, ", ")))
+		}
+		fs := j.checkLine(line, sets, nil)
+		sortFindings(fs)
+		for _, f := range fs {
+			fmt.Fprintf(&b, "  FINDING [%s] %s | %s %s | %s\n", f.kind, f.set, f.shell, f.mode, unfill.Replace(f.detail))
+		}
+		if len(fs) > 0 {
+			t.Error(b.String())
+		} else {
+			t.Log(b.String())
+		}
+	}
 }

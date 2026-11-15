@@ -250,8 +250,17 @@ func (e *Engine) known(w word) (string, bool) {
 // ruleAllows reports whether an allow rule names the command, as it is
 // or behind the wrappers a rule sees through.
 func (e *Engine) ruleAllows(ws []word) bool {
+	// What xargs adds to a command is the business of a rule that ends
+	// in a wildcard, also behind the wrappers such a rule sees through:
+	// "xargs timeout 5 git" under Bash(git *). That is how the engine
+	// judges it (judgePart), so the word that stands for what xargs adds
+	// is taken off before the wrappers are.
+	viaXargs := false
+	if n := len(ws); n > 1 && xargsWord(ws[n-1]) {
+		ws, viaXargs = ws[:n-1], true
+	}
 	for depth := 0; depth < 8 && len(ws) > 0 && plainName(ws[0]); depth++ {
-		if e.allowCommand(ws, false) != nil {
+		if e.allowCommand(ws, viaXargs) != nil {
 			return true
 		}
 		inner, ok := strictStrip(ws)
@@ -475,7 +484,7 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 		}
 		return nil
 	}
-	sourced := sourcesFile(rcs) || traceSources(r)
+	sourced := sourcesFile(rcs) || traceSources(r) || lc.runsFile()
 	for _, rc := range rcs {
 		if rc.fuzzy || rc.by == 0 || sourced && rc.path == "" {
 			continue // started by a program no rule reads, or read from a file that was sourced
@@ -648,6 +657,17 @@ var destroyers = map[string]bool{"mv": true, "chmod": true, "chown": true, "chgr
 // (chmod $(echo -R) 000 .) is a blind spot the engine does not claim to
 // see into, like rm's; and a target that is only an unknown variable is
 // let go by design (doc.go), so that "mv "$tmp" x" runs unasked.
+//
+// A command's output without quotes may be several words. Where it
+// stands in a place the engine reads as something other than a target
+// (the mode of chmod, the place mv moves things to, a flag's value) the
+// engine takes it for that one thing, so that "chown -R $(whoami) build"
+// runs; words it printed beyond the first are, like a flag, what only
+// running the line produces.
+//
+// Of a line the reader could not follow the engine has only crude pieces,
+// and judges those (crudeDanger): the command is written when a piece
+// names it and holds every flag it ran with.
 func (lc *lineCheck) wroteDestroyer(e *Engine, name string, args []string) bool {
 	for _, u := range lc.view.units {
 		ws := u.cmd.words
@@ -658,7 +678,7 @@ func (lc *lineCheck) wroteDestroyer(e *Engine, name string, args []string) bool 
 			continue
 		}
 		static := map[string]bool{}
-		letGo := false
+		letGo, spills := false, false
 		for _, w := range ws[1:] {
 			if w.static() {
 				static[w.joined()] = true
@@ -667,6 +687,7 @@ func (lc *lineCheck) wroteDestroyer(e *Engine, name string, args []string) bool 
 			if _, _, ok := e.filledAll(lc.view, w); !ok && onlyVars(w) {
 				letGo = true
 			}
+			spills = spills || !xargsWord(w) && manyWords(w)
 		}
 		written := true
 		for _, a := range args {
@@ -674,8 +695,31 @@ func (lc *lineCheck) wroteDestroyer(e *Engine, name string, args []string) bool 
 				written = false
 			}
 		}
+		if spills && len(args) > len(ws)-1 {
+			written = false
+		}
 		if written && !letGo {
 			return true
+		}
+	}
+	if !lc.view.sc.ok {
+		for _, frag := range lc.view.frags {
+			fields := strings.Fields(frag)
+			has := map[string]bool{}
+			named := false
+			for _, f := range fields {
+				has[f] = true
+				named = named || progKey(baseName(f)) == name
+			}
+			written := named
+			for _, a := range args {
+				if strings.HasPrefix(a, "-") && a != "-" && !has[a] {
+					written = false
+				}
+			}
+			if written {
+				return true
+			}
 		}
 	}
 	return false
@@ -835,12 +879,63 @@ func sourcesFile(rcs []ranCmd) bool {
 			}
 		}
 		words := append([]string{rc.name}, rc.args...)
+		// A real shell that is handed a script file, reached past the
+		// stubs ("command -p bash notes.md", "/bin/sh x.sh"), runs a
+		// program of its own. (A stub named like a shell runs no file.)
+		if rc.path == "" && realShellFile(words) {
+			return true
+		}
 		for i, w := range words {
 			if (w == "." || w == "source") && (i == 0 || rc.name == "command" || rc.name == "builtin") && i+1 < len(words) {
 				if f := words[i+1]; f != "/dev/stdin" && !strings.HasPrefix(f, "/dev/fd/") && !strings.HasPrefix(f, "/proc/self/fd/") {
 					return true
 				}
 			}
+		}
+	}
+	return false
+}
+
+// realShellFile reports whether the words are a real shell, reached past
+// the directory of stubs, that is handed a script file: "command -p bash
+// notes.md", "/bin/sh x.sh", "exec -a x /bin/bash notes.md".
+func realShellFile(words []string) bool {
+	i, past := 0, false
+	if len(words) > 0 && (words[0] == "command" || words[0] == "exec") {
+		for i = 1; i < len(words) && strings.HasPrefix(words[i], "-"); i++ {
+			if words[0] == "command" && !strings.HasPrefix(words[i], "--") && strings.Contains(words[i], "p") {
+				past = true
+			}
+			if words[0] == "exec" && words[i] == "-a" {
+				i++
+			}
+		}
+	}
+	if i >= len(words) {
+		return false
+	}
+	if past = past || strings.Contains(words[i], "/"); !past || !lineShells[baseName(words[i])] {
+		return false
+	}
+	for _, a := range words[i+1:] {
+		if strings.HasPrefix(a, "-") || strings.HasPrefix(a, "+") {
+			if !strings.HasPrefix(a, "--") && strings.Contains(a, "c") {
+				return false // the script is the text after -c
+			}
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// runsFile reports whether the line, as the engine read it, starts a
+// real shell on a script file (realShellFile): dash's trace does not
+// always show the command that did.
+func (lc *lineCheck) runsFile() bool {
+	for _, u := range lc.view.units {
+		if len(u.cmd.words) > 1 && allStatic(u.cmd.words) && realShellFile(litsOf(u.cmd.words)) {
+			return true
 		}
 	}
 	return false
@@ -975,7 +1070,7 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 	if !v.sc.ok || v.opaque != "" || v.tooMany {
 		return ""
 	}
-	if sourcesFile(rcs) || traceSources(r) {
+	if sourcesFile(rcs) || traceSources(r) || lc.runsFile() {
 		return "" // a script file is a program of its own, which the engine does not read
 	}
 	if strings.Contains(lc.line, "PS4") || strings.Contains(lc.line, "XTRACE") || strings.Contains(lc.line, "set +") {
@@ -1028,6 +1123,11 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 		return ""
 	}
 	sc := v.sc
+	if len(v.refs) > 0 {
+		// A name reference whose value is no name ("declare -n d; d=~") is
+		// an error that ends the line.
+		return ""
+	}
 	if sc.subst || sc.subshell || sc.compound || sc.background || strings.HasPrefix(strings.TrimLeft(lc.line, " \t\n"), "-") {
 		// (The shell tool hands the line to eval as it is, and eval takes
 		// a line that starts with a dash for an option: nothing runs.)

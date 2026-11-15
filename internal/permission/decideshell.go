@@ -13,9 +13,11 @@ type lineState struct {
 	// says that it is the shell's own cd, standing by itself: not behind
 	// a wrapper (the cd of "nohup cd x" is a program that moves nobody
 	// but itself), not one side of a pipe (which runs in a shell of its
-	// own) and not under a ! (which turns its outcome round). Only after
-	// such a cd does && mean that the shell went there; after anything
-	// else it may be in either place.
+	// own), not under a ! (which turns its outcome round) and not after
+	// an || (which skips it when what stands before went well: "a || cd
+	// d && c" runs c where the line was). Only after such a cd does &&
+	// mean that the shell went there; after anything else it may be in
+	// either place.
 	pending []string
 	sure    bool
 	// before are the places the line was in ahead of the cds of the &&
@@ -631,6 +633,17 @@ func (e *Engine) shellPaths(req *request) {
 					// (One of them may still be as it came, or not set.)
 					vals = append(vals, lineVal{text: e.unsetValue(w)})
 				}
+				if known == 0 {
+					// One of the line's variables beside one nobody set:
+					// "d=.env; cat $X$d" reads .env.
+					parts, capped := e.partFills(v, w, at)
+					if capped {
+						req.pathCapped = "the line gives " + w.raw + " more values than gnosh follows"
+					}
+					for _, pw := range parts {
+						vals = append(vals, lineVal{text: e.unsetValue(pw), glob: pw.glob})
+					}
+				}
 				for i, val := range vals {
 					fields := []string{val.text}
 					if i < known && !w.quoted {
@@ -641,7 +654,7 @@ func (e *Engine) shellPaths(req *request) {
 							continue
 						}
 						part := litOf(f)
-						part.glob = hasPathMagic(f) && (w.glob || i < known && (!w.quoted || val.glob))
+						part.glob = hasPathMagic(f) && (w.glob || val.glob || i < known && !w.quoted)
 						add(part, into)
 					}
 				}
@@ -703,6 +716,40 @@ func (e *Engine) shellPaths(req *request) {
 		for _, w := range f.writes {
 			add(w, &writes)
 		}
+		// A file written onto a flag, in a word that is not all written
+		// out: "awk -f${X:-.env}", "sort -o$X.env", "tool --config=${X:-.env}".
+		// The flag is read as it is when no variable in it is set, and a
+		// file it then names is one more the command may read or write;
+		// what the variable holds otherwise, nobody knows.
+		if alt, changed := e.unsetFlags(u.cmd.words); changed {
+			fa := facts(alt)
+			if len(fa.reads)+len(fa.writes) > len(f.reads)+len(f.writes) && req.pathOpaque == "" {
+				req.pathOpaque = "it names a file in a flag with text computed when the command runs (" + rawJoined(u.cmd.words) + ")"
+			}
+			for _, w := range fa.reads {
+				add(w, &reads)
+			}
+			for _, w := range fa.writes {
+				add(w, &writes)
+			}
+		}
+		// A name that starts with a dash is a flag to the command it is
+		// handed to, and the words beside it are then other things than
+		// they seem: with a file named -R in the directory, "for f in *;
+		// do cp a.txt b.txt $f; done" copies a.txt over b.txt.
+		dashed, capped := e.dashReadings(v, u.cmd.words, dirs, hide)
+		if capped {
+			req.pathCapped = "the line hands " + rawJoined(u.cmd.words[:1]) + " more names that look like flags than gnosh follows"
+		}
+		for _, alt := range dashed {
+			fa := facts(alt)
+			for _, w := range fa.reads {
+				add(w, &reads)
+			}
+			for _, w := range fa.writes {
+				add(w, &writes)
+			}
+		}
 		for _, r := range u.cmd.redirs {
 			switch r.op {
 			case "<":
@@ -759,6 +806,80 @@ func (e *Engine) shellPaths(req *request) {
 	req.reads = e.expand(req, reads)
 	req.writes = e.expand(req, writes)
 	req.unresolved = false // links matter here only to the checks that allow
+}
+
+// dashReadings returns the command once for each name that starts with a
+// dash among those one of its words may turn into: a file a pattern
+// matches, or a value the line gave a variable (which may itself be a
+// pattern, or went through one). Each has that name written out in the
+// word's place, where a command takes it for a flag. capped says there
+// were more of them than gnosh follows.
+func (e *Engine) dashReadings(v *bashView, ws []word, dirs []string, hide bool) (out [][]word, capped bool) {
+	const max = 24
+	for i, w := range ws {
+		if i == 0 || w.quoted && w.static() {
+			continue
+		}
+		var names []string
+		expand := func(pattern string) {
+			if e.glob == nil {
+				return
+			}
+			if ms, ok := e.matchNames(pattern, dirs, hide); ok {
+				names = append(names, ms...)
+			}
+		}
+		switch {
+		case w.static() && w.glob && !w.brace:
+			expand(w.joined())
+		case !w.static():
+			vals, _, _ := e.filledAll(v, w)
+			if e.glob != nil && mixesPattern(v, w) {
+				if named, _, ok := e.filledWith(v, w, func(pattern string) ([]string, bool) { return e.matchNames(pattern, dirs, hide) }); ok {
+					vals = named
+				}
+			}
+			for _, val := range vals {
+				if val.glob && !w.quoted || val.glob && hasPathMagic(val.text) {
+					expand(val.text)
+				}
+				names = append(names, val.text)
+			}
+		}
+		seen := map[string]bool{}
+		for _, name := range names {
+			if !strings.HasPrefix(name, "-") || name == "-" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			if len(out) >= max {
+				return out, true
+			}
+			alt := append([]word(nil), ws...)
+			alt[i] = litOf(name)
+			out = append(out, alt)
+		}
+	}
+	return out, false
+}
+
+// unsetFlags returns a command's words with each flag that is not all
+// written out as it is when no variable in it is set (see word.unset):
+// "-rf${X:-.env}" is then -rf.env, and a table that knows where a flag
+// keeps its file can find it. changed says some word was read that way.
+func (e *Engine) unsetFlags(ws []word) (out []word, changed bool) {
+	for i, w := range ws {
+		if i > 0 && !w.static() && !w.brace && !w.tilde && allLitOrVar(w) {
+			// (Wherever the variable stands in the word: "$x-rf" is -rf.)
+			if l := e.unsetValue(w); strings.HasPrefix(l, "-") && l != "-" {
+				out = append(out, litOf(l))
+				changed = true
+				continue
+			}
+		}
+		out = append(out, w)
+	}
+	return out, changed
 }
 
 // matchNames returns the names a pattern matches from each of the
@@ -1120,13 +1241,13 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		relProg := strings.Contains(prog, "/") && !strings.HasPrefix(prog, "/")
 		if !plan && !((st.moved || st.unknown) && relProg) {
 			if r := e.allowCommand(words, viaXargs); r != nil {
-				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && !c.neg)
+				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg)
 				return partVerdict{ok: true, rule: r, state: state}
 			}
 		}
 		if !viaXargs {
 			if w := e.partRuns(c, f, st, depth, staticInput); w == "" {
-				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && !c.neg)
+				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg)
 				return partVerdict{ok: true}
 			} else if why == "" {
 				why = w
@@ -1139,7 +1260,7 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		viaXargs = viaXargs || words[0].joined() == "xargs"
 		words = inner
 	}
-	e.afterPart(first, c.words, st, c.sep != sepPipe && !c.neg)
+	e.afterPart(first, c.words, st, c.sep != sepPipe && c.sep != sepOr && !c.neg)
 	pv := partVerdict{why: why}
 	if plainName(c.words[0]) {
 		pv.exact, pv.prefix = e.suggestRules(c, first, st)
@@ -1289,11 +1410,104 @@ func (e *Engine) partRuns(c *simpleCmd, f cmdFacts, st *lineState, depth int, st
 				}
 			}
 		}
-		return e.wordsOK(f.writes, st, e.inWork, "outside the working directories")
+		if why := e.wordsOK(f.writes, st, e.inWork, "outside the working directories"); why != "" {
+			return why
+		}
+		if f.name == "cp" {
+			return e.cpLands(f, st)
+		}
+		return ""
 	case f.fsEdit:
 		return f.name + " changes files, which asks unless the mode is acceptEdits or a rule allows it"
 	}
 	return orDefault(f.why, f.name+" is not on the list of commands that only read")
+}
+
+// cpLands says why a cp does not run on the mode alone because of where
+// its copies would land, or "" when nothing stands against it. Handed a
+// directory, cp writes each source under its own name inside it, and
+// where a link of that name is already there it writes through the link:
+// with dir/notes.txt a link that leads out of the project, "cp notes.txt
+// dir" changes the file out there. So every name a copy may get is held to
+// the working directories like a file named outright, whether or not the
+// place is a directory: a name under a place that is none does not exist,
+// and resolves to the place itself.
+//
+// A copy of a directory with all that is in it (-R, -a) into a place that
+// already holds something under its name goes on in the same way for every
+// file inside, link by link. That is not followed: it asks.
+func (e *Engine) cpLands(f cmdFacts, st *lineState) string {
+	if len(f.writes) == 0 || e.resolve == nil {
+		// (With no way to follow links, the paths the engine is given are
+		// already where they lead: there is no link to write through.)
+		return ""
+	}
+	place := f.writes[0]
+	places, pattern, ok := e.absAll(place, st.dirs)
+	if !ok || pattern {
+		return "" // (wordsOK spoke of the place already)
+	}
+	for _, src := range f.reads {
+		abs, pattern, ok := e.absAll(src, st.dirs)
+		if !ok {
+			return "it names a file gnosh cannot know ahead of time (" + src.raw + ")"
+		}
+		// The name a copy gets is the last piece of the source as the
+		// command is handed it. A source that ends in "." or ".." has no
+		// name of its own: what is in it lands in the place itself.
+		names := map[string]bool{}
+		if pattern {
+			for _, a := range abs {
+				ms, err := e.expandGlob(a)
+				dots, good := e.dotMatches(a)
+				if err != nil || !good {
+					return "the pattern " + src.raw + " could not be expanded"
+				}
+				for _, m := range append(ms, dots...) {
+					names[lastPiece(m)] = true
+				}
+			}
+		}
+		// (A pattern that matches nothing stays as it is written.)
+		names[lastPiece(src.value(e.home))] = true
+		for name := range names {
+			for _, p := range places {
+				land := cleanPath(p)
+				if name != "" {
+					land = cleanPath(strings.TrimRight(p, "/") + "/" + name)
+				}
+				if !e.inWork(land) {
+					return land + ", where the copy of " + src.raw + " lands when " + place.raw + " is a directory, is a link that leads out of the working directories"
+				}
+				if !f.tree {
+					continue
+				}
+				if strings.ContainsAny(land, "*?[\\") {
+					return "cp would copy " + src.raw + " with all that is in it to " + land + ", and what is already there cannot be checked ahead of time"
+				}
+				for _, under := range []string{"/*", "/.[!.]*", "/..?*"} {
+					if ms, err := e.expandGlob(land + under); err != nil || len(ms) > 0 {
+						return "cp would copy " + src.raw + " with all that is in it into " + land + ", which already holds files: a link among them would be written through"
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// lastPiece returns the last piece of a path as a command is handed it,
+// the name a copy of it gets inside a directory; "" for a path that ends in
+// "." or "..", or is the root, which has no name of its own there.
+func lastPiece(p string) string {
+	p = strings.TrimRight(p, "/")
+	if i := strings.LastIndexByte(p, '/'); i >= 0 {
+		p = p[i+1:]
+	}
+	if p == "." || p == ".." {
+		return ""
+	}
+	return p
 }
 
 // decideShell applies the allow rules and the mode to a command line that

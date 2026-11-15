@@ -99,6 +99,16 @@ func (e *Engine) removalDanger(v *bashView, c *simpleCmd, dirs []string, fromSub
 	if len(c.words) < 2 {
 		return ""
 	}
+	// A flag with a variable written onto it is also read as it is when
+	// that variable is not set: "rm -r$x ." is rm -r ., and "chmod -R$v
+	// 000 ." chmod -R.
+	if alt, changed := e.unsetFlags(c.words); changed {
+		ac := *c
+		ac.words = alt
+		if why := e.removalDanger(v, &ac, dirs, fromSubst); why != "" {
+			return why
+		}
+	}
 	full, ok := e.progName(c.words[0])
 	name := progKey(baseName(full))
 	if !ok || progIsPattern(c.words[0]) {
@@ -172,7 +182,16 @@ func (e *Engine) targetsDanger(v *bashView, at int, name string, targets []word,
 		// nothing else: "d=build; rm -rf $d/" removes build/, and no
 		// variable in it can turn out empty. Any other word is judged as
 		// it is written, with what is not known in it left out.
-		if w.static() || !e.closedWord(v, w, at) {
+		// (A word that also holds something nobody knows is judged with
+		// the line's own variables written out, below: "d=x; rm -rf
+		// "$DIR"/$d" is $DIR/x, and no lone slash.)
+		vals, _, known := e.filledAll(v, w)
+		var parts []word
+		capped := false
+		if !known {
+			parts, capped = e.partFills(v, w, at)
+		}
+		if w.static() || !e.closedWord(v, w, at) && len(parts) == 0 && !capped {
 			if why := e.targetDanger(w, dirs, fromSubst, recursive); why != "" {
 				return name + " " + w.raw + ": " + why
 			}
@@ -198,7 +217,17 @@ func (e *Engine) targetsDanger(v *bashView, at int, name string, targets []word,
 		if recursive && e.tooManyFills(v, w) {
 			return name + " " + w.raw + ": the line gives the target more values than gnosh follows"
 		}
-		vals, _, _ := e.filledAll(v, w)
+		// A word with one of the line's variables beside something nobody
+		// knows: "d=~; rm -rf $PREFIX$d" is the home directory where
+		// PREFIX is empty.
+		if capped && recursive {
+			return name + " " + w.raw + ": the line gives the target more values than gnosh follows"
+		}
+		for _, pw := range parts {
+			if why := e.targetDanger(pw, dirs, fromSubst, recursive); why != "" {
+				return name + " " + w.raw + ": " + why
+			}
+		}
 		for _, val := range vals {
 			if val.text == "" {
 				continue
@@ -310,7 +339,9 @@ func (e *Engine) takesAll(targets []word, dirs []string) string {
 // flagsAndOperands parts a command's arguments into the flags that are
 // written out and its operands. takes says of a flag whether the word
 // after it is its value, which is then neither. After "--" every word is
-// an operand, and so is one that is only known when the line runs.
+// an operand, and so is one that is only known when the line runs. What
+// xargs adds stands for as many words as xargs read: where it is a
+// flag's value, the words after the first are operands.
 func flagsAndOperands(args []word, takes func(flag string) bool) (flags []string, ops []word) {
 	rest := false
 	for i := 0; i < len(args); i++ {
@@ -325,10 +356,36 @@ func flagsAndOperands(args []word, takes func(flag string) bool) (flags []string
 			flags = append(flags, l)
 			if takes != nil && takes(l) {
 				i++
+				if i < len(args) && xargsWord(args[i]) {
+					ops = append(ops, args[i])
+				}
 			}
 		}
 	}
 	return flags, ops
+}
+
+// xargsWord reports whether a word is the one that stands for what xargs
+// adds to a command (xargsAdds): any number of words, none of them known.
+func xargsWord(w word) bool {
+	return w.raw == "{}" && len(w.parts) == 1 && w.parts[0].kind == partSubst
+}
+
+// manyWords reports whether a word may turn into several once the line
+// runs, none of them known ahead of time: what xargs adds, and what a
+// command prints where no quotes keep it together ("mv $(cat list)").
+func manyWords(w word) bool {
+	return xargsWord(w) || !w.quoted && w.onlySubst()
+}
+
+// severalWords reports whether one word may stand for several once the
+// line runs: what manyWords knows of, and a pattern or a list in braces,
+// which the shell writes out as every name it matches or lists. Where
+// such a word is all a command is handed, it holds the command's every
+// operand: "mv .*" moves ".", ".." and what else starts with a dot into
+// the last of them, and "mv {.git,/tmp/g}" is mv .git /tmp/g.
+func severalWords(w word) bool {
+	return manyWords(w) || w.glob || w.brace
 }
 
 // mvDanger: mv takes a directory away as surely as rm does. What it is
@@ -342,21 +399,51 @@ func (e *Engine) mvDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst ma
 		return !strings.HasPrefix(f, "--") && strings.IndexByte(f, letter) >= 0
 	}
 	flags, ops := flagsAndOperands(c.words[1:], func(f string) bool {
-		// -t and -S take the next word, also at the end of a cluster.
-		return f == "--target-directory" || f == "--suffix" || !strings.HasPrefix(f, "--") && (strings.HasSuffix(f, "t") || strings.HasSuffix(f, "S"))
+		// -t and -S take the next word, also at the end of a cluster, and
+		// so do their long forms where no = hands them their value.
+		if strings.HasPrefix(f, "--") {
+			return !strings.Contains(f, "=") && (longFlag(f, "--target-directory", 3) || longFlag(f, "--suffix", 4))
+		}
+		return strings.HasSuffix(f, "t") || strings.HasSuffix(f, "S")
 	})
 	into, onto := false, false
 	for _, f := range flags {
-		into = into || f == "--target-directory" || strings.HasPrefix(f, "--target-directory=") || short(f, 't')
-		onto = onto || f == "--no-target-directory" || short(f, 'T')
+		into = into || longFlag(f, "--target-directory", 3) || short(f, 't')
+		onto = onto || longFlag(f, "--no-target-directory", 6) || short(f, 'T')
 	}
 	sources := ops
 	var dest []word
-	if !into {
-		if len(ops) < 2 {
+	if !into && len(ops) > 0 {
+		// The last word is the place, and the ones before it are what is
+		// moved. What xargs adds is as many words as it read, the ones
+		// that are moved among them ("echo .git /tmp/g | xargs mv"), and
+		// so is what a command prints when it is all mv is handed ("mv
+		// $(cat list)"): such a word is judged with the sources. After
+		// other words a command's output is taken for the place it is
+		// there to be: "mv a.txt $(mktemp -d)" is not asked about.
+		last := ops[len(ops)-1]
+		switch {
+		case xargsWord(last), len(ops) == 1 && severalWords(last), last.anyOrder:
+			// (The words of an array are known as a set: where one of
+			// them stands last, any of them may be one that is moved.)
+		case len(ops) < 2:
 			return ""
+		default:
+			sources = ops[:len(ops)-1]
 		}
-		sources, dest = ops[:len(ops)-1], ops[len(ops)-1:]
+		dest = []word{last}
+	}
+	// A thing moved onto itself is not moved: mv refuses "mv x x". (A
+	// pattern or a list in braces is not one thing: where it is all mv is
+	// handed, the names it stands for are moved into the last of them.)
+	if len(dest) == 1 && dest[0].static() && !dest[0].anyOrder && !dest[0].glob && !dest[0].brace {
+		kept := sources[:0:0]
+		for _, w := range sources {
+			if !w.static() || w.value(e.home) != dest[0].value(e.home) {
+				kept = append(kept, w)
+			}
+		}
+		sources = kept
 	}
 	if why := e.targetsDanger(v, v.place(c), "mv", sources, dirs, fromSubst, true); why != "" {
 		return why + " (it would be moved away)"
@@ -373,13 +460,15 @@ func (e *Engine) mvDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst ma
 // be kept change every file in it at once. Without -R they change one
 // thing, which can be changed back.
 func (e *Engine) modeDanger(v *bashView, name string, c *simpleCmd, dirs []string, fromSubst map[string]bool) string {
-	flags, ops := flagsAndOperands(c.words[1:], func(f string) bool { return f == "--reference" || f == "--from" })
+	flags, ops := flagsAndOperands(c.words[1:], func(f string) bool {
+		return !strings.Contains(f, "=") && (longFlag(f, "--reference", 5) || longFlag(f, "--from", 3))
+	})
 	recursive, given := false, false
 	for _, f := range flags {
 		switch {
-		case f == "--recursive":
+		case longFlag(f, "--recursive", 5):
 			recursive = true
-		case strings.HasPrefix(f, "--reference"):
+		case longFlag(f, "--reference", 5):
 			given = true // the mode or the owner comes from a file
 		case strings.HasPrefix(f, "--"):
 		case name == "chmod" && strings.Trim(f[1:], "rwxXstugoa+-=,") == "":
@@ -392,11 +481,18 @@ func (e *Engine) modeDanger(v *bashView, name string, c *simpleCmd, dirs []strin
 		return ""
 	}
 	// The first operand is the mode or the owner, unless a flag gave it.
+	// What xargs adds is that and the targets after it ("echo 000 . |
+	// xargs chmod -R"), and so is what a command prints when it is all
+	// there is ("chmod -R $(cat args)"). With targets written after it, a
+	// command's output in that place is taken for the mode or the owner
+	// it is there to be: "chown -R $(whoami) build" is not asked about.
 	if !given {
 		if len(ops) == 0 {
 			return ""
 		}
-		ops = ops[1:]
+		if !(xargsWord(ops[0]) || len(ops) == 1 && severalWords(ops[0]) || ops[0].anyOrder) {
+			ops = ops[1:]
+		}
 	}
 	return e.targetsDanger(v, v.place(c), name+" -R", ops, dirs, fromSubst, true)
 }
@@ -411,11 +507,20 @@ func (e *Engine) gitCleanDanger(v *bashView, c *simpleCmd, dirs []string, fromSu
 	// The words before the subcommand: -C says where git runs.
 	var at []word
 	sub := -1
+	// subName is the subcommand as it is written, or as it is when no
+	// variable in it is set: "git clean$x -fdx" is git clean.
+	subName := ""
 	for i := 0; i < len(args) && sub < 0; i++ {
+		l := args[i].joined()
 		if !args[i].static() {
-			return ""
+			if !allLitOrVar(args[i]) {
+				return "" // what a command prints: nobody knows what git is told to do
+			}
+			if l = e.unsetValue(args[i]); l == "" {
+				continue // a word that is not there when its variable is not set
+			}
 		}
-		switch l := args[i].joined(); {
+		switch {
 		case l == "-C" && i+1 < len(args):
 			i++
 			at = append(at, args[i])
@@ -423,34 +528,52 @@ func (e *Engine) gitCleanDanger(v *bashView, c *simpleCmd, dirs []string, fromSu
 			i++
 		case strings.HasPrefix(l, "-"):
 		default:
-			sub = i
+			sub, subName = i, l
 		}
 	}
-	if sub < 0 || args[sub].joined() != "clean" {
+	rest := args[min(sub+1, len(args)):]
+	if sub >= 0 && subName != "clean" && args[sub].anyOrder {
+		// The words of an array (or of "$@") are known as a set: where
+		// git's subcommand is one of them, clean may be it, and every
+		// other word one it is handed.
+		for i, a := range args {
+			if a.anyOrder && a.static() && a.joined() == "clean" {
+				subName = "clean"
+				rest = append(append([]word(nil), args[:i]...), args[i+1:]...)
+			}
+		}
+	}
+	if sub < 0 || subName != "clean" {
 		return ""
 	}
-	flags, paths := flagsAndOperands(args[sub+1:], func(f string) bool {
+	flags, paths := flagsAndOperands(rest, func(f string) bool {
 		return f == "--exclude" || !strings.HasPrefix(f, "--") && strings.HasSuffix(f, "e")
 	})
-	force, dry, ignored := false, false, false
+	// (-f is not looked for: git wants it only where clean.requireForce
+	// says so, and "git -c clean.requireForce=false clean -dx" says no.)
+	dry, ignored := false, false
 	for _, f := range flags {
 		switch {
-		case f == "--force":
-			force = true
-		case f == "--dry-run":
+		case longFlag(f, "--dry-run", 3):
 			dry = true
 		case strings.HasPrefix(f, "--"):
 		default:
-			force = force || strings.ContainsRune(f, 'f')
 			dry = dry || strings.ContainsRune(f, 'n')
 			ignored = ignored || strings.ContainsAny(f, "xX")
 		}
 	}
-	if !force || dry || !ignored {
+	if dry || !ignored {
 		return ""
 	}
 	where := dirs
 	if len(at) > 0 {
+		// The directory git is sent to is judged like a target of rm: a
+		// variable the line itself set is what it was set to, and what is
+		// written beside one that may be empty is what is left ("w=./$d;
+		// git -C $w clean -fdx").
+		if why := e.targetsDanger(v, v.place(c), "git -C", at, dirs, fromSubst, true); why != "" {
+			return why + " (git clean there removes every file that git does not track, the ignored ones too)"
+		}
 		where = nil
 		for _, w := range at {
 			abs, _, ok := e.absAll(w, dirs)
@@ -464,7 +587,15 @@ func (e *Engine) gitCleanDanger(v *bashView, c *simpleCmd, dirs []string, fromSu
 		if why := e.targetsDanger(v, v.place(c), "git clean", paths, where, fromSubst, true); why != "" {
 			return why + " (every file there that git does not track would be removed, the ignored ones too)"
 		}
-		return ""
+		// (Words known as a set may not be paths of this clean at all:
+		// then it is a clean of the directory git is in.)
+		limited := false
+		for _, w := range paths {
+			limited = limited || !w.anyOrder
+		}
+		if limited {
+			return ""
+		}
 	}
 	for _, d := range where {
 		if why := e.criticalDir(d); why != "" {
@@ -507,6 +638,17 @@ func (e *Engine) overwriteDanger(v *bashView, name string, c *simpleCmd, dirs []
 		}
 	}
 	return ""
+}
+
+// allLitOrVar reports whether a word is made of written text and
+// variables only: nothing a command prints, and no sum.
+func allLitOrVar(w word) bool {
+	for _, p := range w.parts {
+		if p.kind != partLit && p.kind != partVar {
+			return false
+		}
+	}
+	return true
 }
 
 // afterPrefix returns what follows a prefix written at the head of a
@@ -558,25 +700,40 @@ func (e *Engine) rsyncDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst
 		deletes = deletes || f == "--del" || strings.HasPrefix(f, "--delete")
 		away = away || f == "--remove-source-files" || f == "--remove-sent-files"
 	}
-	if len(ops) < 2 {
+	// The last word is the place. One that may be several words (what
+	// xargs adds, a command's output without quotes) may be all of them:
+	// "echo src/ . | xargs rsync -a --delete".
+	if len(ops) == 0 || len(ops) < 2 && !severalWords(ops[0]) {
 		return ""
 	}
 	// (A name with a colon before any slash is a place on another
-	// machine.)
+	// machine. Only what is written of the word counts: a colon inside a
+	// $(...) is the command's own.)
 	here := func(w word) bool {
-		l := w.lit()
+		l := w.joined()
 		i := strings.IndexByte(l, ':')
 		return i < 0 || strings.Contains(l[:i], "/")
 	}
 	dest := ops[len(ops)-1]
-	if deletes && here(dest) {
-		if why := e.targetsDanger(v, v.place(c), "rsync --delete", []word{dest}, dirs, fromSubst, true); why != "" {
+	places := []word{dest}
+	if dest.anyOrder {
+		places = ops // (the words of an array are known as a set: any may be the last)
+	}
+	for _, place := range places {
+		if !deletes || !here(place) {
+			continue
+		}
+		if why := e.targetsDanger(v, v.place(c), "rsync --delete", []word{place}, dirs, fromSubst, true); why != "" {
 			return why + " (whatever is there and not in the source would be deleted)"
 		}
 	}
 	if away {
 		var sources []word
-		for _, w := range ops[:len(ops)-1] {
+		from := ops[:len(ops)-1]
+		if xargsWord(dest) || len(ops) == 1 {
+			from = ops
+		}
+		for _, w := range from {
 			if here(w) {
 				sources = append(sources, w)
 			}
@@ -627,6 +784,16 @@ func recursiveLong(l string) bool {
 	return len(l) >= 3 && strings.HasPrefix("--recursive", l)
 }
 
+// longFlag reports whether a flag, with or without an =value after it, is
+// the long option full, or a shorter way of writing it that GNU's tools
+// take: any beginning of it that is at least min characters long, which
+// is where it stops being the beginning of another option as well ("--rec"
+// is --recursive to chmod, "--t=dir" is --target-directory=dir to mv).
+func longFlag(flag, full string, min int) bool {
+	name, _, _ := strings.Cut(flag, "=")
+	return len(name) >= min && strings.HasPrefix(name, "--") && strings.HasPrefix(full, name)
+}
+
 // findNarrows are the tests of find that pick some files and leave
 // others: with one of them in front, what an action touches is not
 // known ahead of time.
@@ -661,23 +828,31 @@ func (e *Engine) findDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst 
 	if len(starts) == 0 {
 		starts = []word{litOf(".")}
 	}
-	removes := false
+	// does says what find does with all it finds, when that destroys it.
+	does := ""
 	for ; i < len(args); i++ {
 		l := args[i].lit()
 		switch {
 		case findNarrows[l] || strings.HasPrefix(l, "-newer"):
 			return ""
 		case l == "-delete":
-			removes = true
+			does = "removes what it finds"
 		case l == "-exec" || l == "-execdir" || l == "-ok" || l == "-okdir":
 			for k := i + 1; k < len(args) && k < i+4; k++ {
-				if n := baseName(args[k].lit()); n == "rm" || n == "rmdir" || n == "shred" {
-					removes = true
+				switch n := baseName(args[k].lit()); n {
+				case "rm", "rmdir":
+					does = "removes what it finds"
+				case "shred", "truncate", "mv", "chmod", "chown", "chgrp":
+					// (find goes through everything below its starting
+					// point by itself: a chmod of all it finds is chmod -R.)
+					if does == "" {
+						does = "hands all it finds to " + n
+					}
 				}
 			}
 		}
 	}
-	if !removes {
+	if does == "" {
 		return ""
 	}
 	for _, w := range starts {
@@ -685,7 +860,7 @@ func (e *Engine) findDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst 
 		// point too when it can.
 		for _, t := range []word{w, {raw: w.raw + "/*", parts: append(append([]wordPart(nil), w.parts...), wordPart{lit: "/*"}), glob: true, quoted: w.quoted, tilde: w.tilde}} {
 			if why := e.targetsDanger(v, v.place(c), "find", []word{t}, dirs, fromSubst, true); why != "" {
-				return "find " + w.raw + " removes what it finds: " + strings.TrimPrefix(why, "find "+t.raw+": ")
+				return "find " + w.raw + " " + does + ": " + strings.TrimPrefix(why, "find "+t.raw+": ")
 			}
 		}
 	}
@@ -813,6 +988,9 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 		return ""
 	}
 	if unknown {
+		if recursive && xargsWord(w) {
+			return "the target is among words that are only known when the line runs"
+		}
 		if recursive && w.onlySubst() {
 			return "the target is whatever a command prints"
 		}
@@ -842,6 +1020,17 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 			left := litOf(s)
 			left.glob = w.glob
 			if why := e.targetDanger(left, dirs, fromSubst, recursive); why != "" {
+				return "if the variable is empty this removes " + s + ": " + why
+			}
+		case strings.HasPrefix(s, "/") && !(w.glob && hasPathMagic(s)):
+			// What is left may be a directory that has to be kept, by its
+			// whole path: "rm -rf $PREFIX/home/u". (A lone name right under
+			// the root that is not one of the usual ones is "$DIR/build",
+			// which is how a build directory is written.)
+			if c := cleanPath(s); c == "" || path.Dir(c) == "/" && c != e.home && c != e.cwd && c != e.cur {
+				return ""
+			}
+			if why := e.targetDanger(litOf(s), dirs, fromSubst, recursive); why != "" {
 				return "if the variable is empty this removes " + s + ": " + why
 			}
 		case !strings.HasPrefix(s, "/") && !w.tilde:

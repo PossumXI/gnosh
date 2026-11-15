@@ -285,6 +285,64 @@ func TestShellAttacks(t *testing.T) {
 		{"rg -e x reads the file after it", ModeBypass, attackGuards, "rg -e x .e${x}nv", Deny},
 		{"rg -f reads its file of patterns", ModeBypass, attackGuards, "rg -f .env $DIR", Deny},
 		{"after -- every word is an operand", ModeBypass, attackGuards, "grep -e x -- .e${x}nv", Deny},
+		// What the second round's long runs found, and what reading on
+		// from there turned up.
+		{"dash expands the alias, and the words after it are git's", ModeBypass, attackGuards, "alias g=git\ng push origin main", Deny},
+		{"an alias that stands for nothing leaves the next word as the program", ModeBypass, attackGuards, "alias zz=\nzz rm -rf x", Deny},
+		{"an alias that stands for another alias", ModeBypass, attackGuards, "alias a=b\nalias b='git push'\na origin", Deny},
+		{"the alias is used inside a script the line runs", ModeBypass, attackGuards, "alias g=git\neval 'g push origin'", Deny},
+		{"dash expands the alias, and the words after it are rm's", ModeBypass, attackGuards, "alias r=rm\nr -rf x", Deny},
+		{"dash expands the alias, and the word after it is the file", ModeBypass, attackGuards, "alias c=cat\nc .env", Deny},
+		{"mapfile hands its callback the index and the line it read", ModeBypass, attackGuards, "mapfile -t -C git -c 1 a <<< push", Ask},
+		{"what a command prints may be a wrapper's value and the command after it", ModeBypass, attackGuards, "nice -n $(echo 5 git push origin)", Ask},
+		// The same with text beside what is printed: it stays on the first
+		// and the last of the words, and the ones between are the command.
+		{"env -u X rm xm runs rm", ModeBypass, attackGuards, "env -u $(echo X rm x)m", Ask},
+		{"env -u X rm xm runs rm", ModeBypass, attackGuards, "env -u a$(echo X rm x)", Ask},
+		{"env -u X rm x runs rm", ModeBypass, attackGuards, "env -u `echo X rm x`m", Ask},
+		{"timeout -s KILL 5 rm x runs rm", ModeBypass, attackGuards, "timeout -s K$(echo ILL 5 rm x)", Ask},
+		// env goes on taking NAME=VALUE words after "--", and takes any
+		// word with an = in it for one: a shell would look for a program of
+		// that name.
+		{"env sets a variable named 0 and runs rm x", ModeBypass, attackGuards, "env -- 0=1 rm x", Deny},
+		{"env sets a variable named 0 and runs rm x", ModeBypass, attackGuards, "env -- a.b=1 0= rm x", Deny},
+		{"env sets two variables and runs git push", ModeBypass, attackGuards, "env -i -- A=1 0TERNAL_DIFF=rm git push origin", Deny},
+		{"env sets a variable and runs env, which runs rm x", ModeBypass, attackGuards, "env -- 0= env -- 1= rm x", Deny},
+		{"env sets a variable named 0 and runs rm x", "", attackRealistic, "env -- 0=1 rm x", Deny},
+		{"what is computed after -- may be a variable for env or the command", ModeBypass, attackGuards, "env -- $X rm x", Ask},
+		{"what a command prints may be a wrapper's value and the command after it", ModeBypass, attackGuards, "exec -la $(echo x git push origin)", Ask},
+		{"what a command prints may be a wrapper's value and the command after it", ModeBypass, attackGuards, "env -u $(echo X rm -rf y)", Ask},
+		{"hash -p makes ls run git, with the words that follow it", ModeBypass, attackGuards, "hash -p /usr/bin/git ls; ls push origin", Deny},
+		{"BASH_CMDS makes ls run git, with the words that follow it", ModeBypass, attackGuards, "BASH_CMDS[ls]=/usr/bin/git; ls push origin", Deny},
+		{"the alias is rm where the variable in it is not set", ModeBypass, attackGuards, "alias zz=${x}rm\nzz -rf y", Deny},
+		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
+		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
+		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
+		{"the array was given its words in two goes", ModeBypass, attackGuards, "a=(x); a=(git push origin); ${a[@]}", Deny},
+		{"text beside every word of an array joins the first and the last of them only", ModeBypass, attackGuards, "a=(.env x); cat \"${a[@]}\".txt", Deny},
+		{"a } alone opens no braces, and the array's words are what they are", ModeBypass, attackGuards, "a=(x .env y); cat ${a[*]}[*]}", Deny},
+		{"text after every word of an array joins the last of them", ModeBypass, attackGuards, "a=(push origin); git ${a[@]}x", Deny},
+		{"r is a name for F, and an assignment to it is one to F", ModeBypass, attackGuards, "F=a.txt; declare -n r=F; r=.env; cat $F", Deny},
+		{"d is a name for PWD", ModeBypass, attackGuards, "declare -n d=PWD; cat $d/.env", Deny},
+		{"d is a name for HOME", ModeBypass, attackGuards, "declare -n d; d=HOME; cat $d/.ssh/id_rsa", Deny},
+		{"X holds nothing, and d is .env", ModeBypass, attackGuards, "d=.env; cat $X$d", Deny},
+		{"${d,,} is the value in small letters", ModeBypass, attackGuards, "d=.Env; cat ${d,,}", Deny},
+		{"${!v} is what d holds", ModeBypass, attackGuards, "v=d; d=.env; cat ${!v}", Deny},
+		{"${F/x/y} leaves a value with no x as it is", ModeBypass, attackGuards, "F=.env; cat ${F/x/y}", Deny},
+		{"${HOME/x/y} is the home directory", ModeBypass, attackGuards, "cat ${HOME/x/y}/.ssh/id_rsa", Deny},
+		{"${F:1} is the value from its second character on", ModeBypass, attackGuards, "F=x.env; cat ${F:1}", Deny},
+		{"a form that is not worked out may leave the value as it is", ModeBypass, attackGuards, "F=.env; cat ${F@E}", Deny},
+		{"a form that is not worked out may leave the value as it is", ModeBypass, attackGuards, "cat ${HOME, ,}/.ssh/id_rsa", Deny},
+		{"to a plain sh {fd} is one more file for cat, and .env still the first", ModeBypass, attackGuards, "cat .env {fd}>log", Deny},
+		{"to a plain sh {fd} is an argument, and the file after > is written", ModeBypass, attackGuards, "echo x {fd}>build/out.o", Deny},
+		{"xargs hands git the words, behind a wrapper as well", ModeBypass, attackGuards, "echo push origin | xargs timeout 5 git", Ask},
+		{"the file is written onto a flag, beside a variable nobody set", ModeBypass, attackGuards, "awk -rf${X:-.env} a.txt", Deny},
+		{"the file is written onto a flag, beside a variable nobody set", ModeBypass, attackGuards, "grep -f${X:-.env} a.txt", Deny},
+		{"the file is written onto a flag, beside a variable nobody set", ModeBypass, attackGuards, "sort -o${X:-.env} a.txt", Deny},
+		{"the file is written onto a flag, beside a variable nobody set", ModeBypass, attackGuards, "awk -rf$X.env a.txt", Deny},
+		{"the file is written after the = of a flag, beside a variable nobody set", ModeBypass, attackGuards, "mytool --config=${X:-.env}", Deny},
+		{"the file is written onto a flag, in a variable the line set", ModeBypass, attackGuards, "x=.env; awk -f$x a.txt", Deny},
+		{"the file is written onto a flag, after a variable nobody set", ModeBypass, attackGuards, "awk $x-f.env a.txt", Deny},
 		{"the braces are taken apart before the variable is looked at", ModeBypass, attackGuards, "F=.env; cat {$F,x}", Deny},
 		{"the braces are taken apart before the variable is looked at", ModeBypass, attackGuards, "D=.; cat $D/{.env,x}", Deny},
 		{"the program is eval, whatever its name turns out to be", ModeBypass, attackGuards, "ev${x}al 'rm x'", Deny},
@@ -629,6 +687,61 @@ func TestLinkAttacks(t *testing.T) {
 	}
 }
 
+// TestWhereACopyLands: handed a directory, cp writes each source under
+// its own name inside it, and through a link of that name where one is
+// already there. The oracle's "cp db/s da" changed a file outside the
+// project that way, with da/s a link to it.
+func TestWhereACopyLands(t *testing.T) {
+	fs := fakeFS{links: map[string]string{
+		"/proj/da/s":    "/outside/secret.txt",
+		"/proj/da/.h":   "/outside/dir/file",
+		"/proj/link-in": "/proj/src",
+	}, files: []string{"/proj/da/s", "/proj/da/.h", "/proj/db/s", "/proj/db/.h", "/proj/src/main.go", "/proj/a.go", "/proj/build/out.o", "/proj/sub/top.txt"}}
+	o := testOptions(ModeAcceptEdits, rules{})
+	o.Resolve, o.Glob = fs.resolve, fs.glob
+	e := mustEngine(t, o)
+	for cmd, want := range map[string]Behavior{
+		// The copy lands on a link that leads out.
+		"cp db/s da":          Ask,
+		"cp db/s da/":         Ask,
+		"cp db/s ./da":        Ask,
+		"cp -p db/s da":       Ask,
+		"cp db/.h da":         Ask,
+		"cp a.go db/s da":     Ask,
+		"cp db/* da":          Ask, // every name the pattern matches lands there
+		"cp db/s da/s":        Ask, // (named outright, as before)
+		"cd db && cp s ../da": Ask,
+		// It lands on no link.
+		"cp a.go da":        Allow,
+		"cp db/s build":     Allow,
+		"cp db/s copy":      Allow, // a new file
+		"cp a.go db/s":      Allow, // onto a file of the project
+		"cp db/s link-in":   Allow, // a link that stays in the project
+		"cp src/main.go db": Allow,
+		// A directory with all that is in it: into a place that holds
+		// nothing under its name it makes new files, and into one that
+		// does it goes on link by link, which is not followed.
+		"cp -R db da":        Allow, // makes da/db
+		"cp -R src build":    Allow,
+		"cp -a src copy":     Allow,
+		"cp -R db/. da":      Ask, // what is in db lands in da itself, on da/s
+		"cp -R da/. db":      Ask, // (reading da's links asks as well)
+		"cp -R sub build/..": Ask, // lands on sub itself, which holds files
+	} {
+		if d := bash(e, cmd); d.Behavior != want {
+			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
+		}
+	}
+	// With no way to follow links there is no link to write through, and
+	// the copies are judged by where they are written, as before.
+	e = mustEngine(t, testOptions(ModeAcceptEdits, rules{}))
+	for _, cmd := range []string{"cp db/s da", "cp -R src dst", "cp -R db/. da"} {
+		if d := bash(e, cmd); d.Behavior != Allow {
+			t.Errorf("%q with no way to follow links: got %s (%s), want allow", cmd, d.Behavior, d.Reason)
+		}
+	}
+}
+
 // TestReadings: lines the oracle found the engine reading another way
 // than the shell, where no rule was dodged by it. The command that runs
 // must be among the ones the engine reads.
@@ -650,6 +763,18 @@ func TestReadings(t *testing.T) {
 		"coproc make x":           "",                    // not followed at all
 		"x=${y}'a[$(make x)]'; :": "make x",              // text the shell may evaluate later
 		"eval 'ls '$X' > out'":    "ls ${GNOSH_UNKNOWN}", // what stands in an eval, whatever else is in it
+		// The second round. Where a shell runs less than the engine reads,
+		// the engine's reading stands: bash stops at a subscript it cannot
+		// work out, and a file that is sourced is a program of its own.
+		"n[[]= pwd":                             "pwd",
+		"printf y\n{ . ~/x.sh;}":                ". ~/x.sh",
+		"mv a {fd}>log":                         "mv a {fd}",        // to a plain sh the {fd} is an argument
+		"alias g=git\ng push":                   "git push",         // the words after the alias where it is used
+		"alias z=\nz make x":                    "make x",           // an alias that stands for nothing
+		"mapfile -C 'make x' -c 1 a":            "make x {}",        // the index and the line mapfile adds
+		"a=(make x); ${a[@]}":                   "make x",           // every word of the array
+		"echo x | xargs timeout 5 make":         "make {}",          // what xargs adds, behind a wrapper
+		"echo clean -fdx | xargs timeout 5 git": "timeout 5 git {}", // the wrapper itself, with what xargs adds
 	} {
 		v := e.viewBash(line)
 		found := want == ""
@@ -906,6 +1031,101 @@ func TestPatternsThatMatchNothing(t *testing.T) {
 	}
 }
 
+// TestOddExpansions: forms of ${...} with nothing, or next to nothing, in
+// them are read without a crash, and never make a line run that would
+// not have run without them (the long run of seed 72 crashed the reader
+// on "${}").
+func TestOddExpansions(t *testing.T) {
+	e := engine(t, ModeBypass, attackGuards)
+	for _, line := range []string{
+		"echo ${}", "ls ${}", "echo ${!}", "echo ${#}", "echo ${:}", "echo ${a[}", "echo ${a[@]:}", "echo ${a/}", "echo ${a//}", "echo ${a:}",
+		"echo ${a: }", "a=x; echo ${a:5:-9} ${a: -9} ${a:1:99} ${a/x} ${a,} ${a^}", "echo ${,}", "echo ${a@}", "echo ${!a*} ${!a@}", "echo ${a[@]:1:}",
+		"echo \"${}\"", "x=${}; echo $x", "echo ${a:0:}", "echo ${a::}", "echo ${a/#}", "echo ${a,,,}", "v=; echo ${v:0:1}${v,,}${v/a/b}${!v}",
+	} {
+		d := bash(e, line)
+		if d.Behavior == Deny {
+			t.Errorf("%q: refused (%s)", line, d.Reason)
+		}
+	}
+	for _, line := range []string{"rm -rf x ${}", "git push ${} origin", "cat .env ${}", "cat ${}.env", "rm ${a:} -rf y"} {
+		if d := bash(e, line); d.Behavior == Allow {
+			t.Errorf("%q: allowed (%s)", line, d.Reason)
+		}
+	}
+}
+
+// TestCdThatMayNotHappen: a cd that fails ends the && chain it is in, and
+// what follows the chain then runs where the line was before it. A file
+// named after such a chain is read from both places (the second round's
+// first long run found "cd s&&ls;cat *").
+func TestCdThatMayNotHappen(t *testing.T) {
+	fs := fakeFS{links: map[string]string{"/proj/sneaky.txt": "/outside/secret.txt"},
+		files: []string{"/proj/a.txt", "/proj/-n", "/proj/src", "/proj/src/c.go"}}
+	o := testOptions(ModeDefault, rules{})
+	o.Resolve, o.Glob = fs.resolve, fs.glob
+	e := mustEngine(t, o)
+	for _, line := range []string{
+		"cd src && ls; cat ../a.txt",      // from /proj that is /a.txt
+		"cd nope && true; cat sneaky.txt", // a link that leads out, where the line began
+		"cd src && ls; cat *",             // where the line began, * takes in a file named like a flag
+		"cd nope && ls\ncat sneaky.txt",
+		"cd src && cd nope && ls; cat ../../proj/sneaky.txt",
+		"! cd nope && cat sneaky.txt",
+		"nohup cd src && cat ../a.txt",   // the cd of a program moves nobody but that program
+		"ls | cd src && cat ../a.txt",    // and so does one side of a pipe
+		"true || cd src && cat ../a.txt", // the || skips the cd, and the && goes on
+		"ls | cd src || cd nope </dev/null && cat ../a.txt",
+		"cd nope || cd src && cat ../a.txt; cat ../a.txt",
+	} {
+		if d := bash(e, line); d.Behavior != Ask {
+			t.Errorf("%q: got %s (%s), want ask", line, d.Behavior, d.Reason)
+		}
+	}
+	for _, line := range []string{"cd src && cat c.go", "cd src && cat c.go && cat ../a.txt", "cd src && ls; ls", "cd src && ls; cat a.txt", "cd src && cat c.go | head -1",
+		"ls && cd src && cat c.go", "cd nope || cd src && cat c.go"} {
+		if d := bash(e, line); d.Behavior != Allow {
+			t.Errorf("%q: got %s (%s), want allow", line, d.Behavior, d.Reason)
+		}
+	}
+}
+
+// TestPatternValuesWithText: a variable that went through what a pattern
+// matched, with more text around it, names that text around each match,
+// and not what a pattern made of the two would match (the second round's
+// first long run found "for f in *;do mv i$f;done" under an ask rule for
+// *.txt).
+func TestPatternValuesWithText(t *testing.T) {
+	fs := fakeFS{files: []string{"/proj/a.txt", "/proj/b.txt", "/proj/x", "/proj/src", "/proj/src/c.go", "/proj/-n"}}
+	for _, c := range []struct {
+		r    rules
+		line string
+		want Behavior
+	}{
+		{rules{allow: []string{"Bash(mv if$f)"}, ask: []string{"Edit(*.txt)"}}, "for f in *; do mv i$f; done", Ask},
+		{rules{allow: []string{"Bash(mv if$f)"}, ask: []string{"Edit(*.txt)"}}, "for f in * .*; do mv if$f; done", Ask},
+		{rules{deny: []string{"Edit(new_*)"}}, "for f in *.txt; do cp $f new_$f; done", Deny},
+		{rules{deny: []string{"Edit(*.md)"}}, "for f in *.txt; do cp $f ${f%.txt}.md; done", Deny},
+		{rules{deny: []string{"Edit(./build/**)"}}, "for f in *.txt; do cp $f build/$f; done", Deny},
+		{rules{deny: []string{"Edit(*.md)"}}, "for f in *.txt; do cp $f $f.bak; done", Allow},
+		{rules{deny: []string{"Edit(new_*)"}}, "for f in src/*; do wc -l $f; done", Allow},
+		// A name that starts with a dash is a flag to the command, and
+		// the words beside it are then other things than they seem: with
+		// a file named -n, cp takes b.txt for the place it copies to.
+		{rules{deny: []string{"Edit(b.txt)"}}, "for f in *; do cp a.txt b.txt $f; done", Deny},
+		{rules{deny: []string{"Edit(b.txt)"}}, "cp a.txt b.txt -[n]", Deny},
+		{rules{deny: []string{"Edit(b.txt)"}}, "f=-n; cp a.txt b.txt $f", Deny},
+		{rules{deny: []string{"Edit(*.txt)"}}, "for f in * .*; do cp a.txt \"$f\"x; done", Deny},
+		{rules{deny: []string{"Edit(b.txt)"}}, "for f in *.txt; do cp $f build/; done", Allow},
+		{rules{deny: []string{"Edit(b.txt)"}}, "for f in *; do wc -l $f; done", Allow},
+	} {
+		o := testOptions(ModeBypass, c.r)
+		o.Resolve, o.Glob = fs.resolve, fs.goGlob
+		if d := bash(mustEngine(t, o), c.line); d.Behavior != c.want {
+			t.Errorf("%q under %v: got %s (%s), want %s", c.line, c.r, d.Behavior, d.Reason, c.want)
+		}
+	}
+}
+
 // TestOrdinaryLinesStillRun is the other half of the bargain: the lines a
 // developer's rules are meant to cover, and the ones that only read, run
 // without a question after all of the above.
@@ -1026,6 +1246,13 @@ func TestLineValues(t *testing.T) {
 		"IFS=:; F=.env:x; cat $F", "IFS=,; for f in a.txt,.env; do cat $f; done", "X=${IFS}; cat$X.env",
 		// To bash "time F=.env" is an assignment.
 		"time F=.env; cat $F", "time -p F=.env; cat \"$F\"",
+		// The words a function of the line's own, a set -- or a script
+		// after sh -c is handed are what $1 and "$@" stand for in it.
+		"set -- .env; cat $1", "set -- a.txt .env; cat \"$@\"", "f() { cat \"$2\"; }; f a.txt .env", "function f { cat $*; }; f .env",
+		"sh -c 'cat \"$0\"' .env", "bash -c 'cat \"$@\"' _ a.txt .env", "f() { \"$@\"; }; f git push origin", "f() { $1 -rf y; }; f rm",
+		"set -- rm -rf y; \"$@\"", "f() { shift; cat \"$1\"; }; f a.txt .env",
+		// A pattern in one of the line's values, beside a variable nobody set.
+		"w='.e*'; cat $X$w", "d=.e; w=$d*; cat ${X}$w",
 	} {
 		if d := bash(e, line); d.Behavior != Deny {
 			t.Errorf("%q: got %s (%s), want deny", line, d.Behavior, d.Reason)
@@ -1106,7 +1333,7 @@ func TestPaddingIsNotAWayPast(t *testing.T) {
 func TestWhatBypassLetsGo(t *testing.T) {
 	r := rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}
 	for _, line := range []string{
-		"cat $(echo .env)", "read F <<< .env; cat $F", "printf -v F .env; cat $F", "set -- .env; cat $1", "f() { cat $1; }; f \"$(echo .env)\"",
+		"cat $(echo .env)", "read F <<< .env; cat $F", "printf -v F .env; cat $F", "set -- \"$(echo .env)\"; cat $1", "f() { cat $1; }; f \"$(echo .env)\"",
 		"cat \"$FILE\"", "echo .env | xargs cat", "mapfile -t A <<< .env; cat \"${A[@]}\"", "F=a.txt; read F <<< .env; cat $F",
 	} {
 		if d := bash(engine(t, ModeBypass, r), line); d.Behavior != Allow {

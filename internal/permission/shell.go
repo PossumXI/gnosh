@@ -98,7 +98,10 @@ type simpleCmd struct {
 	// every plain sh) would read a [[ ]] test that holds && || | ( ) < >
 	// or a line break: as several commands, and as redirections. mixed is
 	// set when one of those commands would be more than a test operator
-	// that no program is named after.
+	// that no program is named after. A command with an &> in its middle
+	// is cut into pieces in the same way, and one with a {name} before a
+	// redirection has a single piece: itself, with the {name} that a
+	// plain sh takes for an argument among its words.
 	pieces    [][]word
 	altRedirs []redir
 	mixed     bool
@@ -106,6 +109,9 @@ type simpleCmd struct {
 	// holds * ? or [: to bash it is arithmetic (total[i]), to a plain sh
 	// a file name pattern that names the program to run.
 	nameGlob bool
+	// aliased are the aliases this command was read through (useAlias):
+	// a name is taken for its alias once.
+	aliased []string
 }
 
 // script is everything read from one command line.
@@ -126,6 +132,7 @@ type script struct {
 	setsVar    bool // a ${name:=value} expansion or a {name}> redirection, which assign
 	blindSet   bool // a variable is set and the reader cannot say which: ${!ref:=x}
 	funcs      bool // a function is defined
+	funcNames  []string
 	exotic     bool // a ${...} form that is followed but not modelled
 	comments   []string
 	// arith holds the text of every (( ... )) command. A shell without
@@ -760,10 +767,12 @@ func (p *parser) command() {
 	case "function":
 		p.pos += 8
 		p.blanks()
-		if _, ok := p.readWord(); !ok {
+		name, ok := p.readWord()
+		if !ok {
 			p.fail("a function with no name")
 			return
 		}
+		p.sc.funcNames = append(p.sc.funcNames, name.joined())
 		p.blanks()
 		if strings.HasPrefix(p.src[p.pos:], "(") {
 			p.pos++
@@ -1050,6 +1059,10 @@ func (p *parser) simple() {
 	cmd := &simpleCmd{sep: p.sep, nest: p.nest}
 	// ampAts is how many words stood before each &> redirection.
 	var ampAts []int
+	// shWords are the command's words as a shell that knows no {name}>file
+	// has them: the {name} is one of them there. named says there is one.
+	var shWords []word
+	named := false
 	for !p.failed {
 		p.blanks()
 		if p.pos >= len(p.src) {
@@ -1059,7 +1072,7 @@ func (p *parser) simple() {
 			amp := strings.HasPrefix(p.src[p.pos:], "&>")
 			p.redir(cmd)
 			if amp {
-				ampAts = append(ampAts, len(cmd.words))
+				ampAts = append(ampAts, len(shWords))
 			}
 			continue
 		}
@@ -1067,6 +1080,7 @@ func (p *parser) simple() {
 		if c == '(' {
 			if len(cmd.words) == 1 && len(cmd.assigns) == 0 && len(cmd.redirs) == 0 && cmd.words[0].plain() {
 				// name() body: a function definition.
+				p.sc.funcNames = append(p.sc.funcNames, cmd.words[0].joined())
 				p.pos++
 				p.blanks()
 				if !strings.HasPrefix(p.src[p.pos:], ")") {
@@ -1091,9 +1105,12 @@ func (p *parser) simple() {
 		if isBraceName(w.raw) && p.pos < len(p.src) && (p.src[p.pos] == '<' || p.src[p.pos] == '>') {
 			// {name}>file: bash opens the file on a descriptor of its
 			// choosing and puts the number in the variable. The word is not
-			// an argument, and a variable is set (PATH, say).
+			// an argument, and a variable is set (PATH, say). To a plain
+			// sh it is an argument like any, with a redirection after it:
+			// "mv . {fd}>log" moves the directory to a place named {fd}.
 			p.sc.setsVar = true
 			p.sc.loose = append(p.sc.loose, w)
+			shWords, named = append(shWords, w), true
 			continue
 		}
 		if len(cmd.words) == 0 {
@@ -1126,6 +1143,7 @@ func (p *parser) simple() {
 			}
 		}
 		cmd.words = append(cmd.words, w)
+		shWords = append(shWords, w)
 	}
 	if p.failed {
 		// Keep what was read: a deny rule still applies to it.
@@ -1138,19 +1156,23 @@ func (p *parser) simple() {
 		p.fail("an operator with no command before it")
 		return
 	}
-	if len(ampAts) > 0 && ampAts[0] < len(cmd.words) {
+	switch {
+	case len(ampAts) > 0 && ampAts[0] < len(shWords):
 		// "a &>file b": to bash, a with the argument b and its output in
 		// file. To a shell with no &> (sh, dash) it is a in the
 		// background, and then the command b; and each further &> ends
 		// a command in the same way ("a &>f b &>g c" is a, b and c).
 		from := 0
-		for _, at := range append(ampAts, len(cmd.words)) {
+		for _, at := range append(ampAts, len(shWords)) {
 			if at > from || from == 0 {
-				cmd.pieces = append(cmd.pieces, cmd.words[from:at:at])
+				cmd.pieces = append(cmd.pieces, shWords[from:at:at])
 			}
 			from = at
 		}
 		cmd.mixed = true
+	case named:
+		// The command as a plain sh has it, the {name} among its words.
+		cmd.pieces = append(cmd.pieces, shWords)
 	}
 	p.sc.cmds = append(p.sc.cmds, cmd)
 }

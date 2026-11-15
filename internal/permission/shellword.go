@@ -54,6 +54,11 @@ type wordPart struct {
 	// all marks ${name[@]} and ${name[*]}: every word of an array at
 	// once, each a word of its own where the shell cuts words.
 	all bool
+	// arg1 and arg2 are what the forms bash adds are given, where they
+	// are plain text: the text to look for and the text to put in its
+	// place (ops / and //), or where a piece starts and how long it is
+	// (op :sub). See exoticForm.
+	arg1, arg2 string
 }
 
 // of returns the texts the part may stand for when its variable holds
@@ -83,6 +88,54 @@ func (p wordPart) of(val, home string) ([]string, bool) {
 			return []string{home + p.alt[1:]}, true
 		}
 		return []string{p.alt}, true
+	case "~":
+		// A form that is not worked out: the value may come through it
+		// as it is (and whatever else it may be, nobody knows).
+		return []string{val}, true
+	case "/", "//":
+		// ${name/text/other}: the first of them, or all, put in other
+		// words; a value without the text stays as it is.
+		n := 1
+		if p.op == "//" {
+			n = -1
+		}
+		return []string{strings.Replace(val, p.arg1, p.arg2, n)}, true
+	case "^^":
+		return []string{strings.ToUpper(val)}, true
+	case ",,":
+		return []string{strings.ToLower(val)}, true
+	case "^", ",":
+		if val == "" {
+			return []string{""}, true
+		}
+		first := strings.ToUpper(val[:1])
+		if p.op == "," {
+			first = strings.ToLower(val[:1])
+		}
+		return []string{first + val[1:]}, true
+	case ":sub":
+		// ${name:from:length}: a piece of the value. A from below zero
+		// counts from the end, and so does a length below zero.
+		from, _ := strconv.Atoi(p.arg1)
+		if from < 0 {
+			from += len(val)
+		}
+		if from < 0 || from > len(val) {
+			return []string{""}, true
+		}
+		end := len(val)
+		if p.arg2 != "" {
+			n, _ := strconv.Atoi(p.arg2)
+			if n < 0 {
+				end += n
+			} else if from+n < end {
+				end = from + n
+			}
+		}
+		if end < from {
+			return []string{""}, true
+		}
+		return []string{val[from:end]}, true
 	case "%", "%%", "#", "##":
 		if len(val) > 64 {
 			return nil, false
@@ -147,6 +200,12 @@ type word struct {
 	brace bool
 	// tilde is set when the word starts with an unquoted ~.
 	tilde bool
+	// bareSubst is set when a command substitution stands in the word
+	// outside quotes. What the command prints is cut into words at its
+	// blanks, so the word may turn into several, with the text beside the
+	// substitution on the first and the last of them: "-u $(echo X rm x)m"
+	// is -u X rm xm.
+	bareSubst bool
 	// eqHead is set when the word starts with an unquoted =, which zsh
 	// replaces by the path of the command named after it.
 	eqHead bool
@@ -154,6 +213,12 @@ type word struct {
 	// ~ opens the value or follows a colon in it: bash expands that tilde
 	// even when the word is an argument (dd if=~/x).
 	eqTilde bool
+	// anyOrder is set for a word that was filled in from every word of
+	// an array (filledArgs). The words of an array are known as a set:
+	// which of them stands last, and how often one stands there, is not
+	// known, so a check that goes by an operand's place takes such a
+	// word for any of the array's.
+	anyOrder bool
 }
 
 // static reports whether the word's value is known without running the
@@ -721,6 +786,9 @@ func (p *parser) backtick(b *wordBuilder, where int) {
 	b.raw.WriteString(inner.String())
 	b.raw.WriteByte('`')
 	b.add(wordPart{kind: partSubst})
+	if where == 0 {
+		b.w.bareSubst = true
+	}
 	p.sc.subst = true
 	p.nested(inner.String(), nestSubst)
 	if alt.String() != inner.String() {
@@ -768,6 +836,9 @@ func (p *parser) dollar(b *wordBuilder, inDouble bool) {
 		}
 		b.raw.WriteString(p.src[from:p.pos])
 		b.add(wordPart{kind: partSubst})
+		if !inDouble {
+			b.w.bareSubst = true
+		}
 		p.sc.subst = true
 	case strings.HasPrefix(rest, "{"):
 		p.braceParam(b, inDouble)
@@ -801,7 +872,9 @@ func (p *parser) dollar(b *wordBuilder, inDouble bool) {
 	case rest != "" && strings.IndexByte("?$!#*@-0123456789", rest[0]) >= 0:
 		p.pos += 2
 		b.raw.WriteString(p.src[from:p.pos])
-		b.add(wordPart{kind: partVar, name: rest[:1]})
+		// ($@ and $* are every word the script or the function was
+		// handed, like every word of an array.)
+		b.add(wordPart{kind: partVar, name: rest[:1], all: rest[0] == '@' || rest[0] == '*'})
 	default:
 		b.raw.WriteByte('$')
 		b.lit.WriteByte('$')
@@ -933,6 +1006,17 @@ func (p *parser) exoticParam(b *wordBuilder) {
 	part := wordPart{kind: partVar}
 	if name, all, ok := elemName(p.src[p.pos+2 : end-1]); ok {
 		part.name, part.all = name, all
+	} else if name, op, a, b, ok := exoticForm(p.src[p.pos+2 : end-1]); ok {
+		part.name, part.op, part.arg1, part.arg2 = name, op, a, b
+	} else if body := p.src[p.pos+2 : end-1]; body != "" && isNameStart(body[0]) {
+		// Some other form of a variable (${name,pattern}, ${name@U},
+		// ${name/#a/b}): what it makes of a value is not worked out,
+		// and the value as it is stays one thing it may be.
+		n := 1
+		for n < len(body) && isNameChar(body[n]) {
+			n++
+		}
+		part.name, part.op = body[:n], "~"
 	}
 	p.pos = end
 	b.add(part)
@@ -942,11 +1026,65 @@ func (p *parser) exoticParam(b *wordBuilder) {
 	}
 }
 
+// exoticForm reads the body of one of the ${...} forms bash adds to the
+// POSIX ones, where what the form makes of a value can be worked out
+// from the text alone: ${name/text/other} and ${name//text/other} with
+// plain text to look for, ${name:from:length} with numbers, the changes
+// of case (^^ ,, ^ ,), and ${!name}, which stands for the variable that
+// name's value names (op "!"). A value the line knows is then followed
+// through the form: "rm -rf ${HOME/x/y}" is the home directory, whose
+// name holds no x, and "${HOME:0:1}" is the root.
+func exoticForm(body string) (name, op, a, b string, ok bool) {
+	if strings.ContainsAny(body, "$`'\"\\") {
+		return "", "", "", "", false
+	}
+	if strings.HasPrefix(body, "!") && isVarName(body[1:]) {
+		return body[1:], "!", "", "", true
+	}
+	n := 0
+	for n < len(body) && isNameChar(body[n]) {
+		n++
+	}
+	if n == 0 || !isNameStart(body[0]) {
+		return "", "", "", "", false
+	}
+	name, rest := body[:n], body[n:]
+	switch {
+	case rest == "^^" || rest == ",," || rest == "^" || rest == ",":
+		return name, rest, "", "", true
+	case strings.HasPrefix(rest, "/"):
+		op, rest = "/", rest[1:]
+		if strings.HasPrefix(rest, "/") {
+			op, rest = "//", rest[1:]
+		}
+		a, b, _ = strings.Cut(rest, "/")
+		// (A # or a % at its head ties the text to one end of the value,
+		// and * ? [ make a pattern of it: those are not worked out.)
+		if a == "" || strings.ContainsAny(a, "*?[") || a[0] == '#' || a[0] == '%' {
+			return "", "", "", "", false
+		}
+		return name, op, a, b, true
+	case strings.HasPrefix(rest, ":"):
+		from, length, has := strings.Cut(rest[1:], ":")
+		from, length = strings.TrimSpace(from), strings.TrimSpace(length)
+		if !isInt(from) || has && !isInt(length) {
+			return "", "", "", "", false
+		}
+		return name, ":sub", from, length, true
+	}
+	return "", "", "", "", false
+}
+
 // elemName returns the variable in the body of a ${name[subscript]}
 // whose subscript is a number, @ or *. all says it is one of the last
 // two: the form stands for every word of the array.
 func elemName(body string) (name string, all, ok bool) {
 	i := strings.IndexByte(body, '[')
+	// ${name[@]:1} and ${name[*]:1:2} are some of the array's words: read
+	// as all of them, which is never fewer.
+	if j := strings.Index(body, "]:"); j > i && i > 0 && (body[i+1:j] == "@" || body[i+1:j] == "*") && strings.Trim(body[j+2:], "0123456789: -") == "" {
+		body = body[:j+1]
+	}
 	if i <= 0 || !strings.HasSuffix(body, "]") || !isNameStart(body[0]) {
 		return "", false, false
 	}

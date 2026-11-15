@@ -153,17 +153,20 @@
 //     seen (a no-break space, a zero-width space, a mark that turns the
 //     direction of the text), and bytes that are not text.
 //
-// Three forms are read twice, because sh has none of them: [[ a || b ]]
+// Four forms are read twice, because sh has none of them: [[ a || b ]]
 // is also the commands "[[ a" and "b ]]", with any < and > in it as
 // redirections (a number right before one is its descriptor, and the ]]
 // right after one is its file); (( x )) is also the command x in two
 // subshells, with any * ? or [ in it a file name pattern (a variable at
 // its head that the line did not set is passed over as too common to
 // ask about, and the word after it is then the program: to that shell
-// "(( $n rm y ))" runs rm y where n holds nothing); and "a &>f b"
-// is also a in the background and then the command b. Deny and ask
-// rules see both readings. An allow rule or the read-only list lets
-// such a line run only when the second reading runs nothing more
+// "(( $n rm y ))" runs rm y where n holds nothing); "a &>f b" is also a
+// in the background and then the command b; and "mv . {fd}>log" is also
+// mv with one more argument, {fd}: the {name} that bash takes before a
+// redirection for the variable of a descriptor is a word like any to a
+// plain sh. Deny and ask rules, and the checks for what destroys a
+// directory, see both readings. An allow rule or the read-only list
+// lets such a line run only when the second reading runs nothing more
 // ([[ -f a && -d b ]], ls &>/dev/null).
 //
 // Deny and ask rules apply when any command in the line matches: one of
@@ -173,8 +176,17 @@
 // bash +c x, sh -c - x, bash -c -eo pipefail x), eval, trap, a
 // here-document or a pipe into a shell (also the shell behind a wrapper,
 // or inside a group), to source /dev/stdin, to an alias, to mapfile -C or
-// compgen -C, the string env -S splits into arguments of its own, the
-// program hash -p or BASH_CMDS names, a command in a variable that some
+// compgen -C (with the words the builtin puts after the command it
+// calls: the index and the line, the word being completed), the words
+// that follow an alias where the line uses it ("alias g=git" and then
+// "g push origin" is git push origin to dash, and to bash where it was
+// told to expand aliases; an alias that stands for nothing leaves the
+// next word as the program), every word of an array where the
+// program's name goes (a=(git push origin); "${a[@]}"),
+// the string env -S splits into arguments of its own, the
+// program hash -p or BASH_CMDS names (with the words that follow the
+// name where the line uses it: "hash -p /bin/rm ls; ls -rf x" is rm -rf
+// x), a command in a variable that some
 // program runs (PAGER, GIT_EXTERNAL_DIFF), and a $(...) inside quoted
 // text, which the shell may yet evaluate: x='a[$(cmd)]'; echo $((x)),
 // and the word after >&, which bash expands twice (ls >&'$(cmd)').
@@ -189,7 +201,13 @@
 // rm -rf x; and a value is cut into words at whatever else the line
 // puts in IFS (IFS=_; x=rm_-rf_y; $x). What follows a wrapper's own
 // word that is only known when the line runs is read as the command it
-// may be (sudo $FLAGS rm x). The
+// may be (sudo $FLAGS rm x), and what a command prints where a wrapper
+// takes the value of a flag may be that value and the command after it
+// (nice -n $(echo 5 rm x), and with text beside what is printed, env -u
+// $(echo X rm x)m): such a line asks where a rule could apply. env takes
+// any word with an = in it for a variable of its own, before "--" and
+// after it, where a shell would look for a program of that name: "env --
+// 0=1 rm x" runs rm x, and the command after such words is read. The
 // arguments of a program whose name is not known ahead of time are read
 // as the command or script they would be if it were a wrapper or a
 // shell, what is written onto a flag or after a name= among them
@@ -228,7 +246,18 @@
 // (cat {.env,x}), a variable the line set is what it was set to, and a
 // name with any other variable in it is also read with the variable
 // not set, which is what a variable nobody set is: empty, or the text it
-// is given to stand for then (cat .e${x}nv, cat ${X:-.env}).
+// is given to stand for then (cat .e${x}nv, cat ${X:-.env}; a flag is
+// read that way too, and git's subcommand: rm -r$x is rm -r, git
+// clean$x is git clean); where one
+// of the line's own variables stands beside it, that one is written out
+// ("d=.env; cat $X$d" reads .env). A file written onto a flag in such a
+// word (awk -f${X:-.env}, sort -o$X.env, tool --config=${X:-.env}) is
+// the file the flag names with nothing set. A name that starts with a
+// dash, among what a pattern matches or what the line gave a variable,
+// is a flag to the command it is handed to, and the words beside it are
+// then other things than they seem: with a file named -R in the
+// directory, "for f in *; do cp a.txt b.txt $f; done" copies a.txt over
+// b.txt.
 //
 // What the line gives its variables is followed along the roads a line
 // plainly takes: an assignment, or several (each value counts); an
@@ -248,11 +277,22 @@
 // form is read for what it stands for, and not for the variable alone:
 // ${v:-word} and ${v:+word} are also the word (${HOME:+rm} is rm, for
 // HOME is always set), and ${v%pattern} and ${v#pattern} are any piece
-// the pattern may leave of a value that is known. Values the
+// the pattern may leave of a value that is known. Of the forms bash
+// adds, those whose outcome the text alone gives are worked out for a
+// known value: ${v/text/other} and ${v//text/other} with plain text to
+// look for, ${v:from:length} with numbers, the changes of case, and
+// ${!v}, the variable that v's value names (${HOME/x/y} is the home
+// directory, whose name holds no x). A variable that is made a name
+// for another (declare -n r=d, typeset -n, local -n) shares every value
+// with it, and neither is then known for sure: an assignment to r is
+// one to d, and $r is what d holds. Values the
 // line only gets by running something are not followed: $(...), read,
-// printf -v, mapfile, the arguments of a function or of set --, a file
-// that is sourced. A file named through one of those is the file nobody
-// can name ahead of time of the paragraph above. What the line does
+// printf -v, mapfile, a file that is sourced. A file named through one
+// of those is the file nobody can name ahead of time of the paragraph
+// above. The words a function of the line's own, a "set --" or a script
+// after sh -c is handed are followed: $1, $2 and "$@" stand for any of
+// them inside it, whichever its number ("f() { rm -rf "$1"; }; f ~"
+// removes the home directory). What the line does
 // spell out, in more values than gnosh follows (256 for one word) or
 // with more changes of directory (32), is not let go: such a line asks
 // in every mode where a rule about files is in force, and a recursive
@@ -424,9 +464,12 @@
 // one of those, or that
 // could become one of those if a variable were empty, not set, or set
 // (rm -rf "$DIR"/*, rm -rf ~/$DIR, rm -rf $DIR/.., rm -rf ${DIR:-/},
-// rm -rf ${DIR:+/}, rm -rf ${X:-$HOME}), or that is some piece cut from
+// rm -rf ${DIR:+/}, rm -rf ${X:-$HOME}, and by its whole path rm -rf
+// $PREFIX/home/u; not "$DIR/build", a lone name under the root that is
+// none of the usual ones), or that is some piece cut from
 // one (rm -rf ${HOME%/*}), or the directory the line was in before a cd
-// (~-, $OLDPWD), or a pattern that may take one of them in or sweeps up
+// (~-, $OLDPWD), or one of the line's own variables beside one nobody
+// set ("d=~; rm -rf $PREFIX$d"), or a pattern that may take one of them in or sweeps up
 // what is in one (rm -rf /e*, rm -rf /home/u*, rm -rf ../p*, rm -rf
 // /*/*, rm -rf */*; not rm -f */*.o, which names its own files),
 // or whose program's name has something unknown inside it that may be
@@ -435,9 +478,16 @@
 // set, and the loop then asks with a time limit). "${DIR:?}" is the way
 // to write such a command so that it does not. A target that is only
 // what a command prints (rm -r "$(pwd)", rmdir "$(...)", the names xargs
-// hands to rm -r) is the same doubt. A find that removes all
+// hands to rm -r) is the same doubt. What xargs adds to a command is as
+// many words as it read: for mv the ones that are moved and the place
+// they go to (echo .git /tmp/g | xargs mv), for chmod -R the mode and
+// what is changed; and the same holds for the words that follow an
+// alias where it is used, and for those a builtin puts after the
+// command it calls (mapfile -C 'rm -rf'). A find that removes all
 // it finds (find . -delete, find . -exec rm -rf {} +) is the same
-// removal by another name; one with a test in front (-name, -type) is
+// removal by another name, and so is one that hands all it finds to
+// shred, truncate, mv, chmod, chown or chgrp; one with a test in front
+// (-name, -type) is
 // not, because what it finds is not known. A variable the line itself
 // set is read as what it was set to (d=.; rm -rf $d). Where the engine
 // is given a way to see what is in a directory (Options.Glob), targets
@@ -449,25 +499,57 @@
 // asked about in the same way, with the same reading of their targets:
 // mv of one (mv ~ /tmp/x, mv .git old, mv * elsewhere in the project;
 // and mv -T onto one), chmod -R, chown -R and chgrp -R over one, git
-// clean with -f and -x or -X in one or handed one (not a dry run, and
-// not a clean that leaves ignored files alone), dd of=, truncate and
+// clean with -x or -X in one, sent to one with -C or handed one (not a
+// dry run, and not a clean that leaves ignored files alone; with or
+// without -f, which a setting can make git not want), dd of=, truncate and
 // shred onto one or onto a whole disk under /dev, rsync --delete into
-// one and rsync --remove-source-files out of one, and a find that shreds
-// all it finds. Their ordinary uses are not asked about: mv into a
+// one and rsync --remove-source-files out of one. An option is read in
+// the shorter spellings GNU's tools take as well (chmod --rec, mv
+// --t=dir). The words of an array are known as a set, so where they
+// are such a command's operands any of them may be the one that is
+// moved, or the place rsync empties (a=(/tmp/g .git /tmp/g); mv
+// "${a[@]}" moves .git). A pattern or a list in braces that is all such
+// a command is handed stands for its every operand: "mv .*" moves ".",
+// ".." and each name that starts with a dot into the last of them (in
+// dash, and in bash before 5.2), and "mv {.git,/tmp/g}" is mv .git
+// /tmp/g. Their ordinary uses are not asked about: mv into a
 // directory, chmod without -R, git clean -fd, rsync without --delete or
 // into some other place.
+//
+// A line the reader could not follow is judged by its crude pieces: one
+// that names rm is a removal nobody can rule out, and one that names
+// another of these commands is judged by what the piece says the command
+// is handed ("coproc mv .git /tmp/g"). A program named by a word that
+// the line gives more than sixteen values asks in the same way: an rm
+// among them is not ruled out.
 //
 // One thing is let go on purpose, so that a session nobody watches can
 // clean up after itself: a target that is only a variable gnosh knows
 // nothing about (rm -rf "$tmp", mv "$f" "$f.bak") is not asked about,
 // whatever the command. What the line itself gives the variable is
 // followed (see above), and a variable with a slash or a pattern after
-// it is the doubt of the first paragraph.
+// it is the doubt of the first paragraph. Two more things the check does
+// not see, because it looks at what the line says and catches the usual
+// accidents: a flag or a subcommand that only running the line produces
+// (echo -rf . | xargs rm, git $(echo clean -fdx), chmod $(echo -R) 000
+// .), and words that a command's output brings along beyond the one it
+// stands for, where it stands without quotes in a place the command
+// takes something other than a target (the owner in "chown -R $(whoami)
+// build", the place in "mv a.txt $(mktemp -d)"). TestWhatTheRemovalCheckLetsGo
+// is the record of all of these.
 //
 // In acceptEdits the file commands that run are mkdir, touch, rm, rmdir,
 // mv, cp and sed -i with their everyday flags. cp -r is not one of them:
 // on macOS it follows the links in the directory it copies, which brings
-// whatever they lead to into the project; cp -R and cp -a do not.
+// whatever they lead to into the project; cp -R and cp -a do not. Handed
+// a directory, cp writes each source under its own name inside it, and
+// through a link of that name where one is already there: with da/s a
+// link that leads out of the project, "cp db/s da" changes the file out
+// there. So every name a copy may get is held to the working directories
+// like a file named outright, and a cp -R or -a into a place that already
+// holds files under the copy's name asks, because it would go on in the
+// same way through every one of them. (mv puts its source in the link's
+// place and writes through nothing.)
 //
 // # How this was attacked
 //
@@ -515,10 +597,13 @@
 // read-only table's own flags with files in and out of the project and
 // the flags before and after them, from random soup, and from a list
 // written by hand (attackLines). Every disagreement is shrunk to its
-// shortest form. The ones found are in attack_test.go, which needs no
-// shell. A run of the size given with -oracle.lines is started by hand;
-// the runs that were made, and what each found, are recorded in
-// oracle_linux_test.go.
+// shortest form. The ones found are in attack_test.go and danger_test.go,
+// which need no shell. A run of the size given with -oracle.lines is
+// started by hand; the runs that were made, and what each found, are
+// recorded in oracle_linux_test.go. The report at the end of a run shows
+// one line for each kind of finding, and several holes can stand behind
+// one kind: GNOSH_ORACLE_FINDINGS names a file that is given every
+// finding as it is found, and TestOracleProbe judges single lines by hand.
 //
 // What the oracle cannot see: programs it does not run for real (a stub
 // curl fetches nothing, a stub make runs no Makefile), so what a program

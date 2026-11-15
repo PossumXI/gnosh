@@ -713,7 +713,14 @@ func parseTrace(text string, glue bool) []traceCmd {
 				for k := i - 1; k >= 0 && ln[k] == '+'; k-- {
 					level++
 				}
-				recs = append(recs, rec{level, ln[i+1+len(traceMark):]})
+				// (Not where the mark is PS4's own value, printed: a bare
+				// "set" lists every variable, PS4='+@T@ ' among them, and
+				// "seq "$(set)"" is traced with that list as its argument.
+				// What follows the mark there is the quote that closes the
+				// value.)
+				if rest := ln[i+1+len(traceMark):]; rest == "" || !strings.ContainsRune("'\"\\", rune(rest[0])) {
+					recs = append(recs, rec{level, rest})
+				}
 			}
 			continue
 		}
