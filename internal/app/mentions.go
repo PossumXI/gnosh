@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -61,6 +62,12 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 		if raw == "" || seen[raw] || len(seen) >= maxMentions {
 			continue
 		}
+		if name, ok := strings.CutPrefix(raw, "agent-"); ok && l.agentKindOffered(name) {
+			// A kind of sub-agent, named: the task goes to it.
+			seen[raw] = true
+			parts = append(parts, agent.Part{Source: mentionSource("agent", name), Text: l.texts.AgentMention(name)})
+			continue
+		}
 		path := raw
 		switch {
 		case path == "~" || strings.HasPrefix(path, "~/"):
@@ -110,6 +117,27 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 // of it (file, dir, denied, failed), ":" and the path as written, so that
 // a front end can say under the prompt what each mention brought.
 func mentionSource(kind, path string) string { return "mention:" + kind + ":" + path }
+
+// agentKindOffered says the session has the Agent tool and a kind of
+// sub-agent by that name.
+func (l *live) agentKindOffered(name string) bool {
+	if !slices.Contains(l.toolNames(), agentToolName) {
+		return false
+	}
+	_, ok := l.agentDefs().Get(name)
+	return ok
+}
+
+// AgentKinds names the kinds of sub-agent a prompt may name with
+// @agent-, for a front end to offer: none when the session has no Agent
+// tool.
+func (c *controls) AgentKinds() []string {
+	l := c.cur()
+	if !slices.Contains(l.toolNames(), agentToolName) {
+		return nil
+	}
+	return l.agentDefs().Names()
+}
 
 // readTool is the session's Read tool, or nil when it has none.
 func (l *live) readTool() core.Tool {

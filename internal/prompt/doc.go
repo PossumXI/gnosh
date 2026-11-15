@@ -252,6 +252,8 @@
 //     words from the conversation, call no tool, start on nothing.
 //   - recap (Recap) is the question of /recap, asked the same way: the
 //     session in one line, for the person.
+//   - agent-mention (AgentMention) stands after a typed prompt for each
+//     kind of sub-agent it names with @agent-: hand the task to it.
 //   - mention (Mention) stands after a typed prompt for each path it
 //     mentions with @: what Read returns for a file follows it, or a
 //     directory's listing, or it says a deny rule kept the path out or

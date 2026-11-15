@@ -44,11 +44,33 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 	word := before[start:]
 	switch {
 	case strings.HasPrefix(word, "@"):
-		return s.completeFile(word[1:], start, "@")
+		return append(s.completeFile(word[1:], start, "@"), s.completeAgent(word[1:], start)...)
 	case strings.ContainsRune(word, '/') || strings.HasPrefix(word, "~"):
 		return s.completeFile(word, start, "")
 	}
 	return nil
+}
+
+// agentLister is what a session's controls may also be: able to name the
+// kinds of sub-agent a prompt may ask for with @agent-.
+type agentLister interface {
+	AgentKinds() []string
+}
+
+// completeAgent offers "@agent-" and a kind of sub-agent, for what was
+// typed after an @ that "agent-" and the kind's name begin with.
+func (s *session) completeAgent(typed string, start int) []editor.Candidate {
+	al, ok := s.c.(agentLister)
+	if !ok || typed == "" || !strings.HasPrefix("agent-", typed) && !strings.HasPrefix(typed, "agent-") {
+		return nil
+	}
+	var out []editor.Candidate
+	for _, name := range al.AgentKinds() {
+		if text := "@agent-" + name; strings.HasPrefix(text, "@"+typed) {
+			out = append(out, editor.Candidate{Text: text + " ", Start: start, Label: text, Detail: "a kind of sub-agent"})
+		}
+	}
+	return out
 }
 
 // completeCommand offers the session's commands whose names begin with

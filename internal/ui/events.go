@@ -266,7 +266,7 @@ func (s *session) prompt(ev *agent.PromptEvent) {
 // the Source of their parts ("mention:file:notes.txt"): "@notes.txt read ·
 // @docs listed · @.env denied".
 func mentionsSaid(parts []agent.Part) string {
-	words := map[string]string{"file": "read", "dir": "listed", "denied": "denied by a rule", "failed": "could not be read"}
+	words := map[string]string{"file": "read", "dir": "listed", "denied": "denied by a rule", "failed": "could not be read", "agent": "asked for"}
 	var out []string
 	for _, p := range parts {
 		rest, ok := strings.CutPrefix(p.Source, "mention:")
@@ -274,6 +274,9 @@ func mentionsSaid(parts []agent.Part) string {
 			continue
 		}
 		kind, path, ok := strings.Cut(rest, ":")
+		if kind == "agent" {
+			path = "agent-" + path
+		}
 		if w := words[kind]; ok && w != "" {
 			out = append(out, "@"+oneLine(path)+" "+w)
 		}

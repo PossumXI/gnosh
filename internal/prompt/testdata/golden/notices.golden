@@ -33,6 +33,9 @@ Half of it is read.</gnosh>
 === the question of /recap ===
 <gnosh>In one line, say what this session has done so far and where it stands now. Call no tool, and start on nothing: the line is for the user, and it is not kept in the conversation.</gnosh>
 
+=== a kind of sub-agent named with @agent- ===
+<gnosh>The user asks for the sub-agent kind reviewer in the prompt above: hand the task, or the part of it they mean, to that kind with the Agent tool (subagent_type reviewer).</gnosh>
+
 === a file mentioned with @ ===
 <gnosh>The user mentioned the file src/main.go in the prompt above. What Read returns for it follows, and it counts as read.</gnosh>
 

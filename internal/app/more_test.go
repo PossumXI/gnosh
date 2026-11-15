@@ -330,3 +330,13 @@ func TestMentions(t *testing.T) {
 		t.Errorf("the Edit right after the mention did not work: %q; it read %s", data, toolResult(t, w, 1, "c1"))
 	}
 }
+
+// @agent-<name> asks for that kind of sub-agent: the model is told to
+// hand the task to it. A name that is no kind is left alone.
+func TestAgentMention(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "On it."})
+	run(t, w, "-p", "review the change, @agent-reviewer, and ask @agent-nobody", "--agents", `{"reviewer": {"description": "Reviews a change.", "prompt": "You review."}}`).wantCode(t, 0)
+	body := string(w.Model.Requests()[0].Body)
+	has(t, "the request", body, "The user asks for the sub-agent kind reviewer", "subagent_type reviewer")
+	hasNot(t, "the request", body, "sub-agent kind nobody")
+}

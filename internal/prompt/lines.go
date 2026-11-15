@@ -544,6 +544,12 @@ func (s *Set) Mention(kind MentionKind, path, why string) string {
 	return s.fill(textMention, vals)
 }
 
+// AgentMention returns the line for a kind of sub-agent a person named in
+// a prompt with @agent-: hand the task to that kind.
+func (s *Set) AgentMention(name string) string {
+	return s.fill(textAgentMention, values{"name": oneLine(name, maxName)})
+}
+
 // Recap returns the question of /recap: the session in one line, for the
 // person, in a request beside the session's that is not kept.
 func (s *Set) Recap() string {

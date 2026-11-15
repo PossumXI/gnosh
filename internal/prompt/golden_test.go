@@ -217,7 +217,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw, textRecap, textMention},
+			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw, textRecap, textMention, textAgentMention},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -231,6 +231,7 @@ func goldenFiles() []goldenFile {
 					{"one was stopped", s.AgentEnded(AgentEnd{ID: "9c4d", Description: "search the logs", State: AgentStopped})},
 					{"before a side question (/btw)", s.Btw()},
 					{"the question of /recap", s.Recap()},
+					{"a kind of sub-agent named with @agent-", s.AgentMention("reviewer")},
 					{"a file mentioned with @", s.Mention(MentionFile, "src/main.go", "")},
 					{"a directory mentioned with @", s.Mention(MentionDir, "src/", "")},
 					{"a path a deny rule keeps out", s.Mention(MentionDenied, ".env", "")},

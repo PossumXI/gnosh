@@ -67,6 +67,7 @@ const (
 	textBtw              = "btw"
 	textRecap            = "recap"
 	textMention          = "mention"
+	textAgentMention     = "agent-mention"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
 	textSummary          = "summary"
@@ -177,6 +178,8 @@ func specs() []spec {
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,
 			when: "As the question of /recap, in a request beside the session's that is not kept."},
+		{name: textAgentMention, kind: KindLine, need: []string{"name"},
+			when: "After a prompt a person typed, for each kind of sub-agent it names with @agent-: use that kind."},
 		{name: textMention, kind: KindLine, need: []string{"path"}, may: []string{"file", "dir", "denied", "failed", "why"},
 			when: "After a prompt a person typed, for each file or directory it mentions with @: what Read returns follows it, or a listing."},
 		{name: textSummary, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
