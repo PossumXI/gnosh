@@ -384,5 +384,6 @@ or kept with the reason said (27).
     how long, stop it with TaskStop or end the turn to wait on.
     `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` still sets a hard ceiling for
     whoever wants one (`0`: no ceiling and no checkpoint). A run fed
-    stream-json is not yet kept open this way. Sub-agents in a run still
-    wait in the foreground (item 31).
+    stream-json waits the same way once its input is over, and in
+    stream-json output each turn's result line is written as the turn
+    ends. Sub-agents in a run still wait in the foreground (item 31).

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +87,39 @@ func TestRunWaitsForItsBackgroundWork(t *testing.T) {
 	r = run(t, w, "-y", "-p", "--output-format", "json", "start it again").wantCode(t, 0)
 	has(t, "the JSON result", r.out, `"result":"Done again."`)
 	hasNot(t, "the JSON result", r.out, "Started again.")
+}
+
+// In stream-json output each turn's result line is written as the turn
+// ends, the one the end of background work started too, and a run fed
+// stream-json waits for that work as well once its input is over.
+func TestRunWaitsInStreamJSON(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 1; echo one","run_in_background":true}`}}},
+		apptest.Reply{Text: "Started."},
+		apptest.Reply{Text: "It said one."})
+	r := run(t, w, "-y", "-p", "--output-format", "stream-json", "--verbose", "start it").wantCode(t, 0)
+	results := 0
+	for _, line := range strings.Split(r.out, "\n") {
+		if strings.Contains(line, `"type":"result"`) {
+			results++
+		}
+	}
+	if results != 2 || !strings.Contains(r.out, `"result":"Started."`) || !strings.Contains(r.out, `"result":"It said one."`) {
+		t.Errorf("%d result lines:\n%s", results, r.out)
+	}
+	w.Model.Done()
+
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"sleep 1; echo two","run_in_background":true}`}}},
+		apptest.Reply{Text: "Started two."},
+		apptest.Reply{Text: "It said two."})
+	o := testOptions(w, "-y", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"start two"}}` + "\n")
+	r = runWith(t, context.Background(), o).wantCode(t, 0)
+	if !strings.Contains(r.out, `"result":"Started two."`) || !strings.Contains(r.out, `"result":"It said two."`) {
+		t.Errorf("a run fed stream-json:\n%s", r.out)
+	}
+	w.Model.Done()
 }
 
 // A ceiling set with CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS stops what is

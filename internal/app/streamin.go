@@ -157,8 +157,21 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 
 	for {
 		if in == nil && len(pending) == 0 && len(backlog) == 0 {
+			// Input is over and every message answered: the run waits for
+			// the background work its turns started (printwait.go).
 			if ended {
-				code = c.RunEnd(last, code)
+				res, sig, st := f.awaitBackground(ctx, c, last, true)
+				if sig != nil {
+					return f.stoppedBySignal(c, "", sig, st)
+				}
+				if res.Turn != last.Turn {
+					if res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped {
+						code = cli.ExitOK
+					} else {
+						code = cli.ExitFailure
+					}
+				}
+				code = c.RunEnd(res, code)
 			}
 			return code
 		}
@@ -191,6 +204,12 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 					}
 					delete(pending, id)
 				}
+			}
+			if !found && res.Turn != "" {
+				// A turn no message started: the end of background work
+				// woke the model. Its result line is written too.
+				f.emitResult(c, res)
+				last, ended = res, true
 			}
 			if found {
 				f.mu.Lock()

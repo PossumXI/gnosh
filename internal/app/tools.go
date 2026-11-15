@@ -80,12 +80,10 @@ func (l *live) buildTools() error {
 		Local:     l.p.whoAndWhere(),
 		ToolNames: l.p.toolNames(),
 	}
-	if l.interactive || l.inv.Command == cli.CmdPrint && l.inv.InputFormat != cli.FormatStreamJSON {
+	if l.interactive || l.inv.Command == cli.CmdPrint {
 		// A session somebody attends is told when a background command
 		// ends, and so is a run, which waits for the background work its
-		// turns started (printwait.go). A run fed stream-json is not yet:
-		// the tool's words to the model must not promise what does not
-		// come.
+		// turns started (printwait.go).
 		so.OnEnd = l.backgroundEnded
 		// The refusal of a foreground command that begins with a long
 		// sleep (shelltool.Options.LongSleep, for sessions like this one,

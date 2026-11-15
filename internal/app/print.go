@@ -79,6 +79,10 @@ type printer struct {
 	structuredErr string
 
 	capped bool
+	// resultsOut says each turn's result line was written as its turn
+	// ended (stream-json output with background work, printwait.go): the
+	// last is not written again.
+	resultsOut bool
 	// rounds counts the run's own replies as they are reported, for a
 	// result that has to be written before the turn has said how it
 	// ended.
@@ -160,7 +164,7 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	}
 	// The background work the turn started is waited for, and the turns
 	// its ends start are the run's too (printwait.go).
-	if res, sig, st = f.awaitBackground(ctx, c, res); sig != nil {
+	if res, sig, st = f.awaitBackground(ctx, c, res, false); sig != nil {
 		return f.stoppedBySignal(c, "", sig, st)
 	}
 	if ctx.Err() != nil {
@@ -1094,7 +1098,9 @@ func (f *printer) report(c Controls, res agent.TurnResult) int {
 		f.encode(obj)
 	case f.format == cli.FormatStreamJSON:
 		f.init()
-		f.encode(obj)
+		if !f.resultsOut {
+			f.encode(obj)
+		}
 	case f.inv.JSONSchema != "":
 		// The text format prints the structured output alone.
 		if f.structured != nil {

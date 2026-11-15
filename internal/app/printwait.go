@@ -45,14 +45,24 @@ const (
 )
 
 // awaitBackground keeps the run open for the background work its turns
-// started, and returns the last turn's result.
-func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.TurnResult) (agent.TurnResult, os.Signal, agent.State) {
+// started, and returns the last turn's result. In stream-json output each
+// turn's result line is written as the turn ends; written says the line
+// of res, the turn the wait begins after, already was.
+func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.TurnResult, written bool) (agent.TurnResult, os.Signal, agent.State) {
 	b, ok := c.(backgrounder)
 	if !ok {
 		return res, nil, agent.State{}
 	}
 	if _, ever := b.BackgroundWork(); !ever {
 		return res, nil, agent.State{}
+	}
+	if f.format == cli.FormatStreamJSON {
+		f.mu.Lock()
+		f.resultsOut = true
+		f.mu.Unlock()
+		if !written {
+			f.emitResult(c, res)
+		}
 	}
 	ceiling, checkpoints := f.waitCeiling()
 	signals := c.Signals()
@@ -63,8 +73,12 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 		select {
 		case r := <-f.results:
 			// A turn that background work started has ended: its reply
-			// stands apart from the next one's.
+			// stands apart from the next one's, and its result line is
+			// written.
 			f.closeReply()
+			if f.format == cli.FormatStreamJSON {
+				f.emitResult(c, r)
+			}
 			res, idleSince, quietSince = r, time.Now(), time.Time{}
 			continue
 		case s := <-signals:
@@ -110,6 +124,16 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			idleSince = time.Now()
 		}
 	}
+}
+
+// emitResult writes the result line of a turn that has ended (stream-json
+// output).
+func (f *printer) emitResult(c Controls, res agent.TurnResult) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.init()
+	f.encode(f.result(c, res))
+	f.rounds = 0
 }
 
 // waitCeiling reads CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: a ceiling on
