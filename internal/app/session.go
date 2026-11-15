@@ -671,13 +671,13 @@ func (l *live) statusFacts() map[string]string {
 // noteBackground keeps the count of commands that run in the background
 // among the facts for a status line.
 func (l *live) noteBackground() {
-	if l.shell == nil {
-		return
-	}
-	running := 0
-	for _, t := range l.shell.Tasks() {
-		if t.Running {
-			running++
+	// The commands and the sub-agents that run in the background.
+	running := len(l.backgroundAgents())
+	if l.shell != nil {
+		for _, t := range l.shell.Tasks() {
+			if t.Running {
+				running++
+			}
 		}
 	}
 	value := ""

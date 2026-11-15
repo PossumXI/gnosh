@@ -502,6 +502,8 @@ func TestBackgroundSubAgent(t *testing.T) {
 	s.typeLine("find the port")
 	s.see("It looks for the port in the background.")
 	s.see("-- done in ")
+	// The status line counts it among what runs in the background.
+	s.see("1 in the background")
 	// (The sub-agent's requests and the session's come in either order.)
 	has(t, "what the Agent call returned", toolMessageWith(w, "working in the background"), "The sub-agent is working in the background on: find the port", "TaskStop with its id stops it")
 

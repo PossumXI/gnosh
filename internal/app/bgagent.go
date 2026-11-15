@@ -70,6 +70,7 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 	l.bgMu.Lock()
 	l.bgAgents = append(l.bgAgents, b)
 	l.bgMu.Unlock()
+	l.noteBackground()
 	l.bgWG.Add(1)
 	go func() {
 		defer l.bgWG.Done()
@@ -91,6 +92,7 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 			}
 		}
 		l.bgMu.Unlock()
+		l.noteBackground()
 		l.backgroundAgentEnded(b, rep, err)
 	}()
 	l.flog.logf("turn", "sub-agent %s (%s) started in the background: %s", shortID(s.id), s.def.Name, b.desc)
