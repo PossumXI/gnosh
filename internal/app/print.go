@@ -503,16 +503,25 @@ func (f *printer) text(s string) {
 	f.wroteAny, f.endsLine = true, strings.HasSuffix(s, "\n")
 }
 
-// dropEchoedLine takes a reply's last line off when it is one line in
-// gnosh's own marker after the answer: a model now and then repeats the
-// line gnosh puts after the person's prompt ("ready", and then the mem
-// line), and a run's result is read by scripts. A reply that is nothing
-// but such a line, or whose marked part runs over several lines, is left
-// as it is.
+// dropEchoedLine takes off the end of a reply what a model repeated of
+// gnosh's own lines after its answer: a last line, or a last block that
+// closes, in gnosh's marker ("ready", and then the mem line), or the
+// marker's closing tag stuck to the answer ("ready</gnosh>"). A run's
+// result is read by scripts. A reply that is nothing but such text is left
+// as it is, and so is a marked block that does not run to the end.
 func dropEchoedLine(text string) string {
 	t := strings.TrimRight(text, " \t\r\n")
+	if strings.HasSuffix(t, prompt.Close) && !strings.Contains(t, prompt.Open) {
+		if head := strings.TrimRight(strings.TrimSuffix(t, prompt.Close), " \t\r\n"); head != "" {
+			return head
+		}
+		return text
+	}
 	i := strings.LastIndex(t, "\n"+prompt.Open)
-	if i < 0 || strings.Contains(t[i+1:], "\n") {
+	if i < 0 {
+		return text
+	}
+	if tail := t[i+1:]; strings.Contains(tail, "\n") && !strings.HasSuffix(tail, prompt.Close) {
 		return text
 	}
 	head := strings.TrimRight(t[:i], " \t\r\n")

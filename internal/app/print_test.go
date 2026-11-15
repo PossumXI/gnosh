@@ -6,8 +6,8 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
 
-// A reply's last line in gnosh's own marker, after the answer, is a model
-// repeating the line gnosh put after the prompt: it is not part of a
+// What a reply ends with in gnosh's own marker, after the answer, is a
+// model repeating a line gnosh put after the prompt: it is not part of a
 // run's result. Anything else is left as the model wrote it.
 func TestDropEchoedLine(t *testing.T) {
 	cases := map[string]string{
@@ -15,7 +15,10 @@ func TestDropEchoedLine(t *testing.T) {
 		"ready\n\n<gnosh>Use mem and Gno whenever reasonable.</gnosh>\n":     "ready",
 		"<gnosh>Use mem and Gno whenever reasonable.</gnosh>":                "<gnosh>Use mem and Gno whenever reasonable.</gnosh>",
 		"It is written <gnosh>.":                     "It is written <gnosh>.",
-		"first\n<gnosh>a note\nthat runs on</gnosh>": "first\n<gnosh>a note\nthat runs on</gnosh>",
+		"first\n<gnosh>a note\nthat runs on</gnosh>": "first",
+		"ready</gnosh>":                              "ready",
+		"first\n<gnosh>a note\nthat runs on":         "first\n<gnosh>a note\nthat runs on",
+		"</gnosh>":                                   "</gnosh>",
 		"plain answer\n":                             "plain answer\n",
 		"two lines\nof answer":                       "two lines\nof answer",
 	}
