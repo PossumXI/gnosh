@@ -766,7 +766,17 @@ func (l *live) typedFork(sk skill.Skill, text, line string, res CommandResult) (
 		res.Text = fmt.Sprintf("The skill %s runs in a sub-agent in the background; its report comes to the model when it ends.", sk.Name)
 		return res, true, nil
 	}
-	body := prompt.Wrap(fmt.Sprintf("The user ran the skill %q by typing: %s\nIt ran in a sub-agent, which saw nothing of this conversation, and this is its report. Tell the user what came of it, and carry on from there if the skill asks for more.", sk.Name, oneLine(line, 400))) + "\n\n" + prompt.Untrusted(report)
+	// The model is told what the sub-agent was asked as well as what it
+	// found: the report alone ("3") says nothing of what it answers.
+	task := strings.TrimSpace(text)
+	if r := []rune(task); len(r) > 600 {
+		task = string(r[:600]) + " [...]"
+	}
+	about := ""
+	if d := oneLine(sk.Description, 300); d != "" {
+		about = " (" + d + ")"
+	}
+	body := prompt.Wrap(fmt.Sprintf("The user ran the skill %q%s by typing: %s\nIt ran in a sub-agent, which saw nothing of this conversation. The sub-agent's task was:\n%s\nIts report follows. Tell the user what came of it, in the words of the task, and carry on from there if the skill asks for more.", sk.Name, about, oneLine(line, 400), task)) + "\n\n" + prompt.Untrusted(report)
 	id, err := l.agent.Submit(agent.Prompt{Hidden: true, Source: "skill", Text: body,
 		Notice: fmt.Sprintf("The skill %s ran in a sub-agent; its report is in front of the model.", sk.Name)})
 	if err != nil {

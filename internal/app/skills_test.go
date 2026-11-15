@@ -320,8 +320,7 @@ func TestForkedSkill(t *testing.T) {
 	has(t, "the typed run", r.out, "Told.")
 	has(t, "the typed skill's task", requestText(t, w, 3), "FORK-BODY-55: audit lib and report.")
 	last := requestText(t, w, 4)
-	has(t, "the report in front of the model", last, "It ran in a sub-agent", "SUB-REPORT-88: nothing found.")
-	hasNot(t, "the report in front of the model", last, "FORK-BODY-55")
+	has(t, "the report in front of the model", last, "It ran in a sub-agent", "(Audits a folder.)", "The sub-agent's task was:", "FORK-BODY-55: audit lib and report.", "SUB-REPORT-88: nothing found.")
 	w.Model.Done()
 }
 
