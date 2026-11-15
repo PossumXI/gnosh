@@ -178,3 +178,8 @@ func gitSubcommand(args []shellWord) string {
 	}
 	return ""
 }
+
+// HarmlessExit is harmlessExit for others that run a command as the Bash
+// tool would (a skill's commands, run before the model sees it): what exit
+// code 1 means where it is no failure, or "".
+func HarmlessExit(command string) string { return harmlessExit(command) }

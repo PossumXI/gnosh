@@ -423,6 +423,12 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 	if refusal := l.skillHooks(sk); refusal != "" {
 		return "", false, refusal
 	}
+	// The commands its text runs before the model sees it (inject.go).
+	injected, err := l.injectCommands(sk, text)
+	if err != nil {
+		return "", false, err.Error()
+	}
+	text = injected
 	if sk.Fork {
 		// (A forked skill's text is a sub-agent's task: it never enters
 		// this conversation, and is not given back after a summary.)

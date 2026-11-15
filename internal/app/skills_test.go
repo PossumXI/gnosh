@@ -149,7 +149,7 @@ func TestSkillThatCannotBeRun(t *testing.T) {
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/audit")
-	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for a model of its own (model), commands run before the model sees it")
+	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for a model of its own (model)")
 	s.see("It is not run without: that would be another skill than the one its author wrote")
 	s.typeLine("/quiet")
 	s.see("error: the skill quiet is for the model alone")
@@ -373,4 +373,35 @@ func TestSkillHooks(t *testing.T) {
 	if got := w.Read("once.txt"); strings.Count(got, "once") != 1 {
 		t.Errorf("the once hook ran %d times, want 1", strings.Count(got, "once"))
 	}
+}
+
+// A skill's text may run commands before the model sees it (!`command`
+// and a block opened with ```!): what they print takes their place. One
+// that fails, or that the rules do not let run outright, stops the skill;
+// its allowed-tools can let one run.
+func TestSkillCommands(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Seen."}, apptest.Reply{Text: "Made."})
+	w.Write(w.ConfigDir()+"/skills/state/SKILL.md", "---\ndescription: The state.\n---\nBranch: !`echo INJ-BRANCH`\n```!\necho INJ-BLOCK-1\necho INJ-BLOCK-2\n```\nWow!`echo not-one`\n")
+	w.Write(w.ConfigDir()+"/skills/fails/SKILL.md", "---\ndescription: Fails.\n---\nFirst !`ls no-such-dir-77`\n")
+	w.Write(w.ConfigDir()+"/skills/asks/SKILL.md", "---\ndescription: Asks.\n---\n!`touch made.txt`\n")
+	w.Write(w.ConfigDir()+"/skills/allowed/SKILL.md", "---\ndescription: Allowed.\nallowed-tools: Bash(touch made.txt)\n---\n!`touch made.txt && echo made`\n")
+
+	run(t, w, "-p", "/state").wantCode(t, 0)
+	sent := requestText(t, w, 0)
+	has(t, "the skill as the model read it", sent, "Branch: INJ-BRANCH", `INJ-BLOCK-1\nINJ-BLOCK-2`, "Wow!`echo not-one`")
+	hasNot(t, "the skill as the model read it", sent, "!`echo INJ-BRANCH`", "```!")
+
+	r := run(t, w, "-p", "/fails").wantCode(t, 1)
+	has(t, "a command that fails", r.out+r.err, `Shell command failed for pattern "ls no-such-dir-77"`, "exit code", "no-such-dir-77")
+	r = run(t, w, "-p", "/asks").wantCode(t, 1)
+	has(t, "a command the rules do not let run", r.out+r.err, `Shell command permission check failed for pattern "touch made.txt"`)
+	if w.Exists("made.txt") {
+		t.Errorf("a command the rules did not let run ran")
+	}
+	run(t, w, "-p", "/allowed").wantCode(t, 0)
+	if !w.Exists("made.txt") {
+		t.Errorf("a command the skill's allowed-tools let run did not run")
+	}
+	has(t, "the allowed skill as the model read it", requestText(t, w, 1), "made")
+	w.Model.Done()
 }

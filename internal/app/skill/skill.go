@@ -74,6 +74,9 @@ type Skill struct {
 	// Code's shape: put in force when the skill is run, for the rest of
 	// the session.
 	Hooks json.RawMessage
+	// Injects says the skill's text runs commands before the model sees
+	// it (!`command`, or a block opened with ```!).
+	Injects bool
 	// Body is the instructions: the file without its settings.
 	Body string
 	// Dir is the folder that holds the file, Source the file, and Scope
@@ -320,9 +323,7 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 	if shell != "" && shell != "bash" {
 		sk.Unbuilt = append(sk.Unbuilt, "the shell "+shell)
 	}
-	if injects(sk.Body) {
-		sk.Unbuilt = append(sk.Unbuilt, "commands run before the model sees it (the !`command` form)")
-	}
+	sk.Injects = injects(sk.Body)
 	if sk.Description == "" {
 		for _, line := range strings.Split(sk.Body, "\n") {
 			if line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#")); line != "" {

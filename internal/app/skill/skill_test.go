@@ -41,7 +41,7 @@ func TestParse(t *testing.T) {
 
 	// What this gnosh does not have is named, each thing.
 	sk, reason = Parse("---\ncontext: fork\nmodel: opus\neffort: high\nhooks:\n  Stop:\n    - x\npaths: [\"*.go\"]\ndisallowed-tools: Bash\nshell: powershell\n---\nRun !`git status` first.\n", "big")
-	if reason != "" || len(sk.Unbuilt) != 2 || len(sk.Paths) != 1 || sk.Paths[0] != "*.go" || string(sk.Hooks) != `{"Stop":["x"]}` {
+	if reason != "" || len(sk.Unbuilt) != 1 || !sk.Injects || len(sk.Paths) != 1 || sk.Paths[0] != "*.go" || string(sk.Hooks) != `{"Stop":["x"]}` {
 		t.Errorf("what is not built: %q (%s)", sk.Unbuilt, reason)
 	}
 	// context: fork is built, and a forked skill's model is its
@@ -63,12 +63,12 @@ func TestParse(t *testing.T) {
 		t.Errorf("effort %q, disallowed-tools %q", sk.Effort, sk.DisallowedTools)
 	}
 	for _, text := range []string{"Now:\n```!\ngit log\n```\n", "See !`date`.", "!`date`"} {
-		if sk, _ := Parse(text, "x"); len(sk.Unbuilt) != 1 {
+		if sk, _ := Parse(text, "x"); !sk.Injects || len(sk.Unbuilt) != 0 {
 			t.Errorf("%q: not seen as running a command first", text)
 		}
 	}
 	for _, text := range []string{"Wow!`not one`", "Use `!` to negate.", "```\n!ls\n```"} {
-		if sk, _ := Parse(text, "x"); len(sk.Unbuilt) != 0 {
+		if sk, _ := Parse(text, "x"); sk.Injects {
 			t.Errorf("%q: taken for a command to run", text)
 		}
 	}
