@@ -26,6 +26,14 @@ import (
 // the linker's -X can set nothing else.
 var BuildID string
 
+// BuildTime is the time of the commit a build was made from, in RFC 3339,
+// when it is given at link time: the go command records it only for a
+// build made inside a git checkout, and a build made from an archive of
+// the tree (git archive) has none.
+//
+//	go build -ldflags "-X github.com/gnosh-ai/gnosh/internal/buildinfo.BuildTime=2026-11-15T09:30:00Z" .
+var BuildTime string
+
 func init() {
 	BuildID = resolve(BuildID, debug.ReadBuildInfo)
 }

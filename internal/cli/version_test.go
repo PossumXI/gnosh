@@ -54,3 +54,24 @@ func TestBuildFromInfo(t *testing.T) {
 		t.Errorf("BuildFromInfo = %+v", got)
 	}
 }
+
+// A time given at link time fills in a build that has none of its own,
+// and never one that has.
+func TestWithLinkedTime(t *testing.T) {
+	when := time.Date(2026, 11, 15, 9, 30, 0, 0, time.UTC)
+	if got := (Build{Commit: "abc"}).WithLinkedTime("2026-11-15T09:30:00Z"); !got.Time.Equal(when) {
+		t.Errorf("a build with no time: %v", got.Time)
+	}
+	own := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if got := (Build{Time: own}).WithLinkedTime("2026-11-15T09:30:00Z"); !got.Time.Equal(own) {
+		t.Errorf("a build with a time of its own: %v", got.Time)
+	}
+	for _, bad := range []string{"", "yesterday", "2026-11-15"} {
+		if got := (Build{}).WithLinkedTime(bad); !got.Time.IsZero() {
+			t.Errorf("WithLinkedTime(%q) = %v", bad, got.Time)
+		}
+	}
+	if line := VersionLine((Build{Commit: "3e8878f"}).WithLinkedTime("2026-11-15T01:30:00-08:00")); line != "2026-11-15T09:30:00Z 3e8878f (gnosh)" {
+		t.Errorf("VersionLine = %q", line)
+	}
+}

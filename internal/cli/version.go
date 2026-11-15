@@ -45,6 +45,18 @@ func VersionLine(b Build) string {
 	return when + " " + commit + " (gnosh)"
 }
 
+// WithLinkedTime returns b with its time read from linked, an RFC 3339
+// time given at link time, when b has none and linked can be read.
+func (b Build) WithLinkedTime(linked string) Build {
+	if !b.Time.IsZero() || linked == "" {
+		return b
+	}
+	if t, err := time.Parse(time.RFC3339, linked); err == nil {
+		b.Time = t
+	}
+	return b
+}
+
 // commitLength is how many characters of a commit's hash BuildFromInfo
 // keeps.
 const commitLength = 12

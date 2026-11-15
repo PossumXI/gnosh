@@ -64,7 +64,7 @@ func main() {
 		OpenTerminal: func() (io.ReadCloser, error) { return os.Open("/dev/tty") },
 		Signals:      signals,
 		Exit:         os.Exit,
-		Build:        cli.BuildFromInfo(info),
+		Build:        cli.BuildFromInfo(info).WithLinkedTime(buildinfo.BuildTime),
 		BuildID:      buildinfo.BuildID,
 	}))
 }
