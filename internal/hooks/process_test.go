@@ -27,6 +27,11 @@ echo yes > ` + shq(filepath.Join(dir, "ready")) + `
 wait`
 }
 
+// familyWait is the timeout of a family hook: long enough for its shell to
+// start its child and write their ids on a loaded machine, so that the
+// hook is stopped while it waits and not before.
+const familyWait = 2 * time.Second
+
 // A hook that passes its timeout is stopped with everything it started,
 // and counts as a hook that could not evaluate.
 func TestTimeoutStopsTheWholeProcessGroup(t *testing.T) {
@@ -34,7 +39,7 @@ func TestTimeoutStopsTheWholeProcessGroup(t *testing.T) {
 	dir := t.TempDir()
 	opts := options(t)
 	opts.KillGrace = 10 * time.Second // never needed: the hook dies when asked
-	r := newRunner(t, opts, Hook{Event: Stop, Name: "render-check", Command: script(t, family(dir, "")), Timeout: 400 * time.Millisecond})
+	r := newRunner(t, opts, Hook{Event: Stop, Name: "render-check", Command: script(t, family(dir, "")), Timeout: familyWait})
 
 	began := time.Now()
 	out := run(t, r, input(Stop))
@@ -43,9 +48,9 @@ func TestTimeoutStopsTheWholeProcessGroup(t *testing.T) {
 	if !out.Blocked || !out.CouldNotEvaluate {
 		t.Errorf("Blocked %v, CouldNotEvaluate %v; a hook that ran out of time must hold the turn", out.Blocked, out.CouldNotEvaluate)
 	}
-	contains(t, "the reason", out.Reason, `The Stop hook "render-check" could not check this: it did not finish within 400ms and was stopped.`, "A check that could not run does not pass.", "rendering the video")
+	contains(t, "the reason", out.Reason, `The Stop hook "render-check" could not check this: it did not finish within `+spell(familyWait)+` and was stopped.`, "A check that could not run does not pass.", "rendering the video")
 	rec := out.Records[0]
-	if rec.Result != ResultCouldNotEvaluate || rec.ExitCode != -1 || rec.Duration < 400*time.Millisecond {
+	if rec.Result != ResultCouldNotEvaluate || rec.ExitCode != -1 || rec.Duration < familyWait {
 		t.Errorf("record: Result %q, ExitCode %d, Duration %v", rec.Result, rec.ExitCode, rec.Duration)
 	}
 	if took > 5*time.Second {
@@ -62,13 +67,13 @@ func TestHookThatIgnoresTheRequestToStopIsKilled(t *testing.T) {
 	dir := t.TempDir()
 	opts := options(t)
 	opts.KillGrace = 50 * time.Millisecond
-	r := newRunner(t, opts, Hook{Event: PreToolUse, Command: script(t, family(dir, "trap '' TERM")), Timeout: 400 * time.Millisecond})
+	r := newRunner(t, opts, Hook{Event: PreToolUse, Command: script(t, family(dir, "trap '' TERM")), Timeout: familyWait})
 
 	out := run(t, r, input(PreToolUse))
 	if !out.Blocked || !out.CouldNotEvaluate || out.PermissionDecision != Deny {
 		t.Errorf("Blocked %v, CouldNotEvaluate %v, PermissionDecision %q", out.Blocked, out.CouldNotEvaluate, out.PermissionDecision)
 	}
-	contains(t, "the reason", out.Reason, "did not finish within 400ms and was stopped")
+	contains(t, "the reason", out.Reason, "did not finish within "+spell(familyWait)+" and was stopped")
 	if notes := out.Records[0].Notes; len(notes) != 0 {
 		t.Errorf("the record says the hook could not be stopped: %q", notes)
 	}
@@ -89,7 +94,7 @@ func TestHookIsAskedBeforeItIsKilled(t *testing.T) {
 	opts := options(t)
 	opts.KillGrace = 30 * time.Second // the test fails long before this if the hook is not asked first
 	cleaned := filepath.Join(dir, "cleaned")
-	r := newRunner(t, opts, Hook{Event: Stop, Command: script(t, family(dir, "trap 'echo yes > "+shq(cleaned)+"; exit 0' TERM")), Timeout: 400 * time.Millisecond})
+	r := newRunner(t, opts, Hook{Event: Stop, Command: script(t, family(dir, "trap 'echo yes > "+shq(cleaned)+"; exit 0' TERM")), Timeout: familyWait})
 
 	began := time.Now()
 	out := run(t, r, input(Stop))
