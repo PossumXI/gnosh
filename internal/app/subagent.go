@@ -351,6 +351,8 @@ type subSession struct {
 	hasAgent bool // the sub-agent has the Agent tool itself
 	// preloaded are the skills its definition preloads, as parts.
 	preloaded []agent.Part
+	// dropHooks takes its definition's own hooks away when it ends.
+	dropHooks func()
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
@@ -394,6 +396,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	}
 	s.log.onCut = func() { s.instr.Forget() }
 	if s.preloaded, err = l.preloadParts(def, s.id); err != nil {
+		return s, err
+	}
+	if s.dropHooks, err = l.agentHooks(def, s.id); err != nil {
 		return s, err
 	}
 
@@ -883,6 +888,9 @@ func (s *subSession) close() {
 		l := s.l
 		if s.agent != nil {
 			_ = s.agent.Close()
+		}
+		if s.dropHooks != nil {
+			s.dropHooks()
 		}
 		l.subMu.Lock()
 		delete(l.subs, s)

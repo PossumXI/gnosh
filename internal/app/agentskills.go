@@ -8,14 +8,15 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/app/skill"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
 // This file is what a kind of agent brings beside its prompt and its tools
 // (spec/cc/subagents.md 2): the skills its definition preloads (skills),
-// whose whole text it starts with, and the thinking level it asks for
-// (effort). Both hold for a sub-agent of the kind and for a session that
-// runs as it (--agent). A preloaded skill is its text and nothing else:
+// whose whole text it starts with, the thinking level it asks for
+// (effort), and hooks of its own (hooks). All three hold for a sub-agent
+// of the kind and for a session that runs as it (--agent). A preloaded skill is its text and nothing else:
 // the permission rules, hooks and thinking level it carries are put in
 // force when it is run with the Skill tool, not when it is preloaded.
 
@@ -95,6 +96,41 @@ func (l *live) agentPreloaded() ([]agent.Part, error) {
 	l.preloaded = pre
 	l.skillMu.Unlock()
 	return pre, nil
+}
+
+// agentHooks puts the hooks of a kind's definition (hooks) in force: for
+// the events of one sub-agent of the kind (id), with a Stop hook as its
+// SubagentStop, until the function it returns is called as it ends; or,
+// for the session that runs as the kind (id ""), for the whole session.
+// They are checked as the settings' hooks are, and a kind whose hooks
+// would not run is not run either. With every hook switched off
+// (disableAllHooks, safe mode) there are none to put in force.
+func (l *live) agentHooks(def agentdef.Def, id string) (func(), error) {
+	none := func() {}
+	if len(def.Hooks) == 0 || l.hooks == nil || l.hooks.r == nil || l.cfg.HooksOff != "" {
+		return none, nil
+	}
+	where := firstOf(def.Source, "gnosh's own definition")
+	cfg, err := hooks.ParseConfig(def.Hooks, where+" (hooks)")
+	if err == nil {
+		if id == "" {
+			return none, l.hookErr(def, l.hooks.r.Add(cfg))
+		}
+		var remove func()
+		if remove, err = l.hooks.r.AddFor(cfg, id); err == nil {
+			return remove, nil
+		}
+	}
+	return nil, l.hookErr(def, err)
+}
+
+// hookErr words why the hooks of a kind cannot be put in force, or is nil.
+// The error names the file the hooks are in.
+func (l *live) hookErr(def agentdef.Def, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("the hooks the kind %q carries cannot be put in force: %s. It is not run without them", def.Name, strings.TrimRight(err.Error(), "."))
 }
 
 // thinkingFor is the level of m an effort word stands for: one of its

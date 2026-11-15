@@ -361,6 +361,12 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		return l, fmt.Errorf("the hooks cannot be run as they are configured:\n%w", err)
 	}
 	l.hooks = &hookRunner{l: l, r: runner}
+	if l.asAgent != nil {
+		// The hooks of the kind the session runs as hold for all of it.
+		if _, err := l.agentHooks(*l.asAgent, ""); err != nil {
+			return l, fmt.Errorf("%v. Nothing was started", err)
+		}
+	}
 
 	// The tools, the instruction files and the system prompt. What the
 	// files the tools change held is kept beside the session's file.

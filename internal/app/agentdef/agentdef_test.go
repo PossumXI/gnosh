@@ -53,13 +53,13 @@ func TestParse(t *testing.T) {
 		Name: "code-reviewer", Description: "Reviews code: quality, security",
 		Prompt: "You are a code reviewer.\n\nBe specific.",
 		Tools:  []string{"Read", "Glob", "Grep", "Bash"}, ToolsSet: true, Disallowed: []string{"Write", "Edit"},
-		PermissionMode: "plan", MaxTurns: 12, OmitInstructions: true, Other: []string{"hooks"},
+		PermissionMode: "plan", MaxTurns: 12, OmitInstructions: true,
 	}
 	if d.Name != want.Name || d.Description != want.Description || d.Prompt != want.Prompt ||
 		strings.Join(d.Tools, ",") != strings.Join(want.Tools, ",") || !d.ToolsSet ||
 		strings.Join(d.Disallowed, ",") != strings.Join(want.Disallowed, ",") ||
 		d.Model != "" || d.PermissionMode != "plan" || d.MaxTurns != 12 || !d.OmitInstructions ||
-		strings.Join(d.Other, ",") != "hooks" {
+		len(d.Other) != 0 || string(d.Hooks) != `{"PreToolUse":[{"matcher":"Bash"}]}` {
 		t.Errorf("read as %+v", d)
 	}
 
@@ -100,6 +100,7 @@ func TestParse(t *testing.T) {
 		"---\nname: a:b\ndescription: y\n---\nbody":              "cannot be an agent's",
 		"---\nname: x\n  stray\n: y\ndescription: y\n---\nbody":  "cannot be read",
 		"---\nname: x\ndescription: y\nmaxTurns: lots\n---\nbod": "not a number of turns",
+		"---\nname: x\ndescription: y\nhooks: Stop\n---\nbody":   "something other than a block of events",
 	} {
 		if _, reason := Parse(text); !strings.Contains(reason, why) {
 			t.Errorf("%q: skipped for %q, want a reason holding %q", text, reason, why)

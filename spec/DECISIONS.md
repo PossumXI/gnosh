@@ -466,4 +466,17 @@ or kept with the reason said (27).
     default, at most 30), with no shorter one in a run. The command is
     judged as the same command in Bash is. A sub-agent has no Monitor:
     the lines go to the session the person is in.
+42. **A kind's own hooks guard its own sub-agents, while each runs.** A
+    definition's `hooks` block (YAML in a file, JSON in `--agents`) is
+    put in force when a sub-agent of the kind starts, for that
+    sub-agent's events alone: its tool calls, its permission requests,
+    its SubagentStop (a Stop hook there is one, as in Claude Code). The
+    session's own events and other sub-agents' are not touched, and the
+    hooks go when the sub-agent ends. A session that runs as the kind
+    (`--agent`) has them for the whole session, Stop as Stop. They are
+    checked as the settings' hooks are: a block that cannot be read
+    makes the definition unusable, and hooks that would not run stop the
+    Agent call (or the session's start) with the reason. With every hook
+    switched off (`disableAllHooks`, safe mode) there are none to put in
+    force, as for a skill's hooks.
 

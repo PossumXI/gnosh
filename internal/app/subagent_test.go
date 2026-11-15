@@ -271,6 +271,46 @@ func TestSubAgentModelFromTheEnvironment(t *testing.T) {
 	}
 }
 
+// A kind's own hooks (hooks) hold for the events of its sub-agents alone,
+// while each runs: they guard the sub-agent's calls and not the
+// session's, and a Stop hook among them is the sub-agent's SubagentStop.
+func TestAgentHooksHoldForItsOwnEvents(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"try","prompt":"Make a file.","subagent_type":"guarded"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"touch by-sub.txt"}`}}},
+		apptest.Reply{Text: "It was refused."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"touch by-main.txt"}`}}},
+		apptest.Reply{Text: "Done."},
+	)
+	w.Write(w.ConfigDir()+"/agents/guarded.md", `---
+name: guarded
+description: Guarded.
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: "echo GUARD-9 >&2; exit 2"
+  Stop:
+    - hooks:
+        - type: command
+          command: "echo stopped >> stops.txt"
+---
+You make files.
+`)
+	run(t, w, "-y", "-p", "try it").wantCode(t, 0)
+	if w.Exists("by-sub.txt") {
+		t.Errorf("the sub-agent's call ran past its kind's hook")
+	}
+	if !w.Exists("by-main.txt") {
+		t.Errorf("the session's own call was held by the sub-agent's hook")
+	}
+	has(t, "what the sub-agent read", toolResult(t, w, 2, "c1"), "GUARD-9")
+	if got := w.Read("stops.txt"); got != "stopped\n" {
+		t.Errorf("the kind's Stop hook ran %q times, want once, as the sub-agent's SubagentStop", got)
+	}
+}
+
 // A kind of sub-agent that a project defines: it is loaded in a folder
 // that is trusted, runs with the tools its definition names, and its tool
 // calls go through the person's rules and hooks like any other, marked
@@ -503,7 +543,7 @@ func TestSubAgentRefusalsAndLimits(t *testing.T) {
 	_, got := one(t, `{"description":"d","prompt":"p","subagent_type":"nobody"}`, nil)
 	has(t, "a kind that does not exist", got, `there is no kind of sub-agent called "nobody"`, "general-purpose, Explore")
 	_, got = one(t, `{"description":"d","prompt":"p","subagent_type":"hooked"}`, def("hooked", "hooks:\n  PreToolUse:\n    - matcher: Bash\n"))
-	has(t, "a definition with hooks of its own", got, `the kind "hooked" asks for hooks`, "It is not run without")
+	has(t, "a definition whose hooks cannot be used", got, `No sub-agent was started: the hooks the kind "hooked" carries cannot be put in force`, `the group has no "hooks" list`, "It is not run without them.")
 	_, got = one(t, `{"description":"d","prompt":"p","subagent_type":"easy"}`, def("easy", "permissionMode: acceptEdits\n"))
 	has(t, "a definition that asks for another mode", got, `asks to run in the permission mode acceptEdits`, "which is default")
 	// Under a session that skips permissions the session's mode holds, and

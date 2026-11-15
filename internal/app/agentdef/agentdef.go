@@ -24,6 +24,7 @@ package agentdef
 
 import (
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -75,13 +76,17 @@ type Def struct {
 	// InheritModel says Model was written as inherit: the session's model,
 	// whatever else would name one.
 	InheritModel bool
+	// Hooks is the definition's own hooks block (hooks), as JSON in the
+	// shape of the settings' hooks: in force while the agent runs, for its
+	// events alone.
+	Hooks json.RawMessage
 	// Skills names the skills whose whole text the agent starts with
 	// (skills), and Effort the thinking level it asks for (effort): a
 	// level of its model, max, or auto.
 	Skills []string
 	Effort string
 	// Other lists the fields of the frontmatter that change what the
-	// sub-agent is or may do and that this package only notes: hooks,
+	// sub-agent is or may do and that this package only notes:
 	// mcpServers, isolation, memory. A caller that cannot honour one must
 	// say so, and not run the agent as if the field were not there.
 	Other []string
@@ -343,7 +348,16 @@ func Parse(text string) (d Def, reason string) {
 			d.Skills = cleanNames(f.list())
 		case "effort":
 			d.Effort = f.scalar
-		case "hooks", "mcpServers", "isolation", "memory":
+		case "hooks":
+			switch raw, err := BlockJSON(f.block); {
+			case !f.nested && (f.scalar != "" || len(f.items) > 0):
+				return d, "its hooks are written as something other than a block of events"
+			case err != nil:
+				return d, "its hooks cannot be read: " + err.Error()
+			case f.nested:
+				d.Hooks = raw
+			}
+		case "mcpServers", "isolation", "memory":
 			if f.scalar != "" || len(f.items) > 0 || f.nested {
 				d.Other = append(d.Other, f.key)
 			}

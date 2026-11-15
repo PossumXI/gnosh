@@ -23,7 +23,7 @@ func TestFromJSON(t *testing.T) {
 		strings.Join(r.AgentTypes, ",") != "helper,x" || r.Model != "" || !r.InheritModel || r.MaxTurns != 5 || r.Scope != ScopeCommandLine || r.Source != "--agents" {
 		t.Errorf("reviewer = %+v", r)
 	}
-	if strings.Join(w.Tools, ",") != "Read,Edit" || strings.Join(w.Disallowed, ",") != "Bash" || !w.Background || strings.Join(w.Other, ",") != "hooks" ||
+	if strings.Join(w.Tools, ",") != "Read,Edit" || strings.Join(w.Disallowed, ",") != "Bash" || !w.Background || len(w.Other) != 0 || w.Hooks != nil ||
 		strings.Join(w.Skills, ",") != "style,terms" || w.Effort != "max" {
 		t.Errorf("writer = %+v", w)
 	}
@@ -35,6 +35,7 @@ func TestFromJSON(t *testing.T) {
 		`{"a": {"description": "x", "maxTurns": 0}}`:    "a number of turns",
 		`{"a": {"description": "x", "tools": 7}}`:       "a list of tool names",
 		`{"a": {"description": "x", "skills": 7}}`:      "a list of skill names",
+		`{"a": {"description": "x", "hooks": [1]}}`:     "a map of events to their hooks",
 		`{"a": {"description": "x", "effort": 7}}`:      "a string",
 		`{"a": {"description": "x", "temperature": 1}}`: `"temperature", which is not a setting of an agent`,
 	} {

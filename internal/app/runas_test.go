@@ -37,7 +37,7 @@ func TestRunAsAgent(t *testing.T) {
 	r := run(t, w, "-p", "--agent", "nobody", "x").wantCode(t, 1)
 	has(t, "an agent that is not there", r.err, `--agent names the agent "nobody", and there is no kind of agent of that name`, "general-purpose", "reviewer")
 	r = run(t, w, "-p", "--agent", "hooked", "x").wantCode(t, 1)
-	has(t, "an agent with hooks", r.err, "the agent hooked", "asks for hooks", "Nothing was started")
+	has(t, "an agent whose hooks cannot be read", r.err, `the hooks the kind "hooked" carries cannot be put in force`, "agents/hooked.md (hooks): Stop group 1", "It is not run without them. Nothing was started")
 	if strings.Contains(r.out, "Hooked") {
 		t.Errorf("the hooked agent ran: %s", r.out)
 	}

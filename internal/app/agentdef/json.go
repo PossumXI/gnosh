@@ -96,7 +96,15 @@ func FromJSON(text string) ([]Def, error) {
 				} else {
 					d.Background = b
 				}
-			case "hooks", "mcpServers", "isolation", "memory", "initialPrompt", "autoCompactWindow":
+			case "hooks":
+				var events map[string]json.RawMessage
+				if json.Unmarshal(val, &events) != nil {
+					return nil, bad("a map of events to their hooks")
+				}
+				if len(events) > 0 {
+					d.Hooks = val
+				}
+			case "mcpServers", "isolation", "memory", "initialPrompt", "autoCompactWindow":
 				if string(val) != "null" {
 					d.Other = append(d.Other, key)
 				}

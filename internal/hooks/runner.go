@@ -163,6 +163,9 @@ type compiled struct {
 	m matcher
 	// id tells the hooks Add put in force apart, for Once.
 	id int
+	// agent is the sub-agent whose events alone the hook takes (AddFor),
+	// or "" for a hook that takes every event's.
+	agent string
 }
 
 // selected is a hook chosen to run on one occurrence of an event.
@@ -252,18 +255,55 @@ func (r *Runner) Has(event Event) bool {
 // it is run. They are checked as NewRunner checks its own, and refused,
 // all of them, with a *ConfigError, when one would not run.
 func (r *Runner) Add(cfg Config) error {
+	_, err := r.add(cfg, "")
+	return err
+}
+
+// AddFor puts hooks in force for the events of one sub-agent alone, an
+// agent definition's own (spec/cc/subagents.md 2): they take no event
+// whose AgentID is another, a Stop hook among them is that sub-agent's
+// SubagentStop, and the function it returns takes them away again, for
+// when the sub-agent ends. They are checked as Add checks hooks.
+func (r *Runner) AddFor(cfg Config, agentID string) (remove func(), err error) {
+	if agentID == "" {
+		return nil, errors.New("hooks for a sub-agent need its id (AddFor was given none)")
+	}
+	cfg.Hooks = slices.Clone(cfg.Hooks)
+	for i := range cfg.Hooks {
+		if cfg.Hooks[i].Event == Stop {
+			cfg.Hooks[i].Event = SubagentStop
+		}
+	}
+	ids, err := r.add(cfg, agentID)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		r.hooksMu.Lock()
+		defer r.hooksMu.Unlock()
+		for ev, list := range r.hooks {
+			r.hooks[ev] = slices.DeleteFunc(list, func(c compiled) bool { return slices.Contains(ids, c.id) })
+		}
+	}, nil
+}
+
+// add checks hooks and puts them in force, for the events of agent alone
+// when it is not "", and returns their ids.
+func (r *Runner) add(cfg Config, agent string) ([]int, error) {
 	if bad := stopping(Check(cfg, r.opts)); len(bad) > 0 {
-		return &ConfigError{Problems: bad}
+		return nil, &ConfigError{Problems: bad}
 	}
 	r.hooksMu.Lock()
 	defer r.hooksMu.Unlock()
+	var ids []int
 	for _, h := range cfg.Hooks {
 		info, _ := describe(h.Event)
 		m, _ := compileMatcher(h.Matcher, info.narrow) // Check has passed it
 		r.nextID++
-		r.hooks[h.Event] = append(r.hooks[h.Event], compiled{Hook: h, m: m, id: r.nextID})
+		ids = append(ids, r.nextID)
+		r.hooks[h.Event] = append(r.hooks[h.Event], compiled{Hook: h, m: m, id: r.nextID, agent: agent})
 	}
-	return nil
+	return ids, nil
 }
 
 // dropOnce takes away the hooks with Once whose run did not fail.
@@ -426,6 +466,10 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 	hooks := slices.Clone(r.hooks[in.Event])
 	r.hooksMu.RUnlock()
 	for _, h := range hooks {
+		if h.agent != "" && h.agent != in.AgentID {
+			// A sub-agent's own hook, and this is not its event.
+			continue
+		}
 		matched, guardOnly := true, false
 		switch info.subject {
 		case toolName:
