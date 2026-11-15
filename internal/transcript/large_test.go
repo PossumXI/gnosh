@@ -110,6 +110,37 @@ func peakHeap(fn func()) uint64 {
 	return peak.Load()
 }
 
+// peakLive is peakHeap for what is kept alive: each sample is taken after a
+// collection, so garbage the collector has not come to yet does not count.
+// How much garbage piles up between collections depends on how busy the
+// machine is (on a loaded one the collector falls behind), and that is not
+// what a test of what a reader keeps is about.
+func peakLive(fn func()) uint64 {
+	var peak atomic.Uint64
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tick := time.NewTicker(20 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			if live := heapNow(); live > peak.Load() {
+				peak.Store(live)
+			}
+			select {
+			case <-done:
+				return
+			case <-tick.C:
+			}
+		}
+	}()
+	fn()
+	close(done)
+	wg.Wait()
+	return peak.Load()
+}
+
 func heapNow() uint64 {
 	runtime.GC()
 	var m runtime.MemStats
@@ -188,7 +219,7 @@ func TestLargeSession(t *testing.T) {
 	base = heapNow()
 	n := 0
 	start = time.Now()
-	peak = peakHeap(func() {
+	peak = peakLive(func() {
 		for _, err := range ReadFile(ctx, path, nil) {
 			if err != nil {
 				t.Fatal(err)
@@ -196,13 +227,13 @@ func TestLargeSession(t *testing.T) {
 			n++
 		}
 	})
-	t.Logf("streamed it in %v (%.0f MB/s); the heap peaked %.1f MB over where it began",
+	t.Logf("streamed it in %v (%.0f MB/s); what it kept alive peaked %.1f MB over where it began",
 		time.Since(start).Round(time.Millisecond), mb/time.Since(start).Seconds(), float64(peak-min(peak, base))/(1<<20))
 	if n != count {
 		t.Errorf("streaming read %d entries, want %d", n, count)
 	}
 	if peak > base+uint64(size)/2 {
-		t.Errorf("streaming a %.1f MB file, the heap peaked %.1f MB over where it began", mb, float64(peak-base)/(1<<20))
+		t.Errorf("streaming a %.1f MB file, what it kept alive peaked %.1f MB over where it began", mb, float64(peak-base)/(1<<20))
 	}
 }
 
