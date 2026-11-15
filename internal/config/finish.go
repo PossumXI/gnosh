@@ -152,6 +152,9 @@ func (ld *loader) switches() Switches {
 	if in.Flags.SafeMode {
 		s.SafeMode.put(true, flagOrigin("--safe-mode"))
 	}
+	if in.Flags.Bare {
+		s.SafeMode.put(true, flagOrigin("--bare"))
+	}
 	if on, set := ld.onOff("GNOSH_DEBUG_PAGE"); set {
 		s.DebugPage.put(on, envOrigin("GNOSH_DEBUG_PAGE"))
 	}

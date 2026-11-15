@@ -108,8 +108,10 @@ type Flags struct {
 	// and "local" (the settings file in the project's data folder). Nil
 	// means all three. The state file and --settings are read either way.
 	SettingSources []string
-	// SafeMode is --safe-mode.
+	// SafeMode is --safe-mode, and Bare is --bare, which turns safe mode
+	// on as well.
 	SafeMode bool
+	Bare     bool
 	// Debug is -d / --debug.
 	Debug bool
 }

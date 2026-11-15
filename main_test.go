@@ -313,7 +313,7 @@ func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
 	}
 
 	for _, args := range [][]string{
-		{"-p", "-q", "x"}, {"-s", "abc", "-p", "x"}, {"-D", t.TempDir(), "-p", "x"}, {"--bare", "-p", "x"},
+		{"-p", "-q", "x"}, {"-s", "abc", "-p", "x"}, {"-D", t.TempDir(), "-p", "x"}, {"--replay-user-messages", "-p", "x"},
 		{"session", "delete", "abc"}, {"session", "web"}, {"help", "run"}, {"mcp", "serve"},
 	} {
 		code, out, errs := shipped(t, args...)

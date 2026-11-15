@@ -265,6 +265,7 @@ func TestBareMode(t *testing.T) {
 	hook := w.Script(w.Home+"/hooks/h.sh", "cat > /dev/null; touch "+hookRan)
 	r := run(t, w, "-p", "--bare", "--trust-folder", "--settings", `{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "`+hook+`"}]}]}}`, "say it").wantCode(t, 0)
 	has(t, "the answer", r.out, "Bare.")
+	hasNot(t, "stderr", r.err, "Safe mode is on")
 	reqs := w.Model.Requests()
 	body := string(reqs[len(reqs)-1].Body)
 	for _, name := range []string{"Bash", "Read", "Edit", "Write"} {

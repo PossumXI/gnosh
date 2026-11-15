@@ -257,7 +257,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			}
 			l.notice(agent.LevelWarning, "prompt", text)
 		}
-	} else {
+	} else if !l.inv.Bare {
+		// (Minimal mode is chosen for what it leaves out, and says
+		// nothing about it.)
 		l.notice(agent.LevelWarning, "config", fmt.Sprintf(
 			"Safe mode is on (%s): hooks, instruction files, MCP servers from files and your own prompt texts are off. Start without it to turn them back on.",
 			l.cfg.Switches.SafeMode.Origin))

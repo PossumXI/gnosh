@@ -242,7 +242,7 @@ func (st *startup) load(trusted bool) {
 		// Minimal mode is safe mode with the tools cut down to running
 		// commands and reading and changing files, unless --tools names
 		// others.
-		flags.SafeMode = true
+		flags.Bare = true
 		if !inv.ToolsGiven {
 			flags.ToolsGiven, flags.Tools = true, slices.Clone(bareTools)
 		}
