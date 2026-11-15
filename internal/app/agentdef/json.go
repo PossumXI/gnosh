@@ -47,7 +47,7 @@ func FromJSON(text string) ([]Def, error) {
 				return fmt.Errorf("the agent %q has %s set to %s, which should be %s", name, key, clip(string(val), 60), want)
 			}
 			switch key {
-			case "description", "prompt", "model", "permissionMode":
+			case "description", "prompt", "model", "permissionMode", "effort":
 				var s string
 				if json.Unmarshal(val, &s) != nil {
 					return nil, bad("a string")
@@ -59,9 +59,17 @@ func FromJSON(text string) ([]Def, error) {
 					d.Prompt = strings.TrimSpace(s)
 				case "model":
 					d.Model = strings.TrimSpace(s)
+				case "effort":
+					d.Effort = strings.TrimSpace(s)
 				default:
 					d.PermissionMode = strings.TrimSpace(s)
 				}
+			case "skills":
+				list, ok := jsonList(val)
+				if !ok {
+					return nil, bad("a list of skill names, or one string of them with commas")
+				}
+				d.Skills = cleanNames(list)
 			case "tools", "disallowedTools":
 				list, ok := jsonList(val)
 				if !ok {
@@ -88,7 +96,7 @@ func FromJSON(text string) ([]Def, error) {
 				} else {
 					d.Background = b
 				}
-			case "hooks", "skills", "mcpServers", "isolation", "memory", "effort", "initialPrompt", "autoCompactWindow":
+			case "hooks", "mcpServers", "isolation", "memory", "initialPrompt", "autoCompactWindow":
 				if string(val) != "null" {
 					d.Other = append(d.Other, key)
 				}

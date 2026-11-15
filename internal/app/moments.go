@@ -213,6 +213,14 @@ func (l *live) firstPromptLines(ctx context.Context, info agent.LineInfo) ([]age
 	if text := l.skillsLine(); text != "" {
 		parts = append(parts, agent.Part{Source: "skills", Text: text, Before: true})
 	}
+	pre, err := l.agentPreloaded()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range pre {
+		p.Before = true
+		parts = append(parts, p)
+	}
 	return append(parts, agent.Part{Source: "environment", Text: l.environment(), Before: true}), nil
 }
 
@@ -552,6 +560,11 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	}
 	if text := l.skillsAfterSummary(); text != "" {
 		parts = append(parts, agent.Part{Source: "skills", Text: text})
+	}
+	if pre, err := l.agentPreloaded(); err != nil {
+		l.notice(agent.LevelWarning, "agent", "The skills the kind "+l.agentName()+" preloads could not be given back after the summary: "+err.Error())
+	} else {
+		parts = append(parts, pre...)
 	}
 	if l.shell != nil {
 		var running []string

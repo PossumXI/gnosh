@@ -498,13 +498,8 @@ func (l *live) skillEffort(sk skill.Skill) {
 		return
 	}
 	m := l.agent.Model()
-	word := sk.Effort
-	switch {
-	case word == "auto":
-		word = ""
-	case word == "max" && len(m.Levels) > 0:
-		word = m.Levels[len(m.Levels)-1]
-	case !slices.Contains(m.Levels, word):
+	word, ok := thinkingFor(m, sk.Effort)
+	if !ok {
 		l.notice(agent.LevelInfo, "skill", fmt.Sprintf("The skill %s asks for the effort %s, which is not a thinking level of %s; thinking stays as it is.", sk.Name, sk.Effort, firstOf(m.Info.ID, "the model")))
 		return
 	}

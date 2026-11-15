@@ -68,11 +68,15 @@ type Def struct {
 	// Background says the definition asks to be run in the background
 	// always.
 	Background bool
+	// Skills names the skills whose whole text the agent starts with
+	// (skills), and Effort the thinking level it asks for (effort): a
+	// level of its model, max, or auto.
+	Skills []string
+	Effort string
 	// Other lists the fields of the frontmatter that change what the
 	// sub-agent is or may do and that this package only notes: hooks,
-	// skills, mcpServers, isolation, memory. A caller that cannot honour
-	// one must say so, and not run the agent as if the field were not
-	// there.
+	// mcpServers, isolation, memory. A caller that cannot honour one must
+	// say so, and not run the agent as if the field were not there.
 	Other []string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
@@ -328,7 +332,11 @@ func Parse(text string) (d Def, reason string) {
 			d.OmitInstructions = f.scalar == "true"
 		case "background":
 			d.Background = f.scalar == "true"
-		case "hooks", "skills", "mcpServers", "isolation", "memory":
+		case "skills":
+			d.Skills = cleanNames(f.list())
+		case "effort":
+			d.Effort = f.scalar
+		case "hooks", "mcpServers", "isolation", "memory":
 			if f.scalar != "" || len(f.items) > 0 || f.nested {
 				d.Other = append(d.Other, f.key)
 			}
@@ -341,6 +349,18 @@ func Parse(text string) (d Def, reason string) {
 		d.Model = ""
 	}
 	return d, ""
+}
+
+// cleanNames is a list of names with the blanks around each taken off and
+// the empty ones left out.
+func cleanNames(list []string) []string {
+	var out []string
+	for _, n := range list {
+		if n = strings.TrimSpace(n); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // problem says why a definition cannot be used, or "": every definition

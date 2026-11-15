@@ -79,7 +79,10 @@ type live struct {
 	// The session's models, and the client of every provider it has used.
 	large *modelUse
 	// asAgent is the kind of agent the session runs as (runas.go), or nil.
-	asAgent   *agentdef.Def
+	asAgent *agentdef.Def
+	// preloaded are the skills the kind it runs as preloads, as parts,
+	// once its first request has gone out (agentskills.go).
+	preloaded []agent.Part
 	small     *modelUse
 	providers map[string]*providerUse
 	typeMu    sync.Mutex
@@ -453,6 +456,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	if l.agent, err = agent.New(opts); err != nil {
 		return l, fmt.Errorf("the session could not be put together: %w", err)
+	}
+	if l.asAgent != nil && l.inv.Effort == "" {
+		l.agentEffort(l.agent, *l.asAgent)
 	}
 	l.slash = newSlashSet(l)
 	for _, c := range l.contribs {

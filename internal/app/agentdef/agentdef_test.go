@@ -63,6 +63,15 @@ func TestParse(t *testing.T) {
 		t.Errorf("read as %+v", d)
 	}
 
+	// The skills it preloads, as a list or with commas, and its effort.
+	d, reason = Parse("---\nname: careful\ndescription: Checks.\nskills:\n  - review-list\n  - ' style '\neffort: high\n---\nCheck.")
+	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" || len(d.Other) != 0 {
+		t.Errorf("read as %+v (%s)", d, reason)
+	}
+	if d, _ = Parse("---\nname: c\ndescription: d\nskills: a, b\n---\nx"); strings.Join(d.Skills, ",") != "a,b" {
+		t.Errorf("skills with commas read as %q", d.Skills)
+	}
+
 	// A list in brackets, a description that runs over lines, and a model.
 	d, reason = Parse("---\nname: tester\ndescription: >\n  Runs the tests\n  and reports.\ntools: [Bash, Read]\nmodel: local/qwen\n---\nRun them.")
 	if reason != "" || d.Description != "Runs the tests and reports." || strings.Join(d.Tools, ",") != "Bash,Read" || d.Model != "local/qwen" {

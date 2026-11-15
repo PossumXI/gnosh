@@ -17,7 +17,9 @@ import (
 // prompt stands in place of gnosh's own system prompt (unless
 // --system-prompt is given), the tools it does not have are off, as a
 // deny rule of a tool's bare name puts one, and its model is the
-// session's (unless -m names one). The instruction files still load. The
+// session's (unless -m names one), at the thinking level it asks for
+// (unless --effort names one). The skills it preloads come with the first
+// prompt, after the instruction files, which still load. The
 // session's file records the agent, and a resumed session runs as it
 // again unless --agent names another. What a definition asks for that a
 // session cannot be (hooks, skills, MCP servers, isolation, memory) stops
@@ -50,6 +52,9 @@ func (l *live) runAsAgent() error {
 	}
 	if len(def.Other) > 0 {
 		return fmt.Errorf("the agent %s (%s) asks for %s, which a session cannot have yet, so it is not run as something else. Nothing was started", def.Name, firstOf(def.Source, def.Scope), strings.Join(def.Other, ", "))
+	}
+	if _, why := l.skillsToPreload(def); why != "" {
+		return fmt.Errorf("%s. Nothing was started", why)
 	}
 	if l.inv.SystemPrompt == "" && l.inv.SystemPromptFile == "" && strings.TrimSpace(def.Prompt) != "" {
 		l.inv.SystemPrompt = def.Prompt

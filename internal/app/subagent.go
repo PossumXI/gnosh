@@ -274,6 +274,9 @@ func (l *live) cannotRunAgent(def agentdef.Def) string {
 		return fmt.Sprintf("the kind %q asks for %s in its definition (%s), and this gnosh does not have that for sub-agents yet. It is not run without: that would be another agent than the one its author wrote. Use another kind, or take the setting out of the file.",
 			def.Name, strings.Join(def.Other, ", "), where)
 	}
+	if _, why := l.skillsToPreload(def); why != "" {
+		return why + "."
+	}
 	if def.PermissionMode == "" {
 		return ""
 	}
@@ -319,6 +322,8 @@ type subSession struct {
 	contribs []joined
 	agent    *agent.Agent
 	hasAgent bool // the sub-agent has the Agent tool itself
+	// preloaded are the skills its definition preloads, as parts.
+	preloaded []agent.Part
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
@@ -361,6 +366,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		return s, err
 	}
 	s.log.onCut = func() { s.instr.Forget() }
+	if s.preloaded, err = l.preloadParts(def, s.id); err != nil {
+		return s, err
+	}
 
 	// The features' part in it.
 	dirs := l.st.dirs(l.ts.ID())
@@ -465,6 +473,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.agent, err = parent.Spawn(sub); err != nil {
 		return s, err
 	}
+	l.agentEffort(s.agent, def)
 	l.subMu.Lock()
 	if l.subs == nil {
 		l.subs = map[*subSession]struct{}{}
@@ -662,6 +671,10 @@ func (s *subSession) firstLines(ctx context.Context, info agent.LineInfo) ([]age
 			parts = append(parts, agent.Part{Source: "agents", Text: text, Before: true})
 		}
 	}
+	for _, p := range s.preloaded {
+		p.Before = true
+		parts = append(parts, p)
+	}
 	return append(parts, agent.Part{Source: "environment", Text: s.l.environment(), Before: true}), nil
 }
 
@@ -696,6 +709,7 @@ func (s *subSession) afterSummary(ctx context.Context, info agent.SummaryInfo) (
 			parts = append(parts, agent.Part{Source: "instructions", Text: text})
 		}
 	}
+	parts = append(parts, s.preloaded...)
 	for _, c := range s.contribs {
 		if c.c.AfterSummary == nil {
 			continue

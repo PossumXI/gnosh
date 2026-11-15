@@ -437,3 +437,16 @@ or kept with the reason said (27).
     the Agent call's result, which names what was found and says the
     report is data; a background sub-agent's notice carries it before
     the report. Nothing is taken out.
+40. **A kind of agent preloads skills as text, and a missing one stops
+    it.** A definition's `skills` gives the agent the whole text of each
+    skill it names when it starts (after the instruction files, and again
+    after a summary), and `effort` its thinking level, as in Claude Code;
+    both hold for a sub-agent of the kind and for a session that runs as
+    it, where `--effort` still wins. A preloaded skill is its text, with
+    its !`command` lines run and no arguments: the permission rules, hooks
+    and thinking level it carries come into force only when it is run
+    with the Skill tool, since preloading is reading, not running. A
+    skill the session does not have, one whose file keeps it from the
+    model (`disable-model-invocation`), and one this gnosh cannot run stop
+    the Agent call (or the session's start) with the reason: the agent
+    is never run without instructions its author gave it.
