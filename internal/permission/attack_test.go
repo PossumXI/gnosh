@@ -296,6 +296,8 @@ func TestShellAttacks(t *testing.T) {
 		// command is exactly what a deny rule names (oracle seed 101).
 		{"a function's unset numbers stand for nothing", ModeBypass, rules{allow: []string{"Bash"}, deny: []string{"Bash(git push)"}}, "f() { git $1 $2 $3; }; f push", Deny},
 		{"a function's unset numbers stand for nothing", ModeBypass, rules{allow: []string{"Bash"}, deny: []string{"Bash(git push)"}}, "f() { git $1 $2 $3 $4 $5; }; f push", Deny},
+		{"a function's numbers after a shift stand for nothing", ModeBypass, rules{allow: []string{"Bash"}, deny: []string{"Bash(git push)"}}, "f() { shift; git $1 $2; }; f x push", Deny},
+		{"a function's word that may be no word moves the rest", ModeBypass, rules{allow: []string{"Bash"}, deny: []string{"Bash(git push)"}}, "f() { git $1 $2; }; f $NOPE push", Deny},
 		{"any program is handed the file", ModeBypass, attackGuards, "mytool --exclude .env", Deny},
 		{"any program is handed the file after an @", ModeBypass, attackGuards, "mytool @.env", Deny},
 		{"bash expands the ~ after the = of a word that looks like an assignment", ModeBypass, attackGuards, "mytool cfg=~/.ssh/id_rsa", Deny},

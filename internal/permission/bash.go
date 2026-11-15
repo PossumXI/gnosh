@@ -1,7 +1,9 @@
 package permission
 
 import (
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -1960,6 +1962,9 @@ func (e *Engine) addScript(v *bashView, text string, nest nesting, depth int, ho
 	}
 }
 
+// shiftWord finds a shift in a line: what moves the numbered words.
+var shiftWord = regexp.MustCompile(`(^|[^A-Za-z0-9_])shift([^A-Za-z0-9_]|$)`)
+
 // positionals are the names a script's or a function's own words go by.
 var positionals = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "@", "*"}
 
@@ -2003,11 +2008,31 @@ func (e *Engine) giveArgs(v *bashView, ws []word, zero bool) {
 			}
 		}
 	}
-	// A number the call hands no word to is unset, and so is one a shift
-	// moved past the last word: unquoted, it stands for nothing. "f() {
-	// echo $1 $2 $3; }; f x" runs echo x (oracle seed 101).
+	// A number the call hands no word to is unset: unquoted, it stands
+	// for nothing. "f() { echo $1 $2 $3; }; f x" runs echo x (oracle seed
+	// 101). Where the call's words are written out, the numbers past them
+	// are unset, and only those: "f() { rm -rf "$1/build"; }; f proj" is
+	// proj/build. From a word that may make no word at all ("f $X a")
+	// every number on may be unset, and a shift anywhere in the line
+	// moves them all.
+	sure := 0
+	for _, w := range ws {
+		if !w.static() {
+			break
+		}
+		sure++
+	}
+	if zero && sure > 0 {
+		sure-- // (the first word is $0)
+	}
+	if shiftWord.MatchString(v.text) {
+		sure = 0
+	}
 	for _, name := range positionals {
-		if name != "0" {
+		n, err := strconv.Atoi(name)
+		switch {
+		case name == "0":
+		case err != nil && sure == 0, err == nil && n > sure:
 			v.give(name, lineVal{})
 		}
 	}

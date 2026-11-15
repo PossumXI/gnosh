@@ -251,6 +251,9 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv \"$tmp\" out.txt", "mv \"$f\" \"$f.bak\"", "mv vendor/x/.git /tmp/g", "mv -T /tmp/new build", "mv -f a b", "mv src/* dst/",
 		"mv $tmp $dest", "mv -n a.txt ~/Documents/", "mv {a.txt,b.txt}", "mv logs/*.log", "chmod -R {755,build}",
 		"mv a.txt {b,c}.txt", "mv x.txt *.bak", "ls 10>&1", "make build 77>&1",
+		// A number the call hands a written word to is that word, not
+		// nothing: the function removes proj/build, not /build.
+		"f() { rm -rf \"$1/build\"; }; f proj", "f() { mv \"$1\" \"$2\"; }; f a.txt b.txt",
 		"mv ${X:-a.txt b.txt}", "mv \"${X:-.git /tmp/g}\" /tmp", "chmod -R ${X:-755 build}", "mv ${X:-a b} dst/",
 		"x='.git /tmp/g'; mv \"$x\" /tmp", "x='a.txt b.txt'; mv $x''", "x='755 build'; chmod -R $x''", "x='.git /tmp/g'; mv \"$x\"'' /tmp",
 		// (A line that cannot be read, with such a command behind another
