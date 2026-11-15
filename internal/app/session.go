@@ -1086,7 +1086,7 @@ func (l *live) info() SessionInfo {
 		Mode:        string(l.engine.Mode()),
 		Commands:    l.slash.names(),
 		CommandList: l.slash.list(),
-		Skills:      l.typedSkills(),
+		Skills:      append(l.typedSkills(), l.mcpPromptInfos()...),
 		Version:     l.p.o.BuildID,
 		Interactive: l.interactive,
 		Resume:      "gnosh -r " + l.ts.ID(),

@@ -102,8 +102,31 @@ type Info struct {
 	Version         string
 	ProtocolVersion string
 	Instructions    string
-	// Resources says it offers resources (its capabilities name them).
-	Resources bool
+	// Resources says it offers resources, and Prompts that it offers
+	// prompts (its capabilities name them).
+	Resources, Prompts bool
+}
+
+// Prompt is one prompt a server offers: a message it writes for the user
+// to send, from the arguments given.
+type Prompt struct {
+	Name        string           `json:"name"`
+	Title       string           `json:"title,omitempty"`
+	Description string           `json:"description,omitempty"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
+}
+
+// PromptArgument is one argument a prompt takes.
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+// PromptMessage is one message a prompt comes to.
+type PromptMessage struct {
+	Role    string  `json:"role"`
+	Content Content `json:"content"`
 }
 
 // Resource is one resource a server lists: data it makes readable by URI.
@@ -250,8 +273,9 @@ func (c *Client) handshake(ctx context.Context) error {
 		return fmt.Errorf("mcp: the server's answer to the handshake cannot be read: %w", err)
 	}
 	_, resources := hello.Capabilities["resources"]
+	_, prompts := hello.Capabilities["prompts"]
 	c.info = Info{Name: hello.ServerInfo.Name, Version: hello.ServerInfo.Version, ProtocolVersion: hello.ProtocolVersion, Instructions: hello.Instructions,
-		Resources: resources}
+		Resources: resources, Prompts: prompts}
 	if h, ok := c.t.(*httpTransport); ok {
 		h.setVersion(hello.ProtocolVersion)
 	}
@@ -359,6 +383,53 @@ func (c *Client) ReadResource(ctx context.Context, uri string) ([]ResourceConten
 		return nil, fmt.Errorf("mcp: the resource cannot be read: %w", err)
 	}
 	return res.Contents, nil
+}
+
+// ListPrompts lists the server's prompts, every page of them.
+func (c *Client) ListPrompts(ctx context.Context) ([]Prompt, error) {
+	var all []Prompt
+	cursor := ""
+	for page := 0; page < 100; page++ {
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := c.request(ctx, "prompts/list", params)
+		if err != nil {
+			return nil, err
+		}
+		var res struct {
+			Prompts    []Prompt `json:"prompts"`
+			NextCursor string   `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
+			return nil, fmt.Errorf("mcp: the prompt list cannot be read: %w", err)
+		}
+		all = append(all, res.Prompts...)
+		if res.NextCursor == "" {
+			return all, nil
+		}
+		cursor = res.NextCursor
+	}
+	return nil, errors.New("mcp: the server's prompt list never ends")
+}
+
+// GetPrompt gets the messages a prompt comes to with the arguments given.
+func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]string) ([]PromptMessage, error) {
+	if args == nil {
+		args = map[string]string{}
+	}
+	raw, err := c.request(ctx, "prompts/get", map[string]any{"name": name, "arguments": args})
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Messages []PromptMessage `json:"messages"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return nil, fmt.Errorf("mcp: the prompt's messages cannot be read: %w", err)
+	}
+	return res.Messages, nil
 }
 
 // CallTool calls one tool with its arguments, a JSON object.

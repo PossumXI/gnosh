@@ -56,7 +56,9 @@ type mcpServer struct {
 	err    string
 	client *mcp.Client
 	tools  []*mcpTool
-	since  time.Time
+	// prompts are its prompts, read when it connected (mcpprompts.go).
+	prompts []mcp.Prompt
+	since   time.Time
 	// gen counts what /mcp has done to the server: a connection made for
 	// an earlier one is let go of when it is ready.
 	gen int
@@ -175,13 +177,21 @@ func (l *live) connectMCP(s *mcpServer) {
 		return
 	}
 	made := l.mcpToolsOf(s, tools)
+	var prompts []mcp.Prompt
+	if client.Info().Prompts {
+		// Its prompts, which are typed as commands. A list that cannot be
+		// read leaves the server's tools as they are.
+		if prompts, err = client.ListPrompts(ctx); err != nil {
+			l.flog.logf("mcp", "the prompts of the MCP server %s could not be listed: %v", s.cfg.Name, err)
+		}
+	}
 	l.mcp.mu.Lock()
 	if l.closing.Load() || s.gen != gen {
 		l.mcp.mu.Unlock()
 		_ = client.Close()
 		return
 	}
-	s.status, s.client, s.tools, s.since = "connected", client, made, l.p.now()
+	s.status, s.client, s.tools, s.prompts, s.since = "connected", client, made, prompts, l.p.now()
 	l.mcp.mu.Unlock()
 	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
 	l.offerMCPTools()
@@ -353,7 +363,15 @@ func (l *live) mcpLine(s *mcpServer) string {
 		}
 		sort.Strings(names)
 		info := s.client.Info()
-		return fmt.Sprintf("%s: connected (%s %s; %s), %s: %s", s.cfg.Name, firstOf(info.Name, "the server"), info.Version, where, countWords(len(names), "tool", "tools"), strings.Join(names, ", "))
+		line := fmt.Sprintf("%s: connected (%s %s; %s), %s: %s", s.cfg.Name, firstOf(info.Name, "the server"), info.Version, where, countWords(len(names), "tool", "tools"), strings.Join(names, ", "))
+		if len(s.prompts) > 0 {
+			cmds := make([]string, 0, len(s.prompts))
+			for _, p := range s.prompts {
+				cmds = append(cmds, "/"+mcp.ToolName(s.cfg.Name, p.Name))
+			}
+			line += fmt.Sprintf("; %s: %s", countWords(len(cmds), "prompt", "prompts"), strings.Join(cmds, ", "))
+		}
+		return line
 	case "failed":
 		return fmt.Sprintf("%s: not connected (%s): %s", s.cfg.Name, where, oneLine(s.err, 400))
 	case "disabled":

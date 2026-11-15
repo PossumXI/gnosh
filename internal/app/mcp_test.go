@@ -490,3 +490,40 @@ func TestMCPResources(t *testing.T) {
 	run(t, w, "-p", "hi").wantCode(t, 0)
 	hasNot(t, "the tools offered", strings.Join(toolNamesOf(w.Model.Requests()[0]), " "), "ListMcpResourcesTool")
 }
+
+// fakeMCPPrompts is a small MCP server in sh that offers one prompt,
+// review, with a file to review and what to look at.
+const fakeMCPPrompts = `while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"rev","version":"0.1"},"capabilities":{"prompts":{}}}}\n' "$id" ;;
+    *'"method":"tools/list"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[]}}\n' "$id" ;;
+    *'"method":"prompts/list"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"prompts":[{"name":"review","description":"Reviews a file.","arguments":[{"name":"file","required":true},{"name":"focus"}]}]}}\n' "$id" ;;
+    *'"method":"prompts/get"'*)
+      file=$(printf '%s' "$line" | sed -n 's/.*"file":"\([^"]*\)".*/\1/p')
+      focus=$(printf '%s' "$line" | sed -n 's/.*"focus":"\([^"]*\)".*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"messages":[{"role":"user","content":{"type":"text","text":"PROMPT-REVIEW %s for %s."}}]}}\n' "$id" "$file" "$focus" ;;
+  esac
+done`
+
+// The prompts of MCP servers are commands (spec/cc/mcp.md 5): typed as
+// /mcp__<server>__<prompt> with its arguments in order, the last taking
+// the words that are left, what the server writes goes to the model as
+// the user's request. A missing argument is said, and nothing is sent.
+func TestMCPPrompts(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Reviewed."})
+	server := w.Script(w.Home+"/bin/rev.sh", fakeMCPPrompts)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"rev": {"command": "`+server+`"}}}`)
+	r := run(t, w, "-p", "/mcp__rev__review main.go error handling").wantCode(t, 0)
+	has(t, "the run's answer", r.out, "Reviewed.")
+	first := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
+	has(t, "what the model read", first, "The user ran the prompt review of the MCP server rev", "PROMPT-REVIEW main.go for error handling.")
+	r = run(t, w, "-p", "/mcp__rev__review").wantCode(t, 1)
+	has(t, "a missing argument", r.err, "the prompt review of rev needs file: type /mcp__rev__review <file> <focus>")
+	if n := len(w.Model.Requests()); n != 1 {
+		t.Errorf("the model was sent %d requests, want 1", n)
+	}
+}

@@ -129,10 +129,10 @@ func (l *live) endWorktree(wt *worktree) (note string, kept bool) {
 	}
 	var what []string
 	if lines := strings.Count(strings.TrimSpace(status), "\n") + 1; strings.TrimSpace(status) != "" {
-		what = append(what, count(lines, "file it changed and did not commit", "files it changed and did not commit"))
+		what = append(what, countWords(lines, "file it changed and did not commit", "files it changed and did not commit"))
 	}
 	if n > 0 {
-		what = append(what, count(n, "commit", "commits"))
+		what = append(what, countWords(n, "commit", "commits"))
 	}
 	return fmt.Sprintf("[It worked in its own git work tree, %s, on the branch %s, which started at %s: it holds %s. None of it is in the folder you work in. Look at it there; merge the branch or copy what you want; then git worktree remove %s takes the work tree away.]",
 		wt.path, wt.branch, shortCommit(wt.base), strings.Join(what, " and "), wt.path), true
@@ -150,12 +150,4 @@ func shortCommit(id string) string {
 		return id[:10]
 	}
 	return id
-}
-
-// count says how many of a thing there are: "1 commit", "3 commits".
-func count(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return strconv.Itoa(n) + " " + many
 }

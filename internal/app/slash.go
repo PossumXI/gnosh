@@ -110,6 +110,12 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 		res, _, err := s.l.typedSkill(word, args, line)
 		if res.Handled {
 			s.l.flog.logf("turn", "the skill /%s was typed (%d bytes of arguments): %v", word, len(args), err)
+			return res, err
+		}
+		// Or a prompt of a connected MCP server.
+		res, _, err = s.l.typedMCPPrompt(word, args, line)
+		if res.Handled {
+			s.l.flog.logf("turn", "the MCP prompt /%s was typed (%d bytes of arguments): %v", word, len(args), err)
 		}
 		return res, err
 	}

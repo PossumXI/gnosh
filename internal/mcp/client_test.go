@@ -59,7 +59,18 @@ func fakeServer(mode string) {
 		switch m.Method {
 		case "initialize":
 			reply(map[string]any{"protocolVersion": "2025-03-26", "serverInfo": map[string]any{"name": "fake", "version": "1.0"},
-				"capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}, "instructions": "Use echo to echo."})
+				"capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "instructions": "Use echo to echo."})
+		case "prompts/list":
+			reply(map[string]any{"prompts": []map[string]any{{"name": "review", "description": "Reviews a file.",
+				"arguments": []map[string]any{{"name": "file", "required": true}, {"name": "focus"}}}}})
+		case "prompts/get":
+			var p struct {
+				Name      string            `json:"name"`
+				Arguments map[string]string `json:"arguments"`
+			}
+			json.Unmarshal(m.Params, &p)
+			reply(map[string]any{"messages": []map[string]any{{"role": "user", "content": map[string]any{"type": "text",
+				"text": "Review " + p.Arguments["file"] + " for " + p.Arguments["focus"] + "."}}}})
 		case "resources/list":
 			var p struct {
 				Cursor string `json:"cursor"`
@@ -271,5 +282,26 @@ func TestResources(t *testing.T) {
 	}
 	if _, err := c.ReadResource(context.Background(), "nowhere://x"); err == nil {
 		t.Errorf("a resource that is not there was read")
+	}
+}
+
+// A server that offers prompts says so in the handshake; they are listed,
+// and one is got with its arguments filled in.
+func TestPrompts(t *testing.T) {
+	c, err := Start(context.Background(), fake(t, "ok"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if !c.Info().Prompts {
+		t.Errorf("the server's prompts were not noted: %+v", c.Info())
+	}
+	list, err := c.ListPrompts(context.Background())
+	if err != nil || len(list) != 1 || list[0].Name != "review" || len(list[0].Arguments) != 2 || !list[0].Arguments[0].Required {
+		t.Fatalf("ListPrompts = %+v, %v", list, err)
+	}
+	msgs, err := c.GetPrompt(context.Background(), "review", map[string]string{"file": "main.go", "focus": "errors"})
+	if err != nil || len(msgs) != 1 || msgs[0].Role != "user" || msgs[0].Content.Text != "Review main.go for errors." {
+		t.Fatalf("GetPrompt = %+v, %v", msgs, err)
 	}
 }
