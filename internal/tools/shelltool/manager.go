@@ -135,7 +135,12 @@ func (m *Manager) Tools() []core.Tool {
 	if !m.opt.NoOutputTool {
 		tools = append(tools, outputTool{m})
 	}
-	return append(tools, stopTool{m})
+	tools = append(tools, stopTool{m})
+	if m.opt.OnMonitor != nil && !m.opt.NoBackground {
+		// Monitor is there when there is somewhere to pass its lines.
+		tools = append(tools, monitorTool{m})
+	}
+	return tools
 }
 
 // Tasks lists the session's background commands, oldest first, ended ones

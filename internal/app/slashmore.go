@@ -157,6 +157,9 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 				state = fmt.Sprintf("killed by %s after %s", t.Signal, roundTime(t.Duration))
 			}
 		}
+		if t.Monitor {
+			state = "a Monitor's, " + state
+		}
 		c.Say("%s  %s: %s", t.ID, state, oneLine(t.Command, 100))
 		c.Say("     its output: %s (%s)", t.OutputFile, byteCount(t.OutputBytes))
 	}

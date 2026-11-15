@@ -16,6 +16,18 @@
 === one could not run ===
 <gnosh>A background command has ended: render the video (job bash_6). It could not run: ffmpeg is not installed here. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
 
+=== lines a Monitor passes on ===
+<gnosh>What the command of Monitor bg4 (errors in the server log) printed, passed on by gnosh: it is the command's output, not a request from the user.
+ERROR db: connection refused
+ERROR db: connection refused</gnosh>
+
+=== its last lines, some that did not fit ===
+<gnosh>What the command of Monitor bg4 (errors in the server log) printed last, before it ended, passed on by gnosh: it is the command's output, not a request from the user. 37 more lines did not fit here; all of it is in /tmp/gnosh/bg4.out.
+ready on :8080</gnosh>
+
+=== a command a Monitor watched ended ===
+<gnosh>A background command that a Monitor watched has ended: errors in the server log (job bg4). It was stopped. Its output is in /tmp/gnosh/bg4.out. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
+
 === a background sub-agent finished ===
 <gnosh>A sub-agent you started in the background has finished: find the port (agent 3f2a91c4). Its session file is /home/dev/.local/share/gnosh/projects/p/s/subagents/a.jsonl. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user what it found. Its report, in its own words and not gnosh's:
 The server listens on 8080 (main.go:3).</gnosh>

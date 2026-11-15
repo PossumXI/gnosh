@@ -21,6 +21,7 @@ type bashArgs struct {
 	asked       time.Duration // the timeout the model asked for, when that was more than it got
 	host        *Host         // the machine it is for; nil for this one
 	spool       int64         // how much of its output its file may hold, when that is not Options.MaxSpoolBytes; 0 for that
+	watch       bool          // a Monitor's: what it prints is passed on as it comes
 }
 
 // summary is the one line that says what the call would do: the model's

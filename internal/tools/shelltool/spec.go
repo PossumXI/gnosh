@@ -102,10 +102,14 @@ func (m *Manager) outputSpec() core.ToolSpec {
 
 // stopSpec describes the TaskStop tool to the model.
 func (m *Manager) stopSpec() core.ToolSpec {
-	text := fmt.Sprintf(`Stops a background command that %[1]s started with %[2]s.
+	started := fmt.Sprintf("that %s started with %s", BashName, argBackground)
+	if m.opt.OnMonitor != nil && !m.opt.NoBackground {
+		started += fmt.Sprintf(", or the command a %s call watches", MonitorName)
+	}
+	text := fmt.Sprintf(`Stops a background command %[1]s.
 
-The command and everything it started are asked to exit and, if they have not gone within %[3]s, are killed. The result says how the command ended. Stopping a command that has already ended changes nothing and says how it ended.`,
-		BashName, argBackground, seconds(m.opt.TermGrace))
+The command and everything it started are asked to exit and, if they have not gone within %[2]s, are killed. The result says how the command ended. Stopping a command that has already ended changes nothing and says how it ended.`,
+		started, seconds(m.opt.TermGrace))
 	return core.ToolSpec{
 		Name:        StopName,
 		Description: text,

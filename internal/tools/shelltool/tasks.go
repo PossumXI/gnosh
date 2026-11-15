@@ -47,6 +47,9 @@ type Task struct {
 	// LeftRunning lists the process groups of what the command left
 	// running, still holding its output open, when it ended.
 	LeftRunning []int
+	// Monitor says the command is a Monitor's: what it prints is passed on
+	// as it comes.
+	Monitor bool
 }
 
 // Ended is the news that a background command has ended, as Options.OnEnd
@@ -76,6 +79,7 @@ func (j *job) task(now time.Time) Task {
 		Started:     j.started,
 		Duration:    now.Sub(j.started),
 		Running:     true,
+		Monitor:     j.mon != nil,
 	}
 	if e := j.ending(); e != nil {
 		t.Running = false

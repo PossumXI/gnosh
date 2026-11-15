@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -25,6 +27,7 @@ func (l *live) backgroundEnded(e shelltool.Ended) {
 		ID:      e.ID,
 		Command: firstOf(e.Description, firstLine(e.Command)),
 		Output:  e.OutputFile,
+		Monitor: e.Monitor,
 	}
 	switch {
 	case e.Reason == shelltool.ReasonExited && e.ExitCode == 0:
@@ -41,4 +44,33 @@ func (l *live) backgroundEnded(e shelltool.Ended) {
 		Notice: "A background command ended: " + e.Summary,
 		Wake:   true,
 	})
+}
+
+// monitorLines passes on what the command of a Monitor call printed, in a
+// note that wakes an idle session, as the end of a background command
+// does. While a note the model has not read yet waits in line (the agent
+// has something queued), the lines are not taken: the shell manager keeps
+// them, with what comes after, and offers them again a moment later. A
+// model that is slow to read gets one note with many lines, not a pile of
+// notes. The last lines of a command that ended are always taken, so that
+// they come before the news of its end.
+//
+// It is called on a goroutine of the shell manager's and must not block.
+func (l *live) monitorLines(w shelltool.Watched) bool {
+	a := l.agent
+	if a == nil || l.closing.Load() || l.bgUntold.Load() {
+		return true
+	}
+	if !w.Last && a.State().Queued > 0 {
+		return false
+	}
+	what := firstOf(w.Description, "a command")
+	_ = a.Tell(agent.Note{
+		Text: l.texts.MonitorLines(prompt.MonitorNews{ID: w.ID, Description: w.Description, Lines: w.Lines,
+			Left: w.Left, Output: w.OutputFile, Last: w.Last}),
+		Source: "monitor",
+		Notice: fmt.Sprintf("Monitor %s passed on %d lines: %s", w.ID, len(w.Lines)+w.Left, what),
+		Wake:   true,
+	})
+	return true
 }

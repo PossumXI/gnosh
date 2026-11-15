@@ -19,6 +19,9 @@ const (
 	OutputName = "TaskOutput"
 	// StopName is the tool that stops a background command.
 	StopName = "TaskStop"
+	// MonitorName is the tool that runs a command in the background and
+	// passes on what it prints as it comes (monitor.go).
+	MonitorName = "Monitor"
 )
 
 // The arguments.
@@ -31,6 +34,8 @@ const (
 	argTaskID      = "task_id"           // TaskOutput, TaskStop: the id Bash gave a background command
 	argTaskIDOld   = "shell_id"          // the same, as Claude Code spelled it before; read but not advertised
 	argFilter      = "filter"            // TaskOutput: a regular expression that picks lines
+	argTimeoutMs   = "timeout_ms"        // Monitor: milliseconds the watched command may run
+	argWS          = "ws"                // Monitor in Claude Code: a WebSocket to watch; refused here
 )
 
 // argNoSandbox is an argument of Claude Code's Bash that a model trained on

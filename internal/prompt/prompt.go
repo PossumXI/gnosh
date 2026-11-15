@@ -64,6 +64,7 @@ const (
 	textInterrupted      = "interrupted"
 	textBackgroundEnded  = "background-ended"
 	textAgentEnded       = "agent-ended"
+	textMonitorLines     = "monitor-lines"
 	textBtw              = "btw"
 	textRecap            = "recap"
 	textPrintWait        = "print-wait"
@@ -173,8 +174,10 @@ func specs() []spec {
 		{name: textInterrupted, kind: KindLine, may: []string{"user", "exit"},
 			when: "Where a turn was stopped before it finished, by the person or because gnosh itself was stopped."},
 		{name: textBackgroundEnded, kind: KindLine, need: []string{"command"},
-			may:  []string{"id", "finished", "failed", "stopped", "not_run", "why", "output"},
+			may:  []string{"id", "monitor", "finished", "failed", "stopped", "not_run", "why", "output"},
 			when: "When a background command ends, between rounds or as a turn of its own."},
+		{name: textMonitorLines, kind: KindLine, need: []string{"id"}, may: []string{"description", "last", "left", "output", "lines"},
+			when: "When a command that Monitor watches has printed lines, between rounds or as a turn of its own."},
 		{name: textAgentEnded, kind: KindLine, need: []string{"description", "id"},
 			may:  []string{"finished", "failed", "stopped", "why", "caution", "report", "output"},
 			when: "When a sub-agent the model started in the background ends, between rounds or as a turn of its own."},

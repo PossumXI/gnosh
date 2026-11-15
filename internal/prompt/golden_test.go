@@ -217,7 +217,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw, textRecap, textMention, textAgentMention, textStructured, textPrintWait, textStatusLine},
+			texts: []string{textInterrupted, textBackgroundEnded, textMonitorLines, textAgentEnded, textBtw, textRecap, textMention, textAgentMention, textStructured, textPrintWait, textStatusLine},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -226,6 +226,9 @@ func goldenFiles() []goldenFile {
 					{"one failed", s.BackgroundEnded(BackgroundEnd{ID: "bash_4", Command: "go test -race ./...", State: BackgroundFailed, Code: 2, Output: "/home/dev/project/.gnosh/tasks/bash_4.out"})},
 					{"one was stopped", s.BackgroundEnded(BackgroundEnd{Command: "tail -f server.log", State: BackgroundStopped})},
 					{"one could not run", s.BackgroundEnded(BackgroundEnd{ID: "bash_6", Command: "render the video", State: BackgroundNotRun, Why: "ffmpeg is not installed here"})},
+					{"lines a Monitor passes on", s.MonitorLines(MonitorNews{ID: "bg4", Description: "errors in the server log", Lines: []string{"ERROR db: connection refused", "ERROR db: connection refused"}, Output: "/tmp/gnosh/bg4.out"})},
+					{"its last lines, some that did not fit", s.MonitorLines(MonitorNews{ID: "bg4", Description: "errors in the server log", Lines: []string{"ready on :8080"}, Left: 37, Output: "/tmp/gnosh/bg4.out", Last: true})},
+					{"a command a Monitor watched ended", s.BackgroundEnded(BackgroundEnd{ID: "bg4", Command: "errors in the server log", State: BackgroundStopped, Output: "/tmp/gnosh/bg4.out", Monitor: true})},
 					{"a background sub-agent finished", s.AgentEnded(AgentEnd{ID: "3f2a91c4", Description: "find the port", Report: "The server listens on 8080 (main.go:3).", Output: "/home/dev/.local/share/gnosh/projects/p/s/subagents/a.jsonl"})},
 					{"one stopped before it finished", s.AgentEnded(AgentEnd{ID: "77b0e1d2", Description: "review the patch", State: AgentFailed, Why: "its model request failed: connection refused", Report: "Half of it is read."})},
 					{"one was stopped", s.AgentEnded(AgentEnd{ID: "9c4d", Description: "search the logs", State: AgentStopped})},

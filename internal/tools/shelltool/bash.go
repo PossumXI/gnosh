@@ -105,8 +105,15 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 	if env.Progress != nil && !a.background {
 		j.sink.Store(newProgressSink(env.Progress, callID))
 	}
+	if a.watch && m.opt.OnMonitor != nil {
+		j.mon = newWatcher(j, m.opt.OnMonitor)
+		j.sink.Store(newProgressSink(j.mon.take, callID))
+	}
 	if err := j.launch(dir, name); err != nil {
 		j.detach()
+		if j.mon != nil {
+			j.mon.close()
+		}
 		m.forget(j)
 		close(j.done)
 		return nil, err

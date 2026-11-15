@@ -85,6 +85,9 @@ func (l *live) buildTools() error {
 		// ends, and so is a run, which waits for the background work its
 		// turns started (printwait.go).
 		so.OnEnd = l.backgroundEnded
+		// What the commands of Monitor calls print is passed on the same
+		// way, at the pace the model reads it.
+		so.OnMonitor = l.monitorLines
 		// The refusal of a foreground command that begins with a long
 		// sleep (shelltool.Options.LongSleep, for sessions like this one,
 		// which are told when a background command ends) is built and is

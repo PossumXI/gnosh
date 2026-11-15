@@ -555,7 +555,10 @@ func (s *subSession) tools() ([]core.Tool, error) {
 	seen := map[string]bool{}
 	for _, t := range all {
 		name := t.Spec().Name
-		if seen[name] || slices.Contains(s.def.Disallowed, name) {
+		if seen[name] || slices.Contains(s.def.Disallowed, name) || name == shelltool.MonitorName {
+			// (Monitor passes its lines on to the session the person is
+			// in, so a sub-agent has none: they would go to another
+			// conversation than the one that asked for them.)
 			continue
 		}
 		if s.def.ToolsSet && !slices.Contains(s.def.Tools, name) {

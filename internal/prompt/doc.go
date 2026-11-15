@@ -245,6 +245,11 @@
 //     short is not read as one the model chose to end.
 //   - background-ended (BackgroundEnded) says a background command ended,
 //     how, and where its output is, and that it is news and not a request.
+//   - monitor-lines (MonitorLines) passes on what a command that Monitor
+//     watches printed, a few lines at a time, as the command's output and
+//     not a request; how many lines did not fit, and the file that holds
+//     them all; the last lines say so. background-ended then says that a
+//     command a Monitor watched has ended.
 //   - agent-ended (AgentEnded) says the same of a sub-agent the model
 //     started in the background, with its report, marked as its own words.
 //   - btw (Btw) stands before a side question the person asks with /btw,

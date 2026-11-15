@@ -6,7 +6,10 @@
 // track of every process it starts, and stops them all when it is closed
 // (Close). The tools are Bash, which runs a command; TaskOutput, which
 // returns what a background command has printed since it was last asked;
-// and TaskStop, which stops a background command. Their names and the
+// TaskStop, which stops a background command; and Monitor, which runs a
+// command in the background and passes on what it prints as it comes
+// (monitor.go), where Options.OnMonitor gives the lines somewhere to go.
+// Their names and the
 // names of their arguments are Claude Code's, but for host, which is
 // gnosh's own, and all of them are in names.go.
 //
@@ -294,6 +297,12 @@
 // the model, and not if Close caused it. Manager.Tasks lists the
 // background commands and Manager.Stop stops one, for the person's own
 // controls.
+//
+// A Monitor call's command is a background command like the others, with
+// a watcher on its output: Options.OnMonitor is offered its lines every
+// second, at most monitorLines of them (monitorBytes in all, each line cut
+// at monitorLineBytes), and what is turned down is offered again with what
+// came after. Its last lines are offered before the news of its end.
 //
 // # The tool's own rules
 //

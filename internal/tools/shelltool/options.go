@@ -132,6 +132,16 @@ type Options struct {
 	// TaskStop), and an end caused by Close, is not announced.
 	OnEnd func(Ended)
 
+	// OnMonitor, when not nil, is offered what the commands of Monitor
+	// calls print, a few lines at a time (monitor.go), and the Monitor
+	// tool is among Tools. It is called from a goroutine of the manager's,
+	// one call at a time for each command, and always before the news of
+	// that command's end; it must not block. It reports whether it took
+	// the lines: lines it does not take are offered again a moment later,
+	// with what came after them. An offer with Watched.Last set must be
+	// taken.
+	OnMonitor func(Watched) bool
+
 	// Hosts are the other machines a Bash call may name as its host. A
 	// call that names one runs its command there through ssh. With none,
 	// every command runs here.

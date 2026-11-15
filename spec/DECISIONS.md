@@ -450,3 +450,20 @@ or kept with the reason said (27).
     model (`disable-model-invocation`), and one this gnosh cannot run stop
     the Agent call (or the session's start) with the reason: the agent
     is never run without instructions its author gave it.
+41. **Monitor watches commands, at the pace the model reads.** The tool
+    runs its command in the background, as Bash does with
+    `run_in_background`, and passes each line on as a note from gnosh;
+    the news that the command ended comes after its last lines, and a run
+    (`-p`) waits for it as for any background work. Claude Code's form
+    with `ws` (a WebSocket) is refused: gnosh has no WebSocket client.
+    The lines are offered once a second, and while a note the model has
+    not read yet waits in line, they are kept and offered again with what
+    came after: a local model that is slow to read gets one note with
+    many lines rather than a pile of notes. One note holds at most 100
+    lines and 8 KiB, a line is cut at 1,000 bytes, and what does not fit
+    is counted and left in the output file. Blank lines are not passed
+    on. The time limit is the call's (`timeout_ms`, 5 minutes by
+    default, at most 30), with no shorter one in a run. The command is
+    judged as the same command in Bash is. A sub-agent has no Monitor:
+    the lines go to the session the person is in.
+

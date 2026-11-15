@@ -119,6 +119,7 @@ type job struct {
 	cmdFile string // the command itself, when it was too long to pass as an argument
 
 	sink atomic.Pointer[progressSink] // where live output goes while a call is listening
+	mon  *watcher                     // a Monitor's command: what passes its lines on; nil for any other
 
 	// intake is held while a piece of output is read from the pipe and
 	// taken in, so that whoever else holds it knows that none is on its way.
@@ -384,6 +385,11 @@ func (j *job) background(limit time.Duration) {
 	}
 	why, _ := j.await(context.Background(), timeout, nil)
 	j.finish(why, limit)
+	if j.mon != nil {
+		// A watched command's last lines go before the news of its end.
+		j.detach()
+		j.mon.close()
+	}
 	j.m.notes.send(j)
 }
 

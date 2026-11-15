@@ -431,6 +431,8 @@ type BackgroundEnd struct {
 	Why   string
 	// Output is the file its output is in.
 	Output string
+	// Monitor says a Monitor call watched it.
+	Monitor bool
 }
 
 // BackgroundEnded returns the notice that a background command has ended.
@@ -452,7 +454,39 @@ func (s *Set) BackgroundEnded(b BackgroundEnd) string {
 	default:
 		vals.flag("finished", true)
 	}
+	vals.flag("monitor", b.Monitor)
 	return s.fill(textBackgroundEnded, vals)
+}
+
+// MonitorNews is what a command that Monitor watches printed since it was
+// last passed on.
+type MonitorNews struct {
+	// ID is the command's id, and Description what the call said it
+	// watches.
+	ID, Description string
+	// Lines are the lines it printed, and Left how many more did not fit.
+	Lines []string
+	Left  int
+	// Output is the file that holds all it printed.
+	Output string
+	// Last says the command has ended: these are its last lines.
+	Last bool
+}
+
+// MonitorLines returns the notice that passes on what a command that
+// Monitor watches printed. Nobody typed it, and it says so.
+func (s *Set) MonitorLines(n MonitorNews) string {
+	vals := values{
+		"id":          oneLine(n.ID, maxName),
+		"description": oneLine(n.Description, maxQuote),
+		"lines":       strings.Join(n.Lines, "\n"),
+		"output":      oneLine(n.Output, maxName),
+	}
+	if n.Left > 0 {
+		vals["left"] = strconv.Itoa(n.Left)
+	}
+	vals.flag("last", n.Last)
+	return s.fill(textMonitorLines, vals)
 }
 
 // AgentState says how a background sub-agent ended.
