@@ -484,6 +484,9 @@ func (s *subSession) tools() ([]core.Tool, error) {
 			}
 		}
 	}
+	// The tools of the MCP servers connected when the sub-agent starts, as
+	// for the session: a kind that lists its tools has those it names.
+	all = append(all, l.mcpTools()...)
 	if s.depth < maxAgentDepth && l.engine.ToolEnabled(agentToolName) {
 		all = append(all, &agentTool{l: l, owner: s})
 	}

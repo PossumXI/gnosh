@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -245,5 +246,42 @@ func TestMCPConfigFlags(t *testing.T) {
 	has(t, "the safe mode notice", r.err, "MCP servers from files")
 	if strings.Contains(r.out, "filed") {
 		t.Errorf("safe mode let the user's server in:\n%s", r.out)
+	}
+}
+
+// A sub-agent has the tools of the MCP servers, as the session does,
+// unless its kind names its tools.
+func TestMCPToolsInSubAgents(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"greet","prompt":"Greet Jae.","subagent_type":"general-purpose"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "mcp__greeter__greet", Args: `{"name":"Jae"}`}}},
+		apptest.Reply{Text: "The server said: hello, Jae."},
+		apptest.Reply{Text: "Greeted."},
+	)
+	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"greeter": {"command": "`+server+`"}}}`)
+
+	run(t, w, "-y", "-p", "greet Jae through a sub-agent").wantCode(t, 0)
+	reqs := w.Model.Requests()
+	if len(reqs) != 4 {
+		t.Fatalf("the model was sent %d requests, want 4", len(reqs))
+	}
+	if names := toolNamesOf(reqs[1]); !slices.Contains(names, "mcp__greeter__greet") {
+		t.Errorf("the general-purpose sub-agent's tools are %q", names)
+	}
+	// (toolResult numbers the calls of each request from c1.)
+	has(t, "what the sub-agent read of the call", toolResult(t, w, 2, "c1"), "hello, Jae")
+	has(t, "the result of the Agent call", toolResult(t, w, 3, "c1"), "The server said: hello, Jae.")
+
+	// Explore names its tools, and no server's is among them.
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Agent", Args: `{"description":"look","prompt":"Look around.","subagent_type":"Explore"}`}}},
+		apptest.Reply{Text: "Nothing much."},
+		apptest.Reply{Text: "Looked."},
+	)
+	run(t, w, "-y", "-p", "look around").wantCode(t, 0)
+	reqs = w.Model.Requests()
+	if names := toolNamesOf(reqs[len(reqs)-2]); slices.Contains(names, "mcp__greeter__greet") {
+		t.Errorf("the Explore sub-agent was given a server's tool: %q", names)
 	}
 }

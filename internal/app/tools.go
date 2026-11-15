@@ -189,20 +189,26 @@ func (l *live) toolNames() []string {
 // those of the MCP servers that are connected, as far as the rules let it
 // have them.
 func (l *live) offeredTools() []core.Tool {
-	all := append([]core.Tool(nil), l.tools...)
+	return append(append([]core.Tool(nil), l.tools...), l.mcpTools()...)
+}
+
+// mcpTools are the tools of the MCP servers connected now, as far as the
+// rules let the model have them.
+func (l *live) mcpTools() []core.Tool {
 	if l.mcp == nil {
-		return all
+		return nil
 	}
 	l.mcp.mu.Lock()
 	defer l.mcp.mu.Unlock()
+	var out []core.Tool
 	for _, s := range l.mcp.servers {
 		for _, t := range s.tools {
 			if l.engine.ToolEnabled(t.name) {
-				all = append(all, t)
+				out = append(out, t)
 			}
 		}
 	}
-	return all
+	return out
 }
 
 // toolSpecs lists what the model is told about the session's tools.

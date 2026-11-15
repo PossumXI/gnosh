@@ -28,8 +28,9 @@ import (
 //
 // In an interactive session the servers connect in the background, and
 // their tools are added as each one is ready; a run (-p) waits for them,
-// as long as a server may take to start, before its turn. Sub-agents are
-// not given MCP tools in this build.
+// as long as a server may take to start, before its turn. A sub-agent is
+// given the tools of the servers connected when it starts, as far as its
+// kind's tools and disallowedTools let it have them.
 
 // mcpMaxChars is the most of a tool's result the model reads; the whole of
 // a longer one is written to a file beside the session, and the model is
