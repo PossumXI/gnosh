@@ -8,12 +8,16 @@
 #	ssh ai-remote bash -s < tools/dev/box-ui-check.sh            # basic
 #	ssh ai-remote bash -s -- plan < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- background < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- btw < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
 #               the question is refused (nothing is written)
 #   background  a sub-agent in the background, whose report wakes the
 #               session (permissions skipped, in the scratch folder)
+#   btw         a side question (/btw) asked while a slow command runs:
+#               answered beside the turn, which goes on (permissions
+#               skipped, in the scratch folder)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -26,9 +30,9 @@ flags=""
 case "$scenario" in
 basic) ;;
 plan) flags="--permission-mode plan" ;;
-background) flags="-y" ;;
+background | btw) flags="-y" ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw)" >&2
 	exit 2
 	;;
 esac
@@ -71,6 +75,16 @@ plan)
 background)
 	tmux send-keys -t "$S" "Call the Agent tool with run_in_background set to true, to have a sub-agent count the lines of notes.txt. Then end your turn; when its report comes, tell me the count." Enter
 	done_when() { screen | grep -q "background sub-agent finished" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
+btw)
+	tmux send-keys -t "$S" "Run this exact shell command with the Bash tool and nothing else: sleep 40 && echo slept" Enter
+	for i in $(seq 1 120); do
+		sleep 1
+		screen | grep -q "sleep 40" && break
+	done
+	sleep 3
+	tmux send-keys -t "$S" "/btw what command is running right now?" Enter
+	done_when() { screen | grep -A4 "/btw what command" | tail -n +2 | grep -q -i "sleep" && screen | grep -q "done in"; }
 	;;
 esac
 for i in $(seq 1 300); do
