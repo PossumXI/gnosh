@@ -86,7 +86,13 @@ var roTable = map[string]roSpec{
 	"false": {ops: opsWords, anyArgs: true},
 	"sort": {short: "rnufbdghiMVRszcCm", valued: "kt", noGlob: true,
 		long: "--reverse --numeric-sort --unique --ignore-case --ignore-leading-blanks --dictionary-order --general-numeric-sort --human-numeric-sort --month-sort --version-sort --stable --zero-terminated --check --check= --merge --key= --field-separator="},
-	"uniq":     {short: "cduizD", valued: "fsw", max: 1, long: "--count --repeated --unique --ignore-case --zero-terminated --skip-fields= --skip-chars= --check-chars="},
+	"uniq": {short: "cduizD", valued: "fsw", max: 1, long: "--count --repeated --unique --ignore-case --zero-terminated --skip-fields= --skip-chars= --check-chars="},
+	// od and hexdump dump bytes. (od's -w takes a value only when it is
+	// attached, and is left out: "od -w file" must not lose its file.)
+	"od": {short: "abcdfilosvx", valued: "AjNSt",
+		long: "--address-radix= --skip-bytes= --read-bytes= --strings --strings= --format= --output-duplicates --width= --endian= --traditional"},
+	"hexdump": {short: "bcCdovx", valued: "ens", pathFlags: "f",
+		long: "--one-byte-octal --one-byte-char --canonical --two-bytes-decimal --two-bytes-octal --two-bytes-hex --format= --format-file= --length= --skip= --no-squeezing --color --color="},
 	"cut":      {short: "sz", valued: "dfcb", long: "--delimiter= --fields= --characters= --bytes= --only-delimited --complement --output-delimiter= --zero-terminated"},
 	"tr":       {short: "dscCt", ops: opsWords, long: "--delete --squeeze-repeats --complement --truncate-set1"},
 	"basename": {short: "az", valued: "s", ops: opsWords, long: "--multiple --suffix= --zero"},
@@ -355,6 +361,8 @@ func facts(words []word) (f cmdFacts) {
 		}
 	case "test", "[", "[[":
 		testFacts(&f, args)
+	case "xxd":
+		xxdFacts(&f, args)
 	case "mkdir", "touch", "rm", "rmdir", "mv", "cp":
 		fsFacts(&f, args)
 	default:
@@ -798,6 +806,60 @@ func dateFacts(f *cmdFacts, args []word) {
 			f.why = "date with a bare argument sets the clock"
 			return
 		}
+	}
+	f.readOnly = true
+}
+
+// xxdBool and xxdValued are the flags of xxd that only change how it
+// dumps. Each is a word of its own: xxd's flags do not combine, so "-ps"
+// is one flag, not -p and -s.
+var (
+	xxdBool = map[string]bool{"-a": true, "-autoskip": true, "-b": true, "-bits": true, "-C": true, "-capitalize": true,
+		"-E": true, "-EBCDIC": true, "-e": true, "-i": true, "-include": true, "-p": true, "-ps": true,
+		"-postscript": true, "-plain": true, "-r": true, "-revert": true, "-u": true, "-d": true}
+	xxdValued = map[string]bool{"-c": true, "-cols": true, "-g": true, "-groupsize": true, "-l": true, "-len": true,
+		"-o": true, "-offset": true, "-s": true, "-seek": true, "-n": true, "-name": true, "-R": true}
+)
+
+// xxdFacts judges xxd: it only reads when it writes to standard output,
+// which is when it is given at most one file, the one it reads; a second
+// file is one it writes. Its flags come first, each a known word, and the
+// value of one that takes a value is the plain word after it.
+func xxdFacts(f *cmdFacts, args []word) {
+	var ops []word
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		w := a.joined()
+		switch {
+		case !a.static() || a.glob && len(ops) == 0:
+			f.why = "xxd is given a word whose value is not known before it runs"
+			return
+		case len(ops) > 0:
+			ops = append(ops, a)
+		case xxdBool[w]:
+		case xxdValued[w]:
+			if i+1 >= len(args) || !args[i+1].static() || args[i+1].glob {
+				f.why = "xxd's " + w + " is not given a plain value"
+				return
+			}
+			i++
+		case strings.HasPrefix(w, "-") && w != "-":
+			f.why = "xxd is given a flag (" + w + ") that is not known to only read"
+			return
+		default:
+			ops = append(ops, a)
+		}
+	}
+	if len(ops) > 1 {
+		f.why = "xxd writes to the second file it is given"
+		return
+	}
+	if len(ops) == 1 && ops[0].glob {
+		f.why = "a file name pattern may turn into a second file, which xxd writes"
+		return
+	}
+	if len(ops) == 1 && ops[0].joined() != "-" {
+		f.reads = ops
 	}
 	f.readOnly = true
 }

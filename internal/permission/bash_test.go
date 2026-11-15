@@ -336,6 +336,8 @@ func TestBashReadOnly(t *testing.T) {
 		"date", "date +%s", "date -u", "date -d yesterday", "test -f a", "[ -d src ]",
 		"sed -n '1,5p' a", "sed -n 5p a", "sed 's/a/b/' a", "nl a", "file a", "whoami", "uname -a",
 		"ls ~/../../proj", "cat ./a", "! grep -q foo a",
+		"tail -c 1 a | xxd", "xxd -l 64 a", "xxd -ps a", "xxd -c 16 -g 1 a", "xxd -r -p a", "xxd - ",
+		"od -c a", "od -An -tx1 a", "od -N 16 -j 4 a", "hexdump -C a", "hexdump -n 32 -s 8 a",
 	} {
 		cases = append(cases, bashCase{"read-only", "", rules{}, cmd, Allow})
 		cases = append(cases, bashCase{"read-only in plan", ModePlan, rules{}, cmd, Allow})
@@ -357,6 +359,8 @@ func TestBashReadOnly(t *testing.T) {
 		"find . -delete", "find . -exec ls {} \\;", "find . -fprint out", "find -L . -name x",
 		"find . -follow", "find . -ok ls {} \\;", "find . -newer /etc/passwd",
 		"sort -o out a", "sort --output=out a", "sort --compress-program=sh a", "uniq a out",
+		"xxd a out", "xxd -r -p a out", "xxd -w a", "xxd $X a", "xxd -c $N a", "xxd * ", "xxd -c", "od -w a",
+		"hexdump -f /etc/passwd a",
 		"diff -r a b", "date -s tomorrow", "date 010100002030", "date -f dates", "date -r file",
 		"which -x go", "file -m magic a", "file -f list", "sed -n '1e id' a", "sed 's/a/b/e' a",
 		"sed 's/a/b/w out' a", "sed -n 'w out' a", "sed --debug p a",
