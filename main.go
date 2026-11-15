@@ -23,6 +23,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/buildinfo"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/gnovm"
+	"github.com/gnosh-ai/gnosh/internal/relay"
 	"github.com/gnosh-ai/gnosh/internal/ui"
 )
 
@@ -34,6 +35,11 @@ func main() {
 	// touched by anything a user's settings could change.
 	if len(os.Args) > 1 && os.Args[1] == "gnovm-worker" {
 		os.Exit(gnovm.WorkerMain())
+	}
+	if len(os.Args) > 1 && os.Args[1] == "ssh" && !sshHelp(os.Args[2:]) {
+		// gnosh ssh: every word after ssh is ssh's, so nothing else is
+		// read first (internal/relay).
+		os.Exit(relay.Main(os.Args[2:]))
 	}
 
 	// SIGINT and SIGTERM stop a run in order (the turn, its commands, the
@@ -67,4 +73,10 @@ func main() {
 		Build:        cli.BuildFromInfo(info).WithLinkedTime(buildinfo.BuildTime),
 		BuildID:      buildinfo.BuildID,
 	}))
+}
+
+// sshHelp reports whether the words after gnosh ssh ask for gnosh's help
+// for it: -h or --help alone, which ssh has no use for.
+func sshHelp(args []string) bool {
+	return len(args) == 1 && (args[0] == "-h" || args[0] == "--help")
 }

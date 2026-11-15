@@ -536,3 +536,25 @@ or kept with the reason said (27).
     lines committed meanwhile are then written into the scrollback,
     where they would have been, so nothing said is lost.
 
+45. **gnosh ssh relays the far side's copies, and /copy uses this
+    machine's clipboard.** Apple's Terminal drops OSC 52, the sequence by
+    which a program on the far side of ssh puts text on the clipboard
+    (gnosh's /copy, tmux's copy mode), so in it nothing copied on the
+    far side ever reached the Mac. Jae asked for copying there to work
+    three times. `gnosh ssh [ssh arguments...]` runs ssh on a
+    pseudo-terminal of gnosh's own, passes every byte through as it is,
+    and puts the text of each OSC 52 write on this machine's clipboard
+    as well (pbcopy on macOS; wl-copy, xclip or xsel on a Linux
+    desktop). Queries and clears are not acted on, nor are the 8-bit
+    forms of the sequence, whose bytes are also parts of UTF-8
+    characters. It follows the window's size, passes signals on, and
+    ends with ssh's status; copies queue sixteen deep, the oldest giving
+    way, so a clipboard that hangs never holds the screen up. Without a
+    terminal, or with no clipboard tool, it is plain ssh. main runs it
+    before anything else is read, so every word after `ssh` is ssh's;
+    the table has it for help (`-h` or `--help` alone shows that). A
+    shell function in Apple's Terminal can send each interactive ssh
+    through it. The same tools now serve `/copy` when gnosh was not
+    reached over ssh (no SSH_CONNECTION, SSH_CLIENT or SSH_TTY); over
+    ssh, where there is no tool, or when it fails, `/copy` goes through
+    the terminal as before, and says so.

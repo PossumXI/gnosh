@@ -72,6 +72,26 @@ the scrollback or around what is still being written and the prompt box.
 Claude's part: the empty lines between the paragraphs of the model's own
 answer stay, because they are the answer's.
 
+15 November 2026, setting the work that went on while he was away:
+
+> set a 1m loop and keep improving UX and featureset, make it claude code like. and everything else i said.
+
+Set: gnosh is made more like Claude Code a pass at a time, each pass built
+and tested on a server, pushed, and installed on the home AI boxes once the
+clean-copy CI passes. Claude's part: which thing comes next, each time.
+
+Later that day:
+
+> i want a real side panel as an option i guess.
+
+Set: `/panel` and the `sidePanel` option (`spec/DECISIONS.md` item 44).
+Claude's part: the panel is a second way of drawing the session, on the
+whole screen, and it never comes on by itself.
+
+> make it public.
+
+Set: this repository is public.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

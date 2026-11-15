@@ -1,0 +1,22 @@
+gnosh ssh
+
+  Run ssh, putting what the far side copies on this machine's clipboard. Every
+  word after ssh is ssh's (but for -h or --help alone, which shows this), and
+  gnosh ssh ends with ssh's status. At a terminal, ssh runs on a terminal of
+  gnosh's own: what is typed and what comes back pass through as they are, and
+  the text of each copy the far side makes through the terminal (OSC 52:
+  gnosh's /copy, tmux's copy mode) is put on this machine's clipboard as well.
+  Apple's Terminal drops such copies, so there a shell function can send each
+  interactive ssh through gnosh ssh. Without a terminal, or where this machine
+  has no clipboard tool (pbcopy, wl-copy, xclip, xsel), gnosh ssh is plain
+  ssh.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh ssh [flags] [ssh arguments...]
+
+Flags
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

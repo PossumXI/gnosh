@@ -379,6 +379,16 @@ func Default() *Table {
 		flags:   []*flag{cwd, help},
 		summary: "Say which config and data folders are in use."})
 
+	t.command(root, &command{name: "ssh", cmd: CmdSSH, pri: 1, maxArgs: -1,
+		argsUsage: "[ssh arguments...]", argsShort: "[ssh args]",
+		passes: true, dashHint: "gnosh ssh must be the first word, and then every word after it is ssh's",
+		flags:   []*flag{help},
+		summary: "Run ssh, putting what the far side copies on this machine's clipboard.",
+		about: "Every word after ssh is ssh's (but for -h or --help alone, which shows this), and gnosh ssh ends with ssh's status. At a terminal, ssh runs on a terminal of gnosh's own: what is typed and what comes back pass through as they are, " +
+			"and the text of each copy the far side makes through the terminal (OSC 52: gnosh's /copy, tmux's copy mode) is put on this machine's clipboard as well. " +
+			"Apple's Terminal drops such copies, so there a shell function can send each interactive ssh through gnosh ssh. " +
+			"Without a terminal, or where this machine has no clipboard tool (pbcopy, wl-copy, xclip, xsel), gnosh ssh is plain ssh."})
+
 	mcp := t.command(root, &command{name: "mcp", needSub: true, pri: 1,
 		argsUsage: "<command>", flags: []*flag{help},
 		summary: "Add, list, show and remove MCP servers.",

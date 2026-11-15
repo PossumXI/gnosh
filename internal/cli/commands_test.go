@@ -222,7 +222,9 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		{line: `gnosh session web`, kind: ErrUnknownCommand, say: []string{"web is not a command of gnosh session"}},
 		{line: `gnosh prompt show`, want: inter(Invocation{Prompt: "prompt show"})},
 		{line: `gnosh "prompt"`, want: inter(Invocation{Prompt: "prompt"})},
-		{line: `gnosh ssh box.example.com`, want: inter(Invocation{Prompt: "ssh box.example.com"})},
+		// (gnosh ssh is built: main runs it before the table is read, and
+		// the table has it for help.)
+		{line: `gnosh ssh box.example.com`, want: Invocation{Command: CmdSSH, Args: []string{"box.example.com"}}},
 		{line: `gnosh projects`, want: inter(Invocation{Prompt: "projects"})},
 		{line: `gnosh stats`, want: inter(Invocation{Prompt: "stats"})},
 		{line: `gnosh stats --all`, kind: ErrUnknownFlag, say: []string{"--all is not a flag of gnosh"}},
@@ -240,7 +242,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		"session delete", "session web", "session web --port",
 		"prompt show", "prompt path", "prompt export", "prompt tools", "prompt context",
 		"prompt export --force", "prompt tools --json", "prompt tools --export",
-		"ssh", "projects", "projects --json", "stats", "stats --all", "stats --crawl-dir",
+		"projects", "projects --json", "stats", "stats --all", "stats --crawl-dir",
 	} {
 		if have[gone] {
 			t.Errorf("the table has an entry %q, which spec/DECISIONS.md item 26 took off it", gone)

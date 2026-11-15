@@ -231,7 +231,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 
 		"gnosh session delete", "gnosh session rm", "gnosh session web",
 		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
-		"gnosh ssh", "gnosh projects", "gnosh stats",
+		"gnosh projects", "gnosh stats",
 	} {
 		if have[gone] {
 			t.Errorf("the table has %s, which is not to be on the command line", gone)

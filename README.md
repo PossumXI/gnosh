@@ -44,7 +44,9 @@ sees them), sub-agents in the foreground and, in a session, in the
 background (general-purpose, Explore, Plan and your own), `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
-remove, with Claude Code's local, project and user scopes), and
+remove, with Claude Code's local, project and user scopes), `gnosh ssh`
+(ssh that puts what the far side copies on this machine's clipboard, for
+terminals that drop such copies, as Apple's Terminal does), and
 deliverables: the `Deliver` tool by which
 the model names what was asked for, `/deliverables`, and each delivered file
 served at an address on this machine.

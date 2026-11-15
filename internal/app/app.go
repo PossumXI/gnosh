@@ -199,7 +199,7 @@ func (p *program) warnf(format string, args ...any) {
 // not built has no row (spec/DECISIONS.md, 26).
 var built = []string{
 	"doctor", "doctor --hosts", "trust", "trust --list", "trust --forget",
-	"dirs", "logs", "logs --tail", "logs --follow", "models",
+	"dirs", "logs", "logs --tail", "logs --follow", "models", "ssh",
 	"session list", "session show", "session last", "session rename",
 	"session --json",
 	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",
@@ -303,6 +303,11 @@ func (p *program) run(ctx context.Context) int {
 		return p.sessionsCommand(ctx, inv)
 	case cli.CmdMCPAdd, cli.CmdMCPAddJSON, cli.CmdMCPGet, cli.CmdMCPList, cli.CmdMCPRemove:
 		return p.mcpCommand(ctx, inv)
+	case cli.CmdSSH:
+		// main runs gnosh ssh before anything is read; it comes here only
+		// after other words.
+		p.errf("gnosh ssh must be the first word after gnosh, so that every word after it is ssh's: gnosh ssh [ssh arguments...]")
+		return cli.ExitFailure
 	}
 	for _, f := range p.o.Features {
 		for _, c := range f.Commands {

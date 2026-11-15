@@ -222,6 +222,35 @@ func TestWorkerDispatchComesFirst(t *testing.T) {
 	}
 }
 
+// gnosh ssh comes before everything too: every word after it is ssh's,
+// gnosh flags among them, and it ends with ssh's status. Without a
+// terminal it is plain ssh. -h or --help alone shows gnosh's help for it.
+func TestSSHDispatchComesFirst(t *testing.T) {
+	dir := t.TempDir()
+	ssh := filepath.Join(dir, "ssh")
+	if err := os.WriteFile(ssh, []byte("#!/bin/sh\necho \"ssh got: $*\"\nexit 5\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "ssh", "-p", "2222", "--model", "x", "box")
+	cmd.Env = []string{"PATH=" + dir + ":/usr/bin:/bin"}
+	out, err := cmd.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 5 {
+		t.Fatalf("gnosh ssh ended with %v, want ssh's exit code 5\n%s", err, out)
+	}
+	if string(out) != "ssh got: -p 2222 --model x box\n" {
+		t.Errorf("gnosh ssh: %q", out)
+	}
+	for _, help := range []string{"-h", "--help"} {
+		cmd := exec.Command(binary, "ssh", help)
+		cmd.Env = []string{"HOME=" + t.TempDir(), "PATH=" + dir + ":/usr/bin:/bin"}
+		out, err := cmd.CombinedOutput()
+		if err != nil || !strings.Contains(string(out), "Run ssh, putting what the far side copies") || strings.Contains(string(out), "ssh got") {
+			t.Errorf("gnosh ssh %s: %v\n%s", help, err, out)
+		}
+	}
+}
+
 // What needs no model.
 func TestVersionHelpDoctor(t *testing.T) {
 	w := apptest.NewWorld(t)
@@ -304,7 +333,7 @@ func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
 	want := []string{
 		"gnosh", "gnosh doctor", "gnosh trust", "gnosh models",
 		"gnosh session", "gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename",
-		"gnosh mem", "gnosh logs", "gnosh dirs",
+		"gnosh mem", "gnosh logs", "gnosh dirs", "gnosh ssh",
 		"gnosh mcp", "gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
 		"gnosh help", "gnosh version",
 	}

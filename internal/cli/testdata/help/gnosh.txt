@@ -23,6 +23,8 @@ Commands
                           (Not built yet.)
   dirs                    Say which config and data folders are in use. (Not
                           built yet.)
+  ssh [ssh args]          Run ssh, putting what the far side copies on this
+                          machine's clipboard. (Not built yet.)
   mcp <command>           Add, list, show and remove MCP servers. (Not built
                           yet.)
   help [command]          Show gnosh's help, or a command's.

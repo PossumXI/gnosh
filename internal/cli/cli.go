@@ -50,6 +50,11 @@ const (
 	CmdLogs Command = "logs"
 	// CmdDirs says which config and data folders are in use.
 	CmdDirs Command = "dirs"
+	// CmdSSH is `gnosh ssh`: ssh, with what the far side copies put on
+	// this machine's clipboard (internal/relay). main runs it before
+	// anything else is read, so that every word after ssh is ssh's; the
+	// table has it for help.
+	CmdSSH Command = "ssh"
 	// CmdMCPAdd and the four after it are `gnosh mcp ...`: they add, show,
 	// list and remove the MCP servers of the files they are configured
 	// in. Invocation.Args holds the server's name, and for add its command

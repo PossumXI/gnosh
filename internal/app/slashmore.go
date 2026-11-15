@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/clipboard"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
@@ -349,8 +350,8 @@ func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
 	}
 	size := countWords(utf8.RuneCountInString(text), "character", "characters")
 	failed := ""
-	if tool := clipboardTool(runtime.GOOS, l.p.getenv, l.p.lookPath); tool != nil {
-		err := l.p.copyWith(ctx, tool, text)
+	if tool := clipboard.Tool(runtime.GOOS, l.p.getenv, l.p.lookPath); tool != nil {
+		err := clipboard.Copy(ctx, tool, l.p.o.Environ, text)
 		if err == nil {
 			c.Say("%s (%s) is on the clipboard.", which, size)
 			return nil
