@@ -81,6 +81,7 @@ const (
 	textPopReceipt       = "pop-receipt"
 	textPlanGnovm        = "plan-gnovm"
 	textMissingResult    = "missing-result"
+	textReportCaution    = "report-caution"
 	textCloseEnteredHere = "close-entered-here"
 	textCloseUnbacked    = "close-unbacked"
 	textCloseNotMade     = "close-not-made"
@@ -175,7 +176,7 @@ func specs() []spec {
 			may:  []string{"id", "finished", "failed", "stopped", "not_run", "why", "output"},
 			when: "When a background command ends, between rounds or as a turn of its own."},
 		{name: textAgentEnded, kind: KindLine, need: []string{"description", "id"},
-			may:  []string{"finished", "failed", "stopped", "why", "report", "output"},
+			may:  []string{"finished", "failed", "stopped", "why", "caution", "report", "output"},
 			when: "When a sub-agent the model started in the background ends, between rounds or as a turn of its own."},
 		{name: textBtw, kind: KindLine,
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
@@ -211,6 +212,8 @@ func specs() []spec {
 			when: "In the result of the call that pops a todo, after mem's own lines: what the pop removed from the context, and what that changed."},
 		{name: textPlanGnovm, kind: KindResult, need: []string{"tool"},
 			when: "As the answer to a gnovm tool that runs or changes something, called while the session is in plan mode."},
+		{name: textReportCaution, kind: KindResult, may: []string{"marked", "bypass"},
+			when: "In front of a sub-agent's report that holds text written like a harness's notes or a conversation's turns, or names a way to turn permission checks off."},
 		{name: textMissingResult, kind: KindResult,
 			may:  []string{"not_started", "stopped", "ended", "why", "cut_off", "killed", "still", "waited", "running"},
 			when: "As the result of a tool call that never ran or never returned, because the turn was stopped or gnosh was."},

@@ -165,7 +165,10 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if err != nil {
 		return core.ErrorResult("The sub-agent could not be given its task: " + strings.TrimRight(err.Error(), ".") + "."), nil
 	}
-	out := s.report(res, l.p.now().Sub(started))
+	out, caution := s.report(res, l.p.now().Sub(started))
+	if caution != "" && len(out.Content) > 0 && out.Content[0].Type == core.BlockText {
+		out.Content[0].Text = caution + "\n\n" + out.Content[0].Text
+	}
 	if waited != "" {
 		out.Content = append(out.Content, core.Text("\n\n[It ran in the foreground, and the call waited for it: "+waited+".]"))
 	}
@@ -758,9 +761,16 @@ func (s *subSession) stopHooks(ctx context.Context, end agent.TurnEnd) (agent.Ve
 
 // report is the tool's result: the sub-agent's last reply, or what it had
 // and why it did not finish. Beside the words it carries the facts of the
-// run, under the names Claude Code gives them.
-func (s *subSession) report(res agent.TurnResult, took time.Duration) core.ToolResult {
-	text := strings.TrimSpace(res.Text)
+// run, under the names Claude Code gives them. The reply is scanned first
+// (prompt.ScanReport): what in it is written like a harness's notes or a
+// conversation's turns gets a backslash, and caution is the note to put in
+// front of it when the scan found anything, or "".
+func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.ToolResult, caution string) {
+	text, seen := prompt.ScanReport(strings.TrimSpace(res.Text))
+	if seen.Found() {
+		caution = s.l.texts.ReportCaution(seen)
+		s.l.flog.logf("turn", "sub-agent %s (%s): its report holds %s", shortID(s.id), s.def.Name, strings.Join(append(seen.Marked, seen.Bypass...), ", "))
+	}
 	status := "completed"
 	var out core.ToolResult
 	switch {
@@ -778,7 +788,7 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) core.ToolR
 		}
 		out = core.TextResult(text)
 	case res.Reason == agent.EndHalted:
-		status = "halted"
+		status, caution = "halted", ""
 		out = core.ErrorResult("The sub-agent was ended: " + firstOf(res.Detail, "no reason was given") + ".")
 	case res.Reason == agent.EndFailed:
 		status = "failed"
@@ -789,7 +799,7 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) core.ToolR
 			out = core.TextResult(text + "\n\n[The sub-agent did not finish: " + strings.TrimRight(why, ".") + ". What stands above is what it had written.]")
 		}
 	default:
-		status = "stopped"
+		status, caution = "stopped", ""
 		out = core.ErrorResult("The sub-agent was stopped before it finished, with the turn that started it.")
 	}
 	out.Meta = map[string]any{
@@ -809,7 +819,7 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) core.ToolR
 		out.Meta[agent.MetaHalt] = "the sub-agent was ended: " + firstOf(res.Detail, "no reason was given")
 	}
 	s.l.flog.logf("turn", "sub-agent %s (%s) ended: %s after %s, %d replies, %d tool calls", shortID(s.id), s.def.Name, status, took.Round(time.Millisecond), res.Rounds, s.calls.Load())
-	return out
+	return out, caution
 }
 
 // close ends the sub-agent: its agent is closed, which adds what it cost

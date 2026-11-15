@@ -303,6 +303,12 @@
 //     same bytes in and out of plan mode, and the call is refused with
 //     what plan mode means for the machines and for mem, and what to do
 //     once the plan is approved.
+//   - report-caution (ReportCaution) stands in front of a sub-agent's
+//     report in which ScanReport found text written like a harness's
+//     notes or a conversation's turns, which it marked with a backslash,
+//     or the name of what turns permission checks off: such text can come
+//     from what the sub-agent read, and the report is data all the same.
+//     A background sub-agent's notice (agent-ended) carries it too.
 //   - missing-result (MissingResult) stands for the result of a call that
 //     has none: it never started, it was stopped, its reply was cut off,
 //     or gnosh itself was stopped; or, in a side question's request, it

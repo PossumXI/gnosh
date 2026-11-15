@@ -168,6 +168,19 @@ const (
 	Running
 )
 
+// ReportCaution returns the note that stands in front of a sub-agent's
+// report in which ScanReport found something, or "" when it found
+// nothing.
+func (s *Set) ReportCaution(m Imitation) string {
+	if !m.Found() {
+		return ""
+	}
+	return s.fill(textReportCaution, values{
+		"marked": oneLine(strings.Join(m.Marked, ", "), maxQuote),
+		"bypass": oneLine(strings.Join(m.Bypass, ", "), maxQuote),
+	})
+}
+
 // MissingResult returns the text that stands in for the result of a tool
 // call that has none of its own. Every call must have a result for the
 // conversation to be sent again, and this one says honestly what is known:

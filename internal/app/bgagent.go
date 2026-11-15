@@ -45,13 +45,12 @@ type bgAgent struct {
 }
 
 // backgroundOff says why sub-agents may not run in the background in this
-// session, or "".
+// session, or "". A run (-p) may have them: it waits for them before it
+// ends, and the end of each wakes the model (printwait.go).
 func (l *live) backgroundOff(owner *subSession) string {
 	switch {
 	case owner != nil:
 		return "a sub-agent waits for the sub-agents it starts"
-	case !l.interactive:
-		return "in a run with nobody attending (-p), nothing would read its report later"
 	case l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1":
 		return "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS is set"
 	case l.inv.Bare:
@@ -80,10 +79,11 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 		defer cancel()
 		res, err := s.agent.Run(ctx, agent.Prompt{Text: in.Prompt})
 		var rep core.ToolResult
+		var caution string
 		if err != nil {
 			rep = core.ErrorResult("The sub-agent could not be given its task: " + strings.TrimRight(err.Error(), ".") + ".")
 		} else {
-			rep = s.report(res, l.p.now().Sub(b.started))
+			rep, caution = s.report(res, l.p.now().Sub(b.started))
 		}
 		s.close()
 		l.bgMu.Lock()
@@ -95,7 +95,7 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 		}
 		l.bgMu.Unlock()
 		l.noteBackground()
-		l.backgroundAgentEnded(b, rep, err)
+		l.backgroundAgentEnded(b, rep, caution, err)
 	}()
 	l.flog.logf("turn", "sub-agent %s (%s) started in the background: %s", shortID(s.id), s.def.Name, b.desc)
 	out := core.TextResult(fmt.Sprintf("The sub-agent is working in the background on: %s. Its id is %s. Its report will come to you as a notice from gnosh when it ends; until then it is still running, so do not report what it found before that notice arrives. Go on with other work meanwhile, or end your turn to wait. TaskStop with its id stops it.", b.desc, b.id))
@@ -104,19 +104,19 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 }
 
 // backgroundAgentEnded tells the model that a background sub-agent ended,
-// with its report.
-func (l *live) backgroundAgentEnded(b *bgAgent, rep core.ToolResult, runErr error) {
+// with its report, and the caution report made of it, if any.
+func (l *live) backgroundAgentEnded(b *bgAgent, rep core.ToolResult, caution string, runErr error) {
 	if l.agent == nil || l.closing.Load() || l.bgUntold.Load() {
 		return
 	}
-	end := prompt.AgentEnd{ID: b.id, Description: b.desc, Output: b.output, Report: prompt.Defuse(core.TextOf(rep.Content))}
+	end := prompt.AgentEnd{ID: b.id, Description: b.desc, Output: b.output, Report: prompt.Defuse(core.TextOf(rep.Content)), Caution: caution}
 	status, _ := rep.Meta["status"].(string)
 	verb := "finished"
 	switch {
 	case b.stopped.Load() || status == "stopped":
 		end.State, verb = prompt.AgentStopped, "was stopped"
 		if b.stopped.Load() {
-			end.Report = ""
+			end.Report, end.Caution = "", ""
 		}
 	case runErr != nil || rep.IsError || status == "failed" || status == "partial" || status == "halted":
 		end.State, verb = prompt.AgentFailed, "stopped before it finished"

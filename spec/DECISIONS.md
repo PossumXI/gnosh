@@ -314,10 +314,11 @@ or kept with the reason said (27).
     Code's main agent, whose calls go to the background by default: a
     local model handles a report it waited for better than one that
     comes later, and asking is one word. A sub-agent's own calls wait,
-    as Claude Code's do, and in a run (`-p`) every call waits, and says
-    why, since nothing would read a notice that came after the run's
-    turn. A background sub-agent has no Agent tool; /tasks lists those
-    running and stops one, and TaskStop stops one by its id.
+    as Claude Code's do. (A run, `-p`, made every call wait at first,
+    since nothing read a notice that came after the run's turn; since
+    item 36 a run waits for its background work, so it takes them as a
+    session does.) A background sub-agent has no Agent tool; /tasks
+    lists those running and stops one, and TaskStop stops one by its id.
 32. **A hook's `if` filter takes what a deny rule of the same text
     would stop, and a call it is unsure of.** Claude Code's `if` is one
     permission rule; gnosh holds it against a call as it holds a deny
@@ -389,7 +390,9 @@ or kept with the reason said (27).
     whoever wants one (`0`: no ceiling and no checkpoint). A run fed
     stream-json waits the same way once its input is over, and in
     stream-json output each turn's result line is written as the turn
-    ends. Sub-agents in a run still wait in the foreground (item 31).
+    ends. A sub-agent the model starts in the background is waited for
+    the same way, as Claude Code's run waits for its background
+    sub-agents.
 37. **http hooks run, and fail closed as command hooks do.** Claude
     Code's `"type": "http"` sends the event to a URL and reads the answer
     as a command hook's stdout; a status other than 2xx is a non-blocking
@@ -416,3 +419,21 @@ or kept with the reason said (27).
     skills, MCP servers, isolation, memory), a model that cannot be
     used, or a name that is no kind stops the start with the reason:
     it is never run as something else. /status names the agent.
+39. **A sub-agent's report is scanned, and gnosh's tags are what it looks
+    for first.** Claude Code puts a backslash in front of text in a
+    report that imitates its harness (a `<system-reminder>` tag, a line
+    that begins `Human:` or `Assistant:`) and a marker line in front of
+    the report when it does, or when it names a permission-bypass
+    setting. gnosh's harness speaks in `<gnosh>` and `<mem>` tags, so
+    those are scanned for, with `<system-reminder>` beside them, the
+    markers chat templates write a turn with (`<|im_start|>`,
+    `<start_of_turn>`, `<｜User｜>`), and the two line openings. Each
+    gets a backslash, which a model reads as quoting where the invisible
+    mark Untrusted adds is read past. Lines that open with `User:` and a
+    model's own `<think>` and `<tool_call>` are left alone: they come up
+    in honest reports. The names scanned for are `bypassPermissions`,
+    `--dangerously-skip-permissions` and `--yolo`, and they are left as
+    they are. The caution is a note in square brackets at the head of
+    the Agent call's result, which names what was found and says the
+    report is data; a background sub-agent's notice carries it before
+    the report. Nothing is taken out.

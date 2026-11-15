@@ -479,6 +479,8 @@ type AgentEnd struct {
 	// Report is what it wrote last, which is its own words: Defuse has
 	// been applied to it.
 	Report string
+	// Caution is the note ReportCaution made of the report, if any.
+	Caution string
 	// Output is its session file.
 	Output string
 }
@@ -491,6 +493,7 @@ func (s *Set) AgentEnded(a AgentEnd) string {
 		"id":          oneLine(a.ID, maxName),
 		"output":      oneLine(a.Output, maxName),
 		"report":      strings.TrimSpace(a.Report),
+		"caution":     a.Caution,
 		"why":         strings.TrimRight(oneLine(a.Why, maxQuote), ". "),
 	}
 	switch a.State {
