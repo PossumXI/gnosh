@@ -1,18 +1,37 @@
 #!/bin/bash
 # An interactive check of the installed gnosh on an AI box, with the box's
 # model (Qwen alone: the router holds one model), in a tmux session of its
-# own and a scratch home: the screen before and after one short turn, with
-# a status line command configured. It touches no file of the person's,
-# and ends its own tmux session by name. Run it on the box:
+# own and a scratch home, with a status line command configured: the screen
+# before and after one scenario. It touches no file of the person's, and
+# ends its own tmux session by name. Run it on the box:
 #
-#	ssh ai-remote bash -s < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s < tools/dev/box-ui-check.sh            # basic
+#	ssh ai-remote bash -s -- plan < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- background < tools/dev/box-ui-check.sh
+#
+#   basic       one short turn
+#   plan        plan mode: the model presents a plan with ExitPlanMode, and
+#               the question is refused (nothing is written)
+#   background  a sub-agent in the background, whose report wakes the
+#               session (permissions skipped, in the scratch folder)
 #
 # The full interface is tested in CI with a scripted model; this is the
-# one look at it with a real one, which is how a model writing gnosh's
-# tags into its own reply was found.
+# look at it with a real one, which is how a model writing gnosh's tags
+# into its own reply was found.
 set -u
-T=$HOME/newgnosh-test/uicheck
-S=gnosh-uicheck
+scenario=${1:-basic}
+T=$HOME/newgnosh-test/uicheck-$scenario
+S=gnosh-uicheck-$scenario
+flags=""
+case "$scenario" in
+basic) ;;
+plan) flags="--permission-mode plan" ;;
+background) flags="-y" ;;
+*)
+	echo "box-ui-check: no scenario $scenario (basic, plan, background)" >&2
+	exit 2
+	;;
+esac
 tmux kill-session -t "$S" 2>/dev/null
 rm -rf "$T"
 mkdir -p "$T/home" "$T/config/gnosh" "$T/data" "$T/cache" "$T/work"
@@ -33,21 +52,41 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
   "statusLine": { "type": "command", "command": "$T/config/gnosh/statusline.sh", "padding": 1 }
 }
 EOF
+printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
 cd "$T/work" || exit 1
-tmux new-session -d -s "$S" -x 110 -y 28 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $HOME/.local/bin/gnosh"
+tmux new-session -d -s "$S" -x 110 -y 40 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $HOME/.local/bin/gnosh $flags"
 sleep 4
 echo "=== before"
 tmux capture-pane -p -t "$S"
-tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
-for i in $(seq 1 120); do
+screen() { tmux capture-pane -p -S -80 -t "$S"; }
+case "$scenario" in
+basic)
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
+	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "ctx=[0-9]"; }
+	;;
+plan)
+	tmux send-keys -t "$S" "Create a file hello.txt that says hi. Plan it first, then present the plan for approval." Enter
+	done_when() { screen | grep -q "Carry out this plan"; }
+	;;
+background)
+	tmux send-keys -t "$S" "Call the Agent tool with run_in_background set to true, to have a sub-agent count the lines of notes.txt. Then end your turn; when its report comes, tell me the count." Enter
+	done_when() { screen | grep -q "background sub-agent finished" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
+esac
+for i in $(seq 1 300); do
 	sleep 1
-	if [ "$(tmux capture-pane -p -t "$S" | grep -c -i "all is well")" -ge 2 ] && tmux capture-pane -p -t "$S" | grep -q "ctx=[0-9]"; then
+	if done_when; then
 		sleep 2
 		break
 	fi
 done
 echo "=== after ($i s)"
-tmux capture-pane -p -t "$S"
+screen
+if [ "$scenario" = plan ]; then
+	echo "=== hello.txt: $(cat "$T/work/hello.txt" 2>/dev/null || echo none)"
+	tmux send-keys -t "$S" Escape
+	sleep 2
+fi
 tmux send-keys -t "$S" "/exit" Enter
 sleep 2
 tmux kill-session -t "$S" 2>/dev/null
