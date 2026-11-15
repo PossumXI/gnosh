@@ -108,7 +108,9 @@ func (l *live) listOptions(c *SlashContext, rows []config.OptionValue, saved map
 	keyW, valW := 0, 0
 	for _, r := range rows {
 		keyW = max(keyW, len(r.Key))
-		valW = max(valW, min(len(r.Text), 40))
+		// (A long value, such as a default said in words, pushes its own
+		// line's last column along, not every line's.)
+		valW = max(valW, min(len(r.Text), 24))
 	}
 	c.Say("gnosh's options in this session (/config key says more, /config key=value sets one):")
 	for _, r := range rows {
