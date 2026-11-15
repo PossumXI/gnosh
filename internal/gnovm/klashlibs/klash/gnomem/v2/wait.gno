@@ -29,6 +29,13 @@ func (m *Mem) parseWait(until string) string {
 			panic(strconv.Quote(until) + " is not on the calendar (" + todayIs() + ")")
 		}
 		if until < yesterday() {
+			// A day of the month already past this year was most often
+			// meant for its next coming: told only that it is past, a model
+			// once picked a month later instead of a year later (box 2,
+			// 2026-11-15).
+			if d := sameDayAhead(until); d != "" {
+				panic(until + " is past (" + todayIs() + "): if that day of the year is meant, it comes next on " + d + ": .Wait(\"" + d + "\"); else give another day still to come, or Done the item")
+			}
 			panic(until + " is past (" + todayIs() + "): give a day still to come, or Done the item")
 		}
 		return until
@@ -46,6 +53,24 @@ func (m *Mem) parseWait(until string) string {
 		panic("a wait is a day or words, not an item: to wait for `" + until + "`, make this work a todo under it, or say it in words")
 	}
 	return until
+}
+
+// sameDayAhead is the first day still to come with the month and day of
+// the day until: this year's, or next year's; "" when there is none (the
+// 29th of February in a year without one).
+func sameDayAhead(until string) string {
+	now := today()
+	year, err := strconv.Atoi(now[:4])
+	if err != nil {
+		return ""
+	}
+	for _, y := range []int{year, year + 1} {
+		d := strconv.Itoa(y) + until[4:]
+		if onCalendar(d) && d >= now {
+			return d
+		}
+	}
+	return ""
 }
 
 // onCalendar reports whether day s exists.

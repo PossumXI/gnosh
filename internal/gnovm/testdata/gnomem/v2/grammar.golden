@@ -115,7 +115,11 @@ error: "2026-02-30" is not on the calendar (today is Thu 2026-10-29)
 > s1: mem.Wait("renew-cert", "2026-13-01")
 error: "2026-13-01" is not on the calendar (today is Thu 2026-10-29)
 > s1: mem.Wait("renew-cert", "2026-10-01")
-error: 2026-10-01 is past (today is Thu 2026-10-29): give a day still to come, or Done the item
+error: 2026-10-01 is past (today is Thu 2026-10-29): if that day of the year is meant, it comes next on 2027-10-01: .Wait("2027-10-01"); else give another day still to come, or Done the item
+> s1: mem.Wait("renew-cert", "2025-12-01")
+error: 2025-12-01 is past (today is Thu 2026-10-29): if that day of the year is meant, it comes next on 2026-12-01: .Wait("2026-12-01"); else give another day still to come, or Done the item
+> s1: mem.Wait("renew-cert", "2024-02-29")
+error: 2024-02-29 is past (today is Thu 2026-10-29): give a day still to come, or Done the item
 > s1: mem.Wait("renew-cert", "renew-cert")
 error: a wait is a day or words, not an item: to wait for `renew-cert`, make this work a todo under it, or say it in words
 > s1: mem.Wait("renew-cert", "ship-it")
