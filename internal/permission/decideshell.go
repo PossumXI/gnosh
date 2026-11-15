@@ -27,8 +27,11 @@ type lineState struct {
 	// after the chain then runs where the line was before it: "cd nope
 	// && ls; cat ../x" reads ../x from the directory the line began in.
 	before []string
-	// moved is set once a cd has come earlier in the line.
+	// moved is set once a cd has come earlier in the line that may have
+	// gone somewhere other than start, where the line began: "cd
+	// /the/same/folder && git log" goes nowhere, as models often write.
 	moved bool
+	start string
 	// unknown is set when the directory can no longer be worked out.
 	unknown bool
 	// made are the places an earlier cp or mv of the line puts things,
@@ -56,8 +59,12 @@ func (st *lineState) enter(c *simpleCmd) {
 	} else {
 		st.dirs = unionStrings(st.dirs, st.pending)
 	}
+	for _, d := range st.pending {
+		if d != st.start {
+			st.moved = true
+		}
+	}
 	st.pending = nil
-	st.moved = true
 }
 
 func unionStrings(a, b []string) []string {
@@ -1700,7 +1707,7 @@ func (e *Engine) decideShell(req *request) Decision {
 		return ask("The command sets a variable (${name:=value}), and gnosh asks about every command that does.")
 	}
 
-	st := &lineState{dirs: []string{e.cur}}
+	st := &lineState{dirs: []string{e.cur}, start: e.cur}
 	var rule *crule
 	var whys, exact, prefix []string
 	coverable := true
