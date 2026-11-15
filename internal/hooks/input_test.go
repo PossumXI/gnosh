@@ -236,6 +236,11 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			in:   Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"},
 			want: with(common(DirectoryAdded), map[string]any{"directory": "/project/docs", "source": "slash_command"}),
 		},
+		{
+			name: "CwdChanged",
+			in:   Input{Event: CwdChanged, OldCwd: "/project", NewCwd: "/project/sub"},
+			want: with(common(CwdChanged), map[string]any{"old_cwd": "/project", "new_cwd": "/project/sub"}),
+		},
 	}
 	seen := map[Event]bool{}
 	for _, tt := range tests {
@@ -428,6 +433,8 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 			with(always(Notification), "GNOSH_NOTIFICATION_TYPE", "idle_prompt")},
 		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
 		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
+		{"CwdChanged", Input{Event: CwdChanged, OldCwd: "/project", NewCwd: "/project/sub", EnvFile: "/state/gnosh/env/session-1.sh"},
+			with(always(CwdChanged), "GNOSH_ENV_FILE", "/state/gnosh/env/session-1.sh", "CLAUDE_ENV_FILE", "/state/gnosh/env/session-1.sh")},
 	}
 	seen := map[Event]bool{}
 	for _, tt := range tests {

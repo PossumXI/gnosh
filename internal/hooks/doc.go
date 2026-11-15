@@ -247,7 +247,7 @@
 //
 // Check returns every problem at once, and NewRunner refuses a
 // configuration that has one: an event name that is not exactly one of
-// the seventeen (a misspelling, another letter case, or a Claude Code event
+// the eighteen (a misspelling, another letter case, or a Claude Code event
 // gnosh does not have); an event this build does not fire
 // (Options.Fires); a hook type other than "command"; an "if" that is not
 // a string; "args"; a background hook; "onFailure" other than "continue"; any field

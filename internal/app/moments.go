@@ -277,7 +277,31 @@ func firstOf(ss ...string) string {
 // afterTool is what happens after every tool call that ran: gnosh's own
 // effects, then the features', then the person's PostToolUse hooks.
 func (l *live) afterTool(ctx context.Context, done agent.ToolDone) (agent.ToolVerdict, error) {
-	return l.afterToolWith(ctx, done, l.instr, l.contribs, l.env)
+	v, err := l.afterToolWith(ctx, done, l.instr, l.contribs, l.env)
+	if done.Result.Cwd != "" {
+		l.cwdMoved(ctx, done.Result.Cwd)
+	}
+	return v, err
+}
+
+// cwdMoved runs the CwdChanged hooks when a call of the session's own has
+// left the shell in another directory than the last one seen. They may
+// write export lines to the session's environment file.
+func (l *live) cwdMoved(ctx context.Context, dir string) {
+	l.cwdMu.Lock()
+	old := l.lastCwd
+	if old == "" {
+		old = l.cfg.Paths.Cwd
+	}
+	if dir == old {
+		l.cwdMu.Unlock()
+		return
+	}
+	l.lastCwd = dir
+	l.cwdMu.Unlock()
+	if l.hooks.has(hooks.CwdChanged) {
+		_, _ = l.hooks.run(ctx, hooks.Input{Event: hooks.CwdChanged, OldCwd: old, NewCwd: dir, EnvFile: l.envFile()})
+	}
 }
 
 // afterToolWith is afterTool for one session: the person's own, or a

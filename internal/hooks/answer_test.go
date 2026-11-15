@@ -359,6 +359,12 @@ var answerForms = []struct {
 		want:   expect{system: []string{"the docs are in docs/"}, result: ResultWarning}},
 	{name: "plain words are not read", event: DirectoryAdded, prints: "the docs are in docs/", want: expect{}},
 
+	// ---- CwdChanged: a message is shown; nothing else is read.
+	{name: "a message", event: CwdChanged,
+		prints: `{"systemMessage": "the sub folder has its own .env"}`,
+		want:   expect{system: []string{"the sub folder has its own .env"}, result: ResultWarning}},
+	{name: "plain words are not read", event: CwdChanged, prints: "nothing", want: expect{}},
+
 	// ---- Stop and SubagentStop: a block keeps the turn going.
 	{name: "block", event: Stop,
 		prints: `{"decision": "block", "reason": "out/final.mp4 is not there"}`,

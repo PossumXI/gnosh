@@ -96,7 +96,7 @@ type Input struct {
 	Source string
 	// Model names the model, for SessionStart ("model").
 	Model string
-	// EnvFile is, for SessionStart, the path of the session's own
+	// EnvFile is, for SessionStart and CwdChanged, the path of the session's own
 	// environment file. Hooks get it as GNOSH_ENV_FILE and
 	// CLAUDE_ENV_FILE and may append export lines to it.
 	EnvFile string
@@ -152,6 +152,9 @@ type Input struct {
 	FromModel, ToModel, RequestedModel string
 	// Directory is, for DirectoryAdded, the directory added ("directory").
 	Directory string
+	// OldCwd and NewCwd are, for CwdChanged, the directory the shell was
+	// in and the one it is in now ("old_cwd", "new_cwd").
+	OldCwd, NewCwd string
 
 	// Extra holds further fields for stdin, by their JSON names, for
 	// things Claude Code documents that this package has no field for
@@ -312,6 +315,9 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 	case DirectoryAdded:
 		m["directory"] = in.Directory
 		m["source"] = in.Source
+	case CwdChanged:
+		m["old_cwd"] = in.OldCwd
+		m["new_cwd"] = in.NewCwd
 	}
 
 	// Claude Code writes this JSON without escaping <, > and &, and a hook
@@ -421,6 +427,9 @@ func (in *Input) environ(info eventInfo, base []string, dir, projectDir, memStat
 		}
 	case SessionStart:
 		vars["GNOSH_SESSION_START_SOURCE"] = in.Source
+		set("GNOSH_ENV_FILE", in.EnvFile)
+		set("CLAUDE_ENV_FILE", in.EnvFile)
+	case CwdChanged:
 		set("GNOSH_ENV_FILE", in.EnvFile)
 		set("CLAUDE_ENV_FILE", in.EnvFile)
 	case SessionEnd:

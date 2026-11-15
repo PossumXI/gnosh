@@ -182,6 +182,8 @@ func input(event Event) Input {
 		in.FromModel, in.ToModel, in.RequestedModel, in.Source = "local/a", "local/b", "local/b", "command"
 	case DirectoryAdded:
 		in.Directory, in.Source = "/project/docs", "slash_command"
+	case CwdChanged:
+		in.OldCwd, in.NewCwd = "/project", "/project/sub"
 	case SubagentStart, SubagentStop:
 		in.AgentID = "agent-1"
 		in.AgentType = "Explore"

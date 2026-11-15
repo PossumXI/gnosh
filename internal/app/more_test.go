@@ -370,3 +370,26 @@ func TestModelSwitchAndDirectoryHooks(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// CwdChanged runs when a command leaves the shell in another directory:
+// it reads the old one and the new one, once per move, and an export it
+// writes to the environment file reaches the next command.
+func TestCwdChangedHook(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"cd sub"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"echo \"in=$PWD v=$FROM_HOOK\""}`}}},
+		apptest.Reply{Text: "Moved."})
+	if err := os.MkdirAll(filepath.Join(w.Dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	log := w.Home + "/hook-log"
+	hook := w.Script(w.Home+"/hooks/cwd.sh", "cat >> "+log+"\necho >> "+log+"\necho 'export FROM_HOOK=set' >> \"$CLAUDE_ENV_FILE\"")
+	w.Settings(`{"hooks": {"CwdChanged": [{"hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
+	run(t, w, "-y", "-p", "go to sub").wantCode(t, 0)
+	data, _ := os.ReadFile(log)
+	if n := strings.Count(string(data), `"hook_event_name":"CwdChanged"`); n != 1 {
+		t.Errorf("the hook ran %d times, want once:\n%s", n, data)
+	}
+	has(t, "what the hook read", string(data), `"old_cwd":"`+w.Dir+`"`, `"new_cwd":"`+filepath.Join(w.Dir, "sub")+`"`)
+	has(t, "the next command", toolResult(t, w, 2, "c2"), "in="+filepath.Join(w.Dir, "sub"), "v=set")
+}

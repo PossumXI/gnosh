@@ -155,6 +155,10 @@ type live struct {
 	// prompt.
 	system []string
 	named  atomic.Bool
+	// lastCwd is the directory the shell was last seen in, for
+	// CwdChanged; empty means the one the session started in.
+	cwdMu   sync.Mutex
+	lastCwd string
 
 	// skillRuns are the skills that went into the conversation, the most
 	// recent last, each with its text as it went in.

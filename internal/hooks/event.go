@@ -10,7 +10,7 @@ import (
 // "pretooluse" and "pre_tool_use" are mistakes.
 type Event string
 
-// The seventeen events gnosh has. The comment on each says when the agent
+// The eighteen events gnosh has. The comment on each says when the agent
 // loop fires it and what a hook can do there.
 const (
 	// PreToolUse fires before every tool call, a sub-agent's included. A
@@ -71,9 +71,15 @@ const (
 	// session (/add-dir). A hook's systemMessage goes to the model with the
 	// next turn.
 	DirectoryAdded Event = "DirectoryAdded"
+	// CwdChanged fires when a command leaves the shell in another
+	// directory, which later commands start in. A hook's systemMessage is
+	// shown, and it may write export lines to the session's environment
+	// file (GNOSH_ENV_FILE, CLAUDE_ENV_FILE), which every later command
+	// runs first.
+	CwdChanged Event = "CwdChanged"
 )
 
-// Events returns the seventeen events gnosh has, in the order the
+// Events returns the eighteen events gnosh has, in the order the
 // specification lists them.
 func Events() []Event {
 	return []Event{
@@ -81,6 +87,7 @@ func Events() []Event {
 		SessionStart, Stop, SubagentStart, SubagentStop, StopFailure,
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
 		PermissionRequest, Notification, PostModelSwitch, DirectoryAdded,
+		CwdChanged,
 	}
 }
 
@@ -180,7 +187,7 @@ type eventInfo struct {
 }
 
 // describe returns what the package knows about e, and whether e is one
-// of the seventeen events.
+// of the eighteen events.
 func describe(e Event) (eventInfo, bool) {
 	tool := eventInfo{subject: toolName, what: "the tool's name", mode: true, reads: true, halts: true}
 	switch e {
@@ -270,6 +277,8 @@ func describe(e Event) (eventInfo, bool) {
 			values: []string{"slash_command", "register_repo_root"},
 			reads:  true,
 		}, true
+	case CwdChanged:
+		return eventInfo{class: warns, reads: true}, true
 	}
 	return eventInfo{}, false
 }
@@ -299,15 +308,15 @@ func claudeOnly(name string) (canBlock, ok bool) {
 		"WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
 		"TeammateIdle", "Elicitation", "ElicitationResult":
 		return true, true
-	case "PermissionDenied", "CwdChanged", "FileChanged", "Setup", "MessageDisplay":
+	case "PermissionDenied", "FileChanged", "Setup", "MessageDisplay":
 		return false, true
 	}
 	return false, false
 }
 
-// eventList is the seventeen names in a sentence.
+// eventList is the eighteen names in a sentence.
 func eventList() string {
-	names := make([]string, 0, 17)
+	names := make([]string, 0, 18)
 	for _, e := range Events() {
 		names = append(names, string(e))
 	}
