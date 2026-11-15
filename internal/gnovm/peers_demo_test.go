@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -493,6 +494,13 @@ func TestPeersDemonstration(t *testing.T) {
 			// say nothing about the schedule.
 			continue
 		}
+		if busy, load := machineBusy(); busy {
+			// Neither do they on a machine that other work keeps busy (a
+			// clean-copy CI beside a long oracle run): the peers wait for
+			// cores, not for each other.
+			t.Logf("%d peers: the machine is busy (load %.1f on %d cores), so their times are not judged", n, load, runtime.NumCPU())
+			continue
+		}
 		require.Less(t, o.wall, bound, "%d peers", n)
 		if roles[0] == "root" {
 			// The run keeps to its rule's own schedule: no needless wait,
@@ -595,4 +603,24 @@ func TestPeersKilledHolder(t *testing.T) {
 	require.Less(t, time.Since(killed), 2*time.Second)
 	require.Contains(t, res.Output, "waited ")
 	require.Equal(t, []string{"release", "release/tag"}, stackAfter(nil, res.Frames), "its todo is passed over, as one held by a session not working, and the release it entered on the way is free: %s", res.Output)
+}
+
+// machineBusy reports whether the machine's load, as /proc/loadavg gives it
+// for the last minute, is more than half its cores: then the times of a
+// run that wants several of them say nothing about its schedule. A machine
+// with no /proc/loadavg is taken as not busy.
+func machineBusy() (bool, float64) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return false, 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return false, 0
+	}
+	load, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return false, 0
+	}
+	return load > float64(runtime.NumCPU())/2, load
 }
