@@ -420,6 +420,9 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 	if sk.Effort != "" {
 		l.skillEffort(sk)
 	}
+	if refusal := l.skillHooks(sk); refusal != "" {
+		return "", false, refusal
+	}
 	if sk.Fork {
 		// (A forked skill's text is a sub-agent's task: it never enters
 		// this conversation, and is not given back after a summary.)
@@ -450,6 +453,34 @@ func (l *live) dropSkillGrants() {
 	if restore && l.agent != nil {
 		_, _ = l.agent.SetThinking(before)
 	}
+}
+
+// skillHooks puts a skill's own hooks (hooks) in force when the skill is
+// first run, for the rest of the session, as Claude Code does; a hook with
+// once: true goes after its first run that did not fail. They are checked
+// as the settings' hooks are, and a skill whose hooks would not run is not
+// run either. It says why not, or "".
+func (l *live) skillHooks(sk skill.Skill) string {
+	if len(sk.Hooks) == 0 || l.hooks == nil || l.hooks.r == nil || l.cfg.HooksOff != "" {
+		return ""
+	}
+	l.skillMu.Lock()
+	defer l.skillMu.Unlock()
+	if l.skillHooksIn[sk.Name] {
+		return ""
+	}
+	cfg, err := hooks.ParseConfig(sk.Hooks, sk.Source+" (hooks)")
+	if err == nil {
+		err = l.hooks.r.Add(cfg)
+	}
+	if err != nil {
+		return fmt.Sprintf("the hooks the skill %s carries (in %s) cannot be put in force: %v. It is not run without them", sk.Name, sk.Source, err)
+	}
+	if l.skillHooksIn == nil {
+		l.skillHooksIn = map[string]bool{}
+	}
+	l.skillHooksIn[sk.Name] = true
+	return ""
 }
 
 // skillEffort puts the thinking level a skill asks for (effort) in force

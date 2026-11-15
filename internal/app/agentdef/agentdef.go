@@ -387,6 +387,7 @@ type field struct {
 	scalar string   // the value written on the key's own line, or a block of text
 	items  []string // the entries of a list
 	nested bool     // the key holds a map of its own, which is not read
+	block  []string // the indented lines under the key, for one that is nested
 }
 
 // list returns the field's value as a list: its entries, or the scalar
@@ -478,7 +479,7 @@ func frontmatter(lines []string) ([]field, error) {
 				}
 			}
 			if f.nested {
-				f.items = nil
+				f.items, f.block = nil, under
 			}
 		}
 		out = append(out, f)
@@ -522,8 +523,10 @@ type Field struct {
 	// text; Items are the entries of a list.
 	Scalar string
 	Items  []string
-	// Nested says the key holds a map of its own, which is not read.
+	// Nested says the key holds a map of its own, which is not read;
+	// Block is the indented lines under the key, which BlockJSON reads.
 	Nested bool
+	Block  []string
 }
 
 // List returns the field's value as a list: its entries, or the scalar
@@ -561,7 +564,7 @@ func Split(text string) (fields []Field, body string, err error) {
 		return nil, body, err
 	}
 	for _, f := range raw {
-		fields = append(fields, Field{Key: f.key, Scalar: f.scalar, Items: f.items, Nested: f.nested})
+		fields = append(fields, Field{Key: f.key, Scalar: f.scalar, Items: f.items, Nested: f.nested, Block: f.block})
 	}
 	return fields, body, nil
 }

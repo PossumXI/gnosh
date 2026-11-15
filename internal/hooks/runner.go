@@ -136,6 +136,12 @@ type Runner struct {
 	maxOutput  int
 	maxText    int
 
+	// hooksMu guards hooks, to which Add puts more while the runner runs;
+	// opts is what Add checks them with, and nextID numbers them.
+	hooksMu sync.RWMutex
+	opts    Options
+	nextID  int
+
 	// The hooks that run in the background: they run under bgCtx, which
 	// Close cancels, and bg counts them.
 	bgCtx        context.Context
@@ -148,6 +154,8 @@ type Runner struct {
 type compiled struct {
 	Hook
 	m matcher
+	// id tells the hooks Add put in force apart, for Once.
+	id int
 }
 
 // selected is a hook chosen to run on one occurrence of an event.
@@ -156,6 +164,7 @@ type selected struct {
 	// guardOnly says the hook fits the tool only as a guard for another
 	// tool's name.
 	guardOnly bool
+	id        int
 }
 
 // NewRunner makes a Runner for a configuration. It refuses, with a
@@ -188,6 +197,7 @@ func NewRunner(cfg Config, opts Options) (*Runner, error) {
 		maxText:    opts.MaxText,
 
 		onBackground: opts.Background,
+		opts:         opts,
 	}
 	r.bgCtx, r.bgStop = context.WithCancel(context.Background())
 	if r.shell == "" {
@@ -226,12 +236,50 @@ func NewRunner(cfg Config, opts Options) (*Runner, error) {
 // loop uses it to skip work that only exists for hooks: the timers behind
 // Notification, the last message gathered for Stop.
 func (r *Runner) Has(event Event) bool {
+	r.hooksMu.RLock()
+	defer r.hooksMu.RUnlock()
 	return len(r.hooks[event]) > 0
+}
+
+// Add puts more hooks in force while the runner runs: a skill's, from when
+// it is run. They are checked as NewRunner checks its own, and refused,
+// all of them, with a *ConfigError, when one would not run.
+func (r *Runner) Add(cfg Config) error {
+	if bad := stopping(Check(cfg, r.opts)); len(bad) > 0 {
+		return &ConfigError{Problems: bad}
+	}
+	r.hooksMu.Lock()
+	defer r.hooksMu.Unlock()
+	for _, h := range cfg.Hooks {
+		info, _ := describe(h.Event)
+		m, _ := compileMatcher(h.Matcher, info.narrow) // Check has passed it
+		r.nextID++
+		r.hooks[h.Event] = append(r.hooks[h.Event], compiled{Hook: h, m: m, id: r.nextID})
+	}
+	return nil
+}
+
+// dropOnce takes away the hooks with Once whose run did not fail.
+func (r *Runner) dropOnce(event Event, sel []selected, records []Record) {
+	var gone []int
+	for i, h := range sel {
+		if h.Once && h.id != 0 && i < len(records) && records[i].Result != ResultCouldNotEvaluate && records[i].Result != ResultCancelled {
+			gone = append(gone, h.id)
+		}
+	}
+	if len(gone) == 0 {
+		return
+	}
+	r.hooksMu.Lock()
+	defer r.hooksMu.Unlock()
+	r.hooks[event] = slices.DeleteFunc(r.hooks[event], func(c compiled) bool { return slices.Contains(gone, c.id) })
 }
 
 // Hooks returns the hooks in force for the event, in the order they run
 // and report in.
 func (r *Runner) Hooks(event Event) []Hook {
+	r.hooksMu.RLock()
+	defer r.hooksMu.RUnlock()
 	out := make([]Hook, 0, len(r.hooks[event]))
 	for _, h := range r.hooks[event] {
 		out = append(out, h.Hook)
@@ -327,6 +375,7 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	all.Wait()
 
 	out := r.combine(&in, info, sel, procs)
+	r.dropOnce(in.Event, sel, out.Records)
 	out.Records = append(out.Records, started...)
 	if slices.ContainsFunc(procs, func(p proc) bool { return p.cancelled }) {
 		return r.refuse(in.Event, out.Records, stopped(ctx, in.Event))
@@ -362,7 +411,10 @@ func stopped(ctx context.Context, event Event) error {
 // order they are configured.
 func (r *Runner) choose(in *Input, info eventInfo) []selected {
 	var out []selected
-	for _, h := range r.hooks[in.Event] {
+	r.hooksMu.RLock()
+	hooks := slices.Clone(r.hooks[in.Event])
+	r.hooksMu.RUnlock()
+	for _, h := range hooks {
 		matched, guardOnly := true, false
 		switch info.subject {
 		case toolName:
@@ -384,7 +436,7 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 			out[i].guardOnly = out[i].guardOnly && guardOnly
 			continue
 		}
-		out = append(out, selected{Hook: h.Hook, guardOnly: guardOnly})
+		out = append(out, selected{Hook: h.Hook, guardOnly: guardOnly, id: h.id})
 	}
 	return out
 }

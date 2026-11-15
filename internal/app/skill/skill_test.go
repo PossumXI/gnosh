@@ -41,7 +41,7 @@ func TestParse(t *testing.T) {
 
 	// What this gnosh does not have is named, each thing.
 	sk, reason = Parse("---\ncontext: fork\nmodel: opus\neffort: high\nhooks:\n  Stop:\n    - x\npaths: [\"*.go\"]\ndisallowed-tools: Bash\nshell: powershell\n---\nRun !`git status` first.\n", "big")
-	if reason != "" || len(sk.Unbuilt) != 3 || len(sk.Paths) != 1 || sk.Paths[0] != "*.go" {
+	if reason != "" || len(sk.Unbuilt) != 2 || len(sk.Paths) != 1 || sk.Paths[0] != "*.go" || string(sk.Hooks) != `{"Stop":["x"]}` {
 		t.Errorf("what is not built: %q (%s)", sk.Unbuilt, reason)
 	}
 	// context: fork is built, and a forked skill's model is its

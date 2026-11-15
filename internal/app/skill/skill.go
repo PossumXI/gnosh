@@ -16,6 +16,7 @@
 package skill
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -69,6 +70,10 @@ type Skill struct {
 	// is told of it once the session works on such a file, and not
 	// before.
 	Paths []string
+	// Hooks is the skill's own hooks block (hooks), as JSON in Claude
+	// Code's shape: put in force when the skill is run, for the rest of
+	// the session.
+	Hooks json.RawMessage
 	// Body is the instructions: the file without its settings.
 	Body string
 	// Dir is the folder that holds the file, Source the file, and Scope
@@ -288,8 +293,13 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 		case "paths":
 			sk.Paths = f.List()
 		case "hooks":
-			if f.Set() {
-				sk.Unbuilt = append(sk.Unbuilt, "hooks of its own (hooks)")
+			switch raw, err := agentdef.BlockJSON(f.Block); {
+			case !f.Nested && f.Set():
+				sk.Unbuilt = append(sk.Unbuilt, "hooks written as something other than a block of events (hooks)")
+			case err != nil:
+				sk.Unbuilt = append(sk.Unbuilt, "hooks that cannot be read ("+err.Error()+")")
+			case f.Nested:
+				sk.Hooks = raw
 			}
 		}
 	}

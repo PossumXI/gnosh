@@ -69,6 +69,11 @@ type Hook struct {
 	// place of the working line's own words (Runner.StatusMessages).
 	StatusMessage string
 
+	// Once takes the hook away after its first run that did not fail (a
+	// skill's hook, added with Runner.Add; Claude Code honours it in a
+	// skill's settings only).
+	Once bool
+
 	// URL, when it is set, makes the hook an HTTP hook (Claude Code's
 	// "type": "http") in place of a command: the event is POSTed to it as
 	// JSON, and the body of the answer is read as a command hook's stdout

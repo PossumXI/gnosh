@@ -149,14 +149,14 @@ func TestSkillThatCannotBeRun(t *testing.T) {
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/audit")
-	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for hooks of its own (hooks), a model of its own (model), commands run before the model sees it")
+	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for a model of its own (model), commands run before the model sees it")
 	s.see("It is not run without: that would be another skill than the one its author wrote")
 	s.typeLine("/quiet")
 	s.see("error: the skill quiet is for the model alone")
 	s.typeLine("/nosuchskill")
 	s.see("There is no command /nosuchskill.")
 	s.typeLine("/skills")
-	s.see("cannot be run by this gnosh: it asks for hooks of its own (hooks), a model of its own (model)")
+	s.see("cannot be run by this gnosh: it asks for a model of its own (model)")
 	s.typeLine("/exit")
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
@@ -348,4 +348,29 @@ func TestSkillForSomeFiles(t *testing.T) {
 		t.Errorf("the skill was named %d times after a second Go file, want once", strings.Count(afterMore, "GOSTYLE-DESC"))
 	}
 	w.Model.Done()
+}
+
+// A skill's own hooks (hooks) are in force from when it is run, for the
+// rest of the session; one with once runs once.
+func TestSkillHooks(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Checked."}, apptest.Reply{Text: "Again."})
+	w.Write(w.ConfigDir()+"/skills/check/SKILL.md", "---\ndescription: Checks.\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: echo stop >> stops.txt\n        - type: command\n          command: echo once >> once.txt\n          once: true\n---\nCheck it.\n")
+	s := sit(t, w, "--trust-folder")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/check")
+	s.see("Checked.")
+	s.see("-- done in ")
+	s.typeLine("and again")
+	s.see("Again.")
+	s.see("-- done in ")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+	if got := w.Read("stops.txt"); strings.Count(got, "stop") != 2 {
+		t.Errorf("the skill's Stop hook ran %d times, want 2:\n%s", strings.Count(got, "stop"), got)
+	}
+	if got := w.Read("once.txt"); strings.Count(got, "once") != 1 {
+		t.Errorf("the once hook ran %d times, want 1", strings.Count(got, "once"))
+	}
 }

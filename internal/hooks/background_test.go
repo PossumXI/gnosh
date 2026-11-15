@@ -149,3 +149,35 @@ func TestStatusMessages(t *testing.T) {
 		t.Errorf("ParseConfig: %+v, %v", cfg.Hooks, err)
 	}
 }
+
+// Hooks added while the runner runs (a skill's) run from then on; one with
+// once goes after its first run that did not fail.
+func TestAddAndOnce(t *testing.T) {
+	r := newRunner(t, options(t))
+	if r.Has(Stop) {
+		t.Fatal("a runner with no hooks has Stop hooks")
+	}
+	cfg, err := ParseConfig([]byte(`{"Stop": [{"hooks": [
+		{"type": "command", "command": "echo always >&2"},
+		{"type": "command", "command": "echo once >&2", "once": true}]}]}`), "the skill (hooks)")
+	if err != nil || len(cfg.Hooks) != 2 || !cfg.Hooks[1].Once {
+		t.Fatalf("ParseConfig: %+v, %v", cfg.Hooks, err)
+	}
+	if err := r.Add(cfg); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if out := run(t, r, input(Stop)); len(out.Records) != 2 {
+		t.Errorf("the first Stop ran %d hooks, want 2", len(out.Records))
+	}
+	if out := run(t, r, input(Stop)); len(out.Records) != 1 || out.Records[0].Stderr != "always" {
+		t.Errorf("the second Stop ran %+v, want the one without once", out.Records)
+	}
+	// A hook on an event this runner was not told it fires is refused.
+	opts := options(t)
+	opts.Fires = []Event{Stop}
+	r = newRunner(t, opts)
+	bad, _ := ParseConfig([]byte(`{"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}`), "x")
+	if err := r.Add(bad); err == nil || r.Has(PreToolUse) {
+		t.Errorf("Add took a hook on an event that is not fired: %v", err)
+	}
+}

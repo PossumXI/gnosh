@@ -256,7 +256,7 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 				p.fail(place, "\"statusMessage\" must be a string; this one is %s.", kindOf(f.value))
 			}
 		case "once":
-			if _, ok := asBool(f.value); !ok {
+			if h.Once, ok = asBool(f.value); !ok {
 				p.fail(place, "\"once\" must be true or false; this one is %s.", kindOf(f.value))
 			}
 		case "shell":
