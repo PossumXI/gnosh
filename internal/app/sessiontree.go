@@ -39,6 +39,9 @@ type sessionTree struct {
 	// named says the person gave the name, and reused that the work tree
 	// was there already: either keeps it at the end.
 	named, reused bool
+	// from is the folder the session was started in, and fromBranch the
+	// branch checked out there ("" when none could be read).
+	from, fromBranch string
 }
 
 // treeNameRe is what a work tree's name may be: a folder's name and a
@@ -95,7 +98,10 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	if err != nil {
 		return fail("%v", err)
 	}
-	t := &sessionTree{worktree: worktree{repo: top, path: filepath.Join(root, name), branch: "worktree-" + name}, name: name, named: named}
+	t := &sessionTree{worktree: worktree{repo: top, path: filepath.Join(root, name), branch: "worktree-" + name}, name: name, named: named, from: st.folder.Start}
+	if b, err := runGit(ctx, env, top, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && b != "HEAD" {
+		t.fromBranch = b
+	}
 	_, branchErr := runGit(ctx, env, top, "rev-parse", "--verify", "--quiet", "refs/heads/"+t.branch)
 	switch {
 	case fileExists(t.path):

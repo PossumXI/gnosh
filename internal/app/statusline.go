@@ -247,11 +247,13 @@ type statusInput struct {
 		DisplayName string `json:"display_name"`
 	} `json:"model"`
 	Workspace struct {
-		CurrentDir string   `json:"current_dir"`
-		ProjectDir string   `json:"project_dir"`
-		AddedDirs  []string `json:"added_dirs"`
+		CurrentDir  string   `json:"current_dir"`
+		ProjectDir  string   `json:"project_dir"`
+		AddedDirs   []string `json:"added_dirs"`
+		GitWorktree string   `json:"git_worktree,omitempty"`
 	} `json:"workspace"`
-	Version     string `json:"version"`
+	Worktree    *statusTree `json:"worktree,omitempty"`
+	Version     string      `json:"version"`
 	OutputStyle struct {
 		Name string `json:"name"`
 	} `json:"output_style"`
@@ -275,6 +277,15 @@ type statusInput struct {
 		Enabled bool `json:"enabled"`
 	} `json:"thinking,omitempty"`
 	PermissionMode string `json:"permission_mode"`
+}
+
+// statusTree is the git work tree a --worktree session works in.
+type statusTree struct {
+	Name           string `json:"name"`
+	Path           string `json:"path"`
+	Branch         string `json:"branch"`
+	OriginalCwd    string `json:"original_cwd"`
+	OriginalBranch string `json:"original_branch,omitempty"`
 }
 
 // statusTokens is the token count of the most recent request.
@@ -305,6 +316,10 @@ func (l *live) statusInput() statusInput {
 		if r != in.Cwd && r != l.cfg.Paths.Cwd {
 			in.Workspace.AddedDirs = append(in.Workspace.AddedDirs, r)
 		}
+	}
+	if t := l.st.tree; t != nil {
+		in.Workspace.GitWorktree = t.name
+		in.Worktree = &statusTree{Name: t.name, Path: t.path, Branch: t.branch, OriginalCwd: t.from, OriginalBranch: t.fromBranch}
 	}
 	in.Version = firstOf(l.p.o.BuildID, "devel")
 	in.OutputStyle.Name = "default"

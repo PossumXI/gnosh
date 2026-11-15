@@ -110,3 +110,39 @@ func TestStatusLineCommandAsksTheModel(t *testing.T) {
 		"It is to show: the branch and the model", "statusline.sh", "gnosh.json", `\"session_id\"`, `\"workspace\"`)
 	w.Model.Done()
 }
+
+// In a --worktree session the status line command is told of the work
+// tree, as Claude Code's is: its name, folder and branch, and where the
+// session was started.
+func TestStatusLineWorktree(t *testing.T) {
+	w := repoWorld(t)
+	runs := w.Home + "/sl-runs"
+	script := w.Script(w.Home+"/bin/sl.sh", "{ cat; echo; } >> "+runs+"\necho status")
+	w.Settings(`{"statusLine": {"type": "command", "command": "` + script + `"}}`)
+	s := sit(t, w, "--trust-folder", "--worktree", "feat")
+	s.see("Type a prompt and Enter.")
+	var got map[string]any
+	for deadline := time.Now().Add(15 * time.Second); got == nil; {
+		data, _ := os.ReadFile(runs)
+		for _, line := range strings.Split(string(data), "\n") {
+			if json.Unmarshal([]byte(line), &got) == nil {
+				break
+			}
+			got = nil
+		}
+		if got == nil && time.Now().After(deadline) {
+			t.Fatalf("the status line command never ran: %s", data)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	tree := w.Dir + "/.gnosh/worktrees/feat"
+	wt, _ := got["worktree"].(map[string]any)
+	if wt["name"] != "feat" || wt["path"] != tree || wt["branch"] != "worktree-feat" || wt["original_cwd"] != w.Dir || wt["original_branch"] != "main" {
+		t.Errorf("the worktree it was given: %v", got["worktree"])
+	}
+	if ws, _ := got["workspace"].(map[string]any); ws["git_worktree"] != "feat" || ws["current_dir"] != tree {
+		t.Errorf("the workspace it was given: %v", got["workspace"])
+	}
+	s.typeLine("/exit")
+	s.exit()
+}

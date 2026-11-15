@@ -615,6 +615,7 @@ or kept with the reason said (27).
       kept, with a line that says how to come back to it (gnosh
       --worktree <name>) and how to take it away.
     The session's records are kept under the work tree's folder, so
-    `gnosh --worktree <name> -c` goes on where it left off. Not built:
-    .worktreeinclude, a pull request's head (#123), worktree.baseRef, and
-    the status line's worktree field.
+    `gnosh --worktree <name> -c` goes on where it left off. The status
+    line command is given Claude Code's worktree field and
+    workspace.git_worktree. Not built: .worktreeinclude, a pull
+    request's head (#123), and worktree.baseRef.
