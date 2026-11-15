@@ -213,9 +213,19 @@ func (l *live) mcpTools() []core.Tool {
 	l.mcp.mu.Lock()
 	defer l.mcp.mu.Unlock()
 	var out []core.Tool
+	resources := false
 	for _, s := range l.mcp.servers {
 		for _, t := range s.tools {
 			if l.engine.ToolEnabled(t.name) {
+				out = append(out, t)
+			}
+		}
+		resources = resources || s.client != nil && s.client.Info().Resources
+	}
+	if resources {
+		// A connected server has resources: the two tools that read them.
+		for _, t := range l.resourceTools() {
+			if l.engine.ToolEnabled(t.Spec().Name) {
 				out = append(out, t)
 			}
 		}

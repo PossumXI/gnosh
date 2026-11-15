@@ -85,7 +85,7 @@ func (t monitorTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Actio
 	if a.command == "" {
 		return core.Action{}, err
 	}
-	return core.Action{Kind: core.ActionExecute, Command: a.command, Summary: "Watch: " + a.summary()}, err
+	return core.Action{Kind: core.ActionExecute, Command: a.command, Summary: a.summary()}, err
 }
 
 // Run starts the command in the background and returns at once.

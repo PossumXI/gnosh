@@ -65,11 +65,15 @@ func (l *live) monitorLines(w shelltool.Watched) bool {
 		return false
 	}
 	what := firstOf(w.Description, "a command")
+	lines := fmt.Sprintf("%d lines", len(w.Lines)+w.Left)
+	if len(w.Lines)+w.Left == 1 {
+		lines = "1 line"
+	}
 	_ = a.Tell(agent.Note{
 		Text: l.texts.MonitorLines(prompt.MonitorNews{ID: w.ID, Description: w.Description, Lines: w.Lines,
 			Left: w.Left, Output: w.OutputFile, Last: w.Last}),
 		Source: "monitor",
-		Notice: fmt.Sprintf("Monitor %s passed on %d lines: %s", w.ID, len(w.Lines)+w.Left, what),
+		Notice: fmt.Sprintf("Monitor %s passed on %s: %s", w.ID, lines, what),
 		Wake:   true,
 	})
 	return true

@@ -59,7 +59,27 @@ func fakeServer(mode string) {
 		switch m.Method {
 		case "initialize":
 			reply(map[string]any{"protocolVersion": "2025-03-26", "serverInfo": map[string]any{"name": "fake", "version": "1.0"},
-				"capabilities": map[string]any{"tools": map[string]any{}}, "instructions": "Use echo to echo."})
+				"capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}, "instructions": "Use echo to echo."})
+		case "resources/list":
+			var p struct {
+				Cursor string `json:"cursor"`
+			}
+			json.Unmarshal(m.Params, &p)
+			if p.Cursor == "" {
+				reply(map[string]any{"resources": []map[string]any{{"uri": "file:///notes.md", "name": "notes", "mimeType": "text/markdown"}}, "nextCursor": "r2"})
+			} else {
+				reply(map[string]any{"resources": []map[string]any{{"uri": "db://users", "name": "users", "description": "The users table."}}})
+			}
+		case "resources/read":
+			var p struct {
+				URI string `json:"uri"`
+			}
+			json.Unmarshal(m.Params, &p)
+			if p.URI != "file:///notes.md" {
+				write(map[string]any{"jsonrpc": "2.0", "id": m.ID, "error": map[string]any{"code": -32002, "message": "no resource " + p.URI}})
+				break
+			}
+			reply(map[string]any{"contents": []map[string]any{{"uri": p.URI, "mimeType": "text/markdown", "text": "# Notes"}, {"uri": p.URI, "blob": "AAEC", "mimeType": "image/png"}}})
 		case "tools/list":
 			var p struct {
 				Cursor string `json:"cursor"`
@@ -227,5 +247,29 @@ func TestCloseStopsAStubbornServer(t *testing.T) {
 	}
 	if took := time.Since(start); took > 1500*time.Millisecond {
 		t.Errorf("Close took %v", took)
+	}
+}
+
+// A server that offers resources says so in the handshake; its resources
+// are listed page by page and read by URI.
+func TestResources(t *testing.T) {
+	c, err := Start(context.Background(), fake(t, "ok"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if !c.Info().Resources {
+		t.Errorf("the server's resources were not noted: %+v", c.Info())
+	}
+	list, err := c.ListResources(context.Background())
+	if err != nil || len(list) != 2 || list[0].URI != "file:///notes.md" || list[1].Description != "The users table." {
+		t.Fatalf("ListResources = %+v, %v", list, err)
+	}
+	parts, err := c.ReadResource(context.Background(), "file:///notes.md")
+	if err != nil || len(parts) != 2 || parts[0].Text != "# Notes" || parts[1].Blob != "AAEC" {
+		t.Fatalf("ReadResource = %+v, %v", parts, err)
+	}
+	if _, err := c.ReadResource(context.Background(), "nowhere://x"); err == nil {
+		t.Errorf("a resource that is not there was read")
 	}
 }

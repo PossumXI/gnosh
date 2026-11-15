@@ -102,6 +102,26 @@ type Info struct {
 	Version         string
 	ProtocolVersion string
 	Instructions    string
+	// Resources says it offers resources (its capabilities name them).
+	Resources bool
+}
+
+// Resource is one resource a server lists: data it makes readable by URI.
+type Resource struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
+
+// ResourceContents is one part of what a resource holds: text, or a blob
+// in base64.
+type ResourceContents struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Blob     string `json:"blob,omitempty"`
 }
 
 // RPCError is an error a server answered a request with.
@@ -222,13 +242,16 @@ func (c *Client) handshake(ctx context.Context) error {
 			Name    string `json:"name"`
 			Version string `json:"version"`
 		} `json:"serverInfo"`
-		Instructions string `json:"instructions"`
+		Instructions string                     `json:"instructions"`
+		Capabilities map[string]json.RawMessage `json:"capabilities"`
 	}
 	if err := json.Unmarshal(raw, &hello); err != nil {
 		c.Close()
 		return fmt.Errorf("mcp: the server's answer to the handshake cannot be read: %w", err)
 	}
-	c.info = Info{Name: hello.ServerInfo.Name, Version: hello.ServerInfo.Version, ProtocolVersion: hello.ProtocolVersion, Instructions: hello.Instructions}
+	_, resources := hello.Capabilities["resources"]
+	c.info = Info{Name: hello.ServerInfo.Name, Version: hello.ServerInfo.Version, ProtocolVersion: hello.ProtocolVersion, Instructions: hello.Instructions,
+		Resources: resources}
 	if h, ok := c.t.(*httpTransport); ok {
 		h.setVersion(hello.ProtocolVersion)
 	}
@@ -292,6 +315,50 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		cursor = res.NextCursor
 	}
 	return nil, errors.New("mcp: the server's tool list never ends")
+}
+
+// ListResources lists the server's resources, every page of them.
+func (c *Client) ListResources(ctx context.Context) ([]Resource, error) {
+	var all []Resource
+	cursor := ""
+	for page := 0; page < 100; page++ {
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := c.request(ctx, "resources/list", params)
+		if err != nil {
+			return nil, err
+		}
+		var res struct {
+			Resources  []Resource `json:"resources"`
+			NextCursor string     `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
+			return nil, fmt.Errorf("mcp: the resource list cannot be read: %w", err)
+		}
+		all = append(all, res.Resources...)
+		if res.NextCursor == "" {
+			return all, nil
+		}
+		cursor = res.NextCursor
+	}
+	return nil, errors.New("mcp: the server's resource list never ends")
+}
+
+// ReadResource reads one resource by its URI.
+func (c *Client) ReadResource(ctx context.Context, uri string) ([]ResourceContents, error) {
+	raw, err := c.request(ctx, "resources/read", map[string]any{"uri": uri})
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Contents []ResourceContents `json:"contents"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return nil, fmt.Errorf("mcp: the resource cannot be read: %w", err)
+	}
+	return res.Contents, nil
 }
 
 // CallTool calls one tool with its arguments, a JSON object.

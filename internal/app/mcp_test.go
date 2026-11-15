@@ -445,3 +445,48 @@ func TestMCPLargeResult(t *testing.T) {
 		t.Errorf("plainName = %q", got)
 	}
 }
+
+// fakeMCPResources is a small MCP server in sh that has resources and no
+// tools: it lists one, memo://plan, and reads it.
+const fakeMCPResources = `while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"memo","version":"0.1"},"capabilities":{"resources":{}}}}\n' "$id" ;;
+    *'"method":"tools/list"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[]}}\n' "$id" ;;
+    *'"method":"resources/list"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"resources":[{"uri":"memo://plan","name":"plan","mimeType":"text/plain","description":"The plan."}]}}\n' "$id" ;;
+    *'"method":"resources/read"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"memo://plan","text":"PLAN-TEXT-12"},{"uri":"memo://plan","blob":"AAAA","mimeType":"image/png"}]}}\n' "$id" ;;
+  esac
+done`
+
+// The resources of MCP servers (spec/cc/mcp.md 5): once a connected server
+// says it has some, ListMcpResourcesTool lists them and
+// ReadMcpResourceTool reads one by its URI. A session whose servers have
+// none is not offered the two tools.
+func TestMCPResources(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{
+			{ID: "c1", Name: "ListMcpResourcesTool", Args: `{}`},
+			{ID: "c2", Name: "ReadMcpResourceTool", Args: `{"server":"memo","uri":"memo://plan"}`},
+			{ID: "c3", Name: "ReadMcpResourceTool", Args: `{"server":"nobody","uri":"memo://plan"}`},
+		}},
+		apptest.Reply{Text: "Read."},
+	)
+	server := w.Script(w.Home+"/bin/memo.sh", fakeMCPResources)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"memo": {"command": "`+server+`"}}}`)
+	run(t, w, "-p", "read the plan").wantCode(t, 0)
+	has(t, "the tools offered", strings.Join(toolNamesOf(w.Model.Requests()[0]), " "), "ListMcpResourcesTool ReadMcpResourceTool")
+	has(t, "the listing", toolResult(t, w, 1, "c1"), "memo  memo://plan  plan (text/plain): The plan.")
+	has(t, "the resource", toolResult(t, w, 1, "c2"), "PLAN-TEXT-12", "holds binary data (image/png, about 3 bytes)")
+	has(t, "a server that is not there", toolResult(t, w, 1, "c3"), `No connected MCP server named "nobody" offers resources. Those that do: memo.`)
+
+	// Servers without resources: no such tools.
+	w = apptest.NewWorld(t, apptest.Reply{Text: "Hello."})
+	server = w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"greeter": {"command": "`+server+`"}}}`)
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	hasNot(t, "the tools offered", strings.Join(toolNamesOf(w.Model.Requests()[0]), " "), "ListMcpResourcesTool")
+}
