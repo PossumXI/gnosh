@@ -12,13 +12,16 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
 // This file holds the slash commands that follow Claude Code's own of the
 // same names (spec/cc/slash-commands-and-skills.md): /plan, /add-dir,
-// /tasks, /cost, /agents, /memory and /init.
+// /tasks, /cost, /agents, /memory, /init and /export.
 
 // slashPlan is /plan [task]: plan mode, and the task, if one is given, as
 // the prompt that starts it.
@@ -277,6 +280,139 @@ func (l *live) slashInit(ctx context.Context, c *SlashContext) error {
 	c.Say("The model looks through the project and writes %s.", target)
 	return c.Send(agent.Prompt{Hidden: true, Source: "init", Text: prompt.Wrap(task),
 		Notice: "/init: the model is writing the project's GNOSH.md."})
+}
+
+// slashExport is /export [file]: the conversation as plain text, in a file.
+// A relative name is the working directory's, a name with no extension gets
+// .txt, and with no name it is <date>-<session's name>.txt there. A file
+// that is there already is never written over.
+func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
+	name := strings.TrimSpace(c.Args)
+	if name == "" {
+		title, _ := l.title()
+		name = l.p.now().Format("2006-01-02") + "-" + fileSlug(firstOf(title, "session")) + ".txt"
+	}
+	switch {
+	case strings.HasPrefix(name, "~/"):
+		name = filepath.Join(l.cfg.Paths.Home, name[2:])
+	case !filepath.IsAbs(name):
+		name = filepath.Join(l.cwd(), name)
+	}
+	if filepath.Ext(name) == "" {
+		name += ".txt"
+	}
+	text := exportText(l.ts.Entries())
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	switch {
+	case errors.Is(err, os.ErrExist):
+		return fmt.Errorf("%s is there already, and /export writes over nothing; give it another name", name)
+	case err != nil:
+		return fmt.Errorf("%s cannot be written: %v", name, err)
+	}
+	_, werr := f.WriteString(text)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return fmt.Errorf("%s could not be written whole: %v", name, werr)
+	}
+	c.Say("The conversation is in %s (%d lines).", name, strings.Count(text, "\n"))
+	return nil
+}
+
+// fileSlug makes a session's name into a piece of a file name: lower case
+// letters and digits, with a dash between words, at most 48 characters.
+func fileSlug(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			if dash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			b.WriteRune(r)
+			dash = false
+		default:
+			dash = true
+		}
+		if b.Len() >= 48 {
+			break
+		}
+	}
+	return firstOf(strings.TrimRight(b.String(), "-"), "session")
+}
+
+// exportMaxOutput is how many lines of one tool call's output /export
+// keeps; what is cut is counted.
+const exportMaxOutput = 40
+
+// exportText writes the conversation as plain text for a person: each of
+// their prompts after "> ", the model's answers as it wrote them, each tool
+// call as one line with its output indented under it, and a line where the
+// conversation was summarized for the model. Reasoning, and what gnosh
+// added for the model alone, are left out, and no line is empty but the
+// ones inside an answer.
+func exportText(entries []transcript.Entry) string {
+	var b strings.Builder
+	put := func(prefix, more, text string) {
+		lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+		for i, line := range lines {
+			lead := more
+			if i == 0 {
+				lead = prefix
+			}
+			b.WriteString(strings.TrimRight(lead+line, " \t"))
+			b.WriteByte('\n')
+		}
+	}
+	for _, e := range transcript.Conversation(entries) {
+		switch e.Type {
+		case transcript.TypeUser:
+			switch e.Source {
+			case transcript.SourcePrompt:
+				if text := strings.TrimSpace(e.Message.Text()); text != "" {
+					put("> ", "  ", text)
+				}
+			case transcript.SourceToolResults:
+				for _, blk := range e.Message.Blocks {
+					if blk.Type != core.BlockToolResult {
+						continue
+					}
+					var out strings.Builder
+					for _, part := range blk.Content {
+						if part.Type == core.BlockText {
+							out.WriteString(part.Text)
+						}
+					}
+					_, rest := shelltool.SplitStamp(out.String())
+					rest = strings.TrimRight(rest, "\n")
+					if strings.TrimSpace(rest) == "" {
+						continue
+					}
+					lines := strings.Split(rest, "\n")
+					if len(lines) > exportMaxOutput {
+						lines = append(lines[:exportMaxOutput], fmt.Sprintf("(%d more lines)", len(lines)-exportMaxOutput))
+					}
+					put("    ", "    ", strings.Join(lines, "\n"))
+				}
+			}
+		case transcript.TypeAssistant:
+			for _, blk := range e.Message.Blocks {
+				switch blk.Type {
+				case core.BlockText:
+					if text := strings.TrimSpace(blk.Text); text != "" {
+						put("", "", text)
+					}
+				case core.BlockToolUse:
+					put("* ", "  ", toolLine(blk.Name, blk.Input))
+				}
+			}
+		case transcript.TypeSummary:
+			put("", "", "(The conversation up to here was summarized for the model.)")
+		}
+	}
+	return b.String()
 }
 
 // initTask is what /init asks of the model. %s is the file it writes.

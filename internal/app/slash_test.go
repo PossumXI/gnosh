@@ -174,6 +174,19 @@ func TestClaudeCodeCommands(t *testing.T) {
 	planReq := string(reqs[len(reqs)-1].Body)
 	has(t, "the request /plan sent", planReq, "work out the change", other)
 
+	// /export writes the conversation as text, and writes over nothing.
+	s.typeLine("/export talk")
+	s.see("The conversation is in " + w.Dir + "/talk.txt")
+	exported := w.Read("talk.txt")
+	has(t, "the exported conversation", exported, "> say hello\nHello.\n", "> work out the change\n", "Here is the plan: read, then change.")
+	if strings.Contains(exported, "\n\n") {
+		t.Errorf("the export holds an empty line:\n%s", exported)
+	}
+	s.typeLine("/export talk.txt")
+	s.see("is there already, and /export writes over nothing")
+	s.typeLine("/export")
+	s.see("The conversation is in " + w.Dir + "/")
+
 	// /init asks the model to improve the GNOSH.md there is.
 	s.typeLine("/init")
 	s.see("GNOSH.md is written.")

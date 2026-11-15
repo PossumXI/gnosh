@@ -195,6 +195,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "cost", Aliases: []string{"usage", "stats"}, Summary: "What this session has used: requests, tokens and time, by model.", InRun: true, Run: l.slashCost},
 		{Name: "agents", Summary: "The kinds of sub-agent there are, and where each is defined.", InRun: true, Run: l.slashAgents},
 		{Name: "memory", Summary: "The context files the model is given (GNOSH.md, AGENTS.md, CLAUDE.md), and where to put one.", InRun: true, Run: l.slashMemory},
+		{Name: "export", Args: "[file]", Summary: "Write the conversation to a file as plain text: the name given, or <date>-<session>.txt here.", Run: l.slashExport},
 		{Name: "init", Summary: "Have the model look through the project and write its GNOSH.md, or improve the one there is.", Run: l.slashInit},
 		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {
