@@ -47,7 +47,8 @@ prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, and a line that begins with `!` is a command of your own.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
-`headers`), web search. The interface is in use over
+`headers`), and a WebSearch tool of gnosh's own (a search engine's MCP
+server gives the model one). The interface is in use over
 ssh, in tmux. Its wording to the model has not yet been compared run
 against run. Nothing here is released.
 
