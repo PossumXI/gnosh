@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -61,4 +62,29 @@ func TestRunAsAgentStartsOnlyItsKinds(t *testing.T) {
 	hasNot(t, "the kinds the session is told of", first, "Does other things")
 	has(t, "a kind it may not start", toolResult(t, w, 1, "c1"), "this session runs as the agent lead, whose tools let it start only these kinds of sub-agent: helper, nowhere")
 	has(t, "a kind it may start", toolResult(t, w, 3, "c2"), "HELPED-31.")
+}
+
+// A session that runs as a kind with an initialPrompt starts with it,
+// ahead of the prompt it was given (as a turn of its own, or folded into
+// the first turn when the given prompt comes before that turn began); a
+// resumed session does not start with it again.
+func TestRunAsAgentInitialPrompt(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		return &apptest.Reply{Text: "Reply " + strconv.Itoa(n) + "."}
+	})
+	w.Write(w.ConfigDir()+"/agents/starter.md", "---\nname: starter\ndescription: Starts on its own.\ninitialPrompt: INIT-PROMPT-5 list the files.\n---\nYou start.\n")
+	run(t, w, "-p", "--agent", "starter", "then this").wantCode(t, 0)
+	reqs := w.Model.Requests()
+	first := strings.Join(userTexts(reqs[0]), "\n")
+	has(t, "the first request", first, "INIT-PROMPT-5 list the files.")
+	all := strings.Join(userTexts(reqs[len(reqs)-1]), "\n")
+	if i, j := strings.Index(all, "INIT-PROMPT-5"), strings.Index(all, "then this"); i < 0 || j < 0 || i > j {
+		t.Errorf("the initial prompt does not come first:\n%s", all)
+	}
+	run(t, w, "-p", "-c", "--agent", "starter", "once more").wantCode(t, 0)
+	reqs = w.Model.Requests()
+	if n := strings.Count(strings.Join(userTexts(reqs[len(reqs)-1]), "\n"), "INIT-PROMPT-5"); n != 1 {
+		t.Errorf("the resumed session holds the initial prompt %d times, want the first time only", n)
+	}
 }

@@ -76,6 +76,10 @@ type Def struct {
 	// InheritModel says Model was written as inherit: the session's model,
 	// whatever else would name one.
 	InheritModel bool
+	// InitialPrompt is the prompt a session that runs as the agent
+	// (--agent) starts with, as its first turn (initialPrompt). A
+	// sub-agent has its task instead.
+	InitialPrompt string
 	// Hooks is the definition's own hooks block (hooks), as JSON in the
 	// shape of the settings' hooks: in force while the agent runs, for its
 	// events alone.
@@ -348,6 +352,8 @@ func Parse(text string) (d Def, reason string) {
 			d.Skills = cleanNames(f.list())
 		case "effort":
 			d.Effort = f.scalar
+		case "initialPrompt":
+			d.InitialPrompt = strings.TrimSpace(f.scalar)
 		case "hooks":
 			switch raw, err := BlockJSON(f.block); {
 			case !f.nested && (f.scalar != "" || len(f.items) > 0):

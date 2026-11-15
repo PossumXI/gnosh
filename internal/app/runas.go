@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
@@ -19,7 +20,8 @@ import (
 // deny rule of a tool's bare name puts one, and its model is the
 // session's (unless -m names one), at the thinking level it asks for
 // (unless --effort names one). The skills it preloads come with the first
-// prompt, after the instruction files, which still load. The
+// prompt, after the instruction files, which still load, and a new
+// session starts with the kind's initialPrompt as its first turn. The
 // session's file records the agent, and a resumed session runs as it
 // again unless --agent names another. What a definition asks for that a
 // session cannot be (hooks, skills, MCP servers, isolation, memory) stops
@@ -134,4 +136,17 @@ func (l *live) agentName() string {
 		return ""
 	}
 	return l.asAgent.Name
+}
+
+// startInitialPrompt sends the prompt the kind the session runs as starts
+// with (initialPrompt) as the first turn of a new session, ahead of
+// anything the person types or the command line gives. A resumed session,
+// and one that /clear began, do not start with it again.
+func (l *live) startInitialPrompt() {
+	if l.asAgent == nil || l.asAgent.InitialPrompt == "" || l.source != "startup" || l.agent == nil {
+		return
+	}
+	if _, err := l.agent.Submit(agent.Prompt{Text: l.asAgent.InitialPrompt, Source: "initialPrompt"}); err != nil {
+		l.notice(agent.LevelWarning, "agent", fmt.Sprintf("The prompt the agent %s starts with could not be sent: %v.", l.asAgent.Name, err))
+	}
 }

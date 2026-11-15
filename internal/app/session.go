@@ -493,6 +493,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.mcp = l.loadMCP()
 	l.startMCP()
 	l.startStatusLine()
+	l.startInitialPrompt()
 	return l, nil
 }
 

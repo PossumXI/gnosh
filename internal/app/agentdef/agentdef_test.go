@@ -76,6 +76,11 @@ func TestParse(t *testing.T) {
 		t.Errorf("Agent bare read as %q, inherit %v", d.AgentTypes, d.InheritModel)
 	}
 
+	// The prompt a session that runs as it starts with.
+	if d, _ = Parse("---\nname: s\ndescription: d\ninitialPrompt: List the files first.\n---\nx"); d.InitialPrompt != "List the files first." {
+		t.Errorf("initialPrompt read as %q", d.InitialPrompt)
+	}
+
 	// The skills it preloads, as a list or with commas, and its effort.
 	d, reason = Parse("---\nname: careful\ndescription: Checks.\nskills:\n  - review-list\n  - ' style '\neffort: high\n---\nCheck.")
 	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" || len(d.Other) != 0 {

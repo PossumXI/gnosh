@@ -10,7 +10,7 @@ import (
 func TestFromJSON(t *testing.T) {
 	defs, err := FromJSON(`{
 		"reviewer": {"description": "Reviews a change.", "prompt": "You review code.", "tools": "Read, Grep(*.go), Agent(helper, x)", "model": "inherit", "maxTurns": 5, "color": "red"},
-		"writer": {"description": "Writes the docs.", "prompt": "", "tools": "Read, Edit", "disallowedTools": "Bash", "background": true, "hooks": {}, "skills": ["style", "terms"], "effort": "max"}
+		"writer": {"description": "Writes the docs.", "prompt": "", "tools": "Read, Edit", "disallowedTools": "Bash", "background": true, "hooks": {}, "skills": ["style", "terms"], "effort": "max", "initialPrompt": "Begin."}
 	}`)
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +24,7 @@ func TestFromJSON(t *testing.T) {
 		t.Errorf("reviewer = %+v", r)
 	}
 	if strings.Join(w.Tools, ",") != "Read,Edit" || strings.Join(w.Disallowed, ",") != "Bash" || !w.Background || len(w.Other) != 0 || w.Hooks != nil ||
-		strings.Join(w.Skills, ",") != "style,terms" || w.Effort != "max" {
+		strings.Join(w.Skills, ",") != "style,terms" || w.Effort != "max" || w.InitialPrompt != "Begin." {
 		t.Errorf("writer = %+v", w)
 	}
 	for text, want := range map[string]string{
