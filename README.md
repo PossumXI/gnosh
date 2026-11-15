@@ -34,8 +34,14 @@ at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
 tools are `mcp__<server>__<tool>`), commands on
 declared hosts over ssh, permission modes (plan mode included, where the model presents its plan
 with ExitPlanMode and you approve it) and rules,
-hooks (with Claude Code's `if` filters, one permission rule each), a status line command (Claude Code's `statusLine`), instruction
-files, sub-agents in the foreground and, in a session, in the background, `mem` and frames
+hooks (command hooks in the shell and exec forms, in the background too,
+http hooks and mcp_tool hooks, with Claude Code's `if` filters, one
+permission rule each, and their status messages), a status line command
+(Claude Code's `statusLine`), instruction files, skills (with
+allowed-tools and disallowed-tools, effort, `context: fork` in a
+sub-agent, paths, hooks of their own, and commands run before the model
+sees them), sub-agents in the foreground and, in a session, in the
+background (general-purpose, Explore, Plan and your own), `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
 remove, with Claude Code's local, project and user scopes), and
