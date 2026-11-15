@@ -23,8 +23,8 @@
 set -eu
 cd "$(dirname "$0")/../.."
 
-HOST=${GNOSH_DEV_HOST:-root@157.245.185.86}
-KEY=${GNOSH_DEV_KEY:-$HOME/.ssh/id_ed25519_kourt}
+HOST=${GNOSH_DEV_HOST:?set GNOSH_DEV_HOST to the devbox, as user@address (and GNOSH_DEV_KEY to its ssh key, when one is needed)}
+KEY=${GNOSH_DEV_KEY:-}
 REMOTE=${GNOSH_DEV_DIR:-/root/src/gnosh}
 
 flags=""
@@ -60,7 +60,7 @@ done
 	exit 2
 }
 
-SSH="ssh -i $KEY -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"
+SSH="ssh ${KEY:+-i $KEY -o IdentitiesOnly=yes} -o BatchMode=yes -o ConnectTimeout=20"
 
 mk=""
 pkgs=""

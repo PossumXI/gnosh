@@ -47,7 +47,7 @@ func TestMemRecallLive(t *testing.T) {
 		{"cmd/test", "go test -race ./..."},
 		{"cmd/build", "make build (CGO_ENABLED=0)"},
 		{"cmd/lint", "golangci-lint run ./... with the repo's .golangci.yml"},
-		{"cmd/deploy", "scripts/deploy.sh kourt, then curl -I https://gno.shop"},
+		{"cmd/deploy", "scripts/deploy.sh web, then curl -I https://shop.example.com"},
 		{"models/qwen", "the abliterated build on the AI box, served by llama-router on port 8080"},
 		{"models/embedding", "Qwen3-Embedding-0.6B on port 8091, CPU only"},
 		{"hosts/devbox", "the build machine, where heavy builds and tests run"},

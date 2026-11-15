@@ -106,9 +106,11 @@ there), so anything generated on the devbox must be written to stdout or to
 `/tmp` and copied back, never left in the tree. Running `gofmt -w` on the Mac
 is fine. Do not run `go build`, `go vet` or `go test` on the Mac.
 
-To run something else on the devbox:
+The scripts reach the devbox as GNOSH_DEV_HOST names it (user@address),
+with the ssh key GNOSH_DEV_KEY names when one is needed; neither has a
+default. To run something else on the devbox:
 
-    ssh -i ~/.ssh/id_ed25519_kourt -o IdentitiesOnly=yes root@157.245.185.86 'cd /root/src/gnosh && export PATH=/usr/local/go/bin:$PATH && <command>'
+    ssh ${GNOSH_DEV_KEY:+-i $GNOSH_DEV_KEY} "$GNOSH_DEV_HOST" 'cd /root/src/gnosh && export PATH=/usr/local/go/bin:$PATH && <command>'
 
 On the devbox, work only inside `/root/src/gnosh` and `/tmp`. Never use
 `pgrep -f` or `pkill -f` there.

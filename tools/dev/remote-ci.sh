@@ -21,8 +21,8 @@
 set -eu
 cd "$(dirname "$0")/../.."
 
-HOST=${GNOSH_DEV_HOST:-root@157.245.185.86}
-KEY=${GNOSH_DEV_KEY:-$HOME/.ssh/id_ed25519_kourt}
+HOST=${GNOSH_DEV_HOST:?set GNOSH_DEV_HOST to the devbox, as user@address (and GNOSH_DEV_KEY to its ssh key, when one is needed)}
+KEY=${GNOSH_DEV_KEY:-}
 ROOT=${GNOSH_CI_ROOT:-/root/ci}
 
 flags=""
@@ -45,7 +45,7 @@ done
 
 sha=$(git rev-parse --short=12 "$ref^{commit}")
 dir="$ROOT/gnosh-$sha"
-SSH="ssh -i $KEY -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"
+SSH="ssh ${KEY:+-i $KEY -o IdentitiesOnly=yes} -o BatchMode=yes -o ConnectTimeout=20"
 
 # shellcheck disable=SC2086,SC2029
 git archive "$sha" | $SSH "$HOST" "rm -rf $dir && mkdir -p $dir && tar -x -C $dir"
