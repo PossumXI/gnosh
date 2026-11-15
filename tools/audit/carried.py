@@ -191,8 +191,37 @@ GNOMEM_EMBEDDINGS = (
     '`/embeddings` endpoint such as `llama-server --embedding`, in your\n`gnosh.json`:\n\n```json\n{ "options": { "memEmbeddingsUrl": "http://127.0.0.1:8091/v1" } }\n```\n',
     "the embedding server's setting, 5 lines: the earlier config line (`option mem-embeddings-url`) is now the `gnosh.json` key `options.memEmbeddingsUrl`",
 )
+# Where GNOMEM.md spoke of the earlier harness's screen and commands (its
+# status bar, its sidebar, `gnosh run`, `/export`, its context file), it now
+# says what the rewritten gnosh has. The blocks a carried test replays are
+# untouched.
+GNOMEM_HARNESS_1 = (
+    "end of the conversation. Met, you are told, in the TUI's status bar and on stderr from\n`gnosh run`, as in a real run in the TUI: `Goal met: create release notes\n",
+    'end of the conversation. Met, you are told, in a line of the session and on stderr from\n`gnosh -p`, as in a real run: `Goal met: create release notes\n',
+    "where a met goal is said, 2 lines: the earlier harness's status bar and `gnosh run` are now a line of the session and `gnosh -p`",
+)
+GNOMEM_HARNESS_2 = (
+    "rows stay there and in `/export`; only the model's view loses them), the\nframe the agent is in where the sidebar shows its work, `/mem log` lists\neach push and pop, and `gnosh run` prints what a pop took out of the\n",
+    "rows stay there and in the session's file; only the model's view loses them), the\nframe the agent is in in the task list under the prompt box, `/mem log` lists\neach push and pop, and `gnosh -p` prints what a pop took out of the\n",
+    "where a pop is seen, 3 lines: the earlier harness's `/export`, sidebar and `gnosh run` are now the session's file, the task list under the prompt box and `gnosh -p`",
+)
+GNOMEM_HARNESS_3 = (
+    'And Gnosh told the user, as a warning in the session (on stderr from\n`gnosh run`):\n',
+    'And Gnosh told the user, as a warning in the session (on stderr from\n`gnosh -p`):\n',
+    '1 word: `gnosh run` is now `gnosh -p`',
+)
+GNOMEM_HARNESS_4 = (
+    "The notice sits in the TUI's status bar as Gnosh starts, and comes again with\nthe first prompt of each new session you open in it and with the first\nprompt of a new day, so a TUI left open overnight tells you when you are\nback. `gnosh run` prints it on stderr before it starts work. It names only what is due and\n",
+    'The notice is a warning line as a session starts, and comes again with the\nfirst prompt of a new day, so a session left open overnight tells you when\nyou are back. `gnosh -p` prints it on stderr before it starts work. It names only what is due and\n',
+    "where the start notice is shown, 4 lines: the earlier harness's status bar and `gnosh run` are now a warning line of the session and `gnosh -p`",
+)
+GNOMEM_HARNESS_5 = (
+    "- **Your words come first**, then the context files (CRUSH.md, AGENTS.md,\n  CLAUDE.md) and mem's rules",
+    "- **Your words come first**, then the context files (GNOSH.md, AGENTS.md,\n  CLAUDE.md) and mem's rules",
+    '1 word: the context file the rewritten gnosh reads is GNOSH.md',
+)
 EDITS = {
-    "GNOMEM.md": [GNOMEM_EMBEDDINGS],
+    "GNOMEM.md": [GNOMEM_EMBEDDINGS, GNOMEM_HARNESS_1, GNOMEM_HARNESS_2, GNOMEM_HARNESS_3, GNOMEM_HARNESS_4, GNOMEM_HARNESS_5],
     "internal/gnovm/LICENSE.md": [LICENSE_NOTES],
     "internal/gnovm/DESIGN.md": [(
         '`cmd.Wait`; `GNOSH_PROFILE` dropped;',

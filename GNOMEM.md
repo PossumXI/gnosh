@@ -141,8 +141,8 @@ Replayed as gnosh asks it, that question passed the close in 5 replays of
 10 of 10, and passed the seven good closes replayed beside it. The hint
 after a pop says to call `mem.Next()` by itself. As the turn ends, a
 separate judge checks each task closed against what mem shows of it and the
-end of the conversation. Met, you are told, in the TUI's status bar and on stderr from
-`gnosh run`, as in a real run in the TUI: `Goal met: create release notes
+end of the conversation. Met, you are told, in a line of the session and on stderr from
+`gnosh -p`, as in a real run: `Goal met: create release notes
 file (The agent wrote …/notes.md with content 'release notes' and verified
 …)`. Not met, the todo is reopened with the judge's reason as a note, you are
 told so, and the agent goes back to it; when what is missing is yours to do
@@ -261,9 +261,9 @@ Work found on the way that is not this todo's goes to the top, from
 anywhere, with `mem.Later("…")`.
 
 You see every pop in the chat as the tool's result (the removed
-rows stay there and in `/export`; only the model's view loses them), the
-frame the agent is in where the sidebar shows its work, `/mem log` lists
-each push and pop, and `gnosh run` prints what a pop took out of the
+rows stay there and in the session's file; only the model's view loses them), the
+frame the agent is in in the task list under the prompt box, `/mem log` lists
+each push and pop, and `gnosh -p` prints what a pop took out of the
 context. A frame a session holds is its own: no other session, and not
 `/mem`, closes, drops or takes it; the session pops it, resumed by id if it
 has ended. A todo with todos under it is the exception: it is coordinated,
@@ -490,7 +490,7 @@ mem.Rule("gofumpt-before-commit", "Always run `gofumpt -l .` before committing a
 ```
 
 And Gnosh told the user, as a warning in the session (on stderr from
-`gnosh run`):
+`gnosh -p`):
 
 ```
 mem: this session set a rule every session will follow as yours: `gofumpt-before-commit` = "Always run `gofumpt -l .` before committing anything in this project". If you did not ask for it, /mem forget gofumpt-before-commit removes it
@@ -609,10 +609,9 @@ in a script on a machine with only Gnosh's data. It only reads: `undo`,
 a name mem does not hold (`gnosh mem show no-such-item`), and a `find` with no
 words. A `find` that matches nothing is an answer, and exits 0.
 
-The notice sits in the TUI's status bar as Gnosh starts, and comes again with
-the first prompt of each new session you open in it and with the first
-prompt of a new day, so a TUI left open overnight tells you when you are
-back. `gnosh run` prints it on stderr before it starts work. It names only what is due and
+The notice is a warning line as a session starts, and comes again with the
+first prompt of a new day, so a session left open overnight tells you when
+you are back. `gnosh -p` prints it on stderr before it starts work. It names only what is due and
 what waits on you, so a mem with neither says nothing. The tests replay the
 block above against every change to Gnosh, the notice and your commands
 included.
@@ -770,7 +769,7 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
 - **Figures**: a sum, a rate or a date it would work out in its head runs in
   the session's scratch machine instead, printing every term, not only the
   total, and the terms and the result in the answer are the lines it printed.
-- **Your words come first**, then the context files (CRUSH.md, AGENTS.md,
+- **Your words come first**, then the context files (GNOSH.md, AGENTS.md,
   CLAUDE.md) and mem's rules, then the rest of mem. What is for the team goes
   in a context file: mem stays on this machine.
 
