@@ -195,6 +195,12 @@ func TestOtherDestroyers(t *testing.T) {
 		// alias, which dash expands in the lines after.
 		"alias zz=\nhead -5 a.txt$[; zz rsync -a --delete src/ .", "alias zz=\necho $[; zz mv .git /tmp/g", "alias q=\necho $[1; q chmod -R 000 .",
 		"alias zz=\necho $[; zz git clean -fdx", "echo $[; zz shred -u *",
+		// And the name itself may be written inside a ${...} or with quotes
+		// in it, which a crude cut at blanks leaves as it is. (A descriptor
+		// of three digits is one more thing the reader does not follow: to
+		// dash the 000 is chmod's mode.)
+		"env ${HOME:+chmod} -R 000> eval000 .", "echo $[; ${HOME:+mv} .git /tmp/g", "echo $[; ch''mod -R 000 .", "echo $[; X=1 \\mv .git /tmp/g",
+		"echo $[; ${X:-rsync} -a --delete src/ .", "echo $[; \"git\" clean -fdx",
 		"time coproc shred -u *", "echo $[1]; rsync -a --delete src/ .", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
 		// The forms bash adds to ${...}, on a value the line knows.
 		"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",
@@ -230,6 +236,7 @@ func TestOtherDestroyers(t *testing.T) {
 		// (A line that cannot be read, with such a command behind another
 		// word and nothing that has to be kept in its way.)
 		"alias zz=\necho $[; zz mv a.txt b.txt", "echo $[1; q chmod -R 755 build", "echo $[; zz rsync -a src/ dst/",
+		"echo $[; ${X:-mv} a.txt b.txt", "echo $[; ch''mod -R 755 build", "env ${X:-chmod} -R 755> eval000 build",
 		"chmod +x script.sh", "chmod 644 a.txt", "chmod -R u+w build", "chown -R me:me node_modules", "chmod 700 ~", "chmod -R 755 src",
 		"chown u .", "chmod -R go-w \"$dir\"", "chmod -x a.sh", "chgrp staff a.txt", "chmod -R 755 ~/bin",
 		"git clean -fd", "git clean -n -fdx", "git clean -fdx --dry-run", "git clean -fdx build", "git clean -fX build/", "git clean -f",

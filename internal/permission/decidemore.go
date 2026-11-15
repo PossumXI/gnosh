@@ -86,9 +86,17 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		crude, why := v.unread, v.opaque
 		if !v.sc.ok {
 			crude, why = v.frags, v.sc.why
+			// The crude pieces are cut at every brace and every < and >,
+			// which parts a name written inside a ${...} from the words it
+			// is handed ("${X:-rsync} -a --delete src/ ."), and a command
+			// from what follows its redirection. So the whole line is cut
+			// once more, at what ends a command and nothing else.
+			crude = append(append([]string(nil), crude...), looseCommands(v.text)...)
 		}
 		for _, f := range crude {
-			fields := strings.Fields(f)
+			// (The words are cut the loosest way, so that a name inside a
+			// ${...} or behind quotes is still a word: see looseFields.)
+			fields := looseFields(f)
 			for i := 0; i < len(fields) && i < 3; i++ {
 				if n := baseName(fields[i]); n == "rm" || n == "rmdir" {
 					return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
@@ -110,7 +118,7 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		// or the working directory is not ruled out either.
 		if len(crude) > 0 && (strings.Contains(v.text, "HOME") || strings.Contains(v.text, "PWD") || strings.Contains(v.text, "~")) {
 			for _, f := range crude {
-				for _, field := range strings.Fields(f) {
+				for _, field := range looseFields(f) {
 					switch progKey(baseName(field)) {
 					case "mv", "chmod", "chown", "chgrp", "truncate", "shred", "rsync":
 						return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
@@ -160,6 +168,60 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 	return Decision{}, false
 }
 
+// looseFields cuts a crude piece of a line into words the loosest way
+// there is: quotes, backslashes and backticks are taken out, and every
+// character that cannot stand in a name, a path, a flag or a pattern is
+// taken for a blank. A name that the line writes inside a ${...}, behind
+// quotes or after an = then stands as a word of its own: "${HOME:+chmod}"
+// is HOME and chmod, r”m is rm, and X=mv is X and mv. This is for
+// looking for the name of a command that destroys things in a line nobody
+// could read, where more words than the shell makes are more to judge and
+// a word that is missed is a directory gone.
+func looseFields(piece string) []string {
+	var b strings.Builder
+	for i := 0; i < len(piece); i++ {
+		c := piece[i]
+		switch {
+		case c == '\'' || c == '"' || c == '\\' || c == '`':
+		case c == '$' && i+1 < len(piece) && piece[i+1] == '{':
+			// ${name<op>word}: the name, and then the word, without the
+			// operator between them, whose - or + would else stick to the
+			// word ("${X:-rm}" is X and rm).
+			b.WriteByte(' ')
+			i += 2
+			for i < len(piece) && isNameChar(piece[i]) {
+				b.WriteByte(piece[i])
+				i++
+			}
+			b.WriteByte(' ')
+			for i < len(piece) && strings.IndexByte(":-+=?#%!@*^,/", piece[i]) >= 0 {
+				i++
+			}
+			i--
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c >= 0x80, strings.IndexByte("_./~*?-@%,[]", c) >= 0:
+			b.WriteByte(c)
+		default:
+			b.WriteByte(' ')
+		}
+	}
+	return strings.Fields(b.String())
+}
+
+// looseCommands cuts a line nobody could read into what may be its
+// commands, at line breaks, semicolons, ampersands and bars and at nothing
+// else, each written out as its looseFields with one blank between them.
+func looseCommands(line string) []string {
+	var out []string
+	for _, piece := range strings.FieldsFunc(strings.ReplaceAll(line, "\\\n", ""), func(r rune) bool {
+		return r == '\n' || r == ';' || r == '&' || r == '|'
+	}) {
+		if fields := looseFields(piece); len(fields) > 0 {
+			out = append(out, strings.Join(fields, " "))
+		}
+	}
+	return out
+}
+
 // crudeDanger reads one crude piece of a line that could not be followed
 // and says why a command in it would destroy something that has to be
 // kept, or "". The piece is read as a line of its own where it can be,
@@ -169,7 +231,7 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 // piece of the line may have made stand for nothing ("zz mv .git /tmp/g"
 // after an "alias zz=").
 func (e *Engine) crudeDanger(piece string, dirs []string) string {
-	fields := strings.Fields(piece)
+	fields := looseFields(piece)
 	var from []int
 	for i, f := range fields {
 		switch progKey(baseName(f)) {

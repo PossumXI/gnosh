@@ -350,6 +350,8 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 //	88    308,000  stopped                2
 //	89     80,000    474,602   43m19s    0 (the generator of file commands only)
 //	90     34,000  stopped                1 (the generator of tricks only)
+//	92     40,000    172,383   14m11s    0 (the generator of tricks only)
+//	93     71,000  stopped                1
 //
 // Seed 86 ran on the code with those four closed, and showed one line:
 // "time>& - -p teepwned", which in bash runs a program named -p, because
@@ -376,7 +378,14 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 // home directory. The name and what it names share values that feed each
 // other, the engine gave up on the word for more of them than it follows,
 // and the count that turns that into a doubt did not follow a ${!name}
-// and came out small. It is now what filledAll itself ran into.
+// and came out small. It is now what filledAll itself ran into. Seed 93
+// showed "env ${HOME:+chmod} -R 000> eval000 .": a descriptor of three
+// digits is more than the reader follows, to dash the 000 is chmod's mode,
+// and the crude pieces of such a line, cut at every brace, had the name in
+// one piece and what it is handed in others. A line nobody could read is
+// now cut once more at what ends a command and nothing else, and the name
+// of a command that destroys things is looked for in the loosest cut of
+// its words (looseFields).
 //
 // (A run was stopped as soon as it had shown something new, the hole was
 // closed, and the next one started with another seed; the seeds between

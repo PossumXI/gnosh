@@ -598,6 +598,9 @@ func TestShellAttacks(t *testing.T) {
 		"$RM -rf /", "\"$(which rm)\" -rf ~", "${RM:-rm} -fr .", "$X --recursive ..", "{rm,} -r /", "r? -rf ~", "rm -rf ~+", "rmdir ~+", "rm -rf ~+/..", "rm -rf ~root", "rmdir ~alice/", "rm -rf ~bob/*",
 		"rmdir \"$(printf .)\"", "rm --recursiv \"$(pwd)\"", "rm --r \"$(pwd)\"", "$RM -rPf /", "{rm,} -rx /",
 		"eval 'time { d;}|rmdir ~'", "bash -c 'coproc rm -rf /'", "echo . | xargs rm -rf",
+		// In a line the reader cannot follow, the name is looked for in the
+		// loosest cut of its pieces: inside a ${...}, behind quotes.
+		"echo $[; ${HOME:+rm} -rf .", "echo $[; r''m -rf .", "env ${X:-rm} -rf 000> eval000 .", "echo $[; \"rm\" -rf ~",
 		"rmdir ''\"$X\".", "rm -rf $X.", "rm -rf \"$X\"..", "rm -rf \"$PREFIX\"*", "rm -rf ${X}./",
 		"rmdir ${X:-$(git rev-parse --show-toplevel)}", "rm -rf \"${DIR:-$(pwd)}\"", "rm -r $A$(pwd)",
 		"d='*'; rm -rf $d", "d='x .'; rm -rf $d", "d=.; rm -rf ${d}/*", "p=/; rm -rf ${p}*",
