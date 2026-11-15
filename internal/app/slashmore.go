@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -342,12 +343,22 @@ func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
 		return fmt.Errorf("the model has replied %s in this session, so there is no reply %d from the end", countWords(len(replies), "time", "times"), n)
 	}
 	text := replies[len(replies)-n]
-	c.Copy(text)
 	which := "The model's last reply"
 	if n > 1 {
 		which = fmt.Sprintf("The model's reply %d from the end", n)
 	}
-	c.Say("%s (%s) is on its way to the clipboard, through the terminal: one that does not take OSC 52 (Apple's Terminal, or tmux without set-clipboard) copies nothing.", which, countWords(utf8.RuneCountInString(text), "character", "characters"))
+	size := countWords(utf8.RuneCountInString(text), "character", "characters")
+	failed := ""
+	if tool := clipboardTool(runtime.GOOS, l.p.getenv, l.p.lookPath); tool != nil {
+		err := l.p.copyWith(ctx, tool, text)
+		if err == nil {
+			c.Say("%s (%s) is on the clipboard.", which, size)
+			return nil
+		}
+		failed = fmt.Sprintf(" (%s failed: %v)", filepath.Base(tool[0]), err)
+	}
+	c.Copy(text)
+	c.Say("%s (%s) is on its way to the clipboard through the terminal%s: one that does not take OSC 52 (Apple's Terminal, or tmux without set-clipboard) copies nothing.", which, size, failed)
 	return nil
 }
 

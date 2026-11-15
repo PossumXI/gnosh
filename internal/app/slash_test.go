@@ -304,11 +304,17 @@ func TestSlashCommandsAsARunsPrompt(t *testing.T) {
 	}
 }
 
+// overSSH is a change to a seat's options: gnosh was reached over ssh, so
+// the person's terminal is on another machine.
+func overSSH(o *Options) {
+	o.Environ = append(o.Environ, "SSH_CONNECTION=203.0.113.7 50000 203.0.113.8 22")
+}
+
 // /copy puts the model's last reply, or the Nth from the end, on the
-// clipboard through the terminal (OSC 52).
+// clipboard: over ssh, through the terminal (OSC 52).
 func TestCopyCommand(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "First answer."}, apptest.Reply{Text: "Second answer."})
-	s := sit(t, w)
+	s := sitWith(t, w, overSSH)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/copy")
 	s.see("the model has not replied in this session yet")
@@ -332,4 +338,85 @@ func TestCopyCommand(t *testing.T) {
 	s.see("/copy takes nothing, or a number")
 	s.typeLine("/exit")
 	s.exit()
+}
+
+// Where the terminal is on this machine, /copy hands the reply to the
+// machine's own clipboard tool, and sends nothing through the terminal;
+// when the tool fails, it says so and sends the text through the terminal.
+func TestCopyCommandHere(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "An answer."})
+	got := w.Path("clipboard.txt")
+	// Stand-ins for every tool a machine might have, first on the PATH,
+	// so that the test never reaches a real clipboard.
+	for _, name := range []string{"pbcopy", "wl-copy", "xclip", "xsel"} {
+		w.Script(w.Root+"/clipbin/"+name, `if [ -e "`+got+`.broken" ]; then echo broken >&2; exit 3; fi; cat > "`+got+`"`)
+	}
+	w.PathFirst = append(w.PathFirst, w.Root+"/clipbin")
+	s := sitWith(t, w, func(o *Options) {
+		o.Environ = append(o.Environ, "DISPLAY=:0", "WAYLAND_DISPLAY=wayland-0")
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("hello")
+	s.see("-- done in ")
+	s.typeLine("/copy")
+	s.see("The model's last reply (10 characters) is on the clipboard.")
+	if b, err := os.ReadFile(got); err != nil || string(b) != "An answer." {
+		t.Errorf("the clipboard tool was given %q (%v)", b, err)
+	}
+	if strings.Contains(s.out.String(), "]52;") {
+		t.Errorf("the text went through the terminal too")
+	}
+	w.Write(got+".broken", "")
+	s.typeLine("/copy")
+	s.see("]52;c;" + base64.StdEncoding.EncodeToString([]byte("An answer.")))
+	s.see("failed: exit status 3)")
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// clipboardTool picks the machine's own tool only where the terminal is on
+// this machine, and the one the desktop takes.
+func TestClipboardTool(t *testing.T) {
+	has := func(names ...string) func(string) (string, error) {
+		return func(name string) (string, error) {
+			for _, n := range names {
+				if n == name {
+					return "/bin/" + name, nil
+				}
+			}
+			return "", exec.ErrNotFound
+		}
+	}
+	env := func(kv ...string) func(string) string {
+		return func(name string) string {
+			for i := 0; i+1 < len(kv); i += 2 {
+				if kv[i] == name {
+					return kv[i+1]
+				}
+			}
+			return ""
+		}
+	}
+	all := has("pbcopy", "wl-copy", "xclip", "xsel")
+	for _, c := range []struct {
+		goos string
+		env  func(string) string
+		look func(string) (string, error)
+		want string
+	}{
+		{"darwin", env(), all, "/bin/pbcopy"},
+		{"darwin", env("SSH_CONNECTION", "203.0.113.7 1 203.0.113.8 22"), all, ""},
+		{"darwin", env("SSH_TTY", "/dev/ttys001"), all, ""},
+		{"darwin", env(), has(), ""},
+		{"linux", env(), all, ""},
+		{"linux", env("WAYLAND_DISPLAY", "wayland-0", "DISPLAY", ":0"), all, "/bin/wl-copy"},
+		{"linux", env("WAYLAND_DISPLAY", "wayland-0", "DISPLAY", ":0"), has("xclip"), "/bin/xclip -selection clipboard"},
+		{"linux", env("DISPLAY", ":0"), has("xsel"), "/bin/xsel --clipboard --input"},
+		{"linux", env("DISPLAY", ":0", "SSH_CLIENT", "203.0.113.7 1 22"), all, ""},
+		{"windows", env(), all, ""},
+	} {
+		if got := strings.Join(clipboardTool(c.goos, c.env, c.look), " "); got != c.want {
+			t.Errorf("%s: clipboardTool = %q, want %q", c.goos, got, c.want)
+		}
+	}
 }
