@@ -46,7 +46,7 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 	// The first session keeps the secret: the call that kept it is a
 	// message the person saw.
 	w.script.add(
-		reply(memCall("c1", `mem.Fact("deploy/token", "the deploy token is `+token+`")`)),
+		reply(memCall("c1", `mem.Fact("deploy/token", "deploy with `+token+`")`)),
 		says("Kept."),
 	)
 	w.run("-y", "-p", "keep the deploy token").wantCode(t, 0)
@@ -72,7 +72,7 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 	}
 	one, two := sessions[0], sessions[1]
 	reqs := w.script.requests()
-	has(t, "the second session's first prompt", lastUser(t, reqs[len(reqs)-1]), "<mem>", "`deploy/token` = the deploy token is "+token)
+	has(t, "the second session's first prompt", lastUser(t, reqs[len(reqs)-1]), "<mem>", "`deploy/token` = deploy with "+token)
 	if data, _ := os.ReadFile(two); !strings.Contains(string(data), token) {
 		t.Fatalf("the second session's file does not hold the digest's text")
 	}
@@ -90,7 +90,7 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 	if strings.Contains(string(data), token) {
 		t.Errorf("the second session's file still holds the secret")
 	}
-	has(t, "the second session's file", string(data), "`deploy/token` = the deploy token is (redacted)", "hello there")
+	has(t, "the second session's file", string(data), "`deploy/token` = deploy with (redacted)", "hello there")
 	s := w.session(two)
 	if warn := s.Warnings(); len(warn) != 0 {
 		t.Errorf("the redacted session's file needed mending: %v", warn)
@@ -118,7 +118,7 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 	reqs = w.script.requests()
 	body := string(reqs[len(reqs)-1].Body)
 	hasNot(t, "the request of the scrubbed session", body, token)
-	has(t, "the request of the scrubbed session", body, "the deploy token is (redacted)")
+	has(t, "the request of the scrubbed session", body, "deploy with (redacted)")
 
 	// Typing the same again finds nothing left in mem, and says so
 	// without repeating the secret.
@@ -131,7 +131,7 @@ func TestErasureScrubsTheDigestInAnotherSessionsFile(t *testing.T) {
 // told where the secret is still shown.
 func TestAgentRedactIsFollowed(t *testing.T) {
 	w := newWorld(t,
-		reply(memCall("c1", `mem.Fact("deploy/token", "the deploy token is `+token+`")`)),
+		reply(memCall("c1", `mem.Fact("deploy/token", "deploy with `+token+`")`)),
 		says("Kept."),
 	)
 	w.run("-y", "-p", "keep the deploy token").wantCode(t, 0)
