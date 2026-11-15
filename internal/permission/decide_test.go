@@ -475,7 +475,9 @@ func TestSuggestions(t *testing.T) {
 	if got := suggested(other(e, "Skill", "skill", "deploy", "args", "prod")); strings.Join(got, "|") != "Skill(deploy *)" {
 		t.Errorf("skill: %q", got)
 	}
-	if got := suggested(other(e, "ExitPlanMode")); len(got) != 0 {
+	// Approving a plan may switch to acceptEdits; it keeps no rule, so
+	// each plan is asked about.
+	if got := suggested(other(e, "ExitPlanMode")); strings.Join(got, "|") != "mode:acceptEdits" {
 		t.Errorf("the plan is approved each time: %q", got)
 	}
 	// Nothing is suggested for what an ask rule or a safety check asks

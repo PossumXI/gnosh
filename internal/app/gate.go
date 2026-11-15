@@ -368,6 +368,9 @@ func unattended(d permission.Decision) string {
 // the files it read brought is shown escaped, never as terminal control
 // sequences.
 func (l *live) permissionQuestion(call core.ToolCall, action core.Action, d permission.Decision) agent.Question {
+	if call.Name == exitPlanName {
+		return l.planQuestion(call, d)
+	}
 	var b strings.Builder
 	// The tool's own line about the call, unless it only repeats the
 	// command that is shown in full below it.
@@ -415,6 +418,33 @@ func (l *live) permissionQuestion(call core.ToolCall, action core.Action, d perm
 		Kind:    "permission",
 		Title:   "Allow " + call.Name + "?",
 		Text:    strings.TrimRight(b.String(), "\n"),
+		Choices: choices,
+	}
+}
+
+// planQuestion is the question ExitPlanMode puts: the plan, and whether to
+// carry it out, asking about each edit or accepting them, or to keep
+// planning.
+func (l *live) planQuestion(call core.ToolCall, d permission.Decision) agent.Question {
+	var in struct {
+		Plan string `json:"plan"`
+	}
+	_ = json.Unmarshal(call.Input, &in)
+	plan := strings.TrimSpace(in.Plan)
+	if plan == "" {
+		plan = "(The model gave no plan.)"
+	}
+	choices := []agent.Choice{{Key: "yes", Label: "Yes, carry it out, asking about each edit"}}
+	for i, s := range d.Suggestions {
+		if s.Mode == permission.ModeAcceptEdits {
+			choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: "Yes, carry it out, and accept its edits without asking"})
+		}
+	}
+	choices = append(choices, agent.Choice{Key: "no", Label: "No, keep planning (say what to change after it; alone it stops the turn)"})
+	return agent.Question{
+		Kind:    "permission",
+		Title:   "Carry out this plan?",
+		Text:    showLines(plan),
 		Choices: choices,
 	}
 }

@@ -396,7 +396,9 @@ func (e *Engine) decideOther(req *request) Decision {
 	}
 	switch {
 	case req.canon == "ExitPlanMode":
+		// Approving the plan can also accept the edits that carry it out.
 		d.Reason = "The plan is ready; a person approves it or asks for more."
+		d.Suggestions = []Suggestion{{Mode: ModeAcceptEdits}}
 	case req.canon == toolWebSearch:
 		d.Suggestions = []Suggestion{{Rules: []string{toolWebSearch}, Scope: GrantLocal}}
 	case req.info.class == classSkill:
