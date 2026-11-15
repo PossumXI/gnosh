@@ -59,6 +59,7 @@ type statusLiner struct {
 	timer   *time.Timer
 	cancel  context.CancelFunc
 	ticker  *time.Ticker
+	ended   chan struct{} // closed by stop, which ends the ticker's goroutine
 	stopped bool
 	runs    sync.WaitGroup
 }
@@ -70,13 +71,20 @@ func (l *live) startStatusLine() {
 	if sl == nil || !l.interactive {
 		return
 	}
-	s := &statusLiner{l: l}
+	s := &statusLiner{l: l, ended: make(chan struct{})}
 	l.statusLine = s
 	if sl.Refresh > 0 {
 		s.ticker = time.NewTicker(sl.Refresh)
 		go func(t *time.Ticker) {
-			for range t.C {
-				s.poke()
+			// A stopped ticker's channel is never closed: ended is what
+			// lets this go.
+			for {
+				select {
+				case <-t.C:
+					s.poke()
+				case <-s.ended:
+					return
+				}
 			}
 		}(s.ticker)
 	}
@@ -106,6 +114,9 @@ func (s *statusLiner) stop() {
 		return
 	}
 	s.mu.Lock()
+	if !s.stopped {
+		close(s.ended)
+	}
 	s.stopped = true
 	if s.timer != nil {
 		s.timer.Stop()

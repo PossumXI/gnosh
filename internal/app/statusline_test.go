@@ -71,3 +71,26 @@ func TestStatusLineCommand(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// With a refreshInterval the command runs again on its own, with nothing
+// else happening.
+func TestStatusLineRefresh(t *testing.T) {
+	w := apptest.NewWorld(t)
+	runs := w.Home + "/sl-runs"
+	script := w.Script(w.Home+"/bin/sl.sh", "cat > /dev/null; echo run >> "+runs+"\necho line")
+	w.Settings(`{"statusLine": {"type": "command", "command": "` + script + `", "refreshInterval": 1}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	count := func() int {
+		data, _ := os.ReadFile(runs)
+		return strings.Count(string(data), "run")
+	}
+	for deadline := time.Now().Add(10 * time.Second); count() < 3 && time.Now().Before(deadline); {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if n := count(); n < 3 {
+		t.Errorf("the command ran %d times in a session that did nothing, want at least 3 (the start and two refreshes)", n)
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
