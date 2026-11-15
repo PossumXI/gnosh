@@ -58,6 +58,9 @@ func (l *live) runAsAgent() error {
 	if _, why := l.skillsToPreload(def); why != "" {
 		return fmt.Errorf("%s. Nothing was started", why)
 	}
+	if def.Isolation != "" {
+		return fmt.Errorf("the agent %s (%s) asks for isolation %s, a work tree of its own, which a session cannot have yet, so it is not run as something else. Nothing was started", def.Name, firstOf(def.Source, def.Scope), def.Isolation)
+	}
 	if l.inv.SystemPrompt == "" && l.inv.SystemPromptFile == "" && strings.TrimSpace(def.Prompt) != "" {
 		l.inv.SystemPrompt = def.Prompt
 	}

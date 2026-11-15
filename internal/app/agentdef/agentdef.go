@@ -73,6 +73,9 @@ type Def struct {
 	// agent start, when it runs as the session (--agent): nil lets it
 	// start any. Inside an ordinary sub-agent the list is not used.
 	AgentTypes []string
+	// Isolation is "worktree" for an agent that works in a git work tree
+	// of its own (isolation), or "".
+	Isolation string
 	// InheritModel says Model was written as inherit: the session's model,
 	// whatever else would name one.
 	InheritModel bool
@@ -91,8 +94,8 @@ type Def struct {
 	Effort string
 	// Other lists the fields of the frontmatter that change what the
 	// sub-agent is or may do and that this package only notes:
-	// mcpServers, isolation, memory. A caller that cannot honour one must
-	// say so, and not run the agent as if the field were not there.
+	// mcpServers, memory. A caller that cannot honour one must say so, and
+	// not run the agent as if the field were not there.
 	Other []string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
@@ -363,7 +366,9 @@ func Parse(text string) (d Def, reason string) {
 			case f.nested:
 				d.Hooks = raw
 			}
-		case "mcpServers", "isolation", "memory":
+		case "isolation":
+			d.Isolation = f.scalar
+		case "mcpServers", "memory":
 			if f.scalar != "" || len(f.items) > 0 || f.nested {
 				d.Other = append(d.Other, f.key)
 			}

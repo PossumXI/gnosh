@@ -257,15 +257,23 @@ func TestProtectedPaths(t *testing.T) {
 		"/proj/pyrightconfig.json", "/proj/.mcp.json", "/home/u/.claude.json", "/proj/gnosh.json",
 		"/proj/sub/GNOSH.JSON", "/home/u/.config/gnosh/gnosh.json", "/home/u/.ssh/authorized_keys",
 		"/custom/settings.json", "/var/mem/store/x",
+		// The folder of work trees and a work tree's own folder are gnosh's;
+		// a protected name inside a work tree is protected as anywhere.
+		"/proj/.gnosh/worktrees/agent-1", "/proj/.gnosh/worktrees/.gitignore",
+		"/proj/.gnosh/worktrees/agent-1/.git", "/proj/.gnosh/worktrees/agent-1/.gnosh/settings.local.json",
+		"/proj/.gnosh/worktrees/agent-1/sub/.envrc",
 	}
 	open := []string{
 		"/proj/a.go", "/proj/git/config", "/proj/.github/workflows/ci.yml", "/proj/.claude/worktrees/w/a.go",
 		"/proj/zshrc", "/proj/.env", "/proj/gitconfig",
 		// (The line-format files gnosh once read are files like any now.)
 		"/proj/gnoshrc", "/proj/.gnoshrc", "/proj/gnosh.json.bak",
+		// What is inside a work tree gnosh made for a sub-agent.
+		"/proj/.gnosh/worktrees/agent-1/a.go", "/proj/.gnosh/worktrees/agent-1/sub/b.go",
 	}
 	o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
-	o.Protected = []string{"/custom/settings.json", "/var/mem/store"}
+	o.Protected = []string{"/custom/settings.json", "/var/mem/store", "/proj/.gnosh"}
+	o.WorkTrees = "/proj/.gnosh/worktrees"
 	e := mustEngine(t, o)
 	for _, p := range protected {
 		// An allow rule and acceptEdits do not pre-approve it.

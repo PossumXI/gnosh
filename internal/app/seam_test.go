@@ -45,9 +45,11 @@ func sitWith(t *testing.T, w *apptest.World, change func(*Options), args ...stri
 // person is shown the line at once and it is stored right after.
 func TestNoticeFromTheLogCallbacksDoesNotHang(t *testing.T) {
 	// (The window is set so that the reads outgrow it and the session
-	// slides; it moves with the size of the tools' descriptions, which
-	// grew when the Agent tool came to name Plan.)
-	const window = 16500
+	// slides; it moves with the size of the tools' descriptions. When the
+	// Agent tool came to take effort and isolation it worked from about
+	// 16,700 to past 19,000 tokens, and it stands in that band with room
+	// on both sides.)
+	const window = 17500
 	var mu sync.Mutex
 	stored, after, slid := 0, 0, 0
 	feature := Feature{

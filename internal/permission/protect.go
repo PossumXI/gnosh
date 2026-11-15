@@ -46,8 +46,18 @@ var protectedFiles = map[string]bool{
 func (e *Engine) protectedWhy(p string) string {
 	low := guardPath(p)
 	segs := splitPath(low)
+	// Inside a work tree gnosh made for a sub-agent, the path to the work
+	// tree (the folder of work trees and the work tree's own name) is not
+	// judged: the rest is a checkout of the project.
+	tree, trees := 0, ""
+	for _, w := range e.workTrees {
+		if n := len(splitPath(w)) + 1; inside(w, low) && len(segs) > n {
+			tree, trees = n, w
+		}
+	}
 	for i, s := range segs {
 		switch {
+		case i < tree:
 		case s == ".claude" && i+1 < len(segs) && segs[i+1] == "worktrees":
 			// Claude Code keeps whole checkouts here; they are ordinary
 			// project files.
@@ -61,7 +71,7 @@ func (e *Engine) protectedWhy(p string) string {
 		return path.Base(p) + " is a settings or startup file that programs run or obey"
 	}
 	for _, x := range e.protected {
-		if inside(x, low) {
+		if inside(x, low) && !(tree > 0 && inside(x, trees)) {
 			return "it is one of gnosh's own files"
 		}
 	}

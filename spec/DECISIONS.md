@@ -479,4 +479,25 @@ or kept with the reason said (27).
     Agent call (or the session's start) with the reason. With every hook
     switched off (`disableAllHooks`, safe mode) there are none to put in
     force, as for a skill's hooks.
+43. **A sub-agent's own work tree starts at HEAD, in .gnosh/worktrees.**
+    `isolation: "worktree"` (on the Agent call, or in a kind's
+    definition) gives the sub-agent a git work tree of its own on a new
+    branch, `gnosh/agent-<id>`, and it starts in the folder there that
+    stands where the session's does. It starts at the commit the
+    repository has checked out, not at the default branch as Claude
+    Code's does: the sub-agent is asked about the code as the person has
+    it. What they have not committed is not in it, and the report says
+    where its changes are. A work tree it changed nothing in is removed,
+    branch and all; one it changed is kept, and the report names its
+    folder and branch, what it holds, and how to remove it. The work
+    trees lie in the project's data folder, with a .gitignore that keeps
+    them out of the repository's status. The permission rules judge what
+    is inside one as project files (`permission.Options.WorkTrees`), as
+    they already did for Claude Code's `.claude/worktrees`. The folder
+    of work trees and each work tree's own folder stay gnosh's, and a
+    protected name inside a work tree is still protected. Making one runs
+    git, so it happens only in a trusted folder, as /diff does. A
+    session that runs as a kind that asks for isolation (`--agent`) is
+    refused for now: that would be `-w`, which is not built. The Agent
+    call also takes `effort` now, over its kind's.
 

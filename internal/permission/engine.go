@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -64,6 +65,13 @@ type Options struct {
 	// and what a feature keeps for itself (the mem store). Each covers
 	// itself and everything under it.
 	Protected []string
+	// WorkTrees is the folder the git work trees gnosh makes for
+	// sub-agents are in (the project's data folder's worktrees). What is
+	// inside one of those work trees is a checkout of the project and is
+	// judged as the project's files are: the protected folder the work
+	// trees lie in does not protect it, while a protected name inside the
+	// work tree (its .git, its own .gnosh) still does. Empty: none.
+	WorkTrees string
 	// DisableBypass forbids ModeBypass (the settings key
 	// disableBypassPermissionsMode).
 	DisableBypass bool
@@ -110,6 +118,7 @@ type Engine struct {
 	restrict  bool
 	only      map[string]bool
 	protected []string
+	workTrees []string // Options.WorkTrees as given and with its links followed, as guardPath keys them
 	resolve   func(string) (string, error)
 	glob      func(string) ([]string, error)
 	gitRuns   bool
@@ -170,6 +179,14 @@ func New(o Options) (*Engine, error) {
 	for _, p := range o.Protected {
 		if strings.HasPrefix(p, "/") {
 			e.protected = append(e.protected, guardPath(path.Clean(p)))
+		}
+	}
+	if strings.HasPrefix(o.WorkTrees, "/") {
+		e.workTrees = append(e.workTrees, guardPath(path.Clean(o.WorkTrees)))
+		if o.Resolve != nil {
+			if real, err := o.Resolve(path.Clean(o.WorkTrees)); err == nil && !slices.Contains(e.workTrees, guardPath(real)) {
+				e.workTrees = append(e.workTrees, guardPath(real))
+			}
 		}
 	}
 
