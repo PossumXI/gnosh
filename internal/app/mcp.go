@@ -32,10 +32,19 @@ import (
 // given the tools of the servers connected when it starts, as far as its
 // kind's tools and disallowedTools let it have them.
 
-// mcpMaxChars is the most of a tool's result the model reads; the whole of
-// a longer one is written to a file beside the session, and the model is
-// told where.
-const mcpMaxChars = 100_000
+// mcpMaxChars is the most of a tool's result the model is handed, as
+// characters; MAX_MCP_OUTPUT_TOKENS may make it less. A longer result is
+// written to a file beside the session, which the model may read without
+// a question, and the model is told where, with the result's beginning.
+const mcpMaxChars = 50_000
+
+// mcpGlimpse is how much of a result that went to a file the model is
+// shown, and mcpLargeChars the size from which a result is noted in the
+// log as large (about 10,000 tokens).
+const (
+	mcpGlimpse    = 2000
+	mcpLargeChars = 40_000
+)
 
 // mcpDescriptionMax is the most of a tool's description the model is sent.
 const mcpDescriptionMax = 4096
@@ -509,15 +518,31 @@ func (t *mcpTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 		}
 		return core.ErrorResult(firstOf(text, "The tool failed and said nothing.")), nil
 	}
-	if n := utf8.RuneCountInString(text); n > mcpMaxChars {
-		path := filepath.Join(t.l.st.dirs(t.l.ts.ID()).Session, "tool-results", fmt.Sprintf("%s-%s.txt", strings.ReplaceAll(t.name, "/", "_"), firstOf(call.ID, "call")))
+	n := utf8.RuneCountInString(text)
+	if n > mcpLargeChars {
+		t.l.flog.logf("mcp", "%s of the MCP server %s returned a large result: %d characters, about %d tokens", t.tool.Name, t.server.cfg.Name, n, n/4)
+	}
+	if most := min(mcpMaxChars, t.l.cfg.Limits.MCPMaxOutputTokens.V*4); n > most {
+		path := filepath.Join(t.l.spoolDir(), fmt.Sprintf("%s-%s.txt", t.name, plainName(firstOf(call.ID, "call"))))
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err == nil && os.WriteFile(path, []byte(text), 0o600) == nil {
-			text = clipChars(text, 0, mcpMaxChars) + fmt.Sprintf("\n[The result is %d characters long; the first %d are here, and the whole of it is in %s. Read that file for the rest.]", n, mcpMaxChars, path)
+			text = fmt.Sprintf("The result is %d characters long, more than the %d one result may be here, so the whole of it is in %s: read that file, in parts, for it. It begins:\n%s", n, most, path, clipChars(text, 0, min(mcpGlimpse, most/2)))
 		} else {
-			text = clipChars(text, 0, mcpMaxChars) + fmt.Sprintf("\n[The result is %d characters long, and only the first %d are here.]", n, mcpMaxChars)
+			text = clipChars(text, 0, most) + fmt.Sprintf("\n[The result is %d characters long, and only the first %d are here.]", n, most)
 		}
 	}
 	return core.TextResult(firstOf(text, "(the tool returned nothing)")), nil
+}
+
+// plainName keeps the plain characters of a name that goes into a file's
+// name and is someone else's word (a call's id is the model's): letters,
+// digits, - and _; every other character is a _.
+func plainName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 128 && (r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return r
+		}
+		return '_'
+	}, s)
 }
 
 // mcpText writes what a tool returned as text: its text, a line for what is

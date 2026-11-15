@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -394,5 +396,52 @@ func TestMCPRedialsAServerAtAURL(t *testing.T) {
 	has(t, "the second call, made again in a new session", toolResult(t, w, 2, "c2"), "pong 2")
 	if inits.Load() != 2 || calls.Load() != 2 {
 		t.Errorf("%d handshakes and %d calls, want 2 of each", inits.Load(), calls.Load())
+	}
+}
+
+// bigMCPServer is a small MCP server in sh whose one tool, dump, returns
+// 1,000 characters.
+const bigMCPServer = `while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"big","version":"1"}}}\n' "$id" ;;
+    *'"method":"tools/list"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"dump","description":"Dumps a lot."}]}}\n' "$id" ;;
+    *'"method":"tools/call"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"start%01000dend"}]}}\n' "$id" 7 ;;
+  esac
+done`
+
+// A result longer than MAX_MCP_OUTPUT_TOKENS lets the model have goes to a
+// file in the session's own folder, named with the plain characters of the
+// call's id, and the model is told where, with the result's beginning.
+func TestMCPLargeResult(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "mcp__big__dump", Args: `{}`}}},
+		apptest.Reply{Text: "Dumped."},
+	)
+	server := w.Script(w.Home+"/bin/big.sh", bigMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"big": {"command": "`+server+`"}}}`)
+	o := testOptions(w, "-y", "-p", "dump it")
+	o.Environ = append(o.Environ, "MAX_MCP_OUTPUT_TOKENS=100")
+	runWith(t, context.Background(), o).wantCode(t, 0)
+
+	result := toolResult(t, w, 1, "c1")
+	has(t, "what the model read", result, "The result is 1008 characters long, more than the 400 one result may be here", "/tool-results/mcp__big__dump-", "It begins:\nstart000")
+	if strings.Contains(result, "7end") {
+		t.Errorf("the model was handed the whole result:\n%s", result)
+	}
+	files, _ := filepath.Glob(filepath.Join(w.DataDir(), "projects", "*", "*", "tool-results", "mcp__big__dump-*.txt"))
+	if len(files) != 1 {
+		t.Fatalf("the result files: %v", files)
+	}
+	if data, _ := os.ReadFile(files[0]); !strings.HasSuffix(string(data), "7end") || len(data) != 1008 {
+		t.Errorf("the file holds %d bytes: %.40q...", len(data), data)
+	}
+	// The model's id for the call goes into the name with its plain
+	// characters alone.
+	if got := plainName("../../out x"); got != "______out_x" {
+		t.Errorf("plainName = %q", got)
 	}
 }

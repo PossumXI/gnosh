@@ -46,6 +46,10 @@ type Limits struct {
 	// server's tool may run when the server's entry gives no timeout of
 	// its own. Not set means no limit.
 	MCPToolTimeout Value[time.Duration]
+	// MCPMaxOutputTokens is MAX_MCP_OUTPUT_TOKENS: the most of one MCP
+	// tool's result the model is handed; a longer one goes to a file.
+	// Default: 25,000.
+	MCPMaxOutputTokens Value[int]
 }
 
 // limitVars are the variables of Claude Code's, and the two provider keys,
@@ -63,6 +67,7 @@ var limitVars = []struct{ name, what, from string }{
 	{"CLAUDE_CODE_SAFE_MODE", "the same as --safe-mode", fromClaudeCode},
 	{"MCP_TIMEOUT", "milliseconds an MCP server may take to start", fromClaudeCode},
 	{"MCP_TOOL_TIMEOUT", "milliseconds one call of an MCP server's tool may run, where its entry gives no timeout", fromClaudeCode},
+	{"MAX_MCP_OUTPUT_TOKENS", "tokens of one MCP tool's result the model is handed; a longer one goes to a file", fromClaudeCode},
 	{"ANTHROPIC_API_KEY", "the key of an anthropic provider that gives none", fromAPIs + ": Anthropic's own variable, which Claude Code reads too"},
 	{"OPENAI_API_KEY", "the key of an openai provider that gives none", fromAPIs + ": OpenAI's own variable"},
 }
@@ -127,6 +132,10 @@ func (ld *loader) limits() Limits {
 		BashMaxOutput:      Value[int]{V: 30000},
 		FileReadMaxTokens:  Value[int]{V: 25000},
 		MCPTimeout:         Value[time.Duration]{V: 30 * time.Second},
+		MCPMaxOutputTokens: Value[int]{V: 25000},
+	}
+	if n, o, ok := ld.whole("MAX_MCP_OUTPUT_TOKENS", 1); ok {
+		l.MCPMaxOutputTokens.put(n, o)
 	}
 	if n, o, ok := ld.whole("MCP_TIMEOUT", 1); ok {
 		l.MCPTimeout.put(ms(n), o)
