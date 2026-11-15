@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -50,15 +51,19 @@ func (l *live) shellLine(command string) error {
 	if call.ID == "" {
 		call.ID = "call_shell_" + l.p.now().UTC().Format("150405.000000000")
 	}
+	// The command is the person's own until it ends; then another may
+	// start, before the model has answered this one (the answer is a turn
+	// of its own, which can end before this goroutine goes on).
+	ended := sync.OnceFunc(func() {
+		cancel()
+		l.shellMu.Lock()
+		l.shellStop = nil
+		l.shellMu.Unlock()
+	})
 	l.bg.Add(1)
 	go func() {
 		defer l.bg.Done()
-		defer func() {
-			cancel()
-			l.shellMu.Lock()
-			l.shellStop = nil
-			l.shellMu.Unlock()
-		}()
+		defer ended()
 		meta := func() agent.Meta { return agent.Meta{Time: l.p.now(), Session: l.ts.ID()} }
 		env := l.env()
 		env.Progress = func(p core.Progress) {
@@ -73,6 +78,7 @@ func (l *live) shellLine(command string) error {
 		}
 		res = cleanResult(call, res)
 		stopped := ctx.Err() != nil
+		ended()
 		l.deliver(&agent.ToolEndEvent{
 			Meta: meta(), CallID: call.ID, Name: call.Name, Input: input,
 			Result: res, Duration: l.p.now().Sub(started), Interrupted: stopped, Ran: true,
