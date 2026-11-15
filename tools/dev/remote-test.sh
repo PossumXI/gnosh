@@ -82,8 +82,15 @@ rsync -az -e "$SSH" $mods "$HOST:$REMOTE/"
 # One directory at a time, each onto its own place: --delete then reaches
 # only inside that directory. (Copying them in one go with --relative made
 # rsync treat internal/ itself as copied and delete its other children.)
+# (The repository's root, given as ".", leaves out what git ignores at the
+# top, dist/ above all: the Mac trial's builds are hundreds of megabytes
+# and no test reads them.)
 for d in internal/core $dirs; do
-	rsync -az --delete -e "$SSH" "$d/" "$HOST:$REMOTE/$d/"
+	if [ "$d" = . ]; then
+		rsync -az --delete --exclude=/dist/ --exclude=/.git/ -e "$SSH" "$d/" "$HOST:$REMOTE/$d/"
+	else
+		rsync -az --delete -e "$SSH" "$d/" "$HOST:$REMOTE/$d/"
+	fi
 done
 
 # shellcheck disable=SC2086,SC2029
