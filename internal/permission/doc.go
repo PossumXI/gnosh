@@ -147,8 +147,9 @@
 //     the delimiter, or lines that spell the delimiter once they are
 //     joined): that is then a matter of which shell reads it;
 //   - a comment that holds operators or quotes inside a substitution;
-//   - a redirection of a descriptor above 9 (10>&1), which bash and sh
-//     read differently;
+//   - a redirection whose descriptor has more than one digit (10>&1,
+//     02>&1), which bash and sh read differently: the removal check
+//     judges what each of them would run;
 //   - outside quotes, a character that looks like a blank or cannot be
 //     seen (a no-break space, a zero-width space, a mark that turns the
 //     direction of the text), and bytes that are not text.

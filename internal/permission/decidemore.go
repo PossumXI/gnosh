@@ -3,6 +3,7 @@ package permission
 import (
 	"encoding/json"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -63,14 +64,8 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 		}
 		for _, u := range v.units {
 			if why := e.removalDanger(v, u.cmd, dirs, fromSubst); why != "" {
-				what := "This removal looks dangerous"
-				if !strings.HasPrefix(why, "rm") && !strings.Contains(why, " removes what it finds: ") {
-					// (mv, chmod -R, git clean, dd, rsync --delete: not
-					// removals by name, and as final.)
-					what = "This command could destroy something that has to be kept"
-				}
 				return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
-					Reason: what + " (" + why + "). No rule approves it; a person decides."}, true
+					Reason: dangerWhat(why) + " (" + why + "). No rule approves it; a person decides."}, true
 			}
 		}
 		if v.manyNames != "" {
@@ -92,6 +87,23 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 			// from what follows its redirection. So the whole line is cut
 			// once more, at what ends a command and nothing else.
 			crude = append(append([]string(nil), crude...), looseCommands(v.text)...)
+			// A descriptor written with more than one digit ("02>&1") is
+			// a word to dash and a descriptor to bash, and the reader
+			// stops there. The line is read both ways, and what either
+			// shell would run is judged.
+			for _, alt := range fdReadings(v.text) {
+				av := e.viewBash(alt)
+				if !av.sc.ok {
+					crude = append(crude, alt)
+					continue
+				}
+				for _, u := range av.units {
+					if why := e.removalDanger(av, u.cmd, dirs, nil); why != "" {
+						return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
+							Reason: dangerWhat(why) + " (" + why + "). Shells read the command differently (" + v.sc.why + "), and this is what one of them would run. No rule approves it; a person decides."}, true
+					}
+				}
+			}
 		}
 		for _, f := range crude {
 			// (The words are cut the loosest way, so that a name inside a
@@ -210,6 +222,37 @@ func looseFields(piece string) []string {
 // looseCommands cuts a line nobody could read into what may be its
 // commands, at line breaks, semicolons, ampersands and bars and at nothing
 // else, each written out as its looseFields with one blank between them.
+// dangerWhat names what the removal check found, by why it found it.
+func dangerWhat(why string) string {
+	if !strings.HasPrefix(why, "rm") && !strings.Contains(why, " removes what it finds: ") {
+		// (mv, chmod -R, git clean, dd, rsync --delete: not removals by
+		// name, and as final.)
+		return "This command could destroy something that has to be kept"
+	}
+	return "This removal looks dangerous"
+}
+
+// manyDigitFD finds a redirection whose descriptor is written with more
+// than one digit, with what stands before it.
+var manyDigitFD = regexp.MustCompile("(^|[\\s;&|()`])([0-9]{2,})([<>])")
+
+// fdReadings gives the line as dash reads its descriptors of more than
+// one digit, each of them a word of its own ("chmod -R 02>&1 ." is chmod
+// -R 02 . with >&1), and as bash does, where the digits name the
+// descriptor and the words are the same without them. It gives nothing
+// for a line that has no such descriptor. (The digits are found in the
+// text as it is written, quoted or not: what this gives is only ever
+// judged for danger, never let go.)
+func fdReadings(line string) []string {
+	if !manyDigitFD.MatchString(line) {
+		return nil
+	}
+	return []string{
+		manyDigitFD.ReplaceAllString(line, "$1$2 $3"),
+		manyDigitFD.ReplaceAllString(line, "$1$3"),
+	}
+}
+
 func looseCommands(line string) []string {
 	var out []string
 	for _, piece := range strings.FieldsFunc(strings.ReplaceAll(line, "\\\n", ""), func(r rune) bool {

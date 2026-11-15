@@ -204,6 +204,13 @@ func TestOtherDestroyers(t *testing.T) {
 		// A ${...} in a line the reader cannot follow stays in its word
 		// (oracle seed 100).
 		"echo $((1)+(1)); rsync -a --${x}delete src/ .", "echo $((1)+(1)); chmod -R${x} 000 .",
+		// A descriptor written with more than one digit is a word to dash
+		// and a descriptor to bash: what each of them would run is judged
+		// (oracle seed 100).
+		"chmod -R 02>&1 .", "chmod${IFS}-R 02>&1 .", "mv 10>x .git /tmp/g", "rsync -a --delete src/ 10>&1 .",
+		// A pattern or a list in braces that stands last stands for names
+		// that are moved too: all of them but the last (oracle seed 100).
+		"mv f /*", "mv a.txt {.git,/tmp/g}", "mv f ~/*",
 		"time coproc shred -u *", "echo $[1]; rsync -a --delete src/ .", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
 		// The forms bash adds to ${...}, on a value the line knows.
 		"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",
@@ -240,6 +247,7 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv a.txt b.txt", "mv build/out dist/", "mv *.log logs/", "mv src/a.go src/b.go", "mv x ~/", "mv x .", "mv -t build a.txt b.txt",
 		"mv \"$tmp\" out.txt", "mv \"$f\" \"$f.bak\"", "mv vendor/x/.git /tmp/g", "mv -T /tmp/new build", "mv -f a b", "mv src/* dst/",
 		"mv $tmp $dest", "mv -n a.txt ~/Documents/", "mv {a.txt,b.txt}", "mv logs/*.log", "chmod -R {755,build}",
+		"mv a.txt {b,c}.txt", "mv x.txt *.bak", "ls 10>&1", "make build 77>&1",
 		"mv ${X:-a.txt b.txt}", "mv \"${X:-.git /tmp/g}\" /tmp", "chmod -R ${X:-755 build}", "mv ${X:-a b} dst/",
 		"x='.git /tmp/g'; mv \"$x\" /tmp", "x='a.txt b.txt'; mv $x''", "x='755 build'; chmod -R $x''", "x='.git /tmp/g'; mv \"$x\"'' /tmp",
 		// (A line that cannot be read, with such a command behind another

@@ -423,9 +423,12 @@ func (e *Engine) mvDanger(v *bashView, c *simpleCmd, dirs []string, fromSubst ma
 		// there to be: "mv a.txt $(mktemp -d)" is not asked about.
 		last := ops[len(ops)-1]
 		switch {
-		case xargsWord(last), len(ops) == 1 && severalWords(last), last.anyOrder:
+		case xargsWord(last), len(ops) == 1 && severalWords(last), last.anyOrder, last.glob, last.brace:
 			// (The words of an array are known as a set: where one of
-			// them stands last, any of them may be one that is moved.)
+			// them stands last, any of them may be one that is moved. So
+			// with a pattern or a list in braces: all the names it stands
+			// for but the last are moved, and "mv f /*" moves /bin and
+			// the rest into /var.)
 		case len(ops) < 2:
 			return ""
 		default:

@@ -1305,7 +1305,7 @@ func (p *parser) redir(cmd *simpleCmd) {
 	if len(r.fd) > 1 {
 		// bash takes 10>&1 as descriptor ten; dash and other plain shells
 		// take the 10 as an argument and redirect descriptor one.
-		p.fail("a redirection of a descriptor above 9, which shells read differently")
+		p.fail("a redirection whose descriptor has more than one digit, which shells read differently")
 		return
 	}
 	for _, op := range redirOps {
