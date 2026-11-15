@@ -94,6 +94,16 @@ type simpleCmd struct {
 	// neg is set when the pipeline the command is part of stands under a
 	// !: what comes after && then runs when the pipeline failed.
 	neg bool
+	// timeCut is set for a command that starts with bash's keyword time
+	// when a redirection stands among the words the keyword takes for its
+	// own (-p, --, a second time): it is how many words stood before the
+	// redirection. bash takes those words for the keyword's only where
+	// they follow it at once, and reads what follows a redirection as the
+	// command, whatever it looks like: "time>&- -p x" runs a program
+	// named -p. To a plain sh time is a program, which reads the words as
+	// its own. Only the reader sets it: a command made of another's words
+	// has none.
+	timeCut int
 	// pieces and altRedirs are how a shell that has no [[ ]] (dash, and
 	// every plain sh) would read a [[ ]] test that holds && || | ( ) < >
 	// or a line break: as several commands, and as redirections. mixed is
@@ -1248,8 +1258,45 @@ func (p *parser) redirAt() bool {
 // redirOps are the redirection operators, longest first.
 var redirOps = []string{"<<<", "<<-", "<<", "<>", "<&", "<", ">>|", ">>", ">&", ">|", ">", "&>>", "&>"}
 
+// timeWord reports whether a word is one bash's keyword time takes for its
+// own when it follows the keyword at once.
+func timeWord(w word) bool {
+	if !w.static() || w.quoted {
+		return false
+	}
+	switch w.joined() {
+	case "-p", "--", "time", "!":
+		return true
+	}
+	return false
+}
+
+// timeWords reports whether ws are bash's keyword time and nothing but
+// words the keyword takes for its own.
+func timeWords(ws []word) bool {
+	if len(ws) == 0 || !ws[0].static() || ws[0].quoted || ws[0].joined() != "time" {
+		return false
+	}
+	for _, w := range ws[1:] {
+		if !timeWord(w) {
+			return false
+		}
+	}
+	return true
+}
+
+// cutsTime reports whether bash runs a program named by one of the
+// keyword's own words in c, because a redirection stands before it (see
+// simpleCmd.timeCut).
+func cutsTime(c *simpleCmd) bool {
+	return c.timeCut > 0 && c.timeCut < len(c.words) && timeWord(c.words[c.timeCut])
+}
+
 // redir reads the redirection at p.pos into cmd.
 func (p *parser) redir(cmd *simpleCmd) {
+	if cmd.timeCut == 0 && timeWords(cmd.words) {
+		cmd.timeCut = len(cmd.words)
+	}
 	start := p.pos
 	for p.pos < len(p.src) && p.src[p.pos] >= '0' && p.src[p.pos] <= '9' {
 		p.pos++

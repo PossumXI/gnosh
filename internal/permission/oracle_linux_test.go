@@ -344,6 +344,14 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 // out). Each was then judged by hand against the shells with
 // TestOracleProbe, and stands in attack_test.go and danger_test.go.
 //
+//	seed  lines    shell runs  time      kinds of finding
+//	86     67,000  stopped                1
+//
+// Seed 86 ran on the code with those four closed, and showed one line:
+// "time>& - -p teepwned", which in bash runs a program named -p, because
+// the keyword time takes -p for its own only where it follows at once
+// (TestTimeAndARedirection).
+//
 // (A run was stopped as soon as it had shown something new, the hole was
 // closed, and the next one started with another seed; the seeds between
 // those listed were stopped within minutes for the same reason.) Beside

@@ -1253,6 +1253,13 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 				why = w
 			}
 		}
+		if depth == 0 && cutsTime(c) {
+			// A redirection stands between bash's keyword time and a word
+			// the keyword would have taken for its own: bash runs a program
+			// of that word's name ("time>&- -p x" runs -p), which no rule
+			// for the command after it covers.
+			break
+		}
 		inner, ok := strictStrip(words)
 		if !ok || depth >= 8 {
 			break

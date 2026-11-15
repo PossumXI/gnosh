@@ -742,6 +742,44 @@ func TestWhereACopyLands(t *testing.T) {
 	}
 }
 
+// TestTimeAndARedirection: bash takes -p and -- for its keyword time's own
+// only where they follow the keyword at once. After a redirection they are
+// the name of the program it runs; to a plain sh time is a program, which
+// reads them as its flags. The oracle's "time>& - -p teepwned" ran a
+// program named -p under a rule that allowed teepwned.
+func TestTimeAndARedirection(t *testing.T) {
+	allowed := rules{allow: []string{"Bash(teepwned *)", "Bash(teepwned)", "Bash(ls *)"}}
+	for _, tc := range []struct {
+		mode Mode
+		r    rules
+		cmd  string
+		want Behavior
+	}{
+		// bash runs a program named -p, or --, which no rule covers.
+		{ModeDefault, allowed, "time>& - -p teepwned", Ask},
+		{ModeDefault, allowed, "time >&- -p teepwned x", Ask},
+		{ModeDefault, allowed, "time 2>/dev/null -p ls src", Ask},
+		{ModeDefault, allowed, "time -p >&- -- teepwned", Ask},
+		{ModeDefault, allowed, "time time >&- -p teepwned", Ask},
+		{ModeAcceptEdits, allowed, "time>& - -p teepwned", Ask},
+		// A plain sh's time runs the command after the flag, and a deny
+		// rule names it.
+		{ModeBypass, attackGuards, "time>&- -p rm x", Deny},
+		{ModeBypass, attackGuards, "time >&- -p -- git push origin", Deny},
+		// With the redirection after the keyword's words, or no such word
+		// after it, the command is the one both shells run.
+		{ModeDefault, allowed, "time -p teepwned", Allow},
+		{ModeDefault, allowed, "time -p teepwned x 2>&1", Allow},
+		{ModeDefault, allowed, "time -p 2>&1 teepwned x", Allow},
+		{ModeDefault, allowed, "time 2>&1 teepwned x", Allow},
+		{ModeDefault, allowed, "time ls src", Allow},
+	} {
+		if d := bash(engine(t, tc.mode, tc.r), tc.cmd); d.Behavior != tc.want {
+			t.Errorf("%q in %s: got %s (%s), want %s", tc.cmd, tc.mode, d.Behavior, d.Reason, tc.want)
+		}
+	}
+}
+
 // TestReadings: lines the oracle found the engine reading another way
 // than the shell, where no rule was dodged by it. The command that runs
 // must be among the ones the engine reads.

@@ -207,7 +207,12 @@
 // $(echo X rm x)m): such a line asks where a rule could apply. env takes
 // any word with an = in it for a variable of its own, before "--" and
 // after it, where a shell would look for a program of that name: "env --
-// 0=1 rm x" runs rm x, and the command after such words is read. The
+// 0=1 rm x" runs rm x, and the command after such words is read. bash
+// takes -p and -- for its keyword time's own only where they follow the
+// keyword at once: after a redirection they name the program it runs
+// ("time>&- -p x" runs a program named -p), while to a plain sh time is a
+// program, which reads them as its flags. Both are read, and no allow
+// rule for the command after them covers such a line. The
 // arguments of a program whose name is not known ahead of time are read
 // as the command or script they would be if it were a wrapper or a
 // shell, what is written onto a flag or after a name= among them

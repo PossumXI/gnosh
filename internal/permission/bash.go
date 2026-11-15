@@ -2748,6 +2748,11 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 		if !ok || name == "command" && len(args) > 0 && (args[0].lit() == "-v" || args[0].lit() == "-V") {
 			break
 		}
+		if name == "time" && cutsTime(c) {
+			// bash runs what follows the redirection, a "-p" included; a
+			// plain sh's time reads the words as its own. Both are read.
+			e.addDerived(v, &simpleCmd{words: c.words[c.timeCut:], redirs: c.redirs, sep: c.sep, nest: nest}, prev, depth)
+		}
 		for _, start := range e.wrappedAt(v, spec, args, nest, depth) {
 			inner := args[start:]
 			if name == "xargs" {
