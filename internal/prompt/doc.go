@@ -122,6 +122,12 @@
 //     that a session with the tool and one without share everything before
 //     it in a model server's cache.
 //
+// agent-work-tree (AgentWorkTree) is not one of these parts: the session
+// adds it to SystemInput.Append, last, for a sub-agent that works in a git
+// work tree of its own. It says where the work tree is, that a path into
+// the person's checkout means the same file in the work tree, and that
+// the sub-agent's changes stay there.
+//
 // # The two texts about mem
 //
 // SystemInput.Memory chooses between two texts about mem: memory, the

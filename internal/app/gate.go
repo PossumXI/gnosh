@@ -123,6 +123,15 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 		hookReason = out.Reason
 	}
 
+	// A sub-agent with a git work tree of its own changes files there, and
+	// not in the person's checkout it was made from, whatever the rules
+	// and the mode allow: that is what the work tree is for.
+	if req.Env != nil && req.Env.Tree != nil && action.Kind == core.ActionEdit {
+		if why := outsideTree(*req.Env.Tree, cwd, action.Paths); why != "" {
+			return agent.Decision{Reason: "This call did not run. " + why}, nil
+		}
+	}
+
 	// 2. The rules and the mode, on the final arguments. A relative path
 	// in a command is read from where the shell of the agent that made the
 	// call now is: the directory goes with the question, in one step,
@@ -605,4 +614,30 @@ func (l *live) saveRules(rules []string) error {
 		return fmt.Errorf("gnosh would not load %s with the rule in it, so it was not written: %w", path, err)
 	}
 	return config.WriteFileAtomic(path, content, 0o600)
+}
+
+// outsideTree says why a sub-agent with the work tree t may not change
+// paths, when one of them is in the checkout the work tree was made from
+// and not in the work tree; "" when none is. A relative path is read from
+// cwd.
+func outsideTree(t core.WorkTree, cwd string, paths []string) string {
+	in := func(p, dir string) bool {
+		return p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, "/")+"/")
+	}
+	for _, p := range paths {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(cwd, p)
+		}
+		p = filepath.Clean(p)
+		if !in(p, t.Repo) || in(p, t.Path) {
+			continue
+		}
+		rel, err := filepath.Rel(t.Repo, p)
+		if err != nil {
+			continue
+		}
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, so that your changes stay apart from the person's checkout at %s, and %s is in that checkout. The same file in your work tree is %s: change that one.",
+			t.Path, t.Repo, p, filepath.Join(t.Path, rel))
+	}
+	return ""
 }

@@ -152,3 +152,45 @@ func TestSubAgentWorktreeFromASubfolder(t *testing.T) {
 		t.Errorf("a sub-agent wrote into the session's own folder")
 	}
 }
+
+// A sub-agent with a work tree of its own is told where it is, and its
+// write into the person's checkout is refused, even in acceptEdits, with
+// the same file in its work tree named; it writes that one, and the
+// checkout is left as it was.
+func TestSubAgentWorktreeKeepsToItsTree(t *testing.T) {
+	w := repoWorld(t)
+	same := regexp.MustCompile(`The same file in your work tree is (/[^:"\\]+): change that one`)
+	var told, refused bool
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		if !strings.Contains(body, "You are a sub-agent inside gnosh") {
+			if strings.Contains(body, `"role":"tool"`) {
+				return &apptest.Reply{Text: "Done."}
+			}
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"note it","prompt":"Write notes.txt.","isolation":"worktree"}`}}}
+		}
+		told = told || strings.Contains(body, "You work in a git work tree of your own, at ")
+		if m := same.FindStringSubmatch(body); m != nil {
+			refused = true
+			if strings.Count(body, `"role":"tool"`) >= 2 {
+				return &apptest.Reply{Text: "Wrote notes.txt in the work tree."}
+			}
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "w2", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":"noted\n"}`, m[1])}}}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "w1", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":"noted\n"}`, filepath.Join(w.Dir, "notes.txt"))}}}
+	})
+	run(t, w, "--permission-mode", "acceptEdits", "--trust-folder", "-p", "note it").wantCode(t, 0)
+	if !told {
+		t.Errorf("the sub-agent was not told where its work tree is")
+	}
+	if !refused {
+		t.Errorf("the write into the person's checkout was not refused")
+	}
+	if w.Exists("notes.txt") {
+		t.Errorf("the sub-agent wrote into the person's checkout")
+	}
+	made, _ := filepath.Glob(filepath.Join(w.Dir, ".gnosh", "worktrees", "agent-*", "notes.txt"))
+	if len(made) != 1 {
+		t.Errorf("notes.txt in the work tree: %q", made)
+	}
+}

@@ -507,6 +507,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 			c.c.System(&in)
 		}
 	}
+	if s.wt != nil {
+		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentWorkTree(s.wt.path, s.wt.repo))
+	}
 
 	sub := agent.SubOptions{
 		CallID:  callID,
@@ -520,8 +523,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Drivers: s.drivers(),
 		Cwd:     s.start,
 	}
-	if s.tree != "" {
+	if s.wt != nil {
 		sub.Roots = append(slices.Clone(l.roots), s.tree)
+		sub.Tree = &core.WorkTree{Path: s.wt.path, Repo: s.wt.repo}
 	}
 	// The model: the call's, then the kind's (inherit is the session's),
 	// then CLAUDE_CODE_SUBAGENT_MODEL, which with
@@ -656,10 +660,13 @@ func (s *subSession) env() *core.ToolEnv {
 		startedBy = s.owner.id
 	}
 	roots := slices.Clone(s.l.roots)
-	if s.tree != "" {
+	env := &core.ToolEnv{Cwd: cwd, SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
+	if s.wt != nil {
 		roots = append(roots, s.tree)
+		env.Tree = &core.WorkTree{Path: s.wt.path, Repo: s.wt.repo}
 	}
-	return &core.ToolEnv{Cwd: cwd, Roots: roots, SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
+	env.Roots = roots
+	return env
 }
 
 // moments joins the sub-agent's moments to the SubagentStart hooks, to

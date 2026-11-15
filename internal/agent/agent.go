@@ -235,6 +235,7 @@ type Agent struct {
 	noAuto     bool
 	cwd        string
 	roots      []string
+	tree       *core.WorkTree // a sub-agent's own work tree (SubOptions.Tree)
 	loop       loopState
 	questions  map[string]chan Answer
 	state      State
@@ -388,6 +389,12 @@ func newAgent(opts Options, parent *Agent, sub SubOptions) (*Agent, error) {
 		a.agentID = sub.ID
 		a.agentType = sub.Type
 		a.parentCall = sub.CallID
+		// A sub-agent of a sub-agent with a work tree of its own works in
+		// that work tree too, unless it has one of its own.
+		a.tree = sub.Tree
+		if a.tree == nil {
+			a.tree = parent.tree
+		}
 		a.session = parent.session
 		a.depth = parent.depth + 1
 		if a.agentID == "" {
@@ -866,6 +873,7 @@ func (a *Agent) toolEnv(callID string) *core.ToolEnv {
 		SessionID:       session,
 		ParentSessionID: parent,
 		Store:           a.store,
+		Tree:            a.tree,
 		Progress: func(p core.Progress) {
 			if p.CallID == "" {
 				p.CallID = callID

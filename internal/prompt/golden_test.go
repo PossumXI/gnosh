@@ -288,6 +288,15 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "agent-work-tree",
+			texts: []string{textAgentWorkTree},
+			cases: func(s *Set) []goldenCase {
+				return []goldenCase{
+					{"a work tree", s.AgentWorkTree("/home/me/proj/.gnosh/worktrees/agent-0123456789ab", "/home/me/proj")},
+				}
+			},
+		},
+		{
 			file:  "report-caution",
 			texts: []string{textReportCaution},
 			cases: func(s *Set) []goldenCase {

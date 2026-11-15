@@ -515,6 +515,15 @@ or kept with the reason said (27).
       is refused for now; that would be `-w`, which is not built.
     - **effort:** the Agent call also takes `effort` now, over its
       kind's.
+    - **Its changes stay there:** the gate refuses a sub-agent's edit
+      (Write, Edit, NotebookEdit) of a file in the person's checkout
+      outside its work tree, whatever the rules and the mode allow, and
+      names the same file in the work tree. Its system prompt says where
+      it works (`agent-work-tree`), and a sub-agent it starts is held to
+      the same work tree. A Bash command is not held to it: a shell
+      reaches wherever it can. Box 1's Qwen showed the need: handed the
+      checkout's absolute path in its task, it wrote there, and its own
+      work tree, unchanged, was removed.
 44. **The side panel takes the whole screen, and only when asked.** Jae
     asked for "a real side panel as an option" (15 November 2026). A
     panel the height of the screen cannot live in the terminal's

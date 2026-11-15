@@ -83,6 +83,7 @@ const (
 	textPlanGnovm        = "plan-gnovm"
 	textMissingResult    = "missing-result"
 	textReportCaution    = "report-caution"
+	textAgentWorkTree    = "agent-work-tree"
 	textCloseEnteredHere = "close-entered-here"
 	textCloseUnbacked    = "close-unbacked"
 	textCloseNotMade     = "close-not-made"
@@ -131,6 +132,8 @@ func specs() []spec {
 			when: "A part of the system prompt only in a project that holds Gno code: new Gno code gets an audit todo."},
 		{name: textDeliver, kind: KindSystem,
 			when: "A part of the system prompt only when the session has the Deliver tool: name a deliverable before making it."},
+		{name: textAgentWorkTree, kind: KindSystem, need: []string{"tree", "repo"},
+			when: "Last in the system prompt of a sub-agent that works in a git work tree of its own (isolation worktree): where the work tree is, and that its changes stay there."},
 
 		{name: textEnvironment, kind: KindLine, need: []string{"date", "cwd"},
 			may:  []string{"weekday", "user", "machine", "user_only", "machine_only", "platform", "branch", "repo", "nogit", "status", "unread", "why", "dirs", "hosts"},

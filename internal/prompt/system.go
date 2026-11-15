@@ -133,3 +133,10 @@ func hasTool(tools []core.ToolSpec, name string) bool {
 	}
 	return false
 }
+
+// AgentWorkTree is the part of a sub-agent's system prompt, sent last,
+// that tells it it works in a git work tree of its own at tree, made from
+// the person's checkout at repo, and that its changes stay there.
+func (s *Set) AgentWorkTree(tree, repo string) string {
+	return s.fill(textAgentWorkTree, values{"tree": tree, "repo": repo})
+}

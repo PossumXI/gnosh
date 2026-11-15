@@ -143,6 +143,18 @@ type ToolEnv struct {
 	// Progress, when not nil, takes live output while a call runs. It may
 	// be called from any goroutine and must not block.
 	Progress func(Progress)
+
+	// Tree, for a call of a sub-agent that works in a git work tree of
+	// its own (isolation worktree), is that work tree; nil otherwise.
+	Tree *WorkTree
+}
+
+// WorkTree is a git work tree an agent works in, apart from the person's
+// own checkout.
+type WorkTree struct {
+	// Path is the work tree's folder, and Repo the top folder of the
+	// checkout it was made from.
+	Path, Repo string
 }
 
 // Progress is a piece of live output from a running tool call.

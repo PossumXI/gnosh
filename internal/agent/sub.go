@@ -44,6 +44,10 @@ type SubOptions struct {
 	// Cwd and Roots default to the parent's.
 	Cwd   string
 	Roots []string
+	// Tree is the git work tree of its own the sub-agent works in, when
+	// it has one: its tools are given it (core.ToolEnv.Tree), and the
+	// gate keeps its changes in it.
+	Tree *core.WorkTree
 	// Store, when not nil, is the Store in which the sub-agent's tools keep
 	// their own state (core.ToolEnv.Store). Nil makes a new one. It is
 	// never the parent's: what a sub-agent has read, its parent has not.
