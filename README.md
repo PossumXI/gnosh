@@ -20,7 +20,8 @@ vets and tests every package from a clean copy.
 
 Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output), an
 interactive session in the terminal's own scrollback, the file and shell
-tools, commands on declared hosts over ssh, permission modes and rules,
+tools, WebFetch (a page read by the small model with the model's request,
+from the open web only), commands on declared hosts over ssh, permission modes and rules,
 hooks, instruction files, sub-agents in the foreground, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, and deliverables: the `Deliver` tool by which

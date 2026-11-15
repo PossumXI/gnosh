@@ -26,7 +26,7 @@ func TestContextAndRename(t *testing.T) {
 	s.see("The model's window is 100.0K tokens")
 	s.see("In use at the last count: about ")
 	s.see("gnosh's instructions to the model")
-	s.see("what the model is told of its 9 tools")
+	s.see("what the model is told of its 10 tools")
 	s.see("the conversation")
 	s.see("/context all lists each tool and each instruction file.")
 	s.typeLine("/context all")
