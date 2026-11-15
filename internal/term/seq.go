@@ -125,6 +125,20 @@ func CursorColumn(col int) string {
 	return "\x1b[" + strconv.Itoa(col) + "G"
 }
 
+// DesktopNote raises a desktop notification through the terminal, in the
+// way kind names: "osc9" (iTerm2, WezTerm, Ghostty) or "osc99" (kitty).
+// Control characters in text are taken out. Any other kind gives "".
+func DesktopNote(kind, text string) string {
+	text = stripControls(text)
+	switch kind {
+	case "osc9":
+		return "\x1b]9;" + text + "\x1b\\"
+	case "osc99":
+		return "\x1b]99;;" + text + "\x1b\\"
+	}
+	return ""
+}
+
 // TitlePush and TitlePop keep the terminal's title on its own stack and
 // put it back (XTWINOPS 22 and 23): a program that sets the title pushes
 // the old one first and pops it as it leaves. Terminals without the stack

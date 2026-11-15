@@ -1032,6 +1032,36 @@ func TestPaste(t *testing.T) {
 	g.liveHas("[pasted 40 lines]")
 }
 
+// In a terminal that takes desktop notifications, the same moments raise
+// one, with no Notification hook configured; in one that does not, the
+// clock asks for nothing.
+func TestDesktopNotifications(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	g.takesNotes = true
+	g.keys(`"go" <Enter>`).start()
+	g.ev(&agent.QuestionEvent{Question: permission("q1")})
+	g.wait(7 * time.Second)
+	g.s.tick()
+	if len(g.notes) != 1 || !strings.Contains(g.notes[0], "gnosh is waiting for an answer") {
+		t.Fatalf("after 7 quiet seconds the desktop was told %q", g.notes)
+	}
+	g.keys(`<Up> <Enter>`).ev(&agent.AnswerEvent{ID: "q1"}, turnEnd(agent.EndCompleted), idle())
+	g.wait(61 * time.Second)
+	g.s.tick()
+	if len(g.notes) != 2 || g.notes[1] != "gnosh has finished and waits for your next prompt" {
+		t.Fatalf("after a minute of idling the desktop was told %q", g.notes)
+	}
+	if len(g.c.notified) != 0 {
+		t.Errorf("hooks were told with none configured: %q", g.c.notified)
+	}
+
+	quiet := newRig(t, 80, 24, text.NoColor)
+	quiet.keys(`"go" <Enter>`).start().ev(turnEnd(agent.EndCompleted), idle())
+	if at := quiet.s.wake(); !at.IsZero() && at.Sub(quiet.now) > 2*time.Second {
+		t.Errorf("with nothing to tell, the session asks to be woken at %v", at.Sub(quiet.now))
+	}
+}
+
 // The person's Notification hooks are told when a question has waited six
 // seconds with no key pressed, and when a turn ended a minute ago and
 // nothing was typed since. The clock never makes the loop spin.

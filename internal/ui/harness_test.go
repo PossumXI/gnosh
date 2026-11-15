@@ -31,6 +31,8 @@ type rig struct {
 	t          *testing.T
 	copied     []string
 	titles     []string
+	takesNotes bool
+	notes      []string
 	scr        *vtest.Screen
 	s          *session
 	c          *controls
@@ -173,6 +175,16 @@ func (g *rig) edit(s string) (string, error) {
 		return "", errors.New("Set VISUAL or EDITOR to edit the prompt in your own editor.")
 	}
 	return g.editor(s)
+}
+
+func (g *rig) desktop(text string) bool {
+	if !g.takesNotes {
+		return false
+	}
+	if text != "" {
+		g.notes = append(g.notes, text)
+	}
+	return true
 }
 
 func (g *rig) title(text string) error {

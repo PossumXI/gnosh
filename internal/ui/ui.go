@@ -949,6 +949,30 @@ func (u *UI) title(text string) error {
 	return err
 }
 
+// desktop raises a desktop notification through a terminal that takes one
+// (iTerm2, WezTerm, Ghostty: OSC 9; kitty: OSC 99), as Claude Code does
+// when the person seems to be away. With text empty it only reports
+// whether the terminal takes them. Inside tmux the sequence would need
+// wrapping, and is not sent.
+func (u *UI) desktop(text string) bool {
+	kind := ""
+	switch {
+	case u.env("TMUX") != "":
+	case u.env("KITTY_WINDOW_ID") != "" || u.env("TERM") == "xterm-kitty":
+		kind = "osc99"
+	case u.env("TERM_PROGRAM") == "iTerm.app" || u.env("TERM_PROGRAM") == "WezTerm" ||
+		u.env("TERM_PROGRAM") == "ghostty" || u.env("TERM") == "xterm-ghostty":
+		kind = "osc9"
+	}
+	if kind == "" || u.t == nil {
+		return false
+	}
+	if text != "" {
+		_, _ = io.WriteString(u.t, term.DesktopNote(kind, text))
+	}
+	return true
+}
+
 // copy puts text on the person's clipboard through the terminal (OSC 52):
 // the person's /copy asks for it. The sequence moves nothing on the screen.
 func (u *UI) copy(text string) error {

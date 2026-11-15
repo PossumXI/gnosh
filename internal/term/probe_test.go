@@ -226,3 +226,18 @@ func TestSequences(t *testing.T) {
 		t.Error("the alternate screen or mouse reporting was turned on")
 	}
 }
+
+// A desktop notification is OSC 9 or OSC 99, with the text's control
+// characters taken out, and nothing for a terminal that takes neither.
+func TestDesktopNote(t *testing.T) {
+	for _, tc := range []struct{ kind, text, want string }{
+		{"osc9", "gnosh waits\x07\x1b]0;evil", "\x1b]9;gnosh waits]0;evil\x1b\\"},
+		{"osc99", "done", "\x1b]99;;done\x1b\\"},
+		{"", "done", ""},
+		{"bell", "done", ""},
+	} {
+		if got := DesktopNote(tc.kind, tc.text); got != tc.want {
+			t.Errorf("DesktopNote(%q, %q) = %q, want %q", tc.kind, tc.text, got, tc.want)
+		}
+	}
+}

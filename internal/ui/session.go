@@ -37,6 +37,9 @@ type host interface {
 	copy(text string) error
 	// title sets the terminal's title.
 	title(text string) error
+	// desktop raises a desktop notification through the terminal, when it
+	// takes one; it reports whether it does.
+	desktop(text string) bool
 }
 
 // config is what a session is made with.
@@ -544,7 +547,7 @@ func (s *session) wake() time.Time {
 		// The spinner takes its next step.
 		soon(now.Add(s.th.SpinEvery))
 	}
-	if s.info.NotifyHooks {
+	if s.info.NotifyHooks || s.host.desktop("") {
 		if q := s.q; q != nil && !q.notified {
 			soon(later(q.opened, s.lastInput).Add(askNotifyAfter))
 		}
@@ -563,21 +566,31 @@ const (
 	idleNotifyAfter = 60 * time.Second
 )
 
-// notify tells the Notification hooks that a question has waited a while
-// with no key pressed, or that a turn ended a while ago and nothing was
-// typed since.
+// notify tells the Notification hooks, and the desktop through a terminal
+// that takes such notes, that a question has waited a while with no key
+// pressed, or that a turn ended a while ago and nothing was typed since:
+// the person seems to be away.
 func (s *session) notify(now time.Time) {
-	if !s.info.NotifyHooks {
+	hooks, desk := s.info.NotifyHooks, s.host.desktop("")
+	if !hooks && !desk {
 		return
+	}
+	tell := func(kind, title, message string) {
+		if hooks {
+			s.c.Notify(kind, title, message)
+		}
+		if desk {
+			s.host.desktop(message)
+		}
 	}
 	if q := s.q; q != nil && !q.notified && !now.Before(later(q.opened, s.lastInput).Add(askNotifyAfter)) {
 		q.notified = true
 		title := firstNonEmpty(q.q.Title, "gnosh")
-		s.c.Notify("permission_prompt", title, "gnosh is waiting for an answer: "+title)
+		tell("permission_prompt", title, "gnosh is waiting for an answer: "+title)
 	}
 	if s.idleWaits() && !now.Before(s.idleSince.Add(idleNotifyAfter)) {
 		s.idleTold = true
-		s.c.Notify("idle_prompt", "gnosh", "gnosh has finished and waits for your next prompt")
+		tell("idle_prompt", "gnosh", "gnosh has finished and waits for your next prompt")
 	}
 }
 
