@@ -162,9 +162,12 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 
 // crudeDanger reads one crude piece of a line that could not be followed
 // and says why a command in it would destroy something that has to be
-// kept, or "". The piece is read as a line of its own where it can be;
-// where it cannot ("chmod -R 00$[0 ."), its words are taken as they are
-// written, from each word on that names such a command.
+// kept, or "". The piece is read as a line of its own where it can be,
+// and its words are taken as they are written from each word on that
+// names such a command: where the piece cannot be read ("chmod -R 00$[0
+// ."), and where the name is not the piece's own program, which another
+// piece of the line may have made stand for nothing ("zz mv .git /tmp/g"
+// after an "alias zz=").
 func (e *Engine) crudeDanger(piece string, dirs []string) string {
 	fields := strings.Fields(piece)
 	var from []int
@@ -177,16 +180,37 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 	if len(from) == 0 {
 		return ""
 	}
+	read := false
 	if pv := e.viewBash(piece); pv.sc.ok {
 		for _, u := range pv.units {
 			if why := e.removalDanger(pv, u.cmd, dirs, nil); why != "" {
 				return why
 			}
 		}
-		return ""
+		read = true
 	}
+	// The words from the command's name on, as they are written. In a
+	// piece that could be read this is for a name that is not the piece's
+	// own program: what stands before it may be nothing once the line
+	// runs, made so in a piece of the line that this one does not hold
+	// ("alias zz=" on the line before, and then "zz rsync -a --delete src/
+	// ."). The piece's own program was judged above, as it was read.
 	plain := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
 	for _, i := range from {
+		if read && i == 0 {
+			continue
+		}
+		// From the name on the words are read as a line of their own where
+		// they can be, so that a pattern among them is a pattern ("zz shred
+		// -u *"), and as plain text where they cannot.
+		if tv := e.viewBash(strings.Join(fields[i:], " ")); tv.sc.ok {
+			for _, u := range tv.units {
+				if why := e.removalDanger(tv, u.cmd, dirs, nil); why != "" {
+					return why
+				}
+			}
+			continue
+		}
 		var ws []word
 		for _, f := range fields[i:] {
 			ws = append(ws, litOf(f))

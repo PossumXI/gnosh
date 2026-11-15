@@ -182,6 +182,11 @@ func TestOtherDestroyers(t *testing.T) {
 		"find . -exec chown u {} +", "find .. -execdir mv {} /tmp \\;",
 		// A line the reader cannot follow, judged by its pieces.
 		"coproc mv .git /tmp/g", "coproc git clean -fdx", "select x in a; do chmod -R 000 .; break; done", "chmod -R 00$[0 .", "echo $[1+1]; mv * /tmp",
+		// In a line that cannot be read, a word before the command's name
+		// may stand for nothing: another piece of the line made it an
+		// alias, which dash expands in the lines after.
+		"alias zz=\nhead -5 a.txt$[; zz rsync -a --delete src/ .", "alias zz=\necho $[; zz mv .git /tmp/g", "alias q=\necho $[1; q chmod -R 000 .",
+		"alias zz=\necho $[; zz git clean -fdx", "echo $[; zz shred -u *",
 		"time coproc shred -u *", "echo $[1]; rsync -a --delete src/ .", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
 		// The forms bash adds to ${...}, on a value the line knows.
 		"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",
@@ -212,6 +217,9 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv a.txt b.txt", "mv build/out dist/", "mv *.log logs/", "mv src/a.go src/b.go", "mv x ~/", "mv x .", "mv -t build a.txt b.txt",
 		"mv \"$tmp\" out.txt", "mv \"$f\" \"$f.bak\"", "mv vendor/x/.git /tmp/g", "mv -T /tmp/new build", "mv -f a b", "mv src/* dst/",
 		"mv $tmp $dest", "mv -n a.txt ~/Documents/", "mv {a.txt,b.txt}", "mv logs/*.log", "chmod -R {755,build}",
+		// (A line that cannot be read, with such a command behind another
+		// word and nothing that has to be kept in its way.)
+		"alias zz=\necho $[; zz mv a.txt b.txt", "echo $[1; q chmod -R 755 build", "echo $[; zz rsync -a src/ dst/",
 		"chmod +x script.sh", "chmod 644 a.txt", "chmod -R u+w build", "chown -R me:me node_modules", "chmod 700 ~", "chmod -R 755 src",
 		"chown u .", "chmod -R go-w \"$dir\"", "chmod -x a.sh", "chgrp staff a.txt", "chmod -R 755 ~/bin",
 		"git clean -fd", "git clean -n -fdx", "git clean -fdx --dry-run", "git clean -fdx build", "git clean -fX build/", "git clean -f",
