@@ -404,12 +404,15 @@ func suspendUnderAShell(t *testing.T, job string) {
 	// The shell and, with a wrapper, the job each say a number, each from
 	// a process of its own on the one terminal: on a busy machine the two
 	// lines come in either order.
+	// (The job's "ready" is a third process's line, and may come before
+	// either number.)
 	numbers := map[string]int{}
 	want := 1
 	if job == "wrapper" {
 		want = 2
 	}
-	for len(numbers) < want {
+	ready := false
+	for len(numbers) < want || !ready {
 		line := next("the job's number")
 		var n int
 		switch {
@@ -417,8 +420,10 @@ func suspendUnderAShell(t *testing.T, job string) {
 			numbers["shell"] = n
 		case job == "wrapper" && scanned(line, "wrapper: the program is %d", &n):
 			numbers["wrapper"] = n
+		case line == "ready" && !ready:
+			ready = true
 		default:
-			t.Fatalf("the shell or its job said %q, want the job's number or the program's", line)
+			t.Fatalf("the shell or its job said %q, want the job's number, the program's, or ready", line)
 		}
 	}
 	program := numbers["shell"]
@@ -427,7 +432,6 @@ func suspendUnderAShell(t *testing.T, job string) {
 		program = numbers["wrapper"]
 		started = append(started, program)
 	}
-	expect("ready")
 	if !isRaw() {
 		t.Error("the terminal is not in raw mode while the job has it")
 	}
