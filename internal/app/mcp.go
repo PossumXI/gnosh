@@ -45,11 +45,14 @@ const mcpDescriptionMax = 4096
 // mcpServer is one configured server as the session holds it.
 type mcpServer struct {
 	cfg    mcp.Config
-	status string // "pending", "connected" or "failed"
+	status string // "pending", "connected", "failed" or "disabled"
 	err    string
 	client *mcp.Client
 	tools  []*mcpTool
 	since  time.Time
+	// gen counts what /mcp has done to the server: a connection made for
+	// an earlier one is let go of when it is ready.
+	gen int
 }
 
 // mcpSet is the session's servers.
@@ -116,8 +119,15 @@ func (l *live) startMCP() {
 
 // connectMCP starts one server and offers its tools.
 func (l *live) connectMCP(s *mcpServer) {
+	l.mcp.mu.Lock()
+	gen := s.gen
+	l.mcp.mu.Unlock()
 	fail := func(why string) {
 		l.mcp.mu.Lock()
+		if s.gen != gen {
+			l.mcp.mu.Unlock()
+			return
+		}
 		s.status, s.err = "failed", why
 		l.mcp.mu.Unlock()
 		l.flog.logf("mcp", "the MCP server %s did not connect: %s", s.cfg.Name, why)
@@ -158,7 +168,7 @@ func (l *live) connectMCP(s *mcpServer) {
 		made = append(made, &mcpTool{l: l, server: s, tool: t, name: mcp.ToolName(s.cfg.Name, t.Name)})
 	}
 	l.mcp.mu.Lock()
-	if l.closing.Load() {
+	if l.closing.Load() || s.gen != gen {
 		l.mcp.mu.Unlock()
 		_ = client.Close()
 		return
@@ -214,35 +224,107 @@ func (l *live) mcpStatus() []MCPServerStatus {
 }
 
 // slashMCP is /mcp: each server, where it is configured, whether it is
-// connected and with what tools, or why not.
+// connected and with what tools, or why not. With reconnect, enable or
+// disable and a server's name (or all) after it, it does that first.
 func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
 	if l.mcp == nil || len(l.mcp.servers) == 0 && len(l.mcp.probs) == 0 {
 		c.Say("No MCP server is configured. From a shell, gnosh mcp add <name> -- <command> [args...] adds one gnosh starts, and gnosh mcp add -t http <name> <url> one at a URL; they are kept in %s, and a project's in .mcp.json at its root (read once the folder is trusted).", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
 		return nil
 	}
+	if words := strings.Fields(c.Args); len(words) > 0 {
+		return l.mcpAct(c, words)
+	}
 	l.mcp.mu.Lock()
 	defer l.mcp.mu.Unlock()
 	for _, s := range l.mcp.servers {
-		where := mcpWhere(s.cfg)
-		switch s.status {
-		case "connected":
-			names := make([]string, 0, len(s.tools))
-			for _, t := range s.tools {
-				names = append(names, t.tool.Name)
-			}
-			sort.Strings(names)
-			info := s.client.Info()
-			c.Say("%s: connected (%s %s; %s), %s: %s", s.cfg.Name, firstOf(info.Name, "the server"), info.Version, where, countWords(len(names), "tool", "tools"), strings.Join(names, ", "))
-		case "failed":
-			c.Say("%s: not connected (%s): %s", s.cfg.Name, where, oneLine(s.err, 400))
-		default:
-			c.Say("%s: connecting (%s)", s.cfg.Name, where)
-		}
+		c.Say("%s", l.mcpLine(s))
 	}
 	for _, p := range l.mcp.probs {
 		c.Say("not in force: %s", p.String())
 	}
-	c.Say("A tool of a server is mcp__<server>__<tool>; a rule such as mcp__%s allows all of one server's tools.", mcpRuleName(l.mcp.servers))
+	c.Say("A tool of a server is mcp__<server>__<tool>; a rule such as mcp__%s allows all of one server's tools. /mcp reconnect, enable or disable, with a server's name or all, does that.", mcpRuleName(l.mcp.servers))
+	return nil
+}
+
+// mcpLine says how one server stands. It is called with l.mcp.mu held.
+func (l *live) mcpLine(s *mcpServer) string {
+	where := mcpWhere(s.cfg)
+	switch s.status {
+	case "connected":
+		names := make([]string, 0, len(s.tools))
+		for _, t := range s.tools {
+			names = append(names, t.tool.Name)
+		}
+		sort.Strings(names)
+		info := s.client.Info()
+		return fmt.Sprintf("%s: connected (%s %s; %s), %s: %s", s.cfg.Name, firstOf(info.Name, "the server"), info.Version, where, countWords(len(names), "tool", "tools"), strings.Join(names, ", "))
+	case "failed":
+		return fmt.Sprintf("%s: not connected (%s): %s", s.cfg.Name, where, oneLine(s.err, 400))
+	case "disabled":
+		return fmt.Sprintf("%s: disabled for this session (%s); /mcp enable %s connects it", s.cfg.Name, where, s.cfg.Name)
+	}
+	return fmt.Sprintf("%s: connecting (%s)", s.cfg.Name, where)
+}
+
+// mcpAct is /mcp reconnect, enable and disable: each takes a server's name,
+// or all. A reconnect or an enable waits for the servers it connects, and
+// says how each came out. What disable does lasts for this session.
+func (l *live) mcpAct(c *SlashContext, words []string) error {
+	verb := words[0]
+	if verb != "reconnect" && verb != "enable" && verb != "disable" || len(words) != 2 {
+		c.Say("/mcp takes nothing, or reconnect, enable or disable with a server's name or all after it: /mcp reconnect %s, say.", l.mcp.servers[0].cfg.Name)
+		return nil
+	}
+	var picked []*mcpServer
+	var names []string
+	for _, s := range l.mcp.servers {
+		names = append(names, s.cfg.Name)
+		if words[1] == "all" || words[1] == s.cfg.Name {
+			picked = append(picked, s)
+		}
+	}
+	if len(picked) == 0 {
+		c.Say("There is no MCP server named %s here; the servers are %s.", words[1], strings.Join(names, ", "))
+		return nil
+	}
+	// Each one picked is let go of first: a reconnect starts afresh, and a
+	// disable ends there. An enable leaves alone a server that is not
+	// disabled, and a reconnect one that is.
+	var connect []*mcpServer
+	var gone []*mcp.Client
+	l.mcp.mu.Lock()
+	for _, s := range picked {
+		switch {
+		case verb == "enable" && s.status != "disabled", verb == "reconnect" && s.status == "disabled":
+			continue
+		}
+		if s.client != nil {
+			gone = append(gone, s.client)
+		}
+		s.gen++
+		s.client, s.tools, s.err = nil, nil, ""
+		if verb == "disable" {
+			s.status = "disabled"
+		} else {
+			s.status = "pending"
+			connect = append(connect, s)
+		}
+	}
+	l.mcp.mu.Unlock()
+	for _, cl := range gone {
+		_ = cl.Close()
+	}
+	l.offerMCPTools()
+	var wg sync.WaitGroup
+	for _, s := range connect {
+		wg.Go(func() { l.connectMCP(s) })
+	}
+	wg.Wait()
+	l.mcp.mu.Lock()
+	defer l.mcp.mu.Unlock()
+	for _, s := range picked {
+		c.Say("%s", l.mcpLine(s))
+	}
 	return nil
 }
 

@@ -190,3 +190,32 @@ func TestMCPCommands(t *testing.T) {
 		t.Errorf("the user's file after the removes:\n%s", data)
 	}
 }
+
+// /mcp reconnect, enable and disable: a reconnect starts the server
+// afresh; a disable lets it go for the session; names that are not there,
+// and words /mcp does not take, are said to be so.
+func TestMCPReconnectAndDisable(t *testing.T) {
+	w := apptest.NewWorld(t)
+	starts := w.Home + "/starts"
+	server := w.Script(w.Home+"/bin/greeter.sh", "echo started >> "+starts+"\n"+fakeMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"greeter": {"command": "`+server+`"}}}`)
+	count := func() int {
+		data, _ := os.ReadFile(starts)
+		return strings.Count(string(data), "started")
+	}
+
+	r := run(t, w, "-p", "/mcp disable greeter").wantCode(t, 0)
+	has(t, "/mcp disable", r.out, "greeter: disabled for this session (user, ", "/mcp enable greeter connects it")
+	r = run(t, w, "-p", "/mcp enable greeter").wantCode(t, 0)
+	has(t, "/mcp enable of a server that is not disabled", r.out, "greeter: connected (greeter 0.1; user, ")
+	before := count()
+	r = run(t, w, "-p", "/mcp reconnect all").wantCode(t, 0)
+	has(t, "/mcp reconnect all", r.out, "greeter: connected (greeter 0.1; user, ")
+	if got := count() - before; got != 2 {
+		t.Errorf("the server was started %d times by a run with a reconnect, want 2", got)
+	}
+	r = run(t, w, "-p", "/mcp reconnect nobody").wantCode(t, 0)
+	has(t, "/mcp reconnect of nobody", r.out, "There is no MCP server named nobody here; the servers are greeter.")
+	r = run(t, w, "-p", "/mcp frobnicate greeter").wantCode(t, 0)
+	has(t, "/mcp frobnicate", r.out, "/mcp takes nothing, or reconnect, enable or disable")
+}
