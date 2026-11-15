@@ -297,7 +297,7 @@ func TestMemVectorsFollowAnErasure(t *testing.T) {
 	h := newTestMemHost(t, dir)
 	h.embed = newMemEmbedder(f.URL + "/v1")
 	const secret = "hunter22-staging"
-	memOK(t, h, `mem.Fact("db/staging", "the staging password is `+secret+`")`)
+	memOK(t, h, `mem.Fact("db/staging", "the staging pin is `+secret+`")`)
 	memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
 	require.NoError(t, fillMemVectorsNow(context.Background(), dir, h.embed))
 	s, ok, err := readMemSnapshot(context.Background(), dir)

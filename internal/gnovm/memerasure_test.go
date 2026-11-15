@@ -53,9 +53,9 @@ func TestMemHostSaysWhatItErased(t *testing.T) {
 	require.Equal(t, []string{"phone/alice"}, res.Erased.Names)
 	require.Equal(t, "(forgotten)", res.Erased.Texts["555-0142 ext 9"])
 
-	memOK(t, h, `mem.Fact("deploy", "use the key sk-live-4f9a2c")`)
-	res, err := h.call(context.Background(), memRequest{Code: `mem.Redact("sk-live-4f9a2c")`, User: true})
+	memOK(t, h, `mem.Fact("deploy", "use the key kz-live-4f9a2c")`)
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Redact("kz-live-4f9a2c")`, User: true})
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"sk-live-4f9a2c": "(redacted)"}, res.Erased.Texts)
+	require.Equal(t, map[string]string{"kz-live-4f9a2c": "(redacted)"}, res.Erased.Texts)
 	require.Nil(t, memOK(t, h, `mem.Show()`).Erased, "a read erases nothing")
 }

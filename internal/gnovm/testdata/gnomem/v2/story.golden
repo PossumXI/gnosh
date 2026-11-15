@@ -183,9 +183,9 @@ error: `which-go-file-declares-the-most-functions` is not a name: a todo's name 
 > s1: mem.Fact("cmd/deploy", "make ship ENV=prod"); mem.Note("qa", "Lin does QA")
 fact `cmd/deploy` is new; `cmd/` also has `cmd/build`, `cmd/test` and `cmd/tests`
 error: no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem
-> s1: mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")
-noted on `bump-gno-pin` "bump the gno pin" as thought `token-sk-live-4f9c2b`
-> s1: mem.Redact("sk-live-4f9c2b")
+> s1: mem.Note("bump-gno-pin", "the pin is kz-live-4f9c2b")
+noted on `bump-gno-pin` "bump the gno pin" as thought `pin-kz-live-4f9c2b`
+> s1: mem.Redact("kz-live-4f9c2b")
 redacted it in 1 place; gnosh rewrites mem's files
 > s1: mem.Redact("nothing")
 error: mem holds no such text; Redact takes a secret's exact text

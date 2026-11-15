@@ -86,7 +86,7 @@ func TestMemGrammars(t *testing.T) {
 	// -2 when the name is taken; a task an open todo has is not given twice.
 	for _, task := range []string{
 		"Ship It", "ship it!", "ship/it", "ship-it", "Ship-It", "page the on-call engineer",
-		"rotate the key sk-live-4f9c2b3a8d7e now", "which Go file declares the most functions?", "日本", "",
+		"rotate the key kz-live-4f9c2b3a8d7e now", "which Go file declares the most functions?", "日本", "",
 	} {
 		s.run("s1", `mem.Todo(`+strconv.Quote(task)+`)`)
 	}
@@ -173,13 +173,13 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `mem.Todo("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")`)
 	s.run("s1", `mem.Fact("cmd/deploy", "make ship ENV=prod"); mem.Note("qa", "Lin does QA")`)
 	s.holding = func(text string, _ []memOp) ([]string, []string, bool) {
-		if text == "sk-live-4f9c2b" {
+		if text == "kz-live-4f9c2b" {
 			return []string{"bump-gno-pin"}, []string{"item"}, false
 		}
 		return nil, nil, false
 	}
-	s.run("s1", `mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")`)
-	s.run("s1", `mem.Redact("sk-live-4f9c2b")`)
+	s.run("s1", `mem.Note("bump-gno-pin", "the pin is kz-live-4f9c2b")`)
+	s.run("s1", `mem.Redact("kz-live-4f9c2b")`)
 	s.run("s1", `mem.Redact("nothing")`)
 	s.now = time.Date(2026, 12, 2, 9, 0, 0, 0, time.UTC)
 	s.run("s1", `println(mem.Show())`)

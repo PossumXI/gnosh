@@ -247,6 +247,13 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	if err != nil {
 		return res, err
 	}
+	if who == "agent" {
+		// mem keeps no secrets (memsecret.go): an input of the agent's that
+		// would keep one keeps nothing.
+		if why := secretIn(call.Ops, q.Code, call.batch != nil); why != "" {
+			return memResult{Notes: notes, Instance: j.instance}, &refusal{msg: why}
+		}
+	}
 	if len(call.Closes) > 0 {
 		// gnosh checks these closes before the input is kept: nothing of it
 		// is kept, nobody is woken, and the session's peers record stays,

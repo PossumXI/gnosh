@@ -567,3 +567,24 @@ or kept with the reason said (27).
     reached over ssh (no SSH_CONNECTION, SSH_CLIENT or SSH_TTY); over
     ssh, where there is no tool, or when it fails, `/copy` goes through
     the terminal as before, and says so.
+46. **mem keeps no secrets the agent hands it.** The text about mem says
+    "Never keep a secret, or offer to", and on box 2 Qwen, with its
+    thinking off, kept "the staging API key is sk-staging-9f3a2c" as a
+    fact all the same; a new session read it back to the person. An
+    input of the agent's (a gnovm_run call, a sub-agent's too) whose
+    changes would keep text that looks like a secret, or whose code
+    would (the journal keeps the code), is refused whole: nothing of it
+    is kept, and the refusal says what it found, cut to its first five
+    characters, and to keep only that the secret exists and where the
+    person keeps it. What looks like a secret: a token that begins as
+    services' secrets do (sk-, ghp_, github_pat_, glpat-, xoxb-, AKIA,
+    AIza, hf_, dop_v1_ and the like) with 8 characters or more after it
+    and a digit among them; a private key block; a JSON Web Token; a
+    random-looking run of 32 characters or more mixing capitals, small
+    letters and digits; and a secret's name (password, token, API key,
+    secret, credential...) followed by "=", ":", "is" or "was" and a
+    value that mixes letters with digits or signs, unless it is a path,
+    a variable or a dotted name. A hash in hex, a UUID and a gno address
+    are not secrets. The person's own inputs (/mem) are theirs to make,
+    and a secret mem does not recognize is still kept until /mem redact
+    takes it out, as GNOMEM.md shows.

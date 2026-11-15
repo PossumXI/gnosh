@@ -376,7 +376,7 @@ func TestMemHostFinishesACrashedErasure(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	h := newTestMemHost(t, dir)
-	const secret = "sk-crash-7f3e91"
+	const secret = "kz-crash-7f3e91"
 	memOK(t, h, `mem.Todo("rotate the key")`)
 	memOK(t, h, `mem.Note("rotate-key", "the old key was `+secret+`")`)
 	// copyPath copies a store's directory or an index's file.
@@ -422,7 +422,7 @@ func TestMemHostFinishesACrashedErasure(t *testing.T) {
 	}))
 	require.True(t, held, "the old generation's files hold the secret again")
 
-	require.Contains(t, memOK(t, h, `mem.Show("rotate-key")`).Output, "thought `old-key-was-sk`: the old key was (redacted)")
+	require.Contains(t, memOK(t, h, `mem.Show("rotate-key")`).Output, "thought `old-key-was-kz`: the old key was (redacted)")
 	requireNowhere(t, dir, secret)
 }
 

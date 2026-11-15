@@ -542,7 +542,7 @@ after ❯; the notice is what the next session starts with; the rest is you:
   asked `release-v2/which-day-suits-you` "which day suits you for the release?" (for the user); `release-v2` waits on it; next: `release-v2/bump-version` "bump the version"
 ❯ mem.Fact("staging-db", "The staging database is db-stg-7.")
   fact `staging-db` is new
-❯ mem.Fact("deploy", "Deploy with the key sk-live-4f9a2c, then run make deploy.")
+❯ mem.Fact("deploy", "Deploy with the key live-4f9a2c-2026, then run make deploy.")
   fact `deploy` is new
 ❯ mem.Fact("staging-db", "The staging database is db-stg-8.")
   fact `staging-db` changed (was "The staging database is db-stg-7.")
@@ -558,23 +558,23 @@ mem waiting on you: "which day suits you for the release?" (release-v2/which-day
       [?] `release-v2/which-day-suits-you` "which day suits you for the release?"
   facts, newest first:
     `staging-db` = The staging database is db-stg-8.
-    `deploy` = Deploy with the key sk-live-4f9a2c, then run make deploy.
+    `deploy` = Deploy with the key live-4f9a2c-2026, then run make deploy.
 /mem find staging
   fact `staging-db` = The staging database is db-stg-8.
 /mem log 2
-  #3 2026-10-30 10:12, the agent in "Release v2": mem.Fact("deploy", "Deploy with the key sk-live-4f9a2c, then run make deploy.")
-      fact `deploy`: "Deploy with the key sk-live-4f9a2c, then run make deploy."
+  #3 2026-10-30 10:12, the agent in "Release v2": mem.Fact("deploy", "Deploy with the key live-4f9a2c-2026, then run make deploy.")
+      fact `deploy`: "Deploy with the key live-4f9a2c-2026, then run make deploy."
   #4 2026-10-30 10:12, the agent in "Release v2": mem.Fact("staging-db", "The staging database is db-stg-8.")
       fact `staging-db`: "The staging database is db-stg-8."
 /mem undo 4
   undid #4 as #5:
   #5 2026-10-30 10:14, you: /mem undo 4
       fact `staging-db`: "The staging database is db-stg-7."
-/mem redact sk-live-4f9a2c
+/mem redact live-4f9a2c-2026
   redacted it in 1 place; gnosh rewrites mem's files
   (mem's journal was written again without what was erased; its store and index are built afresh from it)
-/mem find sk-live
-  nothing in mem matches "sk-live": Find matches the words as they were stored; /mem lists 1 todo, 0 rules and 2 facts
+/mem find 4f9a2c
+  nothing in mem matches "4f9a2c": Find matches the words as they were stored; /mem lists 1 todo, 0 rules and 2 facts
 /mem log 4
   #3 2026-10-30 10:12, the agent in "Release v2": (redacted)
       fact `deploy`: "Deploy with the key (redacted), then run make deploy."
@@ -595,7 +595,10 @@ facts. Past ten facts it lists the rest by the first part of their names, as
 `/mem log` lists every change: when, who made it (you, or the agent by its
 session's title), the call, and what it changed. `/mem undo` takes a change
 back, as a change of yours. `/mem redact` takes a secret's exact text out of
-mem and out of its history, and `/mem forget` erases a todo, a fact or a
+mem and out of its history. (mem refuses to keep what looks like a secret
+when the agent tries to, such as a key that begins sk- or ghp_ or a
+password with its value, and says why; a secret it does not recognize, as
+here, is kept until you redact it.) and `/mem forget` erases a todo, a fact or a
 rule with its history; both write mem's journal again without it, and
 neither can be undone. `/mem show` shows one item in full.
 

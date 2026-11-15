@@ -1301,13 +1301,13 @@ func TestMemRulesAndErasures(t *testing.T) {
 	require.True(t, strings.HasPrefix(resp.Content, "rule `gofumpt-before-commit` is new; every session will be given it\n"), resp.Content)
 	require.Equal(t, []gnovm.MemRule{{Name: "gofumpt-before-commit", Text: "Always run gofumpt before committing"}}, rules)
 
-	resp = mem(`mem.Fact("deploy", "Deploy with the key sk-live-4f9a2c, then run make deploy.")`)
+	resp = mem(`mem.Fact("deploy", "Deploy with the key kz-live-4f9a2c, then run make deploy.")`)
 	require.False(t, resp.IsError, resp.Content)
 	require.Empty(t, erased)
-	resp = mem(`mem.Redact("sk-live-4f9a2c")`)
+	resp = mem(`mem.Redact("kz-live-4f9a2c")`)
 	require.False(t, resp.IsError, resp.Content)
 	require.Equal(t, 1, len(erased))
-	require.Equal(t, []string{"sk-live-4f9a2c"}, erased[0].Secrets())
+	require.Equal(t, []string{"kz-live-4f9a2c"}, erased[0].Secrets())
 	require.Equal(t, []string{"rules", "erased"}, order)
 }
 

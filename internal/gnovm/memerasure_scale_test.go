@@ -36,7 +36,7 @@ func TestMemHostErasesAtScale(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	h := newTestMemHost(t, dir)
-	const secret = "sk-scale-5f2e8a"
+	const secret = "kz-scale-5f2e8a"
 	start := time.Now()
 	memOK(t, h, `mem.Todo("rotate `+secret+`")`)
 	for g := 1; g <= 5; g++ {
@@ -51,7 +51,7 @@ for i := 1; i <= 1000; i++ {
 	res, err := h.call(context.Background(), memRequest{Code: `mem.Redact("` + secret + `")`, User: true})
 	require.NoError(t, err, res.Output)
 	require.Contains(t, res.Output, "redacted it in 5001 places")
-	require.Equal(t, map[string]string{"rotate-sk-scale-5f2e8a": "forgotten-1"}, res.Renamed)
+	require.Equal(t, map[string]string{"rotate-kz-scale-5f2e8a": "forgotten-1"}, res.Renamed)
 	t.Logf("redacted in %s", time.Since(start).Round(time.Millisecond))
 	requireNowhere(t, dir, secret)
 
