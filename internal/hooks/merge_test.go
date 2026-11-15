@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -293,15 +294,19 @@ func TestEverythingIsJoinedInConfiguredOrder(t *testing.T) {
 	dir := t.TempDir()
 	// The first hook waits for the second to finish, so the order of
 	// finishing is the reverse of the order configured.
+	// Each notes when it is done in the file order, which says the order
+	// of finishing for certain.
 	first := script(t, `while [ ! -e `+shq(dir+"/second-done")+` ]; do sleep 0.01; done
 cat <<'EOF'
 {"decision": "block", "reason": "first reason", "systemMessage": "first warning",
  "hookSpecificOutput": {"additionalContext": "first context"}}
-EOF`)
+EOF
+echo first >> `+shq(dir+"/order"))
 	second := script(t, `cat <<'EOF'
 {"decision": "block", "reason": "second reason", "systemMessage": "second warning",
  "hookSpecificOutput": {"additionalContext": ["second context", "more of it"]}}
 EOF
+echo second >> `+shq(dir+"/order")+`
 : > `+shq(dir+"/second-done"))
 	third := script(t, `echo 'third reason' >&2; exit 2`)
 	r := newRunner(t, options(t),
@@ -328,8 +333,8 @@ EOF
 	if strings.Join(names, " ") != "one two three four" || strings.Join(results, " ") != "blocked blocked blocked none" {
 		t.Errorf("records: %v %v", names, results)
 	}
-	if out.Records[0].Duration < out.Records[1].Duration {
-		t.Errorf("the first hook (%v) did not outlast the second (%v), so the test proved nothing", out.Records[0].Duration, out.Records[1].Duration)
+	if order, _ := os.ReadFile(filepath.Join(dir, "order")); string(order) != "second\nfirst\n" {
+		t.Errorf("the hooks finished in the order %q, and the test needs the second first, or it proves nothing", order)
 	}
 
 	// One hook ends the turn; the others block, approve and add text.

@@ -51,6 +51,8 @@ type mcpServer struct {
 	// gen counts what /mcp has done to the server: a connection made for
 	// an earlier one is let go of when it is ready.
 	gen int
+	// refresh is held while the server's tool list is read again.
+	refresh sync.Mutex
 }
 
 // mcpSet is the session's servers.
@@ -141,6 +143,16 @@ func (l *live) connectMCP(s *mcpServer) {
 	ctx, cancel := context.WithTimeout(l.ctx, timeout)
 	defer cancel()
 	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: timeout}
+	// A server that says its tools changed has them read again, once it
+	// is connected.
+	opt.OnToolsChanged = func() {
+		l.mcp.mu.Lock()
+		c := s.client
+		l.mcp.mu.Unlock()
+		if c != nil {
+			l.refreshMCP(s, c)
+		}
+	}
 	var client *mcp.Client
 	var err error
 	switch s.cfg.Type {
@@ -168,10 +180,7 @@ func (l *live) connectMCP(s *mcpServer) {
 		fail("it connected, and its tools could not be listed: " + err.Error())
 		return
 	}
-	var made []*mcpTool
-	for _, t := range tools {
-		made = append(made, &mcpTool{l: l, server: s, tool: t, name: mcp.ToolName(s.cfg.Name, t.Name)})
-	}
+	made := l.mcpToolsOf(s, tools)
 	l.mcp.mu.Lock()
 	if l.closing.Load() || s.gen != gen {
 		l.mcp.mu.Unlock()
@@ -181,6 +190,46 @@ func (l *live) connectMCP(s *mcpServer) {
 	s.status, s.client, s.tools, s.since = "connected", client, made, l.p.now()
 	l.mcp.mu.Unlock()
 	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
+	l.offerMCPTools()
+	// It may have said its tools changed while they were being listed.
+	l.refreshMCP(s, client)
+}
+
+// mcpToolsOf makes the tools the model is offered of a server's list.
+func (l *live) mcpToolsOf(s *mcpServer, tools []mcp.Tool) []*mcpTool {
+	var made []*mcpTool
+	for _, t := range tools {
+		made = append(made, &mcpTool{l: l, server: s, tool: t, name: mcp.ToolName(s.cfg.Name, t.Name)})
+	}
+	return made
+}
+
+// refreshMCP reads a server's tool list again when the server has said it
+// changed since it was last read, and offers the model the new list. A
+// call that is made while it reads waits for it, so that the model's next
+// request has the tools the server has after the call.
+func (l *live) refreshMCP(s *mcpServer, client *mcp.Client) {
+	s.refresh.Lock()
+	defer s.refresh.Unlock()
+	if !client.ToolsChanged() || l.closing.Load() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(l.ctx, l.cfg.Limits.MCPTimeout.V)
+	defer cancel()
+	tools, err := client.ListTools(ctx)
+	if err != nil {
+		l.flog.logf("mcp", "the MCP server %s said its tools changed, and they could not be listed: %v", s.cfg.Name, err)
+		return
+	}
+	made := l.mcpToolsOf(s, tools)
+	l.mcp.mu.Lock()
+	if s.client != client {
+		l.mcp.mu.Unlock()
+		return
+	}
+	s.tools = made
+	l.mcp.mu.Unlock()
+	l.flog.logf("mcp", "the MCP server %s changed its tools (%d now)", s.cfg.Name, len(made))
 	l.offerMCPTools()
 }
 
@@ -400,6 +449,8 @@ func (t *mcpTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 		defer cancel()
 	}
 	res, err := client.CallTool(ctx, t.tool.Name, call.Input)
+	// A server that changed its tools on the way says so before it answers.
+	t.l.refreshMCP(t.server, client)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) && limit > 0 {
 			return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not answer within %s, %s.", t.tool.Name, t.server.cfg.Name, limit, whose)), nil

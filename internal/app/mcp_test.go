@@ -285,3 +285,47 @@ func TestMCPToolsInSubAgents(t *testing.T) {
 		t.Errorf("the Explore sub-agent was given a server's tool: %q", names)
 	}
 }
+
+// changerMCPServer is a small MCP server in sh whose tool list grows: once
+// its tool open has been called, it also has wave, and it says so before
+// it answers the call.
+const changerMCPServer = `while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"changer","version":"1"},"capabilities":{"tools":{"listChanged":true}}}}\n' "$id" ;;
+    *'"method":"tools/list"'*)
+      if [ -f "$HOME/opened" ]; then
+        printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"open","description":"Opens the door."},{"name":"wave","description":"Waves through the door."}]}}\n' "$id"
+      else
+        printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"open","description":"Opens the door."}]}}\n' "$id"
+      fi ;;
+    *'"method":"tools/call"'*)
+      touch "$HOME/opened"
+      printf '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n'
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"the door is open"}]}}\n' "$id" ;;
+  esac
+done`
+
+// A server that says its tools changed has them read again, and the
+// model's next request has the new list.
+func TestMCPToolsChange(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "mcp__changer__open", Args: `{}`}}},
+		apptest.Reply{Text: "Opened."},
+	)
+	server := w.Script(w.Home+"/bin/changer.sh", changerMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"changer": {"command": "`+server+`"}}}`)
+
+	run(t, w, "-y", "-p", "open the door").wantCode(t, 0)
+	reqs := w.Model.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the model was sent %d requests, want 2", len(reqs))
+	}
+	if names := toolNamesOf(reqs[0]); !slices.Contains(names, "mcp__changer__open") || slices.Contains(names, "mcp__changer__wave") {
+		t.Errorf("the tools before the call: %q", names)
+	}
+	if names := toolNamesOf(reqs[1]); !slices.Contains(names, "mcp__changer__wave") {
+		t.Errorf("the tools after the server said they changed: %q", names)
+	}
+}

@@ -60,6 +60,9 @@ type Options struct {
 	MaxStderr int
 	// MaxLine is the longest message the server may send. Default 32 MiB.
 	MaxLine int
+	// OnToolsChanged, when set, is called (in a goroutine of its own) each
+	// time the server says its tool list changed.
+	OnToolsChanged func()
 }
 
 // Tool is one tool a server offers.
@@ -448,6 +451,9 @@ func (c *Client) notified(m message) {
 		c.mu.Lock()
 		c.changed = true
 		c.mu.Unlock()
+		if c.opt.OnToolsChanged != nil {
+			go c.opt.OnToolsChanged()
+		}
 	}
 }
 
