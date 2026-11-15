@@ -355,6 +355,12 @@ var genJoiners = []string{
 	"shopt -s expand_aliases; BASH_ALIASES[zz]=%H\nzz %T", "hash -p @BIN@/p0/%H ls; %B; ls %T",
 	"nice -n $(echo 5 %P)", "env -u $(echo X %P)", "exec -a $(echo x %P)", "timeout -s $(echo KILL 5 %P)", "sudo -u $(echo root %P)", "timeout $(echo 5 %P)",
 	"mapfile -t -C %Q -c 1 a <<< x", "mapfile -t -C '%H' -c 1 a <<< x", "readarray -t -C %Q -c 1 a <<< @WORK@", "compgen -C %Q",
+	// The command of -C with a ;, a line break, a pipe, a # or a > at its
+	// end: the words the builtin adds become a command, or nothing, or a
+	// file (oracle seed 95).
+	"compgen -C 'true;' -- -C%Q", "compgen -C 'true\n' -- -C%Q", "compgen -C 'true|' -- -C%Q", "compgen -C 'true&' -- -C%Q",
+	"compgen -C '%H #' -- %T", "compgen -C %Q\\; -- x", "mapfile -C 'true;' -c 1 a <<< %T", "mapfile -C '%H >' -c 1 a <<< x",
+	"alias zz='true;'\nzz %P", "alias zz='true|'\nzz %P", "alias zz='%H #'\nzz %T",
 	"a=(%P); ${a[@]}", "a=(%P); \"${a[@]}\"", "a=(%H); a+=(%T); ${a[@]}", "a=(x %P); \"${a[@]:1}\"", "a=(%P); ${a[*]}", "a=(%T); %H \"${a[@]}\" x", "a=(/tmp/g %T /tmp/g); %H \"${a[@]}\"", "a=(%T %T); %H \"${a[@]}\"", "a=(%T); %H \"${a[@]}\".bak", "a=(x %T); %H ${a[*]}[*]}", "a=(%T x); %H pre\"${a[@]}\"", "a=(%T); %H ${a[@]}*", "a=(x %T x); %H -R \"${a[@]}\"",
 	"echo %T | xargs -n9 %H x", "echo x | xargs %P", "echo %T | xargs %H -t /tmp", "%H {fd}>log %T", "%P {fd}>log", "%P {fd}>&2 x",
 	"coproc %P", "select x in a; do %P; break; done", "echo $[1]; %P", "%P $[1]", "v=%H; ${v/x/y} %T", "v=x%H; ${v:1} %T", "d=HOME; %H ${!d}", "%P$x", "%H$x %T", "%H ${X:-%T}", "%H $X %T", "sh -c '%P$x'", "%H -${x}%T", "%H $x%T", "%H ${x}%T",

@@ -1987,45 +1987,130 @@ func (e *Engine) useAlias(v *bashView, c *simpleCmd, prev *simpleCmd, depth int)
 		}
 	}
 	for _, val := range vals {
-		var head []word
+		// The shell reads the alias's text and then the words after the
+		// alias, as more of the line: most often more words of the text's
+		// last command, but after a ; a command of their own.
+		ws, redirs := c.words[1:], c.redirs
 		if strings.TrimSpace(val) != "" {
-			sub := parseScript(val)
-			if !sub.ok || len(sub.cmds) == 0 {
-				v.setOpaque("an alias stands for text gnosh cannot read")
+			lc, at, why := landing(val)
+			switch {
+			case why != "":
+				v.setOpaque("an alias stands for text gnosh cannot read with the words after it: " + why)
 				continue
+			case lc == nil:
+				continue // the words after the alias fall after a #
 			}
-			last := sub.cmds[len(sub.cmds)-1]
-			if last.nest != 0 {
-				continue // the words after the alias follow a group: no shell takes that
-			}
-			head = last.words
+			ws = append(append(append([]word(nil), lc.words[:at]...), c.words[1:]...), lc.words[at+1:]...)
+			redirs = append(append([]redir(nil), lc.redirs...), c.redirs...)
 		}
-		ws := append(append([]word(nil), head...), c.words[1:]...)
 		if len(ws) == 0 {
 			continue
 		}
-		e.addDerived(v, &simpleCmd{words: ws, redirs: c.redirs, sep: c.sep, nest: c.nest | nestScript,
+		e.addDerived(v, &simpleCmd{words: ws, redirs: redirs, sep: c.sep, nest: c.nest | nestScript,
 			aliased: append(append([]string(nil), c.aliased...), name)}, prev, depth)
 	}
 }
 
-// addCalled adds the last command of a text that is run with more words
-// after it than the text holds: what an alias stands for (the words that
-// follow the alias where it is used), the command of mapfile -C (the
-// index and the line that was read) and of compgen -C. Nobody knows
-// those words ahead of time, so the command is read with the word that
-// stands for what xargs adds (xargsAdds) at its end: "alias r='rm -rf'"
-// is an rm -rf of whatever follows r later on.
-func (e *Engine) addCalled(v *bashView, text string, nest nesting, depth int) {
-	sub := parseScript(text)
-	if !sub.ok || len(sub.cmds) == 0 {
-		return
+// landing reads text with a marker word after it, as the shell reads text
+// with more words after it (an alias's, the command of mapfile -C), and
+// says where those words land: in which command, at which of its words.
+// It returns no command when they land nowhere (after a #), and a reason
+// when the text cannot be read with them, or they land where they are not
+// words of a command: a file to write, a variable's value, or joined on to
+// the text's last word.
+func landing(text string) (c *simpleCmd, at int, why string) {
+	sub := parseScript(text + " " + calledMarker)
+	if !sub.ok {
+		return nil, 0, "it does not read as a whole"
 	}
-	last := sub.cmds[len(sub.cmds)-1]
-	if len(last.words) == 0 || last.nest != 0 {
-		return
+	for _, c := range sub.cmds {
+		for _, r := range c.redirs {
+			if strings.Contains(r.target.raw, calledMarker) || strings.Contains(r.body, calledMarker) {
+				return nil, 0, "the first of the words names a file"
+			}
+		}
+		for _, a := range c.assigns {
+			if strings.Contains(a.w.raw, calledMarker) {
+				return nil, 0, "the words are a variable's value"
+			}
+		}
+		for i, w := range c.words {
+			if !strings.Contains(w.raw, calledMarker) {
+				continue
+			}
+			if !w.static() || w.lit() != calledMarker || c.nest != 0 {
+				return nil, 0, "the words join on to it"
+			}
+			return c, i, ""
+		}
 	}
-	e.addDerived(v, &simpleCmd{words: xargsAdds(last.words, nil), redirs: last.redirs, nest: nest | nestScript}, nil, depth)
+	return nil, 0, ""
+}
+
+// calledMarker stands for the words a builtin puts after the text it runs,
+// so that reading the two together shows where those words land.
+const calledMarker = "__gnosh_called_words__"
+
+// addCalled adds what a text runs when the shell reads it with more words
+// after it than it holds: what an alias stands for (the words that follow
+// the alias where it is used), the command of mapfile -C (the index and
+// the line that was read) and of compgen -C (compgen, the word being
+// completed and the one before it). then are those words, as far as they
+// are known; a word nobody knows is the one that stands for what xargs
+// adds.
+//
+// The shell puts a blank between the text and the words and reads the
+// whole as a script. Most often the words are more words of the text's
+// last command ("alias r='rm -rf'" is an rm -rf of whatever follows r
+// later on), but after a ; or a line break they are a command of their
+// own (compgen -C 'true;' runs compgen with the word being completed,
+// which may be -C and a command of its own), after a # they are nothing,
+// and after a > the first is a file. Where they land is found by reading
+// the text with a marker word after it.
+func (e *Engine) addCalled(v *bashView, text string, then []word, nest nesting, depth int) {
+	lc, at, why := landing(text)
+	switch {
+	case why != "":
+		v.setOpaque("a builtin runs text that gnosh cannot read with the words it adds after it: " + why)
+	case lc != nil:
+		ws := append(append(append([]word(nil), lc.words[:at]...), then...), lc.words[at+1:]...)
+		e.addDerived(v, &simpleCmd{words: ws, redirs: lc.redirs, nest: nest | nestScript}, nil, depth)
+	}
+	// Otherwise the words fall after a #, where nothing reads them.
+}
+
+// unknownWord stands for a word only known when the line runs: what xargs
+// adds, the words after an alias where it is used.
+func unknownWord() word { return word{raw: "{}", parts: []wordPart{{kind: partSubst}}} }
+
+// compgenWord is the word compgen completes, which it hands the command of
+// -C as its second word: its operand, or nothing.
+func compgenWord(args []word) word {
+	const takes = "ACFGPSWXo" // the flags that take a value
+	for i := 0; i < len(args); i++ {
+		l := args[i].joined()
+		switch {
+		case l == "--":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return litOf("")
+		case len(l) > 1 && l[0] == '-':
+			// A cluster of flags: the first that takes a value takes the
+			// rest of the word, or else the next word.
+			for k := 1; k < len(l); k++ {
+				if strings.IndexByte(takes, l[k]) >= 0 {
+					if k == len(l)-1 {
+						i++
+					}
+					break
+				}
+			}
+		default:
+			return args[i]
+		}
+	}
+	return litOf("")
 }
 
 // onlyVars reports whether a word is made of variables and nothing else.
@@ -2078,7 +2163,7 @@ func (e *Engine) commandVar(v *bashView, w word, nest nesting, depth int) {
 		if _, val, cut := strings.Cut(w.joined(), "="); cut && w.static() && val != "" {
 			if name == "BASH_ALIASES" {
 				e.addScript(v, val, nest, depth, scriptMaybe)
-				e.addCalled(v, val, nest, depth)
+				e.addCalled(v, val, []word{unknownWord()}, nest, depth)
 			} else {
 				e.addDerived(v, &simpleCmd{words: []word{litOf(val)}, nest: nest}, nil, depth)
 			}
@@ -2701,22 +2786,32 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 				v.aliases[alias] = append(v.aliases[alias], val)
 				if val != "" {
 					e.addScript(v, val, nest, depth, how)
-					e.addCalled(v, val, nest, depth)
+					e.addCalled(v, val, []word{unknownWord()}, nest, depth)
 				}
 			}
 		}
 	case name == "mapfile" || name == "readarray" || name == "compgen" || name == "complete":
 		// -C names a command the builtin runs, with words of its own
-		// after it: mapfile adds the index and the line it read, compgen
-		// the word being completed.
+		// after it: mapfile adds the index and the line it read; compgen
+		// adds compgen, the word being completed and the one before it,
+		// which is nothing outside a completion; and complete, whose
+		// command runs when a person completes a word, adds three words
+		// nobody knows ahead of time.
+		then := []word{unknownWord(), unknownWord()}
+		switch name {
+		case "compgen":
+			then = []word{litOf("compgen"), compgenWord(args), litOf("")}
+		case "complete":
+			then = append(then, unknownWord())
+		}
 		flagValue(args, 'C', func(w word, ok bool) {
 			if ok {
 				e.addScript(v, w.joined(), nest, depth, scriptText)
-				e.addCalled(v, w.joined(), nest, depth)
+				e.addCalled(v, w.joined(), then, nest, depth)
 			} else {
 				v.setOpaque(name + " -C runs text that is computed when the command runs")
 				e.addScript(v, maybeText([]word{w}), nest, depth, scriptMaybe)
-				e.addCalled(v, maybeText([]word{w}), nest, depth)
+				e.addCalled(v, maybeText([]word{w}), then, nest, depth)
 			}
 		})
 		for _, a := range args {
@@ -3069,7 +3164,7 @@ func xargsMarks(flags []word) []string {
 // holds one of the marks, and one more word at the end, is something
 // only known when the line runs.
 func xargsAdds(ws []word, marks []string) []word {
-	unknown := word{raw: "{}", parts: []wordPart{{kind: partSubst}}}
+	unknown := unknownWord()
 	out := append([]word(nil), ws...)
 	for k := 1; k < len(out); k++ {
 		for _, m := range marks {

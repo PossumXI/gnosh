@@ -117,6 +117,17 @@ func TestShellAttacks(t *testing.T) {
 		{"hash -p makes ls run another file", ModeBypass, attackGuards, "hash -p /usr/bin/rm ls; ls x", Deny},
 		{"mapfile -C runs its callback", ModeBypass, attackGuards, "mapfile -C 'rm' -c 1 a <<< x", Deny},
 		{"compgen -C runs its argument", ModeBypass, attackGuards, "compgen -C 'rm x'", Deny},
+		// The shell reads the command of -C with the builtin's words put
+		// after it, a blank between. After a ; those words are a command of
+		// their own: for compgen, compgen with the word being completed,
+		// which may be -C and a command (oracle seed 95).
+		{"a ; in compgen's -C makes its words a compgen of their own, and that one's -C runs rm", ModeBypass, attackGuards, "compgen -C 'true;' -- '-Crm -rf x'", Deny},
+		{"the same, with a line break", ModeBypass, attackGuards, "compgen -C 'true\n' -- '-Crm x'", Deny},
+		{"the same, after a pipe", ModeBypass, attackGuards, "compgen -C 'true|' -- '-Crm x'", Deny},
+		{"a ; in mapfile's -C makes the index and the line a command nobody knows", ModeBypass, attackGuards, "mapfile -C 'true;' -c 1 a <<< x", Ask},
+		{"a > at the end of mapfile's -C makes the index a file to write", ModeBypass, attackGuards, "mapfile -C 'cat >' -c 1 a <<< x", Ask},
+		{"an alias that ends with a ; makes the words after it a command", ModeBypass, attackGuards, "alias q='true;'", Allow},
+		{"an alias that ends with a ; is read where it is used", ModeBypass, attackGuards, "alias q='true;'\nq rm -rf x", Deny},
 		{"source /dev/stdin runs the here-string", ModeBypass, attackGuards, ". /dev/stdin <<< 'rm x'", Deny},
 		{"source /dev/stdin runs the here-string", ModeBypass, attackGuards, "source /dev/stdin <<< 'rm x'", Deny},
 		{"a script a command prints is sourced", ModeBypass, attackGuards, "source <(echo rm x)", Ask},
@@ -867,13 +878,17 @@ func TestReadings(t *testing.T) {
 		// work out, and a file that is sourced is a program of its own.
 		"n[[]= pwd":                             "pwd",
 		"printf y\n{ . ~/x.sh;}":                ". ~/x.sh",
-		"mv a {fd}>log":                         "mv a {fd}",        // to a plain sh the {fd} is an argument
-		"alias g=git\ng push":                   "git push",         // the words after the alias where it is used
-		"alias z=\nz make x":                    "make x",           // an alias that stands for nothing
-		"mapfile -C 'make x' -c 1 a":            "make x {}",        // the index and the line mapfile adds
-		"a=(make x); ${a[@]}":                   "make x",           // every word of the array
-		"echo x | xargs timeout 5 make":         "make {}",          // what xargs adds, behind a wrapper
-		"echo clean -fdx | xargs timeout 5 git": "timeout 5 git {}", // the wrapper itself, with what xargs adds
+		"mv a {fd}>log":                         "mv a {fd}",         // to a plain sh the {fd} is an argument
+		"alias g=git\ng push":                   "git push",          // the words after the alias where it is used
+		"alias z=\nz make x":                    "make x",            // an alias that stands for nothing
+		"mapfile -C 'make x' -c 1 a":            "make x {} {}",      // the index and the line mapfile adds
+		"compgen -C 'make x' -- w":              "make x compgen w ", // compgen, the word and the one before it
+		"compgen -C 'make x;' -- w":             "compgen w ",        // after a ;, a command of their own
+		"compgen -C 'make x #' -- w":            "make x",            // after a #, nothing
+		"compgen -C '$'\\;;''rm'\\'' x'":        "compgen  ",         // oracle seed 95
+		"a=(make x); ${a[@]}":                   "make x",            // every word of the array
+		"echo x | xargs timeout 5 make":         "make {}",           // what xargs adds, behind a wrapper
+		"echo clean -fdx | xargs timeout 5 git": "timeout 5 git {}",  // the wrapper itself, with what xargs adds
 	} {
 		v := e.viewBash(line)
 		found := want == ""
