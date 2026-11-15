@@ -35,6 +35,8 @@ type host interface {
 	size() (cols, rows int, ok bool)
 	// copy puts text on the person's clipboard through the terminal.
 	copy(text string) error
+	// title sets the terminal's title.
+	title(text string) error
 }
 
 // config is what a session is made with.
@@ -223,6 +225,8 @@ type session struct {
 	// shown in place of gnosh's own status line, set in by customPad.
 	custom    []string
 	customPad int
+	// titled is the terminal title last set.
+	titled string
 	// tasks is the session's task list as it stands, and hideTasks says
 	// Ctrl+T has put it out of sight.
 	tasks     []app.Task

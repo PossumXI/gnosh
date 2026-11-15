@@ -759,6 +759,21 @@ func TestCustomStatusLine(t *testing.T) {
 	}
 }
 
+// The terminal's title is the session's name, once it has one.
+func TestTerminalTitle(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.ev(facts{"frame": "x"})
+	if len(g.titles) != 0 {
+		t.Errorf("a title was set before the session had a name: %q", g.titles)
+	}
+	g.ev(facts{"session": "fix the parser"})
+	g.ev(facts{"session": "fix the parser"})
+	g.ev(facts{"session": "ship it"})
+	if strings.Join(g.titles, "|") != "gnosh: fix the parser|gnosh: ship it" {
+		t.Errorf("the titles set: %q", g.titles)
+	}
+}
+
 // A command that asks for text on the clipboard (/copy) has it written
 // through the terminal.
 func TestCopyToClipboard(t *testing.T) {

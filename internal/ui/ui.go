@@ -114,6 +114,9 @@ type UI struct {
 	// a signal has put it back as it was found, or the process is being
 	// stopped.
 	held atomic.Bool
+	// retitled says the interface has set the terminal's title, and so
+	// puts the old one back as it leaves.
+	retitled bool
 	// sigs are the signals the terminal passed on, and owed the signals
 	// that one of the two sides has told of and the other has not yet
 	// (see signal).
@@ -499,6 +502,10 @@ func (u *UI) shut() {
 	u.shown.Store(nil)
 	if u.r != nil {
 		_ = u.r.Clear()
+	}
+	if u.retitled {
+		_, _ = io.WriteString(u.t, term.TitlePop)
+		u.retitled = false
 	}
 	_ = u.t.Close()
 	u.t, u.r = nil, nil
@@ -926,6 +933,22 @@ func (u *UI) awaitResume() {
 }
 
 // size is the terminal's size as it stands.
+// title sets the terminal's title (OSC 2), having kept the one it had on
+// the terminal's own stack, which shut puts back. CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+// turns it off, as it does Claude Code's.
+func (u *UI) title(text string) error {
+	if u.t == nil || u.env("CLAUDE_CODE_DISABLE_TERMINAL_TITLE") == "1" {
+		return nil
+	}
+	seq := term.SetTitle(text)
+	if !u.retitled {
+		seq = term.TitlePush + seq
+		u.retitled = true
+	}
+	_, err := io.WriteString(u.t, seq)
+	return err
+}
+
 // copy puts text on the person's clipboard through the terminal (OSC 52):
 // the person's /copy asks for it. The sequence moves nothing on the screen.
 func (u *UI) copy(text string) error {

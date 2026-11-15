@@ -173,6 +173,7 @@ func (s *session) handle(ev any) {
 				s.facts[name] = value
 			}
 		}
+		s.retitle()
 	}
 }
 
@@ -717,4 +718,19 @@ func (s *session) restore(d editor.Draft) {
 func (s *session) queued() {
 	s.ed.SetQueued(len(s.personQueue())+len(s.cmdq) > 0)
 	s.dirty = true
+}
+
+// retitle sets the terminal's title from the session's name, once it has
+// one, as Claude Code does: "gnosh: " and the name.
+func (s *session) retitle() {
+	name := oneLine(s.facts["session"])
+	if name == "" {
+		return
+	}
+	want := "gnosh: " + name
+	if want == s.titled {
+		return
+	}
+	s.titled = want
+	_ = s.host.title(want)
 }

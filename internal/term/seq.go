@@ -125,6 +125,15 @@ func CursorColumn(col int) string {
 	return "\x1b[" + strconv.Itoa(col) + "G"
 }
 
+// TitlePush and TitlePop keep the terminal's title on its own stack and
+// put it back (XTWINOPS 22 and 23): a program that sets the title pushes
+// the old one first and pops it as it leaves. Terminals without the stack
+// ignore both.
+const (
+	TitlePush = "\x1b[22;0t"
+	TitlePop  = "\x1b[23;0t"
+)
+
 // SetTitle sets the terminal window's title (OSC 2). Control characters in
 // the title are left out, so a title cannot end the sequence early and
 // smuggle in another.

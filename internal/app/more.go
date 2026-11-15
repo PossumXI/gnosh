@@ -138,7 +138,9 @@ func (l *live) nameAfter(text string) {
 	}
 	if _, err := l.ts.Append(transcript.TitleEntry(name, transcript.SourceAuto)); err != nil {
 		l.flog.logf("config", "the session could not be named after its first prompt: %v", err)
+		return
 	}
+	l.setStatus("session", name)
 }
 
 // slashRename is /rename: it names the session, and shows the name it

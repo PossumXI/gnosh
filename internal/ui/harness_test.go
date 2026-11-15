@@ -30,6 +30,7 @@ import (
 type rig struct {
 	t          *testing.T
 	copied     []string
+	titles     []string
 	scr        *vtest.Screen
 	s          *session
 	c          *controls
@@ -172,6 +173,11 @@ func (g *rig) edit(s string) (string, error) {
 		return "", errors.New("Set VISUAL or EDITOR to edit the prompt in your own editor.")
 	}
 	return g.editor(s)
+}
+
+func (g *rig) title(text string) error {
+	g.titles = append(g.titles, text)
+	return nil
 }
 
 func (g *rig) copy(text string) error {

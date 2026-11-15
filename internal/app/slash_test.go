@@ -136,6 +136,8 @@ func TestClaudeCodeCommands(t *testing.T) {
 	s.see("Nothing has been asked of a model in this session yet.")
 	s.typeLine("say hello")
 	s.see("Hello.")
+	// (What a turn used is counted when it ends.)
+	s.see("-- done in ")
 	s.typeLine("/usage")
 	s.see("This session: 1 request to its model")
 	s.see("tokens (")
