@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -76,6 +77,7 @@ func (h *hookRunner) run(ctx context.Context, in hooks.Input) (hooks.Outcome, er
 // not check where nothing can be blocked.
 func (l *live) showHooks(in hooks.Input, out hooks.Outcome) {
 	if len(out.Records) > 0 {
+		l.inOrder()
 		l.deliver(&HookEvent{Event: in.Event, CallID: in.ToolUseID, Tool: in.ToolName, Records: out.Records})
 	}
 	source := "hook:" + string(in.Event)
@@ -98,6 +100,7 @@ func (l *live) backgroundHook(b hooks.Background) {
 	if b.Wake == "" && b.Warning == "" {
 		// (A hook that wakes the model or could not be evaluated is said
 		// once, below, and not also as its record.)
+		l.inOrder()
 		l.deliver(&HookEvent{Event: b.Event, Records: []hooks.Record{b.Record}})
 	}
 	source := "hook:" + string(b.Event)
@@ -112,6 +115,21 @@ func (l *live) backgroundHook(b hooks.Background) {
 		_ = l.agent.Tell(agent.Note{Source: source, Wake: true, Text: prompt.Wrap(lead + "exited with 2 and says this:\n" + b.Wake),
 			Notice: fmt.Sprintf("The %s hook %s, in the background, exited with 2: %s", b.Event, hookWho(b.Record), oneLine(b.Wake, 200))})
 	}
+}
+
+// inOrder waits, a moment at most, for the events the agent has made so far
+// to reach the front end, so that a line of gnosh's own (what a hook did)
+// is not shown in the middle of a reply that is still on its way: the
+// agent's events wait in a queue, and gnosh's own go straight to the front
+// end. It is never called from inside the agent's OnEvent, which it would
+// wait for; the bound keeps a mistake from holding anything up for long.
+func (l *live) inOrder() {
+	if l.agent == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = l.agent.Drain(ctx)
 }
 
 // hookWho names a hook by its record: its name, or its command.
