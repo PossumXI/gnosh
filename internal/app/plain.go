@@ -889,6 +889,11 @@ func (f *plain) statusLine() string {
 	if v := facts["background"]; v != "" {
 		parts = append(parts, v+" in the background")
 	}
+	if more, ok := f.c.(SessionControls); ok {
+		if counts := DeliverableCount(more.Deliverables(), ", "); counts != "" {
+			parts = append(parts, "deliverables: "+counts)
+		}
+	}
 	return strings.Join(parts, " | ")
 }
 
@@ -957,12 +962,28 @@ func (f *plain) Event(ev any) {
 		// One of gnosh's own prompts says why a turn started in a notice
 		// that the loop gives right after this event.
 	case *agent.ToolStartEvent:
+		if ev.Name == DeliverToolName && ev.Agent == "" {
+			// What a call of Deliver did is one line, written when the
+			// call ends.
+			break
+		}
 		indent := ""
 		if ev.Agent != "" {
 			indent = "  "
 		}
 		f.say("%s%s%s", indent, markTool, visible(toolLine(ev.Name, ev.Input)))
 	case *agent.ToolEndEvent:
+		if d, replaced, ok := DeliverableOf(ev.Result.Meta); ok && !ev.Denied && !ev.Result.IsError {
+			// A deliverable was claimed, or delivered: one line that
+			// holds its address and its file whole.
+			f.say("%s", visible(d.Line(replaced)))
+			break
+		}
+		if ev.Name == DeliverToolName && ev.Agent == "" {
+			// A call of Deliver that did not go well is shown as any
+			// other call is: what it was, and then why.
+			f.say("%s%s", markTool, visible(toolLine(ev.Name, ev.Input)))
+		}
 		f.say("%s%s", markResult, visible(resultLine(ev.Result, ev.Denied, ev.Interrupted)))
 		if !ev.Denied && !ev.Result.IsError {
 			if _, isCommand := metaInt(ev.Result.Meta, "exitCode"); isCommand {

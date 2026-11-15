@@ -38,7 +38,8 @@ type Frontend interface {
 	// *agent.ToolStartEvent, *agent.ToolEndEvent, *agent.NoticeEvent,
 	// *agent.TurnEndEvent and the rest of that package's list) or to one
 	// of this package's (*HookEvent, *CapEvent, *TasksEvent,
-	// *StatusEvent). A front end passes over the kinds it does not know.
+	// *StatusEvent, *DeliverablesEvent). A front end passes over the kinds
+	// it does not know.
 	//
 	// A question for the person arrives as an *agent.QuestionEvent and is
 	// answered with Controls.Answer; an *agent.AnswerEvent says that it is
@@ -230,6 +231,10 @@ type SessionControls interface {
 	// to last first: what the command /resume offers, and opens in place
 	// of this session with an id after it (CommandResult.Reset).
 	ResumeChoices() []SessionChoice
+	// Deliverables returns the session's list of deliverables as it
+	// stands: what a feature last set (a *DeliverablesEvent says when it
+	// changes). It is empty when the session has none.
+	Deliverables() []Deliverable
 }
 
 // CommandResult is what running a slash command came to.

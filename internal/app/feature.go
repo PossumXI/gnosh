@@ -12,6 +12,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -172,6 +173,16 @@ type ToolName struct {
 	// is not quiet asks before every call unless a rule or the mode allows
 	// it. Deny rules, ask rules and hooks apply to a quiet tool as to any
 	// other.
+	//
+	// What a call reaches beyond the feature's own keeping is judged as
+	// that reach is judged everywhere, quiet or not, and the tool says
+	// what it is when it describes the call (core.Describer). A call that
+	// hands over files of this machine (core.ActionRead, with their
+	// paths) is also judged as the Read of each: one outside the working
+	// directories asks. A call that runs a command on a declared host
+	// (core.ActionExecute, with the command; the machine is named by the
+	// call's "host" argument, as it is for Bash) is also judged as that
+	// command on that host.
 	Quiet bool
 	// Guards lists the Claude Code tool names whose hooks also guard this
 	// tool, for a tool Claude Code has nothing like (hooks.Options.Guards).
@@ -336,6 +347,23 @@ type Session struct {
 	// it. It may be called from any goroutine, at any time after
 	// Feature.Session has returned.
 	Tasks func(tasks []Task)
+
+	// Deliverables sets the session's list of deliverables: what the agent
+	// has produced for the person and what it has said it will, the latest
+	// version of each, which a front end lists and counts on its status
+	// line. The list given replaces the one before; an empty one clears
+	// it. It may be called from any goroutine and from any callback, at
+	// any time after Feature.Session has returned.
+	Deliverables func(list []Deliverable)
+
+	// Shell returns the session's shell manager: the one its Bash tool
+	// runs commands with, here and on the declared hosts. A feature that
+	// has to reach a declared host does it through this and in no other
+	// way, so that there is one road to a machine and one set of rules on
+	// it. It is nil before the session's tools are made, which they are by
+	// the time Contribution.Ready is called, and for a sub-agent it is the
+	// manager of the session that started it.
+	Shell func() *shelltool.Manager
 
 	// Status sets a named fact for the front end's status line: "frame",
 	// the frame the session is in; "goal", the goal it works towards. An

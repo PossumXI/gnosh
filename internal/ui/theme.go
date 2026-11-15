@@ -123,6 +123,9 @@ type Theme struct {
 	// TaskDone, TaskNow and TaskTodo stand before the lines of the task
 	// list: a task that is done, the one in hand, one still to do.
 	TaskDone, TaskNow, TaskTodo string
+	// DeliverMark stands before a deliverable there is something to open
+	// of, and PendingMark before one that is claimed and not there yet.
+	DeliverMark, PendingMark string
 	// Sep separates the parts of the status line and of other one-line
 	// summaries.
 	Sep string
@@ -163,6 +166,13 @@ type Theme struct {
 	Hint text.Style
 	// Ask is the style of AskMark, and Answer of the answer given.
 	Ask, Answer text.Style
+	// DeliverFile is the style of DeliverMark for a file, and DeliverLink
+	// for an address: the mark is the one touch of colour on a
+	// deliverable's line. DeliverLabel is its label, in one plain colour.
+	DeliverFile, DeliverLink, DeliverLabel text.Style
+	// Link is an address a person can open: underlined, as people expect
+	// a link to be.
+	Link text.Style
 
 	// Editor is the look of the prompt box, Menu of the questions,
 	// Markdown of the model's answers and Diff of changes to files.
@@ -220,6 +230,9 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		TaskTodo:   "[ ]",
 		Sep:        " · ",
 
+		DeliverMark: "✦",
+		PendingMark: "✧",
+
 		Prompt:     plain.Fg(pal.Aqua).Bold(),
 		PromptText: plain,
 		Tool:       plain.Fg(pal.Purple),
@@ -244,6 +257,11 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		Hint:       quiet,
 		Ask:        plain.Fg(pal.Purple).Bold(),
 		Answer:     plain.Bold(),
+
+		DeliverFile:  plain.Fg(pal.Green),
+		DeliverLink:  plain.Fg(pal.Gold),
+		DeliverLabel: plain.Bold(),
+		Link:         plain.Fg(pal.Purple).Underline(),
 	}
 
 	if p != text.NoColor {

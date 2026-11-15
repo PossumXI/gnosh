@@ -104,6 +104,8 @@ type job struct {
 	ssh  string       // the ssh program that carries it there
 	side *sideChannel // what that ssh itself says, apart from the command's output
 
+	spool int64 // how much of the output the output file may hold, when the command has a limit of its own; 0 for the manager's
+
 	cmd     *exec.Cmd
 	pid     int      // the shell's process id, which is also its process group and its session
 	pipe    *os.File // our end of the pipe the command's output comes through
@@ -142,6 +144,7 @@ func newJob(m *Manager, a bashArgs, dir string) *job {
 		description: a.description,
 		dir:         dir,
 		host:        a.host,
+		spool:       a.spool,
 		stop:        make(chan endReason, 1),
 		move:        make(chan struct{}, 1),
 		exited:      make(chan struct{}),
@@ -160,7 +163,13 @@ func (j *job) launch(dir, name string) error {
 	if err != nil {
 		return fmt.Errorf("shelltool: creating the output file: %w", err)
 	}
-	j.out = newOutput(path, file, m.opt.MaxSpoolBytes, 2*m.opt.MaxOutputChars)
+	limit := m.opt.MaxSpoolBytes
+	if j.spool > 0 {
+		// A copy of a file from another machine is kept whole, whatever
+		// the limit on a command's output file is.
+		limit = j.spool
+	}
+	j.out = newOutput(path, file, limit, 2*m.opt.MaxOutputChars)
 	fail := func(err error) error {
 		file.Close()
 		os.Remove(path)

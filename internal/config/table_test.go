@@ -57,7 +57,7 @@ func TestTable(t *testing.T) {
 		"providers.<id>.listModels", "providers.<id>.disabled", "providers.<id>.name",
 		"models.<provider>/<model id>.contextWindow", "models.<provider>/<model id>.maxOutputTokens", "models.<provider>/<model id>.thinkingLevels",
 		"model.id", "model.thinking", "model.temperature", "smallModel.id", "hosts.<name>.ssh", "hosts.<name>.description",
-		"options.requestTimeout", "options.autoCompactWindow", "options.memEmbeddingsUrl", "options.hiddenSkills",
+		"options.requestTimeout", "options.autoCompactWindow", "options.memEmbeddingsUrl", "options.hiddenSkills", "options.deliverablesServer",
 		"permissions.allow", "permissions.defaultMode",
 		"hook event Stop", "provider type llamacpp", "provider type openai-compatible", "$GNOSH_CONFIG_DIR", "$GNOSH_DATA_DIR", "$API_TIMEOUT_MS",
 	} {

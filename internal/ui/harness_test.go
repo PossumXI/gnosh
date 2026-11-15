@@ -495,6 +495,7 @@ type controls struct {
 	quit      string
 	sigs      chan os.Signal
 	tasks     []app.Task
+	deliv     []app.Deliverable
 }
 
 // answer is an answer the interface gave to a question.
@@ -625,6 +626,13 @@ func (c *controls) Tasks() []app.Task {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.tasks)
+}
+
+// Deliverables is the session's deliverables as a test set them.
+func (c *controls) Deliverables() []app.Deliverable {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.deliv)
 }
 
 func (c *controls) RunPrompt(context.Context) (agent.Prompt, bool) { return agent.Prompt{}, false }

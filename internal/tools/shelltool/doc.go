@@ -119,6 +119,16 @@
 // TryHost logs in to a host and runs nothing but the lead, for whoever
 // wants to know that a host can be used. Nothing calls it unasked.
 //
+// CopyFromHost copies one file back from a host (fetch.go), for whoever
+// has to hand a file on another machine to the person, such as the
+// Deliver tool. It takes the same road as a command and no other: the
+// same ssh with the same arguments runs one command there (CopyCommand,
+// which is what a caller shows the person and holds the permission rules
+// against), and the file comes down ssh's standard output. There is no
+// scp. The file is taken only whole and only up to the size the caller
+// names; what went wrong otherwise is said in the words a command for
+// the host would get.
+//
 // # How a command runs
 //
 // Each command gets a new shell: /bin/bash where there is one, /bin/sh

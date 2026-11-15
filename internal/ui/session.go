@@ -216,6 +216,9 @@ type session struct {
 	// Ctrl+T has put it out of sight.
 	tasks     []app.Task
 	hideTasks bool
+	// deliv is what the agent has produced for the person and what it has
+	// claimed, the latest version of each, as the session last gave it.
+	deliv []app.Deliverable
 	// tipped says the key that shows more has been named once.
 	tipped bool
 
@@ -262,6 +265,7 @@ func newSession(cfg config) *session {
 func (s *session) start() {
 	s.refresh()
 	s.tasks = s.c.Tasks()
+	s.readDeliverables()
 	s.header()
 	if h, ok := s.c.(historian); ok {
 		var drafts []editor.Draft

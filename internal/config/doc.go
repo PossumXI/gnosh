@@ -110,6 +110,9 @@
 //	                           about mem the model is given
 //	  memReviewCloses          review a todo when it is closed
 //	  memEmbeddingsUrl         the embedding server for mem
+//	  deliverablesServer       where the files the agent delivers are
+//	                           served, to this machine only: "127.0.0.1:7777",
+//	                           or "off"
 //	  debug                    write more to the log
 //	  projectDataDir           the name of the project's data folder
 //

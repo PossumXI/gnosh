@@ -520,10 +520,23 @@ func randomText(r *rand.Rand) string {
 func randomStep(g *rig, r *rand.Rand) {
 	g.t.Helper()
 	id := func() string { return fmt.Sprintf("c%d", r.IntN(4)) }
-	tools := []string{"Bash", "Read", "Edit", "Write", "Glob", "Grep", "gnovm_run", "Agent", "Other"}
+	tools := []string{"Bash", "Read", "Edit", "Write", "Glob", "Grep", "gnovm_run", "Agent", "Deliver", "Other"}
 	args := func() map[string]any {
 		return map[string]any{"command": randomText(r), "file_path": "/home/jae/src/proj/" + randomText(r), "pattern": randomText(r),
-			"code": randomText(r), "name": "mem", "description": randomText(r)}
+			"code": randomText(r), "name": "mem", "description": randomText(r),
+			"label": randomText(r), "target": randomText(r), "host": []string{"", "local", "render", randomText(r)}[r.IntN(4)]}
+	}
+	// A deliverable as a tool or a session may hand one over: any text in
+	// any of its places.
+	deliverable := func() app.Deliverable {
+		d := app.Deliverable{Label: randomText(r), Pending: r.IntN(2) == 0}
+		if r.IntN(3) > 0 {
+			d.URL = []string{"https://example.com/", "http://127.0.0.1:7777/", ""}[r.IntN(3)] + randomText(r)
+		}
+		if r.IntN(2) == 0 {
+			d.Path, d.Host = "/home/jae/"+randomText(r), []string{"", "render", randomText(r)}[r.IntN(3)]
+		}
+		return d
 	}
 	switch n := r.IntN(100); {
 	case n < 22:
@@ -585,6 +598,9 @@ func randomStep(g *rig, r *rand.Rand) {
 		if r.IntN(3) == 0 {
 			res.Display = &core.Display{Kind: "diff", Path: "/home/jae/src/proj/x.go", Before: randomText(r), After: randomText(r)}
 		}
+		if r.IntN(4) == 0 {
+			res.Meta[app.MetaDeliverable], res.Meta[app.MetaReplaced] = deliverable(), r.IntN(2) == 0
+		}
 		end := toolEnd(id(), tools[r.IntN(len(tools))], args(), res, time.Duration(r.IntN(3000))*time.Millisecond)
 		end.Denied, end.Interrupted, end.Ran = r.IntN(6) == 0, r.IntN(6) == 0, r.IntN(6) != 0
 		g.s.handle(end)
@@ -624,6 +640,15 @@ func randomStep(g *rig, r *rand.Rand) {
 		}
 		g.c.tasks = tasks
 		g.s.handle(&app.TasksEvent{Tasks: tasks})
+		list := make([]app.Deliverable, r.IntN(5))
+		for i := range list {
+			list[i] = deliverable()
+		}
+		g.c.deliv = list
+		g.s.handle(&app.DeliverablesEvent{List: list})
+		if r.IntN(2) == 0 {
+			g.s.listDeliverables("/artifacts")
+		}
 	default:
 		g.s.handle(&agent.PromptReturnedEvent{ID: "p1", Prompt: agent.Prompt{Text: randomText(r)}, Reason: randomText(r)})
 		g.s.handle(&agent.LostEvent{Events: 3})

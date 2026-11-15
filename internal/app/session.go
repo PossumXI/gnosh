@@ -91,6 +91,11 @@ type live struct {
 	tasksMu sync.Mutex
 	tasks   []Task
 
+	// deliv is the session's list of deliverables, as a feature last set
+	// it.
+	delivMu sync.Mutex
+	deliv   []Deliverable
+
 	// featureSources are the sources of the notices the features raised.
 	featureSources sync.Map
 
@@ -601,6 +606,9 @@ func (l *live) sessionFacts() *Session {
 		Mode:        func() string { return string(l.engine.Mode()) },
 		Getenv:      l.p.getenv,
 		Now:         l.p.now,
+
+		Deliverables: l.setDeliverables,
+		Shell:        func() *shelltool.Manager { return l.shell },
 	}
 }
 
@@ -1229,6 +1237,9 @@ func (c *controls) Tasks() []Task { return c.cur().taskList() }
 
 // Status returns the facts for a status line.
 func (c *controls) Status() map[string]string { return c.cur().statusFacts() }
+
+// Deliverables returns the session's list of deliverables.
+func (c *controls) Deliverables() []Deliverable { return c.cur().deliverables() }
 
 // Background moves the command a tool call waits for to the background.
 func (c *controls) Background(callID string) bool {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -52,11 +53,24 @@ type Options struct {
 	// given in its instructions: "lean", the default, or "full".
 	MemoryText Value[string]
 
+	// DeliverablesServer is where the files the agent delivers are served
+	// on this machine: an address of this machine alone with a port, as
+	// "127.0.0.1:7777", or ServerOff to serve none.
+	DeliverablesServer Value[string]
+
 	// Debug writes more to the log.
 	Debug Value[bool]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 }
+
+// ServerOff is the value of an option that names where a server of gnosh's
+// own listens, when the server is switched off.
+const ServerOff = "off"
+
+// DefaultDeliverablesServer is where the files the agent delivers are
+// served when nothing says otherwise.
+const DefaultDeliverablesServer = "127.0.0.1:7777"
 
 // defaultOptions returns the options as they are when nothing sets them.
 func defaultOptions() Options {
@@ -65,6 +79,7 @@ func defaultOptions() Options {
 	o.MaxBackgroundTasks.V = 50
 	o.MemReviewCloses.V = true
 	o.MemoryText.V = "lean"
+	o.DeliverablesServer.V = DefaultDeliverablesServer
 	o.ProjectDataDir.V = ".gnosh"
 	return o
 }
@@ -78,6 +93,7 @@ const (
 	oEnum                    // one of a few words, as a string
 	oURL                     // an http or https address, as a string
 	oPath                    // a file or directory; a leading ~ is the home directory
+	oListen                  // where a server of gnosh's own listens: an address of this machine alone with a port, or "off"
 	oPathList                // a list of paths
 	oNameList                // a list of names
 )
@@ -155,6 +171,12 @@ var optionDefs = []optionDef{
 		trust: KindAddress,
 		text:  func(o *Options) *Value[string] { return &o.MemEmbeddingsURL }},
 
+	// What the agent hands over.
+	{key: "deliverablesServer", kind: oListen, def: DefaultDeliverablesServer,
+		what: "where the files the agent delivers are served, to this machine only: an address of this machine with a port, or \"off\" to serve none",
+		from: fromPlain + ", with the word the Deliver tool's text uses (deliverables)",
+		text: func(o *Options) *Value[string] { return &o.DeliverablesServer }},
+
 	// gnosh itself.
 	{key: "debug", kind: oBool, def: "false",
 		what: "write more to the log", from: fromClaudeCode + ": the --debug flag",
@@ -228,6 +250,27 @@ func checkURL(s string) string {
 		}
 	}
 	return ""
+}
+
+// checkListen reads where a server of gnosh's own is to listen: the word
+// off, or an address of this machine alone with a port. It returns the
+// value as it is kept, or what is wrong with it. Port 0 means any port
+// that is free.
+func checkListen(s string) (value, wrong string) {
+	if strings.EqualFold(strings.TrimSpace(s), ServerOff) {
+		return ServerOff, ""
+	}
+	host, port, err := net.SplitHostPort(s)
+	if err != nil || host == "" {
+		return "", "it must be an address of this machine with a port, such as " + DefaultDeliverablesServer + ", or \"" + ServerOff + "\""
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 || strconv.Itoa(n) != port {
+		return "", "its port is not a number from 0 to 65535"
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return "", "it must be an address of this machine alone (127.0.0.1, ::1 or localhost): gnosh serves what it serves to this machine only, and from another machine it is reached through an ssh port forward"
+	}
+	return net.JoinHostPort(host, port), ""
 }
 
 // expandHome replaces a leading ~ or ~/ with the home directory.

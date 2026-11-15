@@ -19,6 +19,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -338,6 +339,11 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Mode:        func() string { return string(l.engine.Mode()) },
 		Getenv:      l.p.getenv,
 		Now:         l.p.now,
+
+		// What a sub-agent makes is the session's to hand over: it has
+		// no list of deliverables of its own.
+		Deliverables: func([]Deliverable) {},
+		Shell:        func() *shelltool.Manager { return l.shell },
 	}
 	for _, f := range l.p.o.Features {
 		if f.Session == nil {

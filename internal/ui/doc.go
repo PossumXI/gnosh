@@ -28,6 +28,8 @@
 //	an error, a hook
 //	a wait for a failed    the first of a run of them, and each whose reason
 //	model server           is new; and a line when the server answers again
+//	a deliverable          when the model claims it, and when it delivers
+//	                       it: the label, and the address and the file whole
 //	a turn's end           when it ends: how, how long it took, what it cost
 //	a slash command        when it has run: the line typed, and what it said
 //	                       (but for what follows "/mem redact", which the
@@ -47,6 +49,14 @@
 // The hooks that ran on the call stand under it. Output, code and diffs
 // carry nothing of gnosh's own but an indentation, so what is selected in
 // the terminal is the text.
+//
+// A call of the Deliver tool that went well is not shown as a call: its
+// block is the deliverable itself (deliver.go), so that the thing the
+// person asked for stands apart from the calls around it. The label is in
+// one plain colour behind a small mark, green for a file and gold for an
+// address; the address and the path are whole, each on a row of its own
+// when they do not all fit on one; and the address is a real link where
+// the terminal knows links.
 //
 // Lines are laid out for the width the terminal has when they are
 // committed. A terminal draws one line of text per row, and the renderer
@@ -95,8 +105,9 @@
 // the folder and its git branch; how far the task list has come ("tasks
 // 2/5", and the task in hand when the list is out of sight); and what
 // the session tells of beyond that, when it does: the frame, commands in
-// the background. In a narrow terminal its parts go one by one, the least
-// needed first and the permission mode last.
+// the background, and how many deliverables are delivered and how many
+// pending ("2 delivered · 1 pending"). In a narrow terminal its parts go
+// one by one, the least needed first and the permission mode last.
 //
 // The task list is the session's own (app.TasksEvent: what mem holds as
 // the frame's tasks). It stands under the prompt box, a row a task:
@@ -292,6 +303,11 @@
 //     (CommandResult.Reset) and gives the prompt back for the box (Draft).
 //   - /resume with nothing after it: a method ResumeChoices()
 //     []app.SessionChoice for the list; opening is /resume and an id.
+//   - /deliverables, which is also /artifacts, and the counts on the
+//     status line: a method Deliverables() []app.Deliverable for the list
+//     as it stands, and an *app.DeliverablesEvent when it changes. The
+//     interface draws the list itself, at once and also while a turn
+//     runs, when the session has the command.
 //   - the frame and the count of background commands on the status
 //     line: an event with a method StatusFacts() map[string]string
 //     (events.go names the facts).

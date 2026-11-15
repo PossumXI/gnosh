@@ -557,6 +557,9 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 			}
 		}
 	}
+	if counts := DeliverableCount(l.deliverables(), ", "); counts != "" {
+		c.Say("deliverables %s (/deliverables lists them)", counts)
+	}
 	if l.shell != nil {
 		running := 0
 		for _, t := range l.shell.Tasks() {

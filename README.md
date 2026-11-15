@@ -23,7 +23,9 @@ interactive session in the terminal's own scrollback, the file and shell
 tools, commands on declared hosts over ssh, permission modes and rules,
 hooks, instruction files, sub-agents in the foreground, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
-`gnosh doctor`, `gnosh trust`.
+`gnosh doctor`, `gnosh trust`, and deliverables: the `Deliver` tool by which
+the model names what was asked for, `/deliverables`, and each delivered file
+served at an address on this machine.
 
 Not built yet: MCP servers, rewind, background sub-agents, web search. The
 interface has been tried in tmux only. Its wording to the model has not yet

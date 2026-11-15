@@ -158,6 +158,9 @@ func (s *session) handle(ev any) {
 	case *app.TasksEvent:
 		s.tasks = ev.Tasks
 		s.dirty = true
+	case *app.DeliverablesEvent:
+		s.deliv = ev.List
+		s.dirty = true
 	case statusFacts:
 		for name, value := range ev.StatusFacts() {
 			if value == "" {

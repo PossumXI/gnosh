@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/deliver"
 	"github.com/gnosh-ai/gnosh/internal/memjoin"
 )
 
@@ -17,5 +18,6 @@ import (
 func features() []app.Feature {
 	return []app.Feature{
 		memjoin.New(memjoin.Options{}), // the GnoVM machines, mem and frames
+		deliver.New(deliver.Options{}), // deliverables: the Deliver tool, the list, the file server
 	}
 }

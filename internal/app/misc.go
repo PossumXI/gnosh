@@ -442,6 +442,19 @@ func toolLine(name string, input []byte) string {
 			name += " on " + oneLine(host, 60)
 		}
 	}
+	if label, _ := args["label"].(string); name == DeliverToolName && strings.TrimSpace(label) != "" {
+		// What is claimed or delivered, and the file or the address when
+		// the call gives one.
+		line := name + ": " + oneLine(label, 80)
+		if target, _ := args["target"].(string); strings.TrimSpace(target) != "" {
+			line += " (" + oneLine(target, 200)
+			if host, _ := args["host"].(string); strings.TrimSpace(host) != "" && strings.TrimSpace(host) != shelltool.LocalName {
+				line += " on " + oneLine(host, 60)
+			}
+			line += ")"
+		}
+		return line
+	}
 	for _, key := range []string{"command", "file_path", "pattern", "path", "url", "task_id", "code", "description", "name"} {
 		if v, ok := args[key].(string); ok && v != "" {
 			return name + ": " + oneLine(v, 200)

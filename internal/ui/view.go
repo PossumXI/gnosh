@@ -613,8 +613,9 @@ var modeNames = map[string]string{
 // the permission mode, the model and how hard it thinks, how full its
 // window is, the folder and its branch, and what the session has told of
 // beyond that (the frame it is in, the task in hand, commands in the
-// background). It never wraps: in a narrow terminal its parts go one by
-// one, the least needed first, and the permission mode last.
+// background, how many deliverables are delivered and how many pending).
+// It never wraps: in a narrow terminal its parts go one by one, the least
+// needed first, and the permission mode last.
 func (s *session) statusLine(width int) string {
 	th := &s.th
 	var segs []segment
@@ -685,6 +686,21 @@ func (s *session) statusLine(width int) string {
 	}
 	if v := oneLine(s.facts["background"]); v != "" && v != "0" {
 		segs = append(segs, segment{v + " in the background", th.Status, 65})
+	}
+	if delivered, pending := app.CountDeliverables(s.deliv); delivered+pending > 0 {
+		// What the agent has handed over and what it has promised, which
+		// /deliverables lists: "2 delivered · 1 pending". They are two
+		// parts, so that in a narrow terminal the promise goes first and
+		// the count of what there is to open stays.
+		if delivered > 0 {
+			segs = append(segs, segment{fmt.Sprintf("%d delivered", delivered), th.Status, 68})
+		}
+		switch {
+		case pending > 0 && delivered > 0:
+			segs = append(segs, segment{fmt.Sprintf("%d pending", pending), th.Status, 62})
+		case pending > 0:
+			segs = append(segs, segment{count(pending, "deliverable", "deliverables") + " pending", th.Status, 62})
+		}
 	}
 	if v := oneLine(s.facts["session"]); v != "" {
 		segs = append(segs, segment{v, th.Status, 30})

@@ -78,6 +78,7 @@ type historian interface {
 // interactive.md, 2.8).
 var atOnce = map[string]bool{
 	"status": true, "tasks": true, "model": true, "permissions": true,
+	"deliverables": true, "artifacts": true,
 	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
 	"think": true, "no_think": true, "nothink": true, "no-think": true,
 	"loop": true, "noloop": true, "no_loop": true, "no-loop": true,
@@ -336,6 +337,12 @@ func (s *session) command(d editor.Draft) {
 			return
 		}
 	}
+	if deliverWords[strings.ToLower(line)] && s.listsDeliverables() {
+		// The list is the interface's own to draw, at once, also while a
+		// turn runs.
+		s.listDeliverables(line)
+		return
+	}
 	if s.busy && !atOnce[strings.ToLower(word)] {
 		s.cmdq = append(s.cmdq, line)
 		s.queued()
@@ -424,8 +431,10 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		}
 		s.refresh()
 		// A command may have put another session behind the controls,
-		// with a task list of its own or none.
+		// with a task list of its own or none, and deliverables of its
+		// own or none.
 		s.tasks = s.c.Tasks()
+		s.readDeliverables()
 		if res.Draft != "" {
 			// The prompt a rewind went back to is in the box again, to be
 			// sent as it was or changed.

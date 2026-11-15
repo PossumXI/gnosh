@@ -53,7 +53,8 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 
 // completeCommand offers the session's commands whose names begin with
 // what was typed, in the order /help lists them, and after them the
-// person's skills.
+// person's skills. When no name begins that way, the commands' other
+// names that do are offered.
 func (s *session) completeCommand(typed string) []editor.Candidate {
 	want := strings.TrimPrefix(typed, "/")
 	var out []editor.Candidate
@@ -65,6 +66,18 @@ func (s *session) completeCommand(typed string) []editor.Candidate {
 	for _, sk := range s.info.Skills {
 		if strings.HasPrefix(sk.Name, want) && !slices.Contains(s.info.Commands, sk.Name) {
 			out = append(out, editor.Candidate{Text: "/" + sk.Name, Start: 0})
+		}
+	}
+	if len(out) == 0 && want != "" {
+		// Nothing begins that way by its own name. A command's other
+		// name is offered then, so that the word a person uses for a
+		// thing finds it: /artifacts for /deliverables, /quit for /exit.
+		for _, c := range s.info.CommandList {
+			for _, alias := range c.Aliases {
+				if strings.HasPrefix(alias, strings.ToLower(want)) {
+					out = append(out, editor.Candidate{Text: "/" + alias, Start: 0})
+				}
+			}
 		}
 	}
 	return out

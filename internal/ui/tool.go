@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/diff"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -427,6 +428,17 @@ func (s *session) headOf(name string, raw []byte, action *core.Action) head {
 		h.arg = oneLine(get("query"))
 	case "TaskOutput", "TaskStop":
 		h.arg = oneLine(get("task_id"))
+	case app.DeliverToolName:
+		// What is being claimed or delivered, while the call is written
+		// and while it runs. When it has gone well its block is the
+		// deliverable's own line (endBlock).
+		h.arg = oneLine(get("label"))
+		if target := oneLine(get("target")); target != "" {
+			h.arg += ": " + target
+			if host := oneLine(get("host")); host != "" && host != shelltool.LocalName {
+				h.arg += " on " + host
+			}
+		}
 	default:
 		if action != nil && strings.TrimSpace(action.Summary) != "" {
 			h.arg = oneLine(action.Summary)
@@ -593,6 +605,21 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 	}
 	h := s.headOf(ev.Name, input, &c.action)
 	res := ev.Result
+	if d, replaced, ok := app.DeliverableOf(res.Meta); ok && !ev.Denied && !ev.Interrupted && !res.IsError {
+		// A deliverable was claimed or delivered: the call is shown as
+		// the deliverable itself, with its address and its file whole.
+		words := d.State(replaced)
+		if ev.Duration >= time.Second {
+			words += th.Sep + span(ev.Duration)
+		}
+		rows = s.deliverableRows(d, words)
+		for _, line := range c.hooks {
+			rows = append(rows, wrap(s.m, th.Quiet.Render(line), s.cols, "  ", "    ")...)
+		}
+		// It is never packed in among the calls around it: it is the
+		// thing the person asked for, and stands apart.
+		return rows, false
+	}
 	text := core.TextOf(res.Content)
 	if h.shell {
 		// A shell result begins with a line that tells the model which

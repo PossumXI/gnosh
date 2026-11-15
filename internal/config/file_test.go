@@ -278,6 +278,7 @@ func TestOptions(t *testing.T) {
     "memoryText": "full",
     "memReviewCloses": false,
     "memEmbeddingsUrl": "http://127.0.0.1:8090",
+    "deliverablesServer": "127.0.0.1:8123",
     "debug": true,
     "projectDataDir": ".agent"
   }
@@ -311,6 +312,7 @@ func TestOptions(t *testing.T) {
 	check("memoryText", o.MemoryText.V, "full")
 	check("memReviewCloses", o.MemReviewCloses.V, false)
 	check("memEmbeddingsUrl", o.MemEmbeddingsURL.V, "http://127.0.0.1:8090")
+	check("deliverablesServer", o.DeliverablesServer, Value[string]{V: "127.0.0.1:8123", Set: true, Origin: at("deliverablesServer")})
 	check("debug", o.Debug.V, true)
 	check("projectDataDir", o.ProjectDataDir.V, ".agent")
 
@@ -327,6 +329,45 @@ func TestOptions(t *testing.T) {
 		if !strings.Contains(text, `"`+v.Key+`"`) {
 			t.Errorf("option %s is not in the file of this test", v.Key)
 		}
+	}
+}
+
+// Where the files the agent delivers are served: this machine only, at
+// port 7777, until the option moves it to another port of this machine or
+// switches it off.
+func TestDeliverablesServerOption(t *testing.T) {
+	if got := mustLoad(t, withConfig(`{}`)).Options.DeliverablesServer; got.V != "127.0.0.1:7777" || got.Set {
+		t.Errorf("with nothing set the option is %+v, want 127.0.0.1:7777 as the default", got)
+	}
+	for text, want := range map[string]string{
+		`"off"`:            ServerOff,
+		`"OFF"`:            ServerOff,
+		`" off "`:          ServerOff,
+		`"127.0.0.1:8080"`: "127.0.0.1:8080",
+		`"127.0.0.1:0"`:    "127.0.0.1:0",
+		`"127.9.9.9:7777"`: "127.9.9.9:7777",
+		`"localhost:7777"`: "localhost:7777",
+		`"[::1]:7777"`:     "[::1]:7777",
+	} {
+		cfg := mustLoad(t, withConfig(`{"options": {"deliverablesServer": `+text+`}}`))
+		if got := cfg.Options.DeliverablesServer; got.V != want || !got.Set {
+			t.Errorf("deliverablesServer %s is kept as %+v, want %q", text, got, want)
+		}
+	}
+	// null puts it back, and the listing of the configuration shows it.
+	cfg := mustLoad(t, inputs(newFS().
+		put(userJSON, `{"options": {"deliverablesServer": "off"}}`).
+		put(projJSON, `{"options": {"deliverablesServer": null}}`)))
+	if got := cfg.Options.DeliverablesServer; got.V != DefaultDeliverablesServer || got.Set {
+		t.Errorf("null left the option as %+v", got)
+	}
+	cfg = mustLoad(t, withConfig(`{"options": {"deliverablesServer": "off"}}`))
+	found := false
+	for _, v := range cfg.Options.All() {
+		found = found || (v.Key == "deliverablesServer" && v.Text == "off" && v.Set)
+	}
+	if !found {
+		t.Errorf("the listing of the options does not show deliverablesServer as off: %+v", cfg.Options.All())
 	}
 }
 
@@ -620,6 +661,14 @@ func TestFileRefusals(t *testing.T) {
 		{"a list with a number in it", `{"options": {"userInstructionFiles": ["/a", 2]}}`, "", []string{`"options.userInstructionFiles" is a list of paths`, "a list that holds more than strings"}},
 		{"an empty entry of a list", `{"options": {"projectInstructionFiles": [""]}}`, "", []string{`an entry of "options.projectInstructionFiles" is empty`}},
 		{"an empty folder name", `{"options": {"projectDataDir": ""}}`, "", []string{`"options.projectDataDir" is a path as a string that is not empty`, "an empty string"}},
+		{"a server switched off with false", `{"options": {"deliverablesServer": false}}`, "", []string{`"options.deliverablesServer" is an address of this machine with a port, as a string, such as "127.0.0.1:7777", or "off"`, "false"}},
+		{"a server on a port alone", `{"options": {"deliverablesServer": "7777"}}`, "", []string{`the address given in "options.deliverablesServer" cannot be used`, "an address of this machine with a port, such as 127.0.0.1:7777"}},
+		{"a server on every address", `{"options": {"deliverablesServer": ":7777"}}`, "", []string{"cannot be used", "an address of this machine with a port"}},
+		{"a server other machines could reach", `{"options": {"deliverablesServer": "0.0.0.0:7777"}}`, "", []string{"cannot be used", "an address of this machine alone (127.0.0.1, ::1 or localhost)", "an ssh port forward"}},
+		{"a server on a machine's own address", `{"options": {"deliverablesServer": "203.0.113.5:7777"}}`, "", []string{"an address of this machine alone"}},
+		{"a server on a named machine", `{"options": {"deliverablesServer": "example.com:7777"}}`, "", []string{"an address of this machine alone"}},
+		{"a server on a port that is none", `{"options": {"deliverablesServer": "127.0.0.1:99999"}}`, "", []string{"its port is not a number from 0 to 65535"}},
+		{"a server on a port with a sign", `{"options": {"deliverablesServer": "127.0.0.1:+80"}}`, "", []string{"its port is not a number from 0 to 65535"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

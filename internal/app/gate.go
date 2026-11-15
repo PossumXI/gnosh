@@ -19,6 +19,8 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
@@ -49,6 +51,16 @@ import (
 // A call its tool has already found unable to run is still judged by the
 // hooks and the rules, on what it was aimed at, so that a refused path
 // does not give away whether it exists; nobody is asked about it.
+//
+// A call of a feature's tool that reaches beyond what the feature itself
+// keeps is judged twice in step 2: as the call of its own tool that it
+// is, and as the call of gnosh's own tool that reaches the same thing
+// (reach). A call that runs a command on a declared host is also judged
+// as the Bash call for that host, so it asks as every command on another
+// machine does and the person's deny rules are held against the command
+// before it leaves. A call that hands over a file of this machine is also
+// judged as the Read of that file, so a file outside the working
+// directories asks as reading it does. The stricter answer holds.
 type gate struct {
 	l *live
 }
@@ -117,7 +129,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	// named "local") as the call for this machine that it is, and any
 	// other as a command on another machine, which always asks.
 	l.engine.SetCwd(cwd)
-	d := l.engine.Decide(call.Name, call, action).WithHook(verdict, hookReason)
+	d := l.reach(call, action, l.engine.Decide(call.Name, call, action)).WithHook(verdict, hookReason)
 	confirm := action.Confirm && cannot == nil
 	if confirm {
 		// Asked every time: a kept approval would be the rule that this
@@ -205,6 +217,112 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 		return agent.Decision{Reason: "This call did not run: the user refused it, and said: " + comment}, nil
 	}
 	return agent.Decision{Halt: true, Reason: "This call did not run: the user refused it."}, nil
+}
+
+// reach judges what a call of a feature's tool reaches beyond the
+// feature's own keeping, and returns the answer that holds for the call:
+// own, which is the engine's answer for the call as its own tool's, or
+// the engine's answer for the call of gnosh's own tool that reaches the
+// same thing, whichever is the stricter.
+//
+// A feature's tool is known to the engine by its name alone: quiet, or
+// asking every time. What a call of it touches is said by the tool
+// itself, when it describes the call (core.Describer), and is judged as
+// the same reach is judged everywhere else:
+//
+//   - core.ActionExecute with a command, in a call whose "host" argument
+//     names another machine (a host that is left out, left blank or named
+//     "local" is this machine, as for Bash), is the Bash call that runs
+//     that command on that host: it always asks, when anything asks at
+//     all; the person's deny rules are held against the command; and with
+//     permissions skipped the declaration of the host is the whole gate.
+//   - core.ActionRead with paths is the Read of each of those files: one
+//     outside the working directories asks, unless a rule allows reading
+//     it, exactly as the model's own Read of it would. (Where Read is
+//     switched off altogether there is no such reading to judge by, and
+//     the tool's own answer stands.)
+//
+// Nothing here makes an answer milder than the engine's own.
+func (l *live) reach(call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
+	if own.Behavior == permission.Deny || !l.featureTool(call.Name) {
+		return own
+	}
+	stricter := func(why string, other permission.Decision) {
+		if other.Behavior == permission.Allow || own.Behavior == permission.Deny {
+			return
+		}
+		if other.Behavior == permission.Deny || own.Behavior == permission.Allow {
+			other.Reason = why + " " + other.Reason
+			own = other
+		}
+	}
+	switch action.Kind {
+	case core.ActionExecute:
+		if strings.TrimSpace(action.Command) == "" {
+			return own
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(call.Input, &fields) != nil {
+			return own
+		}
+		host, named := fields["host"]
+		if !named {
+			return own
+		}
+		var name string
+		if json.Unmarshal(host, &name) == nil {
+			if name = strings.TrimSpace(name); name == "" || name == shelltool.LocalName {
+				return own
+			}
+		}
+		// Whatever else stands in that place is somewhere else, as the
+		// engine reads a Bash call's host: it is handed over as written.
+		quoted, err := json.Marshal(action.Command)
+		if err != nil {
+			return own
+		}
+		input := json.RawMessage(`{"command":` + string(quoted) + `,"host":` + string(host) + `}`)
+		stricter(call.Name+" runs a command on another machine for this call, which is judged as that command is.",
+			l.engine.Decide(shelltool.BashName,
+				core.ToolCall{ID: call.ID, Name: shelltool.BashName, Input: input},
+				core.Action{Kind: core.ActionExecute, Command: action.Command, Summary: action.Summary}))
+	case core.ActionRead:
+		read := fstools.Defaults().ReadName
+		for _, path := range action.Paths {
+			if !filepath.IsAbs(path) {
+				continue
+			}
+			quoted, err := json.Marshal(path)
+			if err != nil {
+				continue
+			}
+			d := l.engine.Decide(read,
+				core.ToolCall{ID: call.ID, Name: read, Input: json.RawMessage(`{"file_path":` + string(quoted) + `}`)},
+				core.Action{Kind: core.ActionRead, Paths: []string{path}, Summary: action.Summary})
+			if d.Stage == permission.StageTool {
+				// Read itself is switched off in this session, which says
+				// nothing about this file: the person's deny and ask
+				// rules about the path were held against the call
+				// already, and the tool's own answer stands.
+				continue
+			}
+			stricter(call.Name+" hands over a file for this call, which is judged as reading that file is.", d)
+		}
+	}
+	return own
+}
+
+// featureTool reports whether a tool is one a feature brought, and not
+// one of gnosh's own, which the engine knows for what they are.
+func (l *live) featureTool(name string) bool {
+	for _, f := range l.p.o.Features {
+		for _, t := range f.Tools {
+			if t.Name == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // yesWith passes on what the person said with a yes: the call runs, and

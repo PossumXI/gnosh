@@ -751,6 +751,17 @@ func (s *source) options(f jfield) {
 				continue
 			}
 			s.add(op{kind: def.trustKind(), text: key + ": " + displayURL(address), origin: o, apply: func(b *builder) { def.text(&b.opts).put(address, o) }})
+		case oListen:
+			if v.kind != jString {
+				s.errorf(m.line, "%q is an address of this machine with a port, as a string, such as %q, or %q; here it is %s.", key, DefaultDeliverablesServer, ServerOff, shown(v))
+				continue
+			}
+			where, wrong := checkListen(v.str)
+			if wrong != "" {
+				s.errorf(m.line, "the address given in %q cannot be used: %s.", key, wrong)
+				continue
+			}
+			s.add(op{kind: def.trustKind(), text: key + ": " + where, origin: o, apply: func(b *builder) { def.text(&b.opts).put(where, o) }})
 		case oPath:
 			if v.kind != jString || v.str == "" || !printable(v.str) {
 				s.errorf(m.line, "%q is a path as a string that is not empty and holds no control character, and here it is %s.", key, emptyString(v))

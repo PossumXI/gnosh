@@ -48,7 +48,7 @@ on disk. It is written in Go, from scratch (see PROVENANCE.md).
 | `internal/instructions` | The instruction files a project and a person keep for the model. |
 | `internal/prompt` | Every word gnosh says to a model, one text per file, and the defusing of control tokens. |
 | `internal/tools/fstools` | Read, Write, Edit, Glob, Grep, and the gitignore matching they share. |
-| `internal/tools/shelltool` | Bash, background commands, stopping them. |
+| `internal/tools/shelltool` | Bash, background commands, stopping them, and the one road to a declared host: commands there, and copying a file back. |
 | `internal/text` | Text for terminals: grapheme clusters, display width, ANSI-aware wrapping and truncation, styles, colour profiles, gradients. Pure functions. |
 | `internal/term` | The terminal itself: raw mode, key decoding, resize, capabilities, the live-region renderer. `internal/term/vtest` is a screen emulator for tests. |
 | `internal/markdown` | Streaming Markdown to styled lines, with a rule for which lines are final. |
@@ -56,6 +56,7 @@ on disk. It is written in Go, from scratch (see PROVENANCE.md).
 | `internal/ui`, `internal/ui/editor`, `internal/ui/menu` | The interactive session: committed scrollback above, a small live region below; the prompt box; the questions put to a person. |
 | `internal/app` | The program: startup and shutdown, the session, the adapters that attach the loop's ports to the packages above, print mode, the plain session, sub-agents, the feature seam. |
 | `internal/memjoin` | A feature: the GnoVM machines, `mem` and frames joined to the program, as `spec/gnosh/integration-contract.md` lists it. |
+| `internal/deliver` | A feature: deliverables. The `Deliver` tool by which the model names the thing a person asked for, the list of them (built from the session's file), and the small server that hands a delivered file over as an address, on this machine only. |
 | `internal/gnovm`, `internal/gnovm/tools`, `internal/gnochain`, `internal/swarm`, `gno/` | Carried from the earlier gnosh (see `CARRIED.md`): the GnoVM machines, `mem`, the four tools a model calls, the chain client, the swarm demo, the shared realm. |
 | `internal/filelock`, `internal/buildinfo` | Small helpers the carried code needs, written fresh. |
 

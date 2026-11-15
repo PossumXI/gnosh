@@ -97,13 +97,14 @@
 //
 // Whoever watches a session, a person or a script, is a Frontend
 // (frontend.go). It is told everything that happens, the session's task
-// list and the facts for a status line among it, and drives the session
-// through a handful of calls (Controls, and the rest of them in
-// SessionControls: a command of the person's own, moving a running
-// command to the background, the prompts of earlier sessions, taking one
-// queued prompt back). There are three: the writer of a run's output in
-// its three formats (print.go), the plain session that reads lines and
-// writes lines (plain.go), and whatever is attached in its place through
+// list, its deliverables (deliverable.go) and the facts for a status line
+// among it, and drives the session through a handful of calls (Controls,
+// and the rest of them in SessionControls: a command of the person's own,
+// moving a running command to the background, the prompts of earlier
+// sessions, taking one queued prompt back, the list of deliverables).
+// There are three: the writer of a run's output in its three formats
+// (print.go), the plain session that reads lines and writes lines
+// (plain.go), and whatever is attached in its place through
 // Options.Interactive, which is where the full interface goes
 // (internal/ui, attached in main.go). The maker of the full interface
 // declines where there is no terminal it could draw on, and the session
