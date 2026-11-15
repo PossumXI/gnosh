@@ -501,12 +501,17 @@ func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
 		}
 		mu.model.Level = level
 	}
+	from := c.Agent.Model().Info.ID
+	if fromRef, ok := l.modelRef(); ok {
+		from = fromRef.String()
+	}
 	if err := c.Agent.SetModel(mu.model); err != nil {
 		return fmt.Errorf("the model was not changed: %w", err)
 	}
 	l.modelMu.Lock()
 	l.large = mu
 	l.modelMu.Unlock()
+	l.modelSwitched(ctx, from, ref.String(), name)
 	l.saveState(c, func(st *config.State) error {
 		if err := st.SetModel("model", ref); err != nil {
 			return err

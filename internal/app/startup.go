@@ -132,7 +132,7 @@ func firedEvents() []hooks.Event {
 	for _, name := range agent.Fires() {
 		out = append(out, hooks.Event(name))
 	}
-	return append(out, hooks.InstructionsLoaded, hooks.Notification)
+	return append(out, hooks.InstructionsLoaded, hooks.Notification, hooks.PostModelSwitch, hooks.DirectoryAdded)
 }
 
 // absFrom makes a path typed on the command line absolute: a relative one

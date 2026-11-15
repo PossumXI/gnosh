@@ -342,6 +342,23 @@ var answerForms = []struct {
 		prints: `{"systemMessage": "three todos are overdue"}`,
 		want:   expect{system: []string{"three todos are overdue"}, result: ResultWarning}},
 
+	// ---- PostModelSwitch: text for the model; it cannot undo the switch.
+	{name: "plain text", event: PostModelSwitch,
+		prints: "This model answers slowly: keep replies short.",
+		want:   expect{context: "This model answers slowly: keep replies short."}},
+	{name: "added text", event: PostModelSwitch,
+		prints: `{"hookSpecificOutput": {"hookEventName": "PostModelSwitch", "additionalContext": "the new model knows Gno"}}`,
+		want:   expect{context: "the new model knows Gno"}},
+	{name: "a block is only an objection", event: PostModelSwitch,
+		prints: `{"decision": "block", "reason": "too slow"}`,
+		want:   expect{warnings: []string{"objected"}, result: ResultWarning}},
+
+	// ---- DirectoryAdded: a message, which goes to the model.
+	{name: "a message", event: DirectoryAdded,
+		prints: `{"systemMessage": "the docs are in docs/"}`,
+		want:   expect{system: []string{"the docs are in docs/"}, result: ResultWarning}},
+	{name: "plain words are not read", event: DirectoryAdded, prints: "the docs are in docs/", want: expect{}},
+
 	// ---- Stop and SubagentStop: a block keeps the turn going.
 	{name: "block", event: Stop,
 		prints: `{"decision": "block", "reason": "out/final.mp4 is not there"}`,

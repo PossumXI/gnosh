@@ -226,6 +226,16 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			in:   Input{Event: Notification, Message: "the turn finished a minute ago", NotificationType: "idle_prompt"},
 			want: with(common(Notification), map[string]any{"message": "the turn finished a minute ago", "notification_type": "idle_prompt"}),
 		},
+		{
+			name: "PostModelSwitch",
+			in:   Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", RequestedModel: "b", Source: "command"},
+			want: with(common(PostModelSwitch), map[string]any{"from_model": "local/a", "to_model": "local/b", "requested_model": "b", "source": "command"}),
+		},
+		{
+			name: "DirectoryAdded",
+			in:   Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"},
+			want: with(common(DirectoryAdded), map[string]any{"directory": "/project/docs", "source": "slash_command"}),
+		},
 	}
 	seen := map[Event]bool{}
 	for _, tt := range tests {
@@ -416,6 +426,8 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 			with(always(InstructionsLoaded), "GNOSH_INSTRUCTIONS_LOAD_REASON", "nested_traversal")},
 		{"Notification", Input{Event: Notification, NotificationType: "idle_prompt", Message: "idle"},
 			with(always(Notification), "GNOSH_NOTIFICATION_TYPE", "idle_prompt")},
+		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
+		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
 	}
 	seen := map[Event]bool{}
 	for _, tt := range tests {
@@ -539,18 +551,17 @@ func TestRunRefusesAWrongInput(t *testing.T) {
 	dir := t.TempDir()
 	ranFile := filepath.Join(dir, "ran")
 	var hooks []Hook
-	for _, e := range Events() {
-		hooks = append(hooks, Hook{Event: e, Command: "echo ran >> " + shq(ranFile)})
-	}
 	opts := options(t)
 	opts.Fires = nil
 	for _, e := range Events() {
 		if e != Notification {
+			// (The Notification hook has to go for NewRunner to take the
+			// rest.)
+			hooks = append(hooks, Hook{Event: e, Command: "echo ran >> " + shq(ranFile)})
 			opts.Fires = append(opts.Fires, e)
 		}
 	}
-	// The Notification hook has to go for NewRunner to take the rest.
-	r := newRunner(t, opts, hooks[:len(hooks)-1]...)
+	r := newRunner(t, opts, hooks...)
 
 	tests := []struct {
 		name string

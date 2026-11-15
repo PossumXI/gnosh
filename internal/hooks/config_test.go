@@ -342,8 +342,8 @@ func TestCanBlock(t *testing.T) {
 	if Event("stop").CanBlock() {
 		t.Error(`Event("stop").CanBlock() is true for a name that is not an event`)
 	}
-	if n := len(Events()); n != 15 {
-		t.Errorf("Events() has %d events, want 15", n)
+	if n := len(Events()); n != 17 {
+		t.Errorf("Events() has %d events, want 17", n)
 	}
 }
 

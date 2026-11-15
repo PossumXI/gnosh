@@ -228,7 +228,7 @@ type hookEvent struct {
 	blocks bool
 }
 
-// hookEvents is the fifteen events, in the spec's order. Names are exact:
+// hookEvents is the seventeen events, in the spec's order. Names are exact:
 // no other letter case and no underscore form is an event.
 var hookEvents = []hookEvent{
 	{"PreToolUse", "the tool's name", true},
@@ -246,6 +246,8 @@ var hookEvents = []hookEvent{
 	{"InstructionsLoaded", "the load reason", false},
 	{"PermissionRequest", "the tool's name", false},
 	{"Notification", "the type", false},
+	{"PostModelSwitch", "the model switched to", false},
+	{"DirectoryAdded", "the source", false},
 }
 
 // HookEventNames returns the names of the hook events gnosh knows, in the

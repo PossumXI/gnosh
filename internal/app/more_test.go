@@ -340,3 +340,33 @@ func TestAgentMention(t *testing.T) {
 	has(t, "the request", body, "The user asks for the sub-agent kind reviewer", "subagent_type reviewer")
 	hasNot(t, "the request", body, "sub-agent kind nobody")
 }
+
+// PostModelSwitch runs after /model switches the model, and DirectoryAdded
+// after /add-dir adds a directory: they read what changed, and what they
+// say goes to the model with the next request.
+func TestModelSwitchAndDirectoryHooks(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Noted."})
+	log := w.Home + "/hook-log"
+	sw := w.Script(w.Home+"/hooks/sw.sh", "cat >> "+log+"\necho >> "+log+"\necho 'the new model is quick'")
+	da := w.Script(w.Home+"/hooks/da.sh", "cat >> "+log+"\necho >> "+log+"\necho '{\"systemMessage\": \"the docs live there\"}'")
+	w.Settings(`{"hooks": {"PostModelSwitch": [{"hooks": [{"type": "command", "command": "` + sw + `"}]}], "DirectoryAdded": [{"matcher": "slash_command", "hooks": [{"type": "command", "command": "` + da + `"}]}]}}`)
+	docs := filepath.Join(w.Home, "docs")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/model local/test-model")
+	s.see("The model is local/test-model")
+	s.typeLine("/add-dir " + docs)
+	s.see("is a working directory for the rest of this session")
+	s.typeLine("go on")
+	s.see("Noted.")
+	body := string(w.Model.Requests()[0].Body)
+	has(t, "the request", body, "the new model is quick", "the docs live there")
+	data, _ := os.ReadFile(log)
+	has(t, "what the hooks read", string(data), `"hook_event_name":"PostModelSwitch"`, `"to_model":"local/test-model"`, `"source":"command"`,
+		`"hook_event_name":"DirectoryAdded"`, `"directory":"`+docs+`"`, `"source":"slash_command"`)
+	s.typeLine("/exit")
+	s.exit()
+}

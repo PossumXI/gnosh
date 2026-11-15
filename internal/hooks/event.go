@@ -10,7 +10,7 @@ import (
 // "pretooluse" and "pre_tool_use" are mistakes.
 type Event string
 
-// The fifteen events gnosh has. The comment on each says when the agent
+// The seventeen events gnosh has. The comment on each says when the agent
 // loop fires it and what a hook can do there.
 const (
 	// PreToolUse fires before every tool call, a sub-agent's included. A
@@ -63,16 +63,24 @@ const (
 	// Notification fires when gnosh raises a notification. Nothing a hook
 	// says there is read, and the loop does not wait for it.
 	Notification Event = "Notification"
+	// PostModelSwitch fires after the session's model is switched (/model).
+	// What a hook adds (additionalContext, or plain text) goes to the model
+	// with the next request. It cannot undo the switch.
+	PostModelSwitch Event = "PostModelSwitch"
+	// DirectoryAdded fires when a working directory is added to a running
+	// session (/add-dir). A hook's systemMessage goes to the model with the
+	// next turn.
+	DirectoryAdded Event = "DirectoryAdded"
 )
 
-// Events returns the fifteen events gnosh has, in the order the
+// Events returns the seventeen events gnosh has, in the order the
 // specification lists them.
 func Events() []Event {
 	return []Event{
 		PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit,
 		SessionStart, Stop, SubagentStart, SubagentStop, StopFailure,
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
-		PermissionRequest, Notification,
+		PermissionRequest, Notification, PostModelSwitch, DirectoryAdded,
 	}
 }
 
@@ -172,7 +180,7 @@ type eventInfo struct {
 }
 
 // describe returns what the package knows about e, and whether e is one
-// of the fifteen events.
+// of the seventeen events.
 func describe(e Event) (eventInfo, bool) {
 	tool := eventInfo{subject: toolName, what: "the tool's name", mode: true, reads: true, halts: true}
 	switch e {
@@ -250,6 +258,18 @@ func describe(e Event) (eventInfo, bool) {
 			class: records, subject: ownValue, what: "the type of notification",
 			values: []string{"permission_prompt", "idle_prompt"},
 		}, true
+	case PostModelSwitch:
+		return eventInfo{
+			class: warns, subject: ownValue, what: "the model switched to",
+			reads: true, plain: true,
+			fields: []string{"additionalContext"},
+		}, true
+	case DirectoryAdded:
+		return eventInfo{
+			class: warns, subject: ownValue, what: "the source",
+			values: []string{"slash_command", "register_repo_root"},
+			reads:  true,
+		}, true
 	}
 	return eventInfo{}, false
 }
@@ -279,16 +299,15 @@ func claudeOnly(name string) (canBlock, ok bool) {
 		"WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
 		"TeammateIdle", "Elicitation", "ElicitationResult":
 		return true, true
-	case "DirectoryAdded", "PostModelSwitch", "PermissionDenied", "CwdChanged",
-		"FileChanged", "Setup", "MessageDisplay":
+	case "PermissionDenied", "CwdChanged", "FileChanged", "Setup", "MessageDisplay":
 		return false, true
 	}
 	return false, false
 }
 
-// eventList is the fifteen names in a sentence.
+// eventList is the seventeen names in a sentence.
 func eventList() string {
-	names := make([]string, 0, 15)
+	names := make([]string, 0, 17)
 	for _, e := range Events() {
 		names = append(names, string(e))
 	}

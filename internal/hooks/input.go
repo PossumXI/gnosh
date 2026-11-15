@@ -88,8 +88,11 @@ type Input struct {
 	Attachments []string
 
 	// Source says, for SessionStart, how the session comes to start:
-	// startup, resume, clear, compact or fork ("source"). SessionStart
-	// matchers are tested against it.
+	// startup, resume, clear, compact or fork ("source"); SessionStart
+	// matchers are tested against it. For PostModelSwitch it is what
+	// switched the model (command), and for DirectoryAdded what added the
+	// directory (slash_command), which DirectoryAdded matchers are tested
+	// against.
 	Source string
 	// Model names the model, for SessionStart ("model").
 	Model string
@@ -142,6 +145,14 @@ type Input struct {
 	Title            string
 	NotificationType string
 
+	// FromModel, ToModel and RequestedModel are, for PostModelSwitch, the
+	// model before, the model after (PostModelSwitch matchers are tested
+	// against it), and the name it was asked for by ("from_model",
+	// "to_model", "requested_model").
+	FromModel, ToModel, RequestedModel string
+	// Directory is, for DirectoryAdded, the directory added ("directory").
+	Directory string
+
 	// Extra holds further fields for stdin, by their JSON names, for
 	// things Claude Code documents that this package has no field for
 	// (such as "background_tasks" on Stop or "mcp_server" on a tool
@@ -172,6 +183,10 @@ func (in *Input) subject() string {
 		return in.LoadReason
 	case Notification:
 		return in.NotificationType
+	case PostModelSwitch:
+		return in.ToModel
+	case DirectoryAdded:
+		return in.Source
 	}
 	return ""
 }
@@ -289,6 +304,14 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 		m["message"] = in.Message
 		set("title", in.Title)
 		m["notification_type"] = in.NotificationType
+	case PostModelSwitch:
+		m["from_model"] = in.FromModel
+		m["to_model"] = in.ToModel
+		m["requested_model"] = in.RequestedModel
+		m["source"] = in.Source
+	case DirectoryAdded:
+		m["directory"] = in.Directory
+		m["source"] = in.Source
 	}
 
 	// Claude Code writes this JSON without escaping <, > and &, and a hook

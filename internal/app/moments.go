@@ -201,6 +201,33 @@ func (l *live) sessionStart(ctx context.Context, info agent.StartInfo) ([]agent.
 	return hookParts(hooks.SessionStart, out), nil
 }
 
+// modelSwitched runs the PostModelSwitch hooks once /model has switched
+// the model: what they add goes to the model with the next request.
+func (l *live) modelSwitched(ctx context.Context, from, to, requested string) {
+	if !l.hooks.has(hooks.PostModelSwitch) {
+		return
+	}
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostModelSwitch, FromModel: from, ToModel: to, RequestedModel: requested, Source: "command"})
+	if err != nil || strings.TrimSpace(out.AdditionalContext) == "" {
+		return
+	}
+	_ = l.agent.Tell(agent.Note{Source: "hook:PostModelSwitch", Text: hookWords(hooks.PostModelSwitch, "", out.AdditionalContext)})
+}
+
+// directoryAdded runs the DirectoryAdded hooks once /add-dir has added a
+// working directory: a message they give goes to the model with the next
+// turn.
+func (l *live) directoryAdded(ctx context.Context, dir string) {
+	if !l.hooks.has(hooks.DirectoryAdded) {
+		return
+	}
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.DirectoryAdded, Directory: dir, Source: "slash_command"})
+	if err != nil || len(out.SystemMessages) == 0 {
+		return
+	}
+	_ = l.agent.Tell(agent.Note{Source: "hook:DirectoryAdded", Text: hookWords(hooks.DirectoryAdded, "", strings.Join(out.SystemMessages, "\n"))})
+}
+
 // hookParts turns the text hooks added into hidden parts for the model.
 func hookParts(event hooks.Event, out hooks.Outcome) []agent.Part {
 	if strings.TrimSpace(out.AdditionalContext) == "" {
