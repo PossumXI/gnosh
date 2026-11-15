@@ -61,7 +61,6 @@ func TestUnknownFlags(t *testing.T) {
 		{line: `gnosh --enable-auto-mode`, kind: ErrUnknownFlag, say: []string{"--enable-auto-mode is not a flag of gnosh"}},
 		// So are the ones Claude Code has and the specs put off till later.
 		{line: `gnosh -w feature`, kind: ErrUnknownFlag, say: []string{"-w is not a flag of gnosh"}},
-		{line: `gnosh -p x --json-schema '{}'`, kind: ErrUnknownFlag, say: []string{"--json-schema is not a flag of gnosh"}},
 
 		// Only whole names count: no flag is guessed from its start, though
 		// the start is enough for a suggestion.

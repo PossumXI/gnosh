@@ -238,6 +238,9 @@ func Default() *Table {
 	smallModel := t.add(&flag{names: "--small-model", kind: kindText, arg: "model", group: groupPrint, pri: 1, printOnly: true,
 		help: "The model for the run's short side jobs. Without it they use the main model.",
 		set:  func(i *Invocation, v flagValue) { i.SmallModel = v.text }})
+	schema := t.add(&flag{names: "--json-schema", kind: kindText, arg: "schema", group: groupPrint, pri: 1, printOnly: true, freeText: true,
+		help: "After the turn, have the result as JSON that conforms to this JSON Schema: in the result's structured_output with --output-format json, and alone on standard output with text.",
+		set:  func(i *Invocation, v flagValue) { i.JSONSchema = v.text }})
 	replay := t.add(&flag{names: "--replay-user-messages", group: groupPrint, pri: 1, printOnly: true,
 		help: "With --input-format and --output-format stream-json: write each user message read back on standard output, as a user line with isReplay.",
 		set:  func(i *Invocation, _ flagValue) { i.ReplayUserMessages = true }})
@@ -259,7 +262,7 @@ func Default() *Table {
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents,
 		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
-		printMode, output, input, goal, maxTurns, smallModel, partial, replay, noPersist,
+		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, noPersist,
 		help, version,
 	}
 

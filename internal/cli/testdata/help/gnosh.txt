@@ -165,6 +165,10 @@ Print mode
       With --input-format and --output-format stream-json: write each user
       message read back on standard output, as a user line with isReplay. (Not
       built yet.)
+  --json-schema <schema>
+      After the turn, have the result as JSON that conforms to this JSON
+      Schema: in the result's structured_output with --output-format json, and
+      alone on standard output with text. (Not built yet.)
   --no-session-persistence
       Keep nothing of the run: its session is not saved, and cannot be
       resumed. (Not built yet.)

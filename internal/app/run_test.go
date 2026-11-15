@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -193,6 +194,49 @@ func TestRunStreamJSONInput(t *testing.T) {
 	o.StdinIsTerminal = false
 	r = runWith(t, t.Context(), o).wantCode(t, 1)
 	has(t, "stderr", r.err, "is not a JSON object")
+}
+
+// --json-schema: once the turn ends well, the model is asked beside the
+// session's request for the result as JSON that conforms to the schema,
+// and again, told what was wrong, until it does: the value goes in the
+// result's structured_output, and with the text format it is all that is
+// printed. A schema that cannot be used stops the run first.
+func TestRunJSONSchema(t *testing.T) {
+	schema := `{"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}`
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "There are three files."},
+		apptest.Reply{Text: "The count is three."},
+		apptest.Reply{Text: "```json\n{\"count\": 3}\n```"})
+	r := run(t, w, "-p", "how many files?", "--output-format", "json", "--json-schema", schema).wantCode(t, 0)
+	obj := jsonLines(t, r.out)[0]
+	if out, ok := obj["structured_output"].(map[string]any); !ok || fmt.Sprint(out["count"]) != "3" || obj["subtype"] != "success" {
+		t.Errorf("result: %v", obj)
+	}
+	reqs := w.Model.Requests()
+	if len(reqs) != 3 {
+		t.Fatalf("%d requests, want the turn and two asks", len(reqs))
+	}
+	has(t, "the first ask", string(reqs[1].Body), "conforms to the JSON Schema", `\"required\"`)
+	has(t, "the second ask", string(reqs[2].Body), "does not conform", "the answer holds no JSON value")
+
+	// The text format prints the JSON alone.
+	w.Model.Add(apptest.Reply{Text: "Three."}, apptest.Reply{Text: `{"count": 3}`})
+	r = run(t, w, "-p", "again", "--json-schema", schema).wantCode(t, 0)
+	if r.out != "{\"count\":3}\n" {
+		t.Errorf("text output: %q", r.out)
+	}
+
+	// Never conforming ends the run in error.
+	w.Model.Add(apptest.Reply{Text: "Three."}, apptest.Reply{Text: `{"count": "three"}`}, apptest.Reply{Text: `{"n": 3}`}, apptest.Reply{Text: `3`})
+	r = run(t, w, "-p", "once more", "--output-format", "json", "--json-schema", schema).wantCode(t, 1)
+	obj = jsonLines(t, r.out)[0]
+	if obj["subtype"] != "error_max_structured_output_retries" || obj["structured_output"] != nil {
+		t.Errorf("result after three bad values: %v", obj)
+	}
+
+	// A schema that cannot be used.
+	r = run(t, w, "-p", "x", "--json-schema", `{"type": "text"}`).wantCode(t, 1)
+	has(t, "stderr", r.err, "--json-schema is not a valid JSON Schema", "which is no JSON type")
 }
 
 // checkSession opens a session's file as gnosh itself would, and fails

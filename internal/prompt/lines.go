@@ -544,6 +544,17 @@ func (s *Set) Mention(kind MentionKind, path, why string) string {
 	return s.fill(textMention, vals)
 }
 
+// StructuredOutput returns the request for a run's result as JSON that
+// conforms to schema (--json-schema); problem, when not empty, is what was
+// wrong with the value given before.
+func (s *Set) StructuredOutput(schema, problem string) string {
+	vals := values{"schema": strings.TrimSpace(schema)}
+	if problem = strings.TrimSpace(problem); problem != "" {
+		vals["problem"] = strings.TrimRight(oneLine(problem, maxQuote), ". ")
+	}
+	return s.fill(textStructured, vals)
+}
+
 // AgentMention returns the line for a kind of sub-agent a person named in
 // a prompt with @agent-: hand the task to that kind.
 func (s *Set) AgentMention(name string) string {

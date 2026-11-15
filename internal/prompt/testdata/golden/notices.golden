@@ -36,6 +36,17 @@ Half of it is read.</gnosh>
 === a kind of sub-agent named with @agent- ===
 <gnosh>The user asks for the sub-agent kind reviewer in the prompt above: hand the task, or the part of it they mean, to that kind with the Agent tool (subagent_type reviewer).</gnosh>
 
+=== the request for structured output (--json-schema) ===
+<gnosh>The work above is done. Give its result now as one JSON value that conforms to the JSON Schema below, and nothing else: no words around it and no code fence. Call no tool.
+The schema:
+{"type": "object", "required": ["count"]}</gnosh>
+
+=== the same, after a value that did not conform ===
+<gnosh>The work above is done. Give its result now as one JSON value that conforms to the JSON Schema below, and nothing else: no words around it and no code fence. Call no tool.
+The value you gave last does not conform: $: it has no "count", which the schema requires. Give it again, conforming.
+The schema:
+{"type": "object", "required": ["count"]}</gnosh>
+
 === a file mentioned with @ ===
 <gnosh>The user mentioned the file src/main.go in the prompt above. What Read returns for it follows, and it counts as read.</gnosh>
 

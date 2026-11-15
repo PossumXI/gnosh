@@ -23,6 +23,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
+	"github.com/gnosh-ai/gnosh/internal/jsonschema"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -1413,6 +1414,12 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 	}
 	if st.decision.Notice != "" {
 		fmt.Fprintln(p.stderr, st.decision.Notice)
+	}
+	if inv.JSONSchema != "" {
+		if _, err := jsonschema.Compile(inv.JSONSchema); err != nil {
+			p.errf("--json-schema is not a valid JSON Schema: %v, so nothing was started.", strings.TrimRight(err.Error(), "."))
+			return cli.ExitFailure
+		}
 	}
 	if inv.Agents != "" {
 		defs, err := p.cliAgents(inv.Agents)

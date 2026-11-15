@@ -252,6 +252,10 @@
 //     words from the conversation, call no tool, start on nothing.
 //   - recap (Recap) is the question of /recap, asked the same way: the
 //     session in one line, for the person.
+//   - structured-output (StructuredOutput) asks, after a run's turn with
+//     --json-schema and beside the session's request, for the result as
+//     one JSON value that conforms to the schema, again with what was
+//     wrong when the last one did not.
 //   - agent-mention (AgentMention) stands after a typed prompt for each
 //     kind of sub-agent it names with @agent-: hand the task to it.
 //   - mention (Mention) stands after a typed prompt for each path it

@@ -143,6 +143,9 @@ type Invocation struct {
 	// NoSessionPersistence keeps nothing of a run: its session is not
 	// saved and cannot be resumed (print mode only).
 	NoSessionPersistence bool
+	// JSONSchema is --json-schema: after the turn, the result as JSON that
+	// conforms to this schema, in the result's structured_output.
+	JSONSchema string
 	// ReplayUserMessages is --replay-user-messages: with stream-json both
 	// ways, each user message read is written back as a user line.
 	ReplayUserMessages bool

@@ -73,6 +73,10 @@ type printer struct {
 	// starts, in a run of many, hands on the prompts each turn starts
 	// with, so that the next message waits for its turn to begin.
 	starts chan []string
+	// structured is the run's result as JSON that conforms to
+	// --json-schema, or structuredErr why there is none.
+	structured    json.RawMessage
+	structuredErr string
 
 	capped bool
 	// rounds counts the run's own replies as they are reported, for a
@@ -153,6 +157,9 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	}
 	if ctx.Err() != nil {
 		return cli.ExitFailure
+	}
+	if f.inv.JSONSchema != "" && (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) {
+		f.structured, f.structuredErr = f.structuredOutput(ctx, c)
 	}
 	// The features are asked before anything is printed: what they have
 	// to say comes first, and they may raise the exit code.
@@ -525,7 +532,8 @@ func (f *printer) sessionID() string {
 
 // text takes the next piece of the answer.
 func (f *printer) text(s string) {
-	if f.format != cli.FormatText {
+	if f.format != cli.FormatText || f.inv.JSONSchema != "" {
+		// (With --json-schema the text format prints the JSON alone.)
 		return
 	}
 	if !f.live {
@@ -805,6 +813,7 @@ type resultObject struct {
 	APIErrorStatus    *int                  `json:"api_error_status,omitempty"`
 	LocalCommand      string                `json:"local_command,omitempty"`
 	UserMessageUUID   string                `json:"user_message_uuid,omitempty"`
+	StructuredOutput  json.RawMessage       `json:"structured_output,omitempty"`
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -1031,8 +1040,11 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 		fail("error_during_execution", reason, fmt.Sprintf("the run was stopped by %s after %d turns of the model", signalWord(f.signal), obj.NumTurns))
 	case f.capped:
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
+	case (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) && f.structuredErr != "":
+		fail("error_max_structured_output_retries", "structured_output_retry_exhausted", f.structuredErr)
 	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped:
 		obj.Subtype, obj.Result, obj.TerminalReason = "success", ptr(dropEchoedLine(res.Text)), "completed"
+		obj.StructuredOutput = f.structured
 	case res.Reason == agent.EndRefused:
 		// A prompt a hook blocked is a result all the same: the hook's
 		// words, and no turn.
@@ -1069,12 +1081,19 @@ func (f *printer) report(c Controls, res agent.TurnResult) int {
 	if res.Reason == agent.EndRefused {
 		f.stderr("the prompt was not sent: %s", firstOf(res.Detail, "a hook refused it"))
 	}
-	switch f.format {
-	case cli.FormatJSON:
+	switch {
+	case f.format == cli.FormatJSON:
 		f.encode(obj)
-	case cli.FormatStreamJSON:
+	case f.format == cli.FormatStreamJSON:
 		f.init()
 		f.encode(obj)
+	case f.inv.JSONSchema != "":
+		// The text format prints the structured output alone.
+		if f.structured != nil {
+			fmt.Fprintln(f.p.stdout, string(f.structured))
+		} else if f.structuredErr != "" {
+			f.stderr("%s", f.structuredErr)
+		}
 	default:
 		f.endReply()
 		if f.wroteAny && !f.endsLine {
