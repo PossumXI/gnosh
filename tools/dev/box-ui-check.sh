@@ -9,6 +9,7 @@
 #	ssh ai-remote bash -s -- plan < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- background < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- btw < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- mention < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -18,6 +19,8 @@
 #   btw         a side question (/btw) asked while a slow command runs:
 #               answered beside the turn, which goes on (permissions
 #               skipped, in the scratch folder)
+#   mention     a file mentioned with @: read in front of the model with
+#               the prompt, and said so under it
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -28,11 +31,11 @@ T=$HOME/newgnosh-test/uicheck-$scenario
 S=gnosh-uicheck-$scenario
 flags=""
 case "$scenario" in
-basic) ;;
+basic | mention) ;;
 plan) flags="--permission-mode plan" ;;
 background | btw) flags="-y" ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention)" >&2
 	exit 2
 	;;
 esac
@@ -75,6 +78,10 @@ plan)
 background)
 	tmux send-keys -t "$S" "Call the Agent tool with run_in_background set to true, to have a sub-agent count the lines of notes.txt. Then end your turn; when its report comes, tell me the count." Enter
 	done_when() { screen | grep -q "background sub-agent finished" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
+mention)
+	tmux send-keys -t "$S" "What is the second line of @notes.txt? Answer with that one word and call no tool." Enter
+	done_when() { screen | grep -q "@notes.txt read" && screen | grep -q "done in"; }
 	;;
 btw)
 	tmux send-keys -t "$S" "Run this exact shell command with the Bash tool and nothing else: sleep 40 && echo slept" Enter
