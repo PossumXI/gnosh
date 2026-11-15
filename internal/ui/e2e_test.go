@@ -603,8 +603,14 @@ func TestRewindWithTheProgram(t *testing.T) {
 	for i, prompt := range []string{"the first prompt", "the second prompt", "the third prompt"} {
 		p.keys(`"` + prompt + `" <Enter>`)
 		p.has([]string{"First answer.", "Second answer.", "Third answer."}[i])
+		// And then the turn over, by its closing line and the status line
+		// at rest: a prompt typed while the turn is still ending would
+		// wait in the queue, and the conversation would not be the one
+		// this test goes back in. (On a busy machine that happened once
+		// in some hundreds of runs.)
+		p.eventually(fmt.Sprintf("turn %d has ended", i+1), func(s string) bool { return strings.Count(s, "done in") > i })
+		p.has("idle")
 	}
-	p.has("idle")
 
 	// Never mind, at either step, changes nothing.
 	p.keys(`<Esc> <Esc>`)
