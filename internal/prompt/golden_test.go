@@ -217,7 +217,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw, textRecap, textMention, textAgentMention, textStructured},
+			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw, textRecap, textMention, textAgentMention, textStructured, textPrintWait},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -231,6 +231,7 @@ func goldenFiles() []goldenFile {
 					{"one was stopped", s.AgentEnded(AgentEnd{ID: "9c4d", Description: "search the logs", State: AgentStopped})},
 					{"before a side question (/btw)", s.Btw()},
 					{"the question of /recap", s.Recap()},
+					{"a run that has waited long for its background work", s.PrintWait("10m0s", "bg1 (npm run dev), bg2 (watch the logs)")},
 					{"a kind of sub-agent named with @agent-", s.AgentMention("reviewer")},
 					{"the request for structured output (--json-schema)", s.StructuredOutput(`{"type": "object", "required": ["count"]}`, "")},
 					{"the same, after a value that did not conform", s.StructuredOutput(`{"type": "object", "required": ["count"]}`, `$: it has no "count", which the schema requires`)},

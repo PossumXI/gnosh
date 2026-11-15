@@ -1,0 +1,148 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/term"
+)
+
+// This file is a run's wait for the background work it started
+// (spec/cc/cli.md 4.5). Once the run's turn has ended, the run stays open
+// while a background command or a sub-agent in the background still
+// runs. When one ends, its notice wakes the model, and the turn that
+// starts is the run's too: text output prints each turn's reply, and the
+// JSON formats report the last turn. Claude Code stops what is left after
+// ten minutes of idle waiting; gnosh does not give up on a clock, so every
+// ten minutes of idle waiting it asks the model instead, which may stop
+// the work with TaskStop or wait on. CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
+// still sets a ceiling for whoever wants one (a number of milliseconds;
+// 0 waits with no checkpoint).
+
+// backgrounder is what a session's controls may also be: able to say what
+// still runs in the background, to put a checkpoint to the model, and to
+// stop the lot.
+type backgrounder interface {
+	BackgroundWork() (running []string, ever bool)
+	CheckBackground(waited time.Duration, work []string)
+	StopBackground()
+}
+
+// The pace of the wait: how often it looks, how long all must be quiet
+// before the run ends, when it says on a terminal that it waits, and how
+// often it asks the model.
+const (
+	waitLook       = 200 * time.Millisecond
+	waitSettle     = time.Second
+	waitSay        = 5 * time.Second
+	waitCheckpoint = 10 * time.Minute
+)
+
+// awaitBackground keeps the run open for the background work its turns
+// started, and returns the last turn's result.
+func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.TurnResult) (agent.TurnResult, os.Signal, agent.State) {
+	b, ok := c.(backgrounder)
+	if !ok {
+		return res, nil, agent.State{}
+	}
+	if _, ever := b.BackgroundWork(); !ever {
+		return res, nil, agent.State{}
+	}
+	ceiling, checkpoints := f.waitCeiling()
+	signals := c.Signals()
+	tick := time.NewTicker(waitLook)
+	defer tick.Stop()
+	idleSince, quietSince, said := time.Now(), time.Time{}, false
+	for {
+		select {
+		case r := <-f.results:
+			// A turn that background work started has ended: its reply
+			// stands apart from the next one's.
+			f.closeReply()
+			res, idleSince, quietSince = r, time.Now(), time.Time{}
+			continue
+		case s := <-signals:
+			st := c.State()
+			c.Interrupt()
+			return res, s, st
+		case <-ctx.Done():
+			return res, nil, agent.State{}
+		case <-tick.C:
+		}
+		st := c.State()
+		if st.Busy || st.Queued > 0 {
+			idleSince, quietSince = time.Now(), time.Time{}
+			continue
+		}
+		work, _ := b.BackgroundWork()
+		if len(work) == 0 {
+			// Nothing runs and nothing is coming, unless the end of the
+			// last piece of work is still on its way to the model: all
+			// must stay quiet for a moment.
+			if quietSince.IsZero() {
+				quietSince = time.Now()
+			} else if time.Since(quietSince) >= waitSettle {
+				return res, nil, st
+			}
+			continue
+		}
+		quietSince = time.Time{}
+		waited := time.Since(idleSince)
+		if !said && waited >= waitSay {
+			said = true
+			if f.p.stderrIsTerminal() {
+				f.stderr("Waiting for background work to finish: %s", strings.Join(work, ", "))
+			}
+		}
+		switch {
+		case ceiling > 0 && waited >= ceiling:
+			f.stderr("the run waited %s for background work and stops it now (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS): %s", roundTime(waited), strings.Join(work, ", "))
+			b.StopBackground()
+			return res, nil, st
+		case checkpoints && waited >= waitCheckpoint:
+			b.CheckBackground(waited, work)
+			idleSince = time.Now()
+		}
+	}
+}
+
+// waitCeiling reads CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: a ceiling on
+// the idle wait, with no checkpoints; 0 for no ceiling and no checkpoint.
+// Unset (or not a number), there is no ceiling, and the model is asked
+// every waitCheckpoint.
+func (f *printer) waitCeiling() (ceiling time.Duration, checkpoints bool) {
+	v, set := f.p.env["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"]
+	ms, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if !set || err != nil || ms < 0 {
+		return 0, true
+	}
+	return time.Duration(ms) * time.Millisecond, false
+}
+
+// closeReply ends the reply of a turn in text output, so that the next
+// turn's reply starts on a line of its own.
+func (f *printer) closeReply() {
+	if f.format != cli.FormatText || f.inv.JSONSchema != "" {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.endReply()
+	if f.wroteAny && !f.endsLine {
+		fmt.Fprintln(f.p.stdout)
+		f.endsLine = true
+	}
+}
+
+// stderrIsTerminal reports whether the program writes its errors to a
+// terminal.
+func (p *program) stderrIsTerminal() bool {
+	file, ok := p.o.Stderr.(*os.File)
+	return ok && term.IsTerminal(file)
+}

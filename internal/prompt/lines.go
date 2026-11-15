@@ -567,6 +567,12 @@ func (s *Set) Recap() string {
 	return s.fill(textRecap, nil)
 }
 
+// PrintWait returns the checkpoint of a run (-p) that has waited long for
+// background work it started: how long it has waited, and what still runs.
+func (s *Set) PrintWait(waited, work string) string {
+	return s.fill(textPrintWait, values{"waited": oneLine(waited, maxName), "work": oneLine(work, maxQuote)})
+}
+
 // SummaryIntro returns the line that stands just before a summary, where
 // the summary takes the place of the conversation it replaced. The summary
 // itself follows it, outside the marker: it is the model's own text.

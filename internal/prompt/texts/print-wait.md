@@ -1,0 +1,1 @@
+This run (gnosh -p) has waited {{waited}} for background work that still runs: {{work}}. Nobody is watching the run. If what that work was for is done, or will not come, stop it with TaskStop and end your turn, and the run ends. Otherwise end your turn, and the run waits on. This is news from gnosh, not a request from the user.

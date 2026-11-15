@@ -33,6 +33,9 @@ Half of it is read.</gnosh>
 === the question of /recap ===
 <gnosh>In one line, say what this session has done so far and where it stands now. Call no tool, and start on nothing: the line is for the user, and it is not kept in the conversation.</gnosh>
 
+=== a run that has waited long for its background work ===
+<gnosh>This run (gnosh -p) has waited 10m0s for background work that still runs: bg1 (npm run dev), bg2 (watch the logs). Nobody is watching the run. If what that work was for is done, or will not come, stop it with TaskStop and end your turn, and the run ends. Otherwise end your turn, and the run waits on. This is news from gnosh, not a request from the user.</gnosh>
+
 === a kind of sub-agent named with @agent- ===
 <gnosh>The user asks for the sub-agent kind reviewer in the prompt above: hand the task, or the part of it they mean, to that kind with the Agent tool (subagent_type reviewer).</gnosh>
 

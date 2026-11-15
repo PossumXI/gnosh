@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
@@ -79,10 +80,12 @@ func (l *live) buildTools() error {
 		Local:     l.p.whoAndWhere(),
 		ToolNames: l.p.toolNames(),
 	}
-	if l.interactive {
-		// Only a session somebody attends is told when a background
-		// command ends; a run would be gone, and the tool's words to the
-		// model must not promise it.
+	if l.interactive || l.inv.Command == cli.CmdPrint && l.inv.InputFormat != cli.FormatStreamJSON {
+		// A session somebody attends is told when a background command
+		// ends, and so is a run, which waits for the background work its
+		// turns started (printwait.go). A run fed stream-json is not yet:
+		// the tool's words to the model must not promise what does not
+		// come.
 		so.OnEnd = l.backgroundEnded
 		// The refusal of a foreground command that begins with a long
 		// sleep (shelltool.Options.LongSleep, for sessions like this one,

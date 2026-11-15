@@ -370,3 +370,19 @@ or kept with the reason said (27).
     timeout; the session's end (and `-p`'s) stops those still running,
     with their process groups. With them came Claude Code's exec form
     (`"args"`), which runs the program with its arguments and no shell.
+36. **A run waits for its background work, and asks instead of giving
+    up.** Claude Code keeps a `-p` run open, once its turn has ended, for
+    the background commands and sub-agents it started; the end of each
+    wakes the model, and that turn is the run's too (text output prints
+    each turn's reply, JSON reports the last). gnosh used to stop them
+    when the turn ended, since nothing would read a notice that came
+    after it (item 31's reason); now something does, and the Bash tool
+    tells the model of a run that it will be told. Claude Code stops
+    what is left after ten minutes of idle waiting. Jae's rule is that
+    work does not end on a counter or a clock, so gnosh asks the model
+    instead, every ten minutes of idle waiting: what still runs and for
+    how long, stop it with TaskStop or end the turn to wait on.
+    `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` still sets a hard ceiling for
+    whoever wants one (`0`: no ceiling and no checkpoint). A run fed
+    stream-json is not yet kept open this way. Sub-agents in a run still
+    wait in the foreground (item 31).

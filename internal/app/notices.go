@@ -17,7 +17,7 @@ import (
 // Tell only puts the note in line.
 func (l *live) backgroundEnded(e shelltool.Ended) {
 	a := l.agent
-	if a == nil || l.closing.Load() {
+	if a == nil || l.closing.Load() || l.bgUntold.Load() {
 		return
 	}
 	l.noteBackground()

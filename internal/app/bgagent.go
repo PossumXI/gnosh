@@ -106,7 +106,7 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 // backgroundAgentEnded tells the model that a background sub-agent ended,
 // with its report.
 func (l *live) backgroundAgentEnded(b *bgAgent, rep core.ToolResult, runErr error) {
-	if l.agent == nil || l.closing.Load() {
+	if l.agent == nil || l.closing.Load() || l.bgUntold.Load() {
 		return
 	}
 	end := prompt.AgentEnd{ID: b.id, Description: b.desc, Output: b.output, Report: prompt.Defuse(core.TextOf(rep.Content))}

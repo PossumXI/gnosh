@@ -66,6 +66,7 @@ const (
 	textAgentEnded       = "agent-ended"
 	textBtw              = "btw"
 	textRecap            = "recap"
+	textPrintWait        = "print-wait"
 	textMention          = "mention"
 	textAgentMention     = "agent-mention"
 	textStructured       = "structured-output"
@@ -179,6 +180,8 @@ func specs() []spec {
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,
 			when: "As the question of /recap, in a request beside the session's that is not kept."},
+		{name: textPrintWait, kind: KindLine, need: []string{"waited", "work"},
+			when: "In a run (-p) that has waited long for background work it started, as a turn of its own: stop that work, or wait on."},
 		{name: textStructured, kind: KindLine, need: []string{"schema"}, may: []string{"problem"},
 			when: "After a run's turn with --json-schema, beside the session's request: the result as JSON that conforms to the schema, again with what was wrong."},
 		{name: textAgentMention, kind: KindLine, need: []string{"name"},

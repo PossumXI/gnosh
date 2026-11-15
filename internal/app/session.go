@@ -183,6 +183,10 @@ type live struct {
 	closeOnce sync.Once
 	closing   atomic.Bool
 	killed    atomic.Bool
+	// bgEver says the session has had work in the background, and
+	// bgUntold that the ends of that work are no longer told to the model
+	// (the run has stopped waiting for it).
+	bgEver, bgUntold atomic.Bool
 }
 
 // joined is a feature with what it added to this session.
@@ -688,6 +692,7 @@ func (l *live) statusFacts() map[string]string {
 // noteBackground keeps the count of commands that run in the background
 // among the facts for a status line.
 func (l *live) noteBackground() {
+	l.bgEver.Store(true)
 	// The commands and the sub-agents that run in the background.
 	running := len(l.backgroundAgents())
 	if l.shell != nil {
@@ -1327,6 +1332,60 @@ func (c *controls) Status() map[string]string { return c.cur().statusFacts() }
 
 // Deliverables returns the session's list of deliverables.
 func (c *controls) Deliverables() []Deliverable { return c.cur().deliverables() }
+
+// BackgroundWork lists what still runs in the background of the session,
+// each as its id and what it is for: its background commands and its
+// sub-agents in the background. ever reports whether the session ever
+// had any.
+func (c *controls) BackgroundWork() (running []string, ever bool) {
+	l := c.cur()
+	if l.shell != nil {
+		for _, t := range l.shell.Tasks() {
+			ever = true
+			if t.Running {
+				running = append(running, t.ID+" ("+oneLine(firstOf(t.Description, firstLine(t.Command)), 80)+")")
+			}
+		}
+	}
+	for _, b := range l.backgroundAgents() {
+		running = append(running, b.id+" ("+oneLine(b.desc, 80)+")")
+	}
+	return running, ever || len(running) > 0 || l.bgEver.Load()
+}
+
+// CheckBackground hands the model a checkpoint in a run that has waited
+// long for background work: a note that wakes it, says what still runs
+// and for how long the run has waited, and asks whether to stop that work
+// or to wait on.
+func (c *controls) CheckBackground(waited time.Duration, work []string) {
+	l := c.cur()
+	if l.agent == nil || l.closing.Load() {
+		return
+	}
+	_ = l.agent.Tell(agent.Note{
+		Text:   l.texts.PrintWait(roundTime(waited), strings.Join(work, ", ")),
+		Source: "print-wait",
+		Notice: "The run has waited " + roundTime(waited) + " for background work; the model is asked whether to go on waiting.",
+		Wake:   true,
+	})
+}
+
+// StopBackground stops everything that runs in the background of the
+// session: its background commands and its sub-agents.
+func (c *controls) StopBackground() {
+	l := c.cur()
+	l.bgUntold.Store(true)
+	if l.shell != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		for _, t := range l.shell.Tasks() {
+			if t.Running {
+				_, _ = l.shell.Stop(ctx, t.ID)
+			}
+		}
+		cancel()
+	}
+	l.stopBackgroundAgents(10 * time.Second)
+}
 
 // Background moves the command a tool call waits for to the background.
 func (c *controls) Background(callID string) bool {

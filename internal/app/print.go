@@ -158,6 +158,14 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	if ctx.Err() != nil {
 		return cli.ExitFailure
 	}
+	// The background work the turn started is waited for, and the turns
+	// its ends start are the run's too (printwait.go).
+	if res, sig, st = f.awaitBackground(ctx, c, res); sig != nil {
+		return f.stoppedBySignal(c, "", sig, st)
+	}
+	if ctx.Err() != nil {
+		return cli.ExitFailure
+	}
 	if f.inv.JSONSchema != "" && (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) {
 		f.structured, f.structuredErr = f.structuredOutput(ctx, c)
 	}

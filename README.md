@@ -18,7 +18,8 @@ permission, planned and finished a task in `mem`, and popped frames against
 a real model (Qwen 3.8 27B on llama.cpp). `tools/dev/remote-ci.sh` builds,
 vets and tests every package from a clean copy.
 
-Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output,
+Built: print mode (`gnosh -p`, which waits for the background commands its
+turns start and lets the model answer how they ended, with text, JSON and streamed JSON output,
 streamed JSON input for a conversation over standard input, `--json-schema`
 for a result as JSON that conforms to a schema,
 `--bare` for minimal mode, `--no-session-persistence` to keep nothing,
