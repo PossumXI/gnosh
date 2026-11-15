@@ -28,6 +28,10 @@ import (
 // it is: it may be a handle or an address. CLAUDE_CODE_DISABLE_FILE_MENTIONS=1
 // turns this off.
 
+// metaVerbatim, set true in a prompt's Meta, delivers it as it is: no @
+// mention brings anything (stream-json input's client_composed).
+const metaVerbatim = "gnosh.verbatim"
+
 // mentionWord finds "@path" and "@\"a path\"" at the start of a word.
 var mentionWord = regexp.MustCompile(`(?:^|\s)@("[^"\n]+"|[^\s"]+)`)
 
@@ -41,7 +45,8 @@ const (
 // mentionLines is a PromptLines provider: the paths a typed prompt
 // mentions, each with what it brings.
 func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.Part, error) {
-	if info.Prompt.Hidden || l.p.env["CLAUDE_CODE_DISABLE_FILE_MENTIONS"] == "1" || !strings.Contains(info.Prompt.Text, "@") {
+	if verbatim, _ := info.Prompt.Meta[metaVerbatim].(bool); verbatim || info.Prompt.Hidden ||
+		l.p.env["CLAUDE_CODE_DISABLE_FILE_MENTIONS"] == "1" || !strings.Contains(info.Prompt.Text, "@") {
 		return nil, nil
 	}
 	read := l.readTool()

@@ -133,7 +133,12 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 		if m.u.Priority == "now" {
 			c.Interrupt()
 		}
-		id, err := c.Submit(agent.Prompt{Text: text, Attachments: m.images, Later: m.u.Priority == "later"})
+		p := agent.Prompt{Text: text, Attachments: m.images, Later: m.u.Priority == "later"}
+		if m.u.ClientComposed {
+			// Delivered as it is: no @ mention brings a file.
+			p.Meta = map[string]any{metaVerbatim: true}
+		}
+		id, err := c.Submit(p)
 		if err != nil {
 			f.p.errf("a message could not be sent: %v", err)
 			code = cli.ExitFailure

@@ -188,6 +188,17 @@ func TestRunStreamJSONInput(t *testing.T) {
 		t.Errorf("%d session files, want one", n)
 	}
 
+	// client_composed delivers a message as it is: no @ mention brings a
+	// file.
+	w.Write("secret-notes.txt", "SECRET-7f3a\n")
+	w.Model.Add(apptest.Reply{Text: "Verbatim."})
+	o = testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json")
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"look at @secret-notes.txt"},"client_composed":true}` + "\n")
+	o.StdinIsTerminal = false
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	reqs = w.Model.Requests()
+	hasNot(t, "a client_composed message", string(reqs[len(reqs)-1].Body), "SECRET-7f3a", "The user mentioned")
+
 	// A line that is not JSON stops the run.
 	o = testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json")
 	o.Stdin = strings.NewReader("not json\n")
