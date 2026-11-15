@@ -21,8 +21,8 @@ func write(t *testing.T, path, text string) {
 // for.
 func TestBuiltin(t *testing.T) {
 	defs := Builtin()
-	if len(defs) != 2 {
-		t.Fatalf("%d built-in definitions, want 2", len(defs))
+	if len(defs) != 3 {
+		t.Fatalf("%d built-in definitions, want 3", len(defs))
 	}
 	byName := map[string]Def{}
 	for _, d := range defs {
@@ -37,6 +37,9 @@ func TestBuiltin(t *testing.T) {
 	}
 	if strings.Join(ex.Tools, " ") != "Read Glob Grep" || !ex.ToolsSet || !ex.OmitInstructions {
 		t.Errorf("Explore is to read and search only, without the instruction files: %+v", ex)
+	}
+	if pl := byName["Plan"]; strings.Join(pl.Tools, " ") != "Read Glob Grep" || !pl.ToolsSet || !pl.OmitInstructions {
+		t.Errorf("Plan is to read and search only, without the instruction files: %+v", pl)
 	}
 }
 
@@ -110,6 +113,7 @@ func TestLoad(t *testing.T) {
 	want := map[string]string{
 		"general-purpose": "built-in: ",
 		"Explore":         "user: the person's own Explore",
+		"Plan":            "built-in: ",
 		"reviewer":        "project: the project's reviewer",
 		"tester":          "project: the project's tester, near",
 	}
@@ -121,7 +125,7 @@ func TestLoad(t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("the definitions are %v", s.Names())
 	}
-	if names := strings.Join(s.Names(), " "); names != "general-purpose Explore reviewer tester" {
+	if names := strings.Join(s.Names(), " "); names != "general-purpose Plan Explore reviewer tester" {
 		t.Errorf("in the order %q", names)
 	}
 	var reasons []string

@@ -448,7 +448,7 @@ func TestSubAgentAsksThePersonAndTakesAModel(t *testing.T) {
 	// came back, as a result.
 	hasNot(t, "the screen", s.out.String(), "I made made.txt.")
 	s.typeLine("/status")
-	s.see("sub-agents   kinds: general-purpose, Explore; 1 started in this session, 0 running now")
+	s.see("sub-agents   kinds: general-purpose, Explore, Plan; 1 started in this session, 0 running now")
 	s.typeLine("/exit")
 	s.exit()
 	reqs := w.Model.Requests()

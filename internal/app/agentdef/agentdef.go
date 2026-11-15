@@ -91,7 +91,9 @@ type Skipped struct {
 var builtinFiles embed.FS
 
 // Builtin returns gnosh's own kinds of sub-agent: general-purpose, which
-// has every tool, and Explore, which only reads and searches.
+// has every tool, and Explore and Plan, which only read and search: one
+// answers a question about the code, the other gathers what a plan
+// needs.
 func Builtin() []Def {
 	var out []Def
 	entries, _ := fs.ReadDir(builtinFiles, "builtin")
@@ -117,6 +119,20 @@ const DefaultType = "general-purpose"
 type Set struct {
 	defs    []Def
 	skipped []Skipped
+}
+
+// WithoutBuiltin returns the set without gnosh's own definitions of the
+// names given; a person's or a project's definition of the same name
+// stays.
+func (s *Set) WithoutBuiltin(names ...string) *Set {
+	out := &Set{skipped: s.skipped}
+	for _, d := range s.defs {
+		if d.Scope == "built-in" && slices.Contains(names, d.Name) {
+			continue
+		}
+		out.defs = append(out.defs, d)
+	}
+	return out
 }
 
 // Load is LoadFrom with one directory for the person's own definitions,
