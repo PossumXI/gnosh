@@ -40,13 +40,14 @@ import (
 // skills).
 //
 // What is built of a skill's settings: its name, description, when_to_use,
-// argument-hint, arguments, disable-model-invocation, user-invocable and
-// allowed-tools (rules that hold until the person's next prompt). A skill
-// that asks for anything else Claude Code's format has (a model or effort
-// of its own, tools taken away, hooks, a sub-agent to run in, loading by
-// path, commands run before the model sees it) is refused, with the
-// reason, when it is run: it is never run as something else. A sub-agent
-// has no Skill tool.
+// argument-hint, arguments, disable-model-invocation, user-invocable,
+// allowed-tools and disallowed-tools (rules that let calls run, or refuse
+// them, until the person's next prompt) and effort (a thinking level
+// until then). A skill that asks for anything else Claude Code's format
+// has (a model of its own, hooks, a sub-agent to run in, loading by path,
+// commands run before the model sees it) is refused, with the reason,
+// when it is run: it is never run as something else. A sub-agent has no
+// Skill tool.
 
 // skillToolName is the name of the tool, which is Claude Code's.
 const skillToolName = "Skill"
@@ -331,19 +332,28 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 	}
 	vars := skill.Vars{SessionID: l.ts.ID(), SkillDir: sk.Dir, ProjectDir: l.cfg.Paths.ProjectRoot, Effort: effort}
 	text = sk.Render(args, vars)
-	if len(sk.AllowedTools) > 0 {
-		rules := make([]string, len(sk.AllowedTools))
-		for i, r := range sk.AllowedTools {
+	fill := func(list []string) []string {
+		rules := make([]string, len(list))
+		for i, r := range list {
 			r = strings.ReplaceAll(r, "${CLAUDE_SKILL_DIR}", vars.SkillDir)
 			rules[i] = strings.ReplaceAll(r, "${CLAUDE_PROJECT_DIR}", vars.ProjectDir)
 		}
+		return rules
+	}
+	if len(sk.AllowedTools)+len(sk.DisallowedTools) > 0 {
+		// What it lets run, and what it takes away (disallowed-tools, as
+		// rules that refuse: the model's list of tools stays as it is, so
+		// that a local server keeps the prompt it has read).
 		err := l.engine.AddLayer(permission.Layer{
 			Scope: permission.ScopeSkill, Name: "the skill " + sk.Name + " (" + sk.Source + ")",
-			FromProject: sk.Scope == "project", Allow: rules,
+			FromProject: sk.Scope == "project", Allow: fill(sk.AllowedTools), Deny: fill(sk.DisallowedTools),
 		})
 		if err != nil {
-			return "", false, fmt.Sprintf("the permission rules the skill %s carries (allowed-tools, in %s) cannot be used: %v. It is not run without them", sk.Name, sk.Source, err)
+			return "", false, fmt.Sprintf("the permission rules the skill %s carries (allowed-tools or disallowed-tools, in %s) cannot be used: %v. It is not run without them", sk.Name, sk.Source, err)
 		}
+	}
+	if sk.Effort != "" {
+		l.skillEffort(sk)
 	}
 	l.skillMu.Lock()
 	defer l.skillMu.Unlock()
@@ -359,9 +369,44 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 }
 
 // dropSkillGrants ends the permission rules that skills brought with
-// them: they hold until the person's next prompt.
+// them, and the thinking level one asked for: they hold until the
+// person's next prompt.
 func (l *live) dropSkillGrants() {
 	l.engine.RemoveLayers(permission.ScopeSkill)
+	l.skillMu.Lock()
+	restore, before := l.effortHeld, l.effortBefore
+	l.effortHeld = false
+	l.skillMu.Unlock()
+	if restore && l.agent != nil {
+		_, _ = l.agent.SetThinking(before)
+	}
+}
+
+// skillEffort puts the thinking level a skill asks for (effort) in force
+// until the person's next prompt: one of the model's levels, max for its
+// most, or auto for its own default. A level the model does not have
+// leaves thinking as it is, and the person is told.
+func (l *live) skillEffort(sk skill.Skill) {
+	if l.agent == nil {
+		return
+	}
+	m := l.agent.Model()
+	word := sk.Effort
+	switch {
+	case word == "auto":
+		word = ""
+	case word == "max" && len(m.Levels) > 0:
+		word = m.Levels[len(m.Levels)-1]
+	case !slices.Contains(m.Levels, word):
+		l.notice(agent.LevelInfo, "skill", fmt.Sprintf("The skill %s asks for the effort %s, which is not a thinking level of %s; thinking stays as it is.", sk.Name, sk.Effort, firstOf(m.Info.ID, "the model")))
+		return
+	}
+	l.skillMu.Lock()
+	if !l.effortHeld {
+		l.effortHeld, l.effortBefore = true, m.Level
+	}
+	l.skillMu.Unlock()
+	_, _ = l.agent.SetThinking(word)
 }
 
 // typedSkill runs a line that names a skill: /name and what follows. It

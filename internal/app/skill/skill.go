@@ -49,8 +49,12 @@ type Skill struct {
 	NoModel bool
 	NoUser  bool
 	// AllowedTools are permission rules that hold for the turn the skill
-	// is run in, as written.
-	AllowedTools []string
+	// is run in, as written. DisallowedTools are the tools (or rules) it
+	// takes away for that turn: calls they name are refused.
+	AllowedTools, DisallowedTools []string
+	// Effort is the thinking level the skill asks for, for that turn: one
+	// of the model's levels, max or auto.
+	Effort string
 	// Body is the instructions: the file without its settings.
 	Body string
 	// Dir is the folder that holds the file, Source the file, and Scope
@@ -247,6 +251,14 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 			} else {
 				sk.AllowedTools = SplitRules(f.Scalar)
 			}
+		case "disallowed-tools":
+			if len(f.Items) > 0 {
+				sk.DisallowedTools = f.Items
+			} else {
+				sk.DisallowedTools = SplitRules(f.Scalar)
+			}
+		case "effort":
+			sk.Effort = strings.ToLower(strings.TrimSpace(f.Scalar))
 		case "context":
 			context = f.Scalar
 		case "shell":
@@ -255,13 +267,11 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 			if f.Scalar != "" && f.Scalar != "inherit" {
 				sk.Unbuilt = append(sk.Unbuilt, "a model of its own (model)")
 			}
-		case "disallowed-tools", "effort", "hooks", "paths":
+		case "hooks", "paths":
 			if f.Set() {
 				sk.Unbuilt = append(sk.Unbuilt, map[string]string{
-					"disallowed-tools": "tools taken away while it runs (disallowed-tools)",
-					"effort":           "an effort level of its own (effort)",
-					"hooks":            "hooks of its own (hooks)",
-					"paths":            "loading by the files being worked on (paths)",
+					"hooks": "hooks of its own (hooks)",
+					"paths": "loading by the files being worked on (paths)",
 				}[f.Key])
 			}
 		}

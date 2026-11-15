@@ -41,8 +41,12 @@ func TestParse(t *testing.T) {
 
 	// What this gnosh does not have is named, each thing.
 	sk, reason = Parse("---\ncontext: fork\nmodel: opus\neffort: high\nhooks:\n  Stop:\n    - x\npaths: [\"*.go\"]\ndisallowed-tools: Bash\nshell: powershell\n---\nRun !`git status` first.\n", "big")
-	if reason != "" || len(sk.Unbuilt) != 8 {
+	if reason != "" || len(sk.Unbuilt) != 6 {
 		t.Errorf("what is not built: %q (%s)", sk.Unbuilt, reason)
+	}
+	// effort and disallowed-tools are built: read, and not listed.
+	if sk.Effort != "high" || len(sk.DisallowedTools) != 1 || sk.DisallowedTools[0] != "Bash" {
+		t.Errorf("effort %q, disallowed-tools %q", sk.Effort, sk.DisallowedTools)
 	}
 	for _, text := range []string{"Now:\n```!\ngit log\n```\n", "See !`date`.", "!`date`"} {
 		if sk, _ := Parse(text, "x"); len(sk.Unbuilt) != 1 {

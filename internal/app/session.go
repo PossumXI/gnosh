@@ -164,6 +164,10 @@ type live struct {
 	// recent last, each with its text as it went in.
 	skillMu   sync.Mutex
 	skillRuns []skillRun
+	// effortHeld says a skill's effort is in force until the person's
+	// next prompt, and effortBefore is the level to go back to then.
+	effortHeld   bool
+	effortBefore string
 	// skillSet is the skills as they were last read, and skillRead when.
 	skillSet  *skill.Set
 	skillRead time.Time

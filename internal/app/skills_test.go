@@ -273,3 +273,22 @@ func TestDefinitionsOfAFolderThatIsNotTrusted(t *testing.T) {
 	has(t, "the first prompt", said, "`reviewer`: The person's reviewer.", "- `ship`:")
 	hasNot(t, "the first prompt", said, "fixer", "deploy")
 }
+
+// A skill's disallowed-tools refuse the calls they name, even with
+// permissions skipped, and its effort is the thinking level, both until
+// the person's next prompt.
+func TestSkillDisallowedToolsAndEffort(t *testing.T) {
+	touch := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch not-made.txt"}`}}}
+	w := apptest.NewWorld(t, touch, apptest.Reply{Text: "It was refused."})
+	w.Settings(`{"models": {"local/test-model": {"thinkingLevels": ["low", "high"]}}}`)
+	w.Write(w.ConfigDir()+"/skills/careful/SKILL.md", "---\ndescription: Reads only.\ndisallowed-tools: Bash\neffort: max\n---\nLook, and change nothing.\n")
+	r := run(t, w, "-y", "-p", "/careful").wantCode(t, 0)
+	if w.Exists("not-made.txt") {
+		t.Errorf("a tool the skill takes away ran")
+	}
+	has(t, "the run's answer", r.out, "It was refused.")
+	first, second := requestText(t, w, 0), requestText(t, w, 1)
+	has(t, "what the model read of the refusal", second, "This call did not run. The deny rule Bash switches Bash off.")
+	has(t, "the first request's thinking", first, `"reasoning_effort":"high"`)
+	w.Model.Done()
+}
