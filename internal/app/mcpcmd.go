@@ -310,20 +310,7 @@ func (p *program) mcpCheck(ctx context.Context, c mcp.Config, root string, timeo
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(p.o.BuildID, "devel"), StartTimeout: timeout}
-	var client *mcp.Client
-	var err error
-	switch c.Type {
-	case "stdio":
-		env := map[string]string{"CLAUDE_PROJECT_DIR": root, "GNOSH_PROJECT_DIR": root}
-		for k, v := range c.Env {
-			env[k] = v
-		}
-		client, err = mcp.Start(ctx, mcp.Server{Name: c.Name, Command: c.Command, Args: c.Args, Env: env, Environ: p.o.Environ, Dir: root}, opt)
-	case "http":
-		client, err = mcp.StartHTTP(ctx, c.Name, c.URL, c.Headers, opt)
-	default:
-		err = fmt.Errorf("gnosh does not speak the %s transport", c.Type)
-	}
+	client, err := mcpConnect(ctx, c, root, p.o.Environ, []string{root}, opt)
 	if err != nil {
 		return "not connected: " + oneLine(err.Error(), 300)
 	}

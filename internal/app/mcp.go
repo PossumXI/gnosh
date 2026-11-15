@@ -163,23 +163,7 @@ func (l *live) connectMCP(s *mcpServer) {
 			l.refreshMCP(s, c)
 		}
 	}
-	var client *mcp.Client
-	var err error
-	switch s.cfg.Type {
-	case "stdio":
-		root := l.cfg.Paths.ProjectRoot
-		env := map[string]string{"CLAUDE_PROJECT_DIR": root, "GNOSH_PROJECT_DIR": root}
-		for k, v := range s.cfg.Env {
-			env[k] = v
-		}
-		client, err = mcp.Start(ctx, mcp.Server{Name: s.cfg.Name, Command: s.cfg.Command, Args: s.cfg.Args, Env: env,
-			Environ: l.p.o.Environ, Dir: root, Roots: append([]string(nil), l.roots...)}, opt)
-	case "http":
-		// A server elsewhere is not told which folders are open here.
-		client, err = mcp.StartHTTP(ctx, s.cfg.Name, s.cfg.URL, s.cfg.Headers, opt)
-	default:
-		err = fmt.Errorf("gnosh does not speak the %s transport", s.cfg.Type)
-	}
+	client, err := mcpConnect(ctx, s.cfg, l.cfg.Paths.ProjectRoot, l.p.o.Environ, l.roots, opt)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -231,6 +215,26 @@ func (l *live) redialMCP(s *mcpServer, old *mcp.Client) *mcp.Client {
 	l.mcp.mu.Lock()
 	defer l.mcp.mu.Unlock()
 	return s.client
+}
+
+// mcpConnect starts or reaches one server and makes the handshake: a
+// server gnosh starts runs in the project's root, with CLAUDE_PROJECT_DIR
+// and GNOSH_PROJECT_DIR set to it, and is told the session's folders as
+// its roots; a server at a URL is told none, since the folders open here
+// are nothing it needs to know.
+func mcpConnect(ctx context.Context, c mcp.Config, root string, environ, roots []string, opt mcp.Options) (*mcp.Client, error) {
+	switch c.Type {
+	case "stdio":
+		env := map[string]string{"CLAUDE_PROJECT_DIR": root, "GNOSH_PROJECT_DIR": root}
+		for k, v := range c.Env {
+			env[k] = v
+		}
+		return mcp.Start(ctx, mcp.Server{Name: c.Name, Command: c.Command, Args: c.Args, Env: env,
+			Environ: environ, Dir: root, Roots: append([]string(nil), roots...)}, opt)
+	case "http":
+		return mcp.StartHTTP(ctx, c.Name, c.URL, c.Headers, opt)
+	}
+	return nil, fmt.Errorf("gnosh does not speak the %s transport", c.Type)
 }
 
 // mcpToolsOf makes the tools the model is offered of a server's list.
