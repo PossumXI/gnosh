@@ -15,8 +15,10 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 )
 
 // This file is skills in a session, and the folders that agent
@@ -43,10 +45,11 @@ import (
 // argument-hint, arguments, disable-model-invocation, user-invocable,
 // allowed-tools and disallowed-tools (rules that let calls run, or refuse
 // them, until the person's next prompt), effort (a thinking level until
-// then), and context: fork with agent, background and model (the skill
-// runs in a sub-agent of that kind, on that model: forkSkill). A skill
-// that asks for anything else Claude Code's format has (a model of its
-// own outside a fork, hooks, loading by path, commands run before the
+// then), context: fork with agent, background and model (the skill runs
+// in a sub-agent of that kind, on that model: forkSkill), and paths (the
+// model is told of the skill once the session works on a matching file:
+// skillsForFile). A skill that asks for anything else Claude Code's format
+// has (a model of its own outside a fork, hooks, commands run before the
 // model sees it) is refused, with the reason, when it is run: it is never
 // run as something else. A sub-agent has no Skill tool.
 
@@ -263,15 +266,76 @@ func (l *live) skillHidden(name string) bool {
 }
 
 // forModel lists the skills a model may load: not the ones that are the
-// person's alone, hidden from it, or beyond this build.
+// person's alone, hidden from it, or beyond this build, nor one for some
+// files (paths) before the session has worked on such a file.
 func (l *live) forModel() []skill.Skill {
 	var out []skill.Skill
 	for _, sk := range l.skills().All() {
-		if !sk.NoModel && len(sk.Unbuilt) == 0 && !l.skillHidden(sk.Name) {
+		if !sk.NoModel && len(sk.Unbuilt) == 0 && !l.skillHidden(sk.Name) && (len(sk.Paths) == 0 || l.skillWoken(sk.Name)) {
 			out = append(out, sk)
 		}
 	}
 	return out
+}
+
+// skillWoken reports whether a skill for some files (paths) has been told
+// to the model, the session having worked on one of them.
+func (l *live) skillWoken(name string) bool {
+	l.skillMu.Lock()
+	defer l.skillMu.Unlock()
+	return l.skillsWoken[name]
+}
+
+// skillsForFile tells the model of the skills for some files (paths) that
+// a call of a file tool in this session has just worked on one of: they
+// apply from now on. The patterns are read against the project's root, as
+// a rule's paths are.
+func (l *live) skillsForFile(done agent.ToolDone) []agent.Part {
+	if done.Result.IsError || done.AgentID != "" || !slices.Contains(l.toolNames(), skillToolName) {
+		return nil
+	}
+	names := fstools.Defaults()
+	switch done.Call.Name {
+	case names.ReadName, names.WriteName, names.EditName:
+	default:
+		return nil
+	}
+	path := touchedPath(done)
+	if path == "" {
+		return nil
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(l.cwd(), path)
+	}
+	rel, err := filepath.Rel(l.cfg.Paths.ProjectRoot, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	rel = filepath.ToSlash(rel)
+	var lines []string
+	for _, sk := range l.skills().All() {
+		if len(sk.Paths) == 0 || sk.NoModel || len(sk.Unbuilt) > 0 || l.skillHidden(sk.Name) || l.skillWoken(sk.Name) {
+			continue
+		}
+		if pats, _ := instructions.CompilePaths(sk.Paths); !pats.Match(rel) {
+			continue
+		}
+		l.skillMu.Lock()
+		if l.skillsWoken == nil {
+			l.skillsWoken = map[string]bool{}
+		}
+		l.skillsWoken[sk.Name] = true
+		l.skillMu.Unlock()
+		line := "- `" + sk.Name + "`"
+		if d := oneLine(sk.Description, skill.MaxDescription); d != "" {
+			line += ": " + d
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return []agent.Part{{Source: "skills", Text: prompt.Wrap("The user keeps these skills for files like " + rel + ", which you are working on now. When the task calls for one, load it with the Skill tool and follow what it says.\n" + strings.Join(lines, "\n"))}}
 }
 
 // skillsLine tells the model which skills there are. It goes out with a

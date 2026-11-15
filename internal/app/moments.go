@@ -354,6 +354,7 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 	var v agent.ToolVerdict
 	var errs []error
 	v.Context = append(v.Context, l.lateInstructionsFor(ctx, instr, done)...)
+	v.Context = append(v.Context, l.skillsForFile(done)...)
 	for _, c := range contribs {
 		if c.c.AfterTool == nil {
 			continue

@@ -387,3 +387,32 @@ func (t token) takes(r rune) bool {
 	}
 	return false
 }
+
+// Paths is a list of path patterns, compiled: the same patterns a rule's
+// paths list takes, for others that load by the files being worked on (a
+// skill's paths).
+type Paths struct {
+	pats []pattern
+}
+
+// CompilePaths compiles a list of patterns. Each that cannot be read
+// matches nothing, and is said in the problems returned.
+func CompilePaths(list []string) (Paths, []string) {
+	pats, bad := compilePatterns(list)
+	var problems []string
+	for _, b := range bad {
+		problems = append(problems, fmt.Sprintf("the pattern %q cannot be used: %s", b.src, b.why))
+	}
+	return Paths{pats: pats}, problems
+}
+
+// Match reports whether one of the patterns matches rel, a slash-separated
+// path read against the patterns' base directory.
+func (p Paths) Match(rel string) bool {
+	for _, pt := range p.pats {
+		if pt.match(rel) {
+			return true
+		}
+	}
+	return false
+}

@@ -65,6 +65,10 @@ type Skill struct {
 	// Model is the model of a forked skill's sub-agent, or empty for the
 	// session's. (A model for a skill that is not forked is not built.)
 	Model string
+	// Paths are patterns of the files the skill is for (paths): the model
+	// is told of it once the session works on such a file, and not
+	// before.
+	Paths []string
 	// Body is the instructions: the file without its settings.
 	Body string
 	// Dir is the folder that holds the file, Source the file, and Scope
@@ -281,12 +285,11 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 			if f.Scalar != "inherit" {
 				model = f.Scalar
 			}
-		case "hooks", "paths":
+		case "paths":
+			sk.Paths = f.List()
+		case "hooks":
 			if f.Set() {
-				sk.Unbuilt = append(sk.Unbuilt, map[string]string{
-					"hooks": "hooks of its own (hooks)",
-					"paths": "loading by the files being worked on (paths)",
-				}[f.Key])
+				sk.Unbuilt = append(sk.Unbuilt, "hooks of its own (hooks)")
 			}
 		}
 	}

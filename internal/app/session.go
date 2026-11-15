@@ -168,6 +168,9 @@ type live struct {
 	// recent last, each with its text as it went in.
 	skillMu   sync.Mutex
 	skillRuns []skillRun
+	// skillsWoken are the skills for some files (paths) the model has been
+	// told of, the session having worked on one of their files.
+	skillsWoken map[string]bool
 	// effortHeld says a skill's effort is in force until the person's
 	// next prompt, and effortBefore is the level to go back to then.
 	effortHeld   bool

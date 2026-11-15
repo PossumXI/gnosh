@@ -144,19 +144,19 @@ func TestSkillLoadedByTheModel(t *testing.T) {
 // model alone run by typing it.
 func TestSkillThatCannotBeRun(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Nothing to do."})
-	w.Write(w.ConfigDir()+"/skills/audit/SKILL.md", "---\ndescription: Audits the repo.\npaths: \"*.go\"\nmodel: big\n---\nRead everything, after !`git status`.\n")
+	w.Write(w.ConfigDir()+"/skills/audit/SKILL.md", "---\ndescription: Audits the repo.\nhooks:\n  Stop:\n    - x\nmodel: big\n---\nRead everything, after !`git status`.\n")
 	w.Write(w.ConfigDir()+"/skills/quiet/SKILL.md", "---\ndescription: For the model.\nuser-invocable: false\n---\nBe quiet.\n")
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/audit")
-	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for loading by the files being worked on (paths), a model of its own (model), commands run before the model sees it")
+	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for hooks of its own (hooks), a model of its own (model), commands run before the model sees it")
 	s.see("It is not run without: that would be another skill than the one its author wrote")
 	s.typeLine("/quiet")
 	s.see("error: the skill quiet is for the model alone")
 	s.typeLine("/nosuchskill")
 	s.see("There is no command /nosuchskill.")
 	s.typeLine("/skills")
-	s.see("cannot be run by this gnosh: it asks for loading by the files being worked on (paths), a model of its own (model)")
+	s.see("cannot be run by this gnosh: it asks for hooks of its own (hooks), a model of its own (model)")
 	s.typeLine("/exit")
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
@@ -322,5 +322,30 @@ func TestForkedSkill(t *testing.T) {
 	last := requestText(t, w, 4)
 	has(t, "the report in front of the model", last, "It ran in a sub-agent", "SUB-REPORT-88: nothing found.")
 	hasNot(t, "the report in front of the model", last, "FORK-BODY-55")
+	w.Model.Done()
+}
+
+// A skill for some files (paths) is not named to the model until the
+// session works on such a file; then it is, once.
+func TestSkillForSomeFiles(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Read", Args: `{"file_path":"notes.txt"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Read", Args: `{"file_path":"src/main.go"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Read", Args: `{"file_path":"src/util.go"}`}}},
+		apptest.Reply{Text: "Read them."})
+	w.Write("notes.txt", "notes\n")
+	w.Write("src/main.go", "package main\n")
+	w.Write("src/util.go", "package main\n")
+	w.Write(w.ConfigDir()+"/skills/gostyle/SKILL.md", "---\ndescription: GOSTYLE-DESC how Go is written here.\npaths: \"**/*.go\"\n---\nUse tabs.\n")
+	w.Write(w.ConfigDir()+"/skills/always/SKILL.md", "---\ndescription: ALWAYS-DESC for every task.\n---\nBe kind.\n")
+	run(t, w, "-y", "-p", "read the files").wantCode(t, 0)
+	first, afterNotes, afterGo, afterMore := requestText(t, w, 0), requestText(t, w, 1), requestText(t, w, 2), requestText(t, w, 3)
+	has(t, "the first request", first, "ALWAYS-DESC")
+	hasNot(t, "the first request", first, "GOSTYLE-DESC")
+	hasNot(t, "after a file that is not Go", afterNotes, "GOSTYLE-DESC")
+	has(t, "after a Go file", afterGo, "GOSTYLE-DESC", "for files like src/main.go")
+	if strings.Count(afterMore, "GOSTYLE-DESC") != 1 {
+		t.Errorf("the skill was named %d times after a second Go file, want once", strings.Count(afterMore, "GOSTYLE-DESC"))
+	}
 	w.Model.Done()
 }
