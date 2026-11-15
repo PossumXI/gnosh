@@ -317,11 +317,14 @@ func TestMentions(t *testing.T) {
 		apptest.Reply{Text: "Done."})
 	w.Write("notes.txt", "alpha\nbeta\n")
 	w.Write("docs/a.md", "x\n")
+	w.Write("sub/AGENTS.md", "In sub, every name is in Latin.\n")
+	w.Write("sub/b.txt", "b\n")
 	w.Write(".env", "SECRET=1\n")
 	w.Deny("Read(./.env)")
-	run(t, w, "-y", "-p", "capitalize alpha in @notes.txt, see @docs and @.env, and ask @someone").wantCode(t, 0)
+	run(t, w, "-y", "-p", "capitalize alpha in @notes.txt, see @docs, @sub/b.txt and @.env, and ask @someone").wantCode(t, 0)
 	body := string(w.Model.Requests()[0].Body)
-	has(t, "the first request", body, "The user mentioned the file notes.txt", "beta", "The user mentioned the directory docs", "a.md", "The user mentioned .env", "a deny rule keeps it from being read")
+	has(t, "the first request", body, "The user mentioned the file notes.txt", "beta", "The user mentioned the directory docs", "a.md", "The user mentioned .env", "a deny rule keeps it from being read",
+		"every name is in Latin")
 	hasNot(t, "the first request", body, "SECRET=1", "mentioned someone")
 	if data, _ := os.ReadFile(notes); string(data) != "ALPHA\nbeta\n" {
 		t.Errorf("the Edit right after the mention did not work: %q; it read %s", data, toolResult(t, w, 1, "c1"))

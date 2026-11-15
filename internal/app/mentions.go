@@ -21,7 +21,8 @@ import (
 // path written after @ in what a person sends puts what Read returns for
 // that file, or a listing of a directory, in front of the model with the
 // prompt, without a tool call, and the file then counts as read, so that
-// it can be edited at once. Read deny rules hold: a path one refuses is
+// it can be edited at once; the instruction files of its folders come with
+// it, as after a Read. Read deny rules hold: a path one refuses is
 // named and left out. A word after @ that names nothing on disk is left as
 // it is: it may be a handle or an address. CLAUDE_CODE_DISABLE_FILE_MENTIONS=1
 // turns this off.
@@ -97,6 +98,9 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionFailed, raw, core.TextOf(res.Content))})
 		default:
 			parts = append(parts, agent.Part{Source: "mention", Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Defuse(core.TextOf(res.Content))})
+			// The instruction files of the file's folders come with it, as
+			// they would after a Read.
+			parts = append(parts, l.lateInstructions(ctx, agent.ToolDone{Call: call, Tool: read, Result: res})...)
 		}
 	}
 	return parts, nil
