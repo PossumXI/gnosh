@@ -1415,6 +1415,14 @@ func crudeCut(src string) []string {
 	}
 	start := 0
 	for i := 0; i < len(src); i++ {
+		// A ${...} is part of the word it stands in, not a place to cut:
+		// "rsync -a --${x}delete src/ ." is one piece (oracle seed 100).
+		if src[i] == '$' && i+1 < len(src) && src[i+1] == '{' {
+			if end := strings.IndexByte(src[i+2:], '}'); end >= 0 && !strings.ContainsAny(src[i+2:i+2+end], "\n;&|`") {
+				i += 2 + end
+				continue
+			}
+		}
 		switch src[i] {
 		case '\n', ';', '&', '|', '(', ')', '`', '{', '}', '<', '>':
 			add(src[start:i])

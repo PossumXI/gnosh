@@ -201,6 +201,9 @@ func TestOtherDestroyers(t *testing.T) {
 		// dash the 000 is chmod's mode.)
 		"env ${HOME:+chmod} -R 000> eval000 .", "echo $[; ${HOME:+mv} .git /tmp/g", "echo $[; ch''mod -R 000 .", "echo $[; X=1 \\mv .git /tmp/g",
 		"echo $[; ${X:-rsync} -a --delete src/ .", "echo $[; \"git\" clean -fdx",
+		// A ${...} in a line the reader cannot follow stays in its word
+		// (oracle seed 100).
+		"echo $((1)+(1)); rsync -a --${x}delete src/ .", "echo $((1)+(1)); chmod -R${x} 000 .",
 		"time coproc shred -u *", "echo $[1]; rsync -a --delete src/ .", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
 		// The forms bash adds to ${...}, on a value the line knows.
 		"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",

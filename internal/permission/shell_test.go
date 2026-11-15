@@ -249,8 +249,9 @@ func TestParseRedirections(t *testing.T) {
 }
 
 func TestCrudeFragments(t *testing.T) {
-	got := crudeFragments("ls; if x; then FOO=1 'r'm -rf y; fi | (sudo rm z)")
-	for _, want := range []string{"ls", "'r'm -rf y", "rm -rf y", "sudo rm z", "FOO=1 'r'm -rf y"} {
+	got := crudeFragments("ls; if x; then FOO=1 'r'm -rf y; fi | (sudo rm z); rsync -a --${x}delete src/ .")
+	// (A ${...} stays in its word: oracle seed 100.)
+	for _, want := range []string{"ls", "'r'm -rf y", "rm -rf y", "sudo rm z", "FOO=1 'r'm -rf y", "rsync -a --${x}delete src/ ."} {
 		found := false
 		for _, g := range got {
 			found = found || g == want
