@@ -510,11 +510,21 @@ func (e *Engine) gitCleanDanger(v *bashView, c *simpleCmd, dirs []string, fromSu
 	// subName is the subcommand as it is written, or as it is when no
 	// variable in it is set: "git clean$x -fdx" is git clean.
 	subName := ""
+	// printed is the first word before the subcommand that holds what a
+	// command prints. Like any printed text it is read as nothing ("git
+	// $(true) clean -fdx" is git clean), and where no subcommand is
+	// written after it, as the subcommand: "git c`x`lean -fdx" is git
+	// clean when x prints nothing. (A flag that only a command prints is
+	// not one this check claims to see: see TestWhatTheRemovalCheckLetsGo.)
+	printed := -1
 	for i := 0; i < len(args) && sub < 0; i++ {
 		l := args[i].joined()
 		if !args[i].static() {
 			if !allLitOrVar(args[i]) {
-				return "" // what a command prints: nobody knows what git is told to do
+				if printed < 0 {
+					printed = i
+				}
+				continue
 			}
 			if l = e.unsetValue(args[i]); l == "" {
 				continue // a word that is not there when its variable is not set
@@ -530,6 +540,11 @@ func (e *Engine) gitCleanDanger(v *bashView, c *simpleCmd, dirs []string, fromSu
 		default:
 			sub, subName = i, l
 		}
+	}
+	if sub < 0 && printed >= 0 {
+		// The printed word may be the subcommand itself: clean, judged
+		// by the flags the line writes out after it.
+		sub, subName = printed, "clean"
 	}
 	rest := args[min(sub+1, len(args)):]
 	if sub >= 0 && subName != "clean" && args[sub].anyOrder {

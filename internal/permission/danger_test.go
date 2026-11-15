@@ -210,6 +210,9 @@ func TestOtherDestroyers(t *testing.T) {
 		"sh -c 'git clean$x -fdx'", "git clean$x -fdx", "git $X clean -fdx", "git clean -fdx$x", "git ${X:-clean} -fdx", "rm -r$x .", "rm -rf$X /",
 		"chmod -R$v 000 .", "mv -t$X/tmp .git", "mv --t=${X:-/tmp} .git", "rsync -a --delete$x src/ .", "chmod $x-R 000 .", "mv $x-t /tmp .git",
 		"git $x-C .. clean -fdx", "rm ${X:--rf} .", "rm $x-rf ~",
+		// git's subcommand built from what a command prints, or after a
+		// printed word that may be nothing, with the flags written out.
+		"git c`true`lean -fdx", "f=-c; sh $f 'git c`lean -it c`lean -fdx'", "git $(true) clean -fdx", "git cl$(x)ean -xdf", "git \"$(x)\" -fdx",
 		// The words a function of the line's own, a set -- or a script
 		// after sh -c is handed are what $1 and "$@" stand for in it.
 		"f() { rm -rf \"$1\"; }; f ~", "clean() { rm -rf \"$1\"; }; clean build; clean .", "f() { mv \"$@\"; }; f .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"",
@@ -332,6 +335,7 @@ func TestWhatTheRemovalCheckLetsGo(t *testing.T) {
 		// A flag or a subcommand that only running the line produces.
 		"echo -rf . | xargs rm", "echo clean -fdx | xargs git", "echo clean -fdx | xargs timeout 5 git", "echo -R 000 . | xargs chmod",
 		"chmod $(echo -R) 000 .", "git $(echo clean -fdx)", "echo -fdx | xargs git clean",
+		"git clean -f$(echo dx)", "git clean $(echo -fdx)", "chmod -R$(echo) 000 .", "git $(x) status",
 		// A command's output without quotes, standing where the command
 		// takes something other than a target, that prints more words than
 		// the one it is there to be.
