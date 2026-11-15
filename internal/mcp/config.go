@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -45,8 +46,8 @@ type Config struct {
 	Headers map[string]string
 	// Timeout bounds one tool call; zero means no bound.
 	Timeout time.Duration
-	// Scope is "local", "project" or "user", and Path the file it came
-	// from.
+	// Scope is "local", "project", "user" or "command line", and Path the
+	// file it came from ("--mcp-config" for JSON given whole).
 	Scope string
 	Path  string
 	// Shown is the server in a few words, to show the person: a started
@@ -81,6 +82,13 @@ type Sources struct {
 	// Withheld are variables a server at a URL is never sent, beside the
 	// credentials Withheld names on its own: gnosh's model keys, say.
 	Withheld []string
+	// Given are servers from the command line (--mcp-config): each a file,
+	// or the JSON itself, in the shape of .mcp.json. A relative file is
+	// found from GivenFrom. Their entries win over every file's, and with
+	// Strict they are the only ones read.
+	Given     []string
+	GivenFrom string
+	Strict    bool
 }
 
 // withheld are the variables that read as empty in the url and headers of
@@ -134,19 +142,44 @@ func LoadConfig(src Sources) ([]Config, []Problem) {
 			byName[c.Name] = c
 		}
 	}
-	user := read(src.User)
-	if user != nil {
-		use(src.User, "user", user.Servers)
-	}
-	if src.Trusted {
-		if project := read(src.Project); project != nil {
-			use(src.Project, "project", project.Servers)
+	if !src.Strict {
+		user := read(src.User)
+		if user != nil {
+			use(src.User, "user", user.Servers)
+		}
+		if src.Trusted {
+			if project := read(src.Project); project != nil {
+				use(src.Project, "project", project.Servers)
+			}
+		}
+		if user != nil && src.Root != "" {
+			if own, ok := user.Projects[src.Root]; ok {
+				use(src.User, "local", own.Servers)
+			}
 		}
 	}
-	if user != nil && src.Root != "" {
-		if own, ok := user.Projects[src.Root]; ok {
-			use(src.User, "local", own.Servers)
+	for _, given := range src.Given {
+		if t := strings.TrimSpace(given); strings.HasPrefix(t, "{") {
+			var f configFile
+			if err := json.Unmarshal([]byte(t), &f); err != nil {
+				probs = append(probs, Problem{Path: "--mcp-config", Message: fmt.Sprintf("the JSON given is not in the shape {\"mcpServers\": {...}} (%v), so none of it is used", err)})
+				continue
+			}
+			use("--mcp-config", "command line", f.Servers)
+			continue
 		}
+		path := given
+		if !filepath.IsAbs(path) && src.GivenFrom != "" {
+			path = filepath.Join(src.GivenFrom, path)
+		}
+		f := read(path)
+		if f == nil {
+			if _, err := os.Stat(path); err != nil {
+				probs = append(probs, Problem{Path: path, Message: "--mcp-config names it, and it cannot be read: " + err.Error()})
+			}
+			continue
+		}
+		use(path, "command line", f.Servers)
 	}
 	names := make([]string, 0, len(byName))
 	for n := range byName {

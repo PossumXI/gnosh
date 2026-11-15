@@ -184,6 +184,12 @@ func Default() *Table {
 			return problem
 		},
 		set: func(i *Invocation, v flagValue) { i.SettingSources, _ = settingSources(v.text) }})
+	mcpConfig := t.add(&flag{names: "--mcp-config", kind: kindList, list: listPaths, arg: "files-or-json...", group: groupSettings, pri: 1,
+		help: "MCP servers for this run, as files or the JSON itself, each in the shape of .mcp.json. A run waits for them before its turn.",
+		set:  func(i *Invocation, v flagValue) { i.MCPConfigs = append(i.MCPConfigs, v.items...) }})
+	strictMCP := t.add(&flag{names: "--strict-mcp-config", group: groupSettings, pri: 1,
+		help: "Use only the MCP servers --mcp-config gives.",
+		set:  func(i *Invocation, _ flagValue) { i.StrictMCPConfig = true }})
 	safeMode := t.add(&flag{names: "--safe-mode", group: groupSettings, pri: 1,
 		help: "Start with your customizations off (hooks, MCP servers, context files, skills on disk, custom commands), to fix a broken one. Providers, the model, built-in tools and permissions stay as they are.",
 		set:  func(i *Invocation, _ flagValue) { i.SafeMode = true }})
@@ -236,7 +242,7 @@ func Default() *Table {
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile,
-		cwd, settings, settingSrc, safeMode, noSlash, debug, debugFile, verbose,
+		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel,
 		help, version,
 	}

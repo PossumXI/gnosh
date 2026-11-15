@@ -39,6 +39,13 @@ type Limits struct {
 	// the auto-compact window, which can make the backstop run earlier and
 	// never later. Not set means none.
 	AutoCompactPct Value[int]
+	// MCPTimeout is MCP_TIMEOUT: how long an MCP server may take to start
+	// and answer the handshake. Default: 30 seconds.
+	MCPTimeout Value[time.Duration]
+	// MCPToolTimeout is MCP_TOOL_TIMEOUT: how long one call of an MCP
+	// server's tool may run when the server's entry gives no timeout of
+	// its own. Not set means no limit.
+	MCPToolTimeout Value[time.Duration]
 }
 
 // limitVars are the variables of Claude Code's, and the two provider keys,
@@ -54,6 +61,8 @@ var limitVars = []struct{ name, what, from string }{
 	{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "tokens of context before room is made; outranks the autoCompactWindow option", fromClaudeCode},
 	{"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "a percentage of that window; earlier only", fromClaudeCode},
 	{"CLAUDE_CODE_SAFE_MODE", "the same as --safe-mode", fromClaudeCode},
+	{"MCP_TIMEOUT", "milliseconds an MCP server may take to start", fromClaudeCode},
+	{"MCP_TOOL_TIMEOUT", "milliseconds one call of an MCP server's tool may run, where its entry gives no timeout", fromClaudeCode},
 	{"ANTHROPIC_API_KEY", "the key of an anthropic provider that gives none", fromAPIs + ": Anthropic's own variable, which Claude Code reads too"},
 	{"OPENAI_API_KEY", "the key of an openai provider that gives none", fromAPIs + ": OpenAI's own variable"},
 }
@@ -117,6 +126,13 @@ func (ld *loader) limits() Limits {
 		BashMaxTimeout:     Value[time.Duration]{V: 10 * time.Minute},
 		BashMaxOutput:      Value[int]{V: 30000},
 		FileReadMaxTokens:  Value[int]{V: 25000},
+		MCPTimeout:         Value[time.Duration]{V: 30 * time.Second},
+	}
+	if n, o, ok := ld.whole("MCP_TIMEOUT", 1); ok {
+		l.MCPTimeout.put(ms(n), o)
+	}
+	if n, o, ok := ld.whole("MCP_TOOL_TIMEOUT", 1); ok {
+		l.MCPToolTimeout.put(ms(n), o)
 	}
 	if n, o, ok := ld.whole("API_TIMEOUT_MS", 0); ok {
 		l.APITimeout.put(ms(n), o)

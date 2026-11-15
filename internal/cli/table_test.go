@@ -211,6 +211,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove", "gnosh mcp ls", "gnosh mcp rm",
 		"gnosh mcp add -s", "gnosh mcp add --scope", "gnosh mcp add -t", "gnosh mcp add --transport",
 		"gnosh mcp add -e", "gnosh mcp add --env", "gnosh mcp add -H", "gnosh mcp add --header", "gnosh mcp remove -s",
+		"gnosh --mcp-config", "gnosh --strict-mcp-config",
 		"gnosh help", "gnosh version", "gnosh --allow-dangerously-skip-permissions",
 	} {
 		if !have[want] {
@@ -227,7 +228,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		// session is named with --resume, and there is no other data folder.
 		"gnosh run", "gnosh r", "gnosh -q", "gnosh --quiet", "gnosh -s", "gnosh --session", "gnosh -D", "gnosh --data-dir",
 		// What the specs name and nothing builds yet.
-		"gnosh --bare", "gnosh --agents", "gnosh --mcp-config", "gnosh --strict-mcp-config",
+		"gnosh --bare", "gnosh --agents",
 		"gnosh --include-partial-messages", "gnosh --replay-user-messages",
 		"gnosh --no-session-persistence", "gnosh --permission-prompts",
 		"gnosh session delete", "gnosh session rm", "gnosh session web",

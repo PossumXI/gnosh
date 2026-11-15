@@ -299,4 +299,9 @@ or kept with the reason said (27).
     keys, as they were. `list` and `get` connect to each server to say
     whether it works, but never start a project's servers in a folder that
     is not trusted, and never show the values of variables and headers.
+    `--mcp-config` gives a run servers of its own, files or the JSON
+    itself, whose entries win; `--strict-mcp-config` makes them the only
+    ones; and safe mode, which turns off what files set up, leaves them
+    on, since they were typed for this run. `MCP_TIMEOUT` and
+    `MCP_TOOL_TIMEOUT` are read as Claude Code reads them.
 

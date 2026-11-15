@@ -136,6 +136,9 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh mcp remove far -s everywhere`, kind: ErrBadValue},
 		{line: `gnosh mcp`, kind: ErrUsage, say: []string{"gnosh mcp needs one of its commands after it"}},
 		{line: `gnosh help mcp`, want: helpFor("mcp")},
+		{line: `gnosh -p --mcp-config '{"mcpServers": {}}' ./mcp.json --strict-mcp-config "do it"`, want: pr(Invocation{Prompt: "do it", MCPConfigs: []string{`{"mcpServers": {}}`, "./mcp.json"}, StrictMCPConfig: true})},
+		{line: `gnosh -p --mcp-config ./mcp.json '{"mcpServers": {}}'`, want: pr(Invocation{Prompt: `{"mcpServers": {}}`, MCPConfigs: []string{"./mcp.json"}})},
+		{line: `gnosh --mcp-config a.json b.json`, want: inter(Invocation{MCPConfigs: []string{"a.json", "b.json"}})},
 
 		// help and version, as flags and as commands
 		{line: `gnosh -h`, want: helpFor()},
@@ -205,8 +208,6 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		// The flags of parts that are not built.
 		{line: `gnosh --bare`, kind: ErrUnknownFlag, say: []string{"--bare is not a flag of gnosh"}},
 		{line: `gnosh --agents '{}'`, kind: ErrUnknownFlag, say: []string{"--agents is not a flag of gnosh"}},
-		{line: `gnosh --mcp-config ./mcp.json`, kind: ErrUnknownFlag, say: []string{"--mcp-config is not a flag of gnosh"}},
-		{line: `gnosh --strict-mcp-config`, kind: ErrUnknownFlag, say: []string{"--strict-mcp-config is not a flag of gnosh"}},
 		{line: `gnosh -p x --no-session-persistence`, kind: ErrUnknownFlag, say: []string{"--no-session-persistence is not a flag of gnosh"}},
 		{line: `gnosh -p x --permission-prompts none`, kind: ErrUnknownFlag, say: []string{"--permission-prompts is not a flag of gnosh"}},
 		{line: `gnosh -p x --output-format stream-json --include-partial-messages`, kind: ErrUnknownFlag, say: []string{"--include-partial-messages is not a flag of gnosh"}},
@@ -235,7 +236,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 	}
 	for _, gone := range []string{
 		"run", "--quiet", "--session", "--data-dir",
-		"--bare", "--agents", "--mcp-config", "--strict-mcp-config",
+		"--bare", "--agents",
 		"--no-session-persistence", "--permission-prompts", "--include-partial-messages", "--replay-user-messages",
 		"--input-format=stream-json",
 		"session delete", "session web", "session web --port",

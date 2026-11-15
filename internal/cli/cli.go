@@ -242,6 +242,11 @@ type Invocation struct {
 	MCPTransport string
 	MCPEnv       []string
 	MCPHeaders   []string
+	// MCPConfigs are the MCP servers a session is given on its command line
+	// (--mcp-config): files, or the JSON itself, each in the shape of
+	// .mcp.json. StrictMCPConfig says to use those alone.
+	MCPConfigs      []string
+	StrictMCPConfig bool
 }
 
 // Exit codes, for the code that runs what Parse describes.

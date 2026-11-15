@@ -505,14 +505,16 @@ func TestClaudeCodeVariables(t *testing.T) {
 	in := inputs(newFS())
 	def := mustLoad(t, in).Limits
 	if def.APITimeout.Set || def.BashDefaultTimeout.V != 2*time.Minute || def.BashMaxTimeout.V != 10*time.Minute || def.BashMaxOutput.V != 30000 ||
-		def.MaxOutputTokens.Set || def.FileReadMaxTokens.V != 25000 || def.GlobTimeout.Set || def.AutoCompactPct.Set {
+		def.MaxOutputTokens.Set || def.FileReadMaxTokens.V != 25000 || def.GlobTimeout.Set || def.AutoCompactPct.Set ||
+		def.MCPTimeout.V != 30*time.Second || def.MCPToolTimeout.Set {
 		t.Errorf("defaults: %+v", def)
 	}
 
 	in.Environ = append(in.Environ,
 		"API_TIMEOUT_MS=30000", "BASH_DEFAULT_TIMEOUT_MS=60000", "BASH_MAX_TIMEOUT_MS=900000", "BASH_MAX_OUTPUT_LENGTH=50000",
 		"CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000", "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000", "CLAUDE_CODE_GLOB_TIMEOUT_SECONDS=20",
-		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80")
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80",
+		"MCP_TIMEOUT=5000", "MCP_TOOL_TIMEOUT=60000")
 	cfg, problems := load(t, in)
 	if cfg == nil || len(problems) != 0 {
 		t.Fatalf("good values load without a word:\n%s", showProblems(problems))
@@ -520,7 +522,8 @@ func TestClaudeCodeVariables(t *testing.T) {
 	l := cfg.Limits
 	if l.APITimeout.V != 30*time.Second || l.BashDefaultTimeout.V != time.Minute || l.BashMaxTimeout.V != 15*time.Minute || l.BashMaxOutput.V != 50000 ||
 		l.MaxOutputTokens.V != 8000 || l.FileReadMaxTokens.V != 10000 || l.GlobTimeout.V != 20*time.Second ||
-		cfg.Options.AutoCompactWindow.V != 150000 || l.AutoCompactPct.V != 80 {
+		cfg.Options.AutoCompactWindow.V != 150000 || l.AutoCompactPct.V != 80 ||
+		l.MCPTimeout.V != 5*time.Second || l.MCPToolTimeout.V != time.Minute {
 		t.Errorf("limits: %+v", l)
 	}
 	if o := l.BashMaxOutput.Origin; o.Layer != LayerEnv || o.Name != "$BASH_MAX_OUTPUT_LENGTH" {
@@ -531,17 +534,17 @@ func TestClaudeCodeVariables(t *testing.T) {
 	in = inputs(newFS())
 	in.Environ = append(in.Environ,
 		"API_TIMEOUT_MS=soon", "BASH_DEFAULT_TIMEOUT_MS=-5", "BASH_MAX_TIMEOUT_MS=1000", "BASH_MAX_OUTPUT_LENGTH=999999",
-		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=5", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=250")
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=5", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=250", "MCP_TIMEOUT=0")
 	cfg, problems = load(t, in)
 	if cfg == nil {
 		t.Fatalf("a bad value in one of Claude Code's variables never stops startup:\n%s", showProblems(problems))
 	}
 	l = cfg.Limits
 	if l.APITimeout.Set || l.BashDefaultTimeout.V != 2*time.Minute || l.BashMaxTimeout.V != 2*time.Minute || l.BashMaxOutput.V != 150000 ||
-		cfg.Options.AutoCompactWindow.Set || l.AutoCompactPct.Set {
+		cfg.Options.AutoCompactWindow.Set || l.AutoCompactPct.Set || l.MCPTimeout.V != 30*time.Second {
 		t.Errorf("limits after bad values: %+v", l)
 	}
-	if len(cfg.BadEnv) != 6 || len(Warnings(problems)) != 6 {
+	if len(cfg.BadEnv) != 7 || len(Warnings(problems)) != 7 {
 		t.Errorf("each bad value is reported once: %d for doctor, %d warnings:\n%s", len(cfg.BadEnv), len(Warnings(problems)), showProblems(problems))
 	}
 	wantProblem(t, problems, Warning, "$API_TIMEOUT_MS", 0, `"soon"`, "not a whole number")

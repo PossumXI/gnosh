@@ -249,7 +249,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		}
 	} else {
 		l.notice(agent.LevelWarning, "config", fmt.Sprintf(
-			"Safe mode is on (%s): hooks, instruction files and your own prompt texts are off. Start without it to turn them back on.",
+			"Safe mode is on (%s): hooks, instruction files, MCP servers from files and your own prompt texts are off. Start without it to turn them back on.",
 			l.cfg.Switches.SafeMode.Origin))
 	}
 	if l.cfg.HooksOff != "" && !l.cfg.Switches.SafeMode.V {

@@ -22,9 +22,9 @@ Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output), an
 interactive session in the terminal's own scrollback, the file and shell
 tools, WebFetch (a page read by the small model with the model's request,
 from the open web only), MCP servers, those gnosh starts itself and those
-at a URL (from `~/.config/gnosh/mcp.json`, and a trusted project's
-`.mcp.json`, in Claude Code's shape; their tools are
-`mcp__<server>__<tool>`), commands on
+at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
+`.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
+tools are `mcp__<server>__<tool>`), commands on
 declared hosts over ssh, permission modes and rules,
 hooks, instruction files, sub-agents in the foreground, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,

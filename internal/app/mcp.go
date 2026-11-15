@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,10 +30,6 @@ import (
 // their tools are added as each one is ready; a run (-p) waits for them,
 // as long as a server may take to start, before its turn. Sub-agents are
 // not given MCP tools in this build.
-
-// mcpStartTimeout is how long a server may take to start and answer the
-// handshake.
-const mcpStartTimeout = 30 * time.Second
 
 // mcpMaxChars is the most of a tool's result the model reads; the whole of
 // a longer one is written to a file beside the session, and the model is
@@ -80,11 +77,17 @@ func (l *live) loadMCP() *mcpSet {
 			keys = append(keys, v)
 		}
 	}
+	// Servers from the command line are the person's word for this run:
+	// with --strict-mcp-config they are the only ones, and in safe mode
+	// they are all there is too, since safe mode turns off what files set
+	// up and not what was typed.
 	cfgs, probs := mcp.LoadConfig(mcp.Sources{
 		User:    filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"),
 		Project: filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json"),
 		Root:    l.cfg.Paths.ProjectRoot, Trusted: l.st.trusted,
 		Getenv: getenv, Withheld: keys,
+		Given: l.inv.MCPConfigs, GivenFrom: l.p.o.Cwd,
+		Strict: l.inv.StrictMCPConfig || l.cfg.Switches.SafeMode.V,
 	})
 	set := &mcpSet{probs: probs}
 	for _, c := range cfgs {
@@ -133,9 +136,10 @@ func (l *live) connectMCP(s *mcpServer) {
 		l.flog.logf("mcp", "the MCP server %s did not connect: %s", s.cfg.Name, why)
 		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s is not connected: %s (/mcp says more)", s.cfg.Name, oneLine(why, 300)))
 	}
-	ctx, cancel := context.WithTimeout(l.ctx, mcpStartTimeout)
+	timeout := l.cfg.Limits.MCPTimeout.V
+	ctx, cancel := context.WithTimeout(l.ctx, timeout)
 	defer cancel()
-	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: mcpStartTimeout}
+	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: timeout}
 	var client *mcp.Client
 	var err error
 	switch s.cfg.Type {
@@ -384,15 +388,20 @@ func (t *mcpTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	if client == nil {
 		return core.ErrorResult(fmt.Sprintf("The MCP server %s is not connected now, so %s did not run.", t.server.cfg.Name, t.tool.Name)), nil
 	}
-	if t.server.cfg.Timeout > 0 {
+	// The server's own timeout, else MCP_TOOL_TIMEOUT, else none.
+	limit, whose := t.server.cfg.Timeout, "the timeout its entry gives"
+	if limit == 0 {
+		limit, whose = t.l.cfg.Limits.MCPToolTimeout.V, "MCP_TOOL_TIMEOUT"
+	}
+	if limit > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, t.server.cfg.Timeout)
+		ctx, cancel = context.WithTimeout(ctx, limit)
 		defer cancel()
 	}
 	res, err := client.CallTool(ctx, t.tool.Name, call.Input)
 	if err != nil {
-		if ctx.Err() != nil && t.server.cfg.Timeout > 0 {
-			return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not answer within %s, its configured timeout.", t.tool.Name, t.server.cfg.Name, t.server.cfg.Timeout)), nil
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) && limit > 0 {
+			return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not answer within %s, %s.", t.tool.Name, t.server.cfg.Name, limit, whose)), nil
 		}
 		return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not run: %v", t.tool.Name, t.server.cfg.Name, err)), nil
 	}

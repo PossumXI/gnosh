@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/mcp"
@@ -217,12 +218,12 @@ func (p *program) mcpShow(ctx context.Context, inv cli.Invocation, places mcpPla
 	}
 
 	if inv.Command == cli.CmdMCPGet {
-		return p.mcpGet(ctx, inv.Args[0], cfgs, waiting, places)
+		return p.mcpGet(ctx, inv.Args[0], cfgs, waiting, places, st.cfg.Limits.MCPTimeout.V)
 	}
 	if len(cfgs) == 0 && len(waiting) == 0 {
 		fmt.Fprintln(p.stdout, "No MCP server is configured here. gnosh mcp add adds one: gnosh mcp add <name> -- <command> [args...], or gnosh mcp add -t http <name> <url>.")
 	}
-	results := p.mcpCheckAll(ctx, cfgs, places.root)
+	results := p.mcpCheckAll(ctx, cfgs, places.root, st.cfg.Limits.MCPTimeout.V)
 	for i, c := range cfgs {
 		fmt.Fprintf(p.stdout, "%s: %s (%s, %s) - %s\n", c.Name, c.Shown, c.Type, c.Scope, results[i])
 	}
@@ -236,7 +237,7 @@ func (p *program) mcpShow(ctx context.Context, inv cli.Invocation, places mcpPla
 }
 
 // mcpGet is `gnosh mcp get`.
-func (p *program) mcpGet(ctx context.Context, name string, cfgs []mcp.Config, waiting []string, places mcpPlaces) int {
+func (p *program) mcpGet(ctx context.Context, name string, cfgs []mcp.Config, waiting []string, places mcpPlaces, timeout time.Duration) int {
 	i := slices.IndexFunc(cfgs, func(c mcp.Config) bool { return c.Name == name })
 	if i < 0 {
 		if slices.Contains(waiting, name) {
@@ -287,7 +288,7 @@ func (p *program) mcpGet(ctx context.Context, name string, cfgs []mcp.Config, wa
 	if c.Timeout > 0 {
 		fmt.Fprintf(p.stdout, "  timeout of a call: %s\n", c.Timeout)
 	}
-	fmt.Fprintf(p.stdout, "  status: %s\n", p.mcpCheckAll(ctx, []mcp.Config{c}, places.root)[0])
+	fmt.Fprintf(p.stdout, "  status: %s\n", p.mcpCheckAll(ctx, []mcp.Config{c}, places.root, timeout)[0])
 	fmt.Fprintf(p.stdout, "To remove it: gnosh mcp remove %s -s %s\n", c.Name, c.Scope)
 	return cli.ExitOK
 }
@@ -295,20 +296,20 @@ func (p *program) mcpGet(ctx context.Context, name string, cfgs []mcp.Config, wa
 // mcpCheckAll connects to each server, all at once, and says how each
 // went: connected, with how many tools, or why not. A started server
 // starts in the project's root, as in a session.
-func (p *program) mcpCheckAll(ctx context.Context, cfgs []mcp.Config, root string) []string {
+func (p *program) mcpCheckAll(ctx context.Context, cfgs []mcp.Config, root string, timeout time.Duration) []string {
 	out := make([]string, len(cfgs))
 	var wg sync.WaitGroup
 	for i, c := range cfgs {
-		wg.Go(func() { out[i] = p.mcpCheck(ctx, c, root) })
+		wg.Go(func() { out[i] = p.mcpCheck(ctx, c, root, timeout) })
 	}
 	wg.Wait()
 	return out
 }
 
-func (p *program) mcpCheck(ctx context.Context, c mcp.Config, root string) string {
-	ctx, cancel := context.WithTimeout(ctx, mcpStartTimeout)
+func (p *program) mcpCheck(ctx context.Context, c mcp.Config, root string, timeout time.Duration) string {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(p.o.BuildID, "devel"), StartTimeout: mcpStartTimeout}
+	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(p.o.BuildID, "devel"), StartTimeout: timeout}
 	var client *mcp.Client
 	var err error
 	switch c.Type {

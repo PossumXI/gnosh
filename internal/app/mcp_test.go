@@ -219,3 +219,31 @@ func TestMCPReconnectAndDisable(t *testing.T) {
 	r = run(t, w, "-p", "/mcp frobnicate greeter").wantCode(t, 0)
 	has(t, "/mcp frobnicate", r.out, "/mcp takes nothing, or reconnect, enable or disable")
 }
+
+// --mcp-config gives a run servers of its own; --strict-mcp-config makes
+// them the only ones; safe mode turns off the files' servers and leaves
+// the ones typed.
+func TestMCPConfigFlags(t *testing.T) {
+	w := apptest.NewWorld(t)
+	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"filed": {"command": "`+server+`"}}}`)
+	w.Write("given.json", `{"mcpServers": {"given": {"command": "`+server+`"}}}`)
+	inline := `{"mcpServers": {"typed": {"command": "` + server + `"}}}`
+
+	// (JSON with blanks in it ends a list, so it goes first.)
+	r := run(t, w, "-p", "--mcp-config", inline, "given.json", "--", "/mcp").wantCode(t, 0)
+	has(t, "/mcp with --mcp-config", r.out, "filed: connected", "given: connected (greeter 0.1; command line, "+w.Dir+"/given.json)", "typed: connected (greeter 0.1; command line, --mcp-config)")
+
+	r = run(t, w, "-p", "--strict-mcp-config", "--mcp-config", inline, "--", "/mcp").wantCode(t, 0)
+	has(t, "/mcp with --strict-mcp-config", r.out, "typed: connected")
+	if strings.Contains(r.out, "filed") {
+		t.Errorf("--strict-mcp-config let the user's server in:\n%s", r.out)
+	}
+
+	r = run(t, w, "-p", "--safe-mode", "--mcp-config", inline, "--", "/mcp").wantCode(t, 0)
+	has(t, "/mcp in safe mode", r.out, "typed: connected")
+	has(t, "the safe mode notice", r.err, "MCP servers from files")
+	if strings.Contains(r.out, "filed") {
+		t.Errorf("safe mode let the user's server in:\n%s", r.out)
+	}
+}

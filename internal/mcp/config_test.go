@@ -117,3 +117,54 @@ func TestToolName(t *testing.T) {
 		}
 	}
 }
+
+// Servers given on the command line (--mcp-config): files, found from
+// where gnosh was started, and JSON given whole. Their entries win over the
+// files', and with Strict they are the only ones.
+func TestGivenConfig(t *testing.T) {
+	dir := t.TempDir()
+	user := filepath.Join(dir, "mcp.json")
+	os.WriteFile(user, []byte(`{"mcpServers": {"mine": {"command": "user-mine"}, "both": {"command": "user-both"}}}`), 0o600)
+	os.WriteFile(filepath.Join(dir, "extra.json"), []byte(`{"mcpServers": {"fromfile": {"command": "f"}}}`), 0o600)
+	getenv := func(string) (string, bool) { return "", false }
+	src := Sources{User: user, Root: dir, Getenv: getenv, GivenFrom: dir, Given: []string{
+		"extra.json",
+		` {"mcpServers": {"both": {"type": "http", "url": "https://b.example.org/mcp"}}}`,
+		"missing.json",
+		`{"mcpServers": `,
+	}}
+	got, probs := LoadConfig(src)
+	m := map[string]Config{}
+	for _, c := range got {
+		m[c.Name] = c
+	}
+	if m["mine"].Scope != "user" {
+		t.Errorf("mine: %+v", m["mine"])
+	}
+	if f := m["fromfile"]; f.Scope != "command line" || f.Path != filepath.Join(dir, "extra.json") {
+		t.Errorf("fromfile: %+v", f)
+	}
+	if b := m["both"]; b.Type != "http" || b.Scope != "command line" || b.Path != "--mcp-config" {
+		t.Errorf("both: %+v", b)
+	}
+	text := ""
+	for _, p := range probs {
+		text += p.String() + "\n"
+	}
+	for _, want := range []string{"missing.json: --mcp-config names it, and it cannot be read", "--mcp-config: the JSON given is not in the shape"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the problems do not say %q:\n%s", want, text)
+		}
+	}
+
+	src.Strict = true
+	got, _ = LoadConfig(src)
+	for _, c := range got {
+		if c.Scope != "command line" {
+			t.Errorf("with Strict, %s of %s is in force", c.Name, c.Scope)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("with Strict: %d servers, want the 2 given", len(got))
+	}
+}
