@@ -217,7 +217,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw},
+			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded, textBtw, textRecap},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -230,6 +230,7 @@ func goldenFiles() []goldenFile {
 					{"one stopped before it finished", s.AgentEnded(AgentEnd{ID: "77b0e1d2", Description: "review the patch", State: AgentFailed, Why: "its model request failed: connection refused", Report: "Half of it is read."})},
 					{"one was stopped", s.AgentEnded(AgentEnd{ID: "9c4d", Description: "search the logs", State: AgentStopped})},
 					{"before a side question (/btw)", s.Btw()},
+					{"the question of /recap", s.Recap()},
 				}
 			},
 		},

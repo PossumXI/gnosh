@@ -40,7 +40,8 @@ In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write
 and Edit changed, or both), `/model`, `/effort`, `/plan`, `/permissions`,
 `/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
-model works; nothing of it is kept), `/cost`, `/tasks`, `/diff`, `/export`,
+model works; nothing of it is kept), `/recap`, `/cost`, `/tasks`, `/diff`,
+`/export`,
 `/copy`, `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and
 disable), `/skills`, `/reload-skills`, `/hooks` and `/doctor`, with gnosh's
 own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the

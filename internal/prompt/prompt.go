@@ -65,6 +65,7 @@ const (
 	textBackgroundEnded  = "background-ended"
 	textAgentEnded       = "agent-ended"
 	textBtw              = "btw"
+	textRecap            = "recap"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
 	textSummary          = "summary"
@@ -173,6 +174,8 @@ func specs() []spec {
 			when: "When a sub-agent the model started in the background ends, between rounds or as a turn of its own."},
 		{name: textBtw, kind: KindLine,
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
+		{name: textRecap, kind: KindLine,
+			when: "As the question of /recap, in a request beside the session's that is not kept."},
 		{name: textSummary, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
 			when: "At the end of the session's own request, when the conversation must be replaced by a summary."},
 		{name: textSummaryExtra, kind: KindLine, need: []string{"instructions"},

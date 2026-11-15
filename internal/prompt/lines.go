@@ -511,6 +511,12 @@ func (s *Set) Btw() string {
 	return s.fill(textBtw, nil)
 }
 
+// Recap returns the question of /recap: the session in one line, for the
+// person, in a request beside the session's that is not kept.
+func (s *Set) Recap() string {
+	return s.fill(textRecap, nil)
+}
+
 // SummaryIntro returns the line that stands just before a summary, where
 // the summary takes the place of the conversation it replaced. The summary
 // itself follows it, outside the marker: it is the model's own text.

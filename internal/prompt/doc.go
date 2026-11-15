@@ -250,6 +250,8 @@
 //   - btw (Btw) stands before a side question the person asks with /btw,
 //     in a request beside the session's own that is not kept: answer in
 //     words from the conversation, call no tool, start on nothing.
+//   - recap (Recap) is the question of /recap, asked the same way: the
+//     session in one line, for the person.
 //   - summary, with summary-extra for what the person asked of it
 //     (Summary), is the request for a summary. It is about 200 tokens and
 //     asks for at most 500 words: what the user asked, in their words;

@@ -30,3 +30,6 @@ Half of it is read.</gnosh>
 === before a side question (/btw) ===
 <gnosh>The user asks a side question while the work goes on; it follows. Answer it briefly, in words, from what this conversation already holds. Call no tool and start on nothing: neither the question nor your answer stays in the conversation, and the work goes on as it was.</gnosh>
 
+=== the question of /recap ===
+<gnosh>In one line, say what this session has done so far and where it stands now. Call no tool, and start on nothing: the line is for the user, and it is not kept in the conversation.</gnosh>
+

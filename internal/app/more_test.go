@@ -158,6 +158,27 @@ func TestBtwSideQuestion(t *testing.T) {
 	hasNot(t, "the session's file", string(data), "which number was it?", "It was seven.")
 	r = run(t, w, "-c", "-p", "/btw").wantCode(t, 1)
 	has(t, "/btw with no question", r.err, "/btw takes a question")
+
+	// /recap is the session in one line, asked the same way.
+	w.Model.Add(apptest.Reply{Text: "\nYou asked me to remember seven; I did.\nA second line that is left out."})
+	r = run(t, w, "-c", "-p", "/recap").wantCode(t, 0)
+	if r.out != "You asked me to remember seven; I did.\n" {
+		t.Errorf("/recap printed %q", r.out)
+	}
+	reqs = w.Model.Requests()
+	has(t, "the recap request", string(reqs[len(reqs)-1].Body), "remember the number seven", "In one line")
+	data, _ = os.ReadFile(w.Sessions()[0])
+	hasNot(t, "the session's file after /recap", string(data), "In one line", "I did.")
+}
+
+// /recap with no conversation yet says so, and asks no model.
+func TestRecapOfNothing(t *testing.T) {
+	w := apptest.NewWorld(t)
+	r := run(t, w, "-p", "/recap").wantCode(t, 0)
+	has(t, "/recap", r.out, "nothing to recap yet")
+	if n := len(w.Model.Requests()); n != 0 {
+		t.Errorf("the model was sent %d requests", n)
+	}
 }
 
 // The subcommands that look at what gnosh keeps, without a model: the

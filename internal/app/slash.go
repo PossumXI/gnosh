@@ -15,6 +15,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
 // slashSet is the registry of a session's slash commands: gnosh's own, and
@@ -190,6 +191,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "reload-skills", Summary: "Read the skill and command folders again now, and say what changed.", InRun: true, Run: l.slashReloadSkills},
 		{Name: "context", Args: "[all]", Summary: "What fills the model's window, by kind.", InRun: true, Run: l.slashContext},
 		{Name: "btw", Args: "<question>", Summary: "Ask the model a side question about the conversation, also while it works. Neither the question nor the answer is kept.", InRun: true, Run: l.slashBtw},
+		{Name: "recap", Summary: "The session in one line: what it has done and where it stands. Nothing of it is kept.", InRun: true, Run: l.slashRecap},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
@@ -332,6 +334,26 @@ func (l *live) slashBtw(ctx context.Context, c *SlashContext) error {
 	for _, line := range strings.Split(res.Text, "\n") {
 		if strings.TrimSpace(line) != "" {
 			c.Say("%s", line)
+		}
+	}
+	return nil
+}
+
+// slashRecap is /recap: the session in one line, from the session's own
+// model, asked as /btw asks (beside the work, nothing kept).
+func (l *live) slashRecap(ctx context.Context, c *SlashContext) error {
+	if !slices.ContainsFunc(l.ts.Entries(), func(e transcript.Entry) bool { return e.Type == transcript.TypeUser }) {
+		c.Say("There is nothing to recap yet: the conversation has not begun.")
+		return nil
+	}
+	res, err := c.Agent.Side(ctx, agent.SideRequest{Purpose: "recap", Session: true, Prompt: l.texts.Recap(), MaxTokens: 512, Timeout: btwWait})
+	if err != nil {
+		return fmt.Errorf("no recap was made: %w", err)
+	}
+	for _, line := range strings.Split(res.Text, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			c.Say("%s", line)
+			break
 		}
 	}
 	return nil
