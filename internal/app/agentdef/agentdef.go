@@ -237,7 +237,7 @@ func (s *Set) Get(name string) (Def, bool) {
 // name.
 func (s *Set) All() []Def {
 	out := slices.Clone(s.defs)
-	rank := map[string]int{"built-in": 0, "user": 1, "project": 2}
+	rank := map[string]int{"built-in": 0, "user": 1, "project": 2, ScopeCommandLine: 3}
 	sort.SliceStable(out, func(i, j int) bool {
 		if rank[out[i].Scope] != rank[out[j].Scope] {
 			return rank[out[i].Scope] < rank[out[j].Scope]
@@ -318,18 +318,28 @@ func Parse(text string) (d Def, reason string) {
 			}
 		}
 	}
-	switch {
-	case d.Name == "":
-		return d, "it has no name"
-	case strings.HasPrefix(d.Name, "-"), strings.Contains(d.Name, ":"), utf8.RuneCountInString(d.Name) > 256:
-		return d, fmt.Sprintf("the name %q cannot be an agent's: a name does not start with a dash, holds no colon, and is at most 256 characters long", clip(d.Name, 80))
-	case d.Description == "":
-		return d, fmt.Sprintf("the agent %q has no description, which is what says when to use it", d.Name)
+	if why := d.problem(); why != "" {
+		return d, why
 	}
 	if d.Model == "inherit" {
 		d.Model = ""
 	}
 	return d, ""
+}
+
+// problem says why a definition cannot be used, or "": every definition
+// has a name an Agent call can give, and a description that says when to
+// use it.
+func (d Def) problem() string {
+	switch {
+	case d.Name == "":
+		return "it has no name"
+	case strings.HasPrefix(d.Name, "-"), strings.Contains(d.Name, ":"), utf8.RuneCountInString(d.Name) > 256:
+		return fmt.Sprintf("the name %q cannot be an agent's: a name does not start with a dash, holds no colon, and is at most 256 characters long", clip(d.Name, 80))
+	case d.Description == "":
+		return fmt.Sprintf("the agent %q has no description, which is what says when to use it", d.Name)
+	}
+	return ""
 }
 
 func clip(s string, n int) string {

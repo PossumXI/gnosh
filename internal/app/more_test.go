@@ -282,3 +282,24 @@ func TestBareMode(t *testing.T) {
 	has(t, "the tools sent with --tools", body, `"name":"Glob"`, `"name":"Read"`)
 	hasNot(t, "the tools sent with --tools", body, `"name":"Bash"`)
 }
+
+// --agents defines kinds of sub-agent for the run: the Agent tool offers
+// them, over a file's of the same name, and a value that cannot be read
+// stops the run before anything starts.
+func TestAgentsFlag(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Ready."})
+	w.Write("agents.json", `{"haiku-writer": {"description": "Writes haiku about the code.", "prompt": "You write haiku.", "tools": ["Read"]}}`)
+	run(t, w, "-p", "say ready", "--agents", `{"limerick-writer": {"description": "Writes limericks about the code.", "prompt": "You write limericks."}}`).wantCode(t, 0)
+	reqs := w.Model.Requests()
+	has(t, "the Agent tool's kinds", string(reqs[len(reqs)-1].Body), "limerick-writer", "Writes limericks about the code.")
+	w.Model.Add(apptest.Reply{Text: "Ready again."})
+	run(t, w, "-p", "say ready", "--agents", w.Dir+"/agents.json").wantCode(t, 0)
+	reqs = w.Model.Requests()
+	has(t, "the Agent tool's kinds, from a file", string(reqs[len(reqs)-1].Body), "haiku-writer")
+	n := len(w.Model.Requests())
+	r := run(t, w, "-p", "say ready", "--agents", `{"bad": {"prompt": "no description"}}`).wantCode(t, 1)
+	has(t, "a bad --agents", r.err, `--agents: the agent "bad" has no description`, "nothing was started")
+	if len(w.Model.Requests()) != n {
+		t.Errorf("the model was asked although --agents could not be read")
+	}
+}

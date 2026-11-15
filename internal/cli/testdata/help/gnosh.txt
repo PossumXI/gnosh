@@ -94,6 +94,11 @@ What the model is told
   --append-system-prompt-file <path>
       The same, with the text read from a file. Given together with
       --append-system-prompt, the file's text comes first. (Not built yet.)
+  --agents <json>
+      Kinds of sub-agent for this run, over those of the files and gnosh's
+      own: a JSON object of agents by name, each with "description" and
+      "prompt" and the settings of an agent file ("tools", "model", "maxTurns"
+      ...), or the path of a file that holds one. (Not built yet.)
 
 Settings for this run
   --cwd <dir>

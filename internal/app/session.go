@@ -1412,6 +1412,14 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 	if st.decision.Notice != "" {
 		fmt.Fprintln(p.stderr, st.decision.Notice)
 	}
+	if inv.Agents != "" {
+		defs, err := p.cliAgents(inv.Agents)
+		if err != nil {
+			p.errf("--agents: %v, so nothing was started.", strings.TrimRight(err.Error(), "."))
+			return cli.ExitFailure
+		}
+		st.agents = defs
+	}
 	if inv.NoSessionPersistence {
 		// Nothing of the run is kept: its session lives in a folder of
 		// its own, which goes once the session is closed.

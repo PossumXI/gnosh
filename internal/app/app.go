@@ -210,7 +210,7 @@ var built = []string{
 	"--allow-dangerously-skip-permissions",
 	"--allowedTools", "--disallowedTools", "--tools", "--add-dir", "--trust-folder",
 	"--system-prompt", "--system-prompt-file", "--append-system-prompt", "--append-system-prompt-file",
-	"--setting-sources", "--safe-mode", "--bare", "--disable-slash-commands",
+	"--setting-sources", "--safe-mode", "--bare", "--disable-slash-commands", "--agents",
 	"--debug", "--debug-file", "--verbose",
 	"--output-format=json", "--output-format=stream-json",
 	"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove",

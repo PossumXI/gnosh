@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -179,7 +180,29 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 // definition is a stranger's instructions for an agent that acts with the
 // person's permissions. Safe mode reads none but gnosh's own.
 func (l *live) agentDefs() *agentdef.Set {
-	return loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots())
+	return agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents)
+}
+
+// cliAgents reads --agents: the JSON itself, or the path of a file that
+// holds it.
+func (p *program) cliAgents(value string) ([]agentdef.Def, error) {
+	text := strings.TrimSpace(value)
+	if !strings.HasPrefix(text, "{") {
+		path := p.absFrom(text)
+		info, err := os.Stat(path)
+		switch {
+		case err != nil:
+			return nil, fmt.Errorf("it is neither a JSON object nor a file that can be read (%v)", err)
+		case !info.Mode().IsRegular() || info.Size() > 1<<20:
+			return nil, fmt.Errorf("%s is not a file of at most 1 MiB", path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		text = string(data)
+	}
+	return agentdef.FromJSON(text)
 }
 
 // moreRoots lists the folders that were added to the session, beside the

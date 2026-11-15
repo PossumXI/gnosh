@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
@@ -33,6 +34,9 @@ type startup struct {
 	// attended says a person is there to be asked: the session is an
 	// interactive one, and its front end can be typed into.
 	attended bool
+	// agents are the kinds of sub-agent --agents defines, over the files'
+	// and gnosh's own.
+	agents []agentdef.Def
 	// runState, when not empty, is a folder of the run's own that holds
 	// its session in place of the state directory, and goes when the run
 	// ends (--no-session-persistence).

@@ -143,6 +143,9 @@ type Invocation struct {
 	// NoSessionPersistence keeps nothing of a run: its session is not
 	// saved and cannot be resumed (print mode only).
 	NoSessionPersistence bool
+	// Agents is --agents: sub-agents defined for this run, as a JSON
+	// object of agents by name, or the path of a file that holds one.
+	Agents string
 	// Bare is minimal mode: safe mode's customizations off, mem and the
 	// other features off, only Bash, Read, Edit and Write unless --tools
 	// says otherwise, and no background commands or sub-agents.

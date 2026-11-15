@@ -171,6 +171,9 @@ func Default() *Table {
 	appendSystemFile := t.add(&flag{names: "--append-system-prompt-file", kind: kindText, arg: "path", group: groupTold, pri: 1,
 		help: "The same, with the text read from a file. Given together with --append-system-prompt, the file's text comes first.",
 		set:  func(i *Invocation, v flagValue) { i.AppendSystemPromptFile = v.text }})
+	agents := t.add(&flag{names: "--agents", kind: kindText, arg: "json", group: groupTold, pri: 1, freeText: true,
+		help: `Kinds of sub-agent for this run, over those of the files and gnosh's own: a JSON object of agents by name, each with "description" and "prompt" and the settings of an agent file ("tools", "model", "maxTurns" ...), or the path of a file that holds one.`,
+		set:  func(i *Invocation, v flagValue) { i.Agents = v.text }})
 
 	cwd := t.add(&flag{names: "--cwd", kind: kindText, arg: "dir", group: groupSettings, pri: 0,
 		help: "Work in this folder instead of the current one.",
@@ -248,7 +251,7 @@ func Default() *Table {
 		cont, resume, sessionID, fork, name,
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
-		system, systemFile, appendSystem, appendSystemFile,
+		system, systemFile, appendSystem, appendSystemFile, agents,
 		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel, noPersist,
 		help, version,
