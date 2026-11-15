@@ -136,9 +136,20 @@ func TestRepeatKeyAndNudge(t *testing.T) {
 	if other == one {
 		t.Errorf("two answers of mem that differ in their words are the same step")
 	}
-	scratch, _ := json.Marshal(map[string]string{"code": "1 + 1"})
-	if _, ok := j.repeatKey(core.ToolCall{Name: gnovmtools.RunToolName, Input: scratch}, core.TextResult("2")); ok {
-		t.Errorf("a call on a scratch machine was given mem's key")
+	// On a scratch machine only the receipt's numbers are blanked: what
+	// the program printed is its own.
+	scratch, _ := json.Marshal(map[string]string{"code": `println("hello")`})
+	sc := core.ToolCall{Name: gnovmtools.RunToolName, Input: scratch}
+	receipt := func(out, ran string) core.ToolResult {
+		return core.TextResult(out + "\nok · VM scratch-ea5f3e79 · 5.69k of 1G gas (≈6µs at 1 ns/gas; ran " + ran + ") · memory 0.0 MB of 16.0 MB · nothing to keep\n")
+	}
+	a, okA := j.repeatKey(sc, receipt("hello", "173µs"))
+	b2, okB := j.repeatKey(sc, receipt("hello", "161µs"))
+	if !okA || !okB || a != b2 {
+		t.Errorf("two runs of the same program that differ in their time are not the same step:\n%q\n%q", a, b2)
+	}
+	if c, _ := j.repeatKey(sc, receipt("hello 2", "161µs")); c == a {
+		t.Errorf("two runs that printed other numbers are the same step")
 	}
 	if _, ok := j.repeatKey(core.ToolCall{Name: "Bash"}, core.TextResult("12 passed in 3.1s")); ok {
 		t.Errorf("another tool's call was given mem's key")

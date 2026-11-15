@@ -757,23 +757,35 @@ func (j *join) closeSendBack(context.Context, agent.TurnEnd) (agent.Verdict, err
 // number, a count.
 var numberRe = regexp.MustCompile(`[0-9]+(\.[0-9]+)?`)
 
-// repeatKey is Contribution.RepeatKey: how a call on mem and its answer
-// are compared when the loop looks for a model repeating itself. Every
-// answer of mem ends with how long the call ran and the number of the
-// entry it was kept as, so a repeated call never looked repeated; the
-// numbers are blanked first. Only mem's answers are treated so.
+// repeatKey is Contribution.RepeatKey: how a gnovm_run call and its
+// answer are compared when the loop looks for a model repeating itself.
+// Every answer ends in a receipt that says how long the call ran, so a
+// repeated call never looked repeated: on box 2 a model ran
+// println("hello") on a scratch machine 46 times and was never told. The
+// numbers of mem's answers are blanked first (they also number entries);
+// on another machine, only those of the receipt, since what the program
+// printed is its own.
 func (j *join) repeatKey(call core.ToolCall, res core.ToolResult) (string, bool) {
 	if call.Name != gnovmtools.RunToolName {
 		return "", false
 	}
-	if _, ok := memCode(call.Input); !ok {
-		return "", false
+	text := core.TextOf(res.Content)
+	if _, ok := memCode(call.Input); ok {
+		text = numberRe.ReplaceAllString(text, "#")
+	} else {
+		lines := strings.Split(text, "\n")
+		for i, l := range lines {
+			if strings.Contains(l, " gas (≈") {
+				lines[i] = numberRe.ReplaceAllString(l, "#")
+			}
+		}
+		text = strings.Join(lines, "\n")
 	}
 	failed := "ok"
 	if res.IsError {
 		failed = "error"
 	}
-	return call.Name + "\x00" + string(call.Input) + "\x00" + failed + "\x00" + numberRe.ReplaceAllString(core.TextOf(res.Content), "#"), true
+	return call.Name + "\x00" + string(call.Input) + "\x00" + failed + "\x00" + text, true
 }
 
 // repeatNudge is Contribution.RepeatNudge: a loop whose repeated step is
