@@ -304,4 +304,17 @@ or kept with the reason said (27).
     ones; and safe mode, which turns off what files set up, leaves them
     on, since they were typed for this run. `MCP_TIMEOUT` and
     `MCP_TOOL_TIMEOUT` are read as Claude Code reads them.
-
+31. **A sub-agent runs in the background only in a session someone
+    attends, and only when asked.** The Agent call takes
+    `run_in_background` (and a definition `background: true`), as
+    Claude Code's does; the sub-agent then works beside the session, and
+    its report reaches the model as a notice from gnosh, which a running
+    turn reads before its next request and which starts a turn in an
+    idle session. When the call says nothing it waits, unlike Claude
+    Code's main agent, whose calls go to the background by default: a
+    local model handles a report it waited for better than one that
+    comes later, and asking is one word. A sub-agent's own calls wait,
+    as Claude Code's do, and in a run (`-p`) every call waits, and says
+    why, since nothing would read a notice that came after the run's
+    turn. A background sub-agent has no Agent tool; /tasks lists those
+    running and stops one, and TaskStop stops one by its id.

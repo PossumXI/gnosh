@@ -89,7 +89,7 @@ func (l *live) buildTools() error {
 		// sleep in the foreground. It goes on together with that test.
 	}
 	l.shell = shelltool.New(so)
-	all = append(all, l.shell.Tools()...)
+	all = append(all, l.wrapStop(l.shell.Tools())...)
 	all = append(all, &webFetchTool{l: l})
 	// gnosh's own tools, as a sub-agent starts from them.
 	l.own = l.own[:0]

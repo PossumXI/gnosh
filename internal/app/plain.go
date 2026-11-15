@@ -935,6 +935,18 @@ func (f *plain) waitTick() {
 func (f *plain) Event(ev any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// A sub-agent's own turns, requests, replies and states are not the
+	// session's: of its events, its tool calls and their results, its
+	// questions and its notices are shown (below, each marked as its).
+	if e, ok := ev.(agent.Event); ok {
+		if m := e.EventMeta(); m != nil && m.Agent != "" {
+			switch ev.(type) {
+			case *agent.ToolStartEvent, *agent.ToolEndEvent, *agent.QuestionEvent, *agent.AnswerEvent, *agent.NoticeEvent:
+			default:
+				return
+			}
+		}
+	}
 	switch ev := ev.(type) {
 	case *agent.RequestEvent:
 		if ev.Purpose == "main" || ev.Purpose == "summary" {

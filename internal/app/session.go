@@ -139,6 +139,11 @@ type live struct {
 	mcp *mcpSet
 	// statusLine runs the configured status line command, or is nil.
 	statusLine *statusLiner
+	// bgAgents are the sub-agents running in the background, and bgWG
+	// counts their goroutines.
+	bgMu     sync.Mutex
+	bgAgents []*bgAgent
+	bgWG     sync.WaitGroup
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
 	// system is what the model is told as its instructions, and named
@@ -1031,6 +1036,8 @@ func (l *live) close(reason string) {
 			// which closes the shell and runs the hooks.
 			_ = l.agent.End(reason)
 		}
+		// The sub-agents in the background stop first: they use the shell.
+		l.stopBackgroundAgents(15 * time.Second)
 		l.closeShell()
 		l.statusLine.stop()
 		l.cancel()

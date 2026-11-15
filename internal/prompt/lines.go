@@ -455,6 +455,55 @@ func (s *Set) BackgroundEnded(b BackgroundEnd) string {
 	return s.fill(textBackgroundEnded, vals)
 }
 
+// AgentState says how a background sub-agent ended.
+type AgentState int
+
+const (
+	// AgentFinished: it wrote its report.
+	AgentFinished AgentState = iota
+	// AgentFailed: it stopped before it finished: its model failed, or it
+	// reached the most replies its kind may write.
+	AgentFailed
+	// AgentStopped: the person, the model or the session stopped it.
+	AgentStopped
+)
+
+// AgentEnd is the end of a sub-agent that ran in the background.
+type AgentEnd struct {
+	// ID is the sub-agent's id, and Description what the model called its
+	// task.
+	ID, Description string
+	// State says how it ended, and Why says more of a failure.
+	State AgentState
+	Why   string
+	// Report is what it wrote last, which is its own words: Defuse has
+	// been applied to it.
+	Report string
+	// Output is its session file.
+	Output string
+}
+
+// AgentEnded returns the notice that a background sub-agent has ended,
+// with its report. Nobody typed it, and it says so.
+func (s *Set) AgentEnded(a AgentEnd) string {
+	vals := values{
+		"description": oneLine(a.Description, maxQuote),
+		"id":          oneLine(a.ID, maxName),
+		"output":      oneLine(a.Output, maxName),
+		"report":      strings.TrimSpace(a.Report),
+		"why":         strings.TrimRight(oneLine(a.Why, maxQuote), ". "),
+	}
+	switch a.State {
+	case AgentFailed:
+		vals.flag("failed", true)
+	case AgentStopped:
+		vals.flag("stopped", true)
+	default:
+		vals.flag("finished", true)
+	}
+	return s.fill(textAgentEnded, vals)
+}
+
 // SummaryIntro returns the line that stands just before a summary, where
 // the summary takes the place of the conversation it replaced. The summary
 // itself follows it, outside the marker: it is the model's own text.

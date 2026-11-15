@@ -99,25 +99,48 @@ func (l *live) slashAddDir(ctx context.Context, c *SlashContext) error {
 // slashTasks is /tasks (also /bashes): the commands that run, or ran, in
 // the background in this session, and "/tasks stop <id>" to stop one.
 func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
-	if l.shell == nil {
-		c.Say("This session runs no commands, so none runs in the background.")
-		return nil
-	}
+	agents := l.backgroundAgents()
 	args := strings.Fields(c.Args)
 	switch {
 	case len(args) == 2 && args[0] == "stop":
+		if b := l.findBackgroundAgent(args[1]); b != nil {
+			l.stopBackgroundAgent(b)
+			c.Say("The background sub-agent %s is stopped: %s", b.id, oneLine(b.desc, 100))
+			return nil
+		}
+		if l.shell == nil {
+			return fmt.Errorf("%s is not one of this session's background tasks; /tasks lists them", oneLine(args[1], 40))
+		}
 		t, err := l.shell.Stop(ctx, args[1])
 		if err != nil {
-			return fmt.Errorf("%s is not one of this session's background commands; /tasks lists them", oneLine(args[1], 40))
+			return fmt.Errorf("%s is not one of this session's background tasks; /tasks lists them", oneLine(args[1], 40))
 		}
 		c.Say("%s is stopped: %s", t.ID, oneLine(t.Command, 100))
 		return nil
 	case len(args) > 0:
-		return errors.New("/tasks takes nothing after it, or stop and the id of a background command")
+		return errors.New("/tasks takes nothing after it, or stop and the id of a background task")
+	}
+	for _, b := range agents {
+		c.Say("%s  sub-agent (%s), running for %s: %s", b.id, b.kind, roundTime(l.p.now().Sub(b.started)), oneLine(b.desc, 100))
+		if b.output != "" {
+			c.Say("     its session file: %s", b.output)
+		}
+	}
+	if l.shell == nil {
+		if len(agents) == 0 {
+			c.Say("This session runs no commands, so none runs in the background.")
+		} else {
+			c.Say("/tasks stop <id> stops one.")
+		}
+		return nil
 	}
 	tasks := l.shell.Tasks()
 	if len(tasks) == 0 {
-		c.Say("No command has run in the background in this session. Ctrl+B moves one that is running into the background.")
+		if len(agents) == 0 {
+			c.Say("No command has run in the background in this session. Ctrl+B moves one that is running into the background.")
+		} else {
+			c.Say("/tasks stop <id> stops one.")
+		}
 		return nil
 	}
 	running := 0
@@ -134,7 +157,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		c.Say("%s  %s: %s", t.ID, state, oneLine(t.Command, 100))
 		c.Say("     its output: %s (%s)", t.OutputFile, byteCount(t.OutputBytes))
 	}
-	if running > 0 {
+	if running > 0 || len(agents) > 0 {
 		c.Say("/tasks stop <id> stops one.")
 	}
 	return nil

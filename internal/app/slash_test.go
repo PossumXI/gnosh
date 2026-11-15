@@ -157,7 +157,7 @@ func TestClaudeCodeCommands(t *testing.T) {
 	s.typeLine("/tasks")
 	s.see("No command has run in the background in this session.")
 	s.typeLine("/bashes stop bg9")
-	s.see("bg9 is not one of this session's background commands")
+	s.see("bg9 is not one of this session's background tasks")
 
 	// /agents and /memory report.
 	s.typeLine("/agents")

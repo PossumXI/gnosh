@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -333,9 +334,15 @@ func TestSubAgentRefusalsAndLimits(t *testing.T) {
 			w.Write(".claude/agents/"+name+".md", "---\nname: "+name+"\ndescription: A kind for a test.\n"+extra+"---\nDo as asked.\n")
 		}
 	}
-	_, got := one(t, `{"description":"d","prompt":"p","run_in_background":true}`, nil)
-	has(t, "a background sub-agent", got, "does not run sub-agents in the background yet", "Leave run_in_background out")
-	_, got = one(t, `{"description":"d","prompt":"p","subagent_type":"nobody"}`, nil)
+	// In a run, a call that asks for the background waits all the same,
+	// and says so: nothing would read a report that came later.
+	bg := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"d","prompt":"p","run_in_background":true}`}}},
+		apptest.Reply{Text: "The report, at once."},
+		apptest.Reply{Text: "Over."})
+	run(t, bg, "-p", "delegate").wantCode(t, 0)
+	has(t, "a background call in a run", toolResult(t, bg, 2, "c1"), "The report, at once.", "It ran in the foreground, and the call waited for it: in a run with nobody attending (-p)")
+	_, got := one(t, `{"description":"d","prompt":"p","subagent_type":"nobody"}`, nil)
 	has(t, "a kind that does not exist", got, `there is no kind of sub-agent called "nobody"`, "general-purpose, Explore")
 	_, got = one(t, `{"description":"d","prompt":"p","subagent_type":"hooked"}`, def("hooked", "hooks:\n  PreToolUse:\n    - matcher: Bash\n"))
 	has(t, "a definition with hooks of its own", got, `the kind "hooked" asks for hooks`, "It is not run without")
@@ -468,4 +475,115 @@ func TestHaltInsideASubAgentEndsTheTurn(t *testing.T) {
 	}
 	has(t, "the result", r.out, "the budget for sub-agents is spent")
 	checkSession(t, w, w.Sessions()[0])
+}
+
+// In a session a person attends, a sub-agent may run in the background:
+// the Agent call returns at once and the session goes on; /tasks lists it
+// while it works; and its report reaches the model as a notice that wakes
+// the session, without anybody typing.
+func TestBackgroundSubAgent(t *testing.T) {
+	release := make(chan struct{})
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"find the port","prompt":"Find the port the server listens on.","run_in_background":true}`}}},
+		apptest.Reply{Text: "It looks for the port in the background."},
+		apptest.Reply{Text: "The sub-agent says the port is 8080."},
+	)
+	// The sub-agent's requests are told apart by its instructions, and its
+	// answer waits for the test.
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if strings.Contains(string(r.Body), "You are a sub-agent inside gnosh") {
+			return &apptest.Reply{Text: "The server listens on port 8080.", Hold: release}
+		}
+		return nil
+	})
+	s := sit(t, w, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("find the port")
+	s.see("It looks for the port in the background.")
+	s.see("-- done in ")
+	// (The sub-agent's requests and the session's come in either order.)
+	has(t, "what the Agent call returned", toolMessageWith(w, "working in the background"), "The sub-agent is working in the background on: find the port", "TaskStop with its id stops it")
+
+	s.typeLine("/tasks")
+	s.see("sub-agent (general-purpose), running for")
+	s.see("find the port")
+
+	close(release)
+	s.see("A background sub-agent finished: find the port")
+	s.see("The sub-agent says the port is 8080.")
+	reqs := w.Model.Requests()
+	last := requestText(t, w, len(reqs)-1)
+	has(t, "the notice the model read", last, "A sub-agent you started in the background has finished: find the port", "The server listens on port 8080.")
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// The model stops a background sub-agent with TaskStop, by the id its call
+// returned; the notice then says it was stopped, without a report, and a
+// sub-agent's own turn ending is not taken for the session's.
+func TestStopBackgroundSubAgent(t *testing.T) {
+	hold := make(chan struct{})
+	defer close(hold)
+	var id atomic.Value
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"count the stars","prompt":"Count every star.","run_in_background":true}`}}},
+		apptest.Reply{Text: "Counting in the background."},
+		apptest.Reply{Text: "It is stopped."},
+	)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		switch {
+		case strings.Contains(body, "You are a sub-agent inside gnosh"):
+			return &apptest.Reply{Text: "Still counting.", Hold: hold}
+		case strings.Contains(body, "stop it") && !strings.Contains(body, "TaskStop with"):
+			return nil
+		case strings.Contains(body, "stop it"):
+			// The second turn: stop the sub-agent by its id.
+			if v, ok := id.Load().(string); ok && !strings.Contains(body, "The background sub-agent "+v+" is stopped") {
+				return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "TaskStop", Args: `{"task_id":"` + v + `"}`}}}
+			}
+		}
+		return nil
+	})
+	s := sit(t, w, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("count the stars")
+	s.see("Counting in the background.")
+	s.see("-- done in ")
+	text := toolMessageWith(w, "Its id is ")
+	if i := strings.Index(text, "Its id is "); i >= 0 {
+		id.Store(strings.TrimSuffix(strings.Fields(text[i+len("Its id is "):])[0], "."))
+	}
+	if _, ok := id.Load().(string); !ok {
+		t.Fatalf("the Agent call returned no id: %q", text)
+	}
+	// The stop is made by the call, so the notice reaches the turn that
+	// made it, in its next request.
+	s.typeLine("stop it")
+	s.see("A background sub-agent was stopped: count the stars")
+	s.see("It is stopped.")
+	found := false
+	for _, r := range w.Model.Requests() {
+		if strings.Contains(string(r.Body), "has been stopped: count the stars") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no request told the model the sub-agent was stopped")
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// toolMessageWith returns the first tool result any request holds that has
+// want in it, or "".
+func toolMessageWith(w *apptest.World, want string) string {
+	for _, r := range w.Model.Requests() {
+		for _, m := range r.Messages() {
+			if text := apptest.Text(m); m["role"] == "tool" && strings.Contains(text, want) {
+				return text
+			}
+		}
+	}
+	return ""
 }

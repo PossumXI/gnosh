@@ -245,6 +245,8 @@
 //     short is not read as one the model chose to end.
 //   - background-ended (BackgroundEnded) says a background command ended,
 //     how, and where its output is, and that it is news and not a request.
+//   - agent-ended (AgentEnded) says the same of a sub-agent the model
+//     started in the background, with its report, marked as its own words.
 //   - summary, with summary-extra for what the person asked of it
 //     (Summary), is the request for a summary. It is about 200 tokens and
 //     asks for at most 500 words: what the user asked, in their words;

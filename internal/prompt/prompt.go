@@ -63,6 +63,7 @@ const (
 	textGoalNotMet       = "goal-not-met"
 	textInterrupted      = "interrupted"
 	textBackgroundEnded  = "background-ended"
+	textAgentEnded       = "agent-ended"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
 	textSummary          = "summary"
@@ -166,6 +167,9 @@ func specs() []spec {
 		{name: textBackgroundEnded, kind: KindLine, need: []string{"command"},
 			may:  []string{"id", "finished", "failed", "stopped", "not_run", "why", "output"},
 			when: "When a background command ends, between rounds or as a turn of its own."},
+		{name: textAgentEnded, kind: KindLine, need: []string{"description", "id"},
+			may:  []string{"finished", "failed", "stopped", "why", "report", "output"},
+			when: "When a sub-agent the model started in the background ends, between rounds or as a turn of its own."},
 		{name: textSummary, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
 			when: "At the end of the session's own request, when the conversation must be replaced by a summary."},
 		{name: textSummaryExtra, kind: KindLine, need: []string{"instructions"},

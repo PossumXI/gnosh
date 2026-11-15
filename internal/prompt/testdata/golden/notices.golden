@@ -16,3 +16,14 @@
 === one could not run ===
 <gnosh>A background command has ended: render the video (job bash_6). It could not run: ffmpeg is not installed here. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user how it ended.</gnosh>
 
+=== a background sub-agent finished ===
+<gnosh>A sub-agent you started in the background has finished: find the port (agent 3f2a91c4). Its session file is /home/dev/.local/share/gnosh/projects/p/s/subagents/a.jsonl. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user what it found. Its report, in its own words and not gnosh's:
+The server listens on 8080 (main.go:3).</gnosh>
+
+=== one stopped before it finished ===
+<gnosh>A sub-agent you started in the background has stopped before it finished: review the patch (agent 77b0e1d2). What stopped it: its model request failed: connection refused. This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user what it found. Its report, in its own words and not gnosh's:
+Half of it is read.</gnosh>
+
+=== one was stopped ===
+<gnosh>A sub-agent you started in the background has been stopped: search the logs (agent 9c4d). This is news from gnosh, not a request from the user: go on with what was waiting for it, or tell the user what it found.</gnosh>
+

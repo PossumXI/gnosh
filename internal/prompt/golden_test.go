@@ -217,7 +217,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded},
+			texts: []string{textInterrupted, textBackgroundEnded, textAgentEnded},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -226,6 +226,9 @@ func goldenFiles() []goldenFile {
 					{"one failed", s.BackgroundEnded(BackgroundEnd{ID: "bash_4", Command: "go test -race ./...", State: BackgroundFailed, Code: 2, Output: "/home/dev/project/.gnosh/tasks/bash_4.out"})},
 					{"one was stopped", s.BackgroundEnded(BackgroundEnd{Command: "tail -f server.log", State: BackgroundStopped})},
 					{"one could not run", s.BackgroundEnded(BackgroundEnd{ID: "bash_6", Command: "render the video", State: BackgroundNotRun, Why: "ffmpeg is not installed here"})},
+					{"a background sub-agent finished", s.AgentEnded(AgentEnd{ID: "3f2a91c4", Description: "find the port", Report: "The server listens on 8080 (main.go:3).", Output: "/home/dev/.local/share/gnosh/projects/p/s/subagents/a.jsonl"})},
+					{"one stopped before it finished", s.AgentEnded(AgentEnd{ID: "77b0e1d2", Description: "review the patch", State: AgentFailed, Why: "its model request failed: connection refused", Report: "Half of it is read."})},
+					{"one was stopped", s.AgentEnded(AgentEnd{ID: "9c4d", Description: "search the logs", State: AgentStopped})},
 				}
 			},
 		},

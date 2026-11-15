@@ -27,7 +27,7 @@ at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
 tools are `mcp__<server>__<tool>`), commands on
 declared hosts over ssh, permission modes and rules,
 hooks, a status line command (Claude Code's `statusLine`), instruction
-files, sub-agents in the foreground, `mem` and frames
+files, sub-agents in the foreground and, in a session, in the background, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
 remove, with Claude Code's local, project and user scopes), and
@@ -47,7 +47,7 @@ prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, and a line that begins with `!` is a command of your own.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
-`headers`), background sub-agents, web search. The interface is in use over
+`headers`), web search. The interface is in use over
 ssh, in tmux. Its wording to the model has not yet been compared run
 against run. Nothing here is released.
 
