@@ -19,6 +19,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
 // printer is the front end of a run that nobody attends (`gnosh -p`): it
@@ -502,6 +503,25 @@ func (f *printer) text(s string) {
 	f.wroteAny, f.endsLine = true, strings.HasSuffix(s, "\n")
 }
 
+// dropEchoedLine takes a reply's last line off when it is one line in
+// gnosh's own marker after the answer: a model now and then repeats the
+// line gnosh puts after the person's prompt ("ready", and then the mem
+// line), and a run's result is read by scripts. A reply that is nothing
+// but such a line, or whose marked part runs over several lines, is left
+// as it is.
+func dropEchoedLine(text string) string {
+	t := strings.TrimRight(text, " \t\r\n")
+	i := strings.LastIndex(t, "\n"+prompt.Open)
+	if i < 0 || strings.Contains(t[i+1:], "\n") {
+		return text
+	}
+	head := strings.TrimRight(t[:i], " \t\r\n")
+	if head == "" {
+		return text
+	}
+	return head
+}
+
 // separate sets a new message apart from the one written before it.
 func (f *printer) separate() {
 	if !f.wroteAny {
@@ -520,7 +540,7 @@ func (f *printer) endReply() {
 		return
 	}
 	if !f.live {
-		if msg := strings.TrimSpace(f.buf.String()); msg != "" {
+		if msg := strings.TrimSpace(dropEchoedLine(f.buf.String())); msg != "" {
 			f.separate()
 			fmt.Fprintln(f.p.stdout, msg)
 			f.wroteAny, f.endsLine = true, true
@@ -947,7 +967,7 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 	case f.capped:
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped:
-		obj.Subtype, obj.Result, obj.TerminalReason = "success", ptr(res.Text), "completed"
+		obj.Subtype, obj.Result, obj.TerminalReason = "success", ptr(dropEchoedLine(res.Text)), "completed"
 	case res.Reason == agent.EndRefused:
 		// A prompt a hook blocked is a result all the same: the hook's
 		// words, and no turn.
