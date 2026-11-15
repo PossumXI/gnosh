@@ -1126,7 +1126,8 @@ func (p *parser) simple() {
 		if len(cmd.words) == 0 {
 			if name, ok := assignName(w.raw); ok {
 				a := assign{name: name, w: w, fromSubst: w.hasSubst()}
-				if strings.HasSuffix(w.raw, "=") && strings.HasPrefix(p.src[p.pos:], "(") {
+				switch {
+				case strings.HasPrefix(p.src[p.pos:], "(") && arrayStart(w.raw, name):
 					// name=(word ...): an array.
 					a.array = true
 					p.pos++
@@ -1144,9 +1145,21 @@ func (p *parser) simple() {
 							p.fail("an array assignment gnosh cannot follow")
 							break
 						}
+						if strings.HasPrefix(v.raw, "[") && !strings.Contains(v.raw, "]") {
+							// bash reads a subscript on to its ], past the
+							// parenthesis and to the end of the line if it
+							// must: "a=([x); b" is not the array it looks
+							// like, and without a ] it is no line at all.
+							p.fail("an array element that opens a [ with no ] in it")
+							break
+						}
 						a.fromSubst = a.fromSubst || v.hasSubst()
 						a.elems = append(a.elems, v)
 					}
+				case strings.HasPrefix(p.src[p.pos:], "("):
+					// "a==(1)", "a=b(1)": a value, and a parenthesis right
+					// after it, which the shells refuse.
+					p.fail("a parenthesis right after an assignment's value")
 				}
 				cmd.assigns = append(cmd.assigns, a)
 				continue
@@ -1213,6 +1226,21 @@ func isBraceName(raw string) bool {
 
 // assignName reports whether raw starts like an assignment (name=, name+=
 // or name[...]=) and returns the variable's name.
+// arrayStart reports whether an assignment word, of the variable name,
+// opens an array when a parenthesis follows it: nothing stands after its =
+// (name=, name+=, name[sub]=).
+func arrayStart(raw, name string) bool {
+	rest := raw[len(name):]
+	if strings.HasPrefix(rest, "[") {
+		end := strings.IndexByte(rest, ']')
+		if end < 0 {
+			return false
+		}
+		rest = rest[end+1:]
+	}
+	return rest == "=" || rest == "+="
+}
+
 func assignName(raw string) (string, bool) {
 	if raw == "" || !isNameStart(raw[0]) {
 		return "", false

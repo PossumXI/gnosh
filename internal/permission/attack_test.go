@@ -912,22 +912,25 @@ func TestTimeAndARedirection(t *testing.T) {
 func TestReadings(t *testing.T) {
 	e := engine(t, ModeDefault, rules{})
 	for line, want := range map[string]string{
-		"time - ~":                       "- ~",                 // bash's time takes -p and nothing else
-		"time>t -s ''":                   "-s ",                 // so -s is the command
-		"printf 'make l' e|sh":           "make l",              // printf prints its format once
-		"env -S'echo >p x'":              "echo >p x",           // env -S knows no redirections
-		"env -S 'echo a;b'":              "echo a;b",            // and no semicolons
-		"env -S 'mv .gi\\t /tmp/g ## x'": "mv .gi\t /tmp/g",     // oracle seed 102: to env -S, \t is a tab
-		"[[|nohup 2>/dev/null ]]":        "nohup ]]",            // to sh the 2 is a descriptor
-		"bash -c - 'make x'":             "make x",              // a lone - ends the options
-		"echo ${X->(make x)}":            "make x",              // a process substitution in a default
-		"ls >&'(($(make x)'":             "make x",              // the word after >& is expanded twice
-		"echo push | xargs git":          "git {}",              // xargs adds words nobody knows
-		"taskset 0x1 make x":             "make x",              // the command after taskset's mask
-		"echo 'make x' | sh":             "make x",              // what echo prints, when it is plain
-		"coproc make x":                  "",                    // not followed at all
-		"x=${y}'a[$(make x)]'; :":        "make x",              // text the shell may evaluate later
-		"eval 'ls '$X' > out'":           "ls ${GNOSH_UNKNOWN}", // what stands in an eval, whatever else is in it
+		"time - ~":                       "- ~",             // bash's time takes -p and nothing else
+		"time>t -s ''":                   "-s ",             // so -s is the command
+		"printf 'make l' e|sh":           "make l",          // printf prints its format once
+		"env -S'echo >p x'":              "echo >p x",       // env -S knows no redirections
+		"env -S 'echo a;b'":              "echo a;b",        // and no semicolons
+		"env -S 'mv .gi\\t /tmp/g ## x'": "mv .gi\t /tmp/g", // oracle seed 102: to env -S, \t is a tab
+		// Oracle seed 103: lines the shells refuse, which run nothing.
+		"a==(1 2) true bar > new.txt":        "",                    // a value, then a parenthesis
+		"a=([.coproce*); chmod \"$'{a[@]}\"": "",                    // a [ that bash reads on past the array
+		"[[|nohup 2>/dev/null ]]":            "nohup ]]",            // to sh the 2 is a descriptor
+		"bash -c - 'make x'":                 "make x",              // a lone - ends the options
+		"echo ${X->(make x)}":                "make x",              // a process substitution in a default
+		"ls >&'(($(make x)'":                 "make x",              // the word after >& is expanded twice
+		"echo push | xargs git":              "git {}",              // xargs adds words nobody knows
+		"taskset 0x1 make x":                 "make x",              // the command after taskset's mask
+		"echo 'make x' | sh":                 "make x",              // what echo prints, when it is plain
+		"coproc make x":                      "",                    // not followed at all
+		"x=${y}'a[$(make x)]'; :":            "make x",              // text the shell may evaluate later
+		"eval 'ls '$X' > out'":               "ls ${GNOSH_UNKNOWN}", // what stands in an eval, whatever else is in it
 		// The second round. Where a shell runs less than the engine reads,
 		// the engine's reading stands: bash stops at a subscript it cannot
 		// work out, and a file that is sourced is a program of its own.

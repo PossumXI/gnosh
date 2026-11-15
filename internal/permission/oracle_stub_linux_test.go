@@ -63,6 +63,23 @@ func stub(exe, name string) {
 		s, _ := os.Readlink("/proc/self/fd/" + n)
 		return s
 	}
+	// An output descriptor counts only when it is open for writing: with
+	// "sed -n 1<a.txt" standard output is a.txt, open to be read, and
+	// nothing can be written through it (what reopens it by its
+	// /dev/stdout name is judged as a redirection of its own, and asks).
+	out := func(n string) string {
+		info, err := os.ReadFile("/proc/self/fdinfo/" + n)
+		if err == nil {
+			for _, ln := range strings.Split(string(info), "\n") {
+				if v, ok := strings.CutPrefix(ln, "flags:"); ok {
+					if flags, err := strconv.ParseInt(strings.TrimSpace(v), 8, 64); err == nil && flags&3 == 0 {
+						return ""
+					}
+				}
+			}
+		}
+		return fd(n)
+	}
 	ppid := os.Getppid()
 	// The programs above this one, nearest first, up to the sandbox.
 	var chain []string
@@ -83,7 +100,7 @@ func stub(exe, name string) {
 		pid, _ = strconv.Atoi(f[1])
 	}
 	fd0 := fd("0")
-	rec := []string{exe, cwd, fd0, fd("1"), fd("2"), strings.Join(chain, "<")}
+	rec := []string{exe, cwd, fd0, out("1"), out("2"), strings.Join(chain, "<")}
 	rec = append(rec, os.Args...)
 	var b strings.Builder
 	for i, f := range rec {
