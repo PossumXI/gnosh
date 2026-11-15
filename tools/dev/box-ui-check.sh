@@ -16,6 +16,7 @@
 #	ssh ai-remote bash -s -- fork < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- monitor < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- worktree < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- panel < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -38,6 +39,9 @@
 #   monitor     the model watches a command with Monitor: its lines come as
 #               notes, then the news that it ended (permissions skipped, in
 #               the scratch folder)
+#   panel       /panel takes the whole screen: the model writes hello.txt,
+#               and the panel lists it under the files changed (permissions
+#               skipped, in the scratch folder)
 #   worktree    the scratch folder is a git repository, trusted: a sub-agent
 #               with isolation worktree adds a line to notes.txt in a work
 #               tree of its own, and the folder's notes.txt stays as it was
@@ -56,11 +60,11 @@ case "$scenario" in
 basic | mention | config | fork) ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
-background | btw | monitor) flags="-y" ;;
+background | btw | monitor | panel) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, panel)" >&2
 	exit 2
 	;;
 esac
@@ -145,6 +149,12 @@ agent)
 fork)
 	tmux send-keys -t "$S" "/countlines" Enter
 	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
+	;;
+panel)
+	tmux send-keys -t "$S" "/panel" Enter
+	sleep 2
+	tmux send-keys -t "$S" "Create the file hello.txt that says hi, with the Write tool, and say done." Enter
+	done_when() { screen | grep -q "Files changed" && screen | grep -q "hello.txt +1" && screen | grep -q "done in"; }
 	;;
 worktree)
 	tmux send-keys -t "$S" "Call the Agent tool with isolation set to worktree, to have a sub-agent add the line delta at the end of notes.txt. Then tell me where its change is." Enter
