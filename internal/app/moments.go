@@ -192,7 +192,7 @@ func (l *live) sessionStart(ctx context.Context, info agent.StartInfo) ([]agent.
 	if !l.hooks.has(hooks.SessionStart) {
 		return nil, nil
 	}
-	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SessionStart, Source: info.Source, Model: info.Model})
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SessionStart, Source: info.Source, Model: info.Model, EnvFile: l.envFile()})
 	if err != nil {
 		return nil, err
 	}
@@ -448,7 +448,7 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 		}
 	}
 	if l.hooks.has(hooks.SessionStart) {
-		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SessionStart, Source: "compact", Model: l.agent.Model().Info.ID})
+		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SessionStart, Source: "compact", Model: l.agent.Model().Info.ID, EnvFile: l.envFile()})
 		if err != nil {
 			errs = append(errs, err)
 		} else {

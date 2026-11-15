@@ -62,6 +62,7 @@ func (l *live) buildTools() error {
 	so := shelltool.Options{
 		Environ:             func() []string { return slices.Clone(l.p.o.Environ) },
 		Env:                 l.cfg.CommandEnv(),
+		EnvFile:             l.envFile(),
 		SpoolDir:            l.spoolDir(),
 		Now:                 l.p.now,
 		DefaultTimeout:      limits.BashDefaultTimeout.V,

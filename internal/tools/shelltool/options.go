@@ -23,6 +23,12 @@ type Options struct {
 	// variable; "NAME" alone removes it.
 	Env []string
 
+	// EnvFile is a shell file that runs before each command on this
+	// machine, when it is there and not empty: where SessionStart hooks
+	// write the variables later commands are to have (Claude Code's
+	// CLAUDE_ENV_FILE). Empty means none.
+	EnvFile string
+
 	// SpoolDir is the directory in which the manager makes a directory of
 	// its own for output files. Close removes what the manager made, never
 	// SpoolDir itself. Empty means os.TempDir().

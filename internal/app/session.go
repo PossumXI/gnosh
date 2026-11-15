@@ -810,6 +810,18 @@ func (l *live) env() *core.ToolEnv {
 	return &core.ToolEnv{Cwd: l.cwd(), Roots: slices.Clone(l.roots), SessionID: l.ts.ID(), Store: l.toolStore}
 }
 
+// envFile is the session's environment file: SessionStart hooks write
+// export lines into it (as CLAUDE_ENV_FILE and GNOSH_ENV_FILE), and every
+// later command on this machine runs it first. It is in the session's own
+// folder, and is there only once a hook has written it.
+func (l *live) envFile() string {
+	dir := l.st.dirs(l.ts.ID()).Session
+	// The folder is made here: a hook may write the file before anything
+	// else of the session's is kept there.
+	_ = os.MkdirAll(dir, 0o700)
+	return filepath.Join(dir, "env.sh")
+}
+
 // spoolDir is where the session's commands keep their output: a folder of
 // the session's own, beside its file.
 func (l *live) spoolDir() string {

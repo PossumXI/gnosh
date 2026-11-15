@@ -75,3 +75,16 @@ func TestModelsOwnGnoshTagsAreDefused(t *testing.T) {
 		t.Errorf("the model read its own earlier reply as %q", mine)
 	}
 }
+
+// A SessionStart hook that writes export lines to CLAUDE_ENV_FILE gives
+// every later command those variables, as Claude Code's does.
+func TestSessionStartEnvFile(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo \"greeting=$GREETING\""}`}}},
+		apptest.Reply{Text: "Said."},
+	)
+	hook := w.Script(w.Home+"/bin/env-hook.sh", `echo 'export GREETING=hello-from-the-hook' >> "$CLAUDE_ENV_FILE"`)
+	w.Settings(`{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
+	run(t, w, "-y", "-p", "say the greeting").wantCode(t, 0)
+	has(t, "what the command printed", toolResult(t, w, 1, "c1"), "greeting=hello-from-the-hook")
+}

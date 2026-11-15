@@ -26,15 +26,20 @@ import (
 // command left the shell in.
 //
 // The script is one line, so that the line numbers in the shell's messages
-// are the command's own. It leaves two variables of its own in the shell,
-// __gnosh_cwd and __gnosh_cmd, and no arguments.
+// are the command's own. Its third argument is the environment file
+// (Options.EnvFile), which runs first when it is not empty. It leaves three
+// variables of its own in the shell, __gnosh_cwd, __gnosh_cmd and
+// __gnosh_env, and no arguments.
 const (
 	exitTrap = `trap '{ command pwd -P >"${__gnosh_cwd:-/dev/null}"; } 2>/dev/null || :' EXIT`
-	// wrapper takes the file for the final directory and the command.
-	wrapper = `__gnosh_cwd=$1 __gnosh_cmd=$2; set --; ` + exitTrap + `; eval "$__gnosh_cmd"`
-	// fileWrapper takes the file for the final directory and a file that
-	// holds the command. It is for commands too long to be an argument.
-	fileWrapper = `__gnosh_cwd=$1; __gnosh_cmd=$(command cat "$2") || exit 126; set --; ` + exitTrap + `; eval "$__gnosh_cmd"`
+	envFirst = `if [ -n "$__gnosh_env" ] && [ -s "$__gnosh_env" ]; then . "$__gnosh_env"; fi`
+	// wrapper takes the file for the final directory, the command and the
+	// environment file.
+	wrapper = `__gnosh_cwd=$1 __gnosh_cmd=$2 __gnosh_env=$3; set --; ` + exitTrap + `; ` + envFirst + `; eval "$__gnosh_cmd"`
+	// fileWrapper takes the file for the final directory, a file that
+	// holds the command and the environment file. It is for commands too
+	// long to be an argument.
+	fileWrapper = `__gnosh_cwd=$1 __gnosh_env=$3; __gnosh_cmd=$(command cat "$2") || exit 126; set --; ` + exitTrap + `; ` + envFirst + `; eval "$__gnosh_cmd"`
 )
 
 // endReason says why a command ended.
@@ -199,7 +204,7 @@ func (j *job) launch(dir, name string) error {
 			}
 			script, arg = fileWrapper, j.cmdFile
 		}
-		cmd = exec.Command(m.shell, "-c", script, filepath.Base(m.shell), j.cwdFile, arg)
+		cmd = exec.Command(m.shell, "-c", script, filepath.Base(m.shell), j.cwdFile, arg, m.opt.EnvFile)
 		cmd.Stdout, cmd.Stderr = w, w
 	} else {
 		// The command's own two streams are joined on the other machine
