@@ -216,6 +216,9 @@ func TestOtherDestroyers(t *testing.T) {
 		// The words a function of the line's own, a set -- or a script
 		// after sh -c is handed are what $1 and "$@" stand for in it.
 		"f() { rm -rf \"$1\"; }; f ~", "clean() { rm -rf \"$1\"; }; clean build; clean .", "f() { mv \"$@\"; }; f .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"",
+		// A word with a variable nobody set in it, handed to a function, is
+		// what is left of it when the variable is empty (oracle seed 99).
+		"f() { mv \"$@\"; }; f .$git /tmp/g", "f() { mv \"$1\" /tmp/g; }; f .$git", "d=.; f() { rm -rf \"$1\"; }; f $d$X",
 		"set -- /; rm -rf \"$1\"", "sh -c 'rm -rf \"$1\"' sh /", "bash -c 'rm -rf \"$0\"' ~", "bash -c 'mv \"$@\"' _ .git /tmp/g", "f() { \"$@\"; }; f rm -rf /",
 		"function g { chmod -R 000 $1; }; g .", "f() { shift; rm -rf \"$1\"; }; f x ~", "set -- . /tmp/x; mv \"$@\"", "f() { git -C \"$1\" clean -fdx; }; f ..",
 		// The program is one of more values than gnosh follows.

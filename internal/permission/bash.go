@@ -1940,8 +1940,11 @@ var positionals = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "@"
 // for inside it. Which word is which number is not followed (a shift
 // moves them), so each of those names may be any of the words: "f() {
 // rm -rf "$1"; }; f ~" removes the home directory, and so does "sh -c
-// 'rm -rf "$0"' ~". A word that is only known when the line runs gives
-// them nothing, and they are never known for sure.
+// 'rm -rf "$0"' ~". A word with a variable nobody set in it gives what is
+// left of it when that variable is empty, with the line's own variables
+// written out: "f() { mv "$@"; }; f .$git /tmp/g" moves the working
+// directory. A word with a command's output in it gives them nothing, and
+// they are never known for sure.
 //
 // zero says the first of the words is the script's $0, which "$@" and $1
 // leave out.
@@ -1952,6 +1955,16 @@ func (e *Engine) giveArgs(v *bashView, ws []word, zero bool) {
 			vals = []lineVal{{text: w.value(e.home), glob: w.glob && !w.quoted}}
 		} else if got, _, ok := e.filledAll(v, w); ok {
 			vals = got
+		} else if allLitOrVar(w) {
+			readings := []word{w}
+			if parts, capped := e.partFills(v, w, anyTime); !capped {
+				readings = append(readings, parts...)
+			}
+			for _, r := range readings {
+				if l := e.unsetValue(r); l != "" {
+					vals = append(vals, lineVal{text: l, glob: r.glob && !r.quoted})
+				}
+			}
 		}
 		for _, val := range vals {
 			for _, name := range positionals {
@@ -3605,9 +3618,14 @@ func (e *Engine) denyTexts(c *simpleCmd) []string {
 	}
 	raw := rawJoined(c.words)
 	lits := litsOf(c.words)
-	bare := make([]string, len(c.words))
-	for i, w := range c.words {
-		bare[i] = w.joined()
+	// The words with only what is written of them: a word that is nothing
+	// but variables and command output, outside quotes, is no word at all
+	// when they come out empty ("echo $X x" is echo x).
+	bare := []string{c.words[0].joined()}
+	for _, w := range c.words[1:] {
+		if j := w.joined(); j != "" || w.quoted {
+			bare = append(bare, j)
+		}
 	}
 	add(raw)
 	add(strings.Join(lits, " "))
