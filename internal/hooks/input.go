@@ -155,6 +155,12 @@ type Input struct {
 	// OldCwd and NewCwd are, for CwdChanged, the directory the shell was
 	// in and the one it is in now ("old_cwd", "new_cwd").
 	OldCwd, NewCwd string
+	// ExpansionType, CommandName, CommandArgs and CommandSource are, for
+	// UserPromptExpansion, how the line expanded (slash_command), the
+	// command's name (what its matchers are held against), what was
+	// typed after it, and where the command comes from (user, project);
+	// Prompt is then the text it expands into.
+	ExpansionType, CommandName, CommandArgs, CommandSource string
 
 	// Extra holds further fields for stdin, by their JSON names, for
 	// things Claude Code documents that this package has no field for
@@ -190,6 +196,8 @@ func (in *Input) subject() string {
 		return in.ToModel
 	case DirectoryAdded:
 		return in.Source
+	case UserPromptExpansion:
+		return in.CommandName
 	}
 	return ""
 }
@@ -318,6 +326,12 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 	case CwdChanged:
 		m["old_cwd"] = in.OldCwd
 		m["new_cwd"] = in.NewCwd
+	case UserPromptExpansion:
+		m["expansion_type"] = in.ExpansionType
+		m["command_name"] = in.CommandName
+		m["command_args"] = in.CommandArgs
+		m["command_source"] = in.CommandSource
+		m["prompt"] = in.Prompt
 	}
 
 	// Claude Code writes this JSON without escaping <, > and &, and a hook

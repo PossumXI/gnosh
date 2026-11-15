@@ -184,6 +184,8 @@ func input(event Event) Input {
 		in.Directory, in.Source = "/project/docs", "slash_command"
 	case CwdChanged:
 		in.OldCwd, in.NewCwd = "/project", "/project/sub"
+	case UserPromptExpansion:
+		in.ExpansionType, in.CommandName, in.CommandArgs, in.CommandSource, in.Prompt = "slash_command", "deploy", "staging", "project", "Deploy to staging."
 	case SubagentStart, SubagentStop:
 		in.AgentID = "agent-1"
 		in.AgentType = "Explore"

@@ -393,3 +393,25 @@ func TestCwdChangedHook(t *testing.T) {
 	has(t, "what the hook read", string(data), `"old_cwd":"`+w.Dir+`"`, `"new_cwd":"`+filepath.Join(w.Dir, "sub")+`"`)
 	has(t, "the next command", toolResult(t, w, 2, "c2"), "in="+filepath.Join(w.Dir, "sub"), "v=set")
 }
+
+// UserPromptExpansion runs when a typed /name expands into a skill's
+// prompt: it reads the command and what it expands into, may add text
+// for the model, and may stop the expansion, which then never reaches the
+// model.
+func TestUserPromptExpansionHook(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Deployed."})
+	w.Write(".claude/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploys.\n---\nDeploy the site.\n")
+	log := w.Home + "/hook-log"
+	hook := w.Script(w.Home+"/hooks/exp.sh", "in=$(cat); printf '%s\\n' \"$in\" >> "+log+"\ncase \"$in\" in *friday*) echo 'no deploys on Friday' >&2; exit 2;; esac\necho 'use the blue cluster'")
+	w.Settings(`{"hooks": {"UserPromptExpansion": [{"matcher": "deploy", "hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
+	run(t, w, "--trust-folder", "-p", "/deploy staging").wantCode(t, 0)
+	data, _ := os.ReadFile(log)
+	has(t, "what the hook read", string(data), `"hook_event_name":"UserPromptExpansion"`, `"command_name":"deploy"`, `"command_args":"staging"`, `"command_source":"project"`, "Deploy the site.")
+	has(t, "the request", string(w.Model.Requests()[0].Body), "Deploy the site.", "use the blue cluster")
+	n := len(w.Model.Requests())
+	r := run(t, w, "--trust-folder", "-p", "/deploy friday").wantCode(t, 1)
+	has(t, "stderr", r.err, "a UserPromptExpansion hook the user set up blocked it", "no deploys on Friday")
+	if len(w.Model.Requests()) != n {
+		t.Errorf("the model was asked although the hook blocked the expansion")
+	}
+}

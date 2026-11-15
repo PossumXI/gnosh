@@ -14,6 +14,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/app/skill"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
@@ -384,8 +385,26 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	if refusal != "" {
 		return res, true, fmt.Errorf("the skill was not run: %s", refusal)
 	}
+	// The UserPromptExpansion hooks see what the line expands into, and
+	// may stop it or add to it.
+	added := ""
+	if l.hooks.has(hooks.UserPromptExpansion) {
+		out, err := l.hooks.run(l.ctx, hooks.Input{Event: hooks.UserPromptExpansion, ExpansionType: "slash_command",
+			CommandName: sk.Name, CommandArgs: args, CommandSource: sk.Scope, Prompt: text})
+		switch {
+		case err != nil:
+			return res, true, fmt.Errorf("the skill was not run: the UserPromptExpansion hooks could not be run (%v)", err)
+		case out.EndTurn:
+			return res, true, fmt.Errorf("the skill was not run: a UserPromptExpansion hook the user set up stopped it. %s", firstOf(out.StopReason, out.Reason))
+		case out.Blocked:
+			return res, true, fmt.Errorf("the skill was not run: a UserPromptExpansion hook the user set up blocked it. %s", firstOf(out.Reason, "It gave no reason."))
+		}
+		if c := strings.TrimSpace(out.AdditionalContext); c != "" {
+			added = "\n\n" + hookWords(hooks.UserPromptExpansion, "", c)
+		}
+	}
 	lead := fmt.Sprintf("The user ran the skill %q by typing: %s\nWhat follows is the skill: the user's own instructions for this kind of task. Carry them out now.", sk.Name, oneLine(line, 400))
-	body := prompt.Wrap(lead) + "\n\n" + text
+	body := prompt.Wrap(lead) + "\n\n" + text + added
 	if again {
 		body = prompt.Wrap(fmt.Sprintf("The user ran the skill %q again by typing: %s\nIts text is the same as when it was last loaded, earlier in this conversation: carry it out again from there.", sk.Name, oneLine(line, 400)))
 	}

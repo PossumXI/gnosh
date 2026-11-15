@@ -359,6 +359,18 @@ var answerForms = []struct {
 		want:   expect{system: []string{"the docs are in docs/"}, result: ResultWarning}},
 	{name: "plain words are not read", event: DirectoryAdded, prints: "the docs are in docs/", want: expect{}},
 
+	// ---- UserPromptExpansion: like UserPromptSubmit, for the prompt a
+	// typed /name expands into.
+	{name: "plain text", event: UserPromptExpansion,
+		prints: "Staging is frozen until noon.\n",
+		want:   expect{context: "Staging is frozen until noon."}},
+	{name: "added text", event: UserPromptExpansion,
+		prints: `{"hookSpecificOutput": {"hookEventName": "UserPromptExpansion", "additionalContext": "use the blue cluster"}}`,
+		want:   expect{context: "use the blue cluster"}},
+	{name: "block", event: UserPromptExpansion,
+		prints: `{"decision": "block", "reason": "no deploys on Friday"}`,
+		want:   expect{blocked: true, reason: "no deploys on Friday", result: ResultBlocked}},
+
 	// ---- CwdChanged: a message is shown; nothing else is read.
 	{name: "a message", event: CwdChanged,
 		prints: `{"systemMessage": "the sub folder has its own .env"}`,

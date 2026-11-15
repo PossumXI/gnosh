@@ -10,7 +10,7 @@ import (
 // "pretooluse" and "pre_tool_use" are mistakes.
 type Event string
 
-// The eighteen events gnosh has. The comment on each says when the agent
+// The nineteen events gnosh has. The comment on each says when the agent
 // loop fires it and what a hook can do there.
 const (
 	// PreToolUse fires before every tool call, a sub-agent's included. A
@@ -77,9 +77,13 @@ const (
 	// file (GNOSH_ENV_FILE, CLAUDE_ENV_FILE), which every later command
 	// runs first.
 	CwdChanged Event = "CwdChanged"
+	// UserPromptExpansion fires when a typed /name expands into a prompt
+	// (a skill or a command of the person's), before the model sees it. A
+	// hook can stop the expansion or add text beside it.
+	UserPromptExpansion Event = "UserPromptExpansion"
 )
 
-// Events returns the eighteen events gnosh has, in the order the
+// Events returns the nineteen events gnosh has, in the order the
 // specification lists them.
 func Events() []Event {
 	return []Event{
@@ -87,7 +91,7 @@ func Events() []Event {
 		SessionStart, Stop, SubagentStart, SubagentStop, StopFailure,
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
 		PermissionRequest, Notification, PostModelSwitch, DirectoryAdded,
-		CwdChanged,
+		CwdChanged, UserPromptExpansion,
 	}
 }
 
@@ -187,7 +191,7 @@ type eventInfo struct {
 }
 
 // describe returns what the package knows about e, and whether e is one
-// of the eighteen events.
+// of the nineteen events.
 func describe(e Event) (eventInfo, bool) {
 	tool := eventInfo{subject: toolName, what: "the tool's name", mode: true, reads: true, halts: true}
 	switch e {
@@ -279,6 +283,12 @@ func describe(e Event) (eventInfo, bool) {
 		}, true
 	case CwdChanged:
 		return eventInfo{class: warns, reads: true}, true
+	case UserPromptExpansion:
+		return eventInfo{
+			class: gate, subject: ownValue, what: "the command's name",
+			mode: true, reads: true, plain: true, halts: true,
+			fields: []string{"additionalContext"},
+		}, true
 	}
 	return eventInfo{}, false
 }
@@ -304,7 +314,7 @@ func timeoutFor(e Event, own time.Duration) time.Duration {
 // Claude Code. A hook configured on one of them would never run.
 func claudeOnly(name string) (canBlock, ok bool) {
 	switch name {
-	case "PostToolBatch", "UserPromptExpansion", "ConfigChange", "PreModelSwitch",
+	case "PostToolBatch", "ConfigChange", "PreModelSwitch",
 		"WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
 		"TeammateIdle", "Elicitation", "ElicitationResult":
 		return true, true
@@ -314,9 +324,9 @@ func claudeOnly(name string) (canBlock, ok bool) {
 	return false, false
 }
 
-// eventList is the eighteen names in a sentence.
+// eventList is the nineteen names in a sentence.
 func eventList() string {
-	names := make([]string, 0, 18)
+	names := make([]string, 0, 19)
 	for _, e := range Events() {
 		names = append(names, string(e))
 	}

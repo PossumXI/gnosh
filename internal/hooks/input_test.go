@@ -241,6 +241,11 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			in:   Input{Event: CwdChanged, OldCwd: "/project", NewCwd: "/project/sub"},
 			want: with(common(CwdChanged), map[string]any{"old_cwd": "/project", "new_cwd": "/project/sub"}),
 		},
+		{
+			name: "UserPromptExpansion",
+			in:   Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", CommandArgs: "staging", CommandSource: "project", Prompt: "Deploy to staging."},
+			want: with(common(UserPromptExpansion), map[string]any{"permission_mode": "default", "expansion_type": "slash_command", "command_name": "deploy", "command_args": "staging", "command_source": "project", "prompt": "Deploy to staging."}),
+		},
 	}
 	seen := map[Event]bool{}
 	for _, tt := range tests {
@@ -433,6 +438,7 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 			with(always(Notification), "GNOSH_NOTIFICATION_TYPE", "idle_prompt")},
 		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
 		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
+		{"UserPromptExpansion", Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", Prompt: "x"}, always(UserPromptExpansion)},
 		{"CwdChanged", Input{Event: CwdChanged, OldCwd: "/project", NewCwd: "/project/sub", EnvFile: "/state/gnosh/env/session-1.sh"},
 			with(always(CwdChanged), "GNOSH_ENV_FILE", "/state/gnosh/env/session-1.sh", "CLAUDE_ENV_FILE", "/state/gnosh/env/session-1.sh")},
 	}
