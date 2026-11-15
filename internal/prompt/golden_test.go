@@ -245,6 +245,7 @@ func goldenFiles() []goldenFile {
 					{"a directory mentioned with @", s.Mention(MentionDir, "src/", "")},
 					{"a path a deny rule keeps out", s.Mention(MentionDenied, ".env", "")},
 					{"a path that could not be read", s.Mention(MentionFailed, "big.log", "it is larger than 256 KB.")},
+					{"an MCP resource mentioned with @", s.Mention(MentionResource, "memo:memo://plan", "")},
 				}
 			},
 		},

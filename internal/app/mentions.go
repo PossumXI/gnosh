@@ -25,8 +25,10 @@ import (
 // it can be edited at once; the instruction files of its folders come with
 // it, as after a Read. Read deny rules hold: a path one refuses is
 // named and left out. A word after @ that names nothing on disk is left as
-// it is: it may be a handle or an address. CLAUDE_CODE_DISABLE_FILE_MENTIONS=1
-// turns this off.
+// it is: it may be a handle or an address. "@server:scheme://path" names a
+// resource of a connected MCP server (spec/cc/mcp.md 5), and what it holds
+// comes with the prompt. CLAUDE_CODE_DISABLE_FILE_MENTIONS=1 turns this
+// off.
 
 // metaVerbatim, set true in a prompt's Meta, delivers it as it is: no @
 // mention brings anything (stream-json input's client_composed).
@@ -34,6 +36,9 @@ const metaVerbatim = "gnosh.verbatim"
 
 // mentionWord finds "@path" and "@\"a path\"" at the start of a word.
 var mentionWord = regexp.MustCompile(`(?:^|\s)@("[^"\n]+"|[^\s"]+)`)
+
+// resourceMention is "@server:scheme://rest", a resource of an MCP server.
+var resourceMention = regexp.MustCompile(`^([A-Za-z0-9_.-]+):([A-Za-z][A-Za-z0-9+.-]*://\S+)$`)
 
 // maxMentions is how many paths one prompt brings, and maxListing how
 // many names of a directory are listed.
@@ -73,6 +78,21 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 			parts = append(parts, agent.Part{Source: mentionSource("agent", name), Text: l.texts.AgentMention(name)})
 			continue
 		}
+		if m := resourceMention.FindStringSubmatch(raw); m != nil {
+			// A resource of a connected MCP server that offers them.
+			if servers, _ := l.resourceServers(m[1]); len(servers) > 0 {
+				seen[raw] = true
+				rctx, cancel := context.WithTimeout(ctx, l.cfg.Limits.MCPTimeout.V)
+				res, err := servers[0].client.ReadResource(rctx, m[2])
+				cancel()
+				if err != nil {
+					parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, err.Error())})
+					continue
+				}
+				parts = append(parts, agent.Part{Source: mentionSource("resource", raw), Text: l.texts.Mention(prompt.MentionResource, raw, "") + "\n" + prompt.Untrusted(resourceText(res, m[2]))})
+				continue
+			}
+		}
 		path := raw
 		switch {
 		case path == "~" || strings.HasPrefix(path, "~/"):
@@ -99,7 +119,7 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 				parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, err.Error())})
 				continue
 			}
-			parts = append(parts, agent.Part{Source: mentionSource("dir", raw), Text: l.texts.Mention(prompt.MentionDir, raw, "") + "\n" + prompt.Defuse(text)})
+			parts = append(parts, agent.Part{Source: mentionSource("dir", raw), Text: l.texts.Mention(prompt.MentionDir, raw, "") + "\n" + prompt.Untrusted(text)})
 			continue
 		}
 		res, err := read.Run(ctx, call, l.env())
@@ -109,7 +129,9 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 		case res.IsError:
 			parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, core.TextOf(res.Content))})
 		default:
-			parts = append(parts, agent.Part{Source: mentionSource("file", raw), Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Defuse(core.TextOf(res.Content))})
+			// (What the file holds is not the person's word: gnosh's own
+			// tags in it are broken, as in what Read returns to a call.)
+			parts = append(parts, agent.Part{Source: mentionSource("file", raw), Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Untrusted(core.TextOf(res.Content))})
 			// The instruction files of the file's folders come with it, as
 			// they would after a Read.
 			parts = append(parts, l.lateInstructions(ctx, agent.ToolDone{Call: call, Tool: read, Result: res})...)

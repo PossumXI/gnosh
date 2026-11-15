@@ -527,3 +527,16 @@ func TestMCPPrompts(t *testing.T) {
 		t.Errorf("the model was sent %d requests, want 1", n)
 	}
 }
+
+// "@server:scheme://path" in a prompt brings what a connected MCP
+// server's resource holds, as a mention of a file brings the file; a
+// server that is not there brings nothing.
+func TestMCPResourceMention(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "It says PLAN-TEXT-12."})
+	server := w.Script(w.Home+"/bin/memo.sh", fakeMCPResources)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"memo": {"command": "`+server+`"}}}`)
+	run(t, w, "-p", "what does @memo:memo://plan say? and @nobody:memo://x").wantCode(t, 0)
+	users := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
+	has(t, "the first request", users, "The user mentioned the resource memo:memo://plan of an MCP server", "PLAN-TEXT-12")
+	hasNot(t, "the first request", users, "nobody:memo://x of an MCP server")
+}

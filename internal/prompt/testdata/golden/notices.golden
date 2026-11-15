@@ -88,3 +88,6 @@ The schema:
 === a path that could not be read ===
 <gnosh>The user mentioned big.log in the prompt above, and it could not be read: it is larger than 256 KB.</gnosh>
 
+=== an MCP resource mentioned with @ ===
+<gnosh>The user mentioned the resource memo:memo://plan of an MCP server in the prompt above. What it holds follows.</gnosh>
+

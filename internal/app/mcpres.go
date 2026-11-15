@@ -138,6 +138,12 @@ func (t *readResourceTool) Run(ctx context.Context, call core.ToolCall, env *cor
 	if err != nil {
 		return core.ErrorResult(fmt.Sprintf("The resource %s of %s could not be read: %v.", uri, name, err)), nil
 	}
+	return core.TextResult(resourceText(parts, uri)), nil
+}
+
+// resourceText is what a resource holds, as text: its text parts, and a
+// line for each part that is binary.
+func resourceText(parts []mcp.ResourceContents, uri string) string {
 	var out []string
 	for _, p := range parts {
 		switch {
@@ -149,9 +155,9 @@ func (t *readResourceTool) Run(ctx context.Context, call core.ToolCall, env *cor
 		}
 	}
 	if len(out) == 0 {
-		return core.TextResult("(The resource is empty.)"), nil
+		return "(The resource is empty.)"
 	}
-	return core.TextResult(strings.Join(out, "\n\n")), nil
+	return strings.Join(out, "\n\n")
 }
 
 // resourceServer is a connected server that offers resources.

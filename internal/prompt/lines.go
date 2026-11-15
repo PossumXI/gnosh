@@ -560,6 +560,9 @@ const (
 	MentionDenied
 	// MentionFailed: the path could not be read; why says why.
 	MentionFailed
+	// MentionResource: what an MCP server's resource holds follows the
+	// line; the path is server:uri.
+	MentionResource
 )
 
 // Mention returns the line that stands before what a person's @ mention
@@ -575,6 +578,8 @@ func (s *Set) Mention(kind MentionKind, path, why string) string {
 	case MentionFailed:
 		vals.flag("failed", true)
 		vals["why"] = strings.TrimRight(oneLine(why, maxQuote), ". ")
+	case MentionResource:
+		vals.flag("resource", true)
 	default:
 		vals.flag("file", true)
 	}
