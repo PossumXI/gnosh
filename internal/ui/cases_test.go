@@ -1157,3 +1157,16 @@ func TestQuestionOverAnEmptyBox(t *testing.T) {
 	}
 	g.liveHas("> y").liveLacks("Allow Bash?")
 }
+
+// The first lines of a result under its call leave its blank lines out:
+// a sub-agent's report or a page is shown without empty rows.
+func TestResultPreviewHasNoBlankRows(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	in := map[string]any{"url": "https://example.com/page"}
+	res := core.ToolResult{Content: []core.Block{core.Text("Report:\n\n- one\n   \n- two\n\nthree\n")}}
+	g.ev(toolStart("c1", "WebFetch", in), toolEnd("c1", "WebFetch", in, res, time.Second))
+	all := strings.Join(g.all(), "\n")
+	if !strings.Contains(all, "  Report:\n  - one\n  - two\n  1 more line not shown") {
+		t.Errorf("the result's lines, without its blank ones, are not under the call:\n%s", all)
+	}
+}

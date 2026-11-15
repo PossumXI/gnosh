@@ -791,7 +791,7 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 	case "gnovm_run":
 		return "", s.clipHead(safeLines(text), s.limit(receiptLines))
 	}
-	lines := safeLines(text)
+	lines := nonBlank(safeLines(text))
 	switch len(lines) {
 	case 0:
 		return "done", nil
@@ -801,6 +801,20 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		}
 	}
 	return "", s.clipHead(lines, s.limit(resultLines))
+}
+
+// nonBlank drops the blank lines of a result: its first lines under a
+// call are a few rows, none to spare for nothing (Jae, 14 November 2026:
+// "in general don't print empty lines"). The whole is still shown, as
+// it was, when more is asked for.
+func nonBlank(lines []string) []string {
+	var out []string
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // outputLines splits a command's output into lines as a terminal would
