@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -55,9 +56,12 @@ func TestStatusLineCommand(t *testing.T) {
 	if ws, _ := first["workspace"].(map[string]any); ws["current_dir"] != w.Dir || ws["project_dir"] != w.Dir {
 		t.Errorf("the workspace it was given: %v", first["workspace"])
 	}
-	if data, _ := os.ReadFile(runs); !strings.Contains(string(data), "cols=") {
-		t.Errorf("COLUMNS was not set:\n%s", data)
-	}
+	// (The script writes its input, then the width: the file is read until
+	// both are there, and the width must be a number.)
+	waitFor("COLUMNS set to a number", func() bool {
+		data, _ := os.ReadFile(runs)
+		return regexp.MustCompile(`cols=[0-9]+`).Match(data)
+	})
 
 	before := len(inputs())
 	s.typeLine("say hello")

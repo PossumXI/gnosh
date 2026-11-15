@@ -1271,11 +1271,11 @@ func TestMemLockWaitsWithoutACap(t *testing.T) {
 		t.Fatalf("the call did not wait for the lock: %v", err)
 	case <-time.After(500 * time.Millisecond):
 	}
-	// The race detector slows the call itself several fold, so under it the
-	// time from the lock's release to the call's end says nothing about the
-	// wait.
+	// The race detector slows the call itself several fold, and so does a
+	// machine busy with other work, so under either the time from the
+	// lock's release to the call's end says nothing about the wait.
 	soon, never := 2*time.Second, 5*time.Second
-	if raceEnabled {
+	if busy, _ := machineBusy(); raceEnabled || busy {
 		soon, never = time.Minute, time.Minute
 	}
 	let := time.Now()

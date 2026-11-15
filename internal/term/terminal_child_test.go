@@ -401,17 +401,30 @@ func suspendUnderAShell(t *testing.T, job string) {
 
 	// program is the process with the terminal: the shell's job, or the
 	// one that job runs.
-	program := 0
-	first := next("the job's number")
-	if _, err := fmt.Sscanf(first, "shell: the job is %d", &program); err != nil {
-		t.Fatalf("the shell said %q, want the job's number", first)
+	// The shell and, with a wrapper, the job each say a number, each from
+	// a process of its own on the one terminal: on a busy machine the two
+	// lines come in either order.
+	numbers := map[string]int{}
+	want := 1
+	if job == "wrapper" {
+		want = 2
 	}
+	for len(numbers) < want {
+		line := next("the job's number")
+		var n int
+		switch {
+		case scanned(line, "shell: the job is %d", &n):
+			numbers["shell"] = n
+		case job == "wrapper" && scanned(line, "wrapper: the program is %d", &n):
+			numbers["wrapper"] = n
+		default:
+			t.Fatalf("the shell or its job said %q, want the job's number or the program's", line)
+		}
+	}
+	program := numbers["shell"]
 	started = append(started, program)
 	if job == "wrapper" {
-		second := next("the program's number")
-		if _, err := fmt.Sscanf(second, "wrapper: the program is %d", &program); err != nil {
-			t.Fatalf("the shell's job said %q, want the number of the program it runs", second)
-		}
+		program = numbers["wrapper"]
 		started = append(started, program)
 	}
 	expect("ready")
@@ -475,4 +488,10 @@ func (s *safeBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
+}
+
+// scanned reports whether line reads as format, one number in it.
+func scanned(line, format string, n *int) bool {
+	_, err := fmt.Sscanf(line, format, n)
+	return err == nil
 }
