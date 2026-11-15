@@ -329,6 +329,7 @@ func TestBashReadOnly(t *testing.T) {
 		"git status", "git status --short", "git diff", "git diff --stat HEAD~1", "git diff -- a.go",
 		"git log --oneline -5", "git log -n 3 --stat", "git show HEAD", "git branch", "git branch -a",
 		"git rev-parse --show-toplevel", "git ls-files", "git blame a.go", "git --no-pager log",
+		"git worktree list", "git worktree list --porcelain", "git worktree list -v", "git stash list",
 		"ls | head -3", "cat a | grep foo | wc -l", "ls && pwd; echo done", "ls || true",
 		"ls 2>/dev/null", "ls > /dev/null 2>&1", "cat < a", "cat <<EOF\nplain text\nEOF",
 		"timeout 5 ls", "nice ls", "time ls -la", "command -v go", "sort a", "sort -u -k2 a",
@@ -376,6 +377,8 @@ func TestBashReadOnly(t *testing.T) {
 		"git diff --no-index a /etc/passwd", "git -c core.pager=sh log", "git -C /tmp status",
 		"git --git-dir=/x status", "git log --show-signature", "git diff -O order", "git status -uno",
 		"git stash", "git config --get x", "git grep foo", "git show --textconv HEAD",
+		"git worktree add x", "git worktree remove x", "git worktree prune", "git worktree list x",
+		"git worktree", "git stash list --output=x", "git stash list -p", "git stash pop", "git stash drop",
 		"cd src && git status", "cd /proj && git log",
 		// Reads that leave the working directories.
 		"cat /etc/passwd", "cat ~/.ssh/id_ed25519", "cat ../other/x", "ls /", "ls ~", "head /etc/hosts",

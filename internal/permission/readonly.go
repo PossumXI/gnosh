@@ -1019,6 +1019,14 @@ var gitRead = map[string]roSpec{
 	"blame":     {short: "lsewMCctfn", valued: "L", noGlob: true, long: "--date= --porcelain --line-porcelain --show-name --show-number --show-email --root --abbrev --abbrev= --color-lines --color-by-age --incremental"},
 }
 
+// gitReadPairs lists the read-only subcommands git names with two words,
+// and the flags that keep each so. git stash list takes git log's flags,
+// --output among them, so it takes none here.
+var gitReadPairs = map[string]map[string]roSpec{
+	"worktree": {"list": {short: "vz", ops: opsNone, long: "--porcelain --verbose --expire="}},
+	"stash":    {"list": {ops: opsNone}},
+}
+
 // gitFacts judges a git command.
 func gitFacts(f *cmdFacts, args []word) {
 	i := 0
@@ -1031,6 +1039,12 @@ func gitFacts(f *cmdFacts, args []word) {
 	}
 	sub := args[i].joined()
 	spec, ok := gitRead[sub]
+	if pairs := gitReadPairs[sub]; pairs != nil && i+1 < len(args) && args[i+1].plain() {
+		if s, two := pairs[args[i+1].joined()]; two {
+			sub, spec, ok = sub+" "+args[i+1].joined(), s, true
+			i++
+		}
+	}
 	if !ok {
 		if strings.HasPrefix(sub, "-") {
 			f.why = "git's " + sub + " is not one known to only read"
