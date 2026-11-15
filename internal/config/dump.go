@@ -200,14 +200,23 @@ func limit(d time.Duration) string {
 	return d.String()
 }
 
-// OptionValue is one option as /status shows it.
+// OptionValue is one option as /status and /config show it.
 type OptionValue struct {
 	Key string
-	// Text is the value in force, as text.
+	// Text is the value in force, as text; the default when nothing set
+	// it.
 	Text string
 	// Set reports whether something other than the default set it.
 	Set    bool
 	Origin Origin
+	// What the option is for, the value when nothing sets it, and the
+	// values it takes, in a few words each.
+	What, Default, Takes string
+	// List is an option that holds a list, which /config does not change.
+	List bool
+	// JSON is the value in force as a config file would hold it, for an
+	// option that holds one value and is set; nil otherwise.
+	JSON json.RawMessage
 }
 
 // All lists every option with its value in force and where it came from,
@@ -216,17 +225,17 @@ func (o *Options) All() []OptionValue {
 	out := make([]OptionValue, 0, len(optionDefs))
 	for i := range optionDefs {
 		d := &optionDefs[i]
-		v := OptionValue{Key: d.key}
+		v := OptionValue{Key: d.key, What: d.what, Default: d.def, Takes: d.takes(), List: d.list != nil}
 		switch {
 		case d.truth != nil:
 			x := d.truth(o)
-			v.Text, v.Set, v.Origin = fmt.Sprint(x.V), x.Set, x.Origin
+			v.Text, v.Set, v.Origin, v.JSON = fmt.Sprint(x.V), x.Set, x.Origin, jsonOf(x.V)
 		case d.num != nil:
 			x := d.num(o)
-			v.Text, v.Set, v.Origin = fmt.Sprint(x.V), x.Set, x.Origin
+			v.Text, v.Set, v.Origin, v.JSON = fmt.Sprint(x.V), x.Set, x.Origin, jsonOf(x.V)
 		case d.text != nil:
 			x := d.text(o)
-			v.Text, v.Set, v.Origin = x.V, x.Set, x.Origin
+			v.Text, v.Set, v.Origin, v.JSON = x.V, x.Set, x.Origin, jsonOf(x.V)
 			if d.kind == oURL && x.Set {
 				// An address can carry a password; it is shown without.
 				v.Text = displayURL(x.V)
@@ -243,11 +252,18 @@ func (o *Options) All() []OptionValue {
 			}
 		}
 		if !v.Set {
-			v.Text = d.def
+			v.Text, v.JSON = d.def, nil
 		}
 		out = append(out, v)
 	}
 	return out
+}
+
+// jsonOf is a value as JSON. (A boolean, a number and a string always have
+// one.)
+func jsonOf(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 // HooksJSON returns the hooks in force as a hooks block in Claude Code's

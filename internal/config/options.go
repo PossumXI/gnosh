@@ -1,6 +1,9 @@
 package config
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -203,6 +206,109 @@ func optionKeys() []string {
 		keys[i] = o.key
 	}
 	return keys
+}
+
+// ParseOption reads what a person typed as an option's value ("/config
+// memoryText=full") into the JSON value a config file's "options" would
+// hold, checked as gnosh.json's reader checks it. Quotes around the text
+// are taken off.
+func ParseOption(key, text string) (json.RawMessage, error) {
+	def := findOption(key)
+	if def == nil {
+		return nil, unknownOption(key)
+	}
+	t := strings.TrimSpace(text)
+	if len(t) >= 2 && (t[0] == '"' && t[len(t)-1] == '"' || t[0] == '\'' && t[len(t)-1] == '\'') {
+		t = t[1 : len(t)-1]
+	}
+	var v any = t
+	switch def.kind {
+	case oPathList, oNameList:
+		return nil, fmt.Errorf("%s holds a list, and a list is set in gnosh.json: \"options\": {%q: [...]}", key, key)
+	case oBool:
+		switch t {
+		case "true":
+			v = true
+		case "false":
+			v = false
+		default:
+			return nil, fmt.Errorf("%s is true or false, and %s is neither", key, showName(t))
+		}
+	case oInt:
+		n, err := strconv.Atoi(t)
+		if err != nil {
+			return nil, fmt.Errorf("%s is a whole number, written with digits alone, and %s is not one", key, showName(t))
+		}
+		v = n
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	if err := CheckOption(key, raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+// CheckOption says what is wrong with raw as the value of an option, in
+// the words gnosh.json's reader would use, or nil.
+func CheckOption(key string, raw json.RawMessage) error {
+	if findOption(key) == nil {
+		return unknownOption(key)
+	}
+	_, err := optionOps(key, raw, &source{probs: &problems{}, secrets: &secrets{}})
+	return err
+}
+
+// unknownOption is the mistake of naming an option gnosh does not have.
+func unknownOption(key string) error {
+	return fmt.Errorf("%s is not an option gnosh knows. The options are: %s", showName(key), list(optionKeys()))
+}
+
+// optionOps reads one option's value with s, as a config file's "options"
+// would hold it, and gives the ops it makes or the first mistake.
+func optionOps(key string, raw json.RawMessage, s *source) ([]op, error) {
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("the value given for %s is not one JSON value", showName(key))
+	}
+	name, err := json.Marshal(key)
+	if err != nil {
+		return nil, err
+	}
+	mark := len(s.probs.list)
+	readFile(s, []byte(`{"options": {`+string(name)+`: `+string(raw)+`}}`))
+	if len(s.probs.list) > mark {
+		return nil, errors.New(s.probs.list[mark].Message)
+	}
+	return s.ops, nil
+}
+
+// takes says in a few words what values an option takes.
+func (o *optionDef) takes() string {
+	switch o.kind {
+	case oBool:
+		return "true or false"
+	case oInt:
+		switch {
+		case o.bounded && o.max < 1<<30:
+			return fmt.Sprintf("a whole number from %d to %d", o.min, o.max)
+		case o.bounded:
+			return fmt.Sprintf("a whole number of at least %d", o.min)
+		}
+		return "a whole number"
+	case oEnum:
+		return "one of " + strings.Join(o.enum, ", ")
+	case oURL:
+		return "an http or https address"
+	case oListen:
+		return "an address of this machine with a port, or " + ServerOff
+	case oPath:
+		return "a path"
+	case oPathList:
+		return "a list of paths, set in gnosh.json"
+	}
+	return "a list of names, set in gnosh.json"
 }
 
 // trustKind is what a setting of this option counts as when the folder it

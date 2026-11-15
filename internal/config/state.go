@@ -13,7 +13,7 @@ import (
 
 // State is what the user chose inside gnosh, kept between sessions: the
 // models picked with /model, the thinking level picked for each model with
-// /think, /no_think or /model, and the window picked with /autocompact. It
+// /think, /no_think or /model, and the options set with /config. It
 // lives in the user's state directory, never in a project, and it outranks
 // the user's gnosh.json: a choice made inside gnosh sticks. A model given
 // on the command line is never written here.
@@ -25,8 +25,12 @@ type State struct {
 	// Thinking is the level chosen for each model, keyed by provider/id.
 	Thinking map[string]string
 	// AutoCompactWindow is the window chosen, in tokens. Zero means no
-	// choice.
+	// choice. (It is the option of that name: /config writes it here.)
 	AutoCompactWindow int
+	// Options are the other options set with /config, each under its key
+	// as the JSON value a config file's "options" would hold. They are
+	// read as gnosh.json's are.
+	Options map[string]json.RawMessage
 
 	// extra holds keys this gnosh does not know, so that writing the file
 	// back does not drop what another version put there.
@@ -44,12 +48,13 @@ type stateFile struct {
 		Model      string `json:"model,omitempty"`
 		SmallModel string `json:"smallModel,omitempty"`
 	} `json:"models"`
-	Thinking          map[string]string `json:"thinking,omitempty"`
-	AutoCompactWindow int               `json:"autoCompactWindow,omitempty"`
+	Thinking          map[string]string          `json:"thinking,omitempty"`
+	AutoCompactWindow int                        `json:"autoCompactWindow,omitempty"`
+	Options           map[string]json.RawMessage `json:"options,omitempty"`
 }
 
 // stateKeys are the keys of stateFile, which extra never holds.
-var stateKeys = []string{"version", "models", "thinking", "autoCompactWindow"}
+var stateKeys = []string{"version", "models", "thinking", "autoCompactWindow", "options"}
 
 // ReadState reads the state file. A file that is not there gives an empty
 // State. A file that cannot be read or understood also gives an empty
@@ -70,7 +75,7 @@ func ReadState(fsys FS, path string) (State, []Problem) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return warn("the state file is not JSON gnosh can read, so the model and thinking level chosen earlier are not in force. Choosing them again with /model writes a new file.")
 	}
-	st := State{Model: f.Models.Model, SmallModel: f.Models.SmallModel, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow}
+	st := State{Model: f.Models.Model, SmallModel: f.Models.SmallModel, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow, Options: f.Options}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(data, &all) == nil {
 		for _, k := range stateKeys {
@@ -102,6 +107,14 @@ func (st State) check() error {
 	if w := st.AutoCompactWindow; w != 0 && (w < 100000 || w > 1000000) {
 		return fmt.Errorf("the auto-compact window %d is not between 100000 and 1000000", w)
 	}
+	for key, raw := range st.Options {
+		if key == "autoCompactWindow" {
+			return errors.New("autoCompactWindow has a slot of its own")
+		}
+		if err := CheckOption(key, raw); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -121,7 +134,7 @@ func WriteState(fsys WriteFS, path string, st State) error {
 	var f stateFile
 	f.Version = stateVersion
 	f.Models.Model, f.Models.SmallModel = st.Model, st.SmallModel
-	f.Thinking, f.AutoCompactWindow = st.Thinking, st.AutoCompactWindow
+	f.Thinking, f.AutoCompactWindow, f.Options = st.Thinking, st.AutoCompactWindow, st.Options
 	known, err := json.Marshal(f)
 	if err != nil {
 		return fmt.Errorf("the state file %s was not written: %w", path, err)
@@ -158,6 +171,7 @@ func WriteState(fsys WriteFS, path string, st State) error {
 func UpdateState(fsys WriteFS, path string, change func(*State)) error {
 	st, _ := ReadState(fsys, path)
 	st.Thinking = maps.Clone(st.Thinking)
+	st.Options = maps.Clone(st.Options)
 	change(&st)
 	return WriteState(fsys, path, st)
 }
@@ -201,5 +215,35 @@ func (st *State) SetThinking(ref ModelRef, level string) error {
 		st.Thinking = map[string]string{}
 	}
 	st.Thinking[name] = level
+	return nil
+}
+
+// SetOption records the value set with /config for an option, as a config
+// file's "options" would hold it (ParseOption makes one from what a person
+// typed). A nil value takes the choice away, so that the config files
+// decide again.
+func (st *State) SetOption(key string, raw json.RawMessage) error {
+	if raw != nil {
+		if err := CheckOption(key, raw); err != nil {
+			return err
+		}
+	}
+	if key == "autoCompactWindow" {
+		st.AutoCompactWindow = 0
+		if raw != nil {
+			if err := json.Unmarshal(raw, &st.AutoCompactWindow); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if raw == nil {
+		delete(st.Options, key)
+		return nil
+	}
+	if st.Options == nil {
+		st.Options = map[string]json.RawMessage{}
+	}
+	st.Options[key] = raw
 	return nil
 }

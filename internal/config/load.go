@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -547,6 +548,26 @@ func (ld *loader) state() {
 			ld.probs.warnf(path, 0, "the auto-compact window saved here, %d, is not between 100000 and 1000000, so it was not used.", w)
 		} else {
 			ld.b.opts.AutoCompactWindow.put(w, o)
+		}
+	}
+	ld.stateOptions(path, st.Options)
+}
+
+// stateOptions puts in force the options set with /config, each read as a
+// config file's "options" are. One this gnosh cannot use (a newer one wrote
+// it, say) is left out with a warning: what gnosh wrote itself never stops
+// it from starting.
+func (ld *loader) stateOptions(path string, chosen map[string]json.RawMessage) {
+	for _, key := range slices.Sorted(maps.Keys(chosen)) {
+		src := ld.source(path, LayerState, "user", filepath.Dir(path), "")
+		src.probs, src.noLines = &problems{}, true
+		ops, err := optionOps(key, chosen[key], src)
+		if err != nil {
+			ld.probs.warnf(path, 0, "the option %s set here with /config was not used: %s", showName(key), err)
+			continue
+		}
+		for _, o := range ops {
+			ld.b.run(o)
 		}
 	}
 }

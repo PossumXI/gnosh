@@ -117,6 +117,20 @@ func TestStaleStateNeverStopsStartup(t *testing.T) {
 				}
 			}},
 		{"a level that is not a word", `{"thinking": {"p/m": "LOUD!"}}`, []string{"not a level gnosh can read"}, nil},
+		// What /config set is read as gnosh.json's options are, and one
+		// this gnosh cannot use is left out, the others kept.
+		{"an option this gnosh does not have", `{"options": {"fancy": true, "debug": true}}`, []string{"fancy", "set here with /config was not used", "not an option gnosh knows"},
+			func(c *Config) {
+				if !c.Options.Debug.V || c.Options.Debug.Origin.Layer != LayerState {
+					t.Errorf("the option beside it was dropped too: %+v", c.Options.Debug)
+				}
+			}},
+		{"an option's value out of range", `{"options": {"maxBackgroundTasks": 0}}`, []string{"maxBackgroundTasks", "set here with /config was not used", "from 1 to 100000"},
+			func(c *Config) {
+				if c.Options.MaxBackgroundTasks.V != 50 || c.Options.MaxBackgroundTasks.Set {
+					t.Errorf("a stale option is dropped: %+v", c.Options.MaxBackgroundTasks)
+				}
+			}},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -224,5 +238,112 @@ func TestStateWritersAtOnce(t *testing.T) {
 	names, _ := os.ReadDir(filepath.Dir(path))
 	if len(names) != 1 {
 		t.Errorf("temporary files were left behind: %v", names)
+	}
+}
+
+// What /config sets is kept in the state file, read as a config file's
+// options are, and sits between the user's gnosh.json and the project's
+// files.
+func TestStateOptions(t *testing.T) {
+	var st State
+	for _, set := range []struct{ key, text string }{{"debug", "true"}, {"memoryText", "full"}, {"autoCompactWindow", "200000"}, {"requestTimeout", "'120'"}} {
+		raw, err := ParseOption(set.key, set.text)
+		if err != nil {
+			t.Fatalf("ParseOption(%s, %s): %v", set.key, set.text, err)
+		}
+		if err := st.SetOption(set.key, raw); err != nil {
+			t.Fatalf("SetOption(%s): %v", set.key, err)
+		}
+	}
+	// The window has its slot of old; the others are options.
+	if st.AutoCompactWindow != 200000 || len(st.Options) != 3 || string(st.Options["memoryText"]) != `"full"` || string(st.Options["requestTimeout"]) != "120" {
+		t.Fatalf("the state: %+v %s", st, st.Options)
+	}
+	if err := st.SetOption("requestTimeout", nil); err != nil || len(st.Options) != 2 {
+		t.Errorf("taking a choice away: %v %s", err, st.Options)
+	}
+	if err := st.SetOption("memoryText", json.RawMessage(`"fulll"`)); err == nil || !strings.Contains(err.Error(), "lean") || string(st.Options["memoryText"]) != `"full"` {
+		t.Errorf("a value the reader would refuse: %v, and the state holds %s", err, st.Options["memoryText"])
+	}
+	fsys := newFS()
+	if err := WriteState(fsys, statePath, st); err != nil {
+		t.Fatal(err)
+	}
+	if got, problems := ReadState(fsys, statePath); len(problems) != 0 || !reflect.DeepEqual(got, st) {
+		t.Errorf("read back %+v with %v, want %+v", got, problems, st)
+	}
+	// The state outranks the user's file, and the project's file outranks
+	// the state.
+	fsys.put(userJSON, "{"+one+`, "options": {"debug": false, "memoryText": "lean", "loopMaxTurns": 5}}`)
+	fsys.put(projJSON, `{"options": {"memoryText": "lean"}}`)
+	cfg := mustLoad(t, inputs(fsys))
+	o := cfg.Options
+	if !o.Debug.V || o.Debug.Origin.Layer != LayerState || o.Debug.Origin.File != statePath || o.Debug.Origin.Line != 0 {
+		t.Errorf("debug: %+v", o.Debug)
+	}
+	if o.MemoryText.V != "lean" || o.MemoryText.Origin.File != projJSON {
+		t.Errorf("memoryText: the project's file wins: %+v", o.MemoryText)
+	}
+	if o.LoopMaxTurns.V != 5 || o.LoopMaxTurns.Origin.Layer != LayerUser {
+		t.Errorf("loopMaxTurns: what the state does not hold stays the user's: %+v", o.LoopMaxTurns)
+	}
+	if o.AutoCompactWindow.V != 200000 || o.AutoCompactWindow.Origin.Layer != LayerState {
+		t.Errorf("autoCompactWindow: %+v", o.AutoCompactWindow)
+	}
+	rows := o.All()
+	if len(rows) != len(optionDefs) {
+		t.Fatalf("%d rows for %d options", len(rows), len(optionDefs))
+	}
+	for _, r := range rows {
+		switch r.Key {
+		case "debug":
+			if r.Text != "true" || string(r.JSON) != "true" || !r.Set || r.Takes != "true or false" {
+				t.Errorf("the row of debug: %+v", r)
+			}
+		case "maxBackgroundTasks":
+			if r.Text != "50" || r.Set || r.JSON != nil || r.Takes != "a whole number from 1 to 100000" {
+				t.Errorf("the row of an option nothing set: %+v", r)
+			}
+		case "hiddenSkills":
+			if !r.List || r.Set || r.Text != "none" {
+				t.Errorf("the row of a list: %+v", r)
+			}
+		}
+	}
+}
+
+// ParseOption reads what a person types after /config key= as the JSON
+// value gnosh.json would hold, and refuses what gnosh.json's reader would,
+// in its words.
+func TestParseOption(t *testing.T) {
+	for _, tt := range []struct{ key, text, want, wrong string }{
+		{"debug", "true", "true", ""},
+		{"debug", "false", "false", ""},
+		{"debug", "yes", "", "true or false"},
+		{"maxBackgroundTasks", "12", "12", ""},
+		{"maxBackgroundTasks", "0", "", "from 1 to 100000"},
+		{"maxBackgroundTasks", "twelve", "", "whole number"},
+		{"memoryText", "full", `"full"`, ""},
+		{"memoryText", `"full"`, `"full"`, ""},
+		{"memoryText", "short", "", `"lean", "full"`},
+		{"memEmbeddingsUrl", "http://127.0.0.1:8091/v1", `"http://127.0.0.1:8091/v1"`, ""},
+		{"memEmbeddingsUrl", "ftp://x", "", "http:// or https://"},
+		{"deliverablesServer", "off", `"off"`, ""},
+		{"deliverablesServer", "0.0.0.0:80", "", "this machine alone"},
+		{"projectDataDir", "'my data'", `"my data"`, ""},
+		{"hiddenSkills", "x", "", "a list is set in gnosh.json"},
+		{"fancy", "1", "", "not an option gnosh knows"},
+	} {
+		raw, err := ParseOption(tt.key, tt.text)
+		switch {
+		case tt.wrong == "" && (err != nil || string(raw) != tt.want):
+			t.Errorf("ParseOption(%s, %s) = %s, %v; want %s", tt.key, tt.text, raw, err, tt.want)
+		case tt.wrong != "" && (err == nil || !strings.Contains(err.Error(), tt.wrong)):
+			t.Errorf("ParseOption(%s, %s) = %s, %v; want a mistake that says %q", tt.key, tt.text, raw, err, tt.wrong)
+		}
+	}
+	// Only one JSON value is a value: nothing can be written past it.
+	if err := CheckOption("debug", json.RawMessage(`true}, "providers": {"x": 1`)); err == nil {
+		t.Error("CheckOption took more than one JSON value")
 	}
 }

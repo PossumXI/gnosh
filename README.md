@@ -43,7 +43,7 @@ served at an address on this machine.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write
-and Edit changed, or both), `/model`, `/effort`, `/plan`, `/permissions`,
+and Edit changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissions`,
 `/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
 model works; nothing of it is kept), `/recap`, `/cost`, `/tasks`, `/diff`,
 `/export`,

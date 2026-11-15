@@ -1,0 +1,71 @@
+package app
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+
+	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+)
+
+// /config lists gnosh's options with what set each, shows one, and sets
+// them in the user's state file, never in gnosh.json; a project's files
+// still win, and /config says so.
+func TestConfigCommand(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Settings(`{"options": {"memoryText": "full"}}`)
+	state := filepath.Join(w.DataDir(), "state.json")
+	settings, _ := os.ReadFile(w.SettingsFile())
+
+	has(t, "/config", run(t, w, "-p", "/config").wantCode(t, 0).out,
+		"gnosh's options in this session (/config key says more, /config key=value sets one):",
+		"memoryText", "full", "~/.config/gnosh/gnosh.json:", "maxBackgroundTasks", "50", "the default",
+		"What /config sets is kept in ~/.local/share/gnosh/state.json: above your gnosh.json, below a project's files.")
+	has(t, "/config memoryText", run(t, w, "-p", "/config memoryText").wantCode(t, 0).out,
+		"memoryText: which of gnosh's two texts about mem the model is given",
+		"It takes one of lean, full; when nothing sets it, it is lean.", "Now: full (~/.config/gnosh/gnosh.json:")
+
+	// Two at once, kept in the state file.
+	has(t, "/config debug=true maxBackgroundTasks=7", run(t, w, "-p", "/config debug=true maxBackgroundTasks='7'").wantCode(t, 0).out,
+		"debug is true when gnosh next starts, in every project whose own files do not set it.",
+		"maxBackgroundTasks is 7 when gnosh next starts",
+		"(Kept in ~/.local/share/gnosh/state.json, never in your gnosh.json.)")
+	data, err := os.ReadFile(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	has(t, "the state file", string(data), `"debug": true`, `"maxBackgroundTasks": 7`)
+	if now, _ := os.ReadFile(w.SettingsFile()); !reflect.DeepEqual(now, settings) {
+		t.Errorf("/config wrote gnosh.json:\n%s", now)
+	}
+	// The next start has them, from /config.
+	out := run(t, w, "-p", "/config").wantCode(t, 0).out
+	has(t, "/config after the change", out, "debug", "true", "/config")
+	hasNot(t, "/config after the change", out, "when gnosh next starts")
+
+	// A mistake saves nothing, not even the pairs before it.
+	r := run(t, w, "-p", "/config memoryText=lean debug=yes").wantCode(t, 1)
+	has(t, "/config debug=yes", r.out+r.err, `debug is true or false, and "yes" is neither`)
+	if again, _ := os.ReadFile(state); string(again) != string(data) {
+		t.Errorf("a refused /config changed the state file:\n%s", again)
+	}
+	has(t, "/config hiddenSkills=x", run(t, w, "-p", "/config hiddenSkills=x").wantCode(t, 1).err, "hiddenSkills holds a list, and a list is set in gnosh.json")
+	has(t, "/config fancy", run(t, w, "-p", "/config fancy").wantCode(t, 1).err, `"fancy" is not an option gnosh knows`)
+
+	// A project's own file outranks what /config set.
+	w.Write("gnosh.json", `{"options": {"debug": false}}`)
+	out = run(t, w, "--trust-folder", "-p", "/config debug").wantCode(t, 0).out
+	has(t, "/config debug under a project's file", out, "Now: false (", "proj/gnosh.json", "(set with /config to true; what sets it here outranks that)")
+	has(t, "/config debug=true under a project's file", run(t, w, "--trust-folder", "-p", "/config debug=true").wantCode(t, 0).out,
+		"Here ", "proj/gnosh.json", " sets it to false, and that wins.")
+	if err := os.Remove(w.Path("gnosh.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	// key= takes the choice away; a second time there is nothing to take.
+	has(t, "/config debug=", run(t, w, "-p", "/config debug=").wantCode(t, 0).out,
+		"debug is no longer set with /config: when gnosh next starts the config files decide (in this session it is true, from /config).")
+	has(t, "/config debug= again", run(t, w, "-p", "/config debug=").wantCode(t, 0).out, "debug was not set with /config, so nothing changed.")
+	has(t, "/config after taking debug away", run(t, w, "-p", "/config debug").wantCode(t, 0).out, "Now: false (the default).")
+}

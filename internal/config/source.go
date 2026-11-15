@@ -53,10 +53,17 @@ type source struct {
 	probs   *problems
 	secrets *secrets
 	ops     []op
+	// noLines is set for a source whose lines are not the file's own (the
+	// options of the state file, read one by one): its origins name the
+	// file alone.
+	noLines bool
 }
 
 // at is the Origin of a line of the source.
 func (s *source) at(line int) Origin {
+	if s.noLines {
+		line = 0
+	}
 	return Origin{Layer: s.layer, File: s.file, Line: line}
 }
 

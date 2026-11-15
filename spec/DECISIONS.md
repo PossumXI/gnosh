@@ -342,3 +342,17 @@ or kept with the reason said (27).
     lines on the prompt), and no background commands or sub-agents: a
     command whose time is up is stopped, as `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`
     now also has it. What a run needs is given with flags.
+34. **`/config` writes the state file, never a gnosh.json.** Claude
+    Code's `/config` writes the user's own settings file, and a project's
+    files win over it. gnosh never writes a gnosh.json (it is the
+    person's, comments and all), so `/config key=value` keeps the value
+    in the user's state file, beside the model chosen with `/model`: the
+    layer above the user's gnosh.json and below a project's files, which
+    is where Claude Code's choice sits. The value is checked by the very
+    reader gnosh.json's `options` go through, and read back by it at the
+    next start; one a later gnosh cannot use is left out with a warning
+    and never stops startup. It is in force from gnosh's next start:
+    most options are read once, as a session begins. `/config` alone
+    lists every option with its value and what set it, `/config key`
+    says more of one, and `key=` takes a choice away. Lists (instruction
+    files, hidden skills) stay in gnosh.json.

@@ -78,7 +78,7 @@ type historian interface {
 // typed meanwhile waits for the session to go idle (spec/cc
 // interactive.md, 2.8).
 var atOnce = map[string]bool{
-	"status": true, "tasks": true, "model": true, "permissions": true,
+	"status": true, "tasks": true, "model": true, "permissions": true, "config": true,
 	"deliverables": true, "artifacts": true,
 	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
 	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true, "diff": true, "mcp": true, "copy": true,

@@ -16,7 +16,7 @@ const (
 	// LayerUser is the user's own gnosh.json.
 	LayerUser
 	// LayerState is the user's state file: what was chosen inside gnosh
-	// with /model, /think and /autocompact.
+	// with /model, /think and /config.
 	LayerState
 	// LayerProject is a file of the project's: its gnosh.json, or the
 	// settings file in its data folder.
