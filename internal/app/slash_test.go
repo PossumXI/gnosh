@@ -151,6 +151,12 @@ func TestClaudeCodeCommands(t *testing.T) {
 	s.typeLine("/add-dir " + other)
 	s.see("is a working directory of this session already")
 
+	// /tasks: nothing yet, and an id that is not one.
+	s.typeLine("/tasks")
+	s.see("No command has run in the background in this session.")
+	s.typeLine("/bashes stop bg9")
+	s.see("bg9 is not one of this session's background commands")
+
 	// /agents and /memory report.
 	s.typeLine("/agents")
 	s.see("The kinds of sub-agent the model can start:")

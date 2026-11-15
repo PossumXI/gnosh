@@ -18,7 +18,7 @@ import (
 
 // This file holds the slash commands that follow Claude Code's own of the
 // same names (spec/cc/slash-commands-and-skills.md): /plan, /add-dir,
-// /cost, /agents, /memory and /init.
+// /tasks, /cost, /agents, /memory and /init.
 
 // slashPlan is /plan [task]: plan mode, and the task, if one is given, as
 // the prompt that starts it.
@@ -89,6 +89,50 @@ func (l *live) slashAddDir(ctx context.Context, c *SlashContext) error {
 	_ = l.agent.Tell(agent.Note{Source: "add-dir",
 		Text: prompt.Wrap(fmt.Sprintf("The user added %s as a working directory for the rest of this session: its files may be read and changed as the project's are, under the same permission mode and rules.", dir))})
 	c.Say("%s is a working directory for the rest of this session: its files are read and changed as the project's are, under the same mode and rules. --add-dir adds one for a whole session.", dir)
+	return nil
+}
+
+// slashTasks is /tasks (also /bashes): the commands that run, or ran, in
+// the background in this session, and "/tasks stop <id>" to stop one.
+func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
+	if l.shell == nil {
+		c.Say("This session runs no commands, so none runs in the background.")
+		return nil
+	}
+	args := strings.Fields(c.Args)
+	switch {
+	case len(args) == 2 && args[0] == "stop":
+		t, err := l.shell.Stop(ctx, args[1])
+		if err != nil {
+			return fmt.Errorf("%s is not one of this session's background commands; /tasks lists them", oneLine(args[1], 40))
+		}
+		c.Say("%s is stopped: %s", t.ID, oneLine(t.Command, 100))
+		return nil
+	case len(args) > 0:
+		return errors.New("/tasks takes nothing after it, or stop and the id of a background command")
+	}
+	tasks := l.shell.Tasks()
+	if len(tasks) == 0 {
+		c.Say("No command has run in the background in this session. Ctrl+B moves one that is running into the background.")
+		return nil
+	}
+	running := 0
+	for _, t := range tasks {
+		state := "running for " + roundTime(t.Duration)
+		if t.Running {
+			running++
+		} else {
+			state = fmt.Sprintf("ended after %s, exit %d", roundTime(t.Duration), t.ExitCode)
+			if t.Signal != "" {
+				state = fmt.Sprintf("killed by %s after %s", t.Signal, roundTime(t.Duration))
+			}
+		}
+		c.Say("%s  %s: %s", t.ID, state, oneLine(t.Command, 100))
+		c.Say("     its output: %s (%s)", t.OutputFile, byteCount(t.OutputBytes))
+	}
+	if running > 0 {
+		c.Say("/tasks stop <id> stops one.")
+	}
 	return nil
 }
 
