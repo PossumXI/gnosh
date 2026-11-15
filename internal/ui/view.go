@@ -610,7 +610,13 @@ func (s *session) customLines(width int) []string {
 	}
 	pad := strings.Repeat(" ", min(s.customPad, width/2))
 	for _, l := range s.custom {
-		out = append(out, pad+statusText(l))
+		l = statusText(l)
+		if s.th.Profile == text.NoColor {
+			// No colour at all where the person asked for none (NO_COLOR),
+			// or the terminal takes none: the command's go too.
+			l = text.Strip(l)
+		}
+		out = append(out, pad+l)
 	}
 	return out
 }

@@ -731,6 +731,18 @@ func TestCustomStatusLine(t *testing.T) {
 	g.liveHas("accept edits", "  main | ctx 11%")
 	g.ev(&app.StatusLineEvent{})
 	g.liveHas("idle").liveLacks("main | ctx")
+	// Where there is no colour, the command's colours go too; where there
+	// is, they stay. (The screen the rig reads holds no escapes, so the
+	// lines are asked for.)
+	g.ev(&app.StatusLineEvent{Lines: []string{"\x1b[31mred\x1b[0m line"}})
+	if got := strings.Join(g.s.customLines(100), "\n"); strings.Contains(got, "\x1b") || !strings.Contains(got, "red line") {
+		t.Errorf("without colour, the lines are %q", got)
+	}
+	coloured := newRig(t, 100, 24, text.TrueColor)
+	coloured.ev(&app.StatusLineEvent{Lines: []string{"\x1b[31mred\x1b[0m line"}})
+	if got := strings.Join(coloured.s.customLines(100), "\n"); !strings.Contains(got, "\x1b[31mred") {
+		t.Errorf("with colour, the lines are %q", got)
+	}
 
 	// What is kept and what goes.
 	for in, want := range map[string]string{
