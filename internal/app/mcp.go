@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -218,7 +217,7 @@ func (l *live) mcpStatus() []MCPServerStatus {
 // connected and with what tools, or why not.
 func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
 	if l.mcp == nil || len(l.mcp.servers) == 0 && len(l.mcp.probs) == 0 {
-		c.Say("No MCP server is configured. Your own go in %s, and a project's in .mcp.json at its root (read once the folder is trusted), as {\"mcpServers\": {\"name\": {\"command\": \"...\", \"args\": [...]}}}, or {\"type\": \"http\", \"url\": \"...\"} for a server at a URL.", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
+		c.Say("No MCP server is configured. From a shell, gnosh mcp add <name> -- <command> [args...] adds one gnosh starts, and gnosh mcp add -t http <name> <url> one at a URL; they are kept in %s, and a project's in .mcp.json at its root (read once the folder is trusted).", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
 		return nil
 	}
 	l.mcp.mu.Lock()
@@ -251,8 +250,8 @@ func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
 // host (the rest of a URL may hold a key).
 func mcpWhere(c mcp.Config) string {
 	where := c.Scope + ", " + c.Path
-	if u, err := url.Parse(c.URL); c.Type == "http" && err == nil && u.Host != "" {
-		where += ", at " + u.Scheme + "://" + u.Host
+	if c.Type == "http" {
+		where += ", at " + c.Shown
 	}
 	return where
 }

@@ -1,0 +1,28 @@
+gnosh mcp
+
+  Add, list, show and remove MCP servers. They are kept in gnosh's own
+  mcp.json (local and user servers) and in a project's .mcp.json (project
+  servers), in Claude Code's shape. A local server is a project's and yours
+  alone; a server in .mcp.json goes with the project, and is used once its
+  folder is trusted.
+
+  None of these commands is built yet in this build of gnosh: typing one stops
+  with a message that says so.
+
+Usage
+  gnosh mcp <command> [flags] [arguments]
+
+Commands
+  add <name> <command-or-url> [args...]
+                          Add a server. (Not built yet.)
+  add-json <name> <json>  Add a server from its entry, as JSON. (Not built
+                          yet.)
+  get <name>              Show one server, and whether it connects. (Not built
+                          yet.)
+  list                    List the servers this folder uses, and whether each
+                          connects. (Not built yet.)
+  remove <name>           Remove a server. (Not built yet.)
+
+Flags
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

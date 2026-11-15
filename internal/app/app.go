@@ -213,6 +213,10 @@ var built = []string{
 	"--setting-sources", "--safe-mode", "--disable-slash-commands",
 	"--debug", "--debug-file", "--verbose",
 	"--output-format=json", "--output-format=stream-json",
+	"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove",
+	"mcp --scope", "mcp --scope=local", "mcp --scope=user", "mcp --scope=project",
+	"mcp --transport", "mcp --transport=stdio", "mcp --transport=http",
+	"mcp --env", "mcp --header",
 }
 
 // buildTable makes the command-line table of this build: the table as it
@@ -295,6 +299,8 @@ func (p *program) run(ctx context.Context) int {
 		return p.modelsCommand(ctx, inv)
 	case cli.CmdSessionList, cli.CmdSessionShow, cli.CmdSessionLast, cli.CmdSessionRename:
 		return p.sessionsCommand(ctx, inv)
+	case cli.CmdMCPAdd, cli.CmdMCPAddJSON, cli.CmdMCPGet, cli.CmdMCPList, cli.CmdMCPRemove:
+		return p.mcpCommand(ctx, inv)
 	}
 	for _, f := range p.o.Features {
 		for _, c := range f.Commands {

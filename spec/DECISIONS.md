@@ -278,8 +278,13 @@ or kept with the reason said (27).
 30. **MCP servers are configured in files of their own, in Claude Code's
     shape.** The user's are in `mcp.json` in gnosh's config folder, and a
     project's in `.mcp.json` at its root, which counts only in a trusted
-    folder (each entry is a program to run, like a project's hooks); a name
-    in both is the project's entry whole. Not in gnosh.json: spec/cc/mcp.md
+    folder (each entry is a program to run, like a project's hooks). The
+    user's file also holds, under `"projects"` by each project's root, the
+    servers of one project that are the person's alone: Claude Code's
+    local scope, in the shape of its `~/.claude.json`, so that the three
+    scopes `gnosh mcp add -s` names (local, the default; project; user)
+    are two files. A name in more than one is the local entry, else the
+    project's, whole. Not in gnosh.json: spec/cc/mcp.md
     recommends this split, Claude Code keeps MCP servers out of its
     settings files too, and so a `.mcp.json` written for Claude Code works
     in gnosh unchanged while gnosh.json keeps its strict keys. A run (`-p`)
@@ -288,5 +293,10 @@ or kept with the reason said (27).
     URL (Streamable HTTP; the old SSE transport is refused by name) are
     both spoken to; a server at a URL is sent no roots, since the folders
     open here are nothing it needs to know, and is not followed to another
-    host by a redirect, which would carry its headers there.
+    host by a redirect, which would carry its headers there. `gnosh mcp
+    add`, `add-json`, `get`, `list` and `remove` are Claude Code's; they
+    change one entry and leave the rest of the file, and the order of its
+    keys, as they were. `list` and `get` connect to each server to say
+    whether it works, but never start a project's servers in a folder that
+    is not trusted, and never show the values of variables and headers.
 

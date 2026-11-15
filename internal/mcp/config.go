@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
@@ -19,11 +20,14 @@ import (
 //
 //	{"mcpServers": {"<name>": {"command": "...", "args": [...], "env": {...}}}}
 //
-// gnosh reads two of them: the user's own (mcp.json in gnosh's config
-// folder), and the project's .mcp.json at the project's root, which counts
-// only in a folder the person has trusted, because each entry is a program
-// to run. A name in both is the project's entry whole; fields are not
-// merged.
+// gnosh reads two of them. The user's own, mcp.json in gnosh's config
+// folder, holds the user's servers at its top, for every project, and
+// under "projects", by each project's root, the servers of one project
+// that are the person's alone (Claude Code's local scope, kept in the same
+// shape as its ~/.claude.json). The project's .mcp.json at the project's
+// root counts only in a folder the person has trusted, because each entry
+// is a program to run. A name in more than one is the local entry, else
+// the project's, whole; fields are not merged.
 
 // Config is one configured server.
 type Config struct {
@@ -41,9 +45,15 @@ type Config struct {
 	Headers map[string]string
 	// Timeout bounds one tool call; zero means no bound.
 	Timeout time.Duration
-	// Scope is "user" or "project", and Path the file it came from.
+	// Scope is "local", "project" or "user", and Path the file it came
+	// from.
 	Scope string
 	Path  string
+	// Shown is the server in a few words, to show the person: a started
+	// server's command and arguments as they are written (with ${VAR}
+	// unfilled), or the scheme and host of a server's URL, the rest of
+	// which may hold a key.
+	Shown string
 }
 
 // Problem is something wrong with one entry, or with a whole file, which
@@ -98,27 +108,45 @@ func LoadConfig(src Sources) ([]Config, []Problem) {
 	for _, v := range append(append([]string(nil), withheld...), src.Withheld...) {
 		held[v] = true
 	}
-	read := func(path, scope string) {
+	read := func(path string) *configFile {
 		if path == "" {
-			return
+			return nil
 		}
 		data, err := os.ReadFile(path)
 		if errors.Is(err, fs.ErrNotExist) {
-			return
+			return nil
 		}
 		if err != nil {
 			probs = append(probs, Problem{Path: path, Message: err.Error()})
-			return
+			return nil
 		}
-		got, wrong := parseConfig(path, scope, data, src.Root, src.Getenv, held)
+		var f configFile
+		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&f); err != nil {
+			probs = append(probs, Problem{Path: path, Message: fmt.Sprintf("it is not JSON in the shape {\"mcpServers\": {...}} (%v), so none of it is used", err)})
+			return nil
+		}
+		return &f
+	}
+	use := func(path, scope string, servers map[string]json.RawMessage) {
+		got, wrong := parseConfig(path, scope, servers, src.Root, src.Getenv, held)
 		probs = append(probs, wrong...)
 		for _, c := range got {
 			byName[c.Name] = c
 		}
 	}
-	read(src.User, "user")
+	user := read(src.User)
+	if user != nil {
+		use(src.User, "user", user.Servers)
+	}
 	if src.Trusted {
-		read(src.Project, "project")
+		if project := read(src.Project); project != nil {
+			use(src.Project, "project", project.Servers)
+		}
+	}
+	if user != nil && src.Root != "" {
+		if own, ok := user.Projects[src.Root]; ok {
+			use(src.User, "local", own.Servers)
+		}
 	}
 	names := make([]string, 0, len(byName))
 	for n := range byName {
@@ -132,16 +160,18 @@ func LoadConfig(src Sources) ([]Config, []Problem) {
 	return out, probs
 }
 
-// parseConfig reads one file.
-func parseConfig(path, scope string, data []byte, projectRoot string, getenv func(string) (string, bool), held map[string]bool) ([]Config, []Problem) {
-	var probs []Problem
-	var file struct {
+// configFile is one file of servers: its own at the top, and the user's
+// file's servers of each project under "projects".
+type configFile struct {
+	Servers  map[string]json.RawMessage `json:"mcpServers"`
+	Projects map[string]struct {
 		Servers map[string]json.RawMessage `json:"mcpServers"`
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&file); err != nil {
-		return nil, []Problem{{Path: path, Message: fmt.Sprintf("it is not JSON in the shape {\"mcpServers\": {...}} (%v), so none of it is used", err)}}
-	}
+	} `json:"projects"`
+}
+
+// parseConfig reads the servers of one scope of a file.
+func parseConfig(path, scope string, servers map[string]json.RawMessage, projectRoot string, getenv func(string) (string, bool), held map[string]bool) ([]Config, []Problem) {
+	var probs []Problem
 	env := func(name string) (string, bool) {
 		if name == "CLAUDE_PROJECT_DIR" || name == "GNOSH_PROJECT_DIR" {
 			if v, ok := getenv(name); ok {
@@ -152,7 +182,7 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 		return getenv(name)
 	}
 	var out []Config
-	for name, raw := range file.Servers {
+	for name, raw := range servers {
 		var e struct {
 			Type    string            `json:"type"`
 			Command string            `json:"command"`
@@ -202,6 +232,7 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 			for _, a := range e.Args {
 				c.Args = append(c.Args, x(a))
 			}
+			c.Shown = strings.Join(append([]string{e.Command}, e.Args...), " ")
 			if len(e.Env) > 0 {
 				c.Env = map[string]string{}
 				for k, v := range e.Env {
@@ -214,6 +245,7 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 				continue
 			}
 			c.Type, c.URL = "http", remote(e.URL)
+			c.Shown = siteOf(c.URL)
 			if len(e.Headers) > 0 {
 				c.Headers = map[string]string{}
 				for k, v := range e.Headers {
@@ -240,6 +272,22 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 		out = append(out, c)
 	}
 	return out, probs
+}
+
+// siteOf is a URL's scheme and host, or as much of the URL as is not its
+// path, query or fragment when it cannot be read.
+func siteOf(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	if i := strings.Index(raw, "://"); i >= 0 {
+		rest := raw[i+3:]
+		if j := strings.IndexAny(rest, "/?#"); j >= 0 {
+			rest = rest[:j]
+		}
+		return raw[:i+3] + rest
+	}
+	return "a URL that cannot be read"
 }
 
 var variable = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}`)

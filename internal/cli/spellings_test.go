@@ -94,6 +94,10 @@ func sample(f *flag) string {
 		return "user,local"
 	case f.list == listRules:
 		return "Read,Bash(git diff *)"
+	case f.list == listPairs:
+		return "KEY=value"
+	case f.list == listHeaders:
+		return "X-Key: value"
 	}
 	return "value"
 }

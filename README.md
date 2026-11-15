@@ -28,7 +28,9 @@ at a URL (from `~/.config/gnosh/mcp.json`, and a trusted project's
 declared hosts over ssh, permission modes and rules,
 hooks, instruction files, sub-agents in the foreground, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
-`gnosh doctor`, `gnosh trust`, and deliverables: the `Deliver` tool by which
+`gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
+remove, with Claude Code's local, project and user scopes), and
+deliverables: the `Deliver` tool by which
 the model names what was asked for, `/deliverables`, and each delivered file
 served at an address on this machine.
 
@@ -43,9 +45,9 @@ prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, and a line that begins with `!` is a command of your own.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
-`headers`), the `gnosh mcp` commands, background sub-agents, web search. The interface is in use over ssh, in tmux. Its
-wording to the model has not yet been compared run against run. Nothing
-here is released.
+`headers`), background sub-agents, web search. The interface is in use over
+ssh, in tmux. Its wording to the model has not yet been compared run
+against run. Nothing here is released.
 
 ## Licence
 

@@ -1,0 +1,17 @@
+gnosh mcp list
+
+  List the servers this folder uses, and whether each connects. A project's
+  servers in a folder that is not trusted are named and not started.
+  Also typed: gnosh mcp ls.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh mcp list [flags]
+
+Flags
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

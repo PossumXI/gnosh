@@ -117,6 +117,26 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh dirs --cwd /w`, want: Invocation{Command: CmdDirs, Cwd: "/w"}},
 		{line: `gnosh dirs --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh dirs"}},
 
+		// mcp
+		{line: `gnosh mcp add greeter -- npx -y greeter --port 8080`, want: Invocation{Command: CmdMCPAdd, Args: []string{"greeter", "npx", "-y", "greeter", "--port", "8080"}}},
+		{line: `gnosh mcp add -e A=1 B=2 -s user greeter /bin/greeter`, want: Invocation{Command: CmdMCPAdd, Args: []string{"greeter", "/bin/greeter"}, MCPEnv: []string{"A=1", "B=2"}, MCPScope: "user"}},
+		{line: `gnosh mcp add -e A=1 greeter /bin/greeter -e B=x=y`, want: Invocation{Command: CmdMCPAdd, Args: []string{"greeter", "/bin/greeter"}, MCPEnv: []string{"A=1", "B=x=y"}}},
+		{line: `gnosh mcp add -t http -H "Authorization: Bearer x" "X-A: b" far https://mcp.example.org/x`, want: Invocation{Command: CmdMCPAdd, Args: []string{"far", "https://mcp.example.org/x"}, MCPTransport: "http", MCPHeaders: []string{"Authorization: Bearer x", "X-A: b"}}},
+		{line: `gnosh mcp add -t http -H "A: b" https://mcp.example.org/x`, kind: ErrUsage, say: []string{"gnosh mcp add needs more after it"}},
+		{line: `gnosh mcp add -t sse far https://x`, kind: ErrBadValue, say: []string{"the sse transport is not one gnosh speaks"}},
+		{line: `gnosh mcp add -e 1A=b x y`, kind: ErrBadValue, say: []string{"1A=b is not KEY=value"}},
+		{line: `gnosh mcp add greeter npx -y x`, kind: ErrUnknownFlag, say: []string{"goes after --"}},
+		{line: `gnosh mcp add greeter`, kind: ErrUsage, say: []string{"gnosh mcp add needs more after it"}},
+		{line: `gnosh mcp add-json far '{"type":"http","url":"https://x"}'`, want: Invocation{Command: CmdMCPAddJSON, Args: []string{"far", `{"type":"http","url":"https://x"}`}}},
+		{line: `gnosh mcp add-json far -t http x`, kind: ErrUnknownFlag, say: []string{"-t does not go with gnosh mcp add-json"}},
+		{line: `gnosh mcp list`, want: Invocation{Command: CmdMCPList}},
+		{line: `gnosh mcp ls --cwd /w`, want: Invocation{Command: CmdMCPList, Cwd: "/w"}},
+		{line: `gnosh mcp get far`, want: Invocation{Command: CmdMCPGet, Args: []string{"far"}}},
+		{line: `gnosh mcp rm far -s project`, want: Invocation{Command: CmdMCPRemove, Args: []string{"far"}, MCPScope: "project"}},
+		{line: `gnosh mcp remove far -s everywhere`, kind: ErrBadValue},
+		{line: `gnosh mcp`, kind: ErrUsage, say: []string{"gnosh mcp needs one of its commands after it"}},
+		{line: `gnosh help mcp`, want: helpFor("mcp")},
+
 		// help and version, as flags and as commands
 		{line: `gnosh -h`, want: helpFor()},
 		{line: `gnosh --help`, want: helpFor()},
@@ -173,9 +193,9 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		{line: `gnosh -p --quiet x`, kind: ErrUnknownFlag, say: []string{"--quiet is not a flag of gnosh"}},
 
 		// A session is named with --resume, and a new one with --session-id.
-		{line: `gnosh -s abc`, kind: ErrUnknownFlag, say: []string{"-s is not a flag of gnosh"}},
+		{line: `gnosh -s abc`, kind: ErrUnknownFlag, say: []string{"-s does not go with gnosh", "It is a flag of gnosh mcp add, gnosh mcp add-json and gnosh mcp remove."}},
 		{line: `gnosh --session abc`, kind: ErrUnknownFlag, hint: "--session-id", say: []string{"--session is not a flag of gnosh"}},
-		{line: `gnosh -ys abc`, kind: ErrUnknownFlag, say: []string{"-ys: -s is not a flag of gnosh"}},
+		{line: `gnosh -ys abc`, kind: ErrUnknownFlag, say: []string{"-ys: -s does not go with gnosh"}},
 
 		// There is no flag for another data folder.
 		{line: `gnosh -D /tmp/data`, kind: ErrUnknownFlag, hint: "-d", say: []string{"-D is not a flag of gnosh", "Did you mean -d (--debug)? Letter case counts."}},
@@ -203,8 +223,6 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		{line: `gnosh ssh box.example.com`, want: inter(Invocation{Prompt: "ssh box.example.com"})},
 		{line: `gnosh projects`, want: inter(Invocation{Prompt: "projects"})},
 		{line: `gnosh stats`, want: inter(Invocation{Prompt: "stats"})},
-		{line: `gnosh mcp list`, want: inter(Invocation{Prompt: "mcp list"})},
-		{line: `gnosh help mcp`, kind: ErrUnknownCommand, say: []string{"mcp is not a command of gnosh"}},
 		{line: `gnosh stats --all`, kind: ErrUnknownFlag, say: []string{"--all is not a flag of gnosh"}},
 		{line: `gnosh projects --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh"}},
 	})
@@ -224,8 +242,6 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		"prompt show", "prompt path", "prompt export", "prompt tools", "prompt context",
 		"prompt export --force", "prompt tools --json", "prompt tools --export",
 		"ssh", "projects", "projects --json", "stats", "stats --all", "stats --crawl-dir",
-		"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove",
-		"mcp --scope", "mcp add --transport", "mcp add --env", "mcp add --header",
 	} {
 		if have[gone] {
 			t.Errorf("the table has an entry %q, which spec/DECISIONS.md item 26 took off it", gone)

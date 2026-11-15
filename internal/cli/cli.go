@@ -50,6 +50,15 @@ const (
 	CmdLogs Command = "logs"
 	// CmdDirs says which config and data folders are in use.
 	CmdDirs Command = "dirs"
+	// CmdMCPAdd and the four after it are `gnosh mcp ...`: they add, show,
+	// list and remove the MCP servers of the files they are configured
+	// in. Invocation.Args holds the server's name, and for add its command
+	// or URL and arguments, or for add-json its entry.
+	CmdMCPAdd     Command = "mcp add"
+	CmdMCPAddJSON Command = "mcp add-json"
+	CmdMCPGet     Command = "mcp get"
+	CmdMCPList    Command = "mcp list"
+	CmdMCPRemove  Command = "mcp remove"
 )
 
 // Conversation says which conversation a session command works in.
@@ -224,6 +233,15 @@ type Invocation struct {
 	// how many lines to print (zero means the command line did not say).
 	Follow bool
 	Tail   int
+	// MCPScope, MCPTransport, MCPEnv and MCPHeaders belong to `mcp`: where
+	// a server is kept ("local", "user" or "project"; "" when the command
+	// line did not say), how it is reached ("stdio" or "http"; "" means
+	// stdio), and its environment (KEY=value) and headers ("Name: value"),
+	// as they were typed.
+	MCPScope     string
+	MCPTransport string
+	MCPEnv       []string
+	MCPHeaders   []string
 }
 
 // Exit codes, for the code that runs what Parse describes.

@@ -48,7 +48,7 @@ func TestUnknownFlags(t *testing.T) {
 		// What the specs list as not carried over is simply unknown.
 		{line: `gnosh --channels x`, kind: ErrUnknownFlag, say: []string{"--channels is not a flag of gnosh"}},
 		{line: `gnosh --host box`, kind: ErrUnknownFlag, say: []string{"--host is not a flag of gnosh"}},
-		{line: `gnosh -H box`, kind: ErrUnknownFlag, say: []string{"-H is not a flag of gnosh"}},
+		{line: `gnosh -H box`, kind: ErrUnknownFlag, say: []string{"-H does not go with gnosh", "It is a flag of gnosh mcp add."}},
 		{line: `gnosh --from-pr 12`, kind: ErrUnknownFlag, say: []string{"--from-pr is not a flag of gnosh"}},
 		{line: `gnosh --betas x`, kind: ErrUnknownFlag, say: []string{"--betas is not a flag of gnosh"}},
 		{line: `gnosh --plugin-dir x`, kind: ErrUnknownFlag, say: []string{"--plugin-dir is not a flag of gnosh"}},

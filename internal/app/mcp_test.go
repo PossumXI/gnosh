@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -117,4 +118,75 @@ func TestMCPProjectServersAndPermission(t *testing.T) {
 		t.Errorf("the server's tool ran without anybody's approval: %s", result)
 	}
 	has(t, "what the model read of the call", result, "nobody is here to give it")
+}
+
+// gnosh mcp add, list, get and remove, from a shell, as Claude Code's
+// claude mcp has them; a session then uses what was added.
+func TestMCPCommands(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
+	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	var auth []string
+	far := fakeMCPHTTP(t, &auth)
+
+	// add: local unless -s says otherwise.
+	r := run(t, w, "mcp", "add", "greeter", "--", server, "--quiet").wantCode(t, 0)
+	has(t, "add", r.out, "Added greeter to local ("+w.ConfigDir()+"/mcp.json, for "+w.Dir+").")
+	r = run(t, w, "mcp", "add", "-s", "user", "-t", "http", "-H", "Authorization: Bearer t0k", "far", far.URL+"/mcp?key=k9").wantCode(t, 0)
+	has(t, "add -t http", r.out, "Added far to user ("+w.ConfigDir()+"/mcp.json).")
+	r = run(t, w, "mcp", "add-json", "-s", "project", "shared", `{"command": "`+server+`"}`).wantCode(t, 0)
+	has(t, "add-json", r.out, "Added shared to project ("+w.Dir+"/.mcp.json).", "used once its folder is trusted")
+	if info, err := os.Stat(w.ConfigDir() + "/mcp.json"); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the user's file: %v, %v; want it its owner's alone", info, err)
+	}
+
+	// What would not work is refused, and nothing is written.
+	r = run(t, w, "mcp", "add", "greeter", server).wantCode(t, 1)
+	has(t, "a second add", r.err, "there is a server named greeter in local", "gnosh mcp remove greeter -s local")
+	r = run(t, w, "mcp", "add-json", "bad", `{"type": "http"}`).wantCode(t, 1)
+	has(t, "add-json of a bad entry", r.err, "the entry of bad would not be used", "no url")
+	r = run(t, w, "mcp", "add", "a.b", server).wantCode(t, 1)
+	has(t, "a bad name", r.err, `"a.b" cannot be a server's name`)
+
+	// list: each server and whether it connects; the project's waits for
+	// trust. The rest of a URL and the headers' values are not shown.
+	r = run(t, w, "mcp", "list").wantCode(t, 0)
+	has(t, "list", r.out,
+		"greeter: "+server+" --quiet (stdio, local) - connected (greeter 0.1), 1 tool",
+		"far: "+far.URL+" (http, user) - connected (far 1), 1 tool",
+		"shared: in the project's .mcp.json, not used until this folder is trusted")
+	if strings.Contains(r.out, "k9") || strings.Contains(r.out, "t0k") {
+		t.Errorf("list showed a key:\n%s", r.out)
+	}
+	if len(auth) == 0 || auth[0] != "Bearer t0k" {
+		t.Errorf("the header did not go to the server: %q", auth)
+	}
+
+	r = run(t, w, "mcp", "get", "far").wantCode(t, 0)
+	has(t, "get", r.out, "far:\n", "  scope: user (", "  type: http", "  url: "+far.URL+"/mcp?key=k9",
+		"  headers: Authorization (values not shown)", "  status: connected (far 1), 1 tool", "To remove it: gnosh mcp remove far -s user")
+	if strings.Contains(r.out, "t0k") {
+		t.Errorf("get showed a header's value:\n%s", r.out)
+	}
+	r = run(t, w, "mcp", "get", "shared").wantCode(t, 0)
+	has(t, "get of a server waiting for trust", r.out, "not used until this folder is trusted")
+	run(t, w, "mcp", "get", "nobody").wantCode(t, 1)
+
+	// A session uses the local server.
+	r = run(t, w, "-p", "/mcp").wantCode(t, 0)
+	has(t, "/mcp", r.out, "greeter: connected (greeter 0.1; local, ", "far: connected (far 1; user, ")
+
+	// remove: a name in two places needs -s.
+	run(t, w, "mcp", "add", "-s", "user", "greeter", server).wantCode(t, 0)
+	r = run(t, w, "mcp", "remove", "greeter").wantCode(t, 1)
+	has(t, "remove of a name in two places", r.err, "greeter is in more than one place", "Say which with -s (local, user)")
+	r = run(t, w, "mcp", "remove", "greeter", "-s", "local").wantCode(t, 0)
+	has(t, "remove -s local", r.out, "Removed greeter from local (")
+	r = run(t, w, "mcp", "rm", "greeter").wantCode(t, 0)
+	has(t, "rm", r.out, "Removed greeter from user (")
+	r = run(t, w, "mcp", "remove", "nobody").wantCode(t, 1)
+	has(t, "remove of nobody", r.err, "there is no server named nobody here")
+	data, _ := os.ReadFile(w.ConfigDir() + "/mcp.json")
+	if strings.Contains(string(data), "greeter") || strings.Contains(string(data), "projects") || !strings.Contains(string(data), `"far"`) {
+		t.Errorf("the user's file after the removes:\n%s", data)
+	}
 }

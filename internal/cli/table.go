@@ -263,6 +263,33 @@ func Default() *Table {
 	logsTail := t.add(&flag{names: "-t --tail", id: "logs --tail", kind: kindText, arg: "n", pri: 1, number: true, min: 1,
 		help: "Print the last n lines: 1000 unless this is given.",
 		set:  func(i *Invocation, v flagValue) { i.Tail = v.n }})
+	mcpScope := t.add(&flag{names: "-s --scope", id: "mcp --scope", kind: kindText, arg: "scope", pri: 1,
+		choices: []choice{{name: "local"}, {name: "user"}, {name: "project"}},
+		help:    "Where the server is kept: local (this project, for you alone: the default for add), user (every project of yours) or project (the project's .mcp.json, which goes with it).",
+		set:     func(i *Invocation, v flagValue) { i.MCPScope = v.text }})
+	mcpTransport := t.add(&flag{names: "-t --transport", id: "mcp --transport", kind: kindText, arg: "transport", pri: 1,
+		choices: []choice{{name: "stdio"}, {name: "http"},
+			{name: "sse", refuse: "the sse transport is not one gnosh speaks: a server reached at a URL is spoken to over http (Streamable HTTP), which servers that once spoke SSE speak now too"}},
+		help: "How the server is reached: stdio (gnosh starts it: the default) or http (it is at a URL).",
+		set:  func(i *Invocation, v flagValue) { i.MCPTransport = v.text }})
+	mcpEnv := t.add(&flag{names: "-e --env", id: "mcp --env", kind: kindList, list: listPairs, arg: "KEY=value...", pri: 1,
+		check: func(v string) string {
+			if !isPair(v) {
+				return "is not KEY=value"
+			}
+			return ""
+		},
+		help: "Set these variables for a server gnosh starts.",
+		set:  func(i *Invocation, v flagValue) { i.MCPEnv = append(i.MCPEnv, v.items...) }})
+	mcpHeader := t.add(&flag{names: "-H --header", id: "mcp --header", kind: kindList, list: listHeaders, arg: "header...", pri: 1,
+		check: func(v string) string {
+			if !isHeader(v) {
+				return `is not a header ("Name: value")`
+			}
+			return ""
+		},
+		help: `Send these headers ("Name: value") to a server at a URL.`,
+		set:  func(i *Invocation, v flagValue) { i.MCPHeaders = append(i.MCPHeaders, v.items...) }})
 
 	// ------------------------------------------------------------------
 	// The commands.
@@ -319,6 +346,34 @@ func Default() *Table {
 	t.command(root, &command{name: "dirs", cmd: CmdDirs, pri: 1,
 		flags:   []*flag{cwd, help},
 		summary: "Say which config and data folders are in use."})
+
+	mcp := t.command(root, &command{name: "mcp", needSub: true, pri: 1,
+		argsUsage: "<command>", flags: []*flag{help},
+		summary: "Add, list, show and remove MCP servers.",
+		about:   "They are kept in gnosh's own mcp.json (local and user servers) and in a project's .mcp.json (project servers), in Claude Code's shape. A local server is a project's and yours alone; a server in .mcp.json goes with the project, and is used once its folder is trusted."})
+	t.command(mcp, &command{name: "add", cmd: CmdMCPAdd, pri: 1, minArgs: 2, maxArgs: -1,
+		argsUsage: "<name> <command-or-url> [args...]",
+		passes:    true, dashHint: "a word for the server's command that begins with a dash goes after --, as in gnosh mcp add name -- npx -y server",
+		flags:   []*flag{mcpScope, mcpTransport, mcpEnv, mcpHeader, cwd, help},
+		summary: "Add a server.",
+		about:   "A server gnosh starts is its command and arguments; one at a URL is -t http and the URL. Put -- before the command when it has flags of its own."})
+	t.command(mcp, &command{name: "add-json", cmd: CmdMCPAddJSON, pri: 1, minArgs: 2, maxArgs: 2,
+		argsUsage: "<name> <json>",
+		flags:     []*flag{mcpScope, cwd, help},
+		summary:   "Add a server from its entry, as JSON.",
+		about:     `The entry is what goes under the server's name in "mcpServers", such as {"type": "http", "url": "https://..."}.`})
+	t.command(mcp, &command{name: "get", cmd: CmdMCPGet, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<name>",
+		flags:   []*flag{cwd, help},
+		summary: "Show one server, and whether it connects.",
+		about:   "Values of its variables and headers are not shown."})
+	t.command(mcp, &command{name: "list", aliases: []string{"ls"}, cmd: CmdMCPList, pri: 1,
+		flags:   []*flag{cwd, help},
+		summary: "List the servers this folder uses, and whether each connects.",
+		about:   "A project's servers in a folder that is not trusted are named and not started."})
+	t.command(mcp, &command{name: "remove", aliases: []string{"rm"}, cmd: CmdMCPRemove, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<name>",
+		flags:   []*flag{mcpScope, cwd, help},
+		summary: "Remove a server.",
+		about:   "When the name is kept in more than one place, -s says which."})
 
 	t.command(root, &command{name: "help", cmd: CmdHelp, pri: 0, maxArgs: -1, argsUsage: "[command]",
 		flags: []*flag{help}, finish: finishHelp, afterAnything: true,

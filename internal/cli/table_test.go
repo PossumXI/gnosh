@@ -208,6 +208,9 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh sessions list", "gnosh s list", "gnosh session ls",
 		"gnosh session list --json", "gnosh session show --json", "gnosh session last --json", "gnosh session rename --json",
 		"gnosh mem", "gnosh logs", "gnosh logs -f", "gnosh logs --follow", "gnosh logs -t", "gnosh logs --tail", "gnosh dirs",
+		"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove", "gnosh mcp ls", "gnosh mcp rm",
+		"gnosh mcp add -s", "gnosh mcp add --scope", "gnosh mcp add -t", "gnosh mcp add --transport",
+		"gnosh mcp add -e", "gnosh mcp add --env", "gnosh mcp add -H", "gnosh mcp add --header", "gnosh mcp remove -s",
 		"gnosh help", "gnosh version", "gnosh --allow-dangerously-skip-permissions",
 	} {
 		if !have[want] {
@@ -230,7 +233,6 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh session delete", "gnosh session rm", "gnosh session web",
 		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
 		"gnosh ssh", "gnosh projects", "gnosh stats",
-		"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
 	} {
 		if have[gone] {
 			t.Errorf("the table has %s, which is not to be on the command line", gone)

@@ -100,8 +100,41 @@ func (k listKind) more(next string) bool {
 		return !spaceOutsideParens(next)
 	case listPaths:
 		return !hasSpace(next)
+	case listPairs:
+		return isPair(next)
+	case listHeaders:
+		return isHeader(next)
 	}
 	return false
+}
+
+// isPair reports whether s is NAME=value, with NAME a variable's name.
+func isPair(s string) bool {
+	name, _, ok := strings.Cut(s, "=")
+	if !ok || name == "" || name[0] >= '0' && name[0] <= '9' {
+		return false
+	}
+	for _, r := range name {
+		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// isHeader reports whether s is "Name: value", with Name a header's name.
+// A URL is not one: its scheme is followed by //.
+func isHeader(s string) bool {
+	name, value, ok := strings.Cut(s, ":")
+	if !ok || name == "" || strings.HasPrefix(value, "//") {
+		return false
+	}
+	for _, r := range name {
+		if r <= ' ' || r >= 0x7f || strings.ContainsRune("\"(),/:;<=>?@[\\]{}", r) {
+			return false
+		}
+	}
+	return true
 }
 
 // looksLikeRules reports whether an argument of two or more words reads

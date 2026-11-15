@@ -88,6 +88,12 @@ const (
 	// listPaths is folders: each argument is one item, taken whole. A
 	// further argument belongs to the list while it has no space.
 	listPaths
+	// listPairs is environment variables, NAME=value: each argument is one
+	// item. A further argument belongs to the list while it is one.
+	listPairs
+	// listHeaders is HTTP headers, "Name: value": each argument is one
+	// item. A further argument belongs to the list while it is one.
+	listHeaders
 )
 
 // choice is one value of a flag that takes a fixed set of values.
