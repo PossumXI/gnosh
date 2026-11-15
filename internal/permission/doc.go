@@ -268,7 +268,16 @@
 // ${X:-.git /tmp/g} /tmp" is mv .git /tmp/g /tmp where X is not set,
 // "rm -rf ${HOME:+. x}" is rm -rf . x, and "${X:-rm -rf} ." is rm -rf "."
 // too. The command as it is then is read beside the one that is written,
-// and held against every rule and check.
+// and held against every rule and check. What a variable holds is cut
+// into words in the same way wherever the variable stands outside double
+// quotes, whatever is quoted beside it in the word. With x holding ". y",
+// each of these is rm -rf . y:
+//
+//	rm -rf $x''
+//	rm -rf ""$x
+//
+// A word counts as quoted only when every variable and every command
+// substitution in it stands inside the quotes.
 //
 // What the line gives its variables is followed along the roads a line
 // plainly takes: an assignment, or several (each value counts); an

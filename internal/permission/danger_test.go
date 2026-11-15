@@ -116,6 +116,10 @@ func TestOtherDestroyers(t *testing.T) {
 		// variable is not set: this is mv .git /tmp/g /tmp.
 		"mv ${X:-.git /tmp/g} /tmp", "mv ${X:-.git /tmp/g}\\ /tmp", "mv ${X:-.git /tmp/g}", "mv ${X:-.git /tmp/g}''", "mv ${HOME:+.git /tmp/g}",
 		"chmod -R ${X:-000 .}", "rsync -a --delete ${X:-src/ .}", "git ${X:-clean -fdx}", "sudo mv ${X:-.git /tmp/g} /tmp",
+		// What a variable holds is cut into words where it stands outside
+		// double quotes, whatever is quoted beside it.
+		"x='.git /tmp/g'; mv $x\\ /tmp", "x='.git /tmp/g'; mv ${x}'' /tmp", "x='.git /tmp/g'; mv \"\"$x", "x='-R 000 .'; chmod $x''",
+		"x='src/ .'; rsync -a --delete $x''", "x='clean -fdx'; git $x''",
 		// One word that the shell writes out as all of mv's operands: in
 		// dash ".*" is ".", ".." and every name that starts with a dot.
 		"mv .*", "mv *", "mv ./*", "mv {.git,/tmp/g}", "''mv .*", "while mv .*; do x; done", "chmod -R {000,.}",
@@ -222,6 +226,7 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv \"$tmp\" out.txt", "mv \"$f\" \"$f.bak\"", "mv vendor/x/.git /tmp/g", "mv -T /tmp/new build", "mv -f a b", "mv src/* dst/",
 		"mv $tmp $dest", "mv -n a.txt ~/Documents/", "mv {a.txt,b.txt}", "mv logs/*.log", "chmod -R {755,build}",
 		"mv ${X:-a.txt b.txt}", "mv \"${X:-.git /tmp/g}\" /tmp", "chmod -R ${X:-755 build}", "mv ${X:-a b} dst/",
+		"x='.git /tmp/g'; mv \"$x\" /tmp", "x='a.txt b.txt'; mv $x''", "x='755 build'; chmod -R $x''", "x='.git /tmp/g'; mv \"$x\"'' /tmp",
 		// (A line that cannot be read, with such a command behind another
 		// word and nothing that has to be kept in its way.)
 		"alias zz=\necho $[; zz mv a.txt b.txt", "echo $[1; q chmod -R 755 build", "echo $[; zz rsync -a src/ dst/",

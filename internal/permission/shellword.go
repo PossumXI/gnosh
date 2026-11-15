@@ -51,10 +51,11 @@ type wordPart struct {
 	// body is the word after the operator of the forms that stand for
 	// it as it is: - and + and their kin.
 	body *word
-	// bare is set for a ${name<op>word} that stands outside double
-	// quotes. Where it stands for its word, the shell cuts that text into
-	// words at its blanks: "mv ${X:-.git /tmp/g} /tmp" is mv .git /tmp/g
-	// /tmp where X is not set.
+	// bare is set for a variable that stands outside double quotes. The
+	// shell cuts what it stands for into words at its blanks, whatever is
+	// quoted beside it in the same word: "mv ${X:-.git /tmp/g} /tmp" is mv
+	// .git /tmp/g /tmp where X is not set, and with x holding ". y", "rm
+	// -rf $x''" is rm -rf . y.
 	bare bool
 	// all marks ${name[@]} and ${name[*]}: every word of an array at
 	// once, each a word of its own where the shell cuts words.
@@ -196,7 +197,15 @@ type word struct {
 	raw string
 	// parts are the word's pieces in order.
 	parts []wordPart
-	// quoted is set when any part of the word was quoted or escaped.
+	// quoted is set when a part of the word was quoted or escaped, and
+	// every variable and every command substitution in it stands inside
+	// double quotes. A word with one of those outside the quotes is cut
+	// into words, and matched against file names, like a word that
+	// quotes nothing: the shell does that to what the expansion stands
+	// for whatever is quoted beside it ("$x''", ""$x, $x\ y), so such a
+	// word is read as not quoted. What is quoted of its own text is then
+	// read as open to the shell as well, which is more to hold against
+	// the rules and never less.
 	quoted bool
 	// glob is set when the word holds an unquoted *, ? or [.
 	glob bool
@@ -536,6 +545,17 @@ func (b *wordBuilder) add(p wordPart) {
 func (b *wordBuilder) done() word {
 	b.flush()
 	b.w.raw = b.raw.String()
+	if b.w.quoted {
+		// (See word.quoted.)
+		for _, p := range b.w.parts {
+			if p.kind == partVar && p.bare {
+				b.w.quoted = false
+			}
+		}
+		if b.w.bareSubst {
+			b.w.quoted = false
+		}
+	}
 	if len(b.w.parts) == 0 {
 		b.w.parts = []wordPart{{kind: partLit}}
 	}
@@ -873,13 +893,13 @@ func (p *parser) dollar(b *wordBuilder, inDouble bool) {
 		}
 		p.pos += 1 + n
 		b.raw.WriteString(p.src[from:p.pos])
-		b.add(wordPart{kind: partVar, name: rest[:n]})
+		b.add(wordPart{kind: partVar, name: rest[:n], bare: !inDouble})
 	case rest != "" && strings.IndexByte("?$!#*@-0123456789", rest[0]) >= 0:
 		p.pos += 2
 		b.raw.WriteString(p.src[from:p.pos])
 		// ($@ and $* are every word the script or the function was
 		// handed, like every word of an array.)
-		b.add(wordPart{kind: partVar, name: rest[:1], all: rest[0] == '@' || rest[0] == '*'})
+		b.add(wordPart{kind: partVar, name: rest[:1], all: rest[0] == '@' || rest[0] == '*', bare: !inDouble})
 	default:
 		b.raw.WriteByte('$')
 		b.lit.WriteByte('$')
@@ -899,7 +919,7 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 		n++
 	}
 	if n == i || !isNameStart(p.src[i]) {
-		p.exoticParam(b)
+		p.exoticParam(b, inDouble)
 		return
 	}
 	name := p.src[i:n]
@@ -907,7 +927,7 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 		p.fail("a ${ is never closed")
 		return
 	}
-	part := wordPart{kind: partVar, name: name}
+	part := wordPart{kind: partVar, name: name, bare: !inDouble}
 	if p.src[n] == '}' {
 		p.pos = n + 1
 		b.raw.WriteString(p.src[from:p.pos])
@@ -922,11 +942,10 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 		}
 	}
 	if op == "" {
-		p.exoticParam(b)
+		p.exoticParam(b, inDouble)
 		return
 	}
 	part.guarded = op == ":?" || op == "?"
-	part.bare = !inDouble
 	if op == ":=" || op == "=" {
 		p.sc.setsVar = true
 		part.sets = true
@@ -1000,7 +1019,7 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 // exoticParam reads a ${...} that is not one of the plain forms. Its
 // value is not known, and no allow rule approves a line that holds one,
 // but the line can still be read to its end.
-func (p *parser) exoticParam(b *wordBuilder) {
+func (p *parser) exoticParam(b *wordBuilder, inDouble bool) {
 	end, sets, ok := exoticEnd(p.src, p.pos+2)
 	if !ok {
 		p.fail("a ${...} form gnosh does not follow")
@@ -1009,7 +1028,7 @@ func (p *parser) exoticParam(b *wordBuilder) {
 	b.raw.WriteString(p.src[p.pos:end])
 	// ${name[i]}, ${name[@]} and ${name[*]} are a variable's own value,
 	// or its values: the name is kept for a line that set them.
-	part := wordPart{kind: partVar}
+	part := wordPart{kind: partVar, bare: !inDouble}
 	if name, all, ok := elemName(p.src[p.pos+2 : end-1]); ok {
 		part.name, part.all = name, all
 	} else if name, op, a, b, ok := exoticForm(p.src[p.pos+2 : end-1]); ok {

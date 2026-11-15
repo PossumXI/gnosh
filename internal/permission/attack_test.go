@@ -314,6 +314,13 @@ func TestShellAttacks(t *testing.T) {
 		{"with X not set this is sudo rm x", ModeBypass, attackGuards, "sudo ${X:-rm x}", Deny},
 		{"with X not set cat reads .env and a.txt", ModeBypass, attackGuards, "cat ${X:-.env a.txt}", Deny},
 		{"with X not set cat reads .env and a.txt", "", attackRealistic, "cat ${X:-a.txt .env}", Deny},
+		// A variable outside double quotes is cut into words whatever is
+		// quoted beside it: two quotes after it change nothing.
+		{"cat reads .env and a.txt", ModeBypass, attackGuards, "x='.env a.txt'; cat $x''", Deny},
+		{"cat reads .env and a.txt", ModeBypass, attackGuards, "x='a.txt .env'; cat \"\"$x", Deny},
+		{"this is git push origin", ModeBypass, attackGuards, "x='push origin'; git $x''", Deny},
+		{"this is rm x", ModeBypass, attackGuards, "x='rm x'; $x''", Deny},
+		{"what git is told is what a command prints", ModeBypass, attackGuards, "git $(echo push origin)''", Ask},
 		{"env sets a variable named 0 and runs rm x", ModeBypass, attackGuards, "env -- a.b=1 0= rm x", Deny},
 		{"env sets two variables and runs git push", ModeBypass, attackGuards, "env -i -- A=1 0TERNAL_DIFF=rm git push origin", Deny},
 		{"env sets a variable and runs env, which runs rm x", ModeBypass, attackGuards, "env -- 0= env -- 1= rm x", Deny},
@@ -579,6 +586,9 @@ func TestShellAttacks(t *testing.T) {
 		// A default or an alternative written with blanks is several words
 		// where its ${...} stands for it.
 		"rm -rf ${X:-. x}", "rm -rf ${HOME:+. x}", "${X:-rm -rf} .", "rm ${X:--rf .}", "rm -rf ${X:-x .}/", "rm -rf ${X:-. x}''", "rm -rf a${X:- . }b",
+		// What a variable holds is cut into words wherever the variable
+		// stands outside double quotes, whatever is quoted beside it.
+		"x='. y'; rm -rf $x''", "x='. y'; rm -rf \"\"$x", "x='. y'; rm -rf ${x}''", "x='y .'; rm -rf $x\\ z", "x='-rf .'; rm $x''", "x='rm -rf .'; $x''",
 		"find . -delete", "find -delete", "find . -exec rm -rf {} +", "find ~ -exec rm {} \\;", "d=.; rm -rf $d", "d=/; rm -rf \"$d\"",
 		"$RM -rf /", "\"$(which rm)\" -rf ~", "${RM:-rm} -fr .", "$X --recursive ..", "{rm,} -r /", "r? -rf ~", "rm -rf ~+", "rmdir ~+", "rm -rf ~+/..", "rm -rf ~root", "rmdir ~alice/", "rm -rf ~bob/*",
 		"rmdir \"$(printf .)\"", "rm --recursiv \"$(pwd)\"", "rm --r \"$(pwd)\"", "$RM -rPf /", "{rm,} -rx /",
