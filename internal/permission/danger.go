@@ -1037,7 +1037,22 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 			if why := e.targetDanger(left, dirs, fromSubst, recursive); why != "" {
 				return "if the variable is empty this removes " + s + ": " + why
 			}
-		case strings.HasPrefix(s, "/") && !(w.glob && hasPathMagic(s)):
+		case strings.HasPrefix(s, "/") && w.glob && hasPathMagic(s):
+			// What is left may be a pattern that takes in a directory that
+			// has to be kept: "d=~; rm -rf $X$d*" is the home directory,
+			// and every name that begins like it, where X is empty. (One
+			// name of its own right under the root is how a build
+			// directory is written, "$OUT/build*", unless it may be one
+			// that holds what has to be kept: "$X/b*" takes in /bin.)
+			if seg := strings.Trim(path.Clean(s), "/"); !strings.Contains(seg, "/") && !e.topPatternKeeps(seg) {
+				return ""
+			}
+			left := litOf(s)
+			left.glob = true
+			if why := e.targetDanger(left, dirs, fromSubst, recursive); why != "" {
+				return "if the variable is empty this removes " + s + ": " + why
+			}
+		case strings.HasPrefix(s, "/"):
 			// What is left may be a directory that has to be kept, by its
 			// whole path: "rm -rf $PREFIX/home/u". (A lone name right under
 			// the root that is not one of the usual ones is "$DIR/build",
@@ -1181,6 +1196,19 @@ func (e *Engine) keepDirs() []string {
 		out = unionStrings(out, []string{"/" + name})
 	}
 	return out
+}
+
+// topPatternKeeps reports whether a pattern for one name right under the
+// root takes in a directory that is, or holds, one that has to be kept
+// (keepDirs): "b*" takes /bin, "pr*" a working directory /proj.
+func (e *Engine) topPatternKeeps(seg string) bool {
+	for _, d := range e.keepDirs() {
+		first, _, _ := strings.Cut(strings.TrimPrefix(d, "/"), "/")
+		if ok, _ := path.Match(seg, first); ok && first != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // segsMatch reports whether a path's parts could be what the pattern's

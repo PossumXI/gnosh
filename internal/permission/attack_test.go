@@ -735,6 +735,44 @@ func TestLinkAttacks(t *testing.T) {
 	}
 }
 
+// TestPatternThatClimbs: the text takes "*/.." out and the kernel does
+// not. Oracle seed 97 ran "wc */../secret.txt", which bash made
+// "wc -R/../secret.txt link-dir/../secret.txt", two links to a directory
+// outside, and so read the secret.txt beside that directory.
+func TestPatternThatClimbs(t *testing.T) {
+	fs := fakeFS{links: map[string]string{
+		"/proj/link-dir": "/outside/dir",
+		"/proj/-R":       "/outside/dir",
+	}, files: []string{"/proj/link-dir", "/proj/-R", "/proj/src", "/proj/src/main.go", "/proj/a.go", "/outside/secret.txt"}}
+	o := testOptions(ModeDefault, rules{})
+	o.Resolve, o.Glob = fs.resolve, fs.glob
+	e := mustEngine(t, o)
+	for cmd, want := range map[string]Behavior{
+		"wc */../secret.txt":                Ask,
+		"wc origin link*-dir/../secret.txt": Ask,
+		"cat l*/../secret.txt":              Ask,
+		"cat sr*/../a.go":                   Allow, // a match that is no link: the project's own a.go
+		"cat src/*/../../a.go":              Allow,
+	} {
+		if d := bash(e, cmd); d.Behavior != want {
+			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
+		}
+	}
+	// A deny rule on the file outside is held against the pattern too.
+	o = testOptions(ModeBypass, rules{deny: []string{"Read(//outside/secret.txt)"}})
+	o.Resolve, o.Glob = fs.resolve, fs.glob
+	e = mustEngine(t, o)
+	if d := bash(e, "cat */../secret.txt"); d.Behavior != Deny {
+		t.Errorf("cat */../secret.txt under a deny rule on the file: got %s (%s)", d.Behavior, d.Reason)
+	}
+	// Without a way to expand patterns, the line asks as any pattern does.
+	o = testOptions(ModeDefault, rules{})
+	o.Resolve = fs.resolve
+	if d := bash(mustEngine(t, o), "cat */../a.go"); d.Behavior != Ask {
+		t.Errorf("cat */../a.go with no way to expand patterns: got %s (%s)", d.Behavior, d.Reason)
+	}
+}
+
 // TestWhereACopyLands: handed a directory, cp writes each source under
 // its own name inside it, and through a link of that name where one is
 // already there. The oracle's "cp db/s da" changed a file outside the

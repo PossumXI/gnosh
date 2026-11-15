@@ -641,6 +641,10 @@ func (j *jail) run(shell, mode, line string) shellRun {
 	return res
 }
 
+// readCapped reads at most max bytes of a file. A read cut off at max
+// ends at its last whole line: a trace line torn in two is a command
+// nobody ran (seed 97 read "tru" at the end of an endless loop's trace of
+// "true").
 func readCapped(p string, max int64) string {
 	f, err := os.Open(p)
 	if err != nil {
@@ -648,6 +652,11 @@ func readCapped(p string, max int64) string {
 	}
 	defer f.Close()
 	data, _ := io.ReadAll(io.LimitReader(f, max))
+	if int64(len(data)) == max {
+		if i := strings.LastIndexByte(string(data), '\n'); i >= 0 {
+			data = data[:i+1]
+		}
+	}
 	return string(data)
 }
 

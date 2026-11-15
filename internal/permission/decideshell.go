@@ -2,6 +2,7 @@ package permission
 
 import (
 	"errors"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -495,6 +496,72 @@ func (e *Engine) physical(p, dir string) (string, bool) {
 	return cur, true
 }
 
+// climbsAfterMagic reports whether a path climbs with ".." after a part
+// that is a pattern: "*/../x", "src/a*/../../y".
+func climbsAfterMagic(p string) bool {
+	magic := false
+	for _, seg := range strings.Split(p, "/") {
+		switch {
+		case seg == ".." && magic:
+			return true
+		case hasPathMagic(seg):
+			magic = true
+		}
+	}
+	return false
+}
+
+// maxClimbPaths is the most paths climbMatches follows.
+const maxClimbPaths = 4096
+
+// climbMatches expands a pattern that climbs with ".." after a part that
+// is a pattern, as the shell and the kernel read it: each part with magic
+// in it is matched against what is there, and each ".." is taken from
+// where the path before it really leads, links followed (physical). What
+// comes out are cleaned absolute paths. ok is false when a part could not
+// be expanded, a link could not be followed, or there were more paths
+// than gnosh follows.
+func (e *Engine) climbMatches(p, dir string) ([]string, bool) {
+	if !strings.HasPrefix(p, "/") {
+		if dir == "" {
+			return nil, false
+		}
+		p = dir + "/" + p
+	}
+	paths := []string{"/"}
+	for _, seg := range strings.Split(p, "/") {
+		switch {
+		case seg == "" || seg == ".":
+		case seg == "..":
+			for i, q := range paths {
+				ph, ok := e.physical(q+"/..", "")
+				if !ok {
+					return nil, false
+				}
+				paths[i] = ph
+			}
+		case hasPathMagic(seg):
+			var next []string
+			for _, q := range paths {
+				ms, err := e.expandGlob(path.Join(q, seg))
+				if err != nil {
+					return nil, false
+				}
+				next = append(next, ms...)
+			}
+			paths = next
+		default:
+			for i, q := range paths {
+				paths[i] = path.Join(q, seg)
+			}
+		}
+		if len(paths) > maxClimbPaths {
+			return nil, false
+		}
+	}
+	return paths, true
+}
+
 // parentDir returns the directory a cleaned absolute path lies in.
 func parentDir(p string) string {
 	i := strings.LastIndexByte(p, '/')
@@ -680,6 +747,19 @@ func (e *Engine) shellPaths(req *request) {
 				}
 				*into = append(*into, ms...)
 				*into = append(*into, dots...)
+			}
+			// The text takes "*/.." out, and the kernel does not: each
+			// ".." after a pattern is taken from where each match really
+			// leads, so "cat */../x" through a link to a directory outside
+			// reads the x beside that directory.
+			if val := w.value(e.home); climbsAfterMagic(val) {
+				for _, d := range dirs {
+					ms, ok := e.climbMatches(val, d)
+					if !ok {
+						req.pathOpaque = "it names files with a pattern that climbs with .. from what it matched, and that could not be followed (" + w.raw + ")"
+					}
+					*into = append(*into, ms...)
+				}
 			}
 		}
 	}
@@ -1126,6 +1206,18 @@ func (e *Engine) wordsOK(ws []word, st *lineState, ok func(string) bool, what st
 				}
 				all = append(all, ms...)
 				all = append(all, dots...)
+			}
+			// Each ".." after a pattern is taken from where each match
+			// really leads (climbMatches): "cat */../x" may read beside a
+			// directory outside, through a link.
+			if val := w.value(e.home); climbsAfterMagic(val) {
+				for _, d := range st.dirs {
+					ms, good := e.climbMatches(val, d)
+					if !good {
+						return "the pattern " + w.raw + " climbs with .. from what it matched, and where it leads could not be followed"
+					}
+					all = append(all, ms...)
+				}
 			}
 			// A matched name that starts with a dash would reach the
 			// command as a flag. The name is the match as the shell writes

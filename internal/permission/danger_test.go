@@ -178,7 +178,7 @@ func TestOtherDestroyers(t *testing.T) {
 		// One of the line's variables beside one nobody set, and a variable
 		// nobody set in front of a directory that has to be kept.
 		"d=~; ((d++)); w=${X}$d; rm -rf $w", "d=~; rm -rf $PREFIX$d", "rm -rf $X/home/u", "rm -rf ${X}$HOME", "d=.git; mv $X$d /tmp/g",
-		"rm -rf $X/home/u/.config/gnosh", "d=.; chmod -R 000 $X$d", "d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "d=..; rm -rf \"$DIR\"/$d", "d=build; read d; rm -rf $ROOT/$d", "rm -rf $X/home/u/.config",
+		"rm -rf $X/home/u/.config/gnosh", "d=.; chmod -R 000 $X$d", "d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "d=~; rm -rf $X$d*", "cd src && d=~ && w=$d* && rm -rf $X$w", "rm -rf $X/home/u*", "rm -rf $PREFIX/ho*/u", "rm -rf $X/b*", "rm -rf $X/pr*", "d=..; rm -rf \"$DIR\"/$d", "d=build; read d; rm -rf $ROOT/$d", "rm -rf $X/home/u/.config",
 		// A value of the line's own in the place git is sent to.
 		"f() { d=x; }; w=~/$d; f; git -C $w clean -fdx", "d=x; read d </dev/null; w=./$d; git -C $w clean -fdx", "(d=a.txt); w=./$d; git -C $w clean -fdx",
 		"d=src | cat; w=../$d; git -C $w clean -fdx", "git -C \"$(git rev-parse --show-toplevel)\" clean -fdx", "git -C \"$X\"/ clean -fdx",
@@ -336,6 +336,9 @@ func TestWhatTheRemovalCheckLetsGo(t *testing.T) {
 		"echo -rf . | xargs rm", "echo clean -fdx | xargs git", "echo clean -fdx | xargs timeout 5 git", "echo -R 000 . | xargs chmod",
 		"chmod $(echo -R) 000 .", "git $(echo clean -fdx)", "echo -fdx | xargs git clean",
 		"git clean -f$(echo dx)", "git clean $(echo -fdx)", "chmod -R$(echo) 000 .", "git $(x) status",
+		// A pattern left a whole path when a variable is empty, that takes
+		// in nothing that has to be kept.
+		"rm -rf $OUT/build*", "rm -rf \"$TMPDIR\"/gnosh-*", "rm -f $X/tmp/*.log",
 		// A command's output without quotes, standing where the command
 		// takes something other than a target, that prints more words than
 		// the one it is there to be.
