@@ -328,13 +328,13 @@ func (s *session) header() {
 	s.put(wrap(s.m, th.Quiet.Render("? shows the keys"+th.Sep+"/help lists the commands"+th.Sep+"Esc stops a turn"), s.cols, "", "")...)
 }
 
-// begin starts a block of the given kind in the scrollback: a blank line
-// goes first where the block before it should stand apart.
+// begin starts a block of the given kind in the scrollback. No blank line
+// stands between blocks: each begins with a mark of its own, and the
+// screen is for what was said and done. (Jae, 14 November 2026: "remove
+// the newline after prompt and before done etc, in general don't print
+// empty lines".) The empty lines of the model's own answer, between its
+// paragraphs, are the answer's and stay.
 func (s *session) begin(kind blockKind) {
-	packed := kind == s.last && (kind == blkNotice || kind == blkToolLine || kind == blkAsk)
-	if s.last != blkNone && !packed {
-		s.pending = append(s.pending, "")
-	}
 	s.last = kind
 }
 

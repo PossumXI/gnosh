@@ -33,7 +33,7 @@ func (g *rig) show(what string) *rig {
 }
 
 // A session at rest: the header once, then a prompt box and a status line
-// and nothing else.
+// and nothing else, with no empty row between them.
 func TestIdleScreen(t *testing.T) {
 	each(t, func(t *testing.T, cols int) {
 		g := newRig(t, cols, 24, text.NoColor)
@@ -42,8 +42,8 @@ func TestIdleScreen(t *testing.T) {
 		if cols >= 80 {
 			g.liveHas("qwen3.8-27b", "thinking on", "context 11%", "~/src/proj (main)")
 		}
-		if n := len(g.live); n != 3 {
-			t.Errorf("the live region of an idle session has %d rows, want 3: a blank row, the box, the status line\n%s", n, g.dump())
+		if n := len(g.live); n != 2 {
+			t.Errorf("the live region of an idle session has %d rows, want 2: the box and the status line\n%s", n, g.dump())
 		}
 		g.show("idle")
 	})

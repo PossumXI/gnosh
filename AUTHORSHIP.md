@@ -63,6 +63,15 @@ done after a forget; the lines gnosh says for itself about mem, which are
 kept in a session's file, lose an erased text like its other copies; and a
 session is named to the person without the text that was erased.
 
+Later that evening, in the new interface on the home AI box:
+
+> remove the newline after prompt and before done etc, in general don't print empty lines
+
+Set: the interface prints no empty line of its own, between the blocks of
+the scrollback or around what is still being written and the prompt box.
+Claude's part: the empty lines between the paragraphs of the model's own
+answer stay, because they are the answer's.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

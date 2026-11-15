@@ -36,8 +36,10 @@
 //	                       person wants gone: it is shown nowhere and kept
 //	                       in no history)
 //
-// Blocks stand a blank line apart, except one-line tool calls and
-// notices, which stand under each other.
+// Blocks stand under each other with no blank line between them: each
+// begins with a mark of its own (the prompt's >, a thought's ~, a
+// command's $). The only empty lines on the screen are the answer's own,
+// between its paragraphs.
 //
 // A tool call's block is headed by what the call does, not by a name and a
 // spinner: a command line behind "$" (behind the machine's name, when it
@@ -67,12 +69,10 @@
 // Below the committed text are a few rows that are redrawn in place
 // (term.Renderer.SetLive). From its first row to its last:
 //
-//	a blank row
 //	what is still being written: the lines of the answer that may still
 //	  change, the last rows of the reasoning while it is folded, and each
 //	  call that is being written or is running, with the last rows of its
 //	  output
-//	a blank row
 //	one line that says what gnosh is doing or waiting for, while it is busy
 //	the prompts and commands that wait for their turn
 //	the question, when one is put; otherwise the prompt box

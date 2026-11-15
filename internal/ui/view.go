@@ -134,8 +134,7 @@ func (s *session) compose() (lines []string, row, col int) {
 	}
 
 	// What is still being written, in what room is left: its last rows
-	// when it has more. A blank row goes above it when there is one to
-	// spare, and another below it when there are two.
+	// when it has more. No blank row stands above it or below it.
 	var stream []string
 	if room > 0 {
 		stream = s.streamLines(w)
@@ -143,18 +142,9 @@ func (s *session) compose() (lines []string, row, col int) {
 			stream = stream[len(stream)-room:]
 		}
 	}
-	spare := room - len(stream)
-	gapAbove := spare >= 1 && s.last != blkNone
-	gapBelow := len(stream) > 0 && (spare >= 2 || spare == 1 && !gapAbove)
 
 	lines = make([]string, 0, bound)
-	if gapAbove {
-		lines = append(lines, "")
-	}
 	lines = append(lines, stream...)
-	if gapBelow {
-		lines = append(lines, "")
-	}
 	if act != "" {
 		lines = append(lines, act)
 	}
@@ -240,14 +230,7 @@ func (s *session) streamLines(width int) []string {
 		out = append(out, rows...)
 	}
 	if rp.md != nil {
-		live := rp.md.Live()
-		if !rp.begun && len(live) > 0 && len(out) > 0 {
-			out = append(out, "")
-		}
-		out = append(out, live...)
-	}
-	if len(s.calls) > 0 && len(out) > 0 {
-		out = append(out, "")
+		out = append(out, rp.md.Live()...)
 	}
 	shown := s.calls
 	const most = 4
