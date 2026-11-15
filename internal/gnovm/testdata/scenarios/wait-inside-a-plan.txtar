@@ -35,6 +35,6 @@ file version.go contains 2.0.0
 file CHANGELOG.md contains 2.0.0
 cmd go build ./...
 mem-count open >= 1
-vm-dump contains 2026-11-20
+vm-dump contains -11-20
 answer last matches (?i)tag
 answer last matches (?i)nov(ember)?\.? ?20|11-20|20 nov

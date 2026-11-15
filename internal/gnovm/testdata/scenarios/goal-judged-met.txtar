@@ -16,4 +16,4 @@ file greet.go contains hello, world
 file README.md contains go run greet.go
 mem-count open == 0
 mem-count done >= 1
-cmd ! grep -q "found not met" .gnosh/logs/gnosh.log
+cmd test -f ../turn-1.stderr && ! grep -E -q "is not met yet|found it not met" ../turn-*.stderr

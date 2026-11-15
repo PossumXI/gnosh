@@ -38,25 +38,32 @@ import (
 // persistent Gno machines hold at the end.
 //
 // It is skipped unless GNOVM_SCENARIO_GNOSH names the gnosh to run. Every
-// run gets its own config and data directories (copied from
-// GNOVM_SCENARIO_HOME, default $HOME: the crushrc, crush.json and the files
-// that keep first-run questions away), so it never touches the user's
-// settings.
+// run gets its own config and data directories (XDG_CONFIG_HOME and
+// XDG_DATA_HOME) with a gnosh.json written for it, so it never touches the
+// user's settings, sessions or mem. Each turn is one `gnosh -p -y
+// --output-format stream-json --cwd <project>` process.
 //
-//	GNOVM_SCENARIO_GNOSH     the gnosh to run (required)
-//	GNOVM_SCENARIO_HOME      whose config to copy (default $HOME)
-//	GNOVM_SCENARIO_OUT       where runs and reports go (default a temp dir)
-//	GNOVM_SCENARIO_VARIANTS  comma-separated, e.g. "v0" (default v0 and
-//	                         every testdata/prompts file)
-//	GNOVM_SCENARIO_ONLY      a regexp on scenario names
-//	GNOVM_SCENARIO_MODEL     a model for gnosh run -m
-//	GNOVM_SCENARIO_REASONING the large model's reasoning level (default
-//	                         "nothink": these runs measure tool use, and
-//	                         Qwen's thinking is most of their time); "" keeps
-//	                         the user's
-//	GNOVM_SCENARIO_STRICT=1  fail the test when a check fails (by default
-//	                         the checks are reported: the scenarios measure
-//	                         the model and the prompt as much as gnosh)
+//	GNOVM_SCENARIO_GNOSH      the gnosh to run (required)
+//	GNOVM_SCENARIO_OUT        where runs and reports go (default a temp dir)
+//	GNOVM_SCENARIO_VARIANTS   comma-separated, e.g. "v0" (default v0 and
+//	                          every testdata/prompts file)
+//	GNOVM_SCENARIO_ONLY       a regexp on scenario names
+//	GNOVM_SCENARIO_MODEL      provider/model, the model every turn uses for
+//	                          -m and --small-model (default qwen/qwen3.8-27b)
+//	GNOVM_SCENARIO_BASEURL    its llama.cpp server (default
+//	                          http://127.0.0.1:8080)
+//	GNOVM_SCENARIO_CONTEXT    its context window (default 262144)
+//	GNOVM_SCENARIO_EMBEDDINGS mem's embedding server (default
+//	                          http://127.0.0.1:8091/v1; empty or "off": none)
+//	GNOVM_SCENARIO_CONFIG     a gnosh.json to copy as it is instead of the one
+//	                          written from the settings above
+//	GNOVM_SCENARIO_REASONING  "nothink" (the default: these runs measure tool
+//	                          use, and Qwen's thinking is most of their time)
+//	                          turns thinking off; any other level, or "",
+//	                          turns it on. A copied config keeps its own.
+//	GNOVM_SCENARIO_STRICT=1   fail the test when a check fails (by default
+//	                          the checks are reported: the scenarios measure
+//	                          the model and the prompt as much as gnosh)
 //
 // Run it with -test.parallel below the model server's slots, so that live
 // sessions keep one: a conversation whose slot another request takes
@@ -68,7 +75,9 @@ func TestScenarios(t *testing.T) {
 	if gnosh == "" {
 		t.Skip("set GNOVM_SCENARIO_GNOSH to a gnosh binary to run the real-model scenarios")
 	}
-	home := cmp.Or(os.Getenv("GNOVM_SCENARIO_HOME"), os.Getenv("HOME"))
+	if abs, err := filepath.Abs(gnosh); err == nil {
+		gnosh = abs
+	}
 	out := cmp.Or(os.Getenv("GNOVM_SCENARIO_OUT"), t.TempDir())
 	variants := []string{"v0"}
 	prompts, _ := filepath.Glob("testdata/prompts/*.md")
@@ -107,7 +116,7 @@ func TestScenarios(t *testing.T) {
 				mu.Lock()
 				results = append(results, r)
 				mu.Unlock()
-				r.run(t, sc, gnosh, home, reasoning)
+				r.run(t, sc, gnosh, reasoning)
 				for _, c := range r.checks {
 					if !c.ok && os.Getenv("GNOVM_SCENARIO_STRICT") == "1" {
 						t.Errorf("check failed: %s (%s)", c.line, c.got)
@@ -258,28 +267,19 @@ mem-count facts == 1
 }
 
 // TestScenarioEmbeddingsURL checks that the harness finds the embedding
-// server a run's gnosh is given wherever the copied config sets it.
+// server a run's gnosh is given in its gnosh.json, comments and all, and
+// that a URL's "//" is not taken for a comment.
 func TestScenarioEmbeddingsURL(t *testing.T) {
 	t.Parallel()
-	write := func(path, body string) {
-		t.Helper()
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
-		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
-	}
-	for name, files := range map[string]map[string]string{
-		"config crush.json": {"config/crush/crush.json": `{"options": {"mem_embeddings_url": "http://127.0.0.1:8091/v1"}}`},
-		"data crush.json":   {"data/crush/crush.json": `{"options": {"mem_embeddings_url": "http://127.0.0.1:8091/v1"}}`},
-		"crushrc":           {"config/crush/crushrc": "option reasoning nothink\noption mem-embeddings-url 'http://127.0.0.1:8091/v1'\n"},
-	} {
-		dir := t.TempDir()
-		for path, body := range files {
-			write(filepath.Join(dir, path), body)
-		}
-		require.Equal(t, "http://127.0.0.1:8091/v1", memEmbeddingsURL(filepath.Join(dir, "config"), filepath.Join(dir, "data")), name)
-	}
 	dir := t.TempDir()
-	write(filepath.Join(dir, "config/crush/crush.json"), `{"models": {"large": {"provider": "qwen"}}}`)
-	require.Empty(t, memEmbeddingsURL(filepath.Join(dir, "config"), filepath.Join(dir, "data")), "none set")
+	path := filepath.Join(dir, "gnosh", "gnosh.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	body := "{\n  // the box's embedder\n  \"options\": {\"memEmbeddingsUrl\": \"http://127.0.0.1:8091/v1\" /* on the CPU */},\n  \"x\": \"a // b\"\n}\n"
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	require.Equal(t, "http://127.0.0.1:8091/v1", memEmbeddingsURL(dir))
+	require.NoError(t, os.WriteFile(path, []byte(`{"model": {"id": "qwen/qwen3.8-27b"}}`), 0o600))
+	require.Empty(t, memEmbeddingsURL(dir), "none set")
+	require.Empty(t, memEmbeddingsURL(t.TempDir()), "no file")
 }
 
 var sectionRe = regexp.MustCompile(`(?m)^-- (.+?) --$`)
@@ -374,24 +374,21 @@ type checkResult struct {
 	ok        bool
 }
 
-func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning string) {
+func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, reasoning string) {
 	start := time.Now()
 	defer func() { r.took = time.Since(start) }()
 	project := filepath.Join(r.dir, "project")
-	cfg, data := filepath.Join(r.dir, "config"), filepath.Join(r.dir, "data")
-	for _, d := range []string{filepath.Join(cfg, "crush"), filepath.Join(data, "crush"), project, filepath.Join(r.dir, "tmp")} {
+	cfg, data, bin := filepath.Join(r.dir, "config"), filepath.Join(r.dir, "data"), filepath.Join(r.dir, "bin")
+	for _, d := range []string{filepath.Join(cfg, "gnosh"), filepath.Join(data, "gnosh"), project, filepath.Join(r.dir, "tmp"), bin} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, f := range []string{"crushrc", "crush.json"} {
-		copyIfThere(t, filepath.Join(home, ".config", "crush", f), filepath.Join(cfg, "crush", f))
-	}
-	for _, f := range []string{"providers.json", "metrics-consent.json", "crush.json"} {
-		copyIfThere(t, filepath.Join(home, ".local", "share", "crush", f), filepath.Join(data, "crush", f))
-	}
-	if reasoning != "" {
-		setLargeModelReasoning(t, filepath.Join(data, "crush", "crush.json"), reasoning)
+	writeScenarioConfig(t, filepath.Join(cfg, "gnosh", "gnosh.json"), reasoning)
+	// The checks' commands ("gnosh mem show") reach the gnosh under test, not
+	// whichever gnosh PATH finds first.
+	if err := os.Symlink(gnosh, filepath.Join(bin, "gnosh")); err != nil {
+		t.Fatal(err)
 	}
 	for name, body := range sc.files {
 		path := filepath.Join(project, name)
@@ -403,7 +400,7 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		}
 	}
 	if sc.mem != "" {
-		if err := seedMem(filepath.Join(data, "crush", "gnovm"), project, sc.mem, memEmbeddingsURL(cfg, data)); err != nil {
+		if err := seedMem(filepath.Join(data, "gnosh", "gnovm"), project, sc.mem, memEmbeddingsURL(cfg)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -415,7 +412,9 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		}
 		appendPrompt = p
 	}
-	env := append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_DATA_HOME="+data, "TMPDIR="+filepath.Join(r.dir, "tmp"))
+	env := append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_DATA_HOME="+data, "TMPDIR="+filepath.Join(r.dir, "tmp"),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	model := scenarioModel()
 	session := ""
 	// What each turn printed goes beside project/ only after the last turn:
 	// a turn's agent can read anything on disk, and an earlier turn's
@@ -441,8 +440,7 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 	for i, ts := range sc.turns {
 		if peers > 0 && ts.fresh {
 			// The peers: one gnosh process each, started together in the
-			// project, each with its own data directory (its sessions'
-			// database), all sharing the project's mem.
+			// project, all sharing its mem (each session is its own file).
 			type peerOut struct {
 				stdout, stderr bytes.Buffer
 				err            error
@@ -451,15 +449,12 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 			turnStart := time.Now()
 			var wg sync.WaitGroup
 			for k := range peers {
-				args := []string{"run", "--output-format", "stream-json", "-q", "-c", project, "-D", filepath.Join(r.dir, fmt.Sprintf("data-p%d", k+1))}
-				if model := os.Getenv("GNOVM_SCENARIO_MODEL"); model != "" {
-					args = append(args, "-m", model)
-				}
+				args := []string{"-p", "-y", "--output-format", "stream-json", "--cwd", project, "-m", model, "--small-model", model}
 				args = append(args, "-n", fmt.Sprintf("%s %s %d p%d", r.scenario, r.variant, i+1, k+1))
 				if appendPrompt != "" {
 					args = append(args, "--append-system-prompt-file", appendPrompt)
 				}
-				args = append(args, ts.prompt)
+				args = append(args, "--", ts.prompt)
 				po := &peerOut{}
 				outsP[k] = po
 				wg.Add(1)
@@ -490,12 +485,9 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 			t.Logf("turn %d: %d peers, %s from the first start to the last end", i+1, peers, r.peersWall.Round(time.Second))
 			continue
 		}
-		args := []string{"run", "--output-format", "stream-json", "-q", "-c", project}
-		if model := os.Getenv("GNOVM_SCENARIO_MODEL"); model != "" {
-			args = append(args, "-m", model)
-		}
+		args := []string{"-p", "-y", "--output-format", "stream-json", "--cwd", project, "-m", model, "--small-model", model}
 		if !ts.fresh && session != "" {
-			args = append(args, "--session", session)
+			args = append(args, "-r", session)
 		} else {
 			// A named session gets no title request. On the AI box the
 			// title requests of runs started together took every server
@@ -506,7 +498,7 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		if appendPrompt != "" {
 			args = append(args, "--append-system-prompt-file", appendPrompt)
 		}
-		args = append(args, ts.prompt)
+		args = append(args, "--", ts.prompt)
 		turnStart := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), turnCap)
 		cmd := exec.CommandContext(ctx, gnosh, args...)
@@ -531,48 +523,76 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.jsonl", i+1)), outs[i], 0o600)
 		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.stderr", i+1)), errs[i], 0o600)
 	}
-	r.vms = dumpPersistentVMs(t, filepath.Join(data, "crush", "gnovm"), project)
+	r.vms = dumpPersistentVMs(t, filepath.Join(data, "gnosh", "gnovm"), project)
 	for _, line := range sc.checks {
 		r.checks = append(r.checks, r.check(line, project, env))
 	}
 	writeReport(t, r, sc)
 }
 
-// setLargeModelReasoning sets the reasoning level of the model the runs use
-// in a copied crush.json (options.reasoning, keyed "provider/model"). It
-// fails the test when it cannot tell which model that is, rather than let
-// the runs go on with their reasoning left as it was.
-func setLargeModelReasoning(t *testing.T, path, level string) {
-	cfg := map[string]any{}
-	if b, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(b, &cfg); err != nil {
-			t.Fatalf("%s: %v", path, err)
+// scenarioModel is the model every turn uses, as provider/model. Both -m and
+// --small-model name it, so no side job asks a one-model router for another
+// model and evicts this one.
+func scenarioModel() string {
+	return cmp.Or(os.Getenv("GNOVM_SCENARIO_MODEL"), "qwen/qwen3.8-27b")
+}
+
+// scenarioEmbeddings is mem's embedding server for the runs: the default
+// unless GNOVM_SCENARIO_EMBEDDINGS is set, "" when it is set empty or "off".
+func scenarioEmbeddings() string {
+	v, set := os.LookupEnv("GNOVM_SCENARIO_EMBEDDINGS")
+	if !set {
+		return "http://127.0.0.1:8091/v1"
+	}
+	if v == "off" {
+		return ""
+	}
+	return v
+}
+
+// writeScenarioConfig writes a run's gnosh.json: GNOVM_SCENARIO_CONFIG copied
+// as it is when that is set, otherwise a config that knows the scenario
+// model alone (one llama.cpp provider with model listing off, so that no run
+// makes a one-model router swap models), its context window, the request
+// timeout long turns need, mem's embedding server, and thinking off for
+// reasoning "nothink" and on otherwise.
+func writeScenarioConfig(t *testing.T, path, reasoning string) {
+	if from := os.Getenv("GNOVM_SCENARIO_CONFIG"); from != "" {
+		b, err := os.ReadFile(from)
+		if err != nil {
+			t.Fatalf("GNOVM_SCENARIO_CONFIG: %v", err)
 		}
+		if err := os.WriteFile(path, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return
 	}
-	// The model the runs use: -m GNOVM_SCENARIO_MODEL, or the large model.
-	var provider, model string
-	if m := os.Getenv("GNOVM_SCENARIO_MODEL"); m != "" {
-		provider, model, _ = strings.Cut(m, "/")
-	} else {
-		models, _ := cfg["models"].(map[string]any)
-		large, _ := models["large"].(map[string]any)
-		provider, _ = large["provider"].(string)
-		model, _ = large["model"].(string)
+	provider, model, ok := strings.Cut(scenarioModel(), "/")
+	if !ok || provider == "" || model == "" {
+		t.Fatalf("GNOVM_SCENARIO_MODEL=%q is not provider/model", scenarioModel())
 	}
-	if provider == "" || model == "" {
-		t.Fatalf("GNOVM_SCENARIO_REASONING needs the model the runs use: set GNOVM_SCENARIO_MODEL to provider/model, or models.large in %s", path)
+	window := 262144
+	if v := os.Getenv("GNOVM_SCENARIO_CONTEXT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			t.Fatalf("GNOVM_SCENARIO_CONTEXT=%q is not a token count", v)
+		}
+		window = n
 	}
-	options, _ := cfg["options"].(map[string]any)
-	if options == nil {
-		options = map[string]any{}
-		cfg["options"] = options
+	options := map[string]any{"requestTimeout": 900}
+	if e := scenarioEmbeddings(); e != "" {
+		options["memEmbeddingsUrl"] = e
 	}
-	levels, _ := options["reasoning"].(map[string]any)
-	if levels == nil {
-		levels = map[string]any{}
-		options["reasoning"] = levels
+	cfg := map[string]any{
+		"providers": map[string]any{provider: map[string]any{
+			"type":       "llamacpp",
+			"baseUrl":    cmp.Or(os.Getenv("GNOVM_SCENARIO_BASEURL"), "http://127.0.0.1:8080"),
+			"listModels": false,
+		}},
+		"models":  map[string]any{provider + "/" + model: map[string]any{"contextWindow": window}},
+		"model":   map[string]any{"id": provider + "/" + model, "thinking": reasoning != "nothink"},
+		"options": options,
 	}
-	levels[provider+"/"+model] = level
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -758,27 +778,64 @@ func seedMem(gnovmDir, project, code, embeddings string) error {
 	return nil
 }
 
-var memEmbeddingsOptionRe = regexp.MustCompile(`(?m)^\s*option\s+mem-embeddings-url\s+["']?([^"'\s]+)`)
-
 // memEmbeddingsURL is the embedding server a run's gnosh is given, if any:
-// mem_embeddings_url in either of its crush.json files, or its crushrc's
-// option line.
-func memEmbeddingsURL(cfg, data string) string {
-	for _, path := range []string{filepath.Join(data, "crush", "crush.json"), filepath.Join(cfg, "crush", "crush.json")} {
-		var c struct {
-			Options struct {
-				MemEmbeddingsURL string `json:"mem_embeddings_url"`
-			} `json:"options"`
-		}
-		if b, err := os.ReadFile(path); err == nil && json.Unmarshal(b, &c) == nil && c.Options.MemEmbeddingsURL != "" {
-			return c.Options.MemEmbeddingsURL
+// options.memEmbeddingsUrl in the gnosh.json under cfg (comments allowed, as
+// gnosh allows them).
+func memEmbeddingsURL(cfg string) string {
+	b, err := os.ReadFile(filepath.Join(cfg, "gnosh", "gnosh.json"))
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Options struct {
+			MemEmbeddingsURL string `json:"memEmbeddingsUrl"`
+		} `json:"options"`
+	}
+	if json.Unmarshal(stripJSONComments(b), &c) != nil {
+		return ""
+	}
+	return c.Options.MemEmbeddingsURL
+}
+
+// stripJSONComments removes // and /* */ comments outside strings, so that a
+// gnosh.json written by hand decodes as JSON.
+func stripJSONComments(b []byte) []byte {
+	out := make([]byte, 0, len(b))
+	inString, escaped := false, false
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		switch {
+		case inString:
+			out = append(out, c)
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+		case c == '"':
+			inString = true
+			out = append(out, c)
+		case c == '/' && i+1 < len(b) && b[i+1] == '/':
+			for i < len(b) && b[i] != '\n' {
+				i++
+			}
+			if i < len(b) {
+				out = append(out, '\n')
+			}
+		case c == '/' && i+1 < len(b) && b[i+1] == '*':
+			i += 2
+			for i+1 < len(b) && !(b[i] == '*' && b[i+1] == '/') {
+				i++
+			}
+			i++
+		default:
+			out = append(out, c)
 		}
 	}
-	b, _ := os.ReadFile(filepath.Join(cfg, "crush", "crushrc"))
-	if m := memEmbeddingsOptionRe.FindSubmatch(b); m != nil {
-		return string(m[1])
-	}
-	return ""
+	return out
 }
 
 // evalInVM rebuilds a run's VM from its journal and returns an expression's
@@ -965,7 +1022,10 @@ func (r *scenarioRun) check(line, project string, env []string) checkResult {
 	case len(f) >= 2 && f[0] == "cmd":
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "bash", "-lc", strings.Join(f[1:], " "))
+		// A login shell's profile may put another gnosh first on PATH again;
+		// the run's own bin (the gnosh under test) goes back in front.
+		script := "export PATH='" + filepath.Join(r.dir, "bin") + "':\"$PATH\"; " + strings.Join(f[1:], " ")
+		cmd := exec.CommandContext(ctx, "bash", "-lc", script)
 		cmd.Dir, cmd.Env = project, env
 		b, err := cmd.CombinedOutput()
 		res.ok, res.got = err == nil, truncate(strings.TrimSpace(string(b)), 200)
@@ -983,7 +1043,7 @@ func (r *scenarioRun) check(line, project string, env []string) checkResult {
 		}
 	case len(f) == 4 && f[0] == "mem-count":
 		// mem-count <what> <op> <n>: one of mem's counts.
-		n, err := memCount(filepath.Join(r.dir, "data", "crush", "gnovm"), project, f[1])
+		n, err := memCount(filepath.Join(r.dir, "data", "gnosh", "gnovm"), project, f[1])
 		res.got = fmt.Sprintf("%d %s", n, f[1])
 		if err != nil {
 			res.got = err.Error()
@@ -992,7 +1052,7 @@ func (r *scenarioRun) check(line, project string, env []string) checkResult {
 	case len(f) >= 5 && f[0] == "vm-eval":
 		// vm-eval <vm> <expression, no spaces> <op or contains> <value>:
 		// the expression's value in the VM, rebuilt from its journal.
-		got, err := evalInVM(filepath.Join(r.dir, "data", "crush", "gnovm"), project, f[1], f[2])
+		got, err := evalInVM(filepath.Join(r.dir, "data", "gnosh", "gnovm"), project, f[1], f[2])
 		res.got = truncate(got, 160)
 		switch {
 		case err != nil:
