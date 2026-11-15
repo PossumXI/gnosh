@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -187,6 +188,9 @@ type live struct {
 	closeOnce sync.Once
 	closing   atomic.Bool
 	killed    atomic.Bool
+	// configNow is what /config put in force in this session, by option.
+	configMu  sync.Mutex
+	configNow map[string]json.RawMessage
 	// bgEver says the session has had work in the background, and
 	// bgUntold that the ends of that work are no longer told to the model
 	// (the run has stopped waiting for it).
@@ -908,6 +912,12 @@ func (l *live) compactAt() int {
 	if w := l.cfg.Options.AutoCompactWindow; w.Set {
 		at = w.V
 	}
+	return l.compactAtWindow(at)
+}
+
+// compactAtWindow is compactAt for an auto-compact window of at tokens
+// (zero for none).
+func (l *live) compactAtWindow(at int) int {
 	if pct := l.cfg.Limits.AutoCompactPct; pct.Set {
 		base := at
 		if base == 0 {

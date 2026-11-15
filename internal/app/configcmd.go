@@ -18,7 +18,8 @@ import (
 // chosen with /model. That file stands above the user's gnosh.json and
 // below a project's files, as Claude Code's /config writes the user's own
 // settings and a project's files win over them. A value set is in force
-// when gnosh next starts.
+// when gnosh next starts; the few options a running session can change
+// (live) are in force at once as well.
 
 // slashConfig is /config: with nothing, the options; with a key, that one;
 // with key=value pairs, each is set (key= takes the setting away).
@@ -27,7 +28,7 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 	if err != nil {
 		return err
 	}
-	rows := l.cfg.Options.All()
+	rows := l.optionRows()
 	saved := l.savedOptions()
 	switch {
 	case len(args) == 0:
@@ -82,6 +83,10 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 	}
 	for _, ch := range changes {
 		r, _ := findRow(rows, ch.key)
+		if ch.raw != nil && r.Origin.Layer <= config.LayerState && l.applyOption(ch.key, ch.raw) {
+			c.Say("%s is %s from now on, in this session and later ones, in every project whose own files do not set it.", ch.key, jsonText(ch.raw))
+			continue
+		}
 		if _, was := saved[ch.key]; ch.raw == nil && !was {
 			c.Say("%s was not set with /config, so nothing changed.", ch.key)
 			continue
@@ -90,17 +95,87 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 			c.Say("%s is no longer set with /config: when gnosh next starts the config files decide (in this session it is %s, from %s).", ch.key, r.Text, l.originText(r))
 			continue
 		}
-		var shown string
-		if json.Unmarshal(ch.raw, &shown) != nil {
-			shown = string(ch.raw)
+		if ch.raw == nil {
+			l.forgetLive(ch.key)
 		}
-		c.Say("%s is %s when gnosh next starts, in every project whose own files do not set it.", ch.key, shown)
+		c.Say("%s is %s when gnosh next starts, in every project whose own files do not set it.", ch.key, jsonText(ch.raw))
 		if r.Origin.Layer > config.LayerState {
 			c.Say("  Here %s sets it to %s, and that wins.", l.originText(r), r.Text)
 		}
 	}
 	c.Say("(Kept in %s, never in your gnosh.json.)", l.tilde(l.cfg.Paths.StateFile))
 	return nil
+}
+
+// liveOptions are the options a running session can change: /config puts
+// them in force at once.
+var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true}
+
+// applyOption puts what /config set in force in the running session, for
+// an option that can be (liveOptions), and reports whether it was.
+func (l *live) applyOption(key string, raw json.RawMessage) bool {
+	if !liveOptions[key] {
+		return false
+	}
+	switch key {
+	case "autoCompactEnabled", "debug":
+		var on bool
+		if json.Unmarshal(raw, &on) != nil {
+			return false
+		}
+		if key == "debug" {
+			l.flog.debug.Store(on)
+		} else if l.agent != nil {
+			l.agent.SetAutoCompact(on)
+		}
+	case "autoCompactWindow":
+		var n int
+		if json.Unmarshal(raw, &n) != nil || l.agent == nil {
+			return false
+		}
+		l.agent.SetCompactAt(l.compactAtWindow(n))
+	}
+	l.configMu.Lock()
+	if l.configNow == nil {
+		l.configNow = map[string]json.RawMessage{}
+	}
+	l.configNow[key] = raw
+	l.configMu.Unlock()
+	return true
+}
+
+// forgetLive drops what /config put in force in this session for an
+// option whose choice was taken away: the value the session started with
+// is listed again (and in force again at its next start).
+func (l *live) forgetLive(key string) {
+	l.configMu.Lock()
+	delete(l.configNow, key)
+	l.configMu.Unlock()
+}
+
+// optionRows are the options as /config lists them: as the session
+// started, with what /config has put in force since.
+func (l *live) optionRows() []config.OptionValue {
+	rows := l.cfg.Options.All()
+	l.configMu.Lock()
+	defer l.configMu.Unlock()
+	for i, r := range rows {
+		if raw, ok := l.configNow[r.Key]; ok {
+			rows[i].Text, rows[i].JSON, rows[i].Set = jsonText(raw), raw, true
+			rows[i].Origin = config.Origin{Layer: config.LayerState, File: l.cfg.Paths.StateFile}
+		}
+	}
+	return rows
+}
+
+// jsonText is a JSON value as a person reads it: a string without its
+// quotes, anything else as it is written.
+func jsonText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	return string(raw)
 }
 
 // listOptions says every option's value in this session and what set it.

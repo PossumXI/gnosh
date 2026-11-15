@@ -26,9 +26,10 @@ func TestConfigCommand(t *testing.T) {
 		"memoryText: which of gnosh's two texts about mem the model is given",
 		"It takes one of lean, full; when nothing sets it, it is lean.", "Now: full (~/.config/gnosh/gnosh.json:")
 
-	// Two at once, kept in the state file.
+	// Two at once, kept in the state file: debug is in force at once, as
+	// a running session can change it; the other from the next start.
 	has(t, "/config debug=true maxBackgroundTasks=7", run(t, w, "-p", "/config debug=true maxBackgroundTasks='7'").wantCode(t, 0).out,
-		"debug is true when gnosh next starts, in every project whose own files do not set it.",
+		"debug is true from now on, in this session and later ones, in every project whose own files do not set it.",
 		"maxBackgroundTasks is 7 when gnosh next starts",
 		"(Kept in ~/.local/share/gnosh/state.json, never in your gnosh.json.)")
 	data, err := os.ReadFile(state)
@@ -68,4 +69,24 @@ func TestConfigCommand(t *testing.T) {
 		"debug is no longer set with /config: when gnosh next starts the config files decide (in this session it is true, from /config).")
 	has(t, "/config debug= again", run(t, w, "-p", "/config debug=").wantCode(t, 0).out, "debug was not set with /config, so nothing changed.")
 	has(t, "/config after taking debug away", run(t, w, "-p", "/config debug").wantCode(t, 0).out, "Now: false (the default).")
+}
+
+// What a running session can change is in force at once: the listing
+// says so, with no word of waiting for the next start.
+func TestConfigLiveOptions(t *testing.T) {
+	w := apptest.NewWorld(t)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/config autoCompactEnabled=false")
+	s.see("autoCompactEnabled is false from now on, in this session and later ones")
+	s.typeLine("/config autoCompactEnabled")
+	s.see("Now: false (/config).")
+	s.typeLine("/config memoryText=full")
+	s.see("memoryText is full when gnosh next starts")
+	s.typeLine("/config autoCompactEnabled=")
+	s.see("autoCompactEnabled is no longer set with /config")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
 }

@@ -352,7 +352,10 @@ or kept with the reason said (27).
     reader gnosh.json's `options` go through, and read back by it at the
     next start; one a later gnosh cannot use is left out with a warning
     and never stops startup. It is in force from gnosh's next start:
-    most options are read once, as a session begins. `/config` alone
+    most options are read once, as a session begins. The few a running
+    session can change (autoCompactEnabled, autoCompactWindow, debug)
+    are in force at once as well, where nothing above the state file
+    sets them. `/config` alone
     lists every option with its value and what set it, `/config key`
     says more of one, and `key=` takes a choice away. Lists (instruction
     files, hidden skills) stay in gnosh.json.

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -37,9 +38,11 @@ type fileLog struct {
 	f       *os.File
 	now     func() time.Time
 	session string
-	debug   bool
-	only    []string
-	not     []string
+	// debug says the log holds more; /config debug=true can turn it on
+	// while the session runs.
+	debug atomic.Bool
+	only  []string
+	not   []string
 	// noArgs are the tools whose arguments and results are never written
 	// (ToolName.NoLogArgs).
 	noArgs map[string]bool
@@ -66,7 +69,8 @@ func openFileLog(p *program, l *live) *fileLog {
 		p.warnf("the log %s could not be opened (%v), so this session writes none.", path, err)
 		return nil
 	}
-	g := &fileLog{f: f, now: p.now, session: l.ts.ID(), debug: l.cfg.Options.Debug.V, noArgs: p.noLogTools()}
+	g := &fileLog{f: f, now: p.now, session: l.ts.ID(), noArgs: p.noLogTools()}
+	g.debug.Store(l.cfg.Options.Debug.V)
 	for _, word := range strings.Split(l.inv.DebugFilter, ",") {
 		word = strings.TrimSpace(word)
 		switch {
@@ -114,7 +118,7 @@ func (g *fileLog) logf(kind, format string, args ...any) {
 
 // debugf writes one line of a kind when the log was asked for more.
 func (g *fileLog) debugf(kind, format string, args ...any) {
-	if g == nil || !g.debug {
+	if g == nil || !g.debug.Load() {
 		return
 	}
 	g.logf(kind, format, args...)
