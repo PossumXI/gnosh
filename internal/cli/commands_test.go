@@ -40,6 +40,9 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh trust a b`, kind: ErrUsage, say: []string{"b is one argument too many for gnosh trust", "It is written: gnosh trust [folder]"}},
 		{line: `gnosh trust me on this`, kind: ErrUsage, say: []string{"on is one argument too many for gnosh trust", "needs quotes"}},
 		{line: `gnosh trust --list --forget`, kind: ErrConflict, say: []string{"--list and --forget ask for two different things"}},
+		{line: `gnosh -c -p x --no-session-persistence`, kind: ErrConflict, say: []string{"--no-session-persistence keeps nothing of the run, and -c is about a session that is kept"}},
+		{line: `gnosh -p x --session-id 0f8fad5b-d9cb-469f-a165-70867728950e --no-session-persistence`, kind: ErrConflict, say: []string{"--session-id is about a session that is kept"}},
+		{line: `gnosh --no-session-persistence`, kind: ErrUsage, say: []string{"--no-session-persistence only does something in print mode"}},
 		{line: `gnosh trust --list ../x`, kind: ErrUsage, say: []string{"--list shows every trusted folder and takes no folder, and ../x was typed with it"}},
 		{line: `gnosh trust ""`, kind: ErrBadValue, say: []string{"An empty argument was typed after gnosh trust"}},
 		{line: `gnosh trust --lst`, kind: ErrUnknownFlag, hint: "--list"},
@@ -208,7 +211,6 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		// The flags of parts that are not built.
 		{line: `gnosh --bare`, kind: ErrUnknownFlag, say: []string{"--bare is not a flag of gnosh"}},
 		{line: `gnosh --agents '{}'`, kind: ErrUnknownFlag, say: []string{"--agents is not a flag of gnosh"}},
-		{line: `gnosh -p x --no-session-persistence`, kind: ErrUnknownFlag, say: []string{"--no-session-persistence is not a flag of gnosh"}},
 		{line: `gnosh -p x --permission-prompts none`, kind: ErrUnknownFlag, say: []string{"--permission-prompts is not a flag of gnosh"}},
 		{line: `gnosh -p x --output-format stream-json --include-partial-messages`, kind: ErrUnknownFlag, say: []string{"--include-partial-messages is not a flag of gnosh"}},
 		{line: `gnosh -p x --replay-user-messages`, kind: ErrUnknownFlag, say: []string{"--replay-user-messages is not a flag of gnosh"}},
@@ -237,7 +239,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 	for _, gone := range []string{
 		"run", "--quiet", "--session", "--data-dir",
 		"--bare", "--agents",
-		"--no-session-persistence", "--permission-prompts", "--include-partial-messages", "--replay-user-messages",
+		"--permission-prompts", "--include-partial-messages", "--replay-user-messages",
 		"--input-format=stream-json",
 		"session delete", "session web", "session web --port",
 		"prompt show", "prompt path", "prompt export", "prompt tools", "prompt context",

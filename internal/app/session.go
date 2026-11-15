@@ -1411,6 +1411,17 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 	if st.decision.Notice != "" {
 		fmt.Fprintln(p.stderr, st.decision.Notice)
 	}
+	if inv.NoSessionPersistence {
+		// Nothing of the run is kept: its session lives in a folder of
+		// its own, which goes once the session is closed.
+		dir, err := os.MkdirTemp(p.getenv("TMPDIR"), "gnosh-run-")
+		if err != nil {
+			p.errf("a folder for the run's session could not be made, so nothing was started: %v", err)
+			return cli.ExitFailure
+		}
+		st.runState = dir
+		defer os.RemoveAll(dir)
+	}
 
 	l, err := p.openSession(ctx, st, front, "")
 	if err != nil {

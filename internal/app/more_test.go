@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -179,6 +180,29 @@ func TestRecapOfNothing(t *testing.T) {
 	if n := len(w.Model.Requests()); n != 0 {
 		t.Errorf("the model was sent %d requests", n)
 	}
+}
+
+// --no-session-persistence keeps nothing of a run: no session file is
+// left, nor the run's own folder, and it cannot sit beside a flag about a
+// session that is kept.
+func TestNoSessionPersistence(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Nothing is kept."})
+	tmp := filepath.Join(w.Root, "tmp")
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, w, "-p", "--no-session-persistence", "say it").wantCode(t, 0)
+	has(t, "the answer", r.out, "Nothing is kept.")
+	if n := len(w.Sessions()); n != 0 {
+		t.Errorf("%d session files were left: %v", n, w.Sessions())
+	}
+	if left, _ := filepath.Glob(filepath.Join(tmp, "gnosh-run-*")); len(left) != 0 {
+		t.Errorf("the run's folder was left: %v", left)
+	}
+	r = run(t, w, "-c", "-p", "--no-session-persistence", "again").wantCode(t, 1)
+	has(t, "-c beside it", r.err, "keeps nothing of the run", "-c")
+	r = run(t, w, "-p", "-n", "kept", "--no-session-persistence", "again").wantCode(t, 1)
+	has(t, "-n beside it", r.err, "keeps nothing of the run")
 }
 
 // The subcommands that look at what gnosh keeps, without a model: the

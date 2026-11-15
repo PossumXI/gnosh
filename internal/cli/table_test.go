@@ -230,7 +230,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		// What the specs name and nothing builds yet.
 		"gnosh --bare", "gnosh --agents",
 		"gnosh --include-partial-messages", "gnosh --replay-user-messages",
-		"gnosh --no-session-persistence", "gnosh --permission-prompts",
+		"gnosh --permission-prompts",
 		"gnosh session delete", "gnosh session rm", "gnosh session web",
 		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
 		"gnosh ssh", "gnosh projects", "gnosh stats",

@@ -66,6 +66,17 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			"%s gives a new conversation its ID, and %s goes on with an earlier one, so nothing was started. Add --fork-session to go on in a copy that has the new ID, or drop one of the two.",
 			o.typed, chosen.typed)
 	}
+	if o := p.given(idNoPersist); o != nil {
+		// Nothing of the run is kept: it cannot go on with a saved
+		// session, or give the one it starts an id or a name to find it by.
+		for _, other := range []*occurrence{chosen, p.given(idSessionID), p.given("--name")} {
+			if other != nil {
+				return fail(ErrConflict, o.typed,
+					"%s keeps nothing of the run, and %s is about a session that is kept, so nothing was started. Drop one of the two.",
+					o.typed, other.typed)
+			}
+		}
+	}
 	if printing && inv.Conversation == ConversationResume && inv.Resume == "" {
 		return fail(ErrUsage, chosen.typed,
 			"%s needs a session's ID or name after it in print mode, where nobody is there to pick from a list, so nothing was started.%s",

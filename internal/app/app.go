@@ -202,7 +202,7 @@ var built = []string{
 	"dirs", "logs", "logs --tail", "logs --follow", "models",
 	"session list", "session show", "session last", "session rename",
 	"session --json",
-	"--fork-session", "--name",
+	"--fork-session", "--name", "--no-session-persistence",
 	"--reasoning-effort", "--small-model",
 	"--permission-mode",
 	"--permission-mode=default", "--permission-mode=plan", "--permission-mode=acceptEdits",

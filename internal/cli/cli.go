@@ -140,6 +140,9 @@ type Invocation struct {
 	ForkSession bool
 	// Name is the name to give the session (-n).
 	Name string
+	// NoSessionPersistence keeps nothing of a run: its session is not
+	// saved and cannot be resumed (print mode only).
+	NoSessionPersistence bool
 
 	// Model is the model for this run, as typed: `model` or `provider/model`.
 	Model string

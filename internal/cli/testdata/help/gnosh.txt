@@ -144,6 +144,9 @@ Print mode
   --small-model <model>
       The model for the run's short side jobs. Without it they use the main
       model. (Not built yet.)
+  --no-session-persistence
+      Keep nothing of the run: its session is not saved, and cannot be
+      resumed. (Not built yet.)
 
 Help and version
   -h, --help

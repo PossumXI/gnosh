@@ -33,6 +33,10 @@ type startup struct {
 	// attended says a person is there to be asked: the session is an
 	// interactive one, and its front end can be typed into.
 	attended bool
+	// runState, when not empty, is a folder of the run's own that holds
+	// its session in place of the state directory, and goes when the run
+	// ends (--no-session-persistence).
+	runState string
 
 	// folder is the folder the command works in, and trusted whether its
 	// own settings are in force.
@@ -308,6 +312,9 @@ func (st *startup) sessions() *transcript.Store {
 
 // sessionsDir is the root of the session store.
 func (st *startup) sessionsDir() string {
+	if st.runState != "" {
+		return st.runState
+	}
 	return st.cfg.Paths.StateDir
 }
 
@@ -373,6 +380,9 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	// the data it keeps for the person (sessions among it), and whatever
 	// file --settings named.
 	o.Protected = append(o.Protected, cfg.Paths.ConfigDir, cfg.Paths.StateDir, cfg.Paths.DataDir)
+	if st.runState != "" {
+		o.Protected = append(o.Protected, st.runState)
+	}
 	if s := st.inputs.Flags.Settings; s != "" && !strings.HasPrefix(strings.TrimSpace(s), "{") {
 		o.Protected = append(o.Protected, s)
 	}
