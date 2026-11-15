@@ -70,10 +70,20 @@ func (l *live) loadMCP() *mcpSet {
 		}
 		return "", false
 	}
-	cfgs, probs := mcp.LoadConfig(
-		filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"),
-		filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json"),
-		l.cfg.Paths.ProjectRoot, l.st.trusted, getenv)
+	// The variables gnosh's own model keys came from are not sent to a
+	// server at a URL either.
+	var keys []string
+	for _, p := range l.cfg.Providers {
+		if v, ok := strings.CutPrefix(p.KeyFrom, "$"); ok {
+			keys = append(keys, v)
+		}
+	}
+	cfgs, probs := mcp.LoadConfig(mcp.Sources{
+		User:    filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"),
+		Project: filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json"),
+		Root:    l.cfg.Paths.ProjectRoot, Trusted: l.st.trusted,
+		Getenv: getenv, Withheld: keys,
+	})
 	set := &mcpSet{probs: probs}
 	for _, c := range cfgs {
 		set.servers = append(set.servers, &mcpServer{cfg: c, status: "pending"})

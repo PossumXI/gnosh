@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -58,12 +59,45 @@ func (p Problem) String() string {
 	return fmt.Sprintf("%s: the server %q: %s", p.Path, p.Server, p.Message)
 }
 
+// Sources are the files LoadConfig reads, and how it fills in ${VAR}.
+type Sources struct {
+	// User is the user's own file, and Project the project's .mcp.json,
+	// which counts only when Trusted. Root is the project's root.
+	User, Project, Root string
+	Trusted             bool
+	// Getenv fills in ${VAR}; for a stdio server, CLAUDE_PROJECT_DIR and
+	// GNOSH_PROJECT_DIR are the project's root.
+	Getenv func(string) (string, bool)
+	// Withheld are variables a server at a URL is never sent, beside the
+	// credentials Withheld names on its own: gnosh's model keys, say.
+	Withheld []string
+}
+
+// withheld are the variables that read as empty in the url and headers of
+// a server at a URL, so that a configuration, a repository's above all,
+// cannot send them to a server it names: model providers' keys, cloud
+// providers' credentials, proxies (whose addresses may hold a password)
+// and package registries' tokens.
+var withheld = []string{
+	"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+	"OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "MISTRAL_API_KEY",
+	"GROQ_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY",
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+	"AWS_BEARER_TOKEN_BEDROCK", "GOOGLE_APPLICATION_CREDENTIALS",
+	"AZURE_CLIENT_SECRET", "AZURE_OPENAI_API_KEY", "AZURE_API_KEY",
+	"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy",
+	"NPM_TOKEN", "NODE_AUTH_TOKEN",
+}
+
 // LoadConfig reads the user's file and, when trusted, the project's. A file
-// that is not there is no problem. getenv fills in ${VAR}; for a stdio
-// server, CLAUDE_PROJECT_DIR and GNOSH_PROJECT_DIR are the project's root.
-func LoadConfig(userPath, projectPath, projectRoot string, trusted bool, getenv func(string) (string, bool)) ([]Config, []Problem) {
+// that is not there is no problem.
+func LoadConfig(src Sources) ([]Config, []Problem) {
 	var probs []Problem
 	byName := map[string]Config{}
+	held := map[string]bool{}
+	for _, v := range append(append([]string(nil), withheld...), src.Withheld...) {
+		held[v] = true
+	}
 	read := func(path, scope string) {
 		if path == "" {
 			return
@@ -76,15 +110,15 @@ func LoadConfig(userPath, projectPath, projectRoot string, trusted bool, getenv 
 			probs = append(probs, Problem{Path: path, Message: err.Error()})
 			return
 		}
-		got, wrong := parseConfig(path, scope, data, projectRoot, getenv)
+		got, wrong := parseConfig(path, scope, data, src.Root, src.Getenv, held)
 		probs = append(probs, wrong...)
 		for _, c := range got {
 			byName[c.Name] = c
 		}
 	}
-	read(userPath, "user")
-	if trusted {
-		read(projectPath, "project")
+	read(src.User, "user")
+	if src.Trusted {
+		read(src.Project, "project")
 	}
 	names := make([]string, 0, len(byName))
 	for n := range byName {
@@ -99,7 +133,7 @@ func LoadConfig(userPath, projectPath, projectRoot string, trusted bool, getenv 
 }
 
 // parseConfig reads one file.
-func parseConfig(path, scope string, data []byte, projectRoot string, getenv func(string) (string, bool)) ([]Config, []Problem) {
+func parseConfig(path, scope string, data []byte, projectRoot string, getenv func(string) (string, bool), held map[string]bool) ([]Config, []Problem) {
 	var probs []Problem
 	var file struct {
 		Servers map[string]json.RawMessage `json:"mcpServers"`
@@ -133,9 +167,24 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 			continue
 		}
 		c := Config{Name: name, Scope: scope, Path: path}
-		var unset []string
+		var unset, kept []string
 		x := func(s string) string {
 			out, missing := expand(s, env)
+			unset = append(unset, missing...)
+			return out
+		}
+		// A server at a URL is sent no credential, and nothing of the
+		// folders here.
+		remote := func(s string) string {
+			out, missing := expand(s, func(name string) (string, bool) {
+				if held[name] {
+					if !slices.Contains(kept, name) {
+						kept = append(kept, name)
+					}
+					return "", true
+				}
+				return getenv(name)
+			})
 			unset = append(unset, missing...)
 			return out
 		}
@@ -164,11 +213,11 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 				probs = append(probs, Problem{Path: path, Server: name, Message: "it is an http server with no url"})
 				continue
 			}
-			c.Type, c.URL = "http", x(e.URL)
+			c.Type, c.URL = "http", remote(e.URL)
 			if len(e.Headers) > 0 {
 				c.Headers = map[string]string{}
 				for k, v := range e.Headers {
-					c.Headers[k] = x(v)
+					c.Headers[k] = remote(v)
 				}
 			}
 		case "sse", "ws":
@@ -183,6 +232,10 @@ func parseConfig(path, scope string, data []byte, projectRoot string, getenv fun
 		}
 		if len(unset) > 0 {
 			probs = append(probs, Problem{Path: path, Server: name, Message: "it names variables that are not set and have no default: " + strings.Join(unset, ", ") + "; they are left as written"})
+		}
+		if len(kept) > 0 {
+			sort.Strings(kept)
+			probs = append(probs, Problem{Path: path, Server: name, Message: "its url or headers name " + strings.Join(kept, ", ") + ", which a server at a URL is never sent; they read as empty"})
 		}
 		out = append(out, c)
 	}
