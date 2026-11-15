@@ -527,7 +527,8 @@ or kept with the reason said (27).
       folder cannot be told from its text. So is git pointed at the
       checkout from the work tree (-C, --git-dir, --work-tree, GIT_DIR,
       GIT_WORK_TREE, GIT_COMMON_DIR, GIT_INDEX_FILE), or pointed where
-      the text does not tell. What a command writes there by its own
+      the text does not tell, and a command whose own name is only known
+      when the line runs, which may be git. What a command writes there by its own
       paths ("cp a /repo/b") is left to the rules, as Claude Code leaves
       it. Box 1's Qwen showed the need: handed the
       checkout's absolute path in its task, it wrote there, and its own

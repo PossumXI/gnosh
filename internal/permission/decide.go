@@ -268,7 +268,13 @@ func (e *Engine) GitPlaces(dir, command string) (places []string, ok bool) {
 				add(text, known)
 			}
 		}
-		if len(c.words) == 0 || !c.words[0].static() || path.Base(c.words[0].joined()) != "git" {
+		if len(c.words) > 0 && !c.words[0].static() {
+			// A command whose name is only known when the line runs may
+			// be git, pointed anywhere ("$CMD -C /repo commit").
+			ok = false
+			continue
+		}
+		if len(c.words) == 0 || path.Base(c.words[0].joined()) != "git" {
 			continue
 		}
 		args := c.words[1:]

@@ -396,7 +396,9 @@ func TestCommandDirs(t *testing.T) {
 	}
 }
 
-// GitPlaces: where a command points git, or that it cannot be told.
+// GitPlaces: where a command points git, or that it cannot be told: also
+// where a command's own name is only known when it runs, since it may be
+// git (the fourth of Claude Code's checks).
 func TestGitPlaces(t *testing.T) {
 	e := mustEngine(t, testOptions(ModeDefault, rules{}))
 	for _, c := range []struct {
@@ -416,6 +418,9 @@ func TestGitPlaces(t *testing.T) {
 		{"git -C $X log", "-"},
 		{"GIT_DIR=$X git log", "-"},
 		{"git $SUB", "-"},
+		{"$CMD -C /repo commit", "-"},
+		{"x=git; $x status", "-"},
+		{"ls $DIR", ""},
 	} {
 		places, ok := e.GitPlaces("/proj", c.cmd)
 		got := strings.Join(places, " ")
