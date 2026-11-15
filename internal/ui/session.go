@@ -251,6 +251,9 @@ func newSession(cfg config) *session {
 		Complete: s.complete,
 		Now:      s.now,
 		Metrics:  s.m,
+		// Ten at once: a slash shows most of the commands without
+		// scrolling, and a short terminal still has room for the box.
+		MenuHeight: 10,
 	})
 	return s
 }
