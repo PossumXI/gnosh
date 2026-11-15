@@ -284,6 +284,9 @@ or kept with the reason said (27).
     settings files too, and so a `.mcp.json` written for Claude Code works
     in gnosh unchanged while gnosh.json keeps its strict keys. A run (`-p`)
     waits for the servers before its turn; an interactive session connects
-    them in the background. Only servers gnosh starts itself (stdio) are
-    built so far.
+    them in the background. Servers gnosh starts (stdio) and servers at a
+    URL (Streamable HTTP; the old SSE transport is refused by name) are
+    both spoken to; a server at a URL is sent no roots, since the folders
+    open here are nothing it needs to know, and is not followed to another
+    host by a redirect, which would carry its headers there.
 

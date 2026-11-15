@@ -1,26 +1,25 @@
 // Package mcp is a client of MCP servers (the Model Context Protocol):
-// outside programs that offer tools. It speaks JSON-RPC 2.0 to a server it
-// starts and talks to over the server's standard input and output, one
-// message to a line, which is MCP's stdio transport (spec/cc/mcp.md).
+// outside programs that offer tools. It speaks JSON-RPC 2.0 to a server
+// in one of two ways (spec/cc/mcp.md): to a server it starts, over the
+// server's standard input and output, one message to a line (the stdio
+// transport, stdio.go); or to a server at a URL, a POST to a message
+// (the Streamable HTTP transport, http.go).
 //
-// A Client starts the server, makes the initialize handshake, lists the
-// server's tools and calls them. It answers what a server may ask of a
-// client: ping, and roots/list with the folders it was given; anything
-// else is answered "method not found". Stopping a server closes its input
-// and then, as Claude Code does, sends SIGINT, SIGTERM 100 ms later and
-// SIGKILL 400 ms after that, to the server's whole process group.
+// A Client makes the initialize handshake, lists the server's tools and
+// calls them. It answers what a server may ask of a client: ping, and
+// roots/list with the folders it was given; anything else is answered
+// "method not found". Stopping a started server closes its input and then,
+// as Claude Code does, sends SIGINT, SIGTERM 100 ms later and SIGKILL
+// 400 ms after that, to the server's whole process group.
 package mcp
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -127,28 +126,51 @@ type message struct {
 	Error   *RPCError       `json:"error,omitempty"`
 }
 
-// Client is the connection to one started server.
+// Client is the connection to one server.
 type Client struct {
 	srv  Server
 	opt  Options
-	cmd  *exec.Cmd
-	in   io.WriteCloser
+	t    transport
 	info Info
 
-	writeMu sync.Mutex
 	mu      sync.Mutex
 	next    int64
 	pending map[string]chan message
 	closed  bool
 	err     error // why the connection ended
-	stderr  *capped
-	done    chan struct{} // closed when the reader stops
 	// changed is set when the server says its tool list changed.
 	changed bool
 }
 
+// transport carries messages to a server and brings its own back, which
+// it hands to the client's dispatch.
+type transport interface {
+	// send hands one message to the server.
+	send(ctx context.Context, m message) error
+	// stderr is the end of what a started server wrote on its standard
+	// error, or "".
+	stderr() string
+	// close ends the connection, and with a started server the server.
+	close() error
+}
+
 // Start starts the server and makes the handshake.
 func Start(ctx context.Context, srv Server, opt Options) (*Client, error) {
+	opt = opt.defaults()
+	if strings.TrimSpace(srv.Command) == "" {
+		return nil, errors.New("mcp: the server has no command")
+	}
+	c := &Client{srv: srv, opt: opt, pending: map[string]chan message{}}
+	st, err := startStdio(c, srv, opt)
+	if err != nil {
+		return nil, err
+	}
+	c.t = st
+	return c, c.handshake(ctx)
+}
+
+// defaults fills in the options that were left at zero.
+func (opt Options) defaults() Options {
 	if opt.ClientName == "" {
 		opt.ClientName = "gnosh"
 	}
@@ -164,34 +186,13 @@ func Start(ctx context.Context, srv Server, opt Options) (*Client, error) {
 	if opt.MaxLine <= 0 {
 		opt.MaxLine = 32 << 20
 	}
-	if strings.TrimSpace(srv.Command) == "" {
-		return nil, errors.New("mcp: the server has no command")
-	}
-	cmd := exec.Command(srv.Command, srv.Args...)
-	cmd.Dir = srv.Dir
-	env := append([]string(nil), srv.Environ...)
-	for k, v := range srv.Env {
-		env = append(env, k+"="+v)
-	}
-	cmd.Env = env
-	// A group of its own, so that what it starts is stopped with it.
-	ownGroup(cmd)
-	c := &Client{srv: srv, opt: opt, cmd: cmd, pending: map[string]chan message{}, stderr: &capped{max: opt.MaxStderr}, done: make(chan struct{})}
-	cmd.Stderr = c.stderr
-	in, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("mcp: %s could not be started: %w", srv.Command, err)
-	}
-	c.in = in
-	go c.read(out)
+	return opt
+}
 
+// handshake makes the initialize handshake. On failure the connection is
+// closed.
+func (c *Client) handshake(ctx context.Context) error {
+	opt := c.opt
 	hctx, cancel := context.WithTimeout(ctx, opt.StartTimeout)
 	defer cancel()
 	raw, err := c.request(hctx, "initialize", map[string]any{
@@ -201,7 +202,7 @@ func Start(ctx context.Context, srv Server, opt Options) (*Client, error) {
 	})
 	if err != nil {
 		c.Close()
-		return nil, c.failure("the handshake failed", err)
+		return c.failure("the handshake failed", err)
 	}
 	var hello struct {
 		ProtocolVersion string `json:"protocolVersion"`
@@ -213,20 +214,23 @@ func Start(ctx context.Context, srv Server, opt Options) (*Client, error) {
 	}
 	if err := json.Unmarshal(raw, &hello); err != nil {
 		c.Close()
-		return nil, fmt.Errorf("mcp: the server's answer to the handshake cannot be read: %w", err)
+		return fmt.Errorf("mcp: the server's answer to the handshake cannot be read: %w", err)
 	}
 	c.info = Info{Name: hello.ServerInfo.Name, Version: hello.ServerInfo.Version, ProtocolVersion: hello.ProtocolVersion, Instructions: hello.Instructions}
+	if h, ok := c.t.(*httpTransport); ok {
+		h.setVersion(hello.ProtocolVersion)
+	}
 	if err := c.notify("notifications/initialized", nil); err != nil {
 		c.Close()
-		return nil, c.failure("the handshake could not be finished", err)
+		return c.failure("the handshake could not be finished", err)
 	}
-	return c, nil
+	return nil
 }
 
 // failure says why the server did not answer, with what it wrote on its
 // standard error.
 func (c *Client) failure(what string, err error) error {
-	if tail := strings.TrimSpace(c.stderr.String()); tail != "" {
+	if tail := strings.TrimSpace(c.t.stderr()); tail != "" {
 		return fmt.Errorf("mcp: %s: %w. What the server wrote: %s", what, err, tail)
 	}
 	return fmt.Errorf("mcp: %s: %w", what, err)
@@ -236,7 +240,7 @@ func (c *Client) failure(what string, err error) error {
 func (c *Client) Info() Info { return c.info }
 
 // Stderr returns the end of what the server wrote on its standard error.
-func (c *Client) Stderr() string { return c.stderr.String() }
+func (c *Client) Stderr() string { return c.t.stderr() }
 
 // ToolsChanged reports whether the server said its tool list changed since
 // the last call of ListTools.
@@ -294,38 +298,20 @@ func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage
 	return res, nil
 }
 
-// Close stops the server: its input is closed, and then it is sent SIGINT,
-// SIGTERM 100 ms later and SIGKILL 400 ms after that, as long as it runs.
+// Close ends the connection. A started server's input is closed, and then
+// it is sent SIGINT, SIGTERM 100 ms later and SIGKILL 400 ms after that, as
+// long as it runs; an http server's session is ended.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	already := c.closed
 	c.closed = true
 	c.mu.Unlock()
-	if already {
+	if already || c.t == nil {
 		return nil
 	}
-	_ = c.in.Close()
-	exited := make(chan struct{})
-	go func() {
-		_ = c.cmd.Wait()
-		close(exited)
-	}()
-	for i, wait := range []time.Duration{100 * time.Millisecond, 400 * time.Millisecond, 2 * time.Second} {
-		select {
-		case <-exited:
-			<-c.done
-			return nil
-		default:
-		}
-		stop(c.cmd, i)
-		select {
-		case <-exited:
-			<-c.done
-			return nil
-		case <-time.After(wait):
-		}
-	}
-	return fmt.Errorf("mcp: %s did not stop", c.srv.Name)
+	err := c.t.close()
+	c.lost(nil)
+	return err
 }
 
 // request sends a request and waits for its answer.
@@ -349,7 +335,17 @@ func (c *Client) request(ctx context.Context, method string, params any) (json.R
 		delete(c.pending, id)
 		c.mu.Unlock()
 	}()
-	if err := c.send(message{JSONRPC: "2.0", ID: json.RawMessage(id), Method: method, Params: mustJSON(params)}); err != nil {
+	// The server is told a request that is given up.
+	giveUp := func() error {
+		_ = c.notify("notifications/cancelled", map[string]any{"requestId": json.RawMessage(id), "reason": "the client stopped waiting"})
+		return ctx.Err()
+	}
+	// (Over http the answer may come back with the request itself: send
+	// then returns once it has been handed to the channel.)
+	if err := c.t.send(ctx, message{JSONRPC: "2.0", ID: json.RawMessage(id), Method: method, Params: mustJSON(params)}); err != nil {
+		if ctx.Err() != nil {
+			return nil, giveUp()
+		}
 		return nil, err
 	}
 	select {
@@ -362,9 +358,7 @@ func (c *Client) request(ctx context.Context, method string, params any) (json.R
 		}
 		return m.Result, nil
 	case <-ctx.Done():
-		// The server is told the request is given up.
-		_ = c.notify("notifications/cancelled", map[string]any{"requestId": json.RawMessage(id), "reason": "the client stopped waiting"})
-		return nil, ctx.Err()
+		return nil, giveUp()
 	}
 }
 
@@ -382,62 +376,52 @@ func (c *Client) notify(method string, params any) error {
 	return c.send(message{JSONRPC: "2.0", Method: method, Params: mustJSON(params)})
 }
 
+// send sends what needs no answer: a notification, or the client's answer
+// to a server's request.
 func (c *Client) send(m message) error {
-	data, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	if _, err := c.in.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("%w (%v)", ErrClosed, err)
-	}
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), c.opt.StartTimeout)
+	defer cancel()
+	return c.t.send(ctx, m)
 }
 
-// read takes the server's messages until its output ends.
-func (c *Client) read(out io.Reader) {
-	defer close(c.done)
-	sc := bufio.NewScanner(out)
-	sc.Buffer(make([]byte, 64<<10), c.opt.MaxLine)
-	for sc.Scan() {
-		line := bytes.TrimSpace(sc.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var m message
-		if json.Unmarshal(line, &m) != nil {
-			// A server that writes other text on its output is broken, but
-			// one line of it is not worth the connection.
-			continue
-		}
-		switch {
-		case m.Method != "" && len(m.ID) > 0:
-			go c.answer(m)
-		case m.Method != "":
-			c.notified(m)
-		case len(m.ID) > 0:
-			id := strings.Trim(string(m.ID), `"`)
-			c.mu.Lock()
-			ch := c.pending[id]
-			c.mu.Unlock()
-			if ch != nil {
-				ch <- m
+// dispatch takes one message from the server: an answer goes to the request
+// that waits for it, a request of the server's is answered, and a
+// notification is noted.
+func (c *Client) dispatch(m message) {
+	switch {
+	case m.Method != "" && len(m.ID) > 0:
+		go c.answer(m)
+	case m.Method != "":
+		c.notified(m)
+	case len(m.ID) > 0:
+		id := strings.Trim(string(m.ID), `"`)
+		c.mu.Lock()
+		ch := c.pending[id]
+		c.mu.Unlock()
+		if ch != nil {
+			select {
+			case ch <- m:
+			default:
 			}
 		}
 	}
-	err := sc.Err()
+}
+
+// lost ends the connection for every request that waits: they fail with
+// err, or ErrClosed.
+func (c *Client) lost(err error) {
 	c.mu.Lock()
-	if err != nil {
-		c.err = fmt.Errorf("mcp: the server's output could not be read: %w", err)
-	} else {
-		c.err = ErrClosed
+	defer c.mu.Unlock()
+	if c.err == nil {
+		c.err = err
+		if c.err == nil {
+			c.err = ErrClosed
+		}
 	}
 	for id, ch := range c.pending {
 		close(ch)
 		delete(c.pending, id)
 	}
-	c.mu.Unlock()
 }
 
 // answer answers a request the server made of the client.

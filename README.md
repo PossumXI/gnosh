@@ -21,9 +21,10 @@ vets and tests every package from a clean copy.
 Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output), an
 interactive session in the terminal's own scrollback, the file and shell
 tools, WebFetch (a page read by the small model with the model's request,
-from the open web only), MCP servers that gnosh starts itself (from
-`~/.config/gnosh/mcp.json`, and a trusted project's `.mcp.json`, in Claude
-Code's shape; their tools are `mcp__<server>__<tool>`), commands on
+from the open web only), MCP servers, those gnosh starts itself and those
+at a URL (from `~/.config/gnosh/mcp.json`, and a trusted project's
+`.mcp.json`, in Claude Code's shape; their tools are
+`mcp__<server>__<tool>`), commands on
 declared hosts over ssh, permission modes and rules,
 hooks, instruction files, sub-agents in the foreground, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
@@ -41,8 +42,8 @@ permission modes, Esc stops a turn and Esc twice goes back to an earlier
 prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, and a line that begins with `!` is a command of your own.
 
-Not built yet: MCP servers reached over http, the `gnosh mcp` commands,
-background sub-agents, web search. The interface is in use over ssh, in tmux. Its
+Not built yet: signing in to an MCP server by OAuth (a key goes in its
+`headers`), the `gnosh mcp` commands, background sub-agents, web search. The interface is in use over ssh, in tmux. Its
 wording to the model has not yet been compared run against run. Nothing
 here is released.
 

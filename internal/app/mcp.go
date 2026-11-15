@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,11 +20,11 @@ import (
 
 // This file joins MCP servers to a session (spec/cc/mcp.md): the servers
 // mcp.LoadConfig finds (the user's mcp.json in gnosh's config folder, and in
-// a trusted folder the project's .mcp.json) are started, their tools are
-// offered to the model as mcp__<server>__<tool>, and each call is the
-// server's. The permission engine knows every mcp__ name as a tool that
-// asks unless a rule allows it (mcp__server, mcp__server__*,
-// mcp__server__tool).
+// a trusted folder the project's .mcp.json) are started or, at a URL,
+// reached; their tools are offered to the model as mcp__<server>__<tool>,
+// and each call is the server's. The permission engine knows every mcp__
+// name as a tool that asks unless a rule allows it (mcp__server,
+// mcp__server__*, mcp__server__tool).
 //
 // In an interactive session the servers connect in the background, and
 // their tools are added as each one is ready; a run (-p) waits for them,
@@ -113,20 +114,26 @@ func (l *live) connectMCP(s *mcpServer) {
 		l.flog.logf("mcp", "the MCP server %s did not connect: %s", s.cfg.Name, why)
 		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s is not connected: %s (/mcp says more)", s.cfg.Name, oneLine(why, 300)))
 	}
-	if s.cfg.Type != "stdio" {
-		fail("the " + s.cfg.Type + " transport is not built yet in this gnosh; only servers it starts itself (stdio) are")
-		return
-	}
-	root := l.cfg.Paths.ProjectRoot
-	env := map[string]string{"CLAUDE_PROJECT_DIR": root, "GNOSH_PROJECT_DIR": root}
-	for k, v := range s.cfg.Env {
-		env[k] = v
-	}
 	ctx, cancel := context.WithTimeout(l.ctx, mcpStartTimeout)
 	defer cancel()
-	client, err := mcp.Start(ctx, mcp.Server{Name: s.cfg.Name, Command: s.cfg.Command, Args: s.cfg.Args, Env: env,
-		Environ: l.p.o.Environ, Dir: root, Roots: append([]string(nil), l.roots...)},
-		mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: mcpStartTimeout})
+	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: mcpStartTimeout}
+	var client *mcp.Client
+	var err error
+	switch s.cfg.Type {
+	case "stdio":
+		root := l.cfg.Paths.ProjectRoot
+		env := map[string]string{"CLAUDE_PROJECT_DIR": root, "GNOSH_PROJECT_DIR": root}
+		for k, v := range s.cfg.Env {
+			env[k] = v
+		}
+		client, err = mcp.Start(ctx, mcp.Server{Name: s.cfg.Name, Command: s.cfg.Command, Args: s.cfg.Args, Env: env,
+			Environ: l.p.o.Environ, Dir: root, Roots: append([]string(nil), l.roots...)}, opt)
+	case "http":
+		// A server elsewhere is not told which folders are open here.
+		client, err = mcp.StartHTTP(ctx, s.cfg.Name, s.cfg.URL, s.cfg.Headers, opt)
+	default:
+		err = fmt.Errorf("gnosh does not speak the %s transport", s.cfg.Type)
+	}
 	if err != nil {
 		fail(err.Error())
 		return
@@ -134,7 +141,7 @@ func (l *live) connectMCP(s *mcpServer) {
 	tools, err := client.ListTools(ctx)
 	if err != nil {
 		_ = client.Close()
-		fail("it started, and its tools could not be listed: " + err.Error())
+		fail("it connected, and its tools could not be listed: " + err.Error())
 		return
 	}
 	var made []*mcpTool
@@ -201,13 +208,13 @@ func (l *live) mcpStatus() []MCPServerStatus {
 // connected and with what tools, or why not.
 func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
 	if l.mcp == nil || len(l.mcp.servers) == 0 && len(l.mcp.probs) == 0 {
-		c.Say("No MCP server is configured. Your own go in %s, and a project's in .mcp.json at its root (read once the folder is trusted), as {\"mcpServers\": {\"name\": {\"command\": \"...\", \"args\": [...]}}}.", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
+		c.Say("No MCP server is configured. Your own go in %s, and a project's in .mcp.json at its root (read once the folder is trusted), as {\"mcpServers\": {\"name\": {\"command\": \"...\", \"args\": [...]}}}, or {\"type\": \"http\", \"url\": \"...\"} for a server at a URL.", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
 		return nil
 	}
 	l.mcp.mu.Lock()
 	defer l.mcp.mu.Unlock()
 	for _, s := range l.mcp.servers {
-		where := s.cfg.Scope + ", " + s.cfg.Path
+		where := mcpWhere(s.cfg)
 		switch s.status {
 		case "connected":
 			names := make([]string, 0, len(s.tools))
@@ -228,6 +235,16 @@ func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
 	}
 	c.Say("A tool of a server is mcp__<server>__<tool>; a rule such as mcp__%s allows all of one server's tools.", mcpRuleName(l.mcp.servers))
 	return nil
+}
+
+// mcpWhere is where a server is configured, and for one at a URL which
+// host (the rest of a URL may hold a key).
+func mcpWhere(c mcp.Config) string {
+	where := c.Scope + ", " + c.Path
+	if u, err := url.Parse(c.URL); c.Type == "http" && err == nil && u.Host != "" {
+		where += ", at " + u.Scheme + "://" + u.Host
+	}
+	return where
 }
 
 // mcpRuleName is a server name to show in an example rule.

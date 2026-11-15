@@ -1,6 +1,10 @@
 package app
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -22,34 +26,73 @@ const fakeMCPServer = `while IFS= read -r line; do
   esac
 done`
 
-// An MCP server from the user's mcp.json: it is started, its tool is
-// offered as mcp__<server>__<tool>, a call reaches it and its answer
-// reaches the model; /mcp says how it stands; and stream-json's init line
-// names it.
+// fakeMCPHTTP is a small MCP server at a URL: it answers the handshake,
+// lists one tool, wave, and waves back. It notes the Authorization header
+// of each request.
+func fakeMCPHTTP(t *testing.T, auth *[]string) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*auth = append(*auth, r.Header.Get("Authorization"))
+		var m struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		w.Header().Set("Content-Type", "application/json")
+		switch m.Method {
+		case "initialize":
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"far","version":"1"}}}`, m.ID)
+		case "tools/list":
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"wave","description":"Waves from afar."}]}}`, m.ID)
+		case "tools/call":
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"waved back"}]}}`, m.ID)
+		default:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// MCP servers from the user's mcp.json, one started and one at a URL: their
+// tools are offered as mcp__<server>__<tool>, a call reaches each and its
+// answer reaches the model; /mcp says how they stand; and stream-json's
+// init line names them.
 func TestMCPServerTools(t *testing.T) {
 	w := apptest.NewWorld(t,
-		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "mcp__greeter__greet", Args: `{"name":"Jae"}`}}},
+		apptest.Reply{Calls: []apptest.Call{
+			{ID: "c1", Name: "mcp__greeter__greet", Args: `{"name":"Jae"}`},
+			{ID: "c2", Name: "mcp__remote__wave", Args: `{}`},
+		}},
 		apptest.Reply{Text: "Greeted."},
 	)
 	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	var auth []string
+	far := fakeMCPHTTP(t, &auth)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {
 		"greeter": {"command": "`+server+`"},
 		"broken": {"command": "/no/such/server"},
-		"remote": {"type": "http", "url": "https://mcp.example.org/x"}
+		"remote": {"type": "http", "url": "`+far.URL+`/mcp?key=k9", "headers": {"Authorization": "Bearer t0k"}}
 	}}`)
 
 	run(t, w, "-y", "-p", "greet Jae").wantCode(t, 0)
 	reqs := w.Model.Requests()
-	has(t, "the tools the model was offered", string(reqs[0].Body), "mcp__greeter__greet", "Greets someone by name.")
+	has(t, "the tools the model was offered", string(reqs[0].Body), "mcp__greeter__greet", "Greets someone by name.", "mcp__remote__wave", "Waves from afar.")
 	has(t, "what the model read of the call", toolResult(t, w, 1, "c1"), "hello, Jae")
+	has(t, "what the model read of the far call", toolResult(t, w, 1, "c2"), "waved back")
+	if len(auth) == 0 || auth[0] != "Bearer t0k" {
+		t.Errorf("the configured header did not go: %q", auth)
+	}
 
 	r := run(t, w, "-p", "/mcp").wantCode(t, 0)
 	has(t, "/mcp", r.out, "greeter: connected (greeter 0.1; user, ", "1 tool: greet",
 		"broken: not connected", "/no/such/server",
-		"remote: not connected", "the http transport is not built yet")
+		"remote: connected (far 1; user, ", ", at "+far.URL+"), 1 tool: wave")
+	if strings.Contains(r.out, "k9") {
+		t.Errorf("/mcp showed the key in a URL:\n%s", r.out)
+	}
 
 	r = run(t, w, "-p", "--output-format", "stream-json", "--verbose", "/mcp").wantCode(t, 0)
-	has(t, "the init line", r.out, `"mcp_servers":[{"name":"broken","status":"failed"},{"name":"greeter","status":"connected"},{"name":"remote","status":"failed"}]`)
+	has(t, "the init line", r.out, `"mcp_servers":[{"name":"broken","status":"failed"},{"name":"greeter","status":"connected"},{"name":"remote","status":"connected"}]`)
 }
 
 // A project's .mcp.json counts only in a folder the person has trusted,
