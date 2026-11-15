@@ -316,7 +316,13 @@ func (l *live) statusInput() statusInput {
 	in.Cost.TotalAPIDurationMS = u.APITime.Milliseconds()
 	in.ContextWindow.TotalInputTokens = u.Main.PromptTokens()
 	in.ContextWindow.TotalOutputTokens = u.Main.OutputTokens
-	if cs := l.agent.Context(); cs.Window > 0 {
+	cs := l.agent.Context()
+	if cs.Window == 0 {
+		// Before the first request: the window the model is configured
+		// with, and nothing used yet.
+		cs.Window = l.agent.Model().Info.ContextWindow
+	}
+	if cs.Window > 0 {
 		in.ContextWindow.ContextWindowSize = cs.Window
 		used := min(cs.Used*100/cs.Window, 100)
 		left := 100 - used
