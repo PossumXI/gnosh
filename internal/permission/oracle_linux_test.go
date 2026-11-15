@@ -352,6 +352,7 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 //	90     34,000  stopped                1 (the generator of tricks only)
 //	92     40,000    172,383   14m11s    0 (the generator of tricks only)
 //	93     71,000  stopped                1
+//	94    400,000  1,854,750   1h28m14s  0 (14 jails)
 //
 // Seed 86 ran on the code with those four closed, and showed one line:
 // "time>& - -p teepwned", which in bash runs a program named -p, because
@@ -385,7 +386,8 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 // one piece and what it is handed in others. A line nobody could read is
 // now cut once more at what ends a command and nothing else, and the name
 // of a command that destroys things is looked for in the loosest cut of
-// its words (looseFields).
+// its words (looseFields). Seed 94, the first whole run on the code with
+// all of those closed, showed nothing in 400,000 lines.
 //
 // (A run was stopped as soon as it had shown something new, the hole was
 // closed, and the next one started with another seed; the seeds between

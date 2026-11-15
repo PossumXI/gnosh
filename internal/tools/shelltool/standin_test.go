@@ -1,6 +1,7 @@
 package shelltool
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -151,9 +152,26 @@ func standIn(dir string, args []string) int {
 	outW.Close()
 	errW.Close()
 	note(filepath.Join(dir, "far"), cmd.Process.Pid)
+	// The far shell writes the line that reports the start on its standard
+	// error before anything else, and ssh passes it on first; two copies
+	// racing could pass the command's first output on before it. So
+	// standard output waits for that first line, or for the end of
+	// standard error.
 	var copies sync.WaitGroup
-	copies.Go(func() { io.Copy(os.Stdout, outR) })
-	copies.Go(func() { io.Copy(os.Stderr, errR) })
+	first := make(chan struct{})
+	copies.Go(func() {
+		r := bufio.NewReader(errR)
+		line, err := r.ReadBytes('\n')
+		os.Stderr.Write(line)
+		close(first)
+		if err == nil {
+			io.Copy(os.Stderr, r)
+		}
+	})
+	copies.Go(func() {
+		<-first
+		io.Copy(os.Stdout, outR)
+	})
 	if p.Mode == "drop" {
 		time.AfterFunc(time.Duration(p.DropAfterMS)*time.Millisecond, func() {
 			fmt.Fprintln(os.Stderr, "client_loop: send disconnect: Broken pipe")
