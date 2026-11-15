@@ -67,6 +67,7 @@ const (
 	textBtw              = "btw"
 	textRecap            = "recap"
 	textPrintWait        = "print-wait"
+	textStatusLine       = "statusline"
 	textMention          = "mention"
 	textAgentMention     = "agent-mention"
 	textStructured       = "structured-output"
@@ -180,6 +181,8 @@ func specs() []spec {
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,
 			when: "As the question of /recap, in a request beside the session's that is not kept."},
+		{name: textStatusLine, kind: KindLine, need: []string{"wish", "script", "settings", "sample"},
+			when: "As the prompt of /statusline: write a status line script from the user's words, try it on the session's own JSON, and add it to their gnosh.json."},
 		{name: textPrintWait, kind: KindLine, need: []string{"waited", "work"},
 			when: "In a run (-p) that has waited long for background work it started, as a turn of its own: stop that work, or wait on."},
 		{name: textStructured, kind: KindLine, need: []string{"schema"}, may: []string{"problem"},

@@ -567,6 +567,13 @@ func (s *Set) Recap() string {
 	return s.fill(textRecap, nil)
 }
 
+// StatusLine returns the prompt of /statusline: what the user wants the
+// status line to show, where the script and the settings file are, and the
+// session's own JSON as a status line command is handed it.
+func (s *Set) StatusLine(wish, script, settings, sample string) string {
+	return s.fill(textStatusLine, values{"wish": oneLine(wish, maxQuote), "script": oneLine(script, maxName), "settings": oneLine(settings, maxName), "sample": sample})
+}
+
 // PrintWait returns the checkpoint of a run (-p) that has waited long for
 // background work it started: how long it has waited, and what still runs.
 func (s *Set) PrintWait(waited, work string) string {

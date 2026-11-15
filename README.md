@@ -50,7 +50,7 @@ and Edit changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissio
 model works; nothing of it is kept), `/recap`, `/cost`, `/tasks`, `/diff`,
 `/export`,
 `/copy`, `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and
-disable), `/skills`, `/reload-skills`, `/hooks` and `/doctor`, with gnosh's
+disable), `/skills`, `/reload-skills`, `/hooks`, `/statusline` and `/doctor`, with gnosh's
 own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
 permission modes, Esc stops a turn and Esc twice goes back to an earlier
 prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command

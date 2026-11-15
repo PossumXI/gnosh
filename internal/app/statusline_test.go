@@ -98,3 +98,15 @@ func TestStatusLineRefresh(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// /statusline asks the model, in a turn, to write a status line script
+// from the person's words, try it on this session's own JSON, and add the
+// setting to their gnosh.json.
+func TestStatusLineCommandAsksTheModel(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Written."})
+	r := run(t, w, "-p", "/statusline the branch and the model").wantCode(t, 0)
+	has(t, "the run", r.out, "Written.")
+	has(t, "what the model was asked", requestText(t, w, 0),
+		"It is to show: the branch and the model", "statusline.sh", "gnosh.json", `\"session_id\"`, `\"workspace\"`)
+	w.Model.Done()
+}

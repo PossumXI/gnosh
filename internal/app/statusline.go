@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -349,4 +350,23 @@ func (l *live) statusPoke(ev any) {
 	case *agent.ReplyEvent, *agent.RoomEvent, *agent.SummaryEvent, *agent.TurnEndEvent:
 		l.statusLine.poke()
 	}
+}
+
+// slashStatusLine is /statusline: the model writes a status line command
+// from the person's words (or a plain one), tries it on the session's own
+// JSON, and adds the setting to the person's gnosh.json with the Edit
+// tool, which asks as any edit does. gnosh itself writes no gnosh.json.
+func (l *live) slashStatusLine(ctx context.Context, c *SlashContext) error {
+	wish := strings.TrimSpace(c.Args)
+	if wish == "" {
+		wish = "the model, the folder, and how full the context window is"
+	}
+	sample, err := json.MarshalIndent(l.statusInput(), "", "  ")
+	if err != nil {
+		return err
+	}
+	script := filepath.Join(l.cfg.Paths.ConfigDir, "statusline.sh")
+	settings := filepath.Join(l.cfg.Paths.ConfigDir, "gnosh.json")
+	text := l.texts.StatusLine(wish, script, settings, "```json\n"+string(sample)+"\n```")
+	return c.Send(agent.Prompt{Hidden: true, Source: "statusline", Text: text, Notice: "The model is asked to write a status line: " + oneLine(wish, 200)})
 }

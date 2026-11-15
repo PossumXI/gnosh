@@ -252,6 +252,9 @@
 //     words from the conversation, call no tool, start on nothing.
 //   - recap (Recap) is the question of /recap, asked the same way: the
 //     session in one line, for the person.
+//   - statusline (StatusLine) is the prompt of /statusline: write a script
+//     from the user's words, try it on this session's JSON, and add the
+//     statusLine setting to their gnosh.json with the Edit tool.
 //   - print-wait (PrintWait) wakes the model in a run (-p) that has waited
 //     long for background work it started: what still runs and for how
 //     long; stop it with TaskStop, or end the turn to wait on.

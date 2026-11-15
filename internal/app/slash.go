@@ -192,6 +192,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "reload-skills", Summary: "Read the skill and command folders again now, and say what changed.", InRun: true, Run: l.slashReloadSkills},
 		{Name: "context", Args: "[all]", Summary: "What fills the model's window, by kind.", InRun: true, Run: l.slashContext},
 		{Name: "btw", Args: "<question>", Summary: "Ask the model a side question about the conversation, also while it works. Neither the question nor the answer is kept.", InRun: true, Run: l.slashBtw},
+		{Name: "statusline", Args: "[what it shows]", Summary: "Have the model write a status line command from your words, try it, and add it to your gnosh.json.", InRun: true, Run: l.slashStatusLine},
 		{Name: "recap", Summary: "The session in one line: what it has done and where it stands. Nothing of it is kept.", InRun: true, Run: l.slashRecap},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},

@@ -36,6 +36,15 @@ Half of it is read.</gnosh>
 === a run that has waited long for its background work ===
 <gnosh>This run (gnosh -p) has waited 10m0s for background work that still runs: bg1 (npm run dev), bg2 (watch the logs). Nobody is watching the run. If what that work was for is done, or will not come, stop it with TaskStop and end your turn, and the run ends. Otherwise end your turn, and the run waits on. This is news from gnosh, not a request from the user.</gnosh>
 
+=== the prompt of /statusline ===
+<gnosh>The user asks for a status line, a command whose output gnosh shows under the prompt box. It is to show: the model and the git branch
+
+Write it as an executable script at /home/dev/.config/gnosh/statusline.sh. It gets the session's facts as JSON on stdin, and its width as COLUMNS; the line it prints is the status line. This session's JSON is below: use only its fields. Try the script on it.
+
+Then add "statusLine": {"type": "command", "command": "/home/dev/.config/gnosh/statusline.sh"} to /home/dev/.config/gnosh/gnosh.json with the Edit tool, keeping the rest of the file (or write the file with that one setting). It shows from gnosh's next start.
+
+{"cwd": "/home/dev/project", "model": {"id": "local/qwen3.8-27b"}}</gnosh>
+
 === a kind of sub-agent named with @agent- ===
 <gnosh>The user asks for the sub-agent kind reviewer in the prompt above: hand the task, or the part of it they mean, to that kind with the Agent tool (subagent_type reviewer).</gnosh>
 
