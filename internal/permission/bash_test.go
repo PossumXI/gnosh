@@ -330,6 +330,7 @@ func TestBashReadOnly(t *testing.T) {
 		"git log --oneline -5", "git log -n 3 --stat", "git show HEAD", "git branch", "git branch -a",
 		"git rev-parse --show-toplevel", "git ls-files", "git blame a.go", "git --no-pager log",
 		"git worktree list", "git worktree list --porcelain", "git worktree list -v", "git stash list",
+		"printf 'a\\nb\\n' | wc -l", "printf '%s\\n' x y",
 		// A cd to where the line already is goes nowhere: git runs where it
 		// would have.
 		"cd /proj && git log", "cd . && git status", "cd /proj/ && git diff",
@@ -349,7 +350,7 @@ func TestBashReadOnly(t *testing.T) {
 	}
 	for _, cmd := range []string{
 		// Not on the list.
-		"printf '%s\\n' a", "printf -v PATH x", "touch x", "make", "npm test", "python x.py", "env", "printenv", "awk '{print}' a", "less a",
+		"printf -v PATH x", "printf $X PATH x", "touch x", "make", "npm test", "python x.py", "env", "printenv", "awk '{print}' a", "less a",
 		// A read-only word in front of something else.
 		"ls; touch x", "ls && touch x", "ls & touch x", "ls\ntouch x", "ls | tee out", "timeout 5 touch x",
 		"echo x > file", "echo x >> file", "ls > out.txt", "ls &> out", "cat a 2> err",

@@ -92,13 +92,16 @@ func TestWorktreeFlagCommandsStay(t *testing.T) {
 	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"cd $X && ls"}`}}})
 	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"ls"}`}}})
 	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "git -C "+w.Dir+" status")}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c5", Name: "Bash", Args: `{"command":"mem.Show()"}`}}})
 	w.Model.Add(apptest.Reply{Text: "Done."})
 	run(t, w, "--trust-folder", "--worktree", "cmds", "-p", "look").wantCode(t, 0)
 	tree := filepath.Join(w.Dir, ".gnosh", "worktrees", "cmds")
 	has(t, "the first", toolResult(t, w, 1, "c1"), "This call did not run", "this command would run in "+w.Dir+", in the person's checkout", "the same folder there is "+tree)
-	has(t, "the second", toolResult(t, w, 2, "c2"), "This call did not run", "cannot be told from its text")
+	has(t, "the second", toolResult(t, w, 2, "c2"), "This call did not run", "gnosh cannot tell where this command runs: a cd in it goes to a place only known when it runs")
 	if got := toolResult(t, w, 3, "c3"); strings.Contains(got, "did not run") || !strings.Contains(got, "main.go") {
 		t.Errorf("ls in the work tree: %q", got)
 	}
 	has(t, "git pointed at the checkout", toolResult(t, w, 4, "c4"), "This call did not run", "this command points git at "+w.Dir)
+	// Qwen once wrote mem's call as a shell command (box 1).
+	has(t, "mem as a shell command", toolResult(t, w, 5, "c5"), "cannot be read as a shell command", "it is called with gnovm_run")
 }

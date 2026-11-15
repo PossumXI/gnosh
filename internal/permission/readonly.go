@@ -341,6 +341,8 @@ func facts(words []word) (f cmdFacts) {
 	case "git":
 		f.git = true
 		gitFacts(&f, args)
+	case "printf":
+		printfFacts(&f, args)
 	case "find":
 		findFacts(&f, args)
 	case "sed":
@@ -1025,6 +1027,17 @@ var gitRead = map[string]roSpec{
 var gitReadPairs = map[string]map[string]roSpec{
 	"worktree": {"list": {short: "vz", ops: opsNone, long: "--porcelain --verbose --expire="}},
 	"stash":    {"list": {ops: opsNone}},
+}
+
+// printfFacts judges printf: like echo it only writes its words, but with
+// -v it sets a variable of the shell instead ("printf -v PATH x"), and
+// that is not reading.
+func printfFacts(f *cmdFacts, args []word) {
+	if len(args) > 0 && (!args[0].static() || strings.HasPrefix(args[0].joined(), "-v")) {
+		f.why = "printf -v sets a variable of the shell"
+		return
+	}
+	f.readOnly = true
 }
 
 // gitFacts judges a git command.

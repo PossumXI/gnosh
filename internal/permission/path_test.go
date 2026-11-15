@@ -382,8 +382,8 @@ func TestCommandDirs(t *testing.T) {
 		{"/proj", `eval "$CMD"`, ""},
 		{"/proj", "ls 'unclosed", ""},
 	} {
-		dirs, ok := e.CommandDirs(c.dir, c.cmd)
-		got := strings.Join(dirs, " ")
+		dirs, why := e.CommandDirs(c.dir, c.cmd)
+		got, ok := strings.Join(dirs, " "), why == ""
 		if c.want == "" {
 			if ok {
 				t.Errorf("CommandDirs(%q, %q) = %q, want that it cannot be told", c.dir, c.cmd, got)
@@ -422,8 +422,8 @@ func TestGitPlaces(t *testing.T) {
 		{"x=git; $x status", "-"},
 		{"ls $DIR", ""},
 	} {
-		places, ok := e.GitPlaces("/proj", c.cmd)
-		got := strings.Join(places, " ")
+		places, why := e.GitPlaces("/proj", c.cmd)
+		got, ok := strings.Join(places, " "), why == ""
 		if c.want == "-" {
 			if ok {
 				t.Errorf("GitPlaces(%q) = %q, want that it cannot be told", c.cmd, got)

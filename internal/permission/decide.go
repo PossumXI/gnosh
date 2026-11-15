@@ -176,10 +176,11 @@ func (e *Engine) DecideAt(dir, tool string, call core.ToolCall, action core.Acti
 
 // CommandDirs is where the shell may be while the parts of a command run,
 // for a shell started in dir: dir itself, and wherever a cd or a pushd in
-// the line may lead. ok is false when that cannot be told: a line gnosh
-// cannot read to its end, text run as a script that gnosh cannot read, or
-// a cd to a place only known when the line runs.
-func (e *Engine) CommandDirs(dir, command string) (dirs []string, ok bool) {
+// the line may lead. why is "" when that can be told, and otherwise says
+// what keeps it from being told: a line gnosh cannot read to its end, text
+// run as a script that gnosh cannot read, a cd to a place only known when
+// the line runs.
+func (e *Engine) CommandDirs(dir, command string) (dirs []string, why string) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	at := *e
@@ -187,11 +188,40 @@ func (e *Engine) CommandDirs(dir, command string) (dirs []string, ok bool) {
 		at.cur = path.Clean(dir)
 	}
 	v := at.viewBash(command)
-	if !v.sc.ok || v.opaque != "" || v.tooMany {
-		return nil, false
+	if why := unreadable(v); why != "" {
+		return nil, why
 	}
 	dirs, unknown := at.lineDirsKnown(v)
-	return dirs, !unknown && !v.dirsCapped
+	switch {
+	case unknown:
+		return nil, "a cd in it goes to a place only known when it runs"
+	case v.dirsCapped:
+		return nil, "it goes to more folders than gnosh follows"
+	}
+	return dirs, ""
+}
+
+// unreadable says why a line cannot be read to know what it runs, or "".
+func unreadable(v *bashView) string {
+	switch {
+	case !v.sc.ok:
+		return "it cannot be read as a shell command (" + firstNonEmpty(v.sc.why, "the reading stopped") + ")"
+	case v.opaque != "":
+		return v.opaque
+	case v.tooMany:
+		return "it holds more commands than gnosh follows"
+	}
+	return ""
+}
+
+// firstNonEmpty is the first of its arguments that is not empty.
+func firstNonEmpty(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // gitPlaceVars are the variables that point git at a repository or a
@@ -202,9 +232,9 @@ var gitPlaceVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_I
 // line writes, as absolute paths read from where the line may be: the
 // folder of each -C, the paths of --git-dir and --work-tree, and the git
 // variables (GIT_DIR, GIT_WORK_TREE ...) set for a command or for the
-// line. ok is false when the line cannot be read, or one of those is only
-// known when it runs.
-func (e *Engine) GitPlaces(dir, command string) (places []string, ok bool) {
+// line. why is "" when they can be told, and otherwise says why not: the
+// line cannot be read, or one of them is only known when it runs.
+func (e *Engine) GitPlaces(dir, command string) (places []string, why string) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	at := *e
@@ -212,11 +242,11 @@ func (e *Engine) GitPlaces(dir, command string) (places []string, ok bool) {
 		at.cur = path.Clean(dir)
 	}
 	v := at.viewBash(command)
-	if !v.sc.ok || v.opaque != "" || v.tooMany {
-		return nil, false
+	if why := unreadable(v); why != "" {
+		return nil, why
 	}
 	dirs, unknown := at.lineDirsKnown(v)
-	ok = true
+	ok := true
 	add := func(text string, known bool) {
 		if !known {
 			ok = false
@@ -306,7 +336,10 @@ func (e *Engine) GitPlaces(dir, command string) (places []string, ok bool) {
 			break // the subcommand: what follows is its own
 		}
 	}
-	return places, ok
+	if !ok {
+		return nil, "a git place or a command's name in it is only known when it runs"
+	}
+	return places, ""
 }
 
 // decideLocked is Decide with the lock already held.

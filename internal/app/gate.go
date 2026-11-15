@@ -664,9 +664,15 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	if strings.TrimSpace(command) == "" {
 		return ""
 	}
-	dirs, ok := l.engine.CommandDirs(cwd, command)
-	if !ok {
-		return fmt.Sprintf("You work in a git work tree of your own, at %s, and where this command runs cannot be told from its text: it could run in the person's checkout at %s. Write every cd in it plainly, to a folder of your work tree.", t.Path, t.Repo)
+	// Told only that a cd must be plain, a model that had written mem's
+	// call as a shell command added cds to it, call after call (box 1).
+	hint := " Write it as plain shell commands, every cd to a folder of your work tree."
+	if strings.Contains(command, "mem.") {
+		hint += " (mem is no shell command: it is called with gnovm_run.)"
+	}
+	dirs, why := l.engine.CommandDirs(cwd, command)
+	if why != "" {
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command runs: %s. It could run in the person's checkout at %s.%s", t.Path, why, t.Repo, hint)
 	}
 	for _, d := range dirs {
 		if !within(d, t.Repo) || within(d, t.Path) {
@@ -680,9 +686,9 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	}
 	// Nor is git pointed there from the work tree: git -C, --git-dir,
 	// --work-tree, GIT_DIR and its kin.
-	places, ok := l.engine.GitPlaces(cwd, command)
-	if !ok {
-		return fmt.Sprintf("You work in a git work tree of your own, at %s, and where this command points git cannot be told from its text: it could be the person's checkout at %s. Run git in your work tree as it is, with its words written out.", t.Path, t.Repo)
+	places, why := l.engine.GitPlaces(cwd, command)
+	if why != "" {
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command points git: %s. It could be the person's checkout at %s. Run git in your work tree as it is, with its words written out.", t.Path, why, t.Repo)
 	}
 	for _, p := range places {
 		if within(p, t.Repo) && !within(p, t.Path) {
