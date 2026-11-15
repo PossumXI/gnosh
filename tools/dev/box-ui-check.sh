@@ -12,6 +12,8 @@
 #	ssh ai-remote bash -s -- mention < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- config < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- hookwake < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- agent < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- fork < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -27,6 +29,10 @@
 #               file and says it is in force from the next start (no model)
 #   hookwake    a Stop hook in the background ("asyncRewake") exits with 2
 #               after the first turn and wakes the model, which answers it
+#   agent       the session runs as the Explore agent (--agent): its prompt
+#               and its read-only tools
+#   fork        a skill with context: fork, typed: a sub-agent counts the
+#               lines of notes.txt, and the model answers its report
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -38,12 +44,13 @@ S=gnosh-uicheck-$scenario
 flags=""
 hooks=""
 case "$scenario" in
-basic | mention | config) ;;
+basic | mention | config | fork) ;;
+agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw) flags="-y" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork)" >&2
 	exit 2
 	;;
 esac
@@ -78,6 +85,14 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+mkdir -p "$T/config/gnosh/skills/countlines"
+cat > "$T/config/gnosh/skills/countlines/SKILL.md" <<'EOF'
+---
+description: Counts the lines of a file in a sub-agent.
+context: fork
+---
+Count the lines of the file notes.txt in the working directory. Report the count as one number.
+EOF
 cd "$T/work" || exit 1
 tmux new-session -d -s "$S" -x 110 -y 40 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $HOME/.local/bin/gnosh $flags"
 sleep 4
@@ -108,6 +123,14 @@ config)
 	sleep 2
 	tmux send-keys -t "$S" "/config memoryText" Enter
 	done_when() { screen | grep -q "set with /config to full: in force when gnosh next starts"; }
+	;;
+agent)
+	tmux send-keys -t "$S" "Which files are in this folder? Answer in one line." Enter
+	done_when() { screen | grep -q "notes.txt" && screen | grep -q "done in"; }
+	;;
+fork)
+	tmux send-keys -t "$S" "/countlines" Enter
+	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
