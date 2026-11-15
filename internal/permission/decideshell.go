@@ -1454,6 +1454,14 @@ func (e *Engine) cpLands(f cmdFacts, st *lineState) string {
 	if !ok || pattern {
 		return "" // (wordsOK spoke of the place already)
 	}
+	within := func(p string) bool {
+		for _, d := range e.workDirs() {
+			if inside(d, p) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, src := range f.reads {
 		abs, pattern, ok := e.absAll(src, st.dirs)
 		if !ok {
@@ -1483,7 +1491,16 @@ func (e *Engine) cpLands(f cmdFacts, st *lineState) string {
 				if name != "" {
 					land = cleanPath(strings.TrimRight(p, "/") + "/" + name)
 				}
-				if !e.inWork(land) {
+				// Where the name leads cannot be said when the place is no
+				// directory: nothing has a name under a file, and the copy
+				// is then written to the place itself, which was judged
+				// above. It cannot be said either where cp could not get
+				// there. Neither writes through anything.
+				real, err := e.resolve(land)
+				if err != nil {
+					continue
+				}
+				if !strings.HasPrefix(real, "/") || !within(cleanPath(real)) {
 					return land + ", where the copy of " + src.raw + " lands when " + place.raw + " is a directory, is a link that leads out of the working directories"
 				}
 				if !f.tree {

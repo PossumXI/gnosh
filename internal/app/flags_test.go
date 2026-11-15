@@ -90,6 +90,40 @@ func TestSkippingWithinReach(t *testing.T) {
 	}
 }
 
+// In acceptEdits a cp inside the project runs without a question, onto a
+// file that is there and into a folder alike. It asks where the copy would
+// land on a link that leads out of the project: cp writes through such a
+// link. This is the engine with the real file system behind it, where a
+// path through a file is an error and not a place.
+func TestCopyInAcceptEdits(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"cp a.txt b.txt"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"cp a.txt dir"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"cp a.txt new.txt"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: `{"command":"cp a.txt trap"}`}}},
+		apptest.Reply{Text: "Copied."})
+	w.Write("a.txt", "the new text\n")
+	w.Write("b.txt", "the old text\n")
+	w.Write("dir/keep.txt", "kept\n")
+	outside := filepath.Join(w.Home, "outside.txt")
+	w.Write(outside, "not the project's\n")
+	if err := os.MkdirAll(w.Path("trap"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, w.Path("trap/a.txt")); err != nil {
+		t.Fatal(err)
+	}
+	run(t, w, "--permission-mode", "acceptEdits", "-p", "copy it about").wantCode(t, 0)
+	for name, want := range map[string]string{"b.txt": "the new text\n", "dir/a.txt": "the new text\n", "new.txt": "the new text\n", outside: "not the project's\n"} {
+		if !w.Exists(name) {
+			t.Errorf("%s is not there", name)
+		} else if got := w.Read(name); got != want {
+			t.Errorf("%s holds %q, want %q", name, got, want)
+		}
+	}
+	has(t, "what the model read of the copy onto the link", toolResult(t, w, 4, "c4"), "nobody is here to give it", "leads out of the working directories")
+}
+
 // The permission modes a run can be started in.
 func TestPermissionModes(t *testing.T) {
 	script := func() []apptest.Reply {

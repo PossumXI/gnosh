@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -730,6 +731,29 @@ func TestWhereACopyLands(t *testing.T) {
 	} {
 		if d := bash(e, cmd); d.Behavior != want {
 			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
+		}
+	}
+	// A way to follow links that reports a path through a file as the
+	// system does, with an error: the place is then no directory, the copy
+	// is written to the place itself, and nothing asks.
+	o.Resolve = func(p string) (string, error) {
+		for _, file := range fs.files {
+			if strings.HasPrefix(p, file+"/") {
+				return "", errors.New("lstat " + p + ": not a directory")
+			}
+		}
+		return fs.resolve(p)
+	}
+	e = mustEngine(t, o)
+	for cmd, want := range map[string]Behavior{
+		"cp a.go db/s":        Allow, // onto a file that is there
+		"cp db/s a.go":        Allow,
+		"cp src/main.go db/s": Allow,
+		"cp db/s build/out.o": Allow,
+		"cp db/s da":          Ask, // and the link is still seen
+	} {
+		if d := bash(e, cmd); d.Behavior != want {
+			t.Errorf("%q, where a path through a file is an error: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
 		}
 	}
 	// With no way to follow links there is no link to write through, and
