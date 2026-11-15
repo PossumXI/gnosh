@@ -33,6 +33,8 @@ type builder struct {
 	hosts    []Host
 	hooks    []Hook
 	hooksOff Value[bool]
+	// agent is the kind of agent the session runs as.
+	agent Value[string]
 	// statusLine is the status line command; a later file wins.
 	statusLine Value[StatusLine]
 

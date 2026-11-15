@@ -402,3 +402,17 @@ or kept with the reason said (27).
     `httpHookAllowedEnvVars` are not adopted: the person's own files are
     where the hooks come from, and a folder's own are held until it is
     trusted.
+38. **A session can run as a kind of agent.** `--agent <name>`, and the
+    setting `"agent"` in gnosh.json, make the whole session one of the
+    kinds the Agent tool knows (gnosh's own, the person's, the
+    project's, `--agents`): its prompt stands in place of gnosh's own
+    system prompt unless `--system-prompt` is given; the tools it does
+    not list are off, put so as a deny rule of a tool's bare name in the
+    command line's layer (and every MCP tool, unless it names some);
+    its model is the session's unless `-m` names one; the instruction
+    files still load. The session's file records the agent, and a
+    resumed session runs as it again unless `--agent` names another. A
+    definition that asks for what a session cannot have yet (hooks,
+    skills, MCP servers, isolation, memory), a model that cannot be
+    used, or a name that is no kind stops the start with the reason:
+    it is never run as something else. /status names the agent.

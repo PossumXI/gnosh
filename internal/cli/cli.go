@@ -158,6 +158,8 @@ type Invocation struct {
 	// Agents is --agents: sub-agents defined for this run, as a JSON
 	// object of agents by name, or the path of a file that holds one.
 	Agents string
+	// Agent is --agent: the kind of agent the session runs as.
+	Agent string
 	// Bare is minimal mode: safe mode's customizations off, mem and the
 	// other features off, only Bash, Read, Edit and Write unless --tools
 	// says otherwise, and no background commands or sub-agents.

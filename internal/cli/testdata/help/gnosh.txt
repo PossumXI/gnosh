@@ -99,6 +99,11 @@ What the model is told
       own: a JSON object of agents by name, each with "description" and
       "prompt" and the settings of an agent file ("tools", "model", "maxTurns"
       ...), or the path of a file that holds one. (Not built yet.)
+  --agent <name>
+      Run the session as this kind of agent: its prompt in place of gnosh's
+      own, its tools, and its model. It outranks the setting "agent"; a
+      session that ran as an agent runs as it again when it is resumed. (Not
+      built yet.)
 
 Settings for this run
   --cwd <dir>

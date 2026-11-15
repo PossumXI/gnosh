@@ -174,6 +174,9 @@ func Default() *Table {
 	agents := t.add(&flag{names: "--agents", kind: kindText, arg: "json", group: groupTold, pri: 1, freeText: true,
 		help: `Kinds of sub-agent for this run, over those of the files and gnosh's own: a JSON object of agents by name, each with "description" and "prompt" and the settings of an agent file ("tools", "model", "maxTurns" ...), or the path of a file that holds one.`,
 		set:  func(i *Invocation, v flagValue) { i.Agents = v.text }})
+	asAgent := t.add(&flag{names: "--agent", kind: kindText, arg: "name", group: groupTold, pri: 1,
+		help: `Run the session as this kind of agent: its prompt in place of gnosh's own, its tools, and its model. It outranks the setting "agent"; a session that ran as an agent runs as it again when it is resumed.`,
+		set:  func(i *Invocation, v flagValue) { i.Agent = v.text }})
 
 	cwd := t.add(&flag{names: "--cwd", kind: kindText, arg: "dir", group: groupSettings, pri: 0,
 		help: "Work in this folder instead of the current one.",
@@ -264,7 +267,7 @@ func Default() *Table {
 		cont, resume, sessionID, fork, name,
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
-		system, systemFile, appendSystem, appendSystemFile, agents,
+		system, systemFile, appendSystem, appendSystemFile, agents, asAgent,
 		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, prompts, noPersist,
 		help, version,

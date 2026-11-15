@@ -98,6 +98,7 @@ func (ld *loader) finish() *Config {
 	ld.probs.list = append(ld.probs.list, checkHosts(cfg.Hosts)...)
 
 	cfg.AllHooks = b.hooks
+	cfg.Agent = b.agent
 	switch {
 	case len(b.hooks) == 0:
 	case cfg.Switches.SafeMode.V:

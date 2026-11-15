@@ -45,7 +45,7 @@ func readFile(s *source, data []byte) {
 		}
 		given[f.key] = f
 	}
-	for _, key := range []string{"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine"} {
+	for _, key := range []string{"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "agent"} {
 		f, ok := given[key]
 		if !ok {
 			continue
@@ -69,6 +69,13 @@ func readFile(s *source, data []byte) {
 			s.settingsEnv(f)
 		case "statusLine":
 			s.statusLine(f)
+		case "agent":
+			if f.val.kind != jString || strings.TrimSpace(f.val.str) == "" {
+				s.errorf(f.line, "\"agent\" is the name of a kind of agent for the session to run as, as a string, and here it is %s.", f.val.kind.word())
+				continue
+			}
+			name, o := strings.TrimSpace(f.val.str), s.at(f.line)
+			s.add(op{kind: KindOption, text: "agent: " + name, origin: o, apply: func(b *builder) { b.agent.put(name, o) }})
 		case "disableAllHooks":
 			if f.val.kind != jBool {
 				s.errorf(f.line, "\"disableAllHooks\" is true or false, and here it is %s.", f.val.kind.word())

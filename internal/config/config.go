@@ -49,6 +49,9 @@ type Config struct {
 	// Hooks are the hooks in force, in the order they were configured.
 	// The list is empty in safe mode and when disableAllHooks is set.
 	Hooks []Hook
+	// Agent names the kind of agent the session runs as (the setting
+	// "agent"; --agent outranks it), or is empty.
+	Agent Value[string]
 	// AllHooks are the hooks the configuration holds, in force or not.
 	AllHooks []Hook
 	// HooksOff says why Hooks is empty although AllHooks is not: "safe

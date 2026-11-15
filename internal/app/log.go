@@ -67,6 +67,9 @@ type sessionLog struct {
 	// entry; begun says the file has been looked at for one.
 	startedWith string
 	begun       bool
+	// runAs names the agent the session runs as, when the file does not
+	// say so yet: it is recorded with the first thing stored.
+	runAs string
 
 	mu sync.Mutex
 	// prompts maps the loop's id of a prompt to the entry it was written
@@ -369,6 +372,11 @@ func (l *sessionLog) Append(ctx context.Context, entries ...agent.Entry) error {
 		l.begun = true
 		if len(l.ts.Entries()) == 0 {
 			if _, err := l.ts.Append(transcript.MetaEntry("startedWith", l.startedWith)); err != nil {
+				return err
+			}
+		}
+		if l.runAs != "" {
+			if _, err := l.ts.Append(transcript.MetaEntry(metaAgent, l.runAs)); err != nil {
 				return err
 			}
 		}

@@ -210,7 +210,7 @@ var built = []string{
 	"--allow-dangerously-skip-permissions",
 	"--allowedTools", "--disallowedTools", "--tools", "--add-dir", "--trust-folder",
 	"--system-prompt", "--system-prompt-file", "--append-system-prompt", "--append-system-prompt-file",
-	"--setting-sources", "--safe-mode", "--bare", "--disable-slash-commands", "--agents",
+	"--setting-sources", "--safe-mode", "--bare", "--disable-slash-commands", "--agents", "--agent",
 	"--debug", "--debug-file", "--verbose",
 	"--output-format=json", "--output-format=stream-json", "--input-format=stream-json", "--replay-user-messages", "--json-schema",
 	"--permission-prompts", "--permission-prompts=host", "--permission-prompts=none",

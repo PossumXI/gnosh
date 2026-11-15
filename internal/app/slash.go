@@ -611,6 +611,9 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		trust = "trusted: you answered yes when this session asked"
 	}
 	c.Say("project      %s (%s)", l.cfg.Paths.ProjectRoot, trust)
+	if def := l.asAgent; def != nil {
+		c.Say("agent        %s (%s): its prompt, tools and model", def.Name, firstOf(l.tilde(def.Source), def.Scope))
+	}
 
 	m := a.Model()
 	if ref, ok := l.modelRef(); ok {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/app/skill"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
@@ -76,7 +77,9 @@ type live struct {
 	bg     sync.WaitGroup
 
 	// The session's models, and the client of every provider it has used.
-	large     *modelUse
+	large *modelUse
+	// asAgent is the kind of agent the session runs as (runas.go), or nil.
+	asAgent   *agentdef.Def
 	small     *modelUse
 	providers map[string]*providerUse
 	typeMu    sync.Mutex
@@ -324,6 +327,11 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		}
 	}
 
+	// The agent the session runs as, if any: its prompt and its tools.
+	if err := l.runAsAgent(); err != nil {
+		return l, err
+	}
+
 	// The hooks.
 	hc, _ := hooksConfig(l.cfg)
 	ho := st.hookOptions(l.cfg)
@@ -374,10 +382,16 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	if err := l.setupModels(ctx, pick); err != nil {
 		return l, err
 	}
+	if err := l.agentModel(ctx); err != nil {
+		return l, err
+	}
 
 	// The log, and the agent.
 	l.log = newSessionLog(l.ts, l.texts)
 	l.log.startedWith = "gnosh " + p.o.BuildID
+	if name := l.agentName(); name != "" && name != l.storedAgent() {
+		l.log.runAs = name
+	}
 	for _, c := range l.contribs {
 		if c.c.Stored != nil {
 			l.log.stored = append(l.log.stored, c.c.Stored)
