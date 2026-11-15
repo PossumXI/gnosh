@@ -124,6 +124,9 @@ func (l *live) applyOption(key string, raw json.RawMessage) bool {
 			return false
 		}
 		if key == "debug" {
+			if l.flog == nil {
+				return false // (a session without a log)
+			}
 			l.flog.debug.Store(on)
 		} else if l.agent != nil {
 			l.agent.SetAutoCompact(on)
