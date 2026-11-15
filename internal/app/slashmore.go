@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -310,6 +312,41 @@ func (l *live) slashInit(ctx context.Context, c *SlashContext) error {
 // A relative name is the working directory's, a name with no extension gets
 // .txt, and with no name it is <date>-<session's name>.txt there. A file
 // that is there already is never written over.
+// slashCopy is /copy [N]: the model's last reply, or the Nth from the end,
+// goes to the person's clipboard, through the terminal (OSC 52).
+func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
+	n := 1
+	if a := strings.TrimSpace(c.Args); a != "" {
+		v, err := strconv.Atoi(a)
+		if err != nil || v < 1 {
+			return errors.New("/copy takes nothing, or a number: 1 is the model's last reply, 2 the one before it")
+		}
+		n = v
+	}
+	var replies []string
+	for _, e := range transcript.Conversation(l.ts.Entries()) {
+		if e.Type == transcript.TypeAssistant {
+			if text := strings.TrimSpace(e.Message.Text()); text != "" {
+				replies = append(replies, text)
+			}
+		}
+	}
+	switch {
+	case len(replies) == 0:
+		return errors.New("the model has not replied in this session yet, so there is nothing to copy")
+	case n > len(replies):
+		return fmt.Errorf("the model has replied %s in this session, so there is no reply %d from the end", countWords(len(replies), "time", "times"), n)
+	}
+	text := replies[len(replies)-n]
+	c.Copy(text)
+	which := "The model's last reply"
+	if n > 1 {
+		which = fmt.Sprintf("The model's reply %d from the end", n)
+	}
+	c.Say("%s (%s) is on its way to the clipboard, through the terminal: one that does not take OSC 52 (Apple's Terminal, or tmux without set-clipboard) copies nothing.", which, countWords(utf8.RuneCountInString(text), "character", "characters"))
+	return nil
+}
+
 func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
 	name := strings.TrimSpace(c.Args)
 	if name == "" {

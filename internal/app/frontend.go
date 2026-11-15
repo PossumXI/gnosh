@@ -258,6 +258,9 @@ type CommandResult struct {
 	// sent one: a skill is such a command. What becomes of it arrives as
 	// events, as for a prompt the front end submits itself.
 	Prompt string
+	// Copy is text the command asks the front end to put on the person's
+	// clipboard (/copy), through the terminal.
+	Copy string
 }
 
 // MCPServerStatus is one MCP server and how it stands, as stream-json's

@@ -637,4 +637,6 @@ type SlashContext struct {
 	// skill does: the turn it starts is the command's, and in a run it is
 	// the run's turn. A command sends one prompt at most.
 	Send func(p agent.Prompt) error
+	// Copy asks the front end to put text on the person's clipboard.
+	Copy func(text string)
 }

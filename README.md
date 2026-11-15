@@ -38,7 +38,7 @@ served at an address on this machine.
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/compact`, `/resume`, `/rewind` (the conversation, the files Write and Edit
 changed, or both), `/model`, `/plan`, `/permissions`, `/add-dir`, `/status`,
-`/context`, `/cost`, `/tasks`, `/diff`, `/export`, `/init`, `/memory`,
+`/context`, `/cost`, `/tasks`, `/diff`, `/export`, `/copy`, `/init`, `/memory`,
 `/agents`, `/mcp` (with reconnect, enable and disable), `/skills`, `/hooks`
 and `/doctor`, with gnosh's own `/mem`,
 `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the

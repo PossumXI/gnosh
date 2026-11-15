@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -529,6 +530,7 @@ func TestStopBackgroundSubAgent(t *testing.T) {
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"count the stars","prompt":"Count every star.","run_in_background":true}`}}},
 		apptest.Reply{Text: "Counting in the background."},
 		apptest.Reply{Text: "It is stopped."},
+		apptest.Reply{Text: "Noted."},
 	)
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		body := string(r.Body)
@@ -557,18 +559,22 @@ func TestStopBackgroundSubAgent(t *testing.T) {
 	if _, ok := id.Load().(string); !ok {
 		t.Fatalf("the Agent call returned no id: %q", text)
 	}
-	// The stop is made by the call, so the notice reaches the turn that
-	// made it, in its next request.
+	// The notice reaches the turn that made the stop, in its next request,
+	// or, when that request has gone out already, a turn of its own.
 	s.typeLine("stop it")
 	s.see("A background sub-agent was stopped: count the stars")
-	s.see("It is stopped.")
-	found := false
-	for _, r := range w.Model.Requests() {
-		if strings.Contains(string(r.Body), "has been stopped: count the stars") {
-			found = true
+	told := func() bool {
+		for _, r := range w.Model.Requests() {
+			if strings.Contains(string(r.Body), "has been stopped: count the stars") {
+				return true
+			}
 		}
+		return false
 	}
-	if !found {
+	for deadline := time.Now().Add(15 * time.Second); !told() && time.Now().Before(deadline); {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !told() {
 		t.Errorf("no request told the model the sub-agent was stopped")
 	}
 	s.typeLine("/exit")

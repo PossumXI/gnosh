@@ -29,6 +29,7 @@ import (
 // the cursor where it was asked for.
 type rig struct {
 	t          *testing.T
+	copied     []string
 	scr        *vtest.Screen
 	s          *session
 	c          *controls
@@ -171,6 +172,11 @@ func (g *rig) edit(s string) (string, error) {
 		return "", errors.New("Set VISUAL or EDITOR to edit the prompt in your own editor.")
 	}
 	return g.editor(s)
+}
+
+func (g *rig) copy(text string) error {
+	g.copied = append(g.copied, text)
+	return nil
 }
 
 func (g *rig) size() (int, int, bool) {

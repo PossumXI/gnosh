@@ -747,6 +747,20 @@ func TestCustomStatusLine(t *testing.T) {
 	}
 }
 
+// A command that asks for text on the clipboard (/copy) has it written
+// through the terminal.
+func TestCopyToClipboard(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.c.command = func(ctx context.Context, line string) (app.CommandResult, error) {
+		return app.CommandResult{Handled: true, Name: "copy", Text: "The reply is on its way to the clipboard.", Copy: "the reply"}, nil
+	}
+	g.keys(`"/copy" <Enter>`)
+	g.committedHas("The reply is on its way to the clipboard.")
+	if len(g.copied) != 1 || g.copied[0] != "the reply" {
+		t.Errorf("the clipboard was given %q", g.copied)
+	}
+}
+
 // What is typed after "/mem redact" is a text the person wants gone. It
 // reaches the session, and nothing of it is written into the scrollback,
 // shown while the command waits or runs, or kept in the history.

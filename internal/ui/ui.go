@@ -926,6 +926,16 @@ func (u *UI) awaitResume() {
 }
 
 // size is the terminal's size as it stands.
+// copy puts text on the person's clipboard through the terminal (OSC 52):
+// the person's /copy asks for it. The sequence moves nothing on the screen.
+func (u *UI) copy(text string) error {
+	if u.t == nil {
+		return errors.New("there is no terminal to write to")
+	}
+	_, err := io.WriteString(u.t, term.ClipboardWrite(text))
+	return err
+}
+
 func (u *UI) size() (cols, rows int, ok bool) {
 	cols, rows, err := u.t.Size()
 	return cols, rows, err == nil && cols > 0 && rows > 0

@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/diff"
+	"github.com/gnosh-ai/gnosh/internal/term"
 	"github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
@@ -750,6 +751,9 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 	if strings.HasPrefix(text, "/") {
 		res, err := c.Command(ctx, text)
 		if res.Handled || err != nil {
+			if res.Copy != "" {
+				fmt.Fprint(f.out, term.ClipboardWrite(res.Copy))
+			}
 			if res.Text != "" {
 				f.note("%s", visible(res.Text))
 			}

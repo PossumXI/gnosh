@@ -81,7 +81,7 @@ var atOnce = map[string]bool{
 	"status": true, "tasks": true, "model": true, "permissions": true,
 	"deliverables": true, "artifacts": true,
 	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
-	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true, "diff": true, "mcp": true,
+	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true, "diff": true, "mcp": true, "copy": true,
 	"think": true, "no_think": true, "nothink": true, "no-think": true,
 	"loop": true, "noloop": true, "no_loop": true, "no-loop": true,
 	"exit": true, "quit": true,
@@ -412,6 +412,11 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		}
 		if !held {
 			s.ed.AddHistory(editor.Draft{Text: line})
+		}
+		if res.Copy != "" {
+			if cerr := s.host.copy(res.Copy); cerr != nil {
+				s.notice(agent.LevelWarning, "The text could not be put on the clipboard: "+cerr.Error())
+			}
 		}
 		if err != nil {
 			s.notice(agent.LevelError, err.Error())

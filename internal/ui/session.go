@@ -33,6 +33,8 @@ type host interface {
 	edit(text string) (string, error)
 	// size is the terminal's size as it stands, when it can be told.
 	size() (cols, rows int, ok bool)
+	// copy puts text on the person's clipboard through the terminal.
+	copy(text string) error
 }
 
 // config is what a session is made with.

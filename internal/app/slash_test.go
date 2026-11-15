@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"os"
 	"os/exec"
 	"strings"
@@ -284,4 +285,34 @@ func TestSlashCommandsAsARunsPrompt(t *testing.T) {
 	if r.out != "You typed a slash command.\n" {
 		t.Errorf("stdout = %q", r.out)
 	}
+}
+
+// /copy puts the model's last reply, or the Nth from the end, on the
+// clipboard through the terminal (OSC 52).
+func TestCopyCommand(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "First answer."}, apptest.Reply{Text: "Second answer."})
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/copy")
+	s.see("the model has not replied in this session yet")
+	s.typeLine("one")
+	s.see("First answer.")
+	s.typeLine("two")
+	s.see("Second answer.")
+	// (A reply counts once its turn has ended.)
+	s.see("-- done in ")
+	// The sequence goes out first, then the line about it. (The screen
+	// the test reads has no escape characters left in it.)
+	s.typeLine("/copy")
+	s.see("]52;c;" + base64.StdEncoding.EncodeToString([]byte("Second answer.")))
+	s.see("The model's last reply (14 characters) is on its way to the clipboard")
+	s.typeLine("/copy 2")
+	s.see("]52;c;" + base64.StdEncoding.EncodeToString([]byte("First answer.")))
+	s.see("The model's reply 2 from the end (13 characters)")
+	s.typeLine("/copy 3")
+	s.see("the model has replied 2 times in this session, so there is no reply 3 from the end")
+	s.typeLine("/copy x")
+	s.see("/copy takes nothing, or a number")
+	s.typeLine("/exit")
+	s.exit()
 }
