@@ -315,6 +315,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	// The hooks.
 	hc, _ := hooksConfig(l.cfg)
 	ho := st.hookOptions(l.cfg)
+	ho.Background = l.backgroundHook
 	for _, c := range l.contribs {
 		if c.c.Hooks != nil {
 			fires := ho.Fires
@@ -1067,6 +1068,10 @@ func (l *live) close(reason string) {
 		// The sub-agents in the background stop first: they use the shell.
 		l.stopBackgroundAgents(15 * time.Second)
 		l.closeShell()
+		if l.hooks != nil && l.hooks.r != nil {
+			// The hooks still running in the background are stopped.
+			l.hooks.r.Close(10 * time.Second)
+		}
 		l.statusLine.stop()
 		l.cancel()
 		waitGroup(&l.bg, 15*time.Second)

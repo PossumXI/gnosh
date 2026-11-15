@@ -610,8 +610,9 @@ func (s *session) hooks(ev *app.HookEvent) {
 		// The words are the hook package's own account of the record.
 		line := "hook: " + oneLine(r.String())
 		// "none" is that package's word for a hook that ran and had
-		// nothing to say.
-		quiet := string(r.Result) == "none"
+		// nothing to say, and "background" for one started in the
+		// background, which decides nothing.
+		quiet := string(r.Result) == "none" || string(r.Result) == "background"
 		switch {
 		case quiet && !s.detail:
 			silent++

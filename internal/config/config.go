@@ -309,6 +309,10 @@ type Hook struct {
 	// Args are the program's arguments in the exec form: no shell reads
 	// them. Nil is the shell form.
 	Args []string
+	// Async and AsyncRewake run the hook in the background: nothing waits
+	// for it and it decides nothing; with AsyncRewake an exit with 2 wakes
+	// the model.
+	Async, AsyncRewake bool
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event

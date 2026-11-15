@@ -33,17 +33,16 @@ import (
 //   - a name written twice in one object (JSON readers keep only one of
 //     the two, so a list of hooks would vanish);
 //   - a hook type other than "command" (http, mcp_tool, prompt, agent);
-//   - a background hook ("async", "asyncRewake"), a shell other than
-//     bash, an "onFailure" other than "continue", an "if" that is not a
-//     string, "args" that are not a list of strings;
+//   - a shell other than bash, an "onFailure" other than "continue", an
+//     "if" that is not a string, "args" that are not a list of strings,
+//     "async" or "asyncRewake" that is not true or false;
 //   - any field gnosh does not know;
 //   - a matcher on an event that takes none, or one that cannot be read;
 //   - no command, or a timeout that is not a number of seconds above zero.
 //
 // Accepted, and changing nothing: "statusMessage", "once", and the default
-// values "shell": "bash", "async": false, "asyncRewake": false and
-// "onFailure": "continue". (gnosh blocks when a hook fails, whatever
-// "onFailure" says.)
+// values "shell": "bash" and "onFailure": "continue". (gnosh blocks when a
+// hook fails, whatever "onFailure" says.)
 //
 // When anything is wrong the error is a *ConfigError listing every
 // problem. The Config returned with it holds the hooks that could be read
@@ -256,8 +255,14 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 				p.fail(place, "the hook has \"shell\": %s. gnosh runs hooks with a POSIX shell only. Remove \"shell\", or write \"bash\".", written)
 			}
 		case "async", "asyncRewake":
-			if on, ok := asBool(f.value); !ok || on {
-				p.fail(place, "the hook has \"%s\": %s. gnosh does not run hooks in the background: a hook that is not waited for cannot stop anything. Remove \"%s\".", f.key, written, f.key)
+			on, ok := asBool(f.value)
+			switch {
+			case !ok:
+				p.fail(place, "the hook has \"%s\": %s; it is true or false.", f.key, written)
+			case f.key == "async":
+				h.Async = on
+			default:
+				h.AsyncRewake = on
 			}
 		case "onFailure":
 			switch s, ok := asString(f.value); {

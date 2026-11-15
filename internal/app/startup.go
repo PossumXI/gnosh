@@ -519,11 +519,14 @@ func hooksConfig(cfg *config.Config) (hooks.Config, []hooks.Problem) {
 			Event:   h.Event,
 			Command: h.Command,
 			Args:    h.Args,
+			Async:   h.Async,
 			Matcher: h.Matcher,
-			Timeout: h.Timeout,
-			Source:  h.Origin.String(),
-			Global:  h.Scope == "user",
-			If:      h.If,
+
+			AsyncRewake: h.AsyncRewake,
+			Timeout:     h.Timeout,
+			Source:      h.Origin.String(),
+			Global:      h.Scope == "user",
+			If:          h.If,
 		})
 		if err != nil {
 			var ce *hooks.ConfigError

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -77,6 +78,37 @@ func (l *live) showHooks(in hooks.Input, out hooks.Outcome) {
 	for _, w := range out.Warnings {
 		l.notice(agent.LevelWarning, source, w)
 	}
+}
+
+// backgroundHook takes what a hook that ran in the background left when it
+// ended (spec/cc/hooks.md 7): what it adds for the model goes out with the
+// next request, an "asyncRewake" hook's exit with 2 wakes the model at
+// once, and one that could not be evaluated is a warning for the person.
+func (l *live) backgroundHook(b hooks.Background) {
+	if l.closing.Load() || l.agent == nil {
+		return
+	}
+	l.deliver(&HookEvent{Event: b.Event, Records: []hooks.Record{b.Record}})
+	source := "hook:" + string(b.Event)
+	if b.Warning != "" {
+		l.notice(agent.LevelWarning, source, b.Warning)
+	}
+	lead := "A " + string(b.Event) + " hook the user set up, which ran in the background, "
+	if len(b.Context) > 0 {
+		_ = l.agent.Tell(agent.Note{Source: source, Text: prompt.Wrap(lead + "adds this:\n" + strings.TrimSpace(strings.Join(b.Context, "\n")))})
+	}
+	if b.Wake != "" {
+		_ = l.agent.Tell(agent.Note{Source: source, Wake: true, Text: prompt.Wrap(lead + "exited with 2 and says this:\n" + b.Wake),
+			Notice: fmt.Sprintf("The %s hook %s, in the background, exited with 2: %s", b.Event, hookWho(b.Record), oneLine(b.Wake, 200))})
+	}
+}
+
+// hookWho names a hook by its record: its name, or its command.
+func hookWho(r hooks.Record) string {
+	if r.Name != "" {
+		return strconv.Quote(r.Name)
+	}
+	return "`" + oneLine(r.Command, 60) + "`"
 }
 
 // hookWords marks what a hook said as the words of a hook the user set

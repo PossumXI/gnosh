@@ -129,8 +129,6 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"args that are not a list", hook(`"type": "command", "command": "check", "args": "--strict"`), []string{`"args" is a list of strings`, "this one is a string"}},
 		{"args that are not strings", hook(`"type": "command", "command": "check", "args": ["-n", 3]`), []string{`"args" is a list of strings`, "this one is a list"}},
 		{"an argument with a NUL in it", hook(`"type": "command", "command": "check", "args": ["a\u0000b"]`), []string{"an argument of the hook holds a NUL character"}},
-		{"a background hook", hook(`"type": "command", "command": "true", "async": true`), []string{`"async": true`, "background", "cannot stop anything"}},
-		{"a background hook that wakes the model", hook(`"type": "command", "command": "true", "asyncRewake": true`), []string{`"asyncRewake": true`, "background"}},
 		{"async that is not true or false", hook(`"type": "command", "command": "true", "async": "no"`), []string{`"async": "no"`}},
 		{"another shell", hook(`"type": "command", "command": "true", "shell": "powershell"`), []string{`"shell": "powershell"`, "POSIX shell"}},
 		{"onFailure block", hook(`"type": "command", "command": "true", "onFailure": "block"`), []string{`"onFailure": "block"`, "already blocks", `Remove "onFailure"`}},

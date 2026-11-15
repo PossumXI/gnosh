@@ -57,6 +57,12 @@ type Hook struct {
 	// "Bash(git push *)". On a tool event the hook runs only for a call
 	// the filter takes (Input.IfMatch); on any other event it never runs.
 	If string
+
+	// Async runs the hook in the background: nothing waits for it, it
+	// decides nothing, and what its answer adds for the model goes out
+	// with the next request. AsyncRewake does the same, and an exit with
+	// 2 also wakes the model at once (see Background).
+	Async, AsyncRewake bool
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -116,6 +122,8 @@ type Spec struct {
 	Global bool
 	// If is the handler's "if" filter, or empty.
 	If string
+	// Async and AsyncRewake run the hook in the background.
+	Async, AsyncRewake bool
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -132,9 +140,12 @@ func NewHook(s Spec) (Hook, error) {
 		Args:    s.Args,
 		Timeout: s.Timeout,
 		Name:    s.Name,
-		Source:  s.Source,
-		Global:  s.Global,
-		If:      strings.TrimSpace(s.If),
+		Async:   s.Async,
+
+		AsyncRewake: s.AsyncRewake,
+		Source:      s.Source,
+		Global:      s.Global,
+		If:          strings.TrimSpace(s.If),
 	}
 	if msgs := hookProblems(h); len(msgs) > 0 {
 		problems := make([]Problem, len(msgs))

@@ -122,6 +122,9 @@ const (
 	// ResultCancelled: the turn was cancelled while the hook ran, and the
 	// hook was stopped.
 	ResultCancelled Result = "cancelled"
+	// ResultBackground: the hook was started in the background, and
+	// nothing waited for it ("async", "asyncRewake").
+	ResultBackground Result = "background"
 )
 
 // Record is what one hook did on one occurrence of an event.
@@ -162,6 +165,10 @@ type Record struct {
 
 	// Stderr is the start of what the hook wrote to standard error.
 	Stderr string
+
+	// Background says that the hook ran in the background: it decided
+	// nothing.
+	Background bool
 }
 
 // String returns the record as one line, for a log or a status line.
@@ -181,7 +188,13 @@ func (r Record) String() string {
 		ResultCouldNotEvaluate: "could not evaluate",
 		ResultCancelled:        "was cancelled",
 	}[r.Result]
+	if r.Result == ResultBackground {
+		return fmt.Sprintf("%s hook %s runs in the background", r.Event, who)
+	}
 	s := fmt.Sprintf("%s hook %s %s (%s)", r.Event, who, what, r.Duration.Round(time.Millisecond))
+	if r.Background {
+		s = fmt.Sprintf("%s hook %s, in the background, %s (%s)", r.Event, who, what, r.Duration.Round(time.Millisecond))
+	}
 	if detail := r.Reason; detail != "" {
 		s += ": " + shorten(detail, 200)
 	} else if r.SystemMessage != "" {

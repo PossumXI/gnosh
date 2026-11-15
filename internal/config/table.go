@@ -297,8 +297,8 @@ var hookFields = map[string]string{
 	"statusMessage": "ignored",
 	"once":          "ignored",
 	"shell":         "same",
-	"async":         "same",
-	"asyncRewake":   "same",
+	"async":         "",
+	"asyncRewake":   "",
 	"onFailure":     "same",
 	"if":            "",
 	"args":          "",
@@ -306,10 +306,8 @@ var hookFields = map[string]string{
 
 // hookFieldSame is the one value each "same" field may have.
 var hookFieldSame = map[string]string{
-	"shell":       `"bash"`,
-	"async":       "false",
-	"asyncRewake": "false",
-	"onFailure":   `"continue"`,
+	"shell":     `"bash"`,
+	"onFailure": `"continue"`,
 }
 
 // permissionModes is every mode a session can start in. "manual" is

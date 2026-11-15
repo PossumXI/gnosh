@@ -356,3 +356,17 @@ or kept with the reason said (27).
     lists every option with its value and what set it, `/config key`
     says more of one, and `key=` takes a choice away. Lists (instruction
     files, hidden skills) stay in gnosh.json.
+35. **Hooks in the background run, as Claude Code runs them.** A hook
+    with `"async": true` or `"asyncRewake": true` was a startup error,
+    because a hook that is not waited for cannot stop anything (the
+    principles' D3). In Claude Code such a hook is no guard either: it
+    decides nothing, and what its answer adds for the model goes out
+    with the next request; with `asyncRewake` an exit with 2 wakes the
+    model, even in an idle session, with what the hook wrote to stderr.
+    gnosh now does the same, so a Claude Code settings file with a lint
+    or test hook in the background works unchanged. One that cannot be
+    evaluated is a warning for the person, and nothing for the model.
+    An `async` hook has no time limit and an `asyncRewake` one keeps its
+    timeout; the session's end (and `-p`'s) stops those still running,
+    with their process groups. With them came Claude Code's exec form
+    (`"args"`), which runs the program with its arguments and no shell.

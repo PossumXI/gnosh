@@ -94,7 +94,9 @@
 // (Options.Shell -c), or in Claude Code's exec form (Hook.Args) a program
 // found on the hook's PATH run with its arguments as they are, in the
 // session's working directory, in a session and process group of its own
-// with no terminal. All are waited for. A hook
+// with no terminal. All are waited for, but those that run in the
+// background (Hook.Async, Hook.AsyncRewake: see background.go), which
+// decide nothing. A hook
 // that passes its timeout, or is still running when the turn is cancelled,
 // is stopped with its whole process group: SIGTERM, and SIGKILL after
 // Options.KillGrace.

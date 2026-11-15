@@ -155,8 +155,8 @@ func TestSettingsRefusals(t *testing.T) {
 		{"a hook whose if is empty", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "if": ""}]}]}}`, 1, []string{`a hook's "if" is one permission rule`}},
 		{"a hook whose args are not a list", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "args": "-n"}]}]}}`, 1, []string{`a hook's "args" is a list of strings`, "a string"}},
 		{"a hook whose args are not strings", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "args": [1]}]}]}}`, 1, []string{`a hook's "args" is a list of strings`, "a list"}},
-		{"a background hook", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "async": true}]}]}}`, 1, []string{`this hook sets "async"`, "false"}},
-		{"a hook that wakes the model", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "asyncRewake": true}]}]}}`, 1, []string{`this hook sets "asyncRewake"`}},
+		{"a background hook that is not true or false", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "async": "yes"}]}]}}`, 1, []string{`a hook's "async" is true or false`, "a string"}},
+		{"a hook that wakes the model, written as a number", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "asyncRewake": 1}]}]}}`, 1, []string{`a hook's "asyncRewake" is true or false`}},
 		{"a powershell hook", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "shell": "powershell"}]}]}}`, 1, []string{`this hook sets "shell"`, `"bash"`}},
 		{"a hook with another failure rule", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "onFailure": "block"}]}]}}`, 1, []string{`this hook sets "onFailure"`, `"continue"`}},
 		{"a hook field gnosh does not know", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "retries": 3}]}]}}`, 1, []string{`"retries"`, "not a field of a hook handler"}},
@@ -432,5 +432,17 @@ func TestSettingsHookArgs(t *testing.T) {
 	}
 	if g := block["Stop"]; len(g) != 3 || g[0].Hooks[0].Args == nil || len(*g[0].Hooks[0].Args) != 4 || g[1].Hooks[0].Args == nil || g[2].Hooks[0].Args != nil {
 		t.Errorf("the hooks block keeps the exec form, an empty list too: %s", cfg.HooksJSON())
+	}
+}
+
+// "async" and "asyncRewake" are read, for the hook runner to run the hook
+// in the background.
+func TestSettingsHookAsync(t *testing.T) {
+	cfg := mustLoad(t, withConfig("{"+one+`, "hooks": {"PostToolUse": [{"hooks": [
+		{"type": "command", "command": "./lint.sh", "async": true},
+		{"type": "command", "command": "./tests.sh", "asyncRewake": true, "timeout": 300},
+		{"type": "command", "command": "./now.sh", "async": false}]}]}}`))
+	if len(cfg.Hooks) != 3 || !cfg.Hooks[0].Async || cfg.Hooks[0].AsyncRewake || !cfg.Hooks[1].AsyncRewake || cfg.Hooks[1].Async || cfg.Hooks[2].Async || cfg.Hooks[2].AsyncRewake {
+		t.Errorf("hooks: %+v", cfg.Hooks)
 	}
 }

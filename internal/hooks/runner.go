@@ -98,6 +98,10 @@ type Options struct {
 	// and its end around a line that says how much was left out.
 	// Default: 10,000, as in Claude Code.
 	MaxText int
+
+	// Background is told what a hook that ran in the background left
+	// when it ended, from a goroutine of its own. Nil drops it.
+	Background func(Background)
 }
 
 const (
@@ -129,6 +133,13 @@ type Runner struct {
 	pipeWait   time.Duration
 	maxOutput  int
 	maxText    int
+
+	// The hooks that run in the background: they run under bgCtx, which
+	// Close cancels, and bg counts them.
+	bgCtx        context.Context
+	bgStop       context.CancelFunc
+	bg           sync.WaitGroup
+	onBackground func(Background)
 }
 
 // compiled is a hook with its matcher read.
@@ -173,7 +184,10 @@ func NewRunner(cfg Config, opts Options) (*Runner, error) {
 		pipeWait:   opts.PipeWait,
 		maxOutput:  opts.MaxOutput,
 		maxText:    opts.MaxText,
+
+		onBackground: opts.Background,
 	}
+	r.bgCtx, r.bgStop = context.WithCancel(context.Background())
 	if r.shell == "" {
 		r.shell = "/bin/sh"
 		if st, err := os.Stat("/bin/bash"); err == nil && !st.IsDir() {
@@ -277,6 +291,26 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	}
 	env := in.environ(info, base, dir, r.projectDir, r.memStatus)
 
+	// The hooks that run in the background are started, and nothing
+	// waits for them.
+	var started []Record
+	waited := sel[:0:0]
+	for _, h := range sel {
+		if !h.Async && !h.AsyncRewake {
+			waited = append(waited, h)
+			continue
+		}
+		if r.bgCtx.Err() != nil {
+			started = append(started, Record{Event: h.Event, Matcher: h.Matcher, Command: h.CommandLine(), Name: h.Name, Source: h.Source,
+				ExitCode: -1, Result: ResultCancelled, Background: true, Reason: "the session is ending, and no hook starts in the background now."})
+			continue
+		}
+		started = append(started, r.background(&in, info, h, stdin, env, dir))
+	}
+	if sel = waited; len(sel) == 0 {
+		return Outcome{Records: started}, nil
+	}
+
 	procs := make([]proc, len(sel))
 	var all sync.WaitGroup
 	for i, h := range sel {
@@ -287,6 +321,7 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	all.Wait()
 
 	out := r.combine(&in, info, sel, procs)
+	out.Records = append(out.Records, started...)
 	if slices.ContainsFunc(procs, func(p proc) bool { return p.cancelled }) {
 		return r.refuse(in.Event, out.Records, stopped(ctx, in.Event))
 	}

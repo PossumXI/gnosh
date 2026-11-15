@@ -216,6 +216,16 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 			for _, it := range items {
 				h.Args = append(h.Args, it.str)
 			}
+		case m.key == "async" || m.key == "asyncRewake":
+			if m.val.kind != jBool {
+				bad(m.line, "a hook's \"%s\" is true or false, and here it is %s.", m.key, m.val.kind.word())
+				break
+			}
+			if m.key == "async" {
+				h.Async = m.val.b
+			} else {
+				h.AsyncRewake = m.val.b
+			}
 		case m.key == "timeout":
 			secs, err := strconv.ParseFloat(m.val.str, 64)
 			if m.val.kind != jNumber || err != nil || secs <= 0 || secs > 1e7 {
