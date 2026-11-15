@@ -144,19 +144,19 @@ func TestSkillLoadedByTheModel(t *testing.T) {
 // model alone run by typing it.
 func TestSkillThatCannotBeRun(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Nothing to do."})
-	w.Write(w.ConfigDir()+"/skills/audit/SKILL.md", "---\ndescription: Audits the repo.\ncontext: fork\nmodel: big\n---\nRead everything, after !`git status`.\n")
+	w.Write(w.ConfigDir()+"/skills/audit/SKILL.md", "---\ndescription: Audits the repo.\npaths: \"*.go\"\nmodel: big\n---\nRead everything, after !`git status`.\n")
 	w.Write(w.ConfigDir()+"/skills/quiet/SKILL.md", "---\ndescription: For the model.\nuser-invocable: false\n---\nBe quiet.\n")
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/audit")
-	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for a model of its own (model), running in a sub-agent (context: fork), commands run before the model sees it")
+	s.see("error: the skill was not run: the skill audit (" + w.ConfigDir() + "/skills/audit/SKILL.md) asks for loading by the files being worked on (paths), a model of its own (model), commands run before the model sees it")
 	s.see("It is not run without: that would be another skill than the one its author wrote")
 	s.typeLine("/quiet")
 	s.see("error: the skill quiet is for the model alone")
 	s.typeLine("/nosuchskill")
 	s.see("There is no command /nosuchskill.")
 	s.typeLine("/skills")
-	s.see("cannot be run by this gnosh: it asks for a model of its own (model)")
+	s.see("cannot be run by this gnosh: it asks for loading by the files being worked on (paths), a model of its own (model)")
 	s.typeLine("/exit")
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
@@ -290,5 +290,37 @@ func TestSkillDisallowedToolsAndEffort(t *testing.T) {
 	first, second := requestText(t, w, 0), requestText(t, w, 1)
 	has(t, "what the model read of the refusal", second, "This call did not run. The deny rule Bash switches Bash off.")
 	has(t, "the first request's thinking", first, `"reasoning_effort":"high"`)
+	w.Model.Done()
+}
+
+// A skill with context: fork runs in a sub-agent (spec/cc/slash-commands-
+// and-skills.md 5.6): its text is the sub-agent's task, never the
+// conversation's, and the sub-agent's report is what comes back, whether
+// the model loaded the skill or the person typed it.
+func TestForkedSkill(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Skill", Args: `{"skill":"audit","args":"src"}`}}},
+		apptest.Reply{Text: "SUB-REPORT-77: two problems in src."},
+		apptest.Reply{Text: "Done."},
+		apptest.Reply{Text: "SUB-REPORT-88: nothing found."},
+		apptest.Reply{Text: "Told."})
+	w.Write(w.ConfigDir()+"/skills/audit/SKILL.md", "---\ndescription: Audits a folder.\ncontext: fork\nagent: Explore\n---\nFORK-BODY-55: audit $ARGUMENTS and report.\n")
+
+	// The model loads it.
+	r := run(t, w, "-y", "-p", "audit src").wantCode(t, 0)
+	has(t, "the run", r.out, "Done.")
+	sub, after := requestText(t, w, 1), requestText(t, w, 2)
+	has(t, "the sub-agent's task", sub, "FORK-BODY-55: audit src and report.")
+	hasNot(t, "the sub-agent's tools (Explore)", sub, `"name":"Bash"`)
+	has(t, "what came back to the model", after, "SUB-REPORT-77: two problems in src.")
+	hasNot(t, "what came back to the model", after, "FORK-BODY-55")
+
+	// The person types it.
+	r = run(t, w, "-y", "-p", "/audit lib").wantCode(t, 0)
+	has(t, "the typed run", r.out, "Told.")
+	has(t, "the typed skill's task", requestText(t, w, 3), "FORK-BODY-55: audit lib and report.")
+	last := requestText(t, w, 4)
+	has(t, "the report in front of the model", last, "It ran in a sub-agent", "SUB-REPORT-88: nothing found.")
+	hasNot(t, "the report in front of the model", last, "FORK-BODY-55")
 	w.Model.Done()
 }

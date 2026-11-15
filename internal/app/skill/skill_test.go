@@ -41,8 +41,22 @@ func TestParse(t *testing.T) {
 
 	// What this gnosh does not have is named, each thing.
 	sk, reason = Parse("---\ncontext: fork\nmodel: opus\neffort: high\nhooks:\n  Stop:\n    - x\npaths: [\"*.go\"]\ndisallowed-tools: Bash\nshell: powershell\n---\nRun !`git status` first.\n", "big")
-	if reason != "" || len(sk.Unbuilt) != 6 {
+	if reason != "" || len(sk.Unbuilt) != 4 {
 		t.Errorf("what is not built: %q (%s)", sk.Unbuilt, reason)
+	}
+	// context: fork is built, and a forked skill's model is its
+	// sub-agent's.
+	if !sk.Fork || sk.Model != "opus" {
+		t.Errorf("fork %v, model %q", sk.Fork, sk.Model)
+	}
+	if sk, _ := Parse("---\nmodel: opus\n---\nx\n", "x"); len(sk.Unbuilt) != 1 || sk.Model != "" {
+		t.Errorf("a model for a skill that is not forked: %q, %q", sk.Unbuilt, sk.Model)
+	}
+	if sk, _ := Parse("---\ncontext: fork\nagent: Explore\nbackground: true\n---\nx\n", "x"); !sk.Fork || sk.Agent != "Explore" || !sk.Background || len(sk.Unbuilt) != 0 {
+		t.Errorf("a forked skill: %+v", sk)
+	}
+	if sk, _ := Parse("---\ncontext: thread\n---\nx\n", "x"); len(sk.Unbuilt) != 1 || sk.Fork {
+		t.Errorf("a context gnosh does not know: %q", sk.Unbuilt)
 	}
 	// effort and disallowed-tools are built: read, and not listed.
 	if sk.Effort != "high" || len(sk.DisallowedTools) != 1 || sk.DisallowedTools[0] != "Bash" {

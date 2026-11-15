@@ -42,12 +42,13 @@ import (
 // What is built of a skill's settings: its name, description, when_to_use,
 // argument-hint, arguments, disable-model-invocation, user-invocable,
 // allowed-tools and disallowed-tools (rules that let calls run, or refuse
-// them, until the person's next prompt) and effort (a thinking level
-// until then). A skill that asks for anything else Claude Code's format
-// has (a model of its own, hooks, a sub-agent to run in, loading by path,
-// commands run before the model sees it) is refused, with the reason,
-// when it is run: it is never run as something else. A sub-agent has no
-// Skill tool.
+// them, until the person's next prompt), effort (a thinking level until
+// then), and context: fork with agent, background and model (the skill
+// runs in a sub-agent of that kind, on that model: forkSkill). A skill
+// that asks for anything else Claude Code's format has (a model of its
+// own outside a fork, hooks, loading by path, commands run before the
+// model sees it) is refused, with the reason, when it is run: it is never
+// run as something else. A sub-agent has no Skill tool.
 
 // skillToolName is the name of the tool, which is Claude Code's.
 const skillToolName = "Skill"
@@ -355,6 +356,11 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 	if sk.Effort != "" {
 		l.skillEffort(sk)
 	}
+	if sk.Fork {
+		// (A forked skill's text is a sub-agent's task: it never enters
+		// this conversation, and is not given back after a summary.)
+		return text, false, ""
+	}
 	l.skillMu.Lock()
 	defer l.skillMu.Unlock()
 	for i, r := range l.skillRuns {
@@ -448,6 +454,9 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 			added = "\n\n" + hookWords(hooks.UserPromptExpansion, "", c)
 		}
 	}
+	if sk.Fork {
+		return l.typedFork(sk, text, line, res)
+	}
 	lead := fmt.Sprintf("The user ran the skill %q by typing: %s\nWhat follows is the skill: the user's own instructions for this kind of task. Carry them out now.", sk.Name, oneLine(line, 400))
 	body := prompt.Wrap(lead) + "\n\n" + text + added
 	if again {
@@ -529,6 +538,13 @@ func (t *skillTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 		return core.ErrorResult("The skill was not loaded: " + refusal + "."), nil
 	}
 	meta := map[string]any{"skill": sk.Name, "source": sk.Source}
+	if sk.Fork {
+		// The skill's text is a sub-agent's task, and its report is the
+		// result.
+		out, _ := t.l.forkSkill(ctx, call.ID, sk, text)
+		out.Meta = meta
+		return out, nil
+	}
 	if again {
 		return core.ToolResult{Content: []core.Block{core.Text(fmt.Sprintf("The skill %s is already in this conversation with the same text, where it was last loaded. Follow it from there.", sk.Name))}, Meta: meta}, nil
 	}
@@ -606,4 +622,55 @@ func (l *live) slashSkills(ctx context.Context, c *SlashContext) error {
 		}
 	}
 	return nil
+}
+
+// forkSkill runs a skill with context: fork (spec/cc/slash-commands-and-
+// skills.md 5.6): its text is the task of a sub-agent of the kind the
+// skill names (general-purpose when it names none), which sees nothing of
+// the conversation, and the sub-agent's report is the result. It waits
+// for the report, as gnosh's Agent calls do, unless the skill asks to run
+// in the background (background: true) and the session can: the report
+// then comes later as a notice.
+func (l *live) forkSkill(ctx context.Context, callID string, sk skill.Skill, text string) (core.ToolResult, bool) {
+	in := agentInput{Description: "the skill " + sk.Name, Prompt: text, Type: sk.Agent, Model: sk.Model}
+	if sk.Background {
+		in.Background = &sk.Background
+	}
+	input, err := json.Marshal(in)
+	if err != nil {
+		return core.ErrorResult("The skill was not run: " + err.Error() + "."), false
+	}
+	call := core.ToolCall{ID: callID, Name: agentToolName, Input: input}
+	out, err := (&agentTool{l: l}).Run(ctx, call, l.env())
+	if err != nil {
+		return core.ErrorResult("The skill was not run: " + err.Error() + "."), false
+	}
+	return out, !out.IsError
+}
+
+// typedFork runs a forked skill the person typed: the sub-agent does the
+// skill's task, and its report goes to the model as a prompt of gnosh's
+// own, which the model answers. A skill run in the background says so,
+// and its report comes to the model when it ends.
+func (l *live) typedFork(sk skill.Skill, text, line string, res CommandResult) (CommandResult, bool, error) {
+	if l.interactive {
+		l.notice(agent.LevelInfo, "skill", fmt.Sprintf("The skill %s runs in a sub-agent (%s).", sk.Name, sk.Source))
+	}
+	out, ok := l.forkSkill(l.ctx, newCallID(), sk, text)
+	report := strings.TrimSpace(core.TextOf(out.Content))
+	if !ok {
+		return res, true, fmt.Errorf("the skill was not run: %s", firstOf(report, "the sub-agent did not start"))
+	}
+	if status, _ := out.Meta["status"].(string); status == "async_launched" {
+		res.Text = fmt.Sprintf("The skill %s runs in a sub-agent in the background; its report comes to the model when it ends.", sk.Name)
+		return res, true, nil
+	}
+	body := prompt.Wrap(fmt.Sprintf("The user ran the skill %q by typing: %s\nIt ran in a sub-agent, which saw nothing of this conversation, and this is its report. Tell the user what came of it, and carry on from there if the skill asks for more.", sk.Name, oneLine(line, 400))) + "\n\n" + prompt.Untrusted(report)
+	id, err := l.agent.Submit(agent.Prompt{Hidden: true, Source: "skill", Text: body,
+		Notice: fmt.Sprintf("The skill %s ran in a sub-agent; its report is in front of the model.", sk.Name)})
+	if err != nil {
+		return res, true, fmt.Errorf("the skill's report could not be sent to the model: %v", err)
+	}
+	res.Prompt = id
+	return res, true, nil
 }

@@ -55,6 +55,16 @@ type Skill struct {
 	// Effort is the thinking level the skill asks for, for that turn: one
 	// of the model's levels, max or auto.
 	Effort string
+	// Fork says the skill runs in a sub-agent (context: fork): its text is
+	// the sub-agent's task, and only its report comes back. Agent is the
+	// kind of sub-agent, empty for the default; Background asks for it to
+	// run beside the session (background: true).
+	Fork       bool
+	Agent      string
+	Background bool
+	// Model is the model of a forked skill's sub-agent, or empty for the
+	// session's. (A model for a skill that is not forked is not built.)
+	Model string
 	// Body is the instructions: the file without its settings.
 	Body string
 	// Dir is the folder that holds the file, Source the file, and Scope
@@ -222,7 +232,7 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 		fields = nil
 	}
 	sk.Name, sk.Body = fallback, body
-	when, context, shell := "", "", ""
+	when, context, shell, model := "", "", "", ""
 	for _, f := range fields {
 		switch f.Key {
 		case "name":
@@ -261,11 +271,15 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 			sk.Effort = strings.ToLower(strings.TrimSpace(f.Scalar))
 		case "context":
 			context = f.Scalar
+		case "agent":
+			sk.Agent = strings.TrimSpace(f.Scalar)
+		case "background":
+			sk.Background = truth(f.Scalar)
 		case "shell":
 			shell = f.Scalar
 		case "model":
-			if f.Scalar != "" && f.Scalar != "inherit" {
-				sk.Unbuilt = append(sk.Unbuilt, "a model of its own (model)")
+			if f.Scalar != "inherit" {
+				model = f.Scalar
 			}
 		case "hooks", "paths":
 			if f.Set() {
@@ -276,8 +290,19 @@ func Parse(text, fallback string) (sk Skill, reason string) {
 			}
 		}
 	}
-	if context != "" {
-		sk.Unbuilt = append(sk.Unbuilt, "running in a sub-agent (context: "+context+")")
+	switch context {
+	case "":
+	case "fork":
+		sk.Fork = true
+	default:
+		sk.Unbuilt = append(sk.Unbuilt, "a context gnosh does not know (context: "+context+")")
+	}
+	switch {
+	case model == "":
+	case sk.Fork:
+		sk.Model = model // the sub-agent's
+	default:
+		sk.Unbuilt = append(sk.Unbuilt, "a model of its own (model)")
 	}
 	if shell != "" && shell != "bash" {
 		sk.Unbuilt = append(sk.Unbuilt, "the shell "+shell)
