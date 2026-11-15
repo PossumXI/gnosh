@@ -60,7 +60,8 @@ func TestUnknownFlags(t *testing.T) {
 		{line: `gnosh --file a:b`, kind: ErrUnknownFlag, say: []string{"--file is not a flag of gnosh"}},
 		{line: `gnosh --enable-auto-mode`, kind: ErrUnknownFlag, say: []string{"--enable-auto-mode is not a flag of gnosh"}},
 		// So are the ones Claude Code has and the specs put off till later.
-		{line: `gnosh -w feature`, kind: ErrUnknownFlag, say: []string{"-w is not a flag of gnosh"}},
+		// -w is Claude Code's letter for --worktree, which gnosh spells out.
+		{line: `gnosh -w feature`, kind: ErrUnknownFlag, hint: "--worktree", say: []string{"-w is not a flag of gnosh", "Did you mean --worktree?", "-cwd"}},
 
 		// Only whole names count: no flag is guessed from its start, though
 		// the start is enough for a suggestion.

@@ -592,3 +592,29 @@ or kept with the reason said (27).
     are not secrets. The person's own inputs (/mem) are theirs to make,
     and a secret mem does not recognize is still kept until /mem redact
     takes it out, as GNOMEM.md shows.
+47. **--worktree: a session in a git work tree of the repository's
+    own,** as Claude Code's (its worktrees page). It is
+    .gnosh/worktrees/<name> on the branch worktree-<name>. One of that
+    name already there is opened again, and a branch of that name left
+    from before is checked out again. Without a name one is made up
+    (bright-river-3f2a). The session starts in the folder of the work
+    tree that stands where it was started. The gate keeps its edits, and
+    its sub-agents', out of the person's checkout, as for a sub-agent's
+    work tree (43). Where gnosh differs, and why:
+    - It is spelled out only. -w, Claude Code's letter, would let a
+      mistyped -cwd be read as -c -w -d, against the table's rule that
+      no flag's word is made of one-letter flags. A typed -w is told to
+      use --worktree.
+    - It starts at the commit checked out, not at the remote's default
+      branch, which would need the network (as 43).
+    - The folder must be trusted in print mode too, since making one
+      runs git.
+    - It is not started from inside another linked work tree.
+    - At the end nobody is asked. A work tree left as it was made, not
+      named and not there before, goes with its branch. Any other is
+      kept, with a line that says how to come back to it (gnosh
+      --worktree <name>) and how to take it away.
+    The session's records are kept under the work tree's folder, so
+    `gnosh --worktree <name> -c` goes on where it left off. Not built:
+    .worktreeinclude, a pull request's head (#123), worktree.baseRef, and
+    the status line's worktree field.

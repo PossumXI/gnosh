@@ -181,6 +181,9 @@ func Default() *Table {
 	cwd := t.add(&flag{names: "--cwd", kind: kindText, arg: "dir", group: groupSettings, pri: 0,
 		help: "Work in this folder instead of the current one.",
 		set:  func(i *Invocation, v flagValue) { i.Cwd = v.text }})
+	worktree := t.add(&flag{names: "--worktree", kind: kindOptional, arg: "name", group: groupSettings, pri: 2,
+		help: "Work in a git work tree of the repository's own, in .gnosh/worktrees/<name> on the branch worktree-<name>, made at the commit checked out; one of that name already there is opened again. Without a name, one is made up. A work tree left as it was made is removed when the session ends, unless it was named; any other is kept. The folder must be trusted.",
+		set:  func(i *Invocation, v flagValue) { i.Worktree, i.WorktreeName = true, v.text }})
 	settings := t.add(&flag{names: "--settings", kind: kindText, arg: "file-or-json", group: groupSettings, pri: 0,
 		help: "Extra settings for this run: a file, or the JSON itself. They win over the settings files for the keys they name.",
 		set:  func(i *Invocation, v flagValue) { i.Settings = v.text }})
@@ -268,7 +271,7 @@ func Default() *Table {
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents, asAgent,
-		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
+		cwd, worktree, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, prompts, noPersist,
 		help, version,
 	}

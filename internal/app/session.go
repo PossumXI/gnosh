@@ -435,6 +435,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		SessionID:     l.ts.ID(),
 		Cwd:           l.cfg.Paths.Cwd,
 		Roots:         l.roots,
+		Tree:          l.st.treeEnv(),
 		Interactive:   l.interactive,
 		StartSource:   l.source,
 		Model:         l.large.model,
@@ -1528,6 +1529,8 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 	if st == nil {
 		return code
 	}
+	// --worktree's work tree goes, or is kept, once the session has ended.
+	defer st.leaveTree()
 	st.attended = interactive
 	if st.printProblems() {
 		return cli.ExitFailure

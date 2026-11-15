@@ -110,6 +110,13 @@ What the model is told
 Settings for this run
   --cwd <dir>
       Work in this folder instead of the current one.
+  --worktree [name]
+      Work in a git work tree of the repository's own, in
+      .gnosh/worktrees/<name> on the branch worktree-<name>, made at the
+      commit checked out; one of that name already there is opened again.
+      Without a name, one is made up. A work tree left as it was made is
+      removed when the session ends, unless it was named; any other is kept.
+      The folder must be trusted. (Not built yet.)
   --settings <file-or-json>
       Extra settings for this run: a file, or the JSON itself. They win over
       the settings files for the keys they name.

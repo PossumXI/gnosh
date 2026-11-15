@@ -366,6 +366,13 @@ func (p *parsed) unknownLetter(arg string, r rune) *Error {
 			lead, c.title(), nothing(c), oneOf(owners, "and"))
 		return e
 	}
+	// A letter Claude Code has for a flag gnosh spells out only.
+	if long, ok := spelledOut[r]; ok && c.long(long) != nil {
+		e.Suggestion = "--" + long
+		e.Message = fmt.Sprintf("%s is not a flag of %s, so %s. Did you mean %s? gnosh has it spelled out only: as one letter, a mistyped -cwd would be read as -c -w -d.",
+			lead, c.title(), nothing(c), e.Suggestion)
+		return e
+	}
 	// The same letter in the other case.
 	for _, f := range c.typable {
 		for _, s := range f.short {
@@ -474,3 +481,8 @@ func (t *Table) owners(is func(*command) bool, not *command) []string {
 	}
 	return out
 }
+
+// spelledOut are the one-letter flags of Claude Code's that gnosh has only
+// spelled out, by the flag's word: a letter of their own would let a word
+// flag typed with one dash be read as letters (-cwd as -c -w -d).
+var spelledOut = map[rune]string{'w': "worktree"}

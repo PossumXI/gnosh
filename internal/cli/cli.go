@@ -214,6 +214,11 @@ type Invocation struct {
 
 	// Cwd is the folder to work in (--cwd).
 	Cwd string
+	// Worktree says to work in a git work tree of the repository's own
+	// (--worktree), named WorktreeName, or with a name made up when
+	// that is empty.
+	Worktree     bool
+	WorktreeName string
 	// Settings is what followed --settings: a file's path, or the settings
 	// themselves as JSON. SettingsInline says it is JSON (it begins with a
 	// brace).

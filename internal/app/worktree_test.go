@@ -56,7 +56,7 @@ func TestSubAgentWorktree(t *testing.T) {
 		t.Errorf("the sub-agent wrote into the session's own folder")
 	}
 	report := toolResult(t, w, 3, "c1")
-	has(t, "the report", report, "Wrote new.txt.", "It worked in its own git work tree", "on the branch gnosh-agent-", "it holds 1 file it changed or made and did not commit", "worktree remove --force")
+	has(t, "the report", report, "Wrote new.txt.", "It worked in its own git work tree", "on the branch gnosh-agent-", "it holds 1 file changed or made and not committed", "worktree remove --force")
 	m := regexp.MustCompile(`work tree, (\S+), on the branch`).FindStringSubmatch(report)
 	if m == nil {
 		t.Fatalf("the report names no work tree:\n%s", report)

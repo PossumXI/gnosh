@@ -46,6 +46,9 @@ type startup struct {
 	// own settings are in force.
 	folder  trust.Folder
 	trusted bool
+	// tree is the git work tree --worktree has the session work in
+	// (sessiontree.go).
+	tree *sessionTree
 	// decision is what the trust record and the command line came to.
 	decision trust.Decision
 	// gitPrograms is what the repository's own git settings name that git
@@ -211,6 +214,11 @@ func (p *program) prepare(ctx context.Context, inv cli.Invocation, interactive b
 		st.load(true)
 		if st.cfg == nil {
 			return st, cli.ExitFailure
+		}
+	}
+	if inv.Worktree {
+		if code := st.enterTree(ctx, trusted); code != cli.ExitOK {
+			return nil, code
 		}
 	}
 	return st, cli.ExitOK

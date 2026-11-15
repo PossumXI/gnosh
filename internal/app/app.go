@@ -199,7 +199,7 @@ func (p *program) warnf(format string, args ...any) {
 // not built has no row (spec/DECISIONS.md, 26).
 var built = []string{
 	"doctor", "doctor --hosts", "trust", "trust --list", "trust --forget",
-	"dirs", "logs", "logs --tail", "logs --follow", "models", "ssh",
+	"dirs", "logs", "logs --tail", "logs --follow", "models", "ssh", "--worktree",
 	"session list", "session show", "session last", "session rename",
 	"session --json",
 	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",

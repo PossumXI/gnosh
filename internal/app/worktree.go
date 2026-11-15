@@ -52,9 +52,15 @@ var gitEnvDrop = []string{"GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE=", "GIT_
 // without the variables that would point it elsewhere. An error says what
 // git said.
 func (l *live) git(ctx context.Context, dir string, args ...string) (string, error) {
+	return runGit(ctx, l.p.o.Environ, dir, args...)
+}
+
+// runGit is live.git for code that has no session yet: git in dir, in
+// the environment environ, as live.git runs it.
+func runGit(ctx context.Context, environ []string, dir string, args ...string) (string, error) {
 	base := []string{"--no-pager", "-c", "core.fsmonitor=false", "-C", dir}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
-	env := slices.DeleteFunc(slices.Clone(l.p.o.Environ), func(kv string) bool {
+	env := slices.DeleteFunc(slices.Clone(environ), func(kv string) bool {
 		return slices.ContainsFunc(gitEnvDrop, func(p string) bool { return strings.HasPrefix(kv, p) })
 	})
 	cmd.Env = append(env, "GIT_PAGER=cat", "PAGER=cat", "GIT_TERMINAL_PROMPT=0")
@@ -102,33 +108,17 @@ func (l *live) makeWorktree(ctx context.Context, cwd, id string) (*worktree, str
 	if err != nil || base == "" {
 		return nil, "", errors.New("the repository has no commit yet, so there is nothing to make a work tree of")
 	}
-	root := filepath.Join(l.cfg.Paths.DataDir, worktreesDir)
-	if st, err := os.Lstat(root); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		// A link there would put the work trees, and what the permission
-		// rules let be changed in them, somewhere else.
-		return nil, "", fmt.Errorf("%s is a link, and gnosh makes work trees only in a folder of its own there", root)
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return nil, "", fmt.Errorf("the folder for work trees could not be made: %v", err)
-	}
-	if ignore := filepath.Join(root, ".gitignore"); !fileExists(ignore) {
-		_ = os.WriteFile(ignore, []byte("*\n"), 0o644)
+	root, err := treesFolder(l.cfg.Paths.DataDir)
+	if err != nil {
+		return nil, "", err
 	}
 	name := treeName(id)
 	wt := &worktree{repo: top, path: filepath.Join(root, name), branch: "gnosh-" + name, base: base}
 	if _, err := l.git(ctx, top, "rev-parse", "--verify", "--quiet", "refs/heads/"+wt.branch); err == nil || fileExists(wt.path) {
 		return nil, "", fmt.Errorf("the branch %s or the folder %s is there already, so no work tree was made", wt.branch, wt.path)
 	}
-	if _, err := l.git(ctx, top, "worktree", "add", "--quiet", "-b", wt.branch, wt.path, base); err != nil {
-		// git may have made the branch, or part of the work tree, before
-		// it failed (a hook that failed, a stop half way): they go.
-		clean, done := context.WithTimeout(context.Background(), time.Minute)
-		defer done()
-		_, _ = l.git(clean, top, "worktree", "remove", "--force", wt.path)
-		_ = os.RemoveAll(wt.path)
-		_, _ = l.git(clean, top, "worktree", "prune")
-		_, _ = l.git(clean, top, "branch", "-D", wt.branch)
-		return nil, "", fmt.Errorf("git could not make the work tree: %v", err)
+	if err := addTree(ctx, l.p.o.Environ, wt, true); err != nil {
+		return nil, "", err
 	}
 	if err := l.engine.AddDir(wt.path); err != nil {
 		l.flog.logf("turn", "the work tree %s could not be made a working directory: %v", wt.path, err)
@@ -158,17 +148,11 @@ func (l *live) endWorktree(wt *worktree) (note string, kept bool) {
 		return fmt.Sprintf("[It worked in its own git work tree, %s, on the branch %s, which started at %s: %s. None of it is in the folder you work in. Look at it there, and merge the branch or copy what you want; then git -C %s worktree remove --force %s and git -C %s branch -D %s take it away.]",
 			wt.path, wt.branch, shortCommit(wt.base), why, wt.repo, wt.path, wt.repo, wt.branch), true
 	}
-	status, err := l.git(ctx, wt.path, "status", "--porcelain", "--ignored", "--untracked-files=all")
+	what, err := treeHolds(ctx, l.p.o.Environ, wt)
 	if err != nil {
-		return keep(fmt.Sprintf("whether it changed anything there could not be told (%v), so the work tree is kept", err))
+		return keep(err.Error() + ", so the work tree is kept")
 	}
-	head, err1 := l.git(ctx, wt.path, "rev-parse", "HEAD")
-	commits, err2 := l.git(ctx, wt.repo, "rev-list", "--count", wt.base+"..refs/heads/"+wt.branch)
-	n, err3 := strconv.Atoi(commits)
-	if err1 != nil || err2 != nil || err3 != nil {
-		return keep("how far its branch went could not be told, so the work tree is kept")
-	}
-	if strings.TrimSpace(status) == "" && n == 0 && head == wt.base {
+	if len(what) == 0 {
 		if _, err := l.git(ctx, wt.repo, "worktree", "remove", wt.path); err != nil {
 			return fmt.Sprintf("[It worked in its own git work tree, %s, and changed nothing there; the work tree could not be removed (%v).]", wt.path, err), true
 		}
@@ -177,9 +161,70 @@ func (l *live) endWorktree(wt *worktree) (note string, kept bool) {
 		}
 		return "[It worked in its own git work tree and changed nothing there; the work tree is removed.]", false
 	}
+	return keep("it holds " + strings.Join(what, " and "))
+}
+
+// treesFolder makes the folder of work trees in the data folder dataDir,
+// with a .gitignore that keeps them out of the repository's status, and
+// returns it. It refuses a folder that is a link: that would put the work
+// trees, and what the permission rules let be changed in them, somewhere
+// else.
+func treesFolder(dataDir string) (string, error) {
+	root := filepath.Join(dataDir, worktreesDir)
+	if st, err := os.Lstat(root); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s is a link, and gnosh makes work trees only in a folder of its own there", root)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return "", fmt.Errorf("the folder for work trees could not be made: %v", err)
+	}
+	if ignore := filepath.Join(root, ".gitignore"); !fileExists(ignore) {
+		_ = os.WriteFile(ignore, []byte("*\n"), 0o644)
+	}
+	return root, nil
+}
+
+// addTree adds the work tree wt to its repository: on a new branch at its
+// base when newBranch is set, else on its branch as it stands. What a
+// failed attempt left behind (a branch git made, part of the folder) is
+// taken away.
+func addTree(ctx context.Context, environ []string, wt *worktree, newBranch bool) error {
+	args := []string{"worktree", "add", "--quiet", wt.path, wt.branch}
+	if newBranch {
+		args = []string{"worktree", "add", "--quiet", "-b", wt.branch, wt.path, wt.base}
+	}
+	if _, err := runGit(ctx, environ, wt.repo, args...); err != nil {
+		clean, done := context.WithTimeout(context.Background(), time.Minute)
+		defer done()
+		_, _ = runGit(clean, environ, wt.repo, "worktree", "remove", "--force", wt.path)
+		_ = os.RemoveAll(wt.path)
+		_, _ = runGit(clean, environ, wt.repo, "worktree", "prune")
+		if newBranch {
+			_, _ = runGit(clean, environ, wt.repo, "branch", "-D", wt.branch)
+		}
+		return fmt.Errorf("git could not make the work tree: %v", err)
+	}
+	return nil
+}
+
+// treeHolds says what the work tree wt holds that its removal would take
+// away: files changed or made and not committed (git's ignored ones
+// among them), commits on its branch past where it started, a HEAD moved
+// elsewhere. Nothing means it is as it was made. An error says what could
+// not be told.
+func treeHolds(ctx context.Context, environ []string, wt *worktree) ([]string, error) {
+	status, err := runGit(ctx, environ, wt.path, "status", "--porcelain", "--ignored", "--untracked-files=all")
+	if err != nil {
+		return nil, fmt.Errorf("whether anything was changed there could not be told (%v)", err)
+	}
+	head, err1 := runGit(ctx, environ, wt.path, "rev-parse", "HEAD")
+	commits, err2 := runGit(ctx, environ, wt.repo, "rev-list", "--count", wt.base+"..refs/heads/"+wt.branch)
+	n, err3 := strconv.Atoi(commits)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return nil, errors.New("how far its branch went could not be told")
+	}
 	var what []string
 	if lines := strings.Count(strings.TrimSpace(status), "\n") + 1; strings.TrimSpace(status) != "" {
-		what = append(what, countWords(lines, "file it changed or made and did not commit (git's ignored ones among them)", "files it changed or made and did not commit (git's ignored ones among them)"))
+		what = append(what, countWords(lines, "file changed or made and not committed (git's ignored ones among them)", "files changed or made and not committed (git's ignored ones among them)"))
 	}
 	if n > 0 {
 		what = append(what, countWords(n, "commit", "commits"))
@@ -187,7 +232,7 @@ func (l *live) endWorktree(wt *worktree) (note string, kept bool) {
 	if head != wt.base && n == 0 {
 		what = append(what, "a HEAD that is no longer the commit it started at")
 	}
-	return keep("it holds " + strings.Join(what, " and "))
+	return what, nil
 }
 
 // fileExists reports whether there is a file or folder at p.

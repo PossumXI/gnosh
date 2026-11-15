@@ -41,6 +41,10 @@ type Options struct {
 	// are the directories it works in.
 	Cwd   string
 	Roots []string
+	// Tree is the git work tree the session works in apart from the
+	// person's checkout (--worktree), or nil: its tools are given it
+	// (core.ToolEnv.Tree), and so are its sub-agents'.
+	Tree *core.WorkTree
 	// Interactive says a person is there to answer questions. Without it
 	// every question is answered with ErrNobodyToAsk at once.
 	Interactive bool
@@ -351,6 +355,7 @@ func newAgent(opts Options, parent *Agent, sub SubOptions) (*Agent, error) {
 		noAuto:    opts.NoAutoCompact,
 		cwd:       opts.Cwd,
 		roots:     slices.Clone(opts.Roots),
+		tree:      opts.Tree,
 		questions: make(map[string]chan Answer),
 		calib:     1,
 	}
