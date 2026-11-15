@@ -60,7 +60,11 @@ func (s scrubbed) told() string {
 		parts = append(parts, fmt.Sprintf("what you saw of it is still in %d session(s), %s, and reaches the model again in them: start a new session, or delete those", n, quoted(s.shown)))
 	}
 	if n := len(s.left); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d session(s) are open in another gnosh, %s, so gnosh's own copies in them were left as they are: close them, and run the same /mem redact again", n, quoted(s.left)))
+		// What follows an erasure may have been a forget, or the agent's
+		// own call, and neither can be typed again: mem no longer knows
+		// the name. /mem redact with the text reaches those copies after
+		// any of them.
+		parts = append(parts, fmt.Sprintf("%d session(s) are open in another gnosh, %s, so gnosh's own copies in them were left as they are: to take a text out of them too, close them and run /mem redact with that text", n, quoted(s.left)))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -194,13 +198,17 @@ type scrubber struct {
 }
 
 // name is what a session is called for a person: its title, else the
-// start of its first prompt, else the start of its id.
+// start of its first prompt, else the start of its id. A title or a prompt
+// may itself hold what was erased, so it is named without it: the person
+// is told which session it is, and not the text again.
 func (sc *scrubber) name(id string) string {
-	switch {
-	case sc.title != "":
-		return sc.title
-	case sc.prompt != "":
-		return clipText(firstLine(sc.prompt), 60)
+	if title := strings.TrimSpace(sc.e.Scrub(sc.title)); title != "" {
+		return title
+	}
+	// The whole prompt first, and then its start: a text cut short by the
+	// clipping would no longer be found.
+	if start := clipText(firstLine(sc.e.Scrub(sc.prompt)), 60); start != "" {
+		return start
 	}
 	if len(id) > 8 {
 		return id[:8]
@@ -301,6 +309,13 @@ func (sc *scrubber) edit(en *transcript.Entry) bool {
 			return false
 		}
 	default:
+		// A line gnosh said for itself about mem is a copy of mem's text
+		// too, and the one copy that is neither sent to a model nor
+		// something the person typed.
+		if sc.said(en) {
+			sc.held = true
+			return true
+		}
 		return false
 	}
 	// What the loop keeps beside such an entry (a summary's own blocks)
@@ -314,6 +329,54 @@ func (sc *scrubber) edit(en *transcript.Entry) bool {
 		sc.held = true
 	}
 	return changed
+}
+
+// How a line gnosh said for itself is kept in a session's file, as the
+// wiring writes it: an entry of this type, whose Extra holds the loop's own
+// fields under this key. Who said the line is one of those fields, and its
+// text another.
+const (
+	saidEntry transcript.EntryType = "notice"
+	loopKey                        = "loop"
+)
+
+// said takes what was erased out of a line gnosh said for itself about
+// mem or about a goal (a todo that is due, a rule that was set, a pop, a
+// goal's verdict), and reports whether that changed it. Only the line's
+// text is gone through: the loop's other fields are words of gnosh's own,
+// which an erased text must not be able to change. A line that came from
+// anywhere else is not mem's text, and is left as it is.
+func (sc *scrubber) said(en *transcript.Entry) bool {
+	if en.Type != saidEntry {
+		return false
+	}
+	var loop map[string]json.RawMessage
+	if json.Unmarshal(en.Extra[loopKey], &loop) != nil {
+		return false
+	}
+	var kind, src, text string
+	if json.Unmarshal(loop["kind"], &kind) != nil || kind != string(saidEntry) {
+		return false
+	}
+	if json.Unmarshal(loop["src"], &src) != nil || (src != "mem" && src != "goal") {
+		return false
+	}
+	if json.Unmarshal(loop["text"], &text) != nil || !sc.text(&text) {
+		return false
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if enc.Encode(text) != nil {
+		return false
+	}
+	loop["text"] = bytes.TrimRight(buf.Bytes(), "\n")
+	out, err := json.Marshal(loop)
+	if err != nil {
+		return false
+	}
+	en.Extra[loopKey] = out
+	return true
 }
 
 // renamed returns the name a todo goes by after the erasure.

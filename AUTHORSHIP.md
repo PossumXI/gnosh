@@ -51,6 +51,18 @@ sparkle marks of gnosh's own and not the earlier program's animation, and in
 an interface that has no side panel the deliverables become lines and a
 command (`spec/gnosh/harness-ui.md`, UI-33).
 
+The same evening, about a line the new gnosh printed at every start on the
+home AI box:
+
+> warning: mem due: "rotate the staging API key" (rotate-staging-api-key) (since 2026-11-06) what is this about
+
+It was a todo left by a demonstration, and it was forgotten with `/mem
+forget`. Claude's part, from what that showed: after an erasure gnosh no
+longer tells the person to "run the same /mem redact again", which cannot be
+done after a forget; the lines gnosh says for itself about mem, which are
+kept in a session's file, lose an erased text like its other copies; and a
+session is named to the person without the text that was erased.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

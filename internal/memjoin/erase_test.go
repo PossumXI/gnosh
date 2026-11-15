@@ -1,6 +1,7 @@
 package memjoin
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -214,4 +215,146 @@ func TestScrubberEdit(t *testing.T) {
 	if sc.edit(&foreign) {
 		t.Errorf("a note that is not the join's own was changed")
 	}
+
+	// A line gnosh said for itself about mem is a copy of mem's text, kept
+	// under the loop's own key. Its text loses what was erased, and the
+	// loop's other fields stay as they were, whatever was erased.
+	said := func(src, text string) transcript.Entry {
+		raw, err := json.Marshal(map[string]string{"kind": "notice", "id": "n1", "src": src, "level": "warning", "text": text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return transcript.Entry{Type: "notice", Extra: map[string]json.RawMessage{"loop": raw}}
+	}
+	fields := func(en transcript.Entry) map[string]string {
+		var f map[string]string
+		if err := json.Unmarshal(en.Extra["loop"], &f); err != nil {
+			t.Fatalf("the loop's fields no longer read as they were written: %v: %s", err, en.Extra["loop"])
+		}
+		return f
+	}
+	sc.held = false
+	due := said("mem", `mem due: "ship the release on friday" (ship-release) (since 2026-12-01) <`+token+`>`)
+	if !sc.edit(&due) || !sc.held {
+		t.Fatalf("a line gnosh said about mem that holds what was erased was not changed")
+	}
+	if f := fields(due); f["text"] != `mem due: "(forgotten)" (ship-release) (since 2026-12-01) <(redacted)>` || f["kind"] != "notice" || f["id"] != "n1" || f["src"] != "mem" || f["level"] != "warning" {
+		t.Errorf("the line after the erasure: %v", f)
+	}
+	verdict := said("goal", "Goal not met yet: nothing shows that we ship the release on friday")
+	if !sc.edit(&verdict) || fields(verdict)["text"] != "Goal not met yet: nothing shows that we (forgotten)" {
+		t.Errorf("a goal's line after the erasure: %s", verdict.Extra["loop"])
+	}
+	// An erased text that is one of the loop's own words changes none of
+	// them.
+	words := &scrubber{e: gnovm.MemErasure{Texts: map[string]string{"notice": "(redacted)", "warning": "(redacted)"}}}
+	plain := said("mem", "mem due: a notice of a warning")
+	if !words.edit(&plain) {
+		t.Fatalf("a line that holds an erased word was not changed")
+	}
+	if f := fields(plain); f["kind"] != "notice" || f["level"] != "warning" || f["text"] != "mem due: a (redacted) of a (redacted)" {
+		t.Errorf("the loop's own words after an erasure of the same words: %v", f)
+	}
+	// A line from anywhere else is not mem's text.
+	elsewhere := said("config", "the token is "+token)
+	if sc.edit(&elsewhere) || !strings.Contains(string(elsewhere.Extra["loop"]), token) {
+		t.Errorf("a line that did not come from mem was changed: %s", elsewhere.Extra["loop"])
+	}
+
+	// A session is named to the person without what was erased, whether
+	// its name is its title or the start of what was first typed in it.
+	// The secret stands where the clipping of a long first line would cut
+	// it in two: it is taken out before the line is cut.
+	named := &scrubber{e: e, prompt: "the deploy token of the staging cluster is now " + token + "\nand more"}
+	if got := named.name("0123456789"); got != "the deploy token of the staging cluster is now (redacted)" {
+		t.Errorf("a session named by its first prompt: %q", got)
+	}
+	named = &scrubber{e: e, title: "the " + token + " session"}
+	if got := named.name("0123456789"); got != "the (redacted) session" {
+		t.Errorf("a session named by its title: %q", got)
+	}
+	named = &scrubber{e: gnovm.MemErasure{Names: []string{"old-fact"}}, prompt: "forget `old-fact`"}
+	if got := named.name("0123456789"); got != "01234567" {
+		t.Errorf("a session whose name is all erased: %q", got)
+	}
+}
+
+// A session that another gnosh has open is not written under its writer.
+// An erasure leaves that session's copies as they are, names the session,
+// and says what takes a text out of it later. In a session that is
+// closed, the line gnosh said at its start about what waits on the person
+// loses the text with everything else.
+func TestErasureAndTheSessionOpenElsewhere(t *testing.T) {
+	const ask = "which key did " + token + " replace?"
+	w := newWorld(t,
+		reply(memCall("c1", `mem.Todo("rotate the key").Ask("`+ask+`")`)),
+		says("Noted."),
+	)
+	w.run("-y", "-p", "remind me to rotate the key").wantCode(t, 0)
+
+	// A second session starts and ends without a prompt. gnosh said what
+	// waits on the person, and the line is in its file.
+	r := w.run("-p", "/mem")
+	r.wantCode(t, 0)
+	has(t, "stderr as the second session starts", r.err, `mem waiting on you: "`+ask+`"`)
+	if n := len(w.Sessions()); n != 2 {
+		t.Fatalf("%d session files after the second session: %v", n, w.Sessions())
+	}
+	two := w.Sessions()[1]
+	if data, _ := os.ReadFile(two); !strings.Contains(string(data), token) {
+		t.Fatalf("the second session's file does not hold the line gnosh said as it started")
+	}
+
+	// A person sits in a third, which is told the same with its first
+	// prompt, and stays in it.
+	w.script.add(says("Hello."))
+	s := w.sit()
+	s.see("Type a prompt and Enter.")
+	s.typeLine("hello there")
+	s.see("Hello.")
+	if n := len(w.Sessions()); n != 3 {
+		t.Fatalf("%d session files with the third session open: %v", n, w.Sessions())
+	}
+	three := w.Sessions()[2]
+
+	// The secret is redacted from a fourth while the third is open.
+	r = w.run("-p", "/mem redact "+token)
+	r.wantCode(t, 0)
+	has(t, "what /mem redact says", r.out,
+		`1 session(s) are open in another gnosh, "hello there", so gnosh's own copies in them were left as they are: to take a text out of them too, close them and run /mem redact with that text`)
+	hasNot(t, "what /mem redact says", r.out, token)
+
+	// The closed session's line went; the open session's file is as its
+	// writer left it.
+	data, _ := os.ReadFile(two)
+	hasNot(t, "the second session's file", string(data), token)
+	has(t, "the second session's file", string(data), `mem waiting on you: \"which key did (redacted) replace?\"`)
+	if data, _ := os.ReadFile(three); !strings.Contains(string(data), token) {
+		t.Fatalf("the open session's file was written under its writer")
+	}
+
+	// The person leaves the third, and types the same again: now it is
+	// reached, and the secret stands only where the person saw it, in the
+	// first session's file.
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Fatalf("the third session ended with code %d\n%s", code, s.out.String())
+	}
+	r = w.run("-p", "/mem redact "+token)
+	r.wantCode(t, 0)
+	has(t, "the second /mem redact", r.out, "It was taken out of gnosh's own copies in 1 session(s).")
+	hasNot(t, "the second /mem redact", r.out+r.err, token, "open in another gnosh")
+	one := w.Sessions()[0]
+	for _, name := range holders(t, w.Root, token) {
+		if filepath.Join(w.Root, name) != one {
+			t.Errorf("%s holds the secret after the second redaction", name)
+		}
+	}
+	for _, path := range w.Sessions() {
+		sess := w.session(path)
+		if warn := sess.Warnings(); len(warn) != 0 {
+			t.Errorf("%s needed mending after the redactions: %v", filepath.Base(path), warn)
+		}
+	}
+	w.script.done()
 }

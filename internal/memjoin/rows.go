@@ -187,7 +187,7 @@ func callPath(input json.RawMessage) string {
 // when they are not there, the caller goes by whether the result is a
 // failure.
 func exitCode(e *transcript.Entry) (int, bool) {
-	raw, ok := e.Extra["loop"]
+	raw, ok := e.Extra[loopKey]
 	if !ok {
 		return 0, false
 	}
