@@ -2,6 +2,7 @@ package permission
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -1442,7 +1443,9 @@ func (e *Engine) partRuns(c *simpleCmd, f cmdFacts, st *lineState, depth int, st
 //
 // A copy of a directory with all that is in it (-R, -a) into a place that
 // already holds something under its name goes on in the same way for every
-// file inside, link by link. That is not followed: it asks.
+// file inside. So what is already there is looked through, and a link
+// among it that leads out asks; a place that holds none takes the copy
+// without a question, however much is in it.
 func (e *Engine) cpLands(f cmdFacts, st *lineState) string {
 	if len(f.writes) == 0 || e.resolve == nil {
 		// (With no way to follow links, the paths the engine is given are
@@ -1506,14 +1509,45 @@ func (e *Engine) cpLands(f cmdFacts, st *lineState) string {
 				if !f.tree {
 					continue
 				}
-				if strings.ContainsAny(land, "*?[\\") {
-					return "cp would copy " + src.raw + " with all that is in it to " + land + ", and what is already there cannot be checked ahead of time"
+				if why := e.linkUnder(land, within); why != "" {
+					return "cp would copy " + src.raw + " with all that is in it into " + land + ": " + why
 				}
-				for _, under := range []string{"/*", "/.[!.]*", "/..?*"} {
-					if ms, err := e.expandGlob(land + under); err != nil || len(ms) > 0 {
-						return "cp would copy " + src.raw + " with all that is in it into " + land + ", which already holds files: a link among them would be written through"
-					}
+			}
+		}
+	}
+	return ""
+}
+
+// linkUnder looks through what is already under dir, a place a directory
+// is about to be copied into with all that is in it, and says why the copy
+// asks, or "" when nothing there stands against it: cp writes through a
+// link that is already where one of its files goes, and into a directory
+// that a link there stands for. Every entry is held to the working
+// directories as resolved, links to directories followed as cp follows
+// them. What cannot be listed, and a place that holds more than is looked
+// through, asks.
+func (e *Engine) linkUnder(dir string, within func(string) bool) string {
+	const most = 4096
+	seen := 0
+	for queue := []string{dir}; len(queue) > 0; queue = queue[1:] {
+		d := queue[0]
+		if strings.ContainsAny(d, "*?[\\") {
+			return "what is already there cannot be listed ahead of time (" + d + " holds a character of file name patterns)"
+		}
+		for _, under := range []string{"/*", "/.[!.]*", "/..?*"} {
+			found, err := e.expandGlob(d + under)
+			if err != nil {
+				return "what is already there cannot be listed ahead of time"
+			}
+			for _, m := range found {
+				if seen++; seen > most {
+					return "it already holds more than " + strconv.Itoa(most) + " files, which is more than gnosh looks through for links"
 				}
+				real, err := e.resolve(m)
+				if err != nil || !strings.HasPrefix(real, "/") || !within(cleanPath(real)) {
+					return m + " is already there and is a link that leads out of the working directories, which cp would write through"
+				}
+				queue = append(queue, m)
 			}
 		}
 	}

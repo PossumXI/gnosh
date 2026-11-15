@@ -101,6 +101,8 @@ func TestCopyInAcceptEdits(t *testing.T) {
 		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"cp a.txt dir"}`}}},
 		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"cp a.txt new.txt"}`}}},
 		apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: `{"command":"cp a.txt trap"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c5", Name: "Bash", Args: `{"command":"cp -R tree/. dir"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c6", Name: "Bash", Args: `{"command":"cp -R tree/. deep"}`}}},
 		apptest.Reply{Text: "Copied."})
 	w.Write("a.txt", "the new text\n")
 	w.Write("b.txt", "the old text\n")
@@ -113,8 +115,24 @@ func TestCopyInAcceptEdits(t *testing.T) {
 	if err := os.Symlink(outside, w.Path("trap/a.txt")); err != nil {
 		t.Fatal(err)
 	}
+	// A folder copied with all that is in it, into a folder that holds
+	// files and no link, and into one with a link two folders down that
+	// leads out.
+	w.Write("tree/t.txt", "from the tree\n")
+	w.Write("tree/in/x", "x from the tree\n")
+	w.Write("deep/in/keep.txt", "kept\n")
+	other := filepath.Join(w.Home, "other.txt")
+	w.Write(other, "not the project's either\n")
+	if err := os.Symlink(other, w.Path("deep/in/x")); err != nil {
+		t.Fatal(err)
+	}
 	run(t, w, "--permission-mode", "acceptEdits", "-p", "copy it about").wantCode(t, 0)
-	for name, want := range map[string]string{"b.txt": "the new text\n", "dir/a.txt": "the new text\n", "new.txt": "the new text\n", outside: "not the project's\n"} {
+	if w.Exists("deep/t.txt") {
+		t.Errorf("the copy into the folder with a link that leads out ran")
+	}
+	has(t, "what the model read of the copy into the folder with a link", toolResult(t, w, 6, "c6"), "nobody is here to give it", "leads out of the working directories")
+	for name, want := range map[string]string{"b.txt": "the new text\n", "dir/a.txt": "the new text\n", "new.txt": "the new text\n", outside: "not the project's\n",
+		"dir/t.txt": "from the tree\n", "dir/in/x": "x from the tree\n", "dir/keep.txt": "kept\n", other: "not the project's either\n"} {
 		if !w.Exists(name) {
 			t.Errorf("%s is not there", name)
 		} else if got := w.Read(name); got != want {

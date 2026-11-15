@@ -551,10 +551,12 @@
 // through a link of that name where one is already there: with da/s a
 // link that leads out of the project, "cp db/s da" changes the file out
 // there. So every name a copy may get is held to the working directories
-// like a file named outright, and a cp -R or -a into a place that already
-// holds files under the copy's name asks, because it would go on in the
-// same way through every one of them. (mv puts its source in the link's
-// place and writes through nothing.)
+// like a file named outright. A cp -R or -a goes on in the same way
+// through every file of the directory it copies, so what the place
+// already holds under the copy's name is looked through, and a link among
+// it that leads out asks; a place that holds no such link takes the copy
+// without a question. (mv puts its source in the link's place and writes
+// through nothing, and a link that cp -R or -a copies stays a link.)
 //
 // # How this was attacked
 //

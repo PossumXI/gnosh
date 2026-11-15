@@ -694,10 +694,14 @@ func TestLinkAttacks(t *testing.T) {
 // project that way, with da/s a link to it.
 func TestWhereACopyLands(t *testing.T) {
 	fs := fakeFS{links: map[string]string{
-		"/proj/da/s":    "/outside/secret.txt",
-		"/proj/da/.h":   "/outside/dir/file",
-		"/proj/link-in": "/proj/src",
-	}, files: []string{"/proj/da/s", "/proj/da/.h", "/proj/db/s", "/proj/db/.h", "/proj/src/main.go", "/proj/a.go", "/proj/build/out.o", "/proj/sub/top.txt"}}
+		"/proj/da/s":      "/outside/secret.txt",
+		"/proj/da/.h":     "/outside/dir/file",
+		"/proj/link-in":   "/proj/src",
+		"/proj/tree/in/x": "/outside/secret.txt",
+	}, files: []string{"/proj/da/s", "/proj/da/.h", "/proj/db/s", "/proj/db/.h", "/proj/src/main.go", "/proj/a.go", "/proj/build/out.o", "/proj/sub/top.txt",
+		// (A folder is listed where the fake file system is to find it
+		// when its parent is listed.)
+		"/proj/tree/in", "/proj/tree/in/x", "/proj/tree/plain.txt"}}
 	o := testOptions(ModeAcceptEdits, rules{})
 	o.Resolve, o.Glob = fs.resolve, fs.glob
 	e := mustEngine(t, o)
@@ -720,14 +724,17 @@ func TestWhereACopyLands(t *testing.T) {
 		"cp db/s link-in":   Allow, // a link that stays in the project
 		"cp src/main.go db": Allow,
 		// A directory with all that is in it: into a place that holds
-		// nothing under its name it makes new files, and into one that
-		// does it goes on link by link, which is not followed.
-		"cp -R db da":        Allow, // makes da/db
-		"cp -R src build":    Allow,
-		"cp -a src copy":     Allow,
-		"cp -R db/. da":      Ask, // what is in db lands in da itself, on da/s
-		"cp -R da/. db":      Ask, // (reading da's links asks as well)
-		"cp -R sub build/..": Ask, // lands on sub itself, which holds files
+		// nothing under its name it makes new files. What is already there
+		// is looked through, and a link among it that leads out asks.
+		"cp -R db da":      Allow, // makes da/db
+		"cp -R src build":  Allow,
+		"cp -a src copy":   Allow,
+		"cp -R db/. build": Allow, // build holds a file and no link
+		"cp -R db/. sub":   Allow,
+		"cp -R db/. da":    Ask,   // what is in db lands in da itself, on da/s
+		"cp -R da/. db":    Allow, // da's links are copied as links: nothing outside is read or written
+		"cp -R db/. tree":  Ask,   // tree/in/x, two folders down, leads out
+		"cp -a db/. tree":  Ask,
 	} {
 		if d := bash(e, cmd); d.Behavior != want {
 			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
