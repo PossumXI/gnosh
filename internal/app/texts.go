@@ -153,22 +153,29 @@ func capText(s string, max int) string {
 // defuseRequest makes every message of an outgoing request harmless:
 // whatever a person typed, a tool returned or the model itself wrote
 // earlier can hold a sequence the model server would read as structure.
-// The system prompt and the tool definitions are gnosh's own and are left
-// as they are. The same text always comes out the same, so the bytes of
-// the earlier part of a conversation never change from one request to the
-// next.
+// The model's own earlier text has gnosh's tags made harmless too: a model
+// that writes a <gnosh> note of its own (one did: "Done. Nothing left in
+// mem.") would read it back later as gnosh's word. The system prompt and
+// the tool definitions are gnosh's own and are left as they are. The same
+// text always comes out the same, so the bytes of the earlier part of a
+// conversation never change from one request to the next.
 func defuseRequest(req *core.Request) {
 	for i := range req.Messages {
-		defuseBlocks(req.Messages[i].Blocks)
+		defuseBlocks(req.Messages[i].Blocks, req.Messages[i].Role == core.RoleAssistant)
 	}
 }
 
-func defuseBlocks(blocks []core.Block) {
+// defuseBlocks makes blocks harmless; with own, gnosh's tags as well.
+func defuseBlocks(blocks []core.Block, own bool) {
 	for i := range blocks {
 		b := &blocks[i]
 		switch b.Type {
 		case core.BlockText, core.BlockThinking:
-			b.Text = prompt.Defuse(b.Text)
+			if own {
+				b.Text = prompt.Untrusted(b.Text)
+			} else {
+				b.Text = prompt.Defuse(b.Text)
+			}
 		case core.BlockToolUse:
 			if out, ok := rewriteJSONStrings(b.Input, prompt.Defuse, func(raw []byte) bool {
 				return bytes.IndexByte(raw, '<') >= 0 || containsFold(raw, `<`)
@@ -176,7 +183,7 @@ func defuseBlocks(blocks []core.Block) {
 				b.Input = out
 			}
 		case core.BlockToolResult:
-			defuseBlocks(b.Content)
+			defuseBlocks(b.Content, false)
 		}
 	}
 }
