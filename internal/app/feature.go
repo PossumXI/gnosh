@@ -633,4 +633,8 @@ type SlashContext struct {
 	// Say prints a line for the person, as fmt.Sprintf would format it. In
 	// a run, what a command says is the run's result.
 	Say func(format string, args ...any)
+	// Send hands the model a prompt on the command's behalf, as typing a
+	// skill does: the turn it starts is the command's, and in a run it is
+	// the run's turn. A command sends one prompt at most.
+	Send func(p agent.Prompt) error
 }

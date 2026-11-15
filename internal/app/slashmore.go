@@ -1,0 +1,247 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/permission"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
+)
+
+// This file holds the slash commands that follow Claude Code's own of the
+// same names (spec/cc/slash-commands-and-skills.md): /plan, /add-dir,
+// /cost, /agents, /memory and /init.
+
+// slashPlan is /plan [task]: plan mode, and the task, if one is given, as
+// the prompt that starts it.
+func (l *live) slashPlan(ctx context.Context, c *SlashContext) error {
+	if err := l.setMode(permission.ModePlan); err != nil {
+		return fmt.Errorf("plan mode could not be switched on: %w", err)
+	}
+	task := strings.TrimSpace(c.Args)
+	if task == "" {
+		c.Say("Plan mode is on: the model reads and plans, and changes nothing until you switch out of it (Shift+Tab, or /permissions).")
+		return nil
+	}
+	c.Say("Plan mode is on, and the model plans the task.")
+	return c.Send(agent.Prompt{Text: task})
+}
+
+// slashAddDir is /add-dir <directory>: one more working directory for the
+// rest of the session, as --add-dir is for the whole of one. Its files are
+// read and changed as the project's are, under the same mode and rules.
+// With nothing after it, it lists the working directories.
+func (l *live) slashAddDir(ctx context.Context, c *SlashContext) error {
+	arg := strings.TrimSpace(c.Args)
+	if arg == "" {
+		c.Say("The working directories of this session:")
+		for i, d := range l.roots {
+			label := "added"
+			if i == 0 {
+				label = "the project"
+			}
+			c.Say("  %s (%s)", d, label)
+		}
+		c.Say("/add-dir <directory> adds one for the rest of the session.")
+		return nil
+	}
+	dir := arg
+	switch {
+	case dir == "~":
+		dir = l.cfg.Paths.Home
+	case strings.HasPrefix(dir, "~/"):
+		dir = filepath.Join(l.cfg.Paths.Home, dir[2:])
+	case !filepath.IsAbs(dir):
+		dir = filepath.Join(l.cwd(), dir)
+	}
+	dir = filepath.Clean(dir)
+	info, err := os.Stat(dir)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("%s does not exist; /add-dir takes a directory that is there", dir)
+	case err != nil:
+		return fmt.Errorf("%s cannot be looked at: %v", dir, err)
+	case !info.IsDir():
+		return fmt.Errorf("%s is a file; /add-dir takes a directory", dir)
+	}
+	for _, d := range l.roots {
+		if d == dir {
+			c.Say("%s is a working directory of this session already.", dir)
+			return nil
+		}
+	}
+	if err := l.engine.AddDir(dir); err != nil {
+		return err
+	}
+	l.roots = append(slices.Clone(l.roots), dir)
+	l.agent.SetRoots(l.roots)
+	l.flog.logf("permission", "a working directory was added for the rest of the session: %s", dir)
+	// The model is told with the next request, so that it knows it may work
+	// there.
+	_ = l.agent.Tell(agent.Note{Source: "add-dir",
+		Text: prompt.Wrap(fmt.Sprintf("The user added %s as a working directory for the rest of this session: its files may be read and changed as the project's are, under the same permission mode and rules.", dir))})
+	c.Say("%s is a working directory for the rest of this session: its files are read and changed as the project's are, under the same mode and rules. --add-dir adds one for a whole session.", dir)
+	return nil
+}
+
+// slashCost is /cost (also /usage and /stats): what the session has used.
+// There is no price list, so it is counted in requests, tokens and time.
+func (l *live) slashCost(ctx context.Context, c *SlashContext) error {
+	u := c.Agent.Usage()
+	if u.Requests == 0 && len(u.ByModel) == 0 {
+		c.Say("Nothing has been asked of a model in this session yet.")
+		return nil
+	}
+	m := u.Main
+	c.Say("This session: %s to its model, %s of waiting on it.", requests(u.Requests), roundTime(u.APITime))
+	c.Say("  read     %s tokens (%s fresh, %s from the cache)", tokenCount(m.PromptTokens()), tokenCount(m.InputTokens+m.CacheWriteTokens), tokenCount(m.CacheReadTokens))
+	c.Say("  written  %s tokens", tokenCount(m.OutputTokens))
+	if len(u.ByModel) > 0 {
+		c.Say("Every request made for it, by model (summaries, side jobs and sub-agents included):")
+		ids := make([]string, 0, len(u.ByModel))
+		for id := range u.ByModel {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			mt := u.ByModel[id]
+			c.Say("  %s: %s, %s tokens read, %s written, %s", id, requests(mt.Requests), tokenCount(mt.Usage.PromptTokens()), tokenCount(mt.Usage.OutputTokens), roundTime(mt.APITime))
+		}
+	}
+	if u.Side.Requests > 0 {
+		c.Say("Side jobs (titles, checks, summaries of tool output): %s, %s.", requests(u.Side.Requests), roundTime(u.Side.Time))
+	}
+	if cs := c.Agent.Context(); cs.Window > 0 {
+		c.Say("The context now holds about %s of %s tokens (%d%%).", tokenCount(cs.Used), tokenCount(cs.Window), cs.Used*100/cs.Window)
+	}
+	return nil
+}
+
+// requests counts requests in words: "1 request", "3 requests".
+func requests(n int) string {
+	if n == 1 {
+		return "1 request"
+	}
+	return fmt.Sprintf("%d requests", n)
+}
+
+// roundTime writes a span of time to the second, or to the tenth of one
+// when it is shorter than a second.
+func roundTime(d time.Duration) string {
+	if d < time.Second {
+		return d.Round(100 * time.Millisecond).String()
+	}
+	return d.Round(time.Second).String()
+}
+
+// slashAgents is /agents: the kinds of sub-agent the Agent tool can start,
+// and where each is defined. New kinds are files in an agents folder; the
+// model can write one when asked.
+func (l *live) slashAgents(ctx context.Context, c *SlashContext) error {
+	defs := l.agentDefs().All()
+	if len(defs) == 0 {
+		c.Say("There are no kinds of sub-agent.")
+		return nil
+	}
+	if !slices.Contains(l.toolNames(), agentToolName) {
+		c.Say("The Agent tool is switched off in this session, so none of these is started:")
+	} else {
+		c.Say("The kinds of sub-agent the model can start:")
+	}
+	for _, d := range defs {
+		where := d.Scope
+		if d.Source != "" {
+			where = d.Source
+		}
+		about := oneLine(d.Description, 100)
+		if about == "" {
+			about = "(no description)"
+		}
+		c.Say("  %s (%s): %s", d.Name, where, about)
+	}
+	c.Say("A new kind is a Markdown file in %s, or in .gnosh/agents/ in a trusted project; ask the model to write one.", filepath.Join(l.cfg.Paths.ConfigDir, "agents"))
+	return nil
+}
+
+// slashMemory is /memory: the context files the model is given at the start
+// of each session, and where a new one goes. What the model keeps for
+// itself is mem, which /mem shows.
+func (l *live) slashMemory(ctx context.Context, c *SlashContext) error {
+	var files []string
+	if l.instr != nil {
+		for _, f := range l.instr.Files() {
+			line := fmt.Sprintf("  %s (%s, %s)", f.Path, strings.ToLower(string(f.Scope)), byteCount(f.Size))
+			if f.Late {
+				line += ", read when a file under it was touched"
+			}
+			files = append(files, line)
+		}
+	}
+	if len(files) == 0 {
+		c.Say("No context file is given to the model in this session.")
+	} else {
+		c.Say("The context files the model is given:")
+		for _, f := range files {
+			c.Say("%s", f)
+		}
+	}
+	if len(l.cfg.Context.Global) > 0 {
+		c.Say("Yours, for every project: %s", l.cfg.Context.Global[0].V)
+	}
+	c.Say("The project's, shared with whoever works on it: %s (/init has the model write it)", filepath.Join(l.cfg.Paths.ProjectRoot, "GNOSH.md"))
+	c.Say("They are read as a session starts, and a change shows in the next one. What the model keeps for itself between sessions is mem: /mem shows it.")
+	return nil
+}
+
+// byteCount writes a size in bytes for a person.
+func byteCount(n int64) string {
+	switch {
+	case n < 1024:
+		return fmt.Sprintf("%d bytes", n)
+	case n < 1024*1024:
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	}
+	return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+}
+
+// slashInit is /init: the model looks through the project and writes the
+// context file every later session is given, or improves the one there is.
+func (l *live) slashInit(ctx context.Context, c *SlashContext) error {
+	root := l.cfg.Paths.ProjectRoot
+	target := filepath.Join(root, "GNOSH.md")
+	var have []string
+	for _, name := range []string{"GNOSH.md", "AGENTS.md", "CLAUDE.md"} {
+		if info, err := os.Stat(filepath.Join(root, name)); err == nil && info.Mode().IsRegular() {
+			have = append(have, name)
+		}
+	}
+	task := fmt.Sprintf(initTask, target)
+	switch {
+	case slices.Contains(have, "GNOSH.md"):
+		task += "\n\nGNOSH.md is there already: read it first, keep what is still true and useful in it, correct what is not, and add what is missing. Do not start it over."
+	case len(have) > 0:
+		task += fmt.Sprintf("\n\nThe project has %s already, which gnosh reads as well: read it first, and write GNOSH.md only with what it lacks, so that the two do not say the same things twice.", strings.Join(have, " and "))
+	}
+	c.Say("The model looks through the project and writes %s.", target)
+	return c.Send(agent.Prompt{Hidden: true, Source: "init", Text: prompt.Wrap(task),
+		Notice: "/init: the model is writing the project's GNOSH.md."})
+}
+
+// initTask is what /init asks of the model. %s is the file it writes.
+const initTask = `The user typed /init. Write %s: the file every later session in this project is given at its start, so that an agent that knows nothing of the project can work in it at once.
+
+Look through the project first: its README, its build files and manifests, its test setup, its folder layout, and a few files that show how the code is written. Then write down what an agent needs and could not guess:
+- how to build, test and lint, with the exact commands, and how to run one test alone;
+- how the code is laid out, and where the main pieces are;
+- the project's own conventions, where they differ from the language's usual ones;
+- anything that is easy to get wrong: generated files, slow or flaky tests, steps that must come in an order.
+
+Keep it short: plain sentences and lists, the facts of this project and nothing that is true of every project. Do not invent commands or files: write down only what you found. When it is written, say in a few lines what is in it.`

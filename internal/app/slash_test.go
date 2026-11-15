@@ -114,6 +114,69 @@ func TestSlashCommandsInASession(t *testing.T) {
 	}
 }
 
+// The commands that follow Claude Code's: /add-dir, /cost, /agents,
+// /memory, /plan and /init.
+func TestClaudeCodeCommands(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "Hello."},
+		apptest.Reply{Text: "Here is the plan: read, then change."},
+		apptest.Reply{Text: "GNOSH.md is written."},
+	)
+	w.Write("GNOSH.md", "# the project\n")
+	other := w.Home + "/elsewhere"
+	w.Write(other+"/notes.txt", "notes\n")
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+
+	// Nothing used yet, and then a turn's worth.
+	s.typeLine("/cost")
+	s.see("Nothing has been asked of a model in this session yet.")
+	s.typeLine("say hello")
+	s.see("Hello.")
+	s.typeLine("/usage")
+	s.see("This session: 1 request to its model")
+	s.see("tokens (")
+	s.see("Every request made for it, by model")
+
+	// /add-dir: refused for what is not a directory, then added, and the
+	// model is told with the next request.
+	s.typeLine("/add-dir " + other + "/notes.txt")
+	s.see("is a file; /add-dir takes a directory")
+	s.typeLine("/add-dir ~/no-such-folder")
+	s.see("does not exist")
+	s.typeLine("/add-dir ~/elsewhere")
+	s.see(other + " is a working directory for the rest of this session")
+	s.typeLine("/add-dir")
+	s.see("  " + other + " (added)")
+	s.typeLine("/add-dir " + other)
+	s.see("is a working directory of this session already")
+
+	// /agents and /memory report.
+	s.typeLine("/agents")
+	s.see("The kinds of sub-agent the model can start:")
+	s.see("(built-in)")
+	s.typeLine("/memory")
+	s.see("The context files the model is given:")
+	s.see(w.Dir + "/GNOSH.md (project")
+	s.see("/mem shows it")
+
+	// /plan with a task: plan mode, and the task sent.
+	s.typeLine("/plan work out the change")
+	s.see("Here is the plan: read, then change.")
+	s.see("permission mode plan")
+	reqs := w.Model.Requests()
+	planReq := string(reqs[len(reqs)-1].Body)
+	has(t, "the request /plan sent", planReq, "work out the change", other)
+
+	// /init asks the model to improve the GNOSH.md there is.
+	s.typeLine("/init")
+	s.see("GNOSH.md is written.")
+	reqs = w.Model.Requests()
+	has(t, "the request /init sent", string(reqs[len(reqs)-1].Body), "The user typed /init", "GNOSH.md is there already")
+	s.typeLine("/exit")
+	s.exit()
+}
+
 // A slash command given as the prompt of a run is run, not sent to the
 // model, and what it says is the run's result. A command that only makes
 // sense with a person there says so.

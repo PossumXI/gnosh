@@ -129,6 +129,17 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 			out.WriteString(strings.TrimRight(text, "\n"))
 			out.WriteString("\n")
 		},
+		Send: func(p agent.Prompt) error {
+			if res.Prompt != "" {
+				return fmt.Errorf("/%s sends one prompt at most", cmd.Name)
+			}
+			id, err := s.l.agent.Submit(p)
+			if err != nil {
+				return fmt.Errorf("the prompt could not be sent to the model: %w", err)
+			}
+			res.Prompt = id
+			return nil
+		},
 	}
 	func() {
 		defer func() {
@@ -178,6 +189,12 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number]", Summary: "Take the conversation back to before one of your prompts. Files stay as they are.", Run: l.slashRewind},
+		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
+		{Name: "add-dir", Args: "<directory>", Summary: "Add a working directory for the rest of this session. With nothing after it, lists them.", Run: l.slashAddDir},
+		{Name: "cost", Aliases: []string{"usage", "stats"}, Summary: "What this session has used: requests, tokens and time, by model.", InRun: true, Run: l.slashCost},
+		{Name: "agents", Summary: "The kinds of sub-agent there are, and where each is defined.", InRun: true, Run: l.slashAgents},
+		{Name: "memory", Summary: "The context files the model is given (GNOSH.md, AGENTS.md, CLAUDE.md), and where to put one.", InRun: true, Run: l.slashMemory},
+		{Name: "init", Summary: "Have the model look through the project and write its GNOSH.md, or improve the one there is.", Run: l.slashInit},
 		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {
 				// The declared hosts are listed, and reached only when the
@@ -600,8 +617,7 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		}
 	}
 	u := a.Usage()
-	c.Say("usage        %d requests; %s tokens in, %s out", u.Requests, tokenCount(u.Main.InputTokens), tokenCount(u.Main.OutputTokens))
-	c.Say("")
+	c.Say("usage        %d requests; %s tokens in, %s out (/cost says more)", u.Requests, tokenCount(u.Main.PromptTokens()), tokenCount(u.Main.OutputTokens))
 	c.Say("The configuration in force, each setting with where it came from:")
 	c.Say("%s", strings.TrimRight(l.cfg.String(), "\n"))
 	return nil
