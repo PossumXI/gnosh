@@ -242,6 +242,16 @@ func (u *UI) Event(ev any) {
 	}
 }
 
+// Size is the terminal's size as the interface last heard it, for the
+// status line command's COLUMNS and LINES; 80 by 24 before it has a
+// terminal.
+func (u *UI) Size() (cols, rows int) {
+	if r := u.shown.Load(); r != nil {
+		return r.Size()
+	}
+	return 80, 24
+}
+
 // late takes in something the session reports after the interface has
 // left the terminal: the session is being closed, and its last hooks and
 // warnings still have something to say. Nothing is silent, so a warning,

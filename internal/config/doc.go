@@ -64,7 +64,11 @@
 //	                 disableAutoMode, denyInsteadOfPrompting
 //	hooks            event, then matcher groups, then command handlers
 //	env              variables for the commands and hooks gnosh starts
-//	disableAllHooks  true switches every hook off
+//	disableAllHooks  true switches every hook off, and the status line
+//	statusLine       {"type": "command", "command": ..., "padding": ...,
+//	                 "refreshInterval": ...}: a command whose output is the
+//	                 status line under the prompt; a program to run, so a
+//	                 project's waits for trust, as a hook does
 //	model            the session's model
 //	$schema          accepted and not read
 //

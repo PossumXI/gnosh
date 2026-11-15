@@ -32,6 +32,7 @@ const (
 	KindGitProgram   = "git-program"   // a program the repository's own git settings name
 	KindSkillsLink   = "skills-link"   // a skills folder that is a link out of the folder
 	KindStoredState  = "stored-state"  // something the project's stored state would turn on
+	KindStatusLine   = "status-line"   // a command run to draw the status line
 )
 
 // Restricts reports whether a setting of this kind only takes something
@@ -61,8 +62,8 @@ type risk struct {
 // order they are shown. Only the sentences whose kinds are present are
 // shown.
 var risks = []risk{
-	{[]string{KindHook, KindMCPLocal, KindLSP},
-		"Some of these run commands (hooks, servers started on this machine). They would run as you: a stranger's command could steal your SSH and wallet keys, wipe your files, or plant a program that stays."},
+	{[]string{KindHook, KindMCPLocal, KindLSP, KindStatusLine},
+		"Some of these run commands (hooks, servers started on this machine, a status line). They would run as you: a stranger's command could steal your SSH and wallet keys, wipe your files, or plant a program that stays."},
 	{[]string{KindRunsCommand},
 		"A setting here is filled in by running something. Any command hidden in a setting runs as you."},
 	{[]string{KindGitProgram},

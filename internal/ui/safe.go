@@ -115,6 +115,48 @@ func fit(m text.Metrics, s string, width int) string {
 	return m.Truncate(s, max(width, 0), "")
 }
 
+// statusText makes a line a status line command printed safe to draw. Its
+// colours (SGR) and links (OSC 8) stay, as Claude Code allows; every other
+// escape sequence and control character goes, a tab becomes a space, and
+// a colour or a link that is open at the end is closed there, so that the
+// line stands on its own.
+func statusText(s string) string {
+	var b strings.Builder
+	styled, linked := false, false
+	for rest := s; rest != ""; {
+		tok, after := text.NextToken(rest)
+		rest = after
+		switch {
+		case tok.Kind == text.Plain:
+			for _, r := range tok.Text {
+				switch {
+				case r == '\t':
+					b.WriteByte(' ')
+				case r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0:
+				default:
+					b.WriteRune(r)
+				}
+			}
+		case tok.Complete && tok.IsSGR():
+			b.WriteString(tok.Text)
+			styled = true
+		case tok.IsHyperlink():
+			b.WriteString(tok.Text)
+			uri := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(tok.Text, "\x07"), "\x1b\\"), "\x9c")
+			if i := strings.IndexByte(uri[4:], ';'); i >= 0 {
+				linked = uri[4+i+1:] != ""
+			}
+		}
+	}
+	if linked {
+		b.WriteString("\x1b]8;;\x1b\\")
+	}
+	if styled {
+		b.WriteString("\x1b[0m")
+	}
+	return b.String()
+}
+
 // count writes a number with its noun: "1 line", "3 lines".
 func count(n int, one, many string) string {
 	if n == 1 {

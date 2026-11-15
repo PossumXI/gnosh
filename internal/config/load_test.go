@@ -1882,3 +1882,34 @@ func TestSettingSources(t *testing.T) {
 	_, problems = load(t, in)
 	wantProblem(t, problems, Error, "--setting-sources", 0, `"global"`, "user, project and local")
 }
+
+// statusLine is Claude Code's: a command whose output is the status line.
+// A later file wins; disableAllHooks and safe mode turn it off, as they do
+// hooks; and a project's waits for trust, while the user's own stays.
+func TestStatusLine(t *testing.T) {
+	cfg := mustLoad(t, withConfig(`{"statusLine": {"type": "command", "command": "~/bin/sl.sh", "padding": 2, "refreshInterval": 5}}`))
+	if sl := cfg.StatusLine; sl == nil || sl.Command != "~/bin/sl.sh" || sl.Padding != 2 || sl.Refresh != 5*time.Second || sl.Origin.File != userJSON {
+		t.Errorf("StatusLine = %+v", cfg.StatusLine)
+	}
+
+	cfg = mustLoad(t, withConfig(`{"statusLine": {"type": "command", "command": "x"}, "disableAllHooks": true}`))
+	if cfg.StatusLine != nil || !strings.Contains(cfg.StatusLineOff, "disableAllHooks") {
+		t.Errorf("with disableAllHooks: %+v, %q", cfg.StatusLine, cfg.StatusLineOff)
+	}
+
+	fs := newFS().
+		put(userJSON, `{"statusLine": {"type": "command", "command": "mine"}}`).
+		put(projJSON, `{"statusLine": {"type": "command", "command": "theirs"}}`)
+	in := inputs(fs)
+	if cfg := mustLoad(t, in); cfg.StatusLine == nil || cfg.StatusLine.Command != "theirs" {
+		t.Errorf("trusted: the project's file is the later one, and wins: %+v", cfg.StatusLine)
+	}
+	in.Trusted = false
+	cfg = mustLoad(t, in)
+	if cfg.StatusLine == nil || cfg.StatusLine.Command != "mine" {
+		t.Errorf("not trusted: the user's own stays: %+v", cfg.StatusLine)
+	}
+	if !slices.ContainsFunc(cfg.Held, func(h Held) bool { return h.Kind == KindStatusLine && strings.Contains(h.Text, "theirs") }) {
+		t.Errorf("the project's status line is not held: %+v", cfg.Held)
+	}
+}

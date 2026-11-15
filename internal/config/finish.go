@@ -107,6 +107,17 @@ func (ld *loader) finish() *Config {
 	default:
 		cfg.Hooks = b.hooks
 	}
+	if b.statusLine.Set {
+		switch {
+		case cfg.Switches.SafeMode.V:
+			cfg.StatusLineOff = "safe mode"
+		case b.hooksOff.V:
+			cfg.StatusLineOff = "disableAllHooks in " + b.hooksOff.Origin.String()
+		default:
+			sl := b.statusLine.V
+			cfg.StatusLine = &sl
+		}
+	}
 	for _, name := range slices.Sorted(maps.Keys(b.env)) {
 		cfg.Env = append(cfg.Env, b.env[name])
 	}

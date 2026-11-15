@@ -92,6 +92,7 @@ var topKeys = []keyDef{
 	{"hooks", FeatureHooks, "hooks, in Claude Code's shape", fromClaudeCode + ": the settings key"},
 	{"env", FeatureEnv, "variables for the commands and hooks gnosh starts", fromClaudeCode + ": the settings key"},
 	{"disableAllHooks", "", "switch every hook off", fromClaudeCode + ": the settings key"},
+	{"statusLine", "", "a command whose output is the status line under the prompt", fromClaudeCode + ": the settings key"},
 	{"$schema", "", "accepted and not read", fromClaudeCode + ": the settings key"},
 }
 
@@ -147,7 +148,7 @@ var permissionKeys = []keyDef{
 // whose key it is. The two that gnosh has under "options", with Claude
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
-	"statusLine", "cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
+	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
 	"fileCheckpointingEnabled", "outputStyle", "verbose", "viewMode", "editorMode", "respondToBashCommands",
 	"respectGitignore", "fileSuggestion", "claudeMdExcludes", "agent", "askUserQuestionTimeout",
 	"bashOutputMaxChars", "showTurnDuration", "language", "spinnerVerbs", "spinnerTipsEnabled",

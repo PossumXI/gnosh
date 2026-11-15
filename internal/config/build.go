@@ -33,6 +33,8 @@ type builder struct {
 	hosts    []Host
 	hooks    []Hook
 	hooksOff Value[bool]
+	// statusLine is the status line command; a later file wins.
+	statusLine Value[StatusLine]
 
 	layers []*RuleLayer
 	mode   Value[string]
@@ -405,6 +407,10 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 	if !ok(KindHookOff) && b.hooksOff.Set && from(b.hooksOff.Origin) {
 		note("disableAllHooks")
 		b.hooksOff = Value[bool]{}
+	}
+	if !ok(KindStatusLine) && b.statusLine.Set && from(b.statusLine.Origin) {
+		note("statusLine")
+		b.statusLine = Value[StatusLine]{}
 	}
 	for _, l := range b.layers {
 		if !slices.Contains(projectFiles, l.File) {

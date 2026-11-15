@@ -240,6 +240,63 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		apply: func(b *builder) { b.addHook(h) }})
 }
 
+// statusLine reads the statusLine object: {"type": "command", "command":
+// "...", "padding": 2, "refreshInterval": 5}.
+func (s *source) statusLine(f jfield) {
+	if f.val.kind != jObject {
+		s.errorf(f.line, "\"statusLine\" is an object such as {\"type\": \"command\", \"command\": \"~/.config/gnosh/statusline.sh\"}, and here it is %s.", f.val.kind.word())
+		return
+	}
+	sl := StatusLine{Origin: s.at(f.line)}
+	typ, good := "", true
+	bad := func(line int, format string, a ...any) {
+		s.errorf(line, format, a...)
+		good = false
+	}
+	for _, m := range s.unique(f.val, "statusLine.") {
+		switch m.key {
+		case "type":
+			if m.val.kind != jString || m.val.str != "command" {
+				bad(m.line, "the status line's \"type\" is \"command\", the one kind there is.")
+			}
+			typ = "command"
+		case "command":
+			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
+				bad(m.line, "the status line's \"command\" is the command line to run, as a string that is not empty.")
+				break
+			}
+			sl.Command = m.val.str
+		case "padding":
+			n, err := strconv.Atoi(m.val.str)
+			if m.val.kind != jNumber || err != nil || n < 0 || n > 40 {
+				bad(m.line, "the status line's \"padding\" is a whole number of columns from 0 to 40.")
+				break
+			}
+			sl.Padding = n
+		case "refreshInterval":
+			secs, err := strconv.ParseFloat(m.val.str, 64)
+			if m.val.kind != jNumber || err != nil || secs < 1 || secs > 86400 {
+				bad(m.line, "the status line's \"refreshInterval\" is a number of seconds, at least 1.")
+				break
+			}
+			sl.Refresh = time.Duration(secs * float64(time.Second))
+		default:
+			bad(m.line, "the status line has no field %s; its fields are type, command, padding and refreshInterval.", showName(m.key))
+		}
+	}
+	if good && typ == "" {
+		bad(f.line, "the status line has no \"type\". Add \"type\": \"command\".")
+	}
+	if good && sl.Command == "" {
+		bad(f.line, "the status line has no \"command\", so it would run nothing.")
+	}
+	if !good {
+		return
+	}
+	s.add(op{kind: KindStatusLine, text: "statusLine: " + sl.Command, origin: sl.Origin, what: "a status line",
+		apply: func(b *builder) { b.statusLine.put(sl, sl.Origin) }})
+}
+
 // settingsEnv reads the env object: variables for the commands and hooks
 // gnosh starts.
 func (s *source) settingsEnv(f jfield) {

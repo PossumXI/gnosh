@@ -53,6 +53,12 @@ type Config struct {
 	// HooksOff says why Hooks is empty although AllHooks is not: "safe
 	// mode", or the setting that switched them off. Empty otherwise.
 	HooksOff string
+	// StatusLine is the command whose output is the status line under the
+	// prompt (Claude Code's statusLine), or nil. It is nil in safe mode
+	// and when disableAllHooks is set, as hooks are; StatusLineOff then
+	// says why.
+	StatusLine    *StatusLine
+	StatusLineOff string
 	// Permissions are the permission rules, the starting mode and the
 	// extra directories.
 	Permissions Permissions
@@ -117,7 +123,23 @@ const (
 	KindAddress     = "address"
 	KindHiddenSkill = "hidden-skill"
 	KindRemoval     = "removal" // taking away a provider, a model or a host a weaker file declared
+	KindStatusLine  = "status-line"
 )
+
+// StatusLine is a command whose output takes the place of the status line
+// under the prompt: Claude Code's statusLine setting, of type "command".
+type StatusLine struct {
+	// Command is the command line, run by sh with a JSON object about the
+	// session on its standard input.
+	Command string
+	// Padding is how many columns its lines are set in from the left.
+	Padding int
+	// Refresh is how often it is run again besides the moments it runs at
+	// (Claude Code's refreshInterval); zero means at those moments alone.
+	Refresh time.Duration
+	// Origin is the line that sets it.
+	Origin Origin
+}
 
 // Provider is one model provider.
 type Provider struct {

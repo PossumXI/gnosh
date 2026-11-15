@@ -137,6 +137,8 @@ type live struct {
 	checkWarn sync.Once
 	// mcp is the session's MCP servers.
 	mcp *mcpSet
+	// statusLine runs the configured status line command, or is nil.
+	statusLine *statusLiner
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
 	// system is what the model is told as its instructions, and named
@@ -424,6 +426,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	// The MCP servers: their tools are added as each connects.
 	l.mcp = l.loadMCP()
 	l.startMCP()
+	l.startStatusLine()
 	return l, nil
 }
 
@@ -769,6 +772,7 @@ func (l *live) setMode(m permission.Mode) error {
 	}
 	if now := l.engine.Mode(); now != before {
 		l.flog.logf("permission", "the permission mode is now %s (it was %s)", now, before)
+		l.statusLine.poke()
 		told := slices.Clone(l.contribs)
 		l.subMu.Lock()
 		for s := range l.subs {
@@ -925,6 +929,7 @@ func (l *live) deliver(ev any) {
 		l.front.Event(ev)
 	}
 	l.evMu.Unlock()
+	l.statusPoke(ev)
 	// A command may have moved to the background, or one there may have
 	// been stopped.
 	if te, ok := ev.(*agent.ToolEndEvent); ok && (te.Name == shelltool.BashName || te.Name == shelltool.StopName) {
@@ -1027,6 +1032,7 @@ func (l *live) close(reason string) {
 			_ = l.agent.End(reason)
 		}
 		l.closeShell()
+		l.statusLine.stop()
 		l.cancel()
 		waitGroup(&l.bg, 15*time.Second)
 		l.closeMCP()

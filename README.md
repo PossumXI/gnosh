@@ -26,7 +26,8 @@ at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
 `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
 tools are `mcp__<server>__<tool>`), commands on
 declared hosts over ssh, permission modes and rules,
-hooks, instruction files, sub-agents in the foreground, `mem` and frames
+hooks, a status line command (Claude Code's `statusLine`), instruction
+files, sub-agents in the foreground, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
 remove, with Claude Code's local, project and user scopes), and

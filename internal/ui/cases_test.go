@@ -715,6 +715,38 @@ func TestStatusLine(t *testing.T) {
 	}
 }
 
+// A configured status line command's lines take the place of gnosh's own
+// status line, made safe to draw, with the permission mode above them when
+// it is not the default; no lines give gnosh's own line back.
+func TestCustomStatusLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.ev(&app.StatusLineEvent{Lines: []string{"\x1b[32mmain\x1b[0m | ctx 11%\x1b[2J", "second\tline\x07"}, Padding: 2})
+	g.liveHas("  main | ctx 11%", "  second line").liveLacks("idle", "manual mode")
+	for _, l := range g.live {
+		if strings.Contains(l, "\x1b[2J") || strings.Contains(l, "\x07") {
+			t.Errorf("a control sequence reached the screen: %q", l)
+		}
+	}
+	g.keys(`<Shift+Tab>`)
+	g.liveHas("accept edits", "  main | ctx 11%")
+	g.ev(&app.StatusLineEvent{})
+	g.liveHas("idle").liveLacks("main | ctx")
+
+	// What is kept and what goes.
+	for in, want := range map[string]string{
+		"\x1b[1;32mok\x1b[0m":                                   "\x1b[1;32mok\x1b[0m\x1b[0m",
+		"\x1b[31mred":                                           "\x1b[31mred\x1b[0m",
+		"a\x1b[Hb\x1b]0;title\x07c":                             "abc",
+		"\x1b]8;;https://example.org\x1b\\link":                 "\x1b]8;;https://example.org\x1b\\link\x1b]8;;\x1b\\",
+		"\x1b]8;;https://example.org\x07link\x1b]8;;\x07 after": "\x1b]8;;https://example.org\x07link\x1b]8;;\x07 after",
+		"tab\there\r":                                           "tab here",
+	} {
+		if got := statusText(in); got != want {
+			t.Errorf("statusText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // What is typed after "/mem redact" is a text the person wants gone. It
 // reaches the session, and nothing of it is written into the scrollback,
 // shown while the command waits or runs, or kept in the history.

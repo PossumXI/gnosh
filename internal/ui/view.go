@@ -69,10 +69,19 @@ func (s *session) compose() (lines []string, row, col int) {
 		}
 		return false
 	}
-	status, act := "", ""
-	var hint []string
-	if take(true) {
-		status = s.statusLine(w)
+	act := ""
+	var status, hint []string
+	if len(s.custom) == 0 {
+		if take(true) {
+			status = []string{s.statusLine(w)}
+		}
+	} else {
+		for _, l := range s.customLines(w) {
+			if !take(true) {
+				break
+			}
+			status = append(status, l)
+		}
 	}
 	if a := s.activityLine(w, now); take(a != "") {
 		act = a
@@ -156,9 +165,7 @@ func (s *session) compose() (lines []string, row, col int) {
 	}
 	lines = append(lines, mid...)
 	lines = append(lines, tasks...)
-	if status != "" {
-		lines = append(lines, status)
-	}
+	lines = append(lines, status...)
 	lines = append(lines, hint...)
 
 	// The prompt box may have opened a list under itself that the
@@ -590,6 +597,38 @@ var modeNames = map[string]string{
 	"plan":              "plan mode",
 	"dontAsk":           "don't ask",
 	"bypassPermissions": "BYPASS PERMISSIONS",
+}
+
+// customLines is the status line the configured command printed (Claude
+// Code's statusLine): the permission mode first, when it is not the
+// default, since it is always in sight, and then the command's lines, made
+// safe to draw and set in by the padding.
+func (s *session) customLines(width int) []string {
+	var out []string
+	if s.mode != "" && s.mode != "default" {
+		out = append(out, s.modeWords())
+	}
+	pad := strings.Repeat(" ", min(s.customPad, width/2))
+	for _, l := range s.custom {
+		out = append(out, pad+statusText(l))
+	}
+	return out
+}
+
+// modeWords is the permission mode as the status line names it, styled.
+func (s *session) modeWords() string {
+	th := &s.th
+	name, ok := modeNames[s.mode]
+	if !ok {
+		name = oneLine(s.mode) + " mode"
+	}
+	switch s.mode {
+	case "default":
+		return th.Status.Render(name)
+	case "bypassPermissions":
+		return th.Bypass.Render("[" + name + "]")
+	}
+	return th.Mode.Render(name)
 }
 
 // statusLine is the one line under the prompt box: whether gnosh is idle,

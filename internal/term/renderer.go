@@ -175,6 +175,13 @@ func (r *Renderer) prepareAll(lines []string) []rline {
 	return out
 }
 
+// Size returns the terminal's size as the renderer last heard it.
+func (r *Renderer) Size() (cols, rows int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.cols, r.rows
+}
+
 // Resize tells the renderer the terminal's new size and draws the live
 // region again.
 //

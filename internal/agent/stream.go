@@ -709,10 +709,12 @@ func addUsage(a, b core.Usage) core.Usage {
 // Totals is what a session has cost so far.
 type Totals struct {
 	// Main adds up the session's own main requests, Requests counts them
-	// and APITime is how long they took.
+	// and APITime is how long they took. Last is the most recent main
+	// request's own count; it is zero before the first.
 	Main     core.Usage
 	Requests int
 	APITime  time.Duration
+	Last     core.Usage
 	// ByModel adds up every request made for the session: main requests,
 	// summaries, side requests, and the requests of its sub-agents.
 	ByModel map[string]ModelTotals
@@ -761,6 +763,7 @@ func (t *Totals) add(purpose string, m Model, u core.Usage, d time.Duration) {
 		t.Main = addUsage(t.Main, u)
 		t.Requests++
 		t.APITime += d
+		t.Last = u
 	case "summary":
 	default:
 		if t.Side.ByPurpose == nil {

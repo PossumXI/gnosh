@@ -162,6 +162,9 @@ func (s *session) handle(ev any) {
 	case *app.DeliverablesEvent:
 		s.deliv = ev.List
 		s.dirty = true
+	case *app.StatusLineEvent:
+		s.custom, s.customPad = ev.Lines, ev.Padding
+		s.dirty = true
 	case statusFacts:
 		for name, value := range ev.StatusFacts() {
 			if value == "" {

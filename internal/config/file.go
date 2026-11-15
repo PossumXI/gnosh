@@ -45,7 +45,7 @@ func readFile(s *source, data []byte) {
 		}
 		given[f.key] = f
 	}
-	for _, key := range []string{"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks"} {
+	for _, key := range []string{"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine"} {
 		f, ok := given[key]
 		if !ok {
 			continue
@@ -67,6 +67,8 @@ func readFile(s *source, data []byte) {
 			s.settingsHooks(f)
 		case "env":
 			s.settingsEnv(f)
+		case "statusLine":
+			s.statusLine(f)
 		case "disableAllHooks":
 			if f.val.kind != jBool {
 				s.errorf(f.line, "\"disableAllHooks\" is true or false, and here it is %s.", f.val.kind.word())

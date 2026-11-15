@@ -166,7 +166,7 @@ func TestInstructionFilesAreRead(t *testing.T) {
 // A setting Claude Code has and this gnosh has not built stops startup,
 // with a message that says so. It is never taken and left unused.
 func TestConfigForWhatIsNotBuiltStopsStartup(t *testing.T) {
-	for _, key := range []string{"statusLine", "enabledMcpjsonServers", "sandbox"} {
+	for _, key := range []string{"spinnerVerbs", "enabledMcpjsonServers", "sandbox"} {
 		t.Run(key, func(t *testing.T) {
 			w := apptest.NewWorld(t)
 			w.Write(w.SettingsFile(), "{\n  \""+key+"\": {}\n}\n")

@@ -217,6 +217,10 @@ type session struct {
 	branch string
 	facts  map[string]string
 	detail bool
+	// custom is what the configured status line command printed, which is
+	// shown in place of gnosh's own status line, set in by customPad.
+	custom    []string
+	customPad int
 	// tasks is the session's task list as it stands, and hideTasks says
 	// Ctrl+T has put it out of sight.
 	tasks     []app.Task
