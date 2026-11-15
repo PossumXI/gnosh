@@ -25,7 +25,8 @@ from the open web only), MCP servers, those gnosh starts itself and those
 at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
 `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
 tools are `mcp__<server>__<tool>`), commands on
-declared hosts over ssh, permission modes and rules,
+declared hosts over ssh, permission modes (plan mode included, where the model presents its plan
+with ExitPlanMode and you approve it) and rules,
 hooks, a status line command (Claude Code's `statusLine`), instruction
 files, sub-agents in the foreground and, in a session, in the background, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
