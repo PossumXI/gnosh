@@ -109,6 +109,10 @@ type wrapSpec struct {
 	pos int
 	// assigns: NAME=value words may come before the command.
 	assigns bool
+	// nameAssigns: those are the shell's own assignments, a valid name
+	// before the = (bash's time), where env and sudo take any word with an
+	// = in it: "time a.b=1 x" runs a program named a.b=1.
+	nameAssigns bool
 	// script lists the flags whose value is itself a script.
 	script string
 	// args lists the flags whose value is split into more arguments of
@@ -137,7 +141,7 @@ var wrappers = map[string]wrapSpec{
 	"nice":        {valued: " -n --adjustment "},
 	"ionice":      {valued: " -c -n -p --class --classdata "},
 	"nohup":       {},
-	"time":        {valued: " -f -o --format --output ", assigns: true, dashStarts: true},
+	"time":        {valued: " -f -o --format --output ", assigns: true, nameAssigns: true, dashStarts: true},
 	"stdbuf":      {valued: " -i -o -e --input --output --error "},
 	"setsid":      {},
 	"watch":       {valued: " -n --interval -d ", joined: true},
@@ -2082,6 +2086,15 @@ func (e *Engine) useAlias(v *bashView, c *simpleCmd, prev *simpleCmd, depth int)
 		}
 		e.addDerived(v, &simpleCmd{words: ws, redirs: redirs, sep: c.sep, nest: c.nest | nestScript,
 			aliased: append(append([]string(nil), c.aliased...), name)}, prev, depth)
+		if strings.TrimSpace(val) == "" {
+			// After an alias of blanks only, dash reads the next word as
+			// a command name that may be an alias, this same one
+			// included: that word was typed, not made by the alias. With
+			// "alias zz=", "zz zz rm x" runs rm x there. (bash checks no
+			// further.) Both are read.
+			e.addDerived(v, &simpleCmd{words: ws, redirs: redirs, sep: c.sep, nest: c.nest | nestScript,
+				aliased: append([]string(nil), c.aliased...)}, prev, depth)
+		}
 	}
 }
 
@@ -3429,9 +3442,10 @@ func (e *Engine) wrappedAt(v *bashView, spec wrapSpec, args []word, nest nesting
 				if spliced {
 					break scan
 				}
-			case spec.assigns && strings.IndexByte(l, '=') > 0:
+			case spec.assigns && strings.IndexByte(l, '=') > 0 && (!spec.nameAssigns || isAssignWord(a.raw)):
 				// env takes any word with an = in it for an assignment,
-				// whatever stands before the = ("a.b=1").
+				// whatever stands before the = ("a.b=1"); bash's time only
+				// a valid name's.
 				e.commandVar(v, a, nest, depth)
 			case pos > 0:
 				pos--

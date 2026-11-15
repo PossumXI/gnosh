@@ -75,6 +75,10 @@ func TestShellAttacks(t *testing.T) {
 		{"a process substitution with nothing in it joins pus and h", ModeBypass, attackGuards, "git pus<()h origin main", Ask},
 		// Reserved words.
 		{"time takes assignments before the command", ModeBypass, attackGuards, "time X=1 rm x", Deny},
+		// But only a valid name's (oracle seed 104): ]]xx=1]] is the
+		// program bash runs, where env would take it for an assignment.
+		{"bash's time runs ]]xx=1]], which is no assignment", ModeBypass, rules{allow: []string{"Bash"}, deny: []string{"Bash(]]xx=1]] *)"}}, "time ]]xx=1]] @ echo $x ", Deny},
+		{"bash's time runs a.b=1, which is no assignment", ModeBypass, rules{allow: []string{"Bash"}, deny: []string{"Bash(a.b=1 *)"}}, "time a.b=1 rm x", Deny},
 		{"! before a redirection still negates", ModeBypass, attackGuards, "!<a.txt rm x", Deny},
 		{"! before a redirection still negates", ModeBypass, attackGuards, "!>/dev/null rm x", Deny},
 		{"time ! cmd runs cmd", ModeBypass, attackGuards, "time ! rm x", Deny},
@@ -118,6 +122,11 @@ func TestShellAttacks(t *testing.T) {
 		{"flags the table does not know, one after the other", ModeBypass, attackGuards, "sudo --foo a --bar b rm x", Deny},
 		{"an alias is expanded on the next line", ModeBypass, attackGuards, "alias ls='rm x'\nls", Deny},
 		{"an alias is expanded on the next line", ModeBypass, attackGuards, "shopt -s expand_aliases\nalias ls='rm x'\nls", Deny},
+		// After an alias of nothing, dash checks the next word for an
+		// alias, the same one included (oracle seed 104).
+		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=\nzz zz rm x", Deny},
+		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=\nmake build; zz rl1d; zz zz r\\m x", Deny},
+		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=' '\nzz zz zz rm x", Deny},
 		{"hash -p makes ls run another file", ModeBypass, attackGuards, "hash -p /usr/bin/rm ls; ls x", Deny},
 		{"mapfile -C runs its callback", ModeBypass, attackGuards, "mapfile -C 'rm' -c 1 a <<< x", Deny},
 		{"compgen -C runs its argument", ModeBypass, attackGuards, "compgen -C 'rm x'", Deny},
