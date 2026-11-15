@@ -117,6 +117,12 @@ func TestShellAttacks(t *testing.T) {
 		{"hash -p makes ls run another file", ModeBypass, attackGuards, "hash -p /usr/bin/rm ls; ls x", Deny},
 		{"mapfile -C runs its callback", ModeBypass, attackGuards, "mapfile -C 'rm' -c 1 a <<< x", Deny},
 		{"compgen -C runs its argument", ModeBypass, attackGuards, "compgen -C 'rm x'", Deny},
+		// A pattern that a ".." takes back out is the directory it stands
+		// in: every match of */.. is the working directory (oracle seed 97).
+		{"*/.. is the working directory, whatever * matches", ModeBypass, rules{}, "rm -rf */..", Ask},
+		{"the same through a variable, under rules that allow rm", ModeBypass, rules{allow: []string{"Bash(rm *)", "Bash(rm -rf $w)"}}, "d='*'; w=$d/.. 2>/dev/null; rm -rf $w", Ask},
+		{"the same with the pattern in quotes in the variable", ModeBypass, rules{}, "w='*/..'; rm -rf $w", Ask},
+		{"*/../.. is the directory above it", ModeBypass, rules{}, "rm -rf src/*/../..", Ask},
 		// The shell reads the command of -C with the builtin's words put
 		// after it, a blank between. After a ; those words are a command of
 		// their own: for compgen, compgen with the word being completed,

@@ -1085,6 +1085,11 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 			}
 		}
 		if first < 0 {
+			// A ".." took the pattern back out: every match of "*/.." is
+			// the directory the pattern stands in (oracle seed 97).
+			if why := e.criticalDir(abs); why != "" {
+				return "every match of the pattern " + s + " is " + abs + ": " + why
+			}
 			continue
 		}
 		// A part that takes every entry there is: *.tmp names its own
