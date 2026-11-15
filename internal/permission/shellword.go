@@ -928,22 +928,28 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 		return
 	}
 	part := wordPart{kind: partVar, name: name, bare: !inDouble}
+	// The same forms on the words of an array, or on one of them, as bash
+	// has them: "a=(-R 000 .); chmod "${a[@]=}"" is chmod -R 000 ., and
+	// "${a[0]:-x}" is a word of a, or x. Like ${a[@]} itself (see
+	// exoticParam), they are left to a person under allow rules.
+	if sub, k, ok := subscriptAt(p.src, n); ok && posixOp(p.src[k:]) != "" {
+		n, part.all = k, sub == "@" || sub == "*"
+		p.sc.exotic = true
+	}
 	if p.src[n] == '}' {
 		p.pos = n + 1
 		b.raw.WriteString(p.src[from:p.pos])
 		b.add(part)
 		return
 	}
-	op := ""
-	for _, o := range []string{":-", ":=", ":?", ":+", "-", "=", "?", "+", "%%", "%", "##", "#"} {
-		if strings.HasPrefix(p.src[n:], o) {
-			op = o
-			break
-		}
-	}
+	op := posixOp(p.src[n:])
 	if op == "" {
 		p.exoticParam(b, inDouble)
 		return
+	}
+	if op == ":+" || op == "+" {
+		// (${a[@]:+word} is the word, once, where a has words.)
+		part.all = false
 	}
 	part.guarded = op == ":?" || op == "?"
 	if op == ":=" || op == "=" {
@@ -1031,17 +1037,21 @@ func (p *parser) exoticParam(b *wordBuilder, inDouble bool) {
 	part := wordPart{kind: partVar, bare: !inDouble}
 	if name, all, ok := elemName(p.src[p.pos+2 : end-1]); ok {
 		part.name, part.all = name, all
-	} else if name, op, a, b, ok := exoticForm(p.src[p.pos+2 : end-1]); ok {
-		part.name, part.op, part.arg1, part.arg2 = name, op, a, b
+	} else if name, op, a, b, all, ok := exoticForm(p.src[p.pos+2 : end-1]); ok {
+		part.name, part.op, part.arg1, part.arg2, part.all = name, op, a, b, all
 	} else if body := p.src[p.pos+2 : end-1]; body != "" && isNameStart(body[0]) {
 		// Some other form of a variable (${name,pattern}, ${name@U},
 		// ${name/#a/b}): what it makes of a value is not worked out,
-		// and the value as it is stays one thing it may be.
+		// and the value as it is stays one thing it may be. On ${a[@]}
+		// it is each word of the array, every one a word of its own.
 		n := 1
 		for n < len(body) && isNameChar(body[n]) {
 			n++
 		}
 		part.name, part.op = body[:n], "~"
+		if sub, _, ok := subscriptAt(body, n); ok {
+			part.all = sub == "@" || sub == "*"
+		}
 	}
 	p.pos = end
 	b.add(part)
@@ -1058,25 +1068,29 @@ func (p *parser) exoticParam(b *wordBuilder, inDouble bool) {
 // of case (^^ ,, ^ ,), and ${!name}, which stands for the variable that
 // name's value names (op "!"). A value the line knows is then followed
 // through the form: "rm -rf ${HOME/x/y}" is the home directory, whose
-// name holds no x, and "${HOME:0:1}" is the root.
-func exoticForm(body string) (name, op, a, b string, ok bool) {
+// name holds no x, and "${HOME:0:1}" is the root. all says the form is
+// on every word of an array (${a[@]/x/y}), each word put through it.
+func exoticForm(body string) (name, op, a, b string, all, ok bool) {
 	if strings.ContainsAny(body, "$`'\"\\") {
-		return "", "", "", "", false
+		return "", "", "", "", false, false
 	}
 	if strings.HasPrefix(body, "!") && isVarName(body[1:]) {
-		return body[1:], "!", "", "", true
+		return body[1:], "!", "", "", false, true
 	}
 	n := 0
 	for n < len(body) && isNameChar(body[n]) {
 		n++
 	}
 	if n == 0 || !isNameStart(body[0]) {
-		return "", "", "", "", false
+		return "", "", "", "", false, false
 	}
 	name, rest := body[:n], body[n:]
+	if sub, k, ok := subscriptAt(body, n); ok {
+		rest, all = body[k:], sub == "@" || sub == "*"
+	}
 	switch {
 	case rest == "^^" || rest == ",," || rest == "^" || rest == ",":
-		return name, rest, "", "", true
+		return name, rest, "", "", all, true
 	case strings.HasPrefix(rest, "/"):
 		op, rest = "/", rest[1:]
 		if strings.HasPrefix(rest, "/") {
@@ -1086,18 +1100,49 @@ func exoticForm(body string) (name, op, a, b string, ok bool) {
 		// (A # or a % at its head ties the text to one end of the value,
 		// and * ? [ make a pattern of it: those are not worked out.)
 		if a == "" || strings.ContainsAny(a, "*?[") || a[0] == '#' || a[0] == '%' {
-			return "", "", "", "", false
+			return "", "", "", "", false, false
 		}
-		return name, op, a, b, true
-	case strings.HasPrefix(rest, ":"):
+		return name, op, a, b, all, true
+	case strings.HasPrefix(rest, ":") && !all:
+		// (On every word of an array it picks some of the words, which
+		// elemName reads.)
 		from, length, has := strings.Cut(rest[1:], ":")
 		from, length = strings.TrimSpace(from), strings.TrimSpace(length)
 		if !isInt(from) || has && !isInt(length) {
-			return "", "", "", "", false
+			return "", "", "", "", false, false
 		}
-		return name, ":sub", from, length, true
+		return name, ":sub", from, length, false, true
 	}
-	return "", "", "", "", false
+	return "", "", "", "", false, false
+}
+
+// posixOp returns the operator of a POSIX ${name<op>word} form that s
+// starts with, or "".
+func posixOp(s string) string {
+	for _, o := range []string{":-", ":=", ":?", ":+", "-", "=", "?", "+", "%%", "%", "##", "#"} {
+		if strings.HasPrefix(s, o) {
+			return o
+		}
+	}
+	return ""
+}
+
+// subscriptAt reads the subscript of an array at s[i], when s[i] opens
+// one that is @, * or a number: it returns the subscript and the index
+// just past its ].
+func subscriptAt(s string, i int) (sub string, end int, ok bool) {
+	if i >= len(s) || s[i] != '[' {
+		return "", 0, false
+	}
+	j := strings.IndexByte(s[i:], ']')
+	if j < 0 {
+		return "", 0, false
+	}
+	sub = s[i+1 : i+j]
+	if sub != "@" && sub != "*" && !isDigits(sub) {
+		return "", 0, false
+	}
+	return sub, i + j + 1, true
 }
 
 // elemName returns the variable in the body of a ${name[subscript]}

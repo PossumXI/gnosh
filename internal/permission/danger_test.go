@@ -158,6 +158,10 @@ func TestOtherDestroyers(t *testing.T) {
 		"a=(-fdx); git clean ${a[*]}", "a=(/tmp/g .git /tmp/g); mv \"${a[@]}\"", "d=.git; w=(.git $d); d=.git; mv \"${w[@]}\" /tmp/g", "a=(x); a+=(.git /tmp/g); mv ${a[*]}[*]}", "a=(x .git /tmp/g); mv \"${a[@]}\".bak", "a=(.git /tmp/g); mv pre\"${a[@]}\"", "a=(.git /tmp/g); mv ${a[@]}*", "a=(clean -fdx); git ${a[@]}*", "sh -c 'git \"$@\"' sh clean -fdx", "f() { git \"$@\"; }; f status; f clean -fdx", "a=(status); a+=(clean -fdx); git \"${a[@]}\"",
 		"set -- clean -fdx; git \"$@\"", "f() { git $1 $2 $3; }; f clean -fdx", "f() { mv $1 $2; }; f /tmp/g .git", "f() { shift; git \"$@\"; }; f x clean -fdx", "bash -c 'git \"$@\"' _ -C .. clean -fdx", "a=(-R 000 .); chmod \"${a[@]}\"/", "a=(.git /tmp/g); mv x\"${a[@]}\"",
 		"a=(mv .git /tmp/g); ${a[@]}", "a=(rm -rf /); \"${a[@]}\"", "a=(x); a=(rm -rf ~); ${a[@]}", "a=(chmod -R 000 .); ${a[*]}",
+		// The POSIX forms on every word of an array (seed 105), and bash's.
+		"a=(-R 000 . -R 000 .); chmod \"${a[@]=}\"", "a=(-R 000 .); chmod \"${a[@]-}\"", "a=(-R 000 .); chmod \"${a[@]:-x}\"", "a=(-R 000 .); chmod ${a[*]:=}",
+		"a=(-R 000 .); chmod \"${a[@]?}\"", "a=(000 .x); chmod -R \"${a[@]%x}\"", "a=(000 .x); chmod -R \"${a[@]/x}\"", "a=(-R 000 .); \"${a[@]:+chmod}\" \"${a[@]}\"",
+		"a=(x); chmod -R 000 \"${a[@]:+.}\"", "a=(mv .git /tmp/g); \"${a[@]-}\"", "a=(CLEAN -FDX); git \"${a[@],,}\"", "chmod -R 000 \"${n[@]:-.}\"",
 		// A value made of a variable that was set for another command only.
 		"v=-u *; w=./$v; shred $w", "v=u *;w=.$v;shred $w",
 		// To a plain sh a {name} before a redirection is an argument: the
@@ -285,6 +289,7 @@ func TestOtherDestroyers(t *testing.T) {
 		"d=src/app; rm -rf \"${d/src/build}\"", "dir=build/; rm -rf \"${dir:0:-1}\"", "for f in *.txt; do rm -f \"${f/.txt/.o}\"; done", "rm -rf \"${dir/src/build}\"", "d=build; rm -rf ${d@Q}", "rm -rf ${X@U}", "for f in *.txt; do rm -f \"${f,,}\"; done",
 		"files=(a.txt b.txt); mv \"${files[@]}\" /tmp/", "a=(a.txt b.txt); mv \"${a[@]}\" build", "srcs=(a.txt b.txt); mv -t build \"${srcs[@]}\"", "mv .git .git",
 		"a=(755 build); chmod -R \"${a[@]}\"", "a=(-la src); ls \"${a[@]}\"/*.go", "a=(src/ build/); rsync -a --delete \"${a[@]}\"",
+		"a=(755 build); chmod -R \"${a[@]=}\"", "a=(a.txt b.txt); mv \"${a[@]:-x}\" build", "a=(x); chmod -R 755 \"${a[@]:+build}\"", "a=(BUILD); chmod -R 755 \"${a[@],,}\"",
 		"alias ll='ls -l'\nll src", "hash -r; ls src", "hash -p /usr/local/bin/mytool mytool; mytool build", "a=(make -j4); \"${a[@]}\"", "args=(-la src); ls \"${args[@]}\"", "a=(mv a.txt b.txt); \"${a[@]}\"",
 		"find . -type f | xargs chmod 644", "ls *.log | xargs gzip", "find . -name '*.sh' | xargs chmod +x", "git ls-files | xargs wc -l",
 		"echo $[1+1]; mv build dist", "select x in a b; do mv $x build/; done", "coproc mv a.txt b.txt", "chmod --reference=a.txt b.txt",

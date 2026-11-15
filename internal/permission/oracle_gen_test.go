@@ -363,6 +363,9 @@ var genJoiners = []string{
 	"alias zz='true;'\nzz %P", "alias zz='true|'\nzz %P", "alias zz='%H #'\nzz %T",
 	// A pattern that a ".." takes back out (oracle seed 97).
 	"%H -rf */..", "d='*'; %H -rf $d/..", "w='*/..'; %H -R $w", "%H -rf src/*/../..", "%H -rf ./*/../.",
+	// The forms of ${...} on every word of an array (seed 105).
+	"a=(%T); %H \"${a[@]=}\"", "a=(%T); %H \"${a[@]:-x}\"", "a=(%T); %H ${a[*]-}", "a=(%T); %H \"${a[@]?}\"", "a=(%Tx); %H \"${a[@]%x}\"",
+	"a=(%Tx); %H \"${a[@]/x}\"", "a=(x); %H \"${a[@]:+%T}\"", "a=(%P); \"${a[@]-}\"", "%H \"${n[@]:-%T}\"",
 	"a=(%P); ${a[@]}", "a=(%P); \"${a[@]}\"", "a=(%H); a+=(%T); ${a[@]}", "a=(x %P); \"${a[@]:1}\"", "a=(%P); ${a[*]}", "a=(%T); %H \"${a[@]}\" x", "a=(/tmp/g %T /tmp/g); %H \"${a[@]}\"", "a=(%T %T); %H \"${a[@]}\"", "a=(%T); %H \"${a[@]}\".bak", "a=(x %T); %H ${a[*]}[*]}", "a=(%T x); %H pre\"${a[@]}\"", "a=(%T); %H ${a[@]}*", "a=(x %T x); %H -R \"${a[@]}\"",
 	"echo %T | xargs -n9 %H x", "echo x | xargs %P", "echo %T | xargs %H -t /tmp", "%H {fd}>log %T", "%P {fd}>log", "%P {fd}>&2 x",
 	"coproc %P", "select x in a; do %P; break; done", "echo $[1]; %P", "%P $[1]", "v=%H; ${v/x/y} %T", "v=x%H; ${v:1} %T", "d=HOME; %H ${!d}", "%P$x", "%H$x %T", "%H ${X:-%T}", "%H $X %T", "sh -c '%P$x'", "%H -${x}%T", "%H $x%T", "%H ${x}%T",
