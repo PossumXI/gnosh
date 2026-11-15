@@ -112,6 +112,9 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv /home /x", "sudo mv /etc /x", "mv ${HOME} /tmp/h", "d=.git; mv $d /tmp", "mv ../proj /tmp", "mv \"$X\"/* /tmp", "mv $X/ /tmp",
 		"mv -T /tmp/new ~", "mv --no-target-directory /tmp/new .git", "for d in .git src; do mv $d /tmp/; done", "mv \"$(pwd)\" /tmp/x",
 		"mv ~/.local/share/gnosh /tmp", "mv ~/.config /tmp", "mv .gi* /tmp", "mv {.git,x} /tmp",
+		// A variable inside a name right under the root leaves that name
+		// where it is empty (oracle seed 105): /tmp-a, /tmp:--rf.
+		"mv /tmp$X-a /tmp", "mv /tmp$X:--rf /tmp", "mv $X:--rf x} /tmp$X:--rf x} /tmp", "mv /tm${X}p /x",
 		// A default written with blanks is cut into words where its
 		// variable is not set: this is mv .git /tmp/g /tmp.
 		"mv ${X:-.git /tmp/g} /tmp", "mv ${X:-.git /tmp/g}\\ /tmp", "mv ${X:-.git /tmp/g}", "mv ${X:-.git /tmp/g}''", "mv ${HOME:+.git /tmp/g}",
@@ -359,6 +362,9 @@ func TestWhatTheRemovalCheckLetsGo(t *testing.T) {
 		// A pattern left a whole path when a variable is empty, that takes
 		// in nothing that has to be kept.
 		"rm -rf $OUT/build*", "rm -rf \"$TMPDIR\"/gnosh-*", "rm -f $X/tmp/*.log",
+		// A variable before a name written out right under it is how a
+		// build directory is named: /build where it is empty.
+		"rm -rf $OUT/build", "mv $OUT/build /tmp/old",
 		// A command's output without quotes, standing where the command
 		// takes something other than a target, that prints more words than
 		// the one it is there to be.

@@ -936,6 +936,9 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 	}
 	var val strings.Builder
 	unknown, guardedOnly, vars, substs := false, true, 0, 0
+	// lastUnknown is where in the value the last part not known ahead of
+	// time stands (-1: none), to tell "$DIR/build" from "/tmp$X-a".
+	lastUnknown := -1
 	// stated: every variable that is not known says what it stands for
 	// when it is not set (${DIR:-/}): the word is then a path like any.
 	stated := true
@@ -952,6 +955,12 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 				val.WriteString(e.cur)
 			default:
 				unknown = true
+				if p.name != "" {
+					// (A variable with no name stands for what was not
+					// known of a value made of other variables, put after
+					// what was: where that stood is not known.)
+					lastUnknown = val.Len()
+				}
 				if !p.guarded {
 					guardedOnly = false
 				}
@@ -965,6 +974,7 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 		default:
 			substs++
 			unknown = true
+			lastUnknown = val.Len()
 			guardedOnly = false
 			stated = false
 		}
@@ -1059,8 +1069,13 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 			// What is left may be a directory that has to be kept, by its
 			// whole path: "rm -rf $PREFIX/home/u". (A lone name right under
 			// the root that is not one of the usual ones is "$DIR/build",
-			// which is how a build directory is written.)
-			if c := cleanPath(s); c == "" || path.Dir(c) == "/" && c != e.home && c != e.cwd && c != e.cur {
+			// which is how a build directory is written: the variable
+			// stands before the name, which is written out. One inside the
+			// name is not that: "mv /tmp$X-a /tmp" moves /tmp-a, a
+			// directory right under the root, where X is empty; oracle
+			// seed 105.)
+			inName := lastUnknown >= strings.LastIndex(strings.TrimRight(s, "/"), "/")+1
+			if c := cleanPath(s); c == "" || path.Dir(c) == "/" && c != e.home && c != e.cwd && c != e.cur && !inName {
 				return ""
 			}
 			if why := e.targetDanger(litOf(s), dirs, fromSubst, recursive); why != "" {
