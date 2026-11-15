@@ -225,11 +225,17 @@ func (s *session) streamLines(width int) []string {
 			}
 		}
 		rows := s.thinkRows(words, width)
-		if n := len(rows); n > 2 {
-			rows = rows[n-2:]
+		if n := len(rows); n > thinkLive {
+			rows = rows[n-thinkLive:]
 		}
 		if !s.detail || !rp.thinkBegun {
-			out = append(out, s.th.Thinking.Render(s.th.ThinkMark+" thinking"))
+			head := s.th.Thinking.Render(s.th.ThinkMark + " thinking")
+			if !s.detail {
+				// Folded, only its last rows show: say every time how
+				// to have all of it.
+				head += s.th.Quiet.Render(s.th.Sep + "Ctrl+O writes it out")
+			}
+			out = append(out, fit(s.m, head, width))
 		}
 		out = append(out, rows...)
 	}
@@ -254,6 +260,10 @@ func (s *session) streamLines(width int) []string {
 	}
 	return out
 }
+
+// thinkLive is how many rows of reasoning show in the live region while
+// it arrives folded.
+const thinkLive = 4
 
 // thinkRows lays reasoning out as rows: plain words, set in by two cells,
 // in the style of reasoning. It is outside text and is made safe here.
@@ -489,7 +499,8 @@ func (s *session) activityLine(width int, now time.Time) string {
 			what = firstNonEmpty(s.said(), "working")
 		}
 	}
-	room := width - s.m.Width(th.BusyMark) - 1
+	markText, markWidth := s.busyMark(now)
+	room := width - markWidth - 1
 	if brief != "" && s.m.Width(what) > room {
 		what = brief
 	}
@@ -504,7 +515,7 @@ func (s *session) activityLine(width int, now time.Time) string {
 		parts = append(parts, "Esc stops")
 	}
 	// As many of the parts as fit; what gnosh is doing is always there.
-	mark := th.Busy.Render(th.BusyMark) + " "
+	mark := markText + " "
 	line := th.Activity.Render(parts[0])
 	used := s.m.Width(parts[0])
 	for _, p := range parts[1:] {
@@ -515,6 +526,31 @@ func (s *session) activityLine(width int, now time.Time) string {
 		used += s.m.Width(th.Sep) + s.m.Width(p)
 	}
 	return fit(s.m, mark+line, width)
+}
+
+// busyMark draws the mark that leads the activity line, and says how wide
+// it is. While gnosh works and there is colour, it is the spinner: a comet
+// of sparkle marks crossing its few cells, the head in the lightest colour
+// and the tail fading behind it, one step every SpinEvery of the clock.
+// With no colour, and while a question waits for the person, it is
+// BusyMark, standing still: a line that waits for someone does not move.
+func (s *session) busyMark(now time.Time) (string, int) {
+	th := &s.th
+	n := len(th.Spinner)
+	if n == 0 || len(th.SpinnerStyles) < n || th.SpinnerCells < 1 || th.SpinEvery <= 0 || s.q != nil {
+		return th.Busy.Render(th.BusyMark), s.m.Width(th.BusyMark)
+	}
+	steps := int64(th.SpinnerCells + n - 1)
+	head := int((now.UnixNano() / int64(th.SpinEvery)) % steps)
+	var b strings.Builder
+	for cell := range th.SpinnerCells {
+		if d := head - cell; d >= 0 && d < n {
+			b.WriteString(th.SpinnerStyles[d].Render(th.Spinner[d]))
+		} else {
+			b.WriteByte(' ')
+		}
+	}
+	return b.String(), th.SpinnerCells
 }
 
 // said is what the session itself says it is waiting for, in its own

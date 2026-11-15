@@ -40,6 +40,17 @@ on hosts and the three on the config build (`spec/DECISIONS.md` items 20 to
 25), and starting the first measured bench pass on the home AI box that
 night (`bench/README.md` had left when to measure to him).
 
+14 November 2026, after he had tried the new interface:
+
+> i dont like how the thinking just disappears after two lines... what about ctrl-o or whatever to expand at least? or whatever claude does. and i don't like the red '>'. make it one of the blue/green from gnosh.ai site. and i don't like that there's no spinner now... bring back the previous spinner with colors. and what about artifacts side tab? also pressing 'exit' doesn't exit anymore. and does '/' bring up all the commands?
+
+Set: the prompt mark is the site's blue-green; there is a spinner with
+colours again; the word `exit` leaves; how to see the thinking is said every
+time; deliverables are to be shown. Claude's part: the spinner is a comet of
+sparkle marks of gnosh's own and not the earlier program's animation, and in
+an interface that has no side panel the deliverables become lines and a
+command (`spec/gnosh/harness-ui.md`, UI-33).
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

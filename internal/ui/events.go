@@ -336,11 +336,8 @@ func (s *session) endThinking() {
 	// the words are kept so that Ctrl+O can show them afterwards.
 	s.lastThinking = rp.think.String()
 	rp.thinkRest = ""
-	line := s.th.Thinking.Render(s.th.ThinkMark + " thought for " + span(took))
-	if !s.tipped {
-		s.tipped = true
-		line += s.th.Quiet.Render(s.th.Sep + "Ctrl+O shows it")
-	}
+	line := s.th.Thinking.Render(s.th.ThinkMark+" thought for "+span(took)) +
+		s.th.Quiet.Render(s.th.Sep+"Ctrl+O shows it")
 	s.begin(blkThinking)
 	s.put(fit(s.m, line, s.cols))
 }

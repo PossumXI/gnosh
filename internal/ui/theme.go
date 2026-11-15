@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/gnosh-ai/gnosh/internal/diff"
 	"github.com/gnosh-ai/gnosh/internal/markdown"
 	"github.com/gnosh-ai/gnosh/internal/text"
@@ -41,6 +43,12 @@ type Palette struct {
 
 	// Mint and Sun are the brand's green and gold, for the wordmark.
 	Mint, Sun text.Color
+	// Aqua is the blue-green of gnosh.ai, for the prompt mark, the pointer
+	// and the head of the spinner. Jae chose it for the mark (14 November
+	// 2026: "make it one of the blue/green from gnosh.ai site"). Like the
+	// brand's two it is light: on a white background it is faint, and
+	// nothing but a mark is drawn in it.
+	Aqua text.Color
 }
 
 // DefaultPalette returns gnosh's own colours for the profile p. With
@@ -52,7 +60,7 @@ func DefaultPalette(p text.Profile) Palette {
 		return Palette{
 			Purple: text.Magenta, Pink: text.BrightMagenta, Lilac: text.Cyan,
 			Green: text.Green, Gold: text.Yellow, Rose: text.Red, Grey: text.Default,
-			Mint: text.Green, Sun: text.Yellow,
+			Mint: text.Green, Sun: text.Yellow, Aqua: text.BrightCyan,
 		}
 	}
 	return Palette{
@@ -65,6 +73,7 @@ func DefaultPalette(p text.Profile) Palette {
 		Grey:   text.RGB(0x7A, 0x7A, 0x7A),
 		Mint:   text.RGB(0x00, 0xFF, 0xB2),
 		Sun:    text.RGB(0xFB, 0xD2, 0x37),
+		Aqua:   text.RGB(0x68, 0xFF, 0xD6),
 	}
 }
 
@@ -96,8 +105,17 @@ type Theme struct {
 	// ToolMark stands before a tool call, FailMark before one that
 	// failed or was refused, and SubMark before what a sub-agent did.
 	ToolMark, FailMark, SubMark string
-	// BusyMark stands before the line that says what gnosh is doing.
+	// BusyMark stands before the line that says what gnosh is doing, where
+	// nothing moves: with no colour, and while a question waits.
 	BusyMark string
+	// Spinner is the working mark that moves: a small comet of sparkle
+	// marks, its head first, each drawn in the style of the same place in
+	// SpinnerStyles. It crosses SpinnerCells cells, one step every
+	// SpinEvery. With no colour there is none.
+	Spinner       []string
+	SpinnerStyles []text.Style
+	SpinnerCells  int
+	SpinEvery     time.Duration
 	// ThinkMark stands before the model's reasoning.
 	ThinkMark string
 	// AskMark stands before the record of a question and its answer.
@@ -157,11 +175,12 @@ type Theme struct {
 // DefaultTheme returns gnosh's own look for the colour profile p.
 //
 // It is crisp and sparing: prose, commands and output are the terminal's
-// own colour; purple marks what gnosh draws itself; hot pink is the one
-// accent, on the prompt mark and on whatever is chosen; grey is for what
-// is not the text itself. Nothing is filled in, blurred or dimmed into a
-// background, and the only fade is the wordmark, once, at the top of a
-// session.
+// own colour; purple marks what gnosh draws itself; the prompt mark and the
+// pointer are the site's blue-green; hot pink is the one accent, on
+// whatever is chosen; grey is for what is not the text itself. Nothing is
+// filled in, blurred or dimmed into a background. Two things have more
+// than one colour: the wordmark, once, at the top of a session, and the
+// spinner while gnosh works.
 func DefaultTheme(p text.Profile) Theme {
 	return NewTheme(p, DefaultPalette(p))
 }
@@ -201,7 +220,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		TaskTodo:   "[ ]",
 		Sep:        " · ",
 
-		Prompt:     plain.Fg(pal.Pink).Bold(),
+		Prompt:     plain.Fg(pal.Aqua).Bold(),
 		PromptText: plain,
 		Tool:       plain.Fg(pal.Purple),
 		ToolName:   plain.Bold(),
@@ -215,7 +234,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		WarnLabel:  plain.Fg(pal.Gold).Bold(),
 		ErrorLabel: plain.Fg(pal.Rose).Bold(),
 		NoteText:   quiet,
-		Busy:       plain.Fg(pal.Pink).Bold(),
+		Busy:       plain.Fg(pal.Aqua).Bold(),
 		Activity:   plain,
 		Status:     quiet,
 		Mode:       plain.Fg(pal.Purple).Bold(),
@@ -227,6 +246,17 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		Answer:     plain.Bold(),
 	}
 
+	if p != text.NoColor {
+		// The comet: a bright head and a tail that fades behind it, in the
+		// site's blue-green, the hot pink, the purple and the lilac.
+		th.Spinner = []string{"✦", "✧", "⋆", "∙"}
+		th.SpinnerStyles = []text.Style{
+			plain.Fg(pal.Aqua).Bold(), plain.Fg(pal.Pink), plain.Fg(pal.Purple), plain.Fg(pal.Lilac),
+		}
+		th.SpinnerCells = 6
+		th.SpinEvery = 110 * time.Millisecond
+	}
+
 	th.Editor = editor.Theme{
 		Prompt:        "> ",
 		ShellPrompt:   "! ",
@@ -236,7 +266,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		MoreBoth:      "↕",
 		Pointer:       ">",
 
-		PromptStyle:  plain.Fg(pal.Pink).Bold(),
+		PromptStyle:  plain.Fg(pal.Aqua).Bold(),
 		ShellStyle:   plain.Fg(pal.Gold).Bold(),
 		CommandStyle: plain.Fg(pal.Green).Bold(),
 		Text:         plain,
@@ -254,7 +284,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 	}
 
 	field := th.Editor
-	field.Prompt, field.PromptStyle = "| ", plain.Fg(pal.Pink)
+	field.Prompt, field.PromptStyle = "| ", plain.Fg(pal.Aqua)
 	th.Menu = menu.Theme{
 		Pointer:   ">",
 		MoreAbove: "↑",
@@ -269,7 +299,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		Title:        plain.Bold(),
 		Label:        plain,
 		Selected:     plain.Fg(pal.Pink).Bold(),
-		PointerStyle: plain.Fg(pal.Pink).Bold(),
+		PointerStyle: plain.Fg(pal.Aqua).Bold(),
 		Description:  quiet,
 		Hint:         quiet,
 		More:         plain.Fg(pal.Purple),

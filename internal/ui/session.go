@@ -518,6 +518,10 @@ func (s *session) wake() time.Time {
 	if s.busy || s.cmdRun != "" || s.q != nil || s.ed.Hint() != editor.HintNone {
 		soon(now.Add(time.Second).Truncate(time.Second))
 	}
+	if (s.busy || s.cmdRun != "") && s.q == nil && len(s.th.Spinner) > 0 && s.th.SpinEvery > 0 {
+		// The spinner takes its next step.
+		soon(now.Add(s.th.SpinEvery))
+	}
 	if s.info.NotifyHooks {
 		if q := s.q; q != nil && !q.notified {
 			soon(later(q.opened, s.lastInput).Add(askNotifyAfter))

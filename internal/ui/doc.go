@@ -76,7 +76,11 @@
 // has to read), the model is thinking, is writing, is writing a call;
 // running a command, by its own words, or several tools, by their names;
 // waiting for the person; waiting so many seconds to try a failed request
-// again; writing a summary; stopping. Nothing in it moves but the clock.
+// again; writing a summary; stopping. Its mark moves while gnosh works: a
+// small comet of sparkle marks in the palette's colours, one step about
+// every tenth of a second (Jae, 14 November 2026: "i don't like that
+// there's no spinner now"). With no colour, and while a question waits for
+// the person, the mark stands still.
 // It is there only while the session is busy: there is never a "working"
 // line with nothing in flight, and should the event that says the session
 // went idle ever be missed, the session's own word is asked. When it is
@@ -250,10 +254,13 @@
 // Theme holds every mark and every style, with the looks of the prompt
 // box, the questions, Markdown and diffs inside it, all made from one
 // Palette. The default is gnosh's own: prose and output in the terminal's
-// own colour, purple for the marks gnosh draws itself, hot pink as the one
-// accent, grey for what is not the text itself, and nothing filled in,
-// blurred or dimmed into a background. The text colours are middle tones
-// that read on a dark and on a light background. The wordmark fades
+// own colour, purple for the marks gnosh draws itself, the blue-green of
+// gnosh.ai for the prompt mark, the pointer and the head of the spinner,
+// hot pink as the one accent on what is chosen, grey for what is not the
+// text itself, and nothing filled in, blurred or dimmed into a background.
+// The text colours are middle tones that read on a dark and on a light
+// background; the blue-green is light, and only marks are drawn in it. The
+// wordmark fades
 // through mint, purple, pink and gold with full colour, is "GNO" in green
 // and the rest from purple to pink with fewer colours, and is plain
 // letters with none. Nothing is said by colour alone: every kind of line

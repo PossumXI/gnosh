@@ -183,6 +183,7 @@ func TestOnePalette(t *testing.T) {
 	pal.Pink = text.RGB(4, 5, 6)
 	pal.Green = text.RGB(7, 8, 9)
 	pal.Rose = text.RGB(10, 11, 12)
+	pal.Aqua = text.RGB(13, 14, 15)
 	th := NewTheme(text.TrueColor, pal)
 	for what, seq := range map[string]string{
 		"the tool mark":                 th.Tool.Sequence(),
@@ -197,15 +198,24 @@ func TestOnePalette(t *testing.T) {
 		}
 	}
 	for what, seq := range map[string]string{
-		"the prompt mark":           th.Prompt.Sequence(),
-		"the box's prompt mark":     th.Editor.PromptStyle.Sequence(),
-		"a question's chosen row":   th.Menu.Selected.Sequence(),
-		"Markdown's headings":       th.Markdown.Heading.Sequence(),
-		"the line that says busy":   th.Busy.Sequence(),
-		"a question's field prompt": th.Menu.Field.PromptStyle.Sequence(),
+		"a question's chosen row": th.Menu.Selected.Sequence(),
+		"Markdown's headings":     th.Markdown.Heading.Sequence(),
+		"the spinner's tail":      th.SpinnerStyles[1].Sequence(),
 	} {
 		if !strings.Contains(seq, "38;2;4;5;6") {
 			t.Errorf("%s is not in the palette's pink: %q", what, seq)
+		}
+	}
+	for what, seq := range map[string]string{
+		"the prompt mark":           th.Prompt.Sequence(),
+		"the box's prompt mark":     th.Editor.PromptStyle.Sequence(),
+		"a question's pointer":      th.Menu.PointerStyle.Sequence(),
+		"the line that says busy":   th.Busy.Sequence(),
+		"the spinner's head":        th.SpinnerStyles[0].Sequence(),
+		"a question's field prompt": th.Menu.Field.PromptStyle.Sequence(),
+	} {
+		if !strings.Contains(seq, "38;2;13;14;15") {
+			t.Errorf("%s is not in the palette's blue-green: %q", what, seq)
 		}
 	}
 	if !strings.Contains(th.Diff.Inserted.Sequence(), "38;2;7;8;9") || !strings.Contains(th.Diff.Deleted.Sequence(), "38;2;10;11;12") {

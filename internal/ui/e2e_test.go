@@ -732,6 +732,9 @@ func TestResumeWithTheProgram(t *testing.T) {
 	p.has("A new session is open")
 	p.keys(`"the second session's prompt" <Enter>`)
 	p.has("The second session's answer.")
+	// The list of sessions opens only when no turn is running, so the
+	// turn is let end first: the status line says idle again.
+	p.has("idle")
 	p.keys(`"/resume" <Enter>`)
 	p.has("Open which session? This one is kept.", "the first session's prompt", "Never mind")
 	p.keys(`<Enter>`)
