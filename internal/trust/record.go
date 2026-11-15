@@ -206,6 +206,10 @@ func (s *Store) read(file string) (*Entry, string) {
 		return nil, fmt.Sprintf("the trust record %s can be written by other users, so it does not count. If it is yours: chmod 600 %s", file, file)
 	}
 	text, err := readSmall(file)
+	if errors.Is(err, fs.ErrNotExist) {
+		// Another gnosh forgot the folder between the look and the read.
+		return nil, ""
+	}
 	if err != nil {
 		return nil, fmt.Sprintf("the trust record %s could not be read (%v)", file, err)
 	}

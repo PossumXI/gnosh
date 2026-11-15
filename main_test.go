@@ -304,7 +304,9 @@ func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
 	want := []string{
 		"gnosh", "gnosh doctor", "gnosh trust", "gnosh models",
 		"gnosh session", "gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename",
-		"gnosh mem", "gnosh logs", "gnosh dirs", "gnosh help", "gnosh version",
+		"gnosh mem", "gnosh logs", "gnosh dirs",
+		"gnosh mcp", "gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
+		"gnosh help", "gnosh version",
 	}
 	if strings.Join(titles, ", ") != strings.Join(want, ", ") {
 		t.Errorf("the commands help lists:\n got %s\nwant %s", strings.Join(titles, ", "), strings.Join(want, ", "))
@@ -312,10 +314,10 @@ func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"-p", "-q", "x"}, {"-s", "abc", "-p", "x"}, {"-D", t.TempDir(), "-p", "x"}, {"--bare", "-p", "x"},
-		{"session", "delete", "abc"}, {"session", "web"}, {"help", "run"}, {"help", "mcp"},
+		{"session", "delete", "abc"}, {"session", "web"}, {"help", "run"}, {"mcp", "serve"},
 	} {
 		code, out, errs := shipped(t, args...)
-		if code != 1 || out != "" || (!strings.Contains(errs, "is not a flag of gnosh") && !strings.Contains(errs, "is not a command of gnosh")) {
+		if code != 1 || out != "" || (!strings.Contains(errs, "is not a flag of gnosh") && !strings.Contains(errs, "does not go with gnosh") && !strings.Contains(errs, "is not a command of gnosh")) {
 			t.Errorf("gnosh %s: exit code %d, stdout %q, stderr %q", strings.Join(args, " "), code, out, errs)
 		}
 	}
