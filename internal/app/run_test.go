@@ -136,6 +136,65 @@ func TestRunPartialMessages(t *testing.T) {
 	has(t, "without stream-json", r.err, "only does something with --output-format stream-json")
 }
 
+// --input-format stream-json is a conversation: one user message a line
+// on standard input, each answered by a turn that ends with its own
+// result line, which carries the message's uuid; a blank message ends at
+// once; a line of another type is passed over; with
+// --replay-user-messages each message is written back first. The run
+// ends when the input does, and the turns are one session's.
+func TestRunStreamJSONInput(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "First answer."}, apptest.Reply{Text: "Second answer."})
+	o := testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages")
+	o.Stdin = strings.NewReader(strings.Join([]string{
+		`{"type":"user","message":{"role":"user","content":"first question"},"uuid":"u-1"}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"second question"}]},"uuid":"u-2","priority":"later"}`,
+		`{"type":"control_request","request_id":"r1","request":{"subtype":"initialize"}}`,
+		`{"type":"user","message":{"role":"user","content":"   "},"uuid":"u-3","priority":"later"}`,
+		"",
+	}, "\n"))
+	o.StdinIsTerminal = false
+	r := runWith(t, t.Context(), o).wantCode(t, 0)
+	results := map[string]string{}
+	replays := 0
+	for _, l := range jsonLines(t, r.out) {
+		switch l["type"] {
+		case "result":
+			uuid, _ := l["user_message_uuid"].(string)
+			text, _ := l["result"].(string)
+			if l["subtype"] != "success" {
+				t.Errorf("result for %s: %v", uuid, l)
+			}
+			results[uuid] = text
+		case "user":
+			if l["isReplay"] == true {
+				replays++
+			}
+		}
+	}
+	if results["u-1"] != "First answer." || results["u-2"] != "Second answer." || results["u-3"] != "" || len(results) != 3 {
+		t.Errorf("results by message: %v", results)
+	}
+	if replays != 3 {
+		t.Errorf("%d messages written back, want 3", replays)
+	}
+	has(t, "stderr", r.err, `a line of type "control_request" on standard input was passed over`)
+	reqs := w.Model.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the model was sent %d requests, want 2", len(reqs))
+	}
+	has(t, "the second request", string(reqs[1].Body), "first question", "First answer.", "second question")
+	if n := len(w.Sessions()); n != 1 {
+		t.Errorf("%d session files, want one", n)
+	}
+
+	// A line that is not JSON stops the run.
+	o = testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json")
+	o.Stdin = strings.NewReader("not json\n")
+	o.StdinIsTerminal = false
+	r = runWith(t, t.Context(), o).wantCode(t, 1)
+	has(t, "stderr", r.err, "is not a JSON object")
+}
+
 // checkSession opens a session's file as gnosh itself would, and fails
 // the test unless it reads without a warning and what a model would be
 // sent from it is a conversation a provider accepts: every tool call

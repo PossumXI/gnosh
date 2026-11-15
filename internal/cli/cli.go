@@ -143,6 +143,9 @@ type Invocation struct {
 	// NoSessionPersistence keeps nothing of a run: its session is not
 	// saved and cannot be resumed (print mode only).
 	NoSessionPersistence bool
+	// ReplayUserMessages is --replay-user-messages: with stream-json both
+	// ways, each user message read is written back as a user line.
+	ReplayUserMessages bool
 	// IncludePartialMessages is --include-partial-messages: stream-json
 	// also carries the main agent's replies as streaming events.
 	IncludePartialMessages bool

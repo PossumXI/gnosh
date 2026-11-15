@@ -144,8 +144,10 @@ Print mode
       object at the end) or stream-json (a JSON line per message, then the
       result). (Not built yet: json, stream-json.)
   --input-format <format>
-      What standard input carries: text, which is the default and the one
-      format gnosh reads.
+      What standard input carries: text (the prompt, and the default), or
+      stream-json (one JSON user message a line, for a conversation that goes
+      on until standard input closes; needs --output-format stream-json). (Not
+      built yet: stream-json.)
   --goal <condition>
       Keep working until this condition holds, as /goal does in a session. The
       run exits non-zero while the goal is still unmet. (Not built yet.)
@@ -159,6 +161,10 @@ Print mode
       With --output-format stream-json: also write the replies as they arrive,
       as the Messages API's streaming events (stream_event lines). (Not built
       yet.)
+  --replay-user-messages
+      With --input-format and --output-format stream-json: write each user
+      message read back on standard output, as a user line with isReplay. (Not
+      built yet.)
   --no-session-persistence
       Keep nothing of the run: its session is not saved, and cannot be
       resumed. (Not built yet.)

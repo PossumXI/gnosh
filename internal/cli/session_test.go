@@ -350,7 +350,7 @@ func TestPrintFlags(t *testing.T) {
 		{line: `gnosh -p x --output-format stream_json`, kind: ErrBadValue, hint: "stream-json"},
 		{line: `gnosh -p x --output-format JSON`, kind: ErrBadValue, hint: "json"},
 		{line: `gnosh -p x --output-format xml`, kind: ErrBadValue, say: []string{"xml is none of them"}},
-		{line: `gnosh -p x --input-format json`, kind: ErrBadValue, say: []string{"--input-format takes text and no other value, and json was given"}},
+		{line: `gnosh -p x --input-format json`, kind: ErrBadValue, say: []string{"--input-format takes text or stream-json, and json is none of them"}},
 		{line: `gnosh -p x --max-turns 0`, kind: ErrBadValue, say: []string{"--max-turns takes a whole number of 1 or more, and 0 is not one"}},
 		{line: `gnosh -p x --max-turns many`, kind: ErrBadValue, say: []string{"many is not one"}},
 		{line: `gnosh -p x --max-turns 2.5`, kind: ErrBadValue, say: []string{"2.5 is not one"}},

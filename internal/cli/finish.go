@@ -121,6 +121,20 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 		if inv.InputFormat == "" {
 			inv.InputFormat = FormatText
 		}
+		if o := p.given("--input-format"); o != nil && inv.InputFormat == FormatStreamJSON {
+			switch {
+			case inv.OutputFormat != FormatStreamJSON:
+				return fail(ErrUsage, o.typed,
+					"--input-format stream-json is a conversation in JSON lines both ways, and needs --output-format stream-json, so nothing was started. Add --output-format stream-json.")
+			case inv.Prompt != "":
+				return fail(ErrUsage, o.typed,
+					"With --input-format stream-json the prompts come on standard input, one JSON line each, and one was given on the command line too, so nothing was started. Send it as the first line instead.")
+			}
+		}
+		if o := p.given("--replay-user-messages"); o != nil && (inv.InputFormat != FormatStreamJSON || inv.OutputFormat != FormatStreamJSON) {
+			return fail(ErrUsage, o.typed,
+				"%s only does something with --input-format stream-json and --output-format stream-json, so nothing was started.", o.typed)
+		}
 	}
 
 	inv.SettingsInline = strings.HasPrefix(strings.TrimSpace(inv.Settings), "{")
@@ -131,7 +145,7 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			"The prompt on the command line is empty, so nothing was started. Give it some words, or leave it out.")
 	}
 	inv.ReadStdin = !env.StdinIsTerminal
-	if printing && inv.Prompt == "" && env.StdinIsTerminal && inv.Goal == "" {
+	if printing && inv.Prompt == "" && env.StdinIsTerminal && inv.Goal == "" && inv.InputFormat != FormatStreamJSON {
 		msg := "Print mode answers one prompt, and none was given, so nothing was started. Put the prompt on the command line, or pipe it in."
 		if inv.PrintImplied {
 			msg = "No prompt was given, so nothing was started. gnosh's output is not going to a terminal, so it would answer one prompt and exit, as with -p: put the prompt on the command line, or pipe it in."

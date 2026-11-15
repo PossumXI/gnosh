@@ -226,8 +226,8 @@ func Default() *Table {
 		choices: []choice{{name: FormatText}, {name: FormatJSON, pri: 1}, {name: FormatStreamJSON, pri: 1}},
 		set:     func(i *Invocation, v flagValue) { i.OutputFormat = v.text }})
 	input := t.add(&flag{names: "--input-format", kind: kindText, arg: "format", group: groupPrint, pri: 0, printOnly: true,
-		help:    "What standard input carries: text, which is the default and the one format gnosh reads.",
-		choices: []choice{{name: FormatText}},
+		help:    "What standard input carries: text (the prompt, and the default), or stream-json (one JSON user message a line, for a conversation that goes on until standard input closes; needs --output-format stream-json).",
+		choices: []choice{{name: FormatText}, {name: FormatStreamJSON, pri: 1}},
 		set:     func(i *Invocation, v flagValue) { i.InputFormat = v.text }})
 	goal := t.add(&flag{names: "--goal", kind: kindText, arg: "condition", group: groupPrint, pri: 1, printOnly: true, freeText: true,
 		help: "Keep working until this condition holds, as /goal does in a session. The run exits non-zero while the goal is still unmet.",
@@ -238,6 +238,9 @@ func Default() *Table {
 	smallModel := t.add(&flag{names: "--small-model", kind: kindText, arg: "model", group: groupPrint, pri: 1, printOnly: true,
 		help: "The model for the run's short side jobs. Without it they use the main model.",
 		set:  func(i *Invocation, v flagValue) { i.SmallModel = v.text }})
+	replay := t.add(&flag{names: "--replay-user-messages", group: groupPrint, pri: 1, printOnly: true,
+		help: "With --input-format and --output-format stream-json: write each user message read back on standard output, as a user line with isReplay.",
+		set:  func(i *Invocation, _ flagValue) { i.ReplayUserMessages = true }})
 	partial := t.add(&flag{names: "--include-partial-messages", group: groupPrint, pri: 1, printOnly: true,
 		help: "With --output-format stream-json: also write the replies as they arrive, as the Messages API's streaming events (stream_event lines).",
 		set:  func(i *Invocation, _ flagValue) { i.IncludePartialMessages = true }})
@@ -256,7 +259,7 @@ func Default() *Table {
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents,
 		cwd, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
-		printMode, output, input, goal, maxTurns, smallModel, partial, noPersist,
+		printMode, output, input, goal, maxTurns, smallModel, partial, replay, noPersist,
 		help, version,
 	}
 

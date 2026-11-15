@@ -66,6 +66,13 @@ type printer struct {
 	// sm is the reply being streamed as stream events
 	// (--include-partial-messages).
 	sm streamed
+	// turnStart, when set, is when the prompt of the turn being reported
+	// went out (--input-format stream-json): a result's duration is the
+	// turn's own.
+	turnStart time.Time
+	// starts, in a run of many, hands on the prompts each turn starts
+	// with, so that the next message waits for its turn to begin.
+	starts chan []string
 
 	capped bool
 	// rounds counts the run's own replies as they are reported, for a
@@ -107,6 +114,9 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	f.mu.Lock()
 	f.c = c
 	f.mu.Unlock()
+	if f.inv.InputFormat == cli.FormatStreamJSON {
+		return f.runStream(ctx, c)
+	}
 
 	text, err := f.readPrompt(ctx)
 	first := agent.Prompt{Text: text}
@@ -352,6 +362,12 @@ func (f *printer) Event(ev any) {
 	switch ev := ev.(type) {
 	case *agent.TurnStartEvent:
 		f.init()
+		if f.starts != nil && ev.Agent == "" {
+			select {
+			case f.starts <- ev.Prompts:
+			default:
+			}
+		}
 	case *agent.RequestEvent:
 		if ev.Purpose == "main" && ev.Agent == "" {
 			f.sm.model, f.sm.sent = ev.Model, ev.Time
@@ -526,6 +542,15 @@ func (f *printer) text(s string) {
 	}
 	fmt.Fprint(f.p.stdout, s)
 	f.wroteAny, f.endsLine = true, strings.HasSuffix(s, "\n")
+}
+
+// since is when the turn being reported began: its prompt's, in a run of
+// many, and the run's own start otherwise.
+func (f *printer) since() time.Time {
+	if !f.turnStart.IsZero() {
+		return f.turnStart
+	}
+	return f.p.start
 }
 
 // dropEchoedLine takes off the end of a reply what a model repeated of
@@ -779,6 +804,7 @@ type resultObject struct {
 	TerminalReason    string                `json:"terminal_reason,omitempty"`
 	APIErrorStatus    *int                  `json:"api_error_status,omitempty"`
 	LocalCommand      string                `json:"local_command,omitempty"`
+	UserMessageUUID   string                `json:"user_message_uuid,omitempty"`
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -966,7 +992,7 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 		Type: "result", UUID: newUUID(), SessionID: info.ID,
 		StopReason:        stopWord(res.StopReason),
 		NumTurns:          res.Rounds,
-		DurationMS:        f.p.now().Sub(f.p.start).Milliseconds(),
+		DurationMS:        f.p.now().Sub(f.since()).Milliseconds(),
 		DurationAPIMS:     res.APIDuration.Milliseconds(),
 		Usage:             usageOf(res.Usage),
 		ModelUsage:        map[string]modelUsage{},

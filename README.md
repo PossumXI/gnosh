@@ -19,6 +19,7 @@ a real model (Qwen 3.8 27B on llama.cpp). `tools/dev/remote-ci.sh` builds,
 vets and tests every package from a clean copy.
 
 Built: print mode (`gnosh -p`, with text, JSON and streamed JSON output,
+streamed JSON input for a conversation over standard input,
 `--bare` for minimal mode, `--no-session-persistence` to keep nothing, and
 `--agents` for kinds of sub-agent of the run's own), an
 interactive session in the terminal's own scrollback, the file and shell

@@ -115,6 +115,14 @@ func (u flagUse) around() (before, args []string) {
 	if u.f.id == "--include-partial-messages" {
 		before = append(before, "--output-format", "stream-json")
 	}
+	switch u.f.id {
+	case "--replay-user-messages":
+		// The prompts come on standard input, one JSON line each.
+		return append(before, "--input-format", "stream-json", "--output-format", "stream-json"), nil
+	case "--input-format":
+		// Its sample, stream-json, wants stream-json output and no prompt.
+		return append(before, "--output-format", "stream-json"), nil
+	}
 	if u.c.session {
 		return before, []string{"the prompt"}
 	}

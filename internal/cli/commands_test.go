@@ -211,8 +211,9 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		// The flags of parts that are not built.
 		{line: `gnosh -p x --permission-prompts none`, kind: ErrUnknownFlag, say: []string{"--permission-prompts is not a flag of gnosh"}},
 		{line: `gnosh -p x --include-partial-messages`, kind: ErrUsage, say: []string{"--include-partial-messages only does something with --output-format stream-json"}},
-		{line: `gnosh -p x --replay-user-messages`, kind: ErrUnknownFlag, say: []string{"--replay-user-messages is not a flag of gnosh"}},
-		{line: `gnosh -p --input-format stream-json`, kind: ErrBadValue, say: []string{"--input-format takes text and no other value, and stream-json was given, so nothing was started."}},
+		{line: `gnosh -p --input-format stream-json`, kind: ErrUsage, say: []string{"--input-format stream-json is a conversation in JSON lines both ways, and needs --output-format stream-json"}},
+		{line: `gnosh -p x --input-format stream-json --output-format stream-json`, kind: ErrUsage, say: []string{"the prompts come on standard input"}},
+		{line: `gnosh -p x --replay-user-messages`, kind: ErrUsage, say: []string{"--replay-user-messages only does something with --input-format stream-json and --output-format stream-json"}},
 
 		// The commands of parts that are not built: in a group, unknown; as
 		// a first word, the prompt.
@@ -236,8 +237,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 	}
 	for _, gone := range []string{
 		"run", "--quiet", "--session", "--data-dir",
-		"--permission-prompts", "--replay-user-messages",
-		"--input-format=stream-json",
+		"--permission-prompts",
 		"session delete", "session web", "session web --port",
 		"prompt show", "prompt path", "prompt export", "prompt tools", "prompt context",
 		"prompt export --force", "prompt tools --json", "prompt tools --export",
