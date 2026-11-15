@@ -8,6 +8,8 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -327,5 +329,70 @@ func TestMCPToolsChange(t *testing.T) {
 	}
 	if names := toolNamesOf(reqs[1]); !slices.Contains(names, "mcp__changer__wave") {
 		t.Errorf("the tools after the server said they changed: %q", names)
+	}
+}
+
+// briefMCPHTTP is an MCP server at a URL whose sessions end after one
+// call: a request in an ended session is answered 404, and a handshake
+// starts another session.
+func briefMCPHTTP(t *testing.T, inits, calls *atomic.Int32) *httptest.Server {
+	var mu sync.Mutex
+	live := map[string]bool{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		mu.Lock()
+		defer mu.Unlock()
+		sid := r.Header.Get("Mcp-Session-Id")
+		switch {
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent)
+			return
+		case m.Method == "initialize":
+			sid = fmt.Sprintf("s%d", inits.Add(1))
+			live[sid] = true
+			w.Header().Set("Mcp-Session-Id", sid)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"brief","version":"1"}}}`, m.ID)
+			return
+		case !live[sid]:
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch m.Method {
+		case "tools/list":
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"ping","description":"Pings."}]}}`, m.ID)
+		case "tools/call":
+			delete(live, sid)
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"pong %d"}]}}`, m.ID, calls.Add(1))
+		default:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// A server at a URL that ends the session is connected to again, and the
+// call it refused is made again.
+func TestMCPRedialsAServerAtAURL(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "mcp__brief__ping", Args: `{}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "mcp__brief__ping", Args: `{}`}}},
+		apptest.Reply{Text: "Pinged twice."},
+	)
+	var inits, calls atomic.Int32
+	srv := briefMCPHTTP(t, &inits, &calls)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"brief": {"type": "http", "url": "`+srv.URL+`/mcp"}}}`)
+
+	run(t, w, "-y", "-p", "ping twice").wantCode(t, 0)
+	has(t, "the first call", toolResult(t, w, 1, "c1"), "pong 1")
+	has(t, "the second call, made again in a new session", toolResult(t, w, 2, "c2"), "pong 2")
+	if inits.Load() != 2 || calls.Load() != 2 {
+		t.Errorf("%d handshakes and %d calls, want 2 of each", inits.Load(), calls.Load())
 	}
 }

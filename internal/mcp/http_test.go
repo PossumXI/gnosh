@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -195,7 +196,7 @@ func TestHTTPFailures(t *testing.T) {
 	dead := httptest.NewServer(http.NotFoundHandler())
 	url := dead.URL
 	dead.Close()
-	if _, err := StartHTTP(ctx, "x", url, nil, Options{}); err == nil || !strings.Contains(err.Error(), "could not be reached") {
+	if _, err := StartHTTP(ctx, "x", url, nil, Options{}); !errors.Is(err, ErrUnreachable) || !strings.Contains(err.Error(), "could not be reached") {
 		t.Errorf("nobody there: %v", err)
 	}
 
@@ -210,7 +211,7 @@ func TestHTTPFailures(t *testing.T) {
 	f.mu.Lock()
 	f.gone = true
 	f.mu.Unlock()
-	if _, err := c.ListTools(ctx); err == nil || !strings.Contains(err.Error(), "ended this session") {
+	if _, err := c.ListTools(ctx); !errors.Is(err, ErrSessionEnded) || !strings.Contains(err.Error(), "ended this session") {
 		t.Errorf("an ended session: %v", err)
 	}
 	c.Close()

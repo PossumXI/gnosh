@@ -101,7 +101,7 @@ func (t *httpTransport) send(ctx context.Context, m message) error {
 		if t.base.Err() != nil {
 			return ErrClosed
 		}
-		return fmt.Errorf("mcp: the server could not be reached: %w", err)
+		return fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	if id := resp.Header.Get("Mcp-Session-Id"); id != "" && m.Method == "initialize" {
 		t.mu.Lock()
@@ -116,7 +116,7 @@ func (t *httpTransport) send(ctx context.Context, m message) error {
 	case resp.StatusCode == http.StatusNotFound && t.hasSession():
 		resp.Body.Close()
 		done()
-		return errors.New("mcp: the server has ended this session (it answered 404 Not Found); reconnect to start another")
+		return fmt.Errorf("%w (it answered 404 Not Found); reconnect to start another", ErrSessionEnded)
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
 		resp.Body.Close()

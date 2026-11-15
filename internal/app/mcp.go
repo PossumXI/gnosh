@@ -51,8 +51,9 @@ type mcpServer struct {
 	// gen counts what /mcp has done to the server: a connection made for
 	// an earlier one is let go of when it is ready.
 	gen int
-	// refresh is held while the server's tool list is read again.
-	refresh sync.Mutex
+	// refresh is held while the server's tool list is read again, and
+	// redial while a dropped connection is made again.
+	refresh, redial sync.Mutex
 }
 
 // mcpSet is the session's servers.
@@ -193,6 +194,34 @@ func (l *live) connectMCP(s *mcpServer) {
 	l.offerMCPTools()
 	// It may have said its tools changed while they were being listed.
 	l.refreshMCP(s, client)
+}
+
+// redialMCP connects again to a server whose connection old dropped, and
+// returns the new connection, or nil when it could not be made. Calls that
+// find the same drop at once make one new connection between them.
+func (l *live) redialMCP(s *mcpServer, old *mcp.Client) *mcp.Client {
+	s.redial.Lock()
+	defer s.redial.Unlock()
+	l.mcp.mu.Lock()
+	if s.client != nil && s.client != old {
+		c := s.client
+		l.mcp.mu.Unlock()
+		return c
+	}
+	if s.status == "disabled" || s.client != old {
+		l.mcp.mu.Unlock()
+		return nil
+	}
+	s.gen++
+	s.client, s.tools, s.err, s.status = nil, nil, "", "pending"
+	l.mcp.mu.Unlock()
+	_ = old.Close()
+	l.offerMCPTools()
+	l.flog.logf("mcp", "the connection to the MCP server %s dropped; connecting again", s.cfg.Name)
+	l.connectMCP(s)
+	l.mcp.mu.Lock()
+	defer l.mcp.mu.Unlock()
+	return s.client
 }
 
 // mcpToolsOf makes the tools the model is offered of a server's list.
@@ -451,6 +480,22 @@ func (t *mcpTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	res, err := client.CallTool(ctx, t.tool.Name, call.Input)
 	// A server that changed its tools on the way says so before it answers.
 	t.l.refreshMCP(t.server, client)
+	// A server at a URL that dropped the connection is connected again, as
+	// Claude Code does. One that ended the session refused the call, so the
+	// call is made again; of one that could not be reached nobody knows
+	// whether the call got there, so the model is told, and it decides.
+	if t.server.cfg.Type == "http" && ctx.Err() == nil && (errors.Is(err, mcp.ErrSessionEnded) || errors.Is(err, mcp.ErrUnreachable)) {
+		fresh := t.l.redialMCP(t.server, client)
+		switch {
+		case fresh == nil:
+			return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not run: %v, and connecting to it again failed (/mcp says why).", t.tool.Name, t.server.cfg.Name, err)), nil
+		case errors.Is(err, mcp.ErrUnreachable):
+			return core.ErrorResult(fmt.Sprintf("The MCP server %s could not be reached with the call of %s (%v), so whether it ran is not known. It is connected again: look before you call it again, if a second run would matter.", t.server.cfg.Name, t.tool.Name, err)), nil
+		}
+		client = fresh
+		res, err = client.CallTool(ctx, t.tool.Name, call.Input)
+		t.l.refreshMCP(t.server, client)
+	}
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) && limit > 0 {
 			return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not answer within %s, %s.", t.tool.Name, t.server.cfg.Name, limit, whose)), nil

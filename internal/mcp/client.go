@@ -119,6 +119,15 @@ func (e *RPCError) Error() string {
 // connection is gone.
 var ErrClosed = errors.New("mcp: the server is not running")
 
+// ErrSessionEnded is returned when a server at a URL answers that the
+// session the request carried is over: the request was refused, and did
+// nothing.
+var ErrSessionEnded = errors.New("mcp: the server has ended this session")
+
+// ErrUnreachable is returned when a server at a URL could not be reached
+// with a request; whether the request got there is not known.
+var ErrUnreachable = errors.New("mcp: the server could not be reached")
+
 // message is one JSON-RPC message, either way.
 type message struct {
 	JSONRPC string          `json:"jsonrpc"`
