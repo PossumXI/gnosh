@@ -28,11 +28,12 @@
 //
 // # The rules gnosh's interface follows on a terminal
 //
-// The screen is the terminal's, not gnosh's. gnosh never switches to the
-// alternate screen and never turns on mouse reporting, so scrolling back,
+// The screen is the terminal's, not gnosh's. gnosh does not switch to the
+// alternate screen or turn on mouse reporting, so scrolling back,
 // selecting and copying are the terminal's own and work as they do for
-// any command's output. There are deliberately no functions here for
-// either.
+// any command's output. The one exception is the side panel (Panel),
+// which takes the whole screen and the mouse only when a person turns it
+// on, and gives both back when they turn it off.
 //
 // What is finished is written once. Text gnosh is done with is committed:
 // written above everything that may still change, and never touched again.

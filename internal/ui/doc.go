@@ -4,7 +4,10 @@
 // It draws in the terminal's own scrollback. There is no alternate screen
 // and no mouse capture, so scrolling back, selecting and copying are the
 // terminal's own and work as they do for any command's output. The screen
-// has two parts, and the whole design is about keeping them apart.
+// has two parts, and the whole design is about keeping them apart. (The
+// side panel, panel.go, is the one exception, and only when the person
+// turns it on: then the session is drawn on the whole screen, beside a
+// panel of the files it changed and its deliverables.)
 //
 // # What is committed, and when
 //

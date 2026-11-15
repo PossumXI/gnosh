@@ -500,4 +500,24 @@ or kept with the reason said (27).
     session that runs as a kind that asks for isolation (`--agent`) is
     refused for now: that would be `-w`, which is not built. The Agent
     call also takes `effort` now, over its kind's.
+44. **The side panel takes the whole screen, and only when asked.** Jae
+    asked for "a real side panel as an option" (15 November 2026). A
+    panel the height of the screen cannot live in the terminal's
+    scrollback, where whole rows scroll, so the panel is a second way of
+    drawing the session (term.Panel). It takes the alternate screen and
+    keeps what is committed itself, up to 10,000 rows. It draws the
+    conversation and the live region at the left and the panel at the
+    right, a third of the width (24 to 48 columns), in a terminal of 72
+    columns or more. It comes on only by `/panel` (also `/sidebar`) or
+    the `sidePanel` option, and `/panel` turns it off. The panel lists
+    the files the session's edits changed, newest first with lines added
+    and removed, then the deliverables, newest first. Each address is
+    shown whole and is a link, so the boxes' addresses (127.0.0.1:7777,
+    :7778) open on the Mac through the forwarded ports. While it is on,
+    the terminal reports the mouse, so the wheel scrolls back (as
+    PageUp and PageDown do), and text is selected with a modifier held.
+    Turning it off, a narrowing below 72 columns, Ctrl+Z, the external
+    editor and the end of the session all give the screen back. The
+    lines committed meanwhile are then written into the scrollback,
+    where they would have been, so nothing said is lost.
 

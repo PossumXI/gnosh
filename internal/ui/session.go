@@ -40,6 +40,19 @@ type host interface {
 	// desktop raises a desktop notification through the terminal, when it
 	// takes one; it reports whether it does.
 	desktop(text string) bool
+	// openPanel takes the terminal's whole screen for the side panel
+	// (panel.go), for a terminal of cols by rows.
+	openPanel(cols, rows int) (*term.Panel, error)
+}
+
+// screen is what a session draws on: the terminal's own scrollback
+// (term.Renderer), or the whole screen with the side panel (term.Panel).
+type screen interface {
+	Commit(lines ...string) error
+	SetLive(lines []string, cursorRow, cursorCol int) error
+	Resize(cols, rows int) error
+	Clear() error
+	Reset()
 }
 
 // config is what a session is made with.
@@ -136,10 +149,21 @@ type session struct {
 	m    text.Metrics
 	now  func() time.Time
 	c    app.Controls
-	r    *term.Renderer
 	host host
+	// r is what the session draws on: inline, the terminal's scrollback,
+	// or panel while the side panel is on.
+	r      screen
+	inline *term.Renderer
+	panel  *term.Panel
+	// changed are the files the session's calls changed, the newest
+	// first, for the panel.
+	changed []changedFile
 
+	// cols is the width the session lays out for: the terminal's, or the
+	// panel's left part while the panel is on. termCols is the
+	// terminal's.
 	cols, rows int
+	termCols   int
 	cwd, home  string
 	branchOf   func(string) string
 	listDir    func(string) []fileEntry
@@ -262,8 +286,8 @@ type session struct {
 // newSession makes a session. Nothing is drawn until start.
 func newSession(cfg config) *session {
 	s := &session{
-		th: cfg.theme, m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, host: cfg.host,
-		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), home: cfg.home,
+		th: cfg.theme, m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, inline: cfg.renderer, host: cfg.host,
+		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), termCols: max(cfg.cols, 1), home: cfg.home,
 		branchOf: cfg.branch, listDir: cfg.files,
 		facts: map[string]string{},
 	}
@@ -448,6 +472,9 @@ func (s *session) frame() {
 		s.keep(s.r.Commit(s.pending...))
 		s.pending = s.pending[:0]
 	}
+	if s.panel != nil {
+		s.keep(s.panel.SetPanel(s.panelLines(s.panel.TextWidth())))
+	}
 	lines, row, col := s.compose()
 	if s.onLive != nil {
 		s.onLive(lines, row, col)
@@ -469,13 +496,31 @@ func (s *session) keep(err error) {
 // is laid out for it, and what is in the scrollback stays as the terminal
 // left it.
 func (s *session) resize(cols, rows int) {
-	if cols < 1 || rows < 1 || (cols == s.cols && rows == s.rows) {
+	if cols < 1 || rows < 1 || (cols == s.termCols && rows == s.rows) {
 		return
 	}
-	s.cols, s.rows = cols, rows
+	s.termCols, s.rows = cols, rows
+	if s.panel != nil && !term.PanelFits(cols) {
+		s.closePanel()
+		s.flash("The terminal is too narrow for the side panel now; /panel brings it back once it is wider.")
+	}
+	layout := cols
+	if s.panel != nil {
+		s.keep(s.panel.Resize(cols, rows))
+		layout, _ = s.panel.Size()
+	} else {
+		s.keep(s.r.Resize(cols, rows))
+	}
+	s.relayout(layout)
+	s.dirty = true
+}
+
+// relayout lays out for a new width what waits to be drawn.
+func (s *session) relayout(cols int) {
+	s.cols = cols
 	// Lines that wait to be committed were laid out for the old width.
-	// In a narrower terminal they are wrapped again, so that the
-	// terminal does not cut them off.
+	// In a narrower one they are wrapped again, so that the terminal
+	// does not cut them off.
 	waiting := s.pending
 	s.pending = nil
 	for _, l := range waiting {
@@ -487,8 +532,6 @@ func (s *session) resize(cols, rows int) {
 	if s.q != nil {
 		s.q.rebuild(&s.th, s.m, cols)
 	}
-	s.keep(s.r.Resize(cols, rows))
-	s.dirty = true
 }
 
 // tick lets time pass: what is shown with a clock on it is drawn again,

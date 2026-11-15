@@ -119,7 +119,7 @@ func TestResizeAtEveryPoint(t *testing.T) {
 			t.Run(fmt.Sprintf("reflow=%v/step%d/%dx%d", reflow, at, size[0], size[1]), func(t *testing.T) {
 				g := newRig(t, 80, 24, text.NoColor)
 				g.scr.SetReflow(reflow)
-				g.s.r.SetReflow(reflow)
+				g.s.inline.SetReflow(reflow)
 				for i, step := range steps {
 					if i == at {
 						g.resize(size[0], size[1])
@@ -447,7 +447,7 @@ func TestRandomStreams(t *testing.T) {
 				c.bypass, c.info.NotifyHooks = seed%3 == 0, seed%2 == 0
 			})
 			g.scr.SetReflow(seed%4 < 2)
-			g.s.r.SetReflow(seed%4 < 2)
+			g.s.inline.SetReflow(seed%4 < 2)
 			for range 400 {
 				randomStep(g, r)
 				g.s.done = false

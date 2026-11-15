@@ -62,6 +62,10 @@ permission modes, Esc stops a turn and Esc twice goes back to an earlier
 prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
 to the background, `@path` in a prompt brings that file (or a directory's
 listing) along with it, and a line that begins with `!` is a command of your own.
+`/panel` (or the `sidePanel` option) draws the session on the whole screen
+beside a side panel of the files it changed and its deliverables, with their
+addresses; `/panel` again gives the screen back, with all that was said in
+the scrollback.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
 `headers`), and a WebSearch tool of gnosh's own (a search engine's MCP

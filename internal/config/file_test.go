@@ -280,6 +280,7 @@ func TestOptions(t *testing.T) {
     "memEmbeddingsUrl": "http://127.0.0.1:8090",
     "deliverablesServer": "127.0.0.1:8123",
     "debug": true,
+    "sidePanel": true,
     "projectDataDir": ".agent"
   }
 }`
@@ -314,6 +315,7 @@ func TestOptions(t *testing.T) {
 	check("memEmbeddingsUrl", o.MemEmbeddingsURL.V, "http://127.0.0.1:8090")
 	check("deliverablesServer", o.DeliverablesServer, Value[string]{V: "127.0.0.1:8123", Set: true, Origin: at("deliverablesServer")})
 	check("debug", o.Debug.V, true)
+	check("sidePanel", o.SidePanel.V, true)
 	check("projectDataDir", o.ProjectDataDir.V, ".agent")
 
 	// The table lists every key exactly once, All reports each, and the

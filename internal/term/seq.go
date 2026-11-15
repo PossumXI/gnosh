@@ -7,9 +7,9 @@ import (
 )
 
 // This file holds every control sequence gnosh writes to a terminal, apart
-// from the colour and style codes that internal/text produces. There is
-// deliberately nothing here that switches to the alternate screen or turns
-// on mouse reporting: gnosh never does either.
+// from the colour and style codes that internal/text produces, and the few
+// of the side panel (panel.go), which takes the alternate screen and the
+// mouse only when a person turns it on.
 //
 // The sequences come from ECMA-48 (cursor movement, erasing, SGR), the
 // VT100 and VT220 manuals (DEC private modes), xterm's control sequences

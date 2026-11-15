@@ -1089,6 +1089,7 @@ func (l *live) info() SessionInfo {
 		Skills:      append(l.typedSkills(), l.mcpPromptInfos()...),
 		Version:     l.p.o.BuildID,
 		Interactive: l.interactive,
+		SidePanel:   l.cfg.Options.SidePanel.V,
 		Resume:      "gnosh -r " + l.ts.ID(),
 	}
 	if m.Provider != nil {

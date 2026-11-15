@@ -580,6 +580,7 @@ func (s *session) toolEnd(ev *agent.ToolEndEvent) {
 	} else {
 		s.drop(c)
 	}
+	s.noteChange(ev)
 	rows, compact := s.endBlock(c, ev)
 	kind := blkTool
 	if compact {

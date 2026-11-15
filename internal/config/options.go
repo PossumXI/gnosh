@@ -63,6 +63,8 @@ type Options struct {
 
 	// Debug writes more to the log.
 	Debug Value[bool]
+	// SidePanel starts an interactive session with the side panel on.
+	SidePanel Value[bool]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 }
@@ -184,6 +186,9 @@ var optionDefs = []optionDef{
 	{key: "debug", kind: oBool, def: "false",
 		what: "write more to the log", from: fromClaudeCode + ": the --debug flag",
 		truth: func(o *Options) *Value[bool] { return &o.Debug }},
+	{key: "sidePanel", kind: oBool, def: "false",
+		what: "start the interactive session with the side panel on: the files it changed and its deliverables beside the conversation, on the whole screen (/panel turns it on and off)", from: fromPlain,
+		truth: func(o *Options) *Value[bool] { return &o.SidePanel }},
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
 		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},

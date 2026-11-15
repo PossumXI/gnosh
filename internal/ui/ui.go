@@ -500,6 +500,12 @@ func (u *UI) shut() {
 		return
 	}
 	u.shown.Store(nil)
+	if u.s != nil && u.s.panel != nil {
+		// Whatever ended the interface, the terminal leaves the panel's
+		// screen.
+		_, _ = u.s.panel.Close()
+		u.s.panel = nil
+	}
 	if u.r != nil {
 		_ = u.r.Clear()
 	}
@@ -619,6 +625,10 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	})
 	u.s = s
 	s.start()
+	if s.info.SidePanel {
+		// The sidePanel option: the session starts with the panel on.
+		s.openPanel()
+	}
 	for len(u.ahead) > 0 {
 		ev := u.ahead[0]
 		u.ahead = u.ahead[1:]
@@ -862,6 +872,9 @@ func (u *UI) finish(c app.Controls, code int, why string) int {
 		}
 	}
 	s.endReply()
+	// The side panel gives the screen back, and what was said while it
+	// was on goes into the scrollback, where the rest of the session is.
+	s.closePanel()
 	info := c.Info()
 	if _, err := os.Stat(info.Path); err == nil && info.Resume != "" {
 		s.begin(blkTurn)
@@ -981,6 +994,14 @@ func (u *UI) copy(text string) error {
 	}
 	_, err := io.WriteString(u.t, term.ClipboardWrite(text))
 	return err
+}
+
+// openPanel takes the terminal's whole screen for the side panel.
+func (u *UI) openPanel(cols, rows int) (*term.Panel, error) {
+	if u.t == nil {
+		return nil, errors.New("there is no terminal to draw on")
+	}
+	return term.OpenPanel(u.t, cols, rows, u.m.Width, u.caps.SynchronizedOutput)
 }
 
 func (u *UI) size() (cols, rows int, ok bool) {

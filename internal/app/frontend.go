@@ -303,6 +303,9 @@ type SessionInfo struct {
 	Version string
 	// Interactive says a person is there to be asked.
 	Interactive bool
+	// SidePanel says the session starts with the side panel on (the
+	// sidePanel option).
+	SidePanel bool
 	// Resume is the command line that opens this session again.
 	Resume string
 	// NotifyHooks says a Notification hook is configured, so that the

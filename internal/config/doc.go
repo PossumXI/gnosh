@@ -119,6 +119,7 @@
 //	                           served, to this machine only: "127.0.0.1:7777",
 //	                           or "off"
 //	  debug                    write more to the log
+//	  sidePanel                start with the side panel on (/panel)
 //	  projectDataDir           the name of the project's data folder
 //
 // "model" and "smallModel" are each the model as a string, or an object

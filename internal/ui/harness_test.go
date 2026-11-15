@@ -32,6 +32,9 @@ type rig struct {
 	copied     []string
 	titles     []string
 	takesNotes bool
+	// free says the test draws on the whole screen (the side panel), where
+	// the checks of what is in the scrollback do not hold.
+	free       bool
 	notes      []string
 	scr        *vtest.Screen
 	s          *session
@@ -197,6 +200,10 @@ func (g *rig) copy(text string) error {
 	return nil
 }
 
+func (g *rig) openPanel(cols, rows int) (*term.Panel, error) {
+	return term.OpenPanel(g.scr, cols, rows, vtest.Width, false)
+}
+
 func (g *rig) size() (int, int, bool) {
 	cols, rows := g.scr.Size()
 	return cols, rows, true
@@ -309,6 +316,9 @@ func (g *rig) check() {
 // verify is check; whole says to read the terminal's whole history.
 func (g *rig) verify(whole bool) {
 	g.t.Helper()
+	if g.free {
+		return
+	}
 	fail := func(format string, args ...any) {
 		g.t.Helper()
 		g.t.Fatalf(format+"\n%s", append(args, g.dump())...)

@@ -105,6 +105,15 @@ func (s *session) input(ev term.Event) {
 		s.typed(ev, &ev)
 	case term.Paste:
 		s.typed(ev, nil)
+	case term.Mouse:
+		// The terminal reports the mouse only while the side panel is on:
+		// the wheel scrolls back through what was said.
+		switch ev.Action {
+		case term.MouseWheelUp:
+			s.scrollPanel(3)
+		case term.MouseWheelDown:
+			s.scrollPanel(-3)
+		}
 	}
 }
 
@@ -170,7 +179,11 @@ func (s *session) global(k term.Key) bool {
 		s.keep(s.r.Clear())
 	case k.Is('z', term.ModCtrl):
 		// The shell has the screen while gnosh is stopped. When it is
-		// continued the live region is drawn afresh, at the cursor.
+		// continued the live region is drawn afresh, at the cursor. The
+		// side panel gives the screen back first, and comes back after.
+		panel := s.panel != nil
+		s.closePanel()
+		s.frame()
 		s.keep(s.r.Clear())
 		if err := s.host.suspend(); err != nil {
 			// Nothing was stopped, and nothing else has written to the
@@ -179,6 +192,13 @@ func (s *session) global(k term.Key) bool {
 		} else {
 			s.r.Reset()
 		}
+		if panel {
+			s.openPanel()
+		}
+	case s.panel != nil && k.IsKey(term.KeyPageUp, 0):
+		s.scrollPanel(s.panel.Page())
+	case s.panel != nil && k.IsKey(term.KeyPageDown, 0):
+		s.scrollPanel(-s.panel.Page())
 	case k.Is('o', term.ModCtrl):
 		s.toggleDetail()
 	case k.Is('t', term.ModCtrl):
@@ -338,6 +358,13 @@ func (s *session) command(d editor.Draft) {
 			s.resume()
 			return
 		}
+	}
+	if panelWords[strings.ToLower(line)] {
+		// The side panel is the interface's own, at once, also while a
+		// turn runs.
+		s.ed.AddHistory(editor.Draft{Text: line})
+		s.togglePanel()
+		return
 	}
 	if deliverWords[strings.ToLower(line)] && s.listsDeliverables() {
 		// The list is the interface's own to draw, at once, also while a
@@ -528,9 +555,16 @@ func (s *session) takeBack() {
 	s.queued()
 }
 
-// external opens the box's text in the person's own editor.
+// external opens the box's text in the person's own editor. The side
+// panel gives the screen back first, and comes back after.
 func (s *session) external() {
+	panel := s.panel != nil
+	s.closePanel()
+	s.frame()
 	edited, err := s.host.edit(s.ed.Text())
+	if panel {
+		s.openPanel()
+	}
 	s.dirty = true
 	if err != nil {
 		s.flash(err.Error())

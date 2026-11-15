@@ -206,6 +206,10 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
 		{Name: "add-dir", Args: "<directory>", Summary: "Add a working directory for the rest of this session. With nothing after it, lists them.", Run: l.slashAddDir},
+		{Name: "panel", Aliases: []string{"sidebar"}, Summary: "Show or hide the side panel: the files this session changed and its deliverables, beside the conversation, on the whole screen.",
+			Run: func(context.Context, *SlashContext) error {
+				return errors.New("the side panel is the interactive interface's own; /panel does nothing here")
+			}},
 		{Name: "tasks", Aliases: []string{"bashes"}, Args: "[stop <id>]", Summary: "The commands running in the background, and the ones that ran; stop <id> stops one.", InRun: true, Run: l.slashTasks},
 		{Name: "cost", Aliases: []string{"usage", "stats"}, Summary: "What this session has used: requests, tokens and time, by model.", InRun: true, Run: l.slashCost},
 		{Name: "agents", Summary: "The kinds of sub-agent there are, and where each is defined.", InRun: true, Run: l.slashAgents},
