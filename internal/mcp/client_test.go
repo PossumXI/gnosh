@@ -134,6 +134,10 @@ func TestClient(t *testing.T) {
 	if info := c.Info(); info.Name != "fake" || info.Version != "1.0" || info.ProtocolVersion != "2025-03-26" || info.Instructions != "Use echo to echo." {
 		t.Errorf("the server's info: %+v", info)
 	}
+	// Standard error comes in beside the answers, and may come after them.
+	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(c.Stderr(), "fake server starting") && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if !strings.Contains(c.Stderr(), "fake server starting") {
 		t.Errorf("the server's standard error was not kept: %q", c.Stderr())
 	}

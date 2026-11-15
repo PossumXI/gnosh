@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -149,7 +150,10 @@ func TestHTTPClient(t *testing.T) {
 	if len(f.answers) != 1 || !strings.Contains(f.answers[0], `"id":"srv-1"`) || !strings.Contains(f.answers[0], `"result":{}`) {
 		t.Errorf("the client's answers: %q", f.answers)
 	}
-	if strings.Join(f.methods, " ") != "initialize notifications/initialized tools/list  tools/call tools/call tools/call notifications/cancelled" {
+	// (The client's answer to the ping, which has no method, goes when it
+	// is ready, beside the rest.)
+	sent := slices.DeleteFunc(slices.Clone(f.methods), func(m string) bool { return m == "" })
+	if strings.Join(sent, " ") != "initialize notifications/initialized tools/list tools/call tools/call tools/call notifications/cancelled" {
 		t.Errorf("what the server was sent: %q", f.methods)
 	}
 	for i, h := range f.seen {

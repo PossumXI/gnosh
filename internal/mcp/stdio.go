@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -22,8 +23,14 @@ type stdioTransport struct {
 	mu     sync.Mutex
 	errs   *capped
 	done   chan struct{} // closed when the reader stops
+	exited chan struct{} // closed when the server has exited and its standard error is in errs
 	maxLen int
 }
+
+// stderrWait is how long the reader waits, once the server's output has
+// ended, for the server to exit and what it wrote on its standard error
+// to come in, since that is what says why it ended.
+const stderrWait = 2 * time.Second
 
 // startStdio starts the server.
 func startStdio(c *Client, srv Server, opt Options) (*stdioTransport, error) {
@@ -36,20 +43,35 @@ func startStdio(c *Client, srv Server, opt Options) (*stdioTransport, error) {
 	cmd.Env = env
 	// A group of its own, so that what it starts is stopped with it.
 	ownGroup(cmd)
-	t := &stdioTransport{c: c, name: srv.Name, cmd: cmd, errs: &capped{max: opt.MaxStderr}, done: make(chan struct{}), maxLen: opt.MaxLine}
+	t := &stdioTransport{c: c, name: srv.Name, cmd: cmd, errs: &capped{max: opt.MaxStderr},
+		done: make(chan struct{}), exited: make(chan struct{}), maxLen: opt.MaxLine}
 	cmd.Stderr = t.errs
+	// A process of the server's own that keeps its standard error open
+	// does not hold up Wait for long.
+	cmd.WaitDelay = time.Second
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
-	out, err := cmd.StdoutPipe()
+	// The server's output comes down a pipe of the client's own, not one
+	// exec makes: Wait closes those once the server exits, and runs here
+	// beside the reader, which may not yet have read the last of it.
+	out, outW, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
+	cmd.Stdout = outW
+	err = cmd.Start()
+	outW.Close()
+	if err != nil {
+		out.Close()
 		return nil, fmt.Errorf("mcp: %s could not be started: %w", srv.Command, err)
 	}
 	t.in = in
+	go func() {
+		_ = cmd.Wait()
+		close(t.exited)
+	}()
 	go t.read(out)
 	return t, nil
 }
@@ -70,8 +92,9 @@ func (t *stdioTransport) send(_ context.Context, m message) error {
 }
 
 // read takes the server's messages until its output ends.
-func (t *stdioTransport) read(out io.Reader) {
+func (t *stdioTransport) read(out *os.File) {
 	defer close(t.done)
+	defer out.Close()
 	sc := bufio.NewScanner(out)
 	sc.Buffer(make([]byte, 64<<10), t.maxLen)
 	for sc.Scan() {
@@ -87,7 +110,12 @@ func (t *stdioTransport) read(out io.Reader) {
 		}
 		t.c.dispatch(m)
 	}
-	if err := sc.Err(); err != nil {
+	err := sc.Err()
+	select {
+	case <-t.exited:
+	case <-time.After(stderrWait):
+	}
+	if err != nil {
 		t.c.lost(fmt.Errorf("mcp: the server's output could not be read: %w", err))
 		return
 	}
@@ -98,21 +126,16 @@ func (t *stdioTransport) read(out io.Reader) {
 // later and SIGKILL 400 ms after that, as long as it runs.
 func (t *stdioTransport) close() error {
 	_ = t.in.Close()
-	exited := make(chan struct{})
-	go func() {
-		_ = t.cmd.Wait()
-		close(exited)
-	}()
 	for i, wait := range []time.Duration{100 * time.Millisecond, 400 * time.Millisecond, 2 * time.Second} {
 		select {
-		case <-exited:
+		case <-t.exited:
 			<-t.done
 			return nil
 		default:
 		}
 		stop(t.cmd, i)
 		select {
-		case <-exited:
+		case <-t.exited:
 			<-t.done
 			return nil
 		case <-time.After(wait):
