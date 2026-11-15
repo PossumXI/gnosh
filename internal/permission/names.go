@@ -86,6 +86,7 @@ var builtinTools = map[string]toolInfo{
 	toolAskUser:      {classPerson, "", nil},
 
 	"TaskStop":             {classQuiet, "", []string{"task_id", "shell_id"}},
+	"SendMessage":          {classQuiet, "", []string{"to", "message", "summary"}},
 	"EnterPlanMode":        {classQuiet, "", nil},
 	"ExitPlanMode":         {classOther, "", nil},
 	"ToolSearch":           {classQuiet, "", nil},
@@ -109,7 +110,7 @@ var builtinTools = map[string]toolInfo{
 	"TaskOutput": {class: classAbsent}, "MultiEdit": {class: classAbsent},
 	"LS": {class: classAbsent}, "PowerShell": {class: classAbsent},
 	"Artifact": {class: classAbsent}, "EndConversation": {class: classAbsent},
-	"ListAgents": {class: classAbsent}, "SendMessage": {class: classAbsent},
+	"ListAgents":   {class: classAbsent},
 	"SendUserFile": {class: classAbsent}, "SendFeedback": {class: classAbsent},
 	"PushNotification": {class: classAbsent}, "RemoteTrigger": {class: classAbsent},
 	"ReportFindings": {class: classAbsent}, "ShareOnboardingGuide": {class: classAbsent},

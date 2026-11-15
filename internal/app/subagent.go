@@ -165,7 +165,7 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if background {
 		subCtx = l.ctx
 	}
-	s, err := l.newSub(subCtx, parent, t.owner, def, call.ID, strings.TrimSpace(in.Model), background)
+	s, err := l.newSub(subCtx, parent, t.owner, def, call.ID, strings.TrimSpace(in.Model), background, "")
 	if err != nil {
 		return core.ErrorResult("No sub-agent was started: " + strings.TrimRight(err.Error(), ".") + "."), nil
 	}
@@ -378,8 +378,10 @@ type subSession struct {
 }
 
 // newSub makes a sub-agent's session and its agent. It is not given its
-// task yet.
-func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSession, def agentdef.Def, callID, model string, background bool) (s *subSession, err error) {
+// task yet. With resume set, it is the sub-agent of that id, which ended,
+// made again from its session file: it goes on with everything it had
+// (SendMessage).
+func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSession, def agentdef.Def, callID, model string, background bool, resume string) (s *subSession, err error) {
 	s = &subSession{l: l, owner: owner, def: def, callID: callID, depth: parent.Depth() + 1, store: new(sync.Map), background: background}
 	defer func() {
 		if err != nil {
@@ -394,19 +396,29 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	// Its own session file, in the folder of the session the person is
 	// in. It is not among the files the person's sessions are listed
 	// from.
-	root := filepath.Join(l.st.dirs(l.ts.ID()).Session, "subagents")
+	root := l.subagentsDir()
 	store := &transcript.Store{Dir: root, Clock: l.p.now}
-	if s.ts, err = store.Create(l.cwd()); err != nil {
-		return s, fmt.Errorf("its session file could not be made: %w", err)
-	}
-	s.id = s.ts.ID()
-	if _, err = s.ts.AppendAll(
-		transcript.MetaEntry("subagentOf", l.ts.ID()),
-		transcript.MetaEntry("startedBy", startedBy),
-		transcript.MetaEntry("parentCall", callID),
-		transcript.MetaEntry("agentType", def.Name),
-	); err != nil {
-		return s, fmt.Errorf("its session file could not be written: %w", err)
+	if resume != "" {
+		if s.ts, err = store.Open(ctx, resume); err != nil {
+			return s, fmt.Errorf("its session file could not be opened: %w", err)
+		}
+		s.id = s.ts.ID()
+		if _, err = s.ts.AppendAll(transcript.MetaEntry("resumedBy", callID)); err != nil {
+			return s, fmt.Errorf("its session file could not be written: %w", err)
+		}
+	} else {
+		if s.ts, err = store.Create(l.cwd()); err != nil {
+			return s, fmt.Errorf("its session file could not be made: %w", err)
+		}
+		s.id = s.ts.ID()
+		if _, err = s.ts.AppendAll(
+			transcript.MetaEntry("subagentOf", l.ts.ID()),
+			transcript.MetaEntry("startedBy", startedBy),
+			transcript.MetaEntry("parentCall", callID),
+			transcript.MetaEntry("agentType", def.Name),
+		); err != nil {
+			return s, fmt.Errorf("its session file could not be written: %w", err)
+		}
 	}
 	s.log = newSessionLog(s.ts, l.texts)
 	if s.instr, err = l.readInstructions(ctx); err != nil {
@@ -424,6 +436,8 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 			return s, err
 		}
 		s.tree = s.wt.path
+		// (So that SendMessage knows it is not to be resumed without it.)
+		_, _ = s.ts.AppendAll(transcript.MetaEntry(metaWorkTree, s.wt.path))
 	}
 
 	// The features' part in it.
@@ -914,6 +928,15 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.To
 	if res.Reason == agent.EndHalted {
 		// What ended the sub-agent for good ends the turn that started it.
 		out.Meta[agent.MetaHalt] = "the sub-agent was ended: " + firstOf(res.Detail, "no reason was given")
+	}
+	if s.ts != nil {
+		_, _ = s.ts.AppendAll(transcript.MetaEntry(metaEnded, status))
+	}
+	if s.owner == nil && resumable(s.def) && (status == "completed" || status == "partial") && !out.IsError {
+		// Its id, which SendMessage takes to give it more to do.
+		if n := len(out.Content); n > 0 && out.Content[n-1].Type == core.BlockText {
+			out.Content[n-1].Text += "\n\n[agent id: " + s.id + "]"
+		}
 	}
 	if wt := s.wt; wt != nil {
 		// Its work tree: removed when it changed nothing, kept otherwise,

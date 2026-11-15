@@ -628,3 +628,16 @@ or kept with the reason said (27).
     line command is given Claude Code's worktree field and
     workspace.git_worktree. Not built: .worktreeinclude, a pull
     request's head (#123), and worktree.baseRef.
+48. **SendMessage gives a sub-agent that ended more to do,** as Claude
+    Code's (spec/cc/subagents.md 9). The sub-agent's own session file is
+    opened again as its history. It runs in the background under the
+    same id, with the tools of its kind, and its report comes as a notice,
+    as a background sub-agent's does. A report that can be followed up
+    ends with `[agent id: <id>]`, so the model has the id. SendMessage
+    never asks, as starting a sub-agent does not; its calls do.
+    Refused: an id this session's sub-agents do not have; one still
+    running; Explore and Plan, which are one-shot, as Claude Code's are;
+    one that was stopped; and one that worked in a git work tree of its
+    own (recorded in its file), since the work tree is not opened again.
+    Only the session the person is in has the tool, and only where it may
+    run sub-agents in the background.

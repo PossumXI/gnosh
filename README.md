@@ -41,7 +41,8 @@ permission rule each, and their status messages), a status line command
 allowed-tools and disallowed-tools, effort, `context: fork` in a
 sub-agent, paths, hooks of their own, and commands run before the model
 sees them), sub-agents in the foreground and, in a session, in the
-background (general-purpose, Explore, Plan and your own), `mem` and frames
+background (general-purpose, Explore, Plan and your own, and given more to do
+once they end, with SendMessage), `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
 remove, with Claude Code's local, project and user scopes), `gnosh ssh`
