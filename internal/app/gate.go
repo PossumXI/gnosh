@@ -678,6 +678,17 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 		}
 		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command would run in %s, in the person's checkout at %s. Run it in your work tree instead: the same folder there is %s.", t.Path, d, t.Repo, same)
 	}
+	// Nor is git pointed there from the work tree: git -C, --git-dir,
+	// --work-tree, GIT_DIR and its kin.
+	places, ok := l.engine.GitPlaces(cwd, command)
+	if !ok {
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and where this command points git cannot be told from its text: it could be the person's checkout at %s. Run git in your work tree as it is, with its words written out.", t.Path, t.Repo)
+	}
+	for _, p := range places {
+		if within(p, t.Repo) && !within(p, t.Path) {
+			return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command points git at %s, in the person's checkout at %s. Run git in your work tree, without -C, --git-dir, --work-tree or GIT_DIR: the work tree is a checkout of its own.", t.Path, p, t.Repo)
+		}
+	}
 	return ""
 }
 

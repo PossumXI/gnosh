@@ -194,6 +194,115 @@ func (e *Engine) CommandDirs(dir, command string) (dirs []string, ok bool) {
 	return dirs, !unknown && !v.dirsCapped
 }
 
+// gitPlaceVars are the variables that point git at a repository or a
+// work tree other than the one it runs in.
+var gitPlaceVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"}
+
+// GitPlaces are the places a command points its git runs at, by what the
+// line writes, as absolute paths read from where the line may be: the
+// folder of each -C, the paths of --git-dir and --work-tree, and the git
+// variables (GIT_DIR, GIT_WORK_TREE ...) set for a command or for the
+// line. ok is false when the line cannot be read, or one of those is only
+// known when it runs.
+func (e *Engine) GitPlaces(dir, command string) (places []string, ok bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	at := *e
+	if strings.HasPrefix(dir, "/") {
+		at.cur = path.Clean(dir)
+	}
+	v := at.viewBash(command)
+	if !v.sc.ok || v.opaque != "" || v.tooMany {
+		return nil, false
+	}
+	dirs, unknown := at.lineDirsKnown(v)
+	ok = true
+	add := func(text string, known bool) {
+		if !known {
+			ok = false
+			return
+		}
+		if text == "" {
+			return
+		}
+		if strings.HasPrefix(text, "/") {
+			places = unionStrings(places, []string{path.Clean(text)})
+			return
+		}
+		if unknown || v.dirsCapped {
+			ok = false
+			return
+		}
+		for _, d := range dirs {
+			places = unionStrings(places, []string{path.Join(d, text)})
+		}
+	}
+	varValue := func(w word) (name, text string, isVar, known bool) {
+		if !w.static() {
+			// A word that may be one of the variables is one.
+			for _, n := range gitPlaceVars {
+				if strings.HasPrefix(w.raw, n+"=") {
+					return n, "", true, false
+				}
+			}
+			return "", "", false, false
+		}
+		val := w.value(at.home)
+		for _, n := range gitPlaceVars {
+			if t, found := strings.CutPrefix(val, n+"="); found {
+				return n, t, true, true
+			}
+		}
+		return "", "", false, true
+	}
+	for _, u := range v.units {
+		c := u.cmd
+		for _, a := range c.assigns {
+			if _, text, isVar, known := varValue(a.w); isVar {
+				add(text, known)
+			}
+		}
+		// export GIT_DIR=x, env GIT_DIR=x git, declare -x GIT_DIR=x.
+		for _, w := range c.words {
+			if _, text, isVar, known := varValue(w); isVar {
+				add(text, known)
+			}
+		}
+		if len(c.words) == 0 || !c.words[0].static() || path.Base(c.words[0].joined()) != "git" {
+			continue
+		}
+		args := c.words[1:]
+		for i := 0; i < len(args); i++ {
+			a := args[i]
+			if !a.static() {
+				// What git reads before its subcommand cannot be told.
+				ok = false
+				break
+			}
+			l := a.joined()
+			switch {
+			case l == "-C" || l == "--git-dir" || l == "--work-tree":
+				if i+1 < len(args) {
+					i++
+					add(args[i].value(at.home), args[i].static())
+				}
+				continue
+			case strings.HasPrefix(l, "--git-dir=") || strings.HasPrefix(l, "--work-tree="):
+				_, val, _ := strings.Cut(a.value(at.home), "=")
+				add(val, true)
+				continue
+			case l == "-c" || l == "--namespace" || l == "--config-env":
+				i++ // their value
+				continue
+			case strings.HasPrefix(l, "-"):
+				continue
+			}
+			break // the subcommand: what follows is its own
+		}
+	}
+	return places, ok
+}
+
 // decideLocked is Decide with the lock already held.
 func (e *Engine) decideLocked(tool string, call core.ToolCall, action core.Action) Decision {
 	d := e.decide(CanonicalTool(tool), call, action)

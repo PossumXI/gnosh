@@ -395,3 +395,38 @@ func TestCommandDirs(t *testing.T) {
 		}
 	}
 }
+
+// GitPlaces: where a command points git, or that it cannot be told.
+func TestGitPlaces(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeDefault, rules{}))
+	for _, c := range []struct {
+		cmd  string
+		want string // "-" when it cannot be told
+	}{
+		{"git status", ""},
+		{"git log --oneline -C x", ""}, // after the subcommand: its own words
+		{"git -C /repo commit -am x", "/repo"},
+		{"git -C ../repo log", "/repo"},
+		{"git --git-dir=/repo/.git log", "/repo/.git"},
+		{"git --git-dir /repo/.git --work-tree /repo log", "/repo/.git /repo"},
+		{"GIT_DIR=/repo/.git git log", "/repo/.git"},
+		{"export GIT_WORK_TREE=/repo; git status", "/repo"},
+		{"env GIT_DIR=/repo/.git git log", "/repo/.git"},
+		{"git -c core.pager=cat -C /repo log", "/repo"},
+		{"git -C $X log", "-"},
+		{"GIT_DIR=$X git log", "-"},
+		{"git $SUB", "-"},
+	} {
+		places, ok := e.GitPlaces("/proj", c.cmd)
+		got := strings.Join(places, " ")
+		if c.want == "-" {
+			if ok {
+				t.Errorf("GitPlaces(%q) = %q, want that it cannot be told", c.cmd, got)
+			}
+			continue
+		}
+		if !ok || got != c.want {
+			t.Errorf("GitPlaces(%q) = %q, %v; want %q", c.cmd, got, ok, c.want)
+		}
+	}
+}
