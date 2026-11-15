@@ -197,8 +197,8 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 				bad(m.line, "a hook's \"type\" is a string, and here it is %s.", m.val.kind.word())
 				break
 			}
-			if typ = m.val.str; typ != "command" && typ != "http" {
-				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\" and \"http\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
+			if typ = m.val.str; typ != "command" && typ != "http" && typ != "mcp_tool" {
+				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\", \"http\" and \"mcp_tool\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
 			}
 		case m.key == "command":
 			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
@@ -250,6 +250,22 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 			for _, it := range items {
 				h.AllowedEnvVars = append(h.AllowedEnvVars, it.str)
 			}
+		case m.key == "server" || m.key == "tool":
+			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
+				bad(m.line, "an mcp_tool hook's \"%s\" names the MCP %s it calls, as a string.", m.key, m.key)
+				break
+			}
+			if m.key == "server" {
+				h.Server = m.val.str
+			} else {
+				h.Tool = m.val.str
+			}
+		case m.key == "input":
+			if m.val.kind != jObject {
+				bad(m.line, "an mcp_tool hook's \"input\" is an object of the tool's arguments, and here it is %s.", m.val.kind.word())
+				break
+			}
+			h.Input = m.val.marshal()
 		case m.key == "statusMessage":
 			if m.val.kind != jString {
 				bad(m.line, "a hook's \"statusMessage\" is the text shown while it runs, as a string, and here it is %s.", m.val.kind.word())
@@ -302,6 +318,12 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		bad(n.line, "this http hook has a \"command\", \"args\", \"async\" or \"asyncRewake\", which only a command hook takes.")
 	case typ == "http" && h.URL == "":
 		bad(n.line, "this http hook has no \"url\" to send the event to.")
+	case typ == "mcp_tool" && (h.Server == "" || h.Tool == ""):
+		bad(n.line, "this mcp_tool hook names no \"server\" or no \"tool\" to call.")
+	case typ == "mcp_tool" && (h.Command != "" || h.Args != nil || h.URL != "" || h.Async || h.AsyncRewake):
+		bad(n.line, "this mcp_tool hook has fields of a command hook or an http hook, which it does not take.")
+	case typ != "mcp_tool" && (h.Server != "" || h.Tool != "" || h.Input != nil):
+		bad(n.line, "this hook has \"server\", \"tool\" or \"input\", which only an mcp_tool hook takes. Write \"type\": \"mcp_tool\" for one.")
 	case typ == "command" && (h.URL != "" || h.Headers != nil || h.AllowedEnvVars != nil):
 		bad(n.line, "this command hook has a \"url\", \"headers\" or \"allowedEnvVars\", which only an http hook takes. Write \"type\": \"http\" for one.")
 	case typ == "command" && h.Command == "":

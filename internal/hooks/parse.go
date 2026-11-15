@@ -210,13 +210,14 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 	case !hasType:
 		p.fail(place, "the hook has no \"type\". gnosh runs command hooks: \"type\": \"command\".")
 		return
-	case kind != "command" && kind != "http":
-		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks and http hooks only, so this hook would not run as written.", quote(kind))
+	case kind != "command" && kind != "http" && kind != "mcp_tool":
+		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks, http hooks and mcp_tool hooks only, so this hook would not run as written.", quote(kind))
 		return
 	}
-	// The fields of one type are a mistake on the other.
+	// The fields of one type are a mistake on another.
 	only := map[string]string{"command": "command", "args": "command", "async": "command", "asyncRewake": "command", "shell": "command",
-		"url": "http", "headers": "http", "allowedEnvVars": "http"}
+		"url": "http", "headers": "http", "allowedEnvVars": "http",
+		"server": "mcp_tool", "tool": "mcp_tool", "input": "mcp_tool"}
 	for _, f := range fields {
 		if want, ok := only[f.key]; ok && want != kind && !isNull(f.value) {
 			p.fail(place, "the hook has %s, which a hook of \"type\": %s does not take.", quote(f.key), quote(kind))
@@ -291,6 +292,24 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 			default:
 				p.fail(place, "\"if\" is one permission rule, as a string, such as \"Bash(git push *)\"; this one is %s.", kindOf(f.value))
 			}
+		case "server", "tool":
+			v, isText := asString(f.value)
+			if !isText || strings.TrimSpace(v) == "" {
+				p.fail(place, "%s names the MCP %s, as a string; this one is %s.", quote(f.key), f.key, kindOf(f.value))
+				badCommand = true
+				break
+			}
+			if f.key == "server" {
+				h.Server = v
+			} else {
+				h.Tool = v
+			}
+		case "input":
+			if kindOf(f.value) != "an object" {
+				p.fail(place, "\"input\" is a JSON object of the tool's arguments; this one is %s.", kindOf(f.value))
+				break
+			}
+			h.Input = append(json.RawMessage(nil), f.value...)
 		case "url":
 			if h.URL, ok = asString(f.value); !ok || h.URL == "" {
 				p.fail(place, "\"url\" is the address the event is sent to, as a string; this one is %s.", kindOf(f.value))
@@ -325,8 +344,13 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 		p.fail(place, "the http hook has no \"url\" to send the event to.")
 		badCommand = true
 	}
+	if kind == "mcp_tool" && h.Server == "" && h.Tool == "" && !badCommand {
+		// (One of the two alone is said by hookProblems.)
+		p.fail(place, "the mcp_tool hook names no \"server\" and no \"tool\" to call.")
+		badCommand = true
+	}
 	for _, msg := range hookProblems(h) {
-		if (badCommand || kind == "http") && msg == noCommand {
+		if (badCommand || kind != "command") && msg == noCommand {
 			continue // already said, more exactly
 		}
 		p.fail(place, "%s", msg)

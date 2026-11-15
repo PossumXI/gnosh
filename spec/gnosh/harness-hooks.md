@@ -131,8 +131,12 @@ Rules:
   next request, and with `asyncRewake` an exit with 2 wakes the model with
   its stderr. One that cannot be evaluated is a warning. The session's end
   stops those still running (`spec/DECISIONS.md`, item 35).
+- `mcp_tool` hooks call a tool of a connected MCP server: `server`, `tool`,
+  and `input` (its arguments, in whose strings `${field.path}` is that
+  field of the event); the tool's text is read as a command's stdout, and
+  a tool that fails or cannot be called is a hook that could not check.
 - Anything else a CC hook can ask for is a **startup error that names it**:
-  another `type` (`mcp_tool`, `prompt`, `agent`), a matcher on an
+  another `type` (`prompt`, `agent`), a matcher on an
   event that takes none (CC ignores it), a matcher gnosh's regular
   expressions cannot read. (The `if` filter is built:
   `spec/DECISIONS.md`, item 32.) The

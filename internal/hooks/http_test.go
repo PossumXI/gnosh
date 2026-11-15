@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -100,5 +101,41 @@ func TestHTTPHooks(t *testing.T) {
 	cfg, err := ParseConfig([]byte(`{"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "http", "url": "`+srv.URL+`/check", "headers": {"Authorization": "Bearer ${TOKEN}"}, "allowedEnvVars": ["TOKEN"]}]}]}`), "gnosh.json")
 	if err != nil || len(cfg.Hooks) != 1 || cfg.Hooks[0].URL != srv.URL+"/check" || cfg.Hooks[0].Headers["Authorization"] != "Bearer ${TOKEN}" {
 		t.Errorf("ParseConfig: %+v, %v", cfg.Hooks, err)
+	}
+}
+
+// An mcp_tool hook calls a tool of a connected MCP server through
+// Options.MCP, with ${field.path} in its arguments filled in from the
+// event, and reads the tool's text as a command hook's stdout; a tool that
+// fails, or none to call, is a hook that could not check.
+func TestMCPToolHook(t *testing.T) {
+	opts := options(t)
+	var mu sync.Mutex
+	var gotServer, gotTool, gotInput string
+	answer, failed := `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "the scanner says no"}}`, false
+	opts.MCP = func(ctx context.Context, server, tool string, input json.RawMessage) (string, bool, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		gotServer, gotTool, gotInput = server, tool, string(input)
+		return answer, failed, nil
+	}
+	hook := Hook{Event: PreToolUse, Matcher: "Bash", Server: "scanner", Tool: "check", Input: json.RawMessage(`{"command": "run ${tool_input.command} now", "missing": "${nothing.here}", "n": 1}`)}
+	out := run(t, newRunner(t, opts, hook), input(PreToolUse))
+	if out.PermissionDecision != Deny || !strings.Contains(out.Reason, "the scanner says no") {
+		t.Errorf("the tool's answer: %+v", out)
+	}
+	if gotServer != "scanner" || gotTool != "check" || gotInput != `{"command":"run ls now","missing":"","n":1}` {
+		t.Errorf("the call: %s %s %s", gotServer, gotTool, gotInput)
+	}
+	if len(out.Records) != 1 || out.Records[0].Command != "mcp scanner/check" {
+		t.Errorf("the record: %+v", out.Records)
+	}
+	failed = true
+	if out := run(t, newRunner(t, opts, hook), input(PreToolUse)); !out.Blocked || !strings.Contains(out.Reason, "the tool answered that it failed") {
+		t.Errorf("a tool that failed: %+v", out)
+	}
+	opts.MCP = nil
+	if out := run(t, newRunner(t, opts, hook), input(PreToolUse)); !out.Blocked || !strings.Contains(out.Reason, "its MCP tool could not be called") {
+		t.Errorf("no MCP to call: %+v", out)
 	}
 }

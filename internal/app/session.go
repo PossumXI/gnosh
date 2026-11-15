@@ -341,6 +341,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	hc, _ := hooksConfig(l.cfg)
 	ho := st.hookOptions(l.cfg)
 	ho.Background = l.backgroundHook
+	ho.MCP = l.mcpHookCall
 	for _, c := range l.contribs {
 		if c.c.Hooks != nil {
 			fires := ho.Fires

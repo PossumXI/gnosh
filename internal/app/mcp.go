@@ -574,3 +574,27 @@ func mcpText(res mcp.Result) string {
 	}
 	return strings.Join(parts, "\n")
 }
+
+// mcpHookCall calls a tool of a connected MCP server for an mcp_tool hook:
+// the text the tool answers with, and whether it said it failed.
+func (l *live) mcpHookCall(ctx context.Context, server, tool string, input json.RawMessage) (string, bool, error) {
+	if l.mcp == nil {
+		return "", false, fmt.Errorf("this session has no MCP servers, so %s of %s cannot be called", tool, server)
+	}
+	l.mcp.mu.Lock()
+	var client *mcp.Client
+	for _, s := range l.mcp.servers {
+		if s.cfg.Name == server {
+			client = s.client
+		}
+	}
+	l.mcp.mu.Unlock()
+	if client == nil {
+		return "", false, fmt.Errorf("the MCP server %s is not connected now", server)
+	}
+	res, err := client.CallTool(ctx, tool, input)
+	if err != nil {
+		return "", false, err
+	}
+	return mcpText(res), res.IsError, nil
+}

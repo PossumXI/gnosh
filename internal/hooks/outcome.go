@@ -275,6 +275,9 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 	case p.cancelled:
 		v.cancelled = true
 		return v
+	case p.startErr != nil && h.Server != "":
+		v.failure = "its MCP tool could not be called (" + p.startErr.Error() + ")"
+		return v
 	case p.startErr != nil && h.URL != "":
 		v.failure = "its server could not be reached (" + p.startErr.Error() + ")"
 		return v

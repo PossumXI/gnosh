@@ -1,6 +1,8 @@
 package hooks
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"slices"
@@ -84,6 +86,14 @@ type Hook struct {
 	URL            string
 	Headers        map[string]string
 	AllowedEnvVars []string
+
+	// Server and Tool, when they are set, make the hook a call of a tool
+	// of a connected MCP server (Claude Code's "type": "mcp_tool"): Input
+	// is its arguments, a JSON object in whose strings ${field.path}
+	// stands for that field of the event, and the text the tool returns
+	// is read as a command hook's stdout is (Options.MCP calls it).
+	Server, Tool string
+	Input        json.RawMessage
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -101,6 +111,9 @@ func (h Hook) label() string {
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
 		return "POST " + h.URL
+	}
+	if h.Server != "" {
+		return "mcp " + h.Server + "/" + h.Tool
 	}
 	if h.Args == nil {
 		return h.Command
@@ -154,6 +167,9 @@ type Spec struct {
 	URL            string
 	Headers        map[string]string
 	AllowedEnvVars []string
+	// Server, Tool and Input make an MCP tool hook (see Hook).
+	Server, Tool string
+	Input        json.RawMessage
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -179,6 +195,9 @@ func NewHook(s Spec) (Hook, error) {
 		URL:            s.URL,
 		Headers:        s.Headers,
 		AllowedEnvVars: s.AllowedEnvVars,
+		Server:         s.Server,
+		Tool:           s.Tool,
+		Input:          s.Input,
 		Source:         s.Source,
 		Global:         s.Global,
 		If:             strings.TrimSpace(s.If),
@@ -235,6 +254,16 @@ func hookProblems(h Hook) []string {
 		msgs = append(msgs, eventProblem(string(h.Event)))
 	}
 	switch {
+	case h.Server != "" || h.Tool != "":
+		if h.Server == "" || h.Tool == "" {
+			msgs = append(msgs, "an mcp_tool hook names both the \"server\" and the \"tool\" it calls.")
+		}
+		if h.Command != "" || h.Args != nil || h.URL != "" || h.Async || h.AsyncRewake {
+			msgs = append(msgs, "the hook is both a call of an MCP tool and a command or an address; it is one of them.")
+		}
+		if len(h.Input) > 0 && !bytes.HasPrefix(bytes.TrimSpace(h.Input), []byte("{")) {
+			msgs = append(msgs, "an mcp_tool hook's \"input\" is a JSON object of the tool's arguments.")
+		}
 	case h.URL != "":
 		if h.Command != "" || h.Args != nil || h.Async || h.AsyncRewake {
 			msgs = append(msgs, "the hook has both an address and a command. An http hook sends the event to its \"url\"; a command hook runs its \"command\"; and only a command hook runs in the background.")

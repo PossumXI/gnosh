@@ -303,10 +303,13 @@ var hookFields = map[string]string{
 	"onFailure":     "same",
 	"if":            "",
 	"args":          "",
-	// The fields of an http hook.
+	// The fields of an http hook, and of an mcp_tool hook.
 	"url":            "",
 	"headers":        "",
 	"allowedEnvVars": "",
+	"server":         "",
+	"tool":           "",
+	"input":          "",
 }
 
 // hookFieldSame is the one value each "same" field may have.

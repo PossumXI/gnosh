@@ -277,6 +277,9 @@ func (c *Config) HooksJSON() []byte {
 		URL            string            `json:"url,omitempty"`
 		Headers        map[string]string `json:"headers,omitempty"`
 		AllowedEnvVars []string          `json:"allowedEnvVars,omitempty"`
+		Server         string            `json:"server,omitempty"`
+		Tool           string            `json:"tool,omitempty"`
+		Input          json.RawMessage   `json:"input,omitempty"`
 		Timeout        float64           `json:"timeout,omitempty"`
 	}
 	type group struct {
@@ -288,6 +291,9 @@ func (c *Config) HooksJSON() []byte {
 		hd := handler{Type: "command", Command: h.Command, Timeout: h.Timeout.Seconds()}
 		if h.URL != "" {
 			hd = handler{Type: "http", URL: h.URL, Headers: h.Headers, AllowedEnvVars: h.AllowedEnvVars, Timeout: h.Timeout.Seconds()}
+		}
+		if h.Server != "" {
+			hd = handler{Type: "mcp_tool", Server: h.Server, Tool: h.Tool, Input: h.Input, Timeout: h.Timeout.Seconds()}
 		}
 		if h.Args != nil {
 			// (An empty list is still the exec form.)

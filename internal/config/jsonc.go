@@ -310,3 +310,46 @@ func (n *jnode) whole() (int, bool) {
 	v, err := strconv.Atoi(n.str)
 	return v, err == nil
 }
+
+// marshal writes the node back as JSON, its members in the order they
+// were written.
+func (n *jnode) marshal() json.RawMessage {
+	var b bytes.Buffer
+	n.write(&b)
+	return b.Bytes()
+}
+
+func (n *jnode) write(b *bytes.Buffer) {
+	switch n.kind {
+	case jObject:
+		b.WriteByte('{')
+		for i, f := range n.fields {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			key, _ := json.Marshal(f.key)
+			b.Write(key)
+			b.WriteByte(':')
+			f.val.write(b)
+		}
+		b.WriteByte('}')
+	case jArray:
+		b.WriteByte('[')
+		for i, it := range n.items {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			it.write(b)
+		}
+		b.WriteByte(']')
+	case jString:
+		s, _ := json.Marshal(n.str)
+		b.Write(s)
+	case jNumber:
+		b.WriteString(n.str)
+	case jBool:
+		b.WriteString(strconv.FormatBool(n.b))
+	default:
+		b.WriteString("null")
+	}
+}

@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -104,6 +106,11 @@ type Options struct {
 	// Background is told what a hook that ran in the background left
 	// when it ended, from a goroutine of its own. Nil drops it.
 	Background func(Background)
+
+	// MCP calls a tool of a connected MCP server for an mcp_tool hook,
+	// and returns the text it answered with, and whether the tool said it
+	// failed. Nil: such a hook could not run.
+	MCP func(ctx context.Context, server, tool string, input json.RawMessage) (text string, failed bool, err error)
 }
 
 const (
@@ -367,6 +374,10 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 		all.Go(func() {
 			if h.URL != "" {
 				procs[i] = r.post(ctx, h.Hook, stdin, env, timeoutFor(h.Event, h.Timeout))
+				return
+			}
+			if h.Server != "" {
+				procs[i] = r.callMCP(ctx, h.Hook, stdin, timeoutFor(h.Event, h.Timeout))
 				return
 			}
 			procs[i] = r.exec(ctx, h.Hook, stdin, env, dir, timeoutFor(h.Event, h.Timeout))
@@ -831,3 +842,91 @@ func (r *Runner) post(ctx context.Context, h Hook, body []byte, env []string, li
 	p.exit, p.stdout = 0, string(data)
 	return p
 }
+
+// callMCP runs an mcp_tool hook: the tool's arguments, with ${field.path}
+// in their strings filled in from the event, go to the tool through
+// Options.MCP, and the text it answers with is read as a command hook's
+// stdout. A tool that says it failed is a hook that could not evaluate.
+func (r *Runner) callMCP(ctx context.Context, h Hook, event []byte, limit time.Duration) (p proc) {
+	p.exit, p.limit = -1, limit
+	began := r.now()
+	defer func() { p.took = r.now().Sub(began) }()
+	if r.opts.MCP == nil {
+		p.startErr = errors.New("this gnosh calls no MCP tool for a hook")
+		return p
+	}
+	input, err := fillInput(h.Input, event)
+	if err != nil {
+		p.startErr = err
+		return p
+	}
+	cctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	text, failed, err := r.opts.MCP(cctx, h.Server, h.Tool, input)
+	switch {
+	case ctx.Err() != nil:
+		p.cancelled = true
+	case cctx.Err() != nil:
+		p.timedOut = true
+	case err != nil:
+		p.startErr = err
+	case failed:
+		p.unknown = "the tool answered that it failed"
+		p.stderr = text
+	default:
+		p.exit, p.stdout = 0, text
+	}
+	return p
+}
+
+// fillInput puts the fields of the event in for ${field.path} in the
+// strings of an mcp_tool hook's arguments ("${tool_input.file_path}"). A
+// path the event does not have stands for nothing.
+func fillInput(input json.RawMessage, event []byte) (json.RawMessage, error) {
+	if len(input) == 0 {
+		return json.RawMessage("{}"), nil
+	}
+	var args, ev any
+	if err := json.Unmarshal(input, &args); err != nil {
+		return nil, fmt.Errorf("the hook's input cannot be read (%v)", err)
+	}
+	_ = json.Unmarshal(event, &ev)
+	var fill func(v any) any
+	fill = func(v any) any {
+		switch x := v.(type) {
+		case string:
+			return placeholder.ReplaceAllStringFunc(x, func(m string) string {
+				cur := ev
+				for _, key := range strings.Split(m[2:len(m)-1], ".") {
+					obj, ok := cur.(map[string]any)
+					if !ok {
+						return ""
+					}
+					cur = obj[key]
+				}
+				switch y := cur.(type) {
+				case nil:
+					return ""
+				case string:
+					return y
+				default:
+					b, _ := json.Marshal(y)
+					return string(b)
+				}
+			})
+		case map[string]any:
+			for k, e := range x {
+				x[k] = fill(e)
+			}
+		case []any:
+			for i, e := range x {
+				x[i] = fill(e)
+			}
+		}
+		return v
+	}
+	return json.Marshal(fill(args))
+}
+
+// placeholder finds ${field.path} in an mcp_tool hook's arguments.
+var placeholder = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\}`)

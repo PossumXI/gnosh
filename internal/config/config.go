@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -324,6 +325,10 @@ type Hook struct {
 	URL            string
 	Headers        map[string]string
 	AllowedEnvVars []string
+	// Server, Tool and Input make the hook a call of a tool of a
+	// connected MCP server (mcp_tool), with Input as its arguments.
+	Server, Tool string
+	Input        json.RawMessage
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event
@@ -343,6 +348,9 @@ type Hook struct {
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
 		return "POST " + h.URL
+	}
+	if h.Server != "" {
+		return "mcp " + h.Server + "/" + h.Tool
 	}
 	if h.Args == nil {
 		return h.Command
