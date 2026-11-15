@@ -46,6 +46,9 @@
 #               with isolation worktree adds a line to notes.txt in a work
 #               tree of its own, and the folder's notes.txt stays as it was
 #               (acceptEdits)
+#   wtflag      the same repository, and gnosh started with --worktree demo:
+#               the session adds a line to notes.txt in .gnosh/worktrees/demo,
+#               and the folder's notes.txt stays as it was (acceptEdits)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -62,9 +65,10 @@ agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
+wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, panel)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel)" >&2
 	exit 2
 	;;
 esac
@@ -108,7 +112,7 @@ context: fork
 Count the lines of the file notes.txt in the working directory. Report the count as one number.
 EOF
 cd "$T/work" || exit 1
-if [ "$scenario" = worktree ]; then
+if [ "$scenario" = worktree ] || [ "$scenario" = wtflag ]; then
 	git init -q && git -c user.name=check -c user.email=check@example.com add notes.txt &&
 		git -c user.name=check -c user.email=check@example.com commit -q -m notes || exit 1
 fi
@@ -160,6 +164,10 @@ worktree)
 	tmux send-keys -t "$S" "Call the Agent tool with isolation set to worktree, to have a sub-agent add the line delta at the end of notes.txt. Then tell me where its change is." Enter
 	done_when() { screen | grep -q "work tree" && screen | grep -q "done in"; }
 	;;
+wtflag)
+	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
+	done_when() { screen | grep -q "done in"; }
+	;;
 monitor)
 	tmux send-keys -t "$S" "Use the Monitor tool to watch this exact command: for i in 1 2 3; do echo tick \$i; sleep 3; done; echo MONITOR-DONE. Then end your turn. When its lines come, say only the last line you were given." Enter
 	done_when() { screen | grep -q "passed on" && screen | grep -q "background command ended" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
@@ -197,6 +205,11 @@ if [ "$scenario" = worktree ]; then
 	for d in "$T"/work/.gnosh/worktrees/agent-*; do
 		[ -d "$d" ] && echo "=== notes.txt in $d: $(tr '\n' ' ' < "$d/notes.txt")"
 	done
+fi
+if [ "$scenario" = wtflag ]; then
+	echo "=== notes.txt here: $(tr '\n' ' ' < "$T/work/notes.txt")"
+	echo "=== notes.txt in the work tree: $(tr '\n' ' ' < "$T/work/.gnosh/worktrees/demo/notes.txt" 2>/dev/null || echo none)"
+	echo "=== branches: $(git -C "$T/work" branch --list | tr '\n' ' ')"
 fi
 if [ "$scenario" = plan ]; then
 	echo "=== hello.txt: $(cat "$T/work/hello.txt" 2>/dev/null || echo none)"
