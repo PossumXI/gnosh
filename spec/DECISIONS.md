@@ -318,3 +318,17 @@ or kept with the reason said (27).
     why, since nothing would read a notice that came after the run's
     turn. A background sub-agent has no Agent tool; /tasks lists those
     running and stops one, and TaskStop stops one by its id.
+32. **A hook's `if` filter takes what a deny rule of the same text
+    would stop, and a call it is unsure of.** Claude Code's `if` is one
+    permission rule; gnosh holds it against a call as it holds a deny
+    rule: `Bash(rm *)` takes an `rm` anywhere in the line, inside a
+    wrapper too, and a rule about files takes a command that reads or
+    changes those files. A call part of which is only known when it runs
+    (a program named by a variable) is taken, so a guard hook is never
+    skipped for a call it was meant for; the price is a hook that now
+    and then runs for a call it did not need to see. The session's own
+    rules, mode and approvals play no part. A rule that cannot be
+    applied lets the hook run for every call its matcher takes, and a
+    filter on an event that is not about a tool call keeps its hook from
+    running, as in Claude Code; the session says so of both when it
+    starts.

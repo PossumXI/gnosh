@@ -306,6 +306,10 @@ type Hook struct {
 	Command string
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
+	// If is the hook's "if" filter: one permission rule. On a tool event
+	// the hook runs only for a call a deny rule of that text would refuse
+	// or could apply to; on any other event it never runs.
+	If string
 	// Scope is "user", "project", "local" or "command line".
 	Scope string
 	// BaseDir is the directory of the file that configured the hook.

@@ -62,7 +62,8 @@
 //	permissions      allow, ask and deny (lists of rules), defaultMode,
 //	                 additionalDirectories, disableBypassPermissionsMode,
 //	                 disableAutoMode, denyInsteadOfPrompting
-//	hooks            event, then matcher groups, then command handlers
+//	hooks            event, then matcher groups, then command handlers, each
+//	                 with an "if" filter if it likes (one permission rule)
 //	env              variables for the commands and hooks gnosh starts
 //	disableAllHooks  true switches every hook off, and the status line
 //	statusLine       {"type": "command", "command": ..., "padding": ...,

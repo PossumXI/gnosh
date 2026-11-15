@@ -85,6 +85,14 @@ func (e Event) CanBlock() bool {
 	return ok && i.class == gate
 }
 
+// OfTool reports whether the event is about one tool call: the events on
+// which a matcher is held against the tool's name and an "if" filter
+// against the call.
+func (e Event) OfTool() bool {
+	i, ok := describe(e)
+	return ok && i.subject == toolName
+}
+
 // class sorts the events by what an objection, or a hook that could not
 // evaluate, does to the thing the event announces.
 type class int

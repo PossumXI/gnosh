@@ -293,6 +293,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	for _, note := range l.engine.Explain().Notes {
 		l.notice(agent.LevelWarning, "permission", note)
 	}
+	l.checkHookFilters()
 	l.roots = []string{l.cfg.Paths.ProjectRoot}
 	for _, d := range l.engine.Dirs() {
 		if !slices.Contains(l.roots, d) {

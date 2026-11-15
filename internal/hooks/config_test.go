@@ -124,7 +124,8 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"a prompt hook", hook(`"type": "prompt", "prompt": "is it done?"`), []string{`"type": "prompt"`, "command hooks only"}},
 		{"an agent hook", hook(`"type": "agent", "prompt": "is it done?"`), []string{`"type": "agent"`, "command hooks only"}},
 
-		{"an if filter", hook(`"type": "command", "command": "true", "if": "Bash(rm *)"`), []string{`"if" filter`, "Remove the filter"}},
+		{"an if filter that is not a string", hook(`"type": "command", "command": "true", "if": ["Bash(rm *)"]`), []string{`"if" is one permission rule`, "this one is a list"}},
+		{"an empty if filter", hook(`"type": "command", "command": "true", "if": " "`), []string{`"if" is empty`, `leave "if" out`}},
 		{"args", hook(`"type": "command", "command": "check", "args": ["--strict"]`), []string{`"args"`, "through the shell"}},
 		{"a background hook", hook(`"type": "command", "command": "true", "async": true`), []string{`"async": true`, "background", "cannot stop anything"}},
 		{"a background hook that wakes the model", hook(`"type": "command", "command": "true", "asyncRewake": true`), []string{`"asyncRewake": true`, "background"}},
@@ -192,7 +193,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	    { "matcher": "Bash", "hooks": [
 	        { "type": "command", "command": "./ok.sh" },
 	        { "type": "http", "url": "https://example.com" },
-	        { "type": "command", "command": "./filtered.sh", "if": "Bash(rm *)", "timeout": -1 } ] } ],
+	        { "type": "command", "command": "./filtered.sh", "if": 7, "timeout": -1 } ] } ],
 	  "stop": [ { "hooks": [ { "type": "command", "command": "./tests.sh" } ] } ],
 	  "PermissionRequest": [ { "hooks": [ { "type": "command", "command": "./answer.sh" } ] } ]
 	}`
@@ -203,7 +204,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	text := err.Error()
 	contains(t, "the error", text,
 		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "http"`,
-		`gnosh.json: PreToolUse group 1, hook 3: the hook has an "if" filter`,
+		`gnosh.json: PreToolUse group 1, hook 3: "if" is one permission rule`,
 		`gnosh.json: PreToolUse group 1, hook 3: the timeout "-1" cannot be used`,
 		`gnosh.json: "stop" is not a hook event`,
 	)
@@ -217,7 +218,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	// PermissionRequest hooks.
 	fires := []Event{PreToolUse, Stop}
 	all := problemsText(Check(cfg, Options{Fires: fires}))
-	contains(t, "Check", all, `"type": "http"`, `"if" filter`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
+	contains(t, "Check", all, `"type": "http"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
 }
 
 func TestNewHook(t *testing.T) {

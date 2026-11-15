@@ -296,7 +296,7 @@ var hookFields = map[string]string{
 	"async":         "same",
 	"asyncRewake":   "same",
 	"onFailure":     "same",
-	"if":            "gnosh cannot filter a hook the way Claude Code's \"if\" does, and a guard run some other way than written may let through what it was meant to stop. Move the test into the command",
+	"if":            "",
 	"args":          "gnosh runs a hook's command through the shell and has no \"args\" form. Write the arguments into the command",
 }
 

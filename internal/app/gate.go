@@ -86,6 +86,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			Event: hooks.PreToolUse, Cwd: cwd,
 			ToolName: call.Name, ToolUseID: call.ID, ToolInput: call.Input,
 			AgentID: req.AgentID, AgentType: req.AgentType,
+			IfMatch: l.hookIf(cwd, call, action),
 		})
 		switch {
 		case err != nil && ctx.Err() != nil:
@@ -164,6 +165,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			Event: hooks.PermissionRequest, Cwd: cwd,
 			ToolName: call.Name, ToolInput: call.Input,
 			AgentID: req.AgentID, AgentType: req.AgentType,
+			IfMatch: l.hookIf(cwd, call, action),
 		})
 		switch {
 		case err != nil && ctx.Err() != nil:
@@ -339,6 +341,44 @@ func yesWith(ctx context.Context, call core.ToolCall, ans agent.Answer) {
 		Source: "permission",
 		Text:   prompt.Wrap("The user approved your " + call.Name + " call, and said with it: " + comment),
 	})
+}
+
+// hookIf is the "if" filter of the hooks on one call (hooks.Input.IfMatch):
+// a hook runs for the call when a deny rule of the same text would refuse
+// it or could apply to it, and when the rule cannot be applied at all, of
+// which the person was told when the session started. A filter's mistake
+// never skips a hook.
+func (l *live) hookIf(dir string, call core.ToolCall, action core.Action) func(rule string) bool {
+	return func(rule string) bool {
+		takes, err := l.engine.Takes(rule, dir, call.Name, call, action)
+		return takes || err != nil
+	}
+}
+
+// checkHookFilters tells the person, as the session starts, of a hook
+// whose "if" filter will not do what it seems to: one on an event that is
+// not about a tool call, which never runs, and one whose rule cannot be
+// applied, which runs for every call its matcher takes.
+func (l *live) checkHookFilters() {
+	for _, h := range l.cfg.Hooks {
+		if h.If == "" {
+			continue
+		}
+		if !hooks.Event(h.Event).OfTool() {
+			l.notice(agent.LevelWarning, "hooks", fmt.Sprintf(
+				"The %s hook from %s has an \"if\" filter, which only the hooks of tool events have, so it never runs.", h.Event, h.Origin))
+			continue
+		}
+		if err := l.engine.CheckRule(h.If); err != nil {
+			var re *permission.RuleError
+			if errors.As(err, &re) {
+				err = re.Err
+			}
+			l.notice(agent.LevelWarning, "hooks", fmt.Sprintf(
+				"The %s hook from %s has the \"if\" filter %s, which cannot be applied (%s), so it runs for every call its matcher takes.",
+				h.Event, h.Origin, h.If, strings.TrimRight(err.Error(), ".")))
+		}
+	}
 }
 
 // describe asks a tool what a call would do, and survives a tool that

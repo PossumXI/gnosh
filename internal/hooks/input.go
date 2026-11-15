@@ -21,6 +21,11 @@ type Input struct {
 	// Event is the event that is happening.
 	Event Event
 
+	// IfMatch, on a tool event, says whether the call takes a hook's "if"
+	// filter (Hook.If). Nil means every filter takes it. It is never sent
+	// to a hook.
+	IfMatch func(rule string) bool
+
 	// SessionID is the session the user is in ("session_id"). For a
 	// sub-agent's event it is still the user's session; AgentID names the
 	// sub-agent.

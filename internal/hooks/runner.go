@@ -331,6 +331,11 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		if !matched {
 			continue
 		}
+		// An "if" filter: on a tool event the hook runs for the calls the
+		// filter takes; on any other event never (spec/cc/hooks.md).
+		if h.If != "" && (info.subject != toolName || in.IfMatch != nil && !in.IfMatch(h.If)) {
+			continue
+		}
 		// The same command configured twice runs once. It is a guard
 		// only if every hook that brought it here is one.
 		if i := slices.IndexFunc(out, func(s selected) bool { return s.Command == h.Command }); i >= 0 {

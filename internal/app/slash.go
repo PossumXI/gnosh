@@ -700,6 +700,9 @@ func (l *live) slashHooks(ctx context.Context, c *SlashContext) error {
 			if h.Matcher != "" && h.Matcher != "*" {
 				line += "  [matches " + h.Matcher + "]"
 			}
+			if h.If != "" {
+				line += "  [if " + h.If + "]"
+			}
 			if h.Timeout > 0 {
 				line += "  [timeout " + h.Timeout.String() + "]"
 			}

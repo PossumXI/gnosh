@@ -605,6 +605,9 @@ type RequestInfo struct {
 type ToolDone struct {
 	// Call is the call as it ran, with the arguments the gate left it.
 	Call core.ToolCall
+	// Tool is the tool that ran it, for a moment that asks what the call
+	// did (core.Describer).
+	Tool core.Tool
 	// Result is what the tool returned, after Options.CleanResult.
 	Result core.ToolResult
 	// Duration is how long the call took.

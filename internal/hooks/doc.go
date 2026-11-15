@@ -249,8 +249,8 @@
 // configuration that has one: an event name that is not exactly one of
 // the fifteen (a misspelling, another letter case, or a Claude Code event
 // gnosh does not have); an event this build does not fire
-// (Options.Fires); a hook type other than "command"; an "if" filter;
-// "args"; a background hook; "onFailure" other than "continue"; any field
+// (Options.Fires); a hook type other than "command"; an "if" that is not
+// a string; "args"; a background hook; "onFailure" other than "continue"; any field
 // gnosh does not know; a name written twice in one JSON object; a matcher
 // on an event that takes none, or one that cannot be read; a missing
 // command; a timeout that is not above zero; and, in the user's own
@@ -263,8 +263,11 @@
 //     In Claude Code it never blocks.
 //   - An unknown event, or an entry gnosh cannot run as written, stops
 //     startup. Claude Code skips it with a warning, or runs it another way
-//     (an "if" filter it cannot evaluate, a matcher on an event that takes
-//     none).
+//     (a matcher on an event that takes none).
+//   - An "if" filter takes a tool call whenever a deny rule of the same
+//     text would refuse the call or could apply to it (the agent loop's
+//     Input.IfMatch): it is as strong as a deny rule, and a hook that
+//     guards is never skipped for a call the rule could be about.
 //   - Stop hooks are not capped, and exit 2 with "No such file or
 //     directory" on stderr still blocks. (The agent loop asks the model to
 //     reflect at every tenth block in a row.)

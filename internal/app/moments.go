@@ -304,6 +304,27 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 		AgentID:   done.AgentID,
 		AgentType: done.AgentType,
 	}
+	if done.Tool != nil {
+		// The "if" filters look at what the call did, which the tool is
+		// asked once, and only when a hook has a filter.
+		var match func(string) bool
+		in.IfMatch = func(rule string) bool {
+			if match == nil {
+				e := env()
+				dir := l.cwd()
+				if e != nil && e.Cwd != "" {
+					dir = e.Cwd
+				}
+				act, err := describe(done.Tool, done.Call, e)
+				if err != nil {
+					match = func(string) bool { return true }
+				} else {
+					match = l.hookIf(dir, done.Call, act)
+				}
+			}
+			return match(rule)
+		}
+	}
 	text := core.TextOf(done.Result.Content)
 	if done.Result.IsError {
 		in.Error, in.IsInterrupt = text, done.Interrupted

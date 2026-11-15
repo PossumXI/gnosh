@@ -44,6 +44,11 @@ type Hook struct {
 	// a relative path, since there is no one folder it could be relative
 	// to.
 	Global bool
+
+	// If is the hook's "if" filter: one permission rule, such as
+	// "Bash(git push *)". On a tool event the hook runs only for a call
+	// the filter takes (Input.IfMatch); on any other event it never runs.
+	If string
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -76,6 +81,8 @@ type Spec struct {
 	// Global is true for a hook of the user's own configuration and false
 	// for one of a project's.
 	Global bool
+	// If is the handler's "if" filter, or empty.
+	If string
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -93,6 +100,7 @@ func NewHook(s Spec) (Hook, error) {
 		Name:    s.Name,
 		Source:  s.Source,
 		Global:  s.Global,
+		If:      strings.TrimSpace(s.If),
 	}
 	if msgs := hookProblems(h); len(msgs) > 0 {
 		problems := make([]Problem, len(msgs))

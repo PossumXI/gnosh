@@ -562,7 +562,7 @@ func (a *Agent) exec(stopped, ctx context.Context, turn string, idx int, tool co
 
 	if f := a.opts.Moments.AfterTool; f != nil {
 		info := ToolDone{
-			Call: call, Result: res, Duration: d.dur, Interrupted: d.interrupted || ctx.Err() != nil,
+			Call: call, Tool: tool, Result: res, Duration: d.dur, Interrupted: d.interrupted || ctx.Err() != nil,
 			Turn: turn, Session: a.session, AgentID: a.agentID, AgentType: a.agentType, ParentCall: a.parentCall,
 		}
 		d.verdict, d.hookErr = afterTool(ctx, f, info)

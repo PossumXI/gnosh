@@ -213,6 +213,12 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 				break
 			}
 			h.Timeout = time.Duration(secs * float64(time.Second))
+		case m.key == "if":
+			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
+				bad(m.line, "a hook's \"if\" is one permission rule, as a string, such as \"Bash(git push *)\".")
+				break
+			}
+			h.If = strings.TrimSpace(m.val.str)
 		case how == "ignored":
 		case how == "same":
 			want := hookFieldSame[m.key]

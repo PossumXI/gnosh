@@ -27,7 +27,7 @@ at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
 tools are `mcp__<server>__<tool>`), commands on
 declared hosts over ssh, permission modes (plan mode included, where the model presents its plan
 with ExitPlanMode and you approve it) and rules,
-hooks, a status line command (Claude Code's `statusLine`), instruction
+hooks (with Claude Code's `if` filters, one permission rule each), a status line command (Claude Code's `statusLine`), instruction
 files, sub-agents in the foreground and, in a session, in the background, `mem` and frames
 with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
 `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and

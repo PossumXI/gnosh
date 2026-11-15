@@ -388,3 +388,77 @@ func TestGateConfirmAlwaysAsksAPerson(t *testing.T) {
 		}
 	})
 }
+
+// A hook's "if" filter: the hook runs for the calls its rule takes and
+// for no others, before a call and after it, and a filter on an event
+// that is not about a tool call keeps its hook from running at all, of
+// which the person is told.
+func TestHookIfFilter(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{
+			{ID: "c1", Name: "Bash", Args: `{"command":"rm -f a.txt"}`},
+			{ID: "c2", Name: "Bash", Args: `{"command":"touch b.txt"}`},
+		}},
+		apptest.Reply{Text: "Tidied."})
+	w.Write("a.txt", "keep me\n")
+	log := w.Home + "/hook-log"
+	pre := w.Script(w.Home+"/hooks/pre.sh", "printf 'pre %s\\n' \"$(cat)\" >> "+log+"\necho 'no removing here' >&2\nexit 2")
+	post := w.Script(w.Home+"/hooks/post.sh", "printf 'post %s\\n' \"$(cat)\" >> "+log)
+	stop := w.Script(w.Home+"/hooks/stop.sh", "cat > /dev/null\necho stop >> "+log)
+	w.Settings(`{"hooks": {
+		"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "` + pre + `", "if": "Bash(rm *)"}]}],
+		"PostToolUse": [{"hooks": [{"type": "command", "command": "` + post + `", "if": "Bash(touch *)"}]}],
+		"Stop": [{"hooks": [{"type": "command", "command": "` + stop + `", "if": "Bash(rm *)"}]}]
+	}}`)
+	r := run(t, w, "-y", "-p", "tidy up").wantCode(t, 0)
+	if !w.Exists("a.txt") {
+		t.Errorf("rm ran: the PreToolUse hook filtered to it did not run")
+	}
+	has(t, "what the model read of rm", toolResult(t, w, 1, "c1"), "no removing here")
+	if !w.Exists("b.txt") {
+		t.Errorf("touch did not run: %s", toolResult(t, w, 1, "c2"))
+	}
+	data, _ := os.ReadFile(log)
+	var pres, posts []string
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case strings.HasPrefix(line, "pre "):
+			pres = append(pres, line)
+		case strings.HasPrefix(line, "post "):
+			posts = append(posts, line)
+		case line == "stop":
+			t.Errorf("the Stop hook with an \"if\" filter ran")
+		}
+	}
+	if len(pres) != 1 || !strings.Contains(pres[0], "rm -f a.txt") {
+		t.Errorf("the PreToolUse hook ran for %q, want once, for rm", pres)
+	}
+	if len(posts) != 1 || !strings.Contains(posts[0], "touch b.txt") {
+		t.Errorf("the PostToolUse hook ran for %q, want once, for touch", posts)
+	}
+	has(t, "the notices", r.err, `Stop hook from`, `has an "if" filter, which only the hooks of tool events have, so it never runs`)
+}
+
+// A filter whose rule cannot be applied lets its hook run for every call
+// its matcher takes, and the person is told when the session starts.
+func TestHookIfFilterThatCannotBeApplied(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch b.txt"}`}}},
+		apptest.Reply{Text: "Made."})
+	log := w.Home + "/hook-log"
+	pre := w.Script(w.Home+"/hooks/pre.sh", "cat > /dev/null\necho pre >> "+log)
+	w.Settings(`{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "` + pre + `", "if": "Nonesuch(x)"}]}]}}`)
+	r := run(t, w, "-y", "-p", "make it").wantCode(t, 0)
+	if data, _ := os.ReadFile(log); strings.Count(string(data), "pre") != 1 {
+		t.Errorf("the hook ran %d times, want once", strings.Count(string(data), "pre"))
+	}
+	has(t, "the notices", r.err, `has the "if" filter Nonesuch(x), which cannot be applied`, "so it runs for every call its matcher takes")
+}
+
+// /hooks shows a hook's "if" filter beside its matcher.
+func TestSlashHooksShowsTheFilter(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Settings(`{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "true", "if": "Bash(git push *)"}]}]}}`)
+	r := run(t, w, "-p", "/hooks").wantCode(t, 0)
+	has(t, "/hooks", r.out, "PreToolUse:", "[matches Bash]", "[if Bash(git push *)]")
+}

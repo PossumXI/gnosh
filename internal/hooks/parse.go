@@ -33,8 +33,9 @@ import (
 //   - a name written twice in one object (JSON readers keep only one of
 //     the two, so a list of hooks would vanish);
 //   - a hook type other than "command" (http, mcp_tool, prompt, agent);
-//   - an "if" filter, "args", a background hook ("async", "asyncRewake"),
-//     a shell other than bash, an "onFailure" other than "continue";
+//   - "args", a background hook ("async", "asyncRewake"), a shell other
+//     than bash, an "onFailure" other than "continue", an "if" that is
+//     not a string;
 //   - any field gnosh does not know;
 //   - a matcher on an event that takes none, or one that cannot be read;
 //   - no command, or a timeout that is not a number of seconds above zero.
@@ -267,7 +268,15 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 				p.fail(place, "the hook has \"onFailure\": %s, which gnosh does not know. Remove it: a hook that fails blocks, on every event that can block.", written)
 			}
 		case "if":
-			p.fail(place, "the hook has an \"if\" filter. gnosh does not apply \"if\" filters, and running the hook unfiltered, or not at all, would both differ from what is written. Remove the filter and make the test inside the command.")
+			s, ok := asString(f.value)
+			switch {
+			case ok && strings.TrimSpace(s) != "":
+				h.If = strings.TrimSpace(s)
+			case ok:
+				p.fail(place, "\"if\" is empty. It is one permission rule, such as \"Bash(git push *)\"; to run the hook for every call its matcher takes, leave \"if\" out.")
+			default:
+				p.fail(place, "\"if\" is one permission rule, as a string, such as \"Bash(git push *)\"; this one is %s.", kindOf(f.value))
+			}
 		case "args":
 			p.fail(place, "the hook has \"args\". gnosh runs a hook's command through the shell and takes no separate list of arguments. Write the arguments into \"command\".")
 		default:
