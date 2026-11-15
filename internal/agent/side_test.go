@@ -340,7 +340,7 @@ func TestSideQuestionWhileACallRuns(t *testing.T) {
 	side := reqs[len(reqs)-1]
 	last := side.Messages[len(side.Messages)-1]
 	if len(last.Blocks) != 2 || last.Blocks[0].Type != core.BlockToolResult || last.Blocks[0].ToolUseID != "c1" ||
-		!strings.Contains(core.TextOf(last.Blocks[0].Content), "still running") || last.Blocks[1].Text != "what is it doing?" {
+		!strings.Contains(core.TextOf(last.Blocks[0].Content), "running now; nothing stopped it") || last.Blocks[1].Text != "what is it doing?" {
 		t.Errorf("the side question's last message: %+v", last)
 	}
 	close(release)
