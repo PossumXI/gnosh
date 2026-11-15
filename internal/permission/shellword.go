@@ -51,6 +51,11 @@ type wordPart struct {
 	// body is the word after the operator of the forms that stand for
 	// it as it is: - and + and their kin.
 	body *word
+	// bare is set for a ${name<op>word} that stands outside double
+	// quotes. Where it stands for its word, the shell cuts that text into
+	// words at its blanks: "mv ${X:-.git /tmp/g} /tmp" is mv .git /tmp/g
+	// /tmp where X is not set.
+	bare bool
 	// all marks ${name[@]} and ${name[*]}: every word of an array at
 	// once, each a word of its own where the shell cuts words.
 	all bool
@@ -921,6 +926,7 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 		return
 	}
 	part.guarded = op == ":?" || op == "?"
+	part.bare = !inDouble
 	if op == ":=" || op == "=" {
 		p.sc.setsVar = true
 		part.sets = true

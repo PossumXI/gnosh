@@ -1619,6 +1619,117 @@ func (e *Engine) filledArgs(v *bashView, ws []word) (alts [][]word, every bool) 
 	return append(out, each...), every
 }
 
+// spreadWords returns a command's words as they stand where each default
+// (${name:-text}) or alternative (${name:+text}) that is written with
+// blanks, outside double quotes, is what its ${...} stands for. The shell
+// cuts such a text into words at its blanks, with what is written before
+// it joined to the first of them and what is written after it to the
+// last: "mv ${X:-.git /tmp/g} /tmp" is mv .git /tmp/g /tmp where X is not
+// set, "rm -rf ${HOME:+. x}" is rm -rf . x, and "${X:-rm -rf} ." is rm -rf
+// "." too. Read as one word, such a text names a file nobody has. ok is
+// false when no word of the command is cut that way.
+func (e *Engine) spreadWords(v *bashView, ws []word) (out []word, ok bool) {
+	for _, w := range ws {
+		fields, cut := e.spread(v, w)
+		if !cut {
+			out = append(out, w)
+			continue
+		}
+		ok = true
+		out = append(out, fields...)
+	}
+	if !ok {
+		return nil, false
+	}
+	return out, true
+}
+
+// spread cuts one word as spreadWords says. cut is false for a word that
+// holds no such text, and for one with a part whose text cannot be
+// written out again (what a command prints, arithmetic, the other forms
+// of ${...}).
+func (e *Engine) spread(v *bashView, w word) (out []word, cut bool) {
+	// text is what a ${...} with a default or an alternative stands for.
+	text := func(p wordPart) string {
+		if p.hasAlt {
+			return p.alt
+		}
+		return p.def
+	}
+	blank := func(s string) bool { return len(e.fields(v, s)) > 1 || s != strings.Join(e.fields(v, s), "") }
+	for _, p := range w.parts {
+		switch {
+		case p.kind == partLit:
+		case p.kind == partVar && (p.hasDef || p.hasAlt):
+			cut = cut || p.bare && blank(text(p))
+		case p.kind == partVar && p.op == "" && !p.all && p.name != "":
+		default:
+			return nil, false
+		}
+	}
+	if !cut {
+		return nil, false
+	}
+	var cur word
+	open := false
+	flush := func() {
+		if open {
+			cur.quoted = w.quoted
+			out = append(out, cur)
+		}
+		cur, open = word{}, false
+	}
+	add := func(s string, pattern bool) {
+		if s == "" {
+			return
+		}
+		cur.parts = append(cur.parts, wordPart{kind: partLit, lit: s})
+		cur.raw += s
+		cur.glob = cur.glob || pattern && hasPathMagic(s)
+		open = true
+	}
+	for i, p := range w.parts {
+		switch {
+		case p.kind == partLit:
+			if i == 0 && w.tilde {
+				cur.tilde = true
+			}
+			add(p.lit, w.glob)
+		case p.hasDef || p.hasAlt:
+			s := text(p)
+			tilde := s == "~" || strings.HasPrefix(s, "~/")
+			if !p.bare || !blank(s) {
+				cur.tilde = cur.tilde || !open && tilde
+				add(s, p.bare)
+				continue
+			}
+			// Blanks at its ends cut the text off from what is written
+			// beside it.
+			fields := e.fields(v, s)
+			if len(fields) == 0 || !strings.HasPrefix(s, fields[0]) {
+				flush()
+			}
+			for k, f := range fields {
+				if k > 0 {
+					flush()
+				}
+				cur.tilde = cur.tilde || !open && k == 0 && tilde
+				add(f, true)
+			}
+			if len(fields) > 0 && !strings.HasSuffix(s, fields[len(fields)-1]) {
+				flush()
+			}
+		default:
+			// A plain $name: what the line gave it is filled in later.
+			cur.parts = append(cur.parts, p)
+			cur.raw += "${" + p.name + "}"
+			open = true
+		}
+	}
+	flush()
+	return out, true
+}
+
 // arraySeq returns the words the shell makes of a word that is every
 // word of an array with plain text written before or after it: the text
 // before joins the first of them and the text after the last ("${a[@]}*"
@@ -2291,6 +2402,12 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 	}
 	if len(c.words) == 0 {
 		return
+	}
+	// A default or an alternative written with blanks is several words
+	// where its ${...} stands for it: the command as it is then is read as
+	// well.
+	if spread, ok := e.spreadWords(v, c.words); ok {
+		e.addDerived(v, &simpleCmd{words: spread, redirs: c.redirs, sep: c.sep, nest: nest}, prev, depth)
 	}
 	e.useAlias(v, c, prev, depth)
 	if c.words[0].static() && v.funcNames[c.words[0].joined()] {

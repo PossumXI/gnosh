@@ -262,7 +262,13 @@
 // is a flag to the command it is handed to, and the words beside it are
 // then other things than they seem: with a file named -R in the
 // directory, "for f in *; do cp a.txt b.txt $f; done" copies a.txt over
-// b.txt.
+// b.txt. A default or an alternative that is written with blanks, outside
+// double quotes, is several words where its ${...} stands for it, with
+// what is written beside it joined to the first and the last of them: "mv
+// ${X:-.git /tmp/g} /tmp" is mv .git /tmp/g /tmp where X is not set,
+// "rm -rf ${HOME:+. x}" is rm -rf . x, and "${X:-rm -rf} ." is rm -rf "."
+// too. The command as it is then is read beside the one that is written,
+// and held against every rule and check.
 //
 // What the line gives its variables is followed along the roads a line
 // plainly takes: an assignment, or several (each value counts); an

@@ -306,6 +306,14 @@ func TestShellAttacks(t *testing.T) {
 		// word with an = in it for one: a shell would look for a program of
 		// that name.
 		{"env sets a variable named 0 and runs rm x", ModeBypass, attackGuards, "env -- 0=1 rm x", Deny},
+		// A default written with blanks is cut into words where the
+		// variable is not set, and an alternative where it is.
+		{"with X not set this is rm x y", ModeBypass, attackGuards, "${X:-rm x} y", Deny},
+		{"with X not set this is git push origin", ModeBypass, attackGuards, "git ${X:-push origin}", Deny},
+		{"HOME is set, so this is git push origin", ModeBypass, attackGuards, "git ${HOME:+push origin} main", Deny},
+		{"with X not set this is sudo rm x", ModeBypass, attackGuards, "sudo ${X:-rm x}", Deny},
+		{"with X not set cat reads .env and a.txt", ModeBypass, attackGuards, "cat ${X:-.env a.txt}", Deny},
+		{"with X not set cat reads .env and a.txt", "", attackRealistic, "cat ${X:-a.txt .env}", Deny},
 		{"env sets a variable named 0 and runs rm x", ModeBypass, attackGuards, "env -- a.b=1 0= rm x", Deny},
 		{"env sets two variables and runs git push", ModeBypass, attackGuards, "env -i -- A=1 0TERNAL_DIFF=rm git push origin", Deny},
 		{"env sets a variable and runs env, which runs rm x", ModeBypass, attackGuards, "env -- 0= env -- 1= rm x", Deny},
@@ -567,7 +575,11 @@ func TestShellAttacks(t *testing.T) {
 		}
 	}
 	// The removals are of the kind no rule and no mode waves through.
-	for _, cmd := range []string{"find . -delete", "find -delete", "find . -exec rm -rf {} +", "find ~ -exec rm {} \\;", "d=.; rm -rf $d", "d=/; rm -rf \"$d\"",
+	for _, cmd := range []string{
+		// A default or an alternative written with blanks is several words
+		// where its ${...} stands for it.
+		"rm -rf ${X:-. x}", "rm -rf ${HOME:+. x}", "${X:-rm -rf} .", "rm ${X:--rf .}", "rm -rf ${X:-x .}/", "rm -rf ${X:-. x}''", "rm -rf a${X:- . }b",
+		"find . -delete", "find -delete", "find . -exec rm -rf {} +", "find ~ -exec rm {} \\;", "d=.; rm -rf $d", "d=/; rm -rf \"$d\"",
 		"$RM -rf /", "\"$(which rm)\" -rf ~", "${RM:-rm} -fr .", "$X --recursive ..", "{rm,} -r /", "r? -rf ~", "rm -rf ~+", "rmdir ~+", "rm -rf ~+/..", "rm -rf ~root", "rmdir ~alice/", "rm -rf ~bob/*",
 		"rmdir \"$(printf .)\"", "rm --recursiv \"$(pwd)\"", "rm --r \"$(pwd)\"", "$RM -rPf /", "{rm,} -rx /",
 		"eval 'time { d;}|rmdir ~'", "bash -c 'coproc rm -rf /'", "echo . | xargs rm -rf",
