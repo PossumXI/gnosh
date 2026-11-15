@@ -590,9 +590,32 @@ var (
 		"rm -rf ../$f", "chmod -R 000 ./$f", "cat $f$f", "echo x > build/$f", "cat ${f:-.env}", "cat .${f}"}
 )
 
-// tricks makes a line of one of the three kinds above.
+// A fourth kind: a value with blanks in it where the shell cuts it into
+// words. That is wherever a variable, a default or an alternative stands
+// outside double quotes, whatever is quoted beside it in the word ("$x”"
+// is $x to the shell, and "${X:-.git /tmp/g}\ /tmp" two words); inside
+// double quotes it stays one word. Seed 88 found the first of these by
+// chance, and the rest were found by hand behind it.
+var (
+	trickValues = []string{". y", ".git /tmp/g", ".env a.txt", "a.txt .env", "-rf .", "-R 000 .", "src/ .", "a.txt b.txt", "x .", "push origin",
+		"clean -fdx", "rm -rf .", "~ x", "* x", "build ..", "000 .", "@OUT@/secret.txt a.txt"}
+	trickShapes = []string{"$x", "$x''", "\"\"$x", "${x}''", "$x\\ z", "''$x", "$x\"\"", "${X:-%V}", "${X:-%V}''", "${X:-%V}\\ z", "''${X:-%V}",
+		"${HOME:+%V}", "${HOME:+%V}''", "\"$x\"", "\"${X:-%V}\"", "a${X:- %V }b", "${X-%V}", "${X:=%V}"}
+	trickSplitCmds = []string{"rm -rf %W", "mv %W", "mv %W /tmp", "cat %W", "chmod %W", "chmod -R %W", "rsync -a --delete %W", "git %W", "%W",
+		"cp %W", "head -1 %W", "rm %W", "sudo mv %W /tmp", "ls %W", "shred -u %W", "truncate -s 0 %W", "env %W", "cp %W build/", "tee %W </dev/null"}
+)
+
+// tricks makes a line of one of the four kinds above.
 func (g *lineGen) tricks() string {
-	switch g.r.Intn(5) {
+	switch g.r.Intn(7) {
+	case 5, 6:
+		value := g.one(trickValues)
+		shape := strings.ReplaceAll(g.one(trickShapes), "%V", value)
+		s := strings.ReplaceAll(g.one(trickSplitCmds), "%W", shape)
+		if strings.Contains(shape, "x") {
+			s = "x='" + value + "'" + g.one([]string{"; ", " && ", "\n"}) + s
+		}
+		return s
 	case 0, 1:
 		s := strings.ReplaceAll(g.one(trickCds), "%D", g.one(trickDirs))
 		for n := 1 + g.r.Intn(3); n > 0; n-- {

@@ -346,11 +346,29 @@ func runOracle(t *testing.T, n int, seed int64, each bool, lineAt func(i int) st
 //
 //	seed  lines    shell runs  time      kinds of finding
 //	86     67,000  stopped                1
+//	87     42,000  stopped                0 (the engine changed under it)
+//	88    308,000  stopped                2
+//	89     80,000    474,602   43m19s    0 (the generator of file commands only)
 //
 // Seed 86 ran on the code with those four closed, and showed one line:
 // "time>& - -p teepwned", which in bash runs a program named -p, because
 // the keyword time takes -p for its own only where it follows at once
 // (TestTimeAndARedirection).
+//
+// Seed 88 showed two. The first was a line the reader cannot follow, with
+// rsync --delete behind a word that an alias on the line before had made
+// stand for nothing (dash expands it; crudeDanger now judges the words
+// from such a command's name on). The second was "mv ${X:-.git /tmp/g}\
+// /tmp", and behind it stood two holes wider than the line: a default
+// written with blanks was read as one word where the shell makes several
+// of it, and a variable outside double quotes was taken for quoted as
+// soon as anything beside it in the word was (with x holding ". y", "rm
+// -rf $x" with two single quotes after the x ran rm -rf . y, unasked).
+// The check of this file had been letting the first of those
+// go as "a variable nobody knows". Both are closed in the reader and the
+// engine, and the generator of tricks makes such lines now (trickShapes).
+// Seed 89 was the generator of file commands alone, after a change to how
+// a cp into a directory is judged in acceptEdits.
 //
 // (A run was stopped as soon as it had shown something new, the hole was
 // closed, and the next one started with another seed; the seeds between
