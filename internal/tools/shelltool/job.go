@@ -386,8 +386,12 @@ func (j *job) background(limit time.Duration) {
 	why, _ := j.await(context.Background(), timeout, nil)
 	j.finish(why, limit)
 	if j.mon != nil {
-		// A watched command's last lines go before the news of its end.
-		j.detach()
+		// A watched command's last lines go before the news of its end:
+		// the sink is given the time to hand them over (its listener only
+		// keeps them), and the watcher passes them on.
+		if s := j.sink.Swap(nil); s != nil {
+			s.closeWithin(5 * time.Second)
+		}
 		j.mon.close()
 	}
 	j.m.notes.send(j)

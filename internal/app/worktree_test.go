@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,7 +56,7 @@ func TestSubAgentWorktree(t *testing.T) {
 		t.Errorf("the sub-agent wrote into the session's own folder")
 	}
 	report := toolResult(t, w, 3, "c1")
-	has(t, "the report", report, "Wrote new.txt.", "It worked in its own git work tree", "on the branch gnosh/agent-", "it holds 1 file it changed and did not commit")
+	has(t, "the report", report, "Wrote new.txt.", "It worked in its own git work tree", "on the branch gnosh-agent-", "it holds 1 file it changed or made and did not commit", "worktree remove --force")
 	m := regexp.MustCompile(`work tree, (\S+), on the branch`).FindStringSubmatch(report)
 	if m == nil {
 		t.Fatalf("the report names no work tree:\n%s", report)
@@ -96,4 +97,58 @@ func TestSubAgentWorktree(t *testing.T) {
 	)
 	run(t, w, "--trust-folder", "-p", "look").wantCode(t, 0)
 	has(t, "no repository", toolResult(t, w, 1, "c1"), "No sub-agent was started", "needs a git repository")
+}
+
+// From a folder below the repository's top, the sub-agent starts in the
+// same folder of its work tree, and its writes there are a working
+// directory's, without a question in acceptEdits. Two sub-agents in one
+// reply get work trees of their own: no two share a name.
+func TestSubAgentWorktreeFromASubfolder(t *testing.T) {
+	w := repoWorld(t,
+		apptest.Reply{Calls: []apptest.Call{
+			{ID: "c1", Name: "Agent", Args: `{"description":"one","prompt":"Write one.txt.","isolation":"worktree","run_in_background":true}`},
+			{ID: "c2", Name: "Agent", Args: `{"description":"two","prompt":"Write two.txt.","isolation":"worktree","run_in_background":true}`},
+		}},
+	)
+	w.Write("sub/keep.txt", "kept\n")
+	gitIn(t, w.Dir, "add", "sub/keep.txt")
+	gitIn(t, w.Dir, "commit", "-q", "-m", "sub")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		if !strings.Contains(body, "You are a sub-agent inside gnosh") {
+			if n == 0 {
+				return nil // the session's first reply: the script's
+			}
+			return &apptest.Reply{Text: "Noted."}
+		}
+		file := "one.txt"
+		if strings.Contains(body, "Write two.txt.") {
+			file = "two.txt"
+		}
+		if strings.Contains(body, `"role":"tool"`) {
+			return &apptest.Reply{Text: "Wrote " + file + "."}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "w", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":%q}`, file, file+"\n")}}}
+	})
+	o := testOptions(w, "--permission-mode", "acceptEdits", "--trust-folder", "-p", "write them")
+	o.Cwd = filepath.Join(w.Dir, "sub")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	trees, _ := filepath.Glob(filepath.Join(w.Dir, ".gnosh", "worktrees", "agent-*"))
+	if len(trees) != 2 {
+		t.Fatalf("work trees %q, want two of their own", trees)
+	}
+	var made []string
+	for _, tree := range trees {
+		for _, f := range []string{"one.txt", "two.txt"} {
+			if data, err := os.ReadFile(filepath.Join(tree, "sub", f)); err == nil && strings.TrimSpace(string(data)) != "" {
+				made = append(made, f)
+			}
+		}
+	}
+	if strings.Join(made, " ") != "one.txt two.txt" && strings.Join(made, " ") != "two.txt one.txt" {
+		t.Errorf("the files written in the work trees' sub folders: %q", made)
+	}
+	if w.Exists("sub/one.txt") || w.Exists("sub/two.txt") {
+		t.Errorf("a sub-agent wrote into the session's own folder")
+	}
 }

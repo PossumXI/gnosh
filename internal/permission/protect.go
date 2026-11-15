@@ -41,6 +41,10 @@ var protectedFiles = map[string]bool{
 	"gnosh.json": true, ".netrc": true,
 }
 
+// ProtectsName reports whether a folder of this name protects everything
+// under it, wherever it is: .git, .ssh, .gnosh and the others.
+func ProtectsName(name string) bool { return protectedDirs[guardKey(name)] }
+
 // protectedWhy says why the cleaned absolute path p is protected, or
 // returns "" when it is not.
 func (e *Engine) protectedWhy(p string) string {

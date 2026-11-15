@@ -69,12 +69,15 @@ func (s *progressSink) note(text string) {
 // close hands over what is left and stops the goroutine. It waits for the
 // listener, but not for long: a listener that blocks must not hold up the
 // result of the command.
-func (s *progressSink) close() {
+func (s *progressSink) close() { s.closeWithin(250 * time.Millisecond) }
+
+// closeWithin is close, waiting up to d for the listener.
+func (s *progressSink) closeWithin(d time.Duration) {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
 	s.poke()
-	waitFor(s.done, 250*time.Millisecond)
+	waitFor(s.done, d)
 }
 
 func (s *progressSink) poke() {

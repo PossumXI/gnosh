@@ -482,24 +482,39 @@ or kept with the reason said (27).
 43. **A sub-agent's own work tree starts at HEAD, in .gnosh/worktrees.**
     `isolation: "worktree"` (on the Agent call, or in a kind's
     definition) gives the sub-agent a git work tree of its own on a new
-    branch, `gnosh/agent-<id>`, and it starts in the folder there that
-    stands where the session's does. It starts at the commit the
-    repository has checked out, not at the default branch as Claude
-    Code's does: the sub-agent is asked about the code as the person has
-    it. What they have not committed is not in it, and the report says
-    where its changes are. A work tree it changed nothing in is removed,
-    branch and all; one it changed is kept, and the report names its
-    folder and branch, what it holds, and how to remove it. The work
-    trees lie in the project's data folder, with a .gitignore that keeps
-    them out of the repository's status. The permission rules judge what
-    is inside one as project files (`permission.Options.WorkTrees`), as
-    they already did for Claude Code's `.claude/worktrees`. The folder
-    of work trees and each work tree's own folder stay gnosh's, and a
-    protected name inside a work tree is still protected. Making one runs
-    git, so it happens only in a trusted folder, as /diff does. A
-    session that runs as a kind that asks for isolation (`--agent`) is
-    refused for now: that would be `-w`, which is not built. The Agent
-    call also takes `effort` now, over its kind's.
+    branch, `gnosh-agent-<id>`, named from the random end of its id, so
+    that sub-agents started together never share one. It starts in the
+    folder there that stands where the session's does, and the work tree
+    is a working directory of the session from then on, as /add-dir
+    makes one. It starts at the commit the repository has checked out,
+    not at the default branch as Claude Code's does: the sub-agent is
+    asked about the code as the person has it. What they have not
+    committed is not in it, and the report says where its changes are.
+    - **Removal:** a work tree is removed, branch and all, only when it
+      is as it was made: nothing changed or new, even what git ignores,
+      and its branch and HEAD still at the starting commit. It is removed
+      without force, and the branch with git's safe delete. Any other is
+      kept, and the report names its folder and branch, what it holds,
+      and how to take it away.
+    - **A failed attempt** to make one leaves no branch or folder behind.
+    - **Where they live:** in the project's data folder, with a
+      .gitignore that keeps them out of the repository's status.
+    - **Permissions:** the rules judge what is inside a work tree as
+      project files (`permission.Options.WorkTrees`), as they already
+      did for Claude Code's `.claude/worktrees`. The folder of work trees
+      and each work tree's own folder stay gnosh's, and a protected name
+      inside a work tree is still protected.
+    - **Links:** the folder of work trees must not be a link: gnosh makes
+      none there, and the engine gives no exemption to one, nor to a data
+      folder named like another protected one (`.git`). A repository can
+      ship `.gnosh/worktrees -> ..`, which would otherwise have opened
+      its `.git` to edits without a question. A review found this.
+    - **Trust:** making one runs git, so it happens only in a trusted
+      folder, as /diff does.
+    - **--agent:** a session that runs as a kind that asks for isolation
+      is refused for now; that would be `-w`, which is not built.
+    - **effort:** the Agent call also takes `effort` now, over its
+      kind's.
 44. **The side panel takes the whole screen, and only when asked.** Jae
     asked for "a real side panel as an option" (15 November 2026). A
     panel the height of the screen cannot live in the terminal's

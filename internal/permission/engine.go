@@ -181,11 +181,22 @@ func New(o Options) (*Engine, error) {
 			e.protected = append(e.protected, guardPath(path.Clean(p)))
 		}
 	}
-	if strings.HasPrefix(o.WorkTrees, "/") {
-		e.workTrees = append(e.workTrees, guardPath(path.Clean(o.WorkTrees)))
-		if o.Resolve != nil {
-			if real, err := o.Resolve(path.Clean(o.WorkTrees)); err == nil && !slices.Contains(e.workTrees, guardPath(real)) {
-				e.workTrees = append(e.workTrees, guardPath(real))
+	if trees := path.Clean(o.WorkTrees); strings.HasPrefix(trees, "/") {
+		// The folder of work trees counts only where it is what it says:
+		// in a data folder that has no other protected folder's name
+		// (.git), and not itself a link, which would carry the exemption
+		// somewhere else (a repository can ship ".gnosh/worktrees -> ..").
+		data := path.Base(path.Dir(trees))
+		ok, real := data == ".gnosh" || !ProtectsName(data), trees
+		if ok && o.Resolve != nil {
+			parent, err1 := o.Resolve(path.Dir(trees))
+			r, err2 := o.Resolve(trees)
+			ok, real = err1 == nil && err2 == nil && r == path.Join(parent, path.Base(trees)), r
+		}
+		if ok {
+			e.workTrees = append(e.workTrees, guardPath(trees))
+			if g := guardPath(real); !slices.Contains(e.workTrees, g) {
+				e.workTrees = append(e.workTrees, g)
 			}
 		}
 	}

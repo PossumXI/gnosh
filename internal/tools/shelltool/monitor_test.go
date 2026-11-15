@@ -2,6 +2,7 @@ package shelltool
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -233,5 +234,33 @@ func TestMonitorIsOfferedWhereItCanWork(t *testing.T) {
 	}
 	if !has(newManager(t, Options{OnMonitor: ok})) {
 		t.Errorf("Monitor is not offered")
+	}
+}
+
+// A line printed in two pieces, with a pause between them, is passed on
+// whole; and once a line does not fit, the lines after it are counted too,
+// so that no offer shows lines with a gap between them.
+func TestMonitorWholeLinesNoGaps(t *testing.T) {
+	t.Parallel()
+	w := newWatches()
+	m := newManager(t, Options{OnEnd: w.end, OnMonitor: w.offer})
+	env := newEnv(t)
+	watch(t, m, env, args{argDescription: "a slow test", argCommand: "printf 'test_x '; sleep 0.4; echo PASSED"})
+	got := w.until(t, ended)
+	all := strings.Join(got, "\n")
+	if !strings.Contains(all, "test_x PASSED") {
+		t.Errorf("the line came apart:\n%s", all)
+	}
+
+	w2 := newWatches()
+	m2 := newManager(t, Options{OnEnd: w2.end, OnMonitor: w2.offer})
+	watch(t, m2, env, args{argDescription: "big lines", argCommand: "for i in 1 2 3 4 5 6 7 8 9 10; do head -c 900 /dev/zero | tr '\\0' a; echo; done; echo tail"})
+	w2.until(t, ended)
+	w2.mu.Lock()
+	defer w2.mu.Unlock()
+	for _, o := range w2.offers {
+		if o.Left > 0 && slices.Contains(o.Lines, "tail") {
+			t.Errorf("an offer shows a line after one that did not fit: %d lines, %d left out", len(o.Lines), o.Left)
+		}
 	}
 }

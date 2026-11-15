@@ -366,10 +366,11 @@ type subSession struct {
 	preloaded []agent.Part
 	// dropHooks takes its definition's own hooks away when it ends.
 	dropHooks func()
-	// wt is its git work tree of its own (isolation worktree), or nil, and
-	// start the folder in it that it starts in.
-	wt    *worktree
-	start string
+	// wt is its git work tree of its own (isolation worktree), or nil,
+	// start the folder in it that it starts in, and tree the work tree's
+	// folder, one of its roots.
+	wt          *worktree
+	start, tree string
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
@@ -422,6 +423,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		if s.wt, s.start, err = l.makeWorktree(ctx, parent.Cwd(), s.id); err != nil {
 			return s, err
 		}
+		s.tree = s.wt.path
 	}
 
 	// The features' part in it.
@@ -517,6 +519,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Moments: s.moments(),
 		Drivers: s.drivers(),
 		Cwd:     s.start,
+	}
+	if s.tree != "" {
+		sub.Roots = append(slices.Clone(l.roots), s.tree)
 	}
 	// The model: the call's, then the kind's (inherit is the session's),
 	// then CLAUDE_CODE_SUBAGENT_MODEL, which with
@@ -650,7 +655,11 @@ func (s *subSession) env() *core.ToolEnv {
 	if s.owner != nil {
 		startedBy = s.owner.id
 	}
-	return &core.ToolEnv{Cwd: cwd, Roots: slices.Clone(s.l.roots), SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
+	roots := slices.Clone(s.l.roots)
+	if s.tree != "" {
+		roots = append(roots, s.tree)
+	}
+	return &core.ToolEnv{Cwd: cwd, Roots: roots, SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
 }
 
 // moments joins the sub-agent's moments to the SubagentStart hooks, to

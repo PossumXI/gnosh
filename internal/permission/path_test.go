@@ -1,6 +1,8 @@
 package permission
 
 import (
+	"path"
+	"strings"
 	"testing"
 )
 
@@ -243,6 +245,34 @@ var errLoop = errString("too many levels of symbolic links")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// The folder of work trees counts only where it is what it says: a link in
+// its place (a repository can ship ".gnosh/worktrees -> ..") or a data
+// folder named like another protected one (.git) gives no exemption, and
+// the project's .git and the rest stay protected.
+func TestWorkTreesThatAreNot(t *testing.T) {
+	for name, set := range map[string]func(o *Options){
+		"a link to the project": func(o *Options) {
+			o.WorkTrees = "/proj/.gnosh/worktrees"
+			o.Resolve = func(p string) (string, error) {
+				if rest, ok := strings.CutPrefix(p, "/proj/.gnosh/worktrees"); ok {
+					return path.Clean("/proj/" + rest), nil
+				}
+				return p, nil
+			}
+		},
+		"a data folder named .git": func(o *Options) { o.WorkTrees = "/proj/.git/worktrees" },
+	} {
+		o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
+		set(&o)
+		e := mustEngine(t, o)
+		for _, p := range []string{"/proj/.git/hooks/pre-commit", "/proj/.gnosh/worktrees/x/.git/hooks/pre-commit", "/proj/.git/worktrees/x/config", "/proj/.claude/settings.json"} {
+			if d := file(e, "Write", p); d.Behavior != Ask {
+				t.Errorf("%s: a write to %s is %s (%s), want a question", name, p, d.Behavior, d.Reason)
+			}
+		}
+	}
+}
 
 func TestProtectedPaths(t *testing.T) {
 	protected := []string{

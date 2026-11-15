@@ -201,6 +201,9 @@ type watcher struct {
 	lines []string
 	size  int
 	left  int
+	// part is the start of a line whose end has not come: the sink hands
+	// over a line that waits a moment as far as it has come.
+	part string
 
 	once sync.Once
 	stop chan struct{}
@@ -214,34 +217,52 @@ func newWatcher(j *job, fn func(Watched) bool) *watcher {
 	return w
 }
 
-// take is the job's sink's listener: it keeps the lines of a piece of
-// output, as far as they fit, and counts those that do not.
+// take is the job's sink's listener: it keeps the whole lines of a piece
+// of output, and the start of one whose end has not come yet, as far as
+// they fit; once one does not fit, it counts those that follow, so that
+// what is passed on has no gap in it.
 func (w *watcher) take(p core.Progress) {
-	text := p.Text
-	if p.Stream == "status" {
-		text = "[" + strings.TrimSpace(text) + "]"
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		line = strings.TrimRight(line, " \t\r")
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		if len(line) > monitorLineBytes {
-			cut := monitorLineBytes
-			for cut > 0 && !utf8.RuneStart(line[cut]) {
-				cut--
-			}
-			line = line[:cut] + " [... the rest of this line is in the output file]"
-		}
-		if len(w.lines) >= monitorLines || w.size+len(line) > monitorBytes {
-			w.left++
-			continue
-		}
-		w.lines = append(w.lines, line)
-		w.size += len(line) + 1
+	if p.Stream == "status" {
+		w.keep("[" + strings.TrimSpace(p.Text) + "]")
+		return
 	}
+	text := w.part + p.Text
+	end := strings.LastIndexByte(text, '\n')
+	w.part = text[end+1:]
+	if len(w.part) > monitorLineBytes {
+		// A line that never ends is passed on as far as it has come.
+		w.keep(w.part)
+		w.part = ""
+	}
+	if end < 0 {
+		return
+	}
+	for _, line := range strings.Split(text[:end], "\n") {
+		w.keep(line)
+	}
+}
+
+// keep takes one line, as far as it fits. It is called with mu held.
+func (w *watcher) keep(line string) {
+	line = strings.TrimRight(line, " \t\r")
+	if strings.TrimSpace(line) == "" {
+		return
+	}
+	if len(line) > monitorLineBytes {
+		cut := monitorLineBytes
+		for cut > 0 && !utf8.RuneStart(line[cut]) {
+			cut--
+		}
+		line = line[:cut] + " [... the rest of this line is in the output file]"
+	}
+	if w.left > 0 || len(w.lines) >= monitorLines || w.size+len(line) > monitorBytes {
+		w.left++
+		return
+	}
+	w.lines = append(w.lines, line)
+	w.size += len(line) + 1
 }
 
 // run offers the lines that wait every monitorEvery, until close.
@@ -261,9 +282,14 @@ func (w *watcher) run() {
 }
 
 // offer hands the lines that wait to fn. What fn does not take stays,
-// and what comes after joins it.
+// and what comes after joins it. The last offer has the start of a line
+// whose end never came as well.
 func (w *watcher) offer(last bool) {
 	w.mu.Lock()
+	if last && w.part != "" {
+		w.keep(w.part)
+		w.part = ""
+	}
 	lines, left := w.lines, w.left
 	w.mu.Unlock()
 	if len(lines) == 0 && left == 0 {
