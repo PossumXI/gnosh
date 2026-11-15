@@ -87,11 +87,12 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 			// from what follows its redirection. So the whole line is cut
 			// once more, at what ends a command and nothing else.
 			crude = append(append([]string(nil), crude...), looseCommands(v.text)...)
-			// A descriptor written with more than one digit ("02>&1") is
-			// a word to dash and a descriptor to bash, and the reader
-			// stops there. The line is read both ways, and what either
-			// shell would run is judged.
-			for _, alt := range fdReadings(v.text) {
+			// Where the reader stops, the shells go on: a backslash at the
+			// end of a line joins it to the next, and a descriptor written
+			// with more than one digit ("02>&1") is a word to dash and a
+			// descriptor to bash. The line is read as they read it, and
+			// what it would run is judged.
+			for _, alt := range shellReadings(v.text) {
 				av := e.viewBash(alt)
 				if !av.sc.ok {
 					crude = append(crude, alt)
@@ -100,7 +101,7 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 				for _, u := range av.units {
 					if why := e.removalDanger(av, u.cmd, dirs, nil); why != "" {
 						return Decision{Behavior: Ask, Stage: StageSafety, Critical: true,
-							Reason: dangerWhat(why) + " (" + why + "). Shells read the command differently (" + v.sc.why + "), and this is what one of them would run. No rule approves it; a person decides."}, true
+							Reason: dangerWhat(why) + " (" + why + "). gnosh could not read the whole command (" + v.sc.why + "); read as a shell reads it, this is what it runs. No rule approves it; a person decides."}, true
 					}
 				}
 			}
@@ -230,6 +231,22 @@ func dangerWhat(why string) string {
 		return "This command could destroy something that has to be kept"
 	}
 	return "This removal looks dangerous"
+}
+
+// shellReadings gives the line as the shells read what gnosh's reader
+// stops at: every backslash at the end of a line joined to the next line,
+// as bash and dash do outside single quotes ("$a -\<newline>a" is $a -a),
+// and then each descriptor of more than one digit read both ways (see
+// fdReadings). It gives nothing for a line that has neither. (The joins
+// are made in the text as it is written, quoted or not: what this gives
+// is only ever judged for danger, never let go.)
+func shellReadings(line string) []string {
+	var out []string
+	if strings.Contains(line, "\\\n") {
+		line = strings.ReplaceAll(line, "\\\n", "")
+		out = append(out, line)
+	}
+	return append(out, fdReadings(line)...)
 }
 
 // manyDigitFD finds a redirection whose descriptor is written with more

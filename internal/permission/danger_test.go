@@ -211,6 +211,9 @@ func TestOtherDestroyers(t *testing.T) {
 		// A pattern or a list in braces that stands last stands for names
 		// that are moved too: all of them but the last (oracle seed 100).
 		"mv f /*", "mv a.txt {.git,/tmp/g}", "mv f ~/*",
+		// A backslash at the end of a line in the middle of a word stops
+		// the reader; the shells join the lines (oracle seed 101).
+		"a[0]=rsync; $a -\\\na --delete src/ .", "x=chmod; $x -\\\nR 000 .",
 		"time coproc shred -u *", "echo $[1]; rsync -a --delete src/ .", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
 		// The forms bash adds to ${...}, on a value the line knows.
 		"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",

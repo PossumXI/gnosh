@@ -1527,8 +1527,8 @@ func braceWords(ws []word) (out []word, sure, ok bool) {
 // variables make known replaced by its value: one word when the
 // argument was quoted, and otherwise as many as the value has. Where
 // the line gives a variable several values (a for loop's list), there
-// is one command for each way of choosing among them, up to four; past
-// that, one command that holds them all, which names every file and
+// is one command for each way of choosing among them, up to
+// maxFilledWays; past that, one command that holds them all, which names every file and
 // every flag the others would. That last one is also what "${a[@]}"
 // makes of an array, each of its words a word of the command ("a=(-rf
 // x); rm "${a[@]}"" is rm -rf x), so a command with such an argument is
@@ -1608,15 +1608,17 @@ func (e *Engine) filledArgs(v *bashView, ws []word) (alts [][]word, every bool) 
 			}
 			per[i+1] = append(per[i+1], alt)
 		}
-		if ways *= len(vals); ways > 4 {
-			ways = 5
-		}
 	}
 	if !changed {
 		return nil, false
 	}
+	for _, alts := range per {
+		if ways *= len(alts); ways > maxFilledWays {
+			ways = maxFilledWays + 1
+		}
+	}
 	var out [][]word
-	if ways > 4 || every && ways > 1 {
+	if ways > maxFilledWays || every && ways > 1 {
 		var all []word
 		for _, alts := range per {
 			for _, alt := range alts {
@@ -1626,7 +1628,7 @@ func (e *Engine) filledArgs(v *bashView, ws []word) (alts [][]word, every bool) 
 		if len(all) > 2048 {
 			return nil, false
 		}
-		if ways > 4 {
+		if ways > maxFilledWays {
 			return [][]word{all}, every
 		}
 		out = append(out, all)
@@ -1641,8 +1643,34 @@ func (e *Engine) filledArgs(v *bashView, ws []word) (alts [][]word, every bool) 
 		}
 		each = next
 	}
-	return append(out, each...), every
+	// Ways of choosing that make the same command are one command: the
+	// three ways "echo $1 $2 $3" is echo x, where one of the three is x
+	// and the others are empty.
+	seen := map[string]bool{}
+	for _, ws := range each {
+		var key strings.Builder
+		for _, w := range ws {
+			key.WriteString(w.joined())
+			if w.glob {
+				key.WriteString("\x01")
+			}
+			key.WriteString("\x00")
+		}
+		if !seen[key.String()] {
+			seen[key.String()] = true
+			out = append(out, ws)
+		}
+	}
+	return out, every
 }
+
+// maxFilledWays bounds how many commands filledArgs makes of one, one for
+// each way of choosing among its variables' values; past it, it makes the
+// one that holds them all. A deny rule names a command exactly, so the
+// ways are followed as far as is cheap: "f() { echo $1 $2 $3; }; f x" is
+// eight ways, three of them echo x, which a rule against echo x must meet
+// (oracle seed 101).
+const maxFilledWays = 64
 
 // spreadWords returns a command's words as they stand where each default
 // (${name:-text}) or alternative (${name:+text}) that is written with
@@ -1973,6 +2001,14 @@ func (e *Engine) giveArgs(v *bashView, ws []word, zero bool) {
 				}
 				v.give(name, val)
 			}
+		}
+	}
+	// A number the call hands no word to is unset, and so is one a shift
+	// moved past the last word: unquoted, it stands for nothing. "f() {
+	// echo $1 $2 $3; }; f x" runs echo x (oracle seed 101).
+	for _, name := range positionals {
+		if name != "0" {
+			v.give(name, lineVal{})
 		}
 	}
 	for _, name := range positionals {
