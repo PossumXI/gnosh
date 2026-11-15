@@ -135,6 +135,8 @@ type live struct {
 	// and checkWarn says once that one could not be kept.
 	checks    *checkpoints
 	checkWarn sync.Once
+	// mcp is the session's MCP servers.
+	mcp *mcpSet
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
 	// system is what the model is told as its instructions, and named
@@ -419,6 +421,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			c.c.Ready(l.agent)
 		}
 	}
+	// The MCP servers: their tools are added as each connects.
+	l.mcp = l.loadMCP()
+	l.startMCP()
 	return l, nil
 }
 
@@ -982,6 +987,7 @@ func (l *live) info() SessionInfo {
 		Address:     m.Address,
 		Thinking:    m.Level,
 		Tools:       l.toolNames(),
+		MCPServers:  l.mcpStatus(),
 		Mode:        string(l.engine.Mode()),
 		Commands:    l.slash.names(),
 		CommandList: l.slash.list(),
@@ -1023,6 +1029,7 @@ func (l *live) close(reason string) {
 		l.closeShell()
 		l.cancel()
 		waitGroup(&l.bg, 15*time.Second)
+		l.closeMCP()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		for _, c := range slices.Backward(l.contribs) {
 			if c.c.Close == nil {

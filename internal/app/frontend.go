@@ -260,6 +260,13 @@ type CommandResult struct {
 	Prompt string
 }
 
+// MCPServerStatus is one MCP server and how it stands, as stream-json's
+// system/init line names them.
+type MCPServerStatus struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
 // SessionInfo describes a session to its front end.
 type SessionInfo struct {
 	// ID is the session's id and Path its file.
@@ -273,6 +280,9 @@ type SessionInfo struct {
 	Model    string
 	Address  string
 	Thinking string
+	// MCPServers are the session's MCP servers and how each stands:
+	// "pending", "connected" or "failed".
+	MCPServers []MCPServerStatus
 	// Tools are the tools the model may call, by name, in the order it is
 	// told of them.
 	Tools []string

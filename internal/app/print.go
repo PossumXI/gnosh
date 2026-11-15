@@ -534,21 +534,21 @@ func (f *printer) endReply() {
 // Claude Code documents them.
 
 type initLine struct {
-	Type           string   `json:"type"`
-	Subtype        string   `json:"subtype"`
-	UUID           string   `json:"uuid"`
-	SessionID      string   `json:"session_id"`
-	Cwd            string   `json:"cwd"`
-	Model          string   `json:"model"`
-	Tools          []string `json:"tools"`
-	MCPServers     []string `json:"mcp_servers"`
-	PermissionMode string   `json:"permissionMode"`
-	SlashCommands  []string `json:"slash_commands"`
-	OutputStyle    string   `json:"output_style"`
-	Skills         []string `json:"skills"`
-	Plugins        []string `json:"plugins"`
-	APIKeySource   string   `json:"apiKeySource"`
-	GnoshVersion   string   `json:"gnosh_version"`
+	Type           string            `json:"type"`
+	Subtype        string            `json:"subtype"`
+	UUID           string            `json:"uuid"`
+	SessionID      string            `json:"session_id"`
+	Cwd            string            `json:"cwd"`
+	Model          string            `json:"model"`
+	Tools          []string          `json:"tools"`
+	MCPServers     []MCPServerStatus `json:"mcp_servers"`
+	PermissionMode string            `json:"permissionMode"`
+	SlashCommands  []string          `json:"slash_commands"`
+	OutputStyle    string            `json:"output_style"`
+	Skills         []string          `json:"skills"`
+	Plugins        []string          `json:"plugins"`
+	APIKeySource   string            `json:"apiKeySource"`
+	GnoshVersion   string            `json:"gnosh_version"`
 }
 
 type apiUsage struct {
@@ -786,7 +786,7 @@ func (f *printer) init() {
 		Type: "system", Subtype: "init", UUID: newUUID(), SessionID: info.ID,
 		Cwd: info.Cwd, Model: info.Model,
 		Tools:          append([]string{}, info.Tools...),
-		MCPServers:     []string{},
+		MCPServers:     append([]MCPServerStatus{}, info.MCPServers...),
 		PermissionMode: info.Mode,
 		SlashCommands:  append([]string{}, info.Commands...),
 		OutputStyle:    "default",

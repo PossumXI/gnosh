@@ -177,17 +177,39 @@ func (p *program) userName() string {
 
 // toolNames lists the names of the session's tools, in order.
 func (l *live) toolNames() []string {
-	names := make([]string, len(l.tools))
-	for i, t := range l.tools {
+	all := l.offeredTools()
+	names := make([]string, len(all))
+	for i, t := range all {
 		names[i] = t.Spec().Name
 	}
 	return names
 }
 
+// offeredTools is every tool the model is offered: the session's own, and
+// those of the MCP servers that are connected, as far as the rules let it
+// have them.
+func (l *live) offeredTools() []core.Tool {
+	all := append([]core.Tool(nil), l.tools...)
+	if l.mcp == nil {
+		return all
+	}
+	l.mcp.mu.Lock()
+	defer l.mcp.mu.Unlock()
+	for _, s := range l.mcp.servers {
+		for _, t := range s.tools {
+			if l.engine.ToolEnabled(t.name) {
+				all = append(all, t)
+			}
+		}
+	}
+	return all
+}
+
 // toolSpecs lists what the model is told about the session's tools.
 func (l *live) toolSpecs() []core.ToolSpec {
-	specs := make([]core.ToolSpec, len(l.tools))
-	for i, t := range l.tools {
+	all := l.offeredTools()
+	specs := make([]core.ToolSpec, len(all))
+	for i, t := range all {
 		specs[i] = t.Spec()
 	}
 	return specs

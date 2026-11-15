@@ -275,3 +275,15 @@ or kept with the reason said (27).
     over the mode where it was refused. The flag is Claude Code's, by its
     name and its meaning (`spec/cc/cli.md`). Where a setting forbids
     skipping, the flag is refused as `-y` is.
+30. **MCP servers are configured in files of their own, in Claude Code's
+    shape.** The user's are in `mcp.json` in gnosh's config folder, and a
+    project's in `.mcp.json` at its root, which counts only in a trusted
+    folder (each entry is a program to run, like a project's hooks); a name
+    in both is the project's entry whole. Not in gnosh.json: spec/cc/mcp.md
+    recommends this split, Claude Code keeps MCP servers out of its
+    settings files too, and so a `.mcp.json` written for Claude Code works
+    in gnosh unchanged while gnosh.json keeps its strict keys. A run (`-p`)
+    waits for the servers before its turn; an interactive session connects
+    them in the background. Only servers gnosh starts itself (stdio) are
+    built so far.
+

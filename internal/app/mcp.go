@@ -1,0 +1,333 @@
+package app
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/mcp"
+)
+
+// This file joins MCP servers to a session (spec/cc/mcp.md): the servers
+// mcp.LoadConfig finds (the user's mcp.json in gnosh's config folder, and in
+// a trusted folder the project's .mcp.json) are started, their tools are
+// offered to the model as mcp__<server>__<tool>, and each call is the
+// server's. The permission engine knows every mcp__ name as a tool that
+// asks unless a rule allows it (mcp__server, mcp__server__*,
+// mcp__server__tool).
+//
+// In an interactive session the servers connect in the background, and
+// their tools are added as each one is ready; a run (-p) waits for them,
+// as long as a server may take to start, before its turn. Sub-agents are
+// not given MCP tools in this build.
+
+// mcpStartTimeout is how long a server may take to start and answer the
+// handshake.
+const mcpStartTimeout = 30 * time.Second
+
+// mcpMaxChars is the most of a tool's result the model reads; the whole of
+// a longer one is written to a file beside the session, and the model is
+// told where.
+const mcpMaxChars = 100_000
+
+// mcpDescriptionMax is the most of a tool's description the model is sent.
+const mcpDescriptionMax = 4096
+
+// mcpServer is one configured server as the session holds it.
+type mcpServer struct {
+	cfg    mcp.Config
+	status string // "pending", "connected" or "failed"
+	err    string
+	client *mcp.Client
+	tools  []*mcpTool
+	since  time.Time
+}
+
+// mcpSet is the session's servers.
+type mcpSet struct {
+	mu      sync.Mutex
+	servers []*mcpServer
+	probs   []mcp.Problem
+}
+
+// loadMCP reads which servers there are.
+func (l *live) loadMCP() *mcpSet {
+	getenv := func(name string) (string, bool) {
+		for i := len(l.p.o.Environ) - 1; i >= 0; i-- {
+			if k, v, ok := strings.Cut(l.p.o.Environ[i], "="); ok && k == name {
+				return v, true
+			}
+		}
+		return "", false
+	}
+	cfgs, probs := mcp.LoadConfig(
+		filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"),
+		filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json"),
+		l.cfg.Paths.ProjectRoot, l.st.trusted, getenv)
+	set := &mcpSet{probs: probs}
+	for _, c := range cfgs {
+		set.servers = append(set.servers, &mcpServer{cfg: c, status: "pending"})
+	}
+	return set
+}
+
+// startMCP connects the session's servers: in the background, or, in a
+// run, before it returns.
+func (l *live) startMCP() {
+	if l.mcp == nil {
+		return
+	}
+	for _, p := range l.mcp.probs {
+		l.notice(agent.LevelWarning, "mcp", p.String())
+	}
+	var wg sync.WaitGroup
+	for _, s := range l.mcp.servers {
+		wg.Add(1)
+		l.bg.Add(1)
+		go func() {
+			defer l.bg.Done()
+			defer wg.Done()
+			l.connectMCP(s)
+		}()
+	}
+	if !l.interactive {
+		wg.Wait()
+	}
+}
+
+// connectMCP starts one server and offers its tools.
+func (l *live) connectMCP(s *mcpServer) {
+	fail := func(why string) {
+		l.mcp.mu.Lock()
+		s.status, s.err = "failed", why
+		l.mcp.mu.Unlock()
+		l.flog.logf("mcp", "the MCP server %s did not connect: %s", s.cfg.Name, why)
+		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s is not connected: %s (/mcp says more)", s.cfg.Name, oneLine(why, 300)))
+	}
+	if s.cfg.Type != "stdio" {
+		fail("the " + s.cfg.Type + " transport is not built yet in this gnosh; only servers it starts itself (stdio) are")
+		return
+	}
+	root := l.cfg.Paths.ProjectRoot
+	env := map[string]string{"CLAUDE_PROJECT_DIR": root, "GNOSH_PROJECT_DIR": root}
+	for k, v := range s.cfg.Env {
+		env[k] = v
+	}
+	ctx, cancel := context.WithTimeout(l.ctx, mcpStartTimeout)
+	defer cancel()
+	client, err := mcp.Start(ctx, mcp.Server{Name: s.cfg.Name, Command: s.cfg.Command, Args: s.cfg.Args, Env: env,
+		Environ: l.p.o.Environ, Dir: root, Roots: append([]string(nil), l.roots...)},
+		mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: mcpStartTimeout})
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	tools, err := client.ListTools(ctx)
+	if err != nil {
+		_ = client.Close()
+		fail("it started, and its tools could not be listed: " + err.Error())
+		return
+	}
+	var made []*mcpTool
+	for _, t := range tools {
+		made = append(made, &mcpTool{l: l, server: s, tool: t, name: mcp.ToolName(s.cfg.Name, t.Name)})
+	}
+	l.mcp.mu.Lock()
+	if l.closing.Load() {
+		l.mcp.mu.Unlock()
+		_ = client.Close()
+		return
+	}
+	s.status, s.client, s.tools, s.since = "connected", client, made, l.p.now()
+	l.mcp.mu.Unlock()
+	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
+	l.offerMCPTools()
+}
+
+// offerMCPTools gives the model the session's own tools and every tool of
+// the servers that are connected, as far as the rules let it have them.
+func (l *live) offerMCPTools() {
+	if l.agent == nil {
+		return
+	}
+	if err := l.agent.SetTools(l.offeredTools()); err != nil {
+		l.notice(agent.LevelWarning, "mcp", "The tools of the MCP servers could not be offered to the model: "+err.Error())
+	}
+}
+
+// closeMCP stops every server.
+func (l *live) closeMCP() {
+	if l.mcp == nil {
+		return
+	}
+	l.mcp.mu.Lock()
+	var clients []*mcp.Client
+	for _, s := range l.mcp.servers {
+		if s.client != nil {
+			clients = append(clients, s.client)
+			s.client = nil
+		}
+	}
+	l.mcp.mu.Unlock()
+	for _, c := range clients {
+		_ = c.Close()
+	}
+}
+
+// mcpStatus lists the servers as stream-json's system/init names them.
+func (l *live) mcpStatus() []MCPServerStatus {
+	out := []MCPServerStatus{}
+	if l.mcp == nil {
+		return out
+	}
+	l.mcp.mu.Lock()
+	defer l.mcp.mu.Unlock()
+	for _, s := range l.mcp.servers {
+		out = append(out, MCPServerStatus{Name: s.cfg.Name, Status: s.status})
+	}
+	return out
+}
+
+// slashMCP is /mcp: each server, where it is configured, whether it is
+// connected and with what tools, or why not.
+func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
+	if l.mcp == nil || len(l.mcp.servers) == 0 && len(l.mcp.probs) == 0 {
+		c.Say("No MCP server is configured. Your own go in %s, and a project's in .mcp.json at its root (read once the folder is trusted), as {\"mcpServers\": {\"name\": {\"command\": \"...\", \"args\": [...]}}}.", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
+		return nil
+	}
+	l.mcp.mu.Lock()
+	defer l.mcp.mu.Unlock()
+	for _, s := range l.mcp.servers {
+		where := s.cfg.Scope + ", " + s.cfg.Path
+		switch s.status {
+		case "connected":
+			names := make([]string, 0, len(s.tools))
+			for _, t := range s.tools {
+				names = append(names, t.tool.Name)
+			}
+			sort.Strings(names)
+			info := s.client.Info()
+			c.Say("%s: connected (%s %s; %s), %s: %s", s.cfg.Name, firstOf(info.Name, "the server"), info.Version, where, countWords(len(names), "tool", "tools"), strings.Join(names, ", "))
+		case "failed":
+			c.Say("%s: not connected (%s): %s", s.cfg.Name, where, oneLine(s.err, 400))
+		default:
+			c.Say("%s: connecting (%s)", s.cfg.Name, where)
+		}
+	}
+	for _, p := range l.mcp.probs {
+		c.Say("not in force: %s", p.String())
+	}
+	c.Say("A tool of a server is mcp__<server>__<tool>; a rule such as mcp__%s allows all of one server's tools.", mcpRuleName(l.mcp.servers))
+	return nil
+}
+
+// mcpRuleName is a server name to show in an example rule.
+func mcpRuleName(servers []*mcpServer) string {
+	if len(servers) == 0 {
+		return "server"
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(mcp.ToolName(servers[0].cfg.Name, ""), "mcp__"), "__")
+}
+
+// mcpTool is one tool of a server, as the model is offered it.
+type mcpTool struct {
+	l      *live
+	server *mcpServer
+	tool   mcp.Tool
+	name   string
+}
+
+func (t *mcpTool) Spec() core.ToolSpec {
+	desc := t.tool.Description
+	if desc == "" {
+		desc = t.tool.Title
+	}
+	if utf8.RuneCountInString(desc) > mcpDescriptionMax {
+		desc = clipChars(desc, 0, mcpDescriptionMax) + "…"
+	}
+	schema := t.tool.InputSchema
+	if len(schema) == 0 || string(schema) == "null" {
+		schema = json.RawMessage(`{"type":"object"}`)
+	}
+	return core.ToolSpec{Name: t.name, Description: desc, InputSchema: schema}
+}
+
+// Parallel says a call may run beside others when the server says its
+// tool only reads.
+func (t *mcpTool) Parallel(core.ToolCall) bool { return t.tool.Annotations.ReadOnly }
+
+func (t *mcpTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
+	return core.Action{Kind: core.ActionOther, Summary: fmt.Sprintf("%s of the MCP server %s", t.tool.Name, t.server.cfg.Name)}, nil
+}
+
+func (t *mcpTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+	t.l.mcp.mu.Lock()
+	client := t.server.client
+	t.l.mcp.mu.Unlock()
+	if client == nil {
+		return core.ErrorResult(fmt.Sprintf("The MCP server %s is not connected now, so %s did not run.", t.server.cfg.Name, t.tool.Name)), nil
+	}
+	if t.server.cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, t.server.cfg.Timeout)
+		defer cancel()
+	}
+	res, err := client.CallTool(ctx, t.tool.Name, call.Input)
+	if err != nil {
+		if ctx.Err() != nil && t.server.cfg.Timeout > 0 {
+			return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not answer within %s, its configured timeout.", t.tool.Name, t.server.cfg.Name, t.server.cfg.Timeout)), nil
+		}
+		return core.ErrorResult(fmt.Sprintf("%s of the MCP server %s did not run: %v", t.tool.Name, t.server.cfg.Name, err)), nil
+	}
+	text := mcpText(res)
+	if res.IsError {
+		if n := utf8.RuneCountInString(text); n > 11_000 {
+			text = clipChars(text, 0, 5000) + fmt.Sprintf("\n[... %d characters left out ...]\n", n-10_000) + clipChars(text, n-5000, 5000)
+		}
+		return core.ErrorResult(firstOf(text, "The tool failed and said nothing.")), nil
+	}
+	if n := utf8.RuneCountInString(text); n > mcpMaxChars {
+		path := filepath.Join(t.l.st.dirs(t.l.ts.ID()).Session, "tool-results", fmt.Sprintf("%s-%s.txt", strings.ReplaceAll(t.name, "/", "_"), firstOf(call.ID, "call")))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err == nil && os.WriteFile(path, []byte(text), 0o600) == nil {
+			text = clipChars(text, 0, mcpMaxChars) + fmt.Sprintf("\n[The result is %d characters long; the first %d are here, and the whole of it is in %s. Read that file for the rest.]", n, mcpMaxChars, path)
+		} else {
+			text = clipChars(text, 0, mcpMaxChars) + fmt.Sprintf("\n[The result is %d characters long, and only the first %d are here.]", n, mcpMaxChars)
+		}
+	}
+	return core.TextResult(firstOf(text, "(the tool returned nothing)")), nil
+}
+
+// mcpText writes what a tool returned as text: its text, a line for what is
+// not text, and its structured content when there is nothing else.
+func mcpText(res mcp.Result) string {
+	var parts []string
+	for _, c := range res.Content {
+		switch c.Type {
+		case "text":
+			parts = append(parts, c.Text)
+		case "image", "audio":
+			parts = append(parts, fmt.Sprintf("[%s: %s, %d bytes of base64, not shown]", c.Type, firstOf(c.MimeType, "of no stated type"), len(c.Data)))
+		case "resource":
+			if c.Resource != nil && c.Resource.Text != "" {
+				parts = append(parts, c.Resource.Text)
+			} else if c.Resource != nil {
+				parts = append(parts, "[a resource: "+c.Resource.URI+"]")
+			}
+		case "resource_link":
+			parts = append(parts, "[a resource link]")
+		}
+	}
+	if len(parts) == 0 && len(res.StructuredContent) > 0 {
+		return string(res.StructuredContent)
+	}
+	return strings.Join(parts, "\n")
+}
