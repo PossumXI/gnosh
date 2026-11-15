@@ -273,8 +273,6 @@ func (l *live) cannotRunAgent(def agentdef.Def) string {
 	case len(def.Other) > 0:
 		return fmt.Sprintf("the kind %q asks for %s in its definition (%s), and this gnosh does not have that for sub-agents yet. It is not run without: that would be another agent than the one its author wrote. Use another kind, or take the setting out of the file.",
 			def.Name, strings.Join(def.Other, ", "), where)
-	case def.Background:
-		return fmt.Sprintf("the kind %q is to run in the background always (%s), and this gnosh does not run sub-agents in the background yet.", def.Name, where)
 	}
 	if def.PermissionMode == "" {
 		return ""

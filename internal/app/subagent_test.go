@@ -403,6 +403,21 @@ func TestSubAgentRefusalsAndLimits(t *testing.T) {
 	has(t, "a background call in a run", toolMessageWith(bg, "working in the background"), "The sub-agent is working in the background on: d")
 	reqs := bg.Model.Requests()
 	has(t, "the run's last request", strings.Join(userTexts(reqs[len(reqs)-1]), "\n"), "A sub-agent you started in the background has finished: d", "The report, later.")
+	// A kind whose definition says background: true runs there even when
+	// the call does not ask.
+	behind := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"d","prompt":"p","subagent_type":"behind"}`}}},
+		apptest.Reply{Text: "Started."},
+		apptest.Reply{Text: "Over."})
+	def("behind", "background: true\n")(behind)
+	behind.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if strings.Contains(string(r.Body), "Do as asked.") {
+			return &apptest.Reply{Text: "The report, later."}
+		}
+		return nil
+	})
+	run(t, behind, "--trust-folder", "-p", "delegate").wantCode(t, 0)
+	has(t, "a kind that runs in the background", toolMessageWith(behind, "working in the background"), "The sub-agent is working in the background on: d")
 	_, got := one(t, `{"description":"d","prompt":"p","subagent_type":"nobody"}`, nil)
 	has(t, "a kind that does not exist", got, `there is no kind of sub-agent called "nobody"`, "general-purpose, Explore")
 	_, got = one(t, `{"description":"d","prompt":"p","subagent_type":"hooked"}`, def("hooked", "hooks:\n  PreToolUse:\n    - matcher: Bash\n"))
