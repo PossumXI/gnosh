@@ -66,6 +66,9 @@ type config struct {
 	cols     int
 	rows     int
 	home     string
+	// selectKey is the key the terminal selects text with while the
+	// mouse is reported (panel.go), when it is known.
+	selectKey string
 	// branch reads the git branch of a directory, or returns "".
 	branch func(dir string) string
 	// list lists a directory for file completion.
@@ -158,6 +161,8 @@ type session struct {
 	// changed are the files the session's calls changed, the newest
 	// first, for the panel.
 	changed []changedFile
+	// selectKey is config's.
+	selectKey string
 
 	// cols is the width the session lays out for: the terminal's, or the
 	// panel's left part while the panel is on. termCols is the
@@ -288,7 +293,7 @@ func newSession(cfg config) *session {
 	s := &session{
 		th: cfg.theme, m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, inline: cfg.renderer, host: cfg.host,
 		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), termCols: max(cfg.cols, 1), home: cfg.home,
-		branchOf: cfg.branch, listDir: cfg.files,
+		branchOf: cfg.branch, listDir: cfg.files, selectKey: cfg.selectKey,
 		facts: map[string]string{},
 	}
 	if s.now == nil {

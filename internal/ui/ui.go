@@ -620,7 +620,7 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	}
 	s := newSession(config{
 		theme: u.th, metrics: u.m, now: u.now, controls: c, renderer: u.r, host: u,
-		cols: cols, rows: rows, home: u.env("HOME"),
+		cols: cols, rows: rows, home: u.env("HOME"), selectKey: selectKey(u.env("TERM_PROGRAM")),
 		branch: gitBranch, files: listDir,
 	})
 	u.s = s

@@ -19,10 +19,9 @@ import (
 // turns it on and off, and the sidePanel option starts the session with
 // it. While it is on, the conversation is drawn at the left
 // (term.Panel), the wheel and PageUp/PageDown scroll back through it, and
-// the terminal selects text with a modifier key held (Option in Apple's
-// Terminal and iTerm2, Shift in most others). Turning it off gives the
-// terminal back as it was, and what was said meanwhile is written into
-// the scrollback, where it would have been.
+// the terminal selects text with a key held (selectKey). Turning it off
+// gives the terminal back as it was, and what was said meanwhile is
+// written into the scrollback, where it would have been.
 
 // panelWords are the lines that turn the panel on and off.
 var panelWords = map[string]bool{"/panel": true, "/sidebar": true}
@@ -69,8 +68,26 @@ func (s *session) togglePanel() {
 		return
 	}
 	if s.openPanel() {
-		s.flash("The side panel is on: the wheel and PageUp scroll back; hold Option (Shift in most terminals) to select text. /panel turns it off.")
+		key := "Shift (Fn in Apple's Terminal, Option in iTerm2)"
+		if s.selectKey != "" {
+			key = s.selectKey
+		}
+		s.flash("The side panel is on: the wheel and PageUp scroll back; hold " + key + " to select text. /panel turns it off.")
 	}
+}
+
+// selectKey is the key a terminal selects text with while a program has
+// the mouse reported, by the TERM_PROGRAM it sets: Fn in Apple's
+// Terminal, Option in iTerm2, and "" (Shift, in most others) when it is
+// not one of those.
+func selectKey(program string) string {
+	switch program {
+	case "Apple_Terminal":
+		return "Fn"
+	case "iTerm.app":
+		return "Option"
+	}
+	return ""
 }
 
 // openPanel takes the screen for the panel, and reports whether it could.
@@ -227,8 +244,9 @@ func cutStart(text string, room int, width func(string) int) string {
 	if room < 2 || width(text) <= room {
 		return text
 	}
+	dots := width("…")
 	for i := range text {
-		if i > 0 && width(text[i:])+1 <= room {
+		if i > 0 && width(text[i:])+dots <= room {
 			return "…" + text[i:]
 		}
 	}

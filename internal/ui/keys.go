@@ -461,6 +461,7 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.q, s.qwait = nil, nil
 			s.folded, s.foldedOld, s.loop = nil, false, false
 			s.facts = map[string]string{}
+			s.changed = nil
 			s.lock()
 		}
 		s.refresh()

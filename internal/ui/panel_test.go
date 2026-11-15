@@ -26,12 +26,13 @@ func TestSidePanel(t *testing.T) {
 	edit := map[string]any{"file_path": "/work/proj/main.go"}
 	diff := &core.Display{Kind: "diff", Path: "/work/proj/main.go", Before: "a\n", After: "a\nb\nc\n"}
 	g.ev(toolStart("c1", "Edit", edit), toolEnd("c1", "Edit", edit, core.ToolResult{Content: []core.Block{core.Text("edited")}, Display: diff}, time.Second))
+	g.s.selectKey = selectKey("Apple_Terminal")
 	g.keys(`"/panel" <Enter>`)
 	if !g.scr.AltScreenEver() || !g.scr.MouseEver() {
 		t.Fatalf("/panel did not take the whole screen")
 	}
 	screen := strings.Join(g.scr.Lines(), "\n")
-	for _, want := range []string{"│ Files changed", "main.go +2 -0", "│ Deliverables", "demo video", "http://127.0.0.1:7777/tok", "/root/out/demo.mp4", "The side panel is on"} {
+	for _, want := range []string{"│ Files changed", "main.go +2 -0", "│ Deliverables", "demo video", "http://127.0.0.1:7777/tok", "/root/out/demo.mp4", "The side panel is on", "hold Fn to"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("the screen does not show %q:\n%s", want, screen)
 		}
@@ -65,6 +66,18 @@ func TestSidePanel(t *testing.T) {
 	}
 	if g.scr.Mode(1000) {
 		t.Errorf("the mouse is still reported")
+	}
+
+	// /clear: a new conversation, with no files changed yet.
+	g.keys(`"/clear" <Enter>`)
+	if len(g.s.changed) != 0 {
+		t.Errorf("after /clear the panel still lists %d changed files", len(g.s.changed))
+	}
+
+	// Each terminal's own key; Shift, with the others named, where the
+	// terminal does not say which it is.
+	if selectKey("iTerm.app") != "Option" || selectKey("tmux") != "" || selectKey("") != "" {
+		t.Errorf("selectKey: iTerm2 %q, tmux %q, none %q", selectKey("iTerm.app"), selectKey("tmux"), selectKey(""))
 	}
 
 	// Too narrow: nothing changes but a word.
