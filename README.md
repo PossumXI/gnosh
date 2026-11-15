@@ -112,6 +112,26 @@ Then `gnosh doctor` says whether a turn can run, and `gnosh` starts a
 session. Nothing leaves the machine except what is sent to the model server
 you name.
 
+## Copying over ssh
+
+A program on the far side of ssh copies to your clipboard through the
+terminal (OSC 52): gnosh's `/copy` does, and so does tmux's copy mode.
+Apple's Terminal drops such copies. `gnosh ssh` runs ssh and puts them on
+this machine's clipboard itself. In zsh, this sends every interactive ssh
+typed in Apple's Terminal through it, and leaves scripts' ssh alone:
+
+```sh
+if [[ $TERM_PROGRAM == Apple_Terminal ]]; then
+  ssh() {
+    if [[ -t 0 && -t 1 ]] && (( $+commands[gnosh] )); then
+      gnosh ssh "$@"
+    else
+      command ssh "$@"
+    fi
+  }
+fi
+```
+
 ## Reading on
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): how it is put together.
