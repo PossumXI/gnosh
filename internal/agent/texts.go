@@ -150,7 +150,7 @@ var defaultTexts = Texts{
 	HaltedDuring:  "The turn was ended while this call was running. It may have partly run; check before relying on it.",
 	ReplyCut:      "This call did not run: the reply that asked for it was cut off before it was complete.",
 	Killed:        "gnosh was stopped before this call finished. It may have partly run; check before relying on it.",
-	AsideRunning:  "This call is running now; nothing stopped it. No result yet.",
+	AsideRunning:  "Still running: nobody interrupted this call. No result yet.",
 	DidNotStop: "This call was told to stop when the turn ended, and %s later it still had not. " +
 		"gnosh went on without it; it may still be running, and it may have partly run.",
 

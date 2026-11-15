@@ -4,4 +4,4 @@
 [[{{cut_off?}}This call did not run: the reply that asked for it was cut off before it was whole.]]
 [[{{killed?}}gnosh itself was stopped before this call returned. It may have run in part or not at all: check before you rely on it.]]
 [[{{still?}}The user stopped the turn, and this call had still not stopped]][[ {{waited}} later]][[{{still?}}. gnosh went on without it: it may still be running, and it may have run in part.]]
-[[{{running?}}This call is running now; nothing stopped it. No result yet.]]
+[[{{running?}}Still running: nobody interrupted this call. No result yet.]]
