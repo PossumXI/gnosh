@@ -14,6 +14,7 @@
 #	ssh ai-remote bash -s -- hookwake < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- agent < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- fork < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- monitor < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -33,6 +34,9 @@
 #               and its read-only tools
 #   fork        a skill with context: fork, typed: a sub-agent counts the
 #               lines of notes.txt, and the model answers its report
+#   monitor     the model watches a command with Monitor: its lines come as
+#               notes, then the news that it ended (permissions skipped, in
+#               the scratch folder)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -47,10 +51,10 @@ case "$scenario" in
 basic | mention | config | fork) ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
-background | btw) flags="-y" ;;
+background | btw | monitor) flags="-y" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor)" >&2
 	exit 2
 	;;
 esac
@@ -131,6 +135,10 @@ agent)
 fork)
 	tmux send-keys -t "$S" "/countlines" Enter
 	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
+	;;
+monitor)
+	tmux send-keys -t "$S" "Use the Monitor tool to watch this exact command: for i in 1 2 3; do echo tick \$i; sleep 3; done; echo MONITOR-DONE. Then end your turn. When its lines come, say only the last line you were given." Enter
+	done_when() { screen | grep -q "passed on" && screen | grep -q "background command ended" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
