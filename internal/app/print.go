@@ -393,7 +393,14 @@ func (f *printer) Event(ev any) {
 			// Said once: the person who started the run is the one who
 			// can let it act, and the model cannot tell them how.
 			f.toldUnattended = true
-			f.stderr("%s was not run: it needs a person's approval, and a run has nobody to ask. To let a run act, give it -y, a --permission-mode, or an --allowedTools rule for what it may do. (This is said once; other calls may be refused the same way, and the result lists them.)", ev.Name)
+			if f.c != nil && f.c.Mode() == cli.ModeBypassPermissions {
+				// Permissions are skipped already: what still asks is what
+				// no flag waves through, and "give it -y" would be advice
+				// the person has taken.
+				f.stderr("%s was not run: it is one of the calls gnosh puts to a person even with permissions skipped (a removal that cannot be undone, or what an ask rule or a hook wants asked), and a run has nobody to ask. No flag lets a run approve such a call: run it yourself if it is wanted. (This is said once; other calls may be refused the same way, and the result lists them.)", ev.Name)
+			} else {
+				f.stderr("%s was not run: it needs a person's approval, and a run has nobody to ask. To let a run act, give it -y, a --permission-mode, or an --allowedTools rule for what it may do. (This is said once; other calls may be refused the same way, and the result lists them.)", ev.Name)
+			}
 		}
 		if ev.Denied {
 			f.line(deniedLine{Type: "system", Subtype: "permission_denied", UUID: newUUID(), SessionID: f.sessionID(),

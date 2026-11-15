@@ -77,11 +77,25 @@ func TestGateHookAskAsksEvenWhenPermissionsAreSkipped(t *testing.T) {
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
 		apptest.Reply{Text: "Not made."})
 	preToolUse(w, "ask", `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"a person must look at this one"}}`)
-	run(t, w, "-y", "-p", "make it").wantCode(t, 0)
+	r := run(t, w, "-y", "-p", "make it")
+	r.wantCode(t, 0)
 	if w.Exists("made.txt") {
 		t.Errorf("the command ran although a hook wanted a person asked")
 	}
 	has(t, "what the model read", toolResult(t, w, 1, "c1"), "nobody is here to give it", "a person must look at this one")
+	// The person who started the run with -y is not told to give it -y.
+	has(t, "stderr", r.err, "Bash was not run: it is one of the calls gnosh puts to a person even with permissions skipped", "No flag lets a run approve such a call")
+	hasNot(t, "stderr", r.err, "give it -y")
+}
+
+// Without -y the person is told how a run is let act.
+func TestUnattendedRunSaysHowToLetItAct(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Not made."})
+	r := run(t, w, "-p", "make it")
+	r.wantCode(t, 0)
+	has(t, "stderr", r.err, "Bash was not run: it needs a person's approval, and a run has nobody to ask. To let a run act, give it -y")
 }
 
 // A hook may change a call's arguments. The rules then judge the call as
