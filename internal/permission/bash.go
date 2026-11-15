@@ -3471,10 +3471,16 @@ func (e *Engine) wrapperArgs(v *bashView, spec wrapSpec, text string, after []wo
 	e.addScript(v, text, nest, depth, scriptMaybe)
 }
 
-// splitArgs cuts a string into words the way env -S does: at blanks,
-// with quotes and backslashes taken off, a # at the start of a word
-// ending the string and ${NAME} standing for something not known here.
-// It reports false for a string it cannot cut.
+// splitArgs cuts a string into words the way env -S does, as GNU env 9.4
+// was seen to on Linux: at blanks, and a # at the start of a word ends the
+// string. In single quotes only \\ and \' are escapes. Outside them, and
+// in double quotes, \f \n \r \t and \v are those characters; \_ is a
+// blank that separates words (a space in double quotes); \# \$ \" \' and
+// \\ are the character itself; and \c ends the string (env refuses it in
+// double quotes). ${NAME} stands for something not known here. Any other
+// sequence, a backslash at the end and a quote that is not closed make env
+// refuse the string, and splitArgs reports false for those, as for any
+// string it cannot cut.
 func splitArgs(s string) (out []word, ok bool) {
 	var cur strings.Builder
 	have, dynamic := false, false
@@ -3489,6 +3495,25 @@ func splitArgs(s string) (out []word, ok bool) {
 		cur.Reset()
 		have, dynamic = false, false
 	}
+	// escaped is what a backslash and e stand for outside single quotes,
+	// or 0 for a sequence env refuses.
+	escaped := func(e byte) byte {
+		switch e {
+		case 'f':
+			return '\f'
+		case 'n':
+			return '\n'
+		case 'r':
+			return '\r'
+		case 't':
+			return '\t'
+		case 'v':
+			return '\v'
+		case '#', '$', '"', '\'', '\\':
+			return e
+		}
+		return 0
+	}
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
 		case c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v':
@@ -3496,45 +3521,67 @@ func splitArgs(s string) (out []word, ok bool) {
 		case c == '#' && !have:
 			return out, true
 		case c == '\'':
-			end := strings.IndexByte(s[i+1:], '\'')
-			if end < 0 {
-				return out, false
-			}
-			cur.WriteString(s[i+1 : i+1+end])
 			have = true
-			i += end + 1
+			for i++; ; i++ {
+				if i >= len(s) {
+					return out, false
+				}
+				if s[i] == '\'' {
+					break
+				}
+				if s[i] == '\\' && i+1 < len(s) && (s[i+1] == '\\' || s[i+1] == '\'') {
+					i++
+				}
+				cur.WriteByte(s[i])
+			}
 		case c == '"':
 			have = true
-			for i++; i < len(s) && s[i] != '"'; i++ {
-				switch {
-				case s[i] == '\\' && i+1 < len(s):
+			for i++; ; i++ {
+				if i >= len(s) {
+					return out, false
+				}
+				if s[i] == '"' {
+					break
+				}
+				switch s[i] {
+				case '\\':
+					if i+1 >= len(s) {
+						return out, false
+					}
 					i++
-					cur.WriteByte(s[i])
-				case s[i] == '$':
+					switch e := s[i]; {
+					case e == '_':
+						cur.WriteByte(' ')
+					case escaped(e) != 0:
+						cur.WriteByte(escaped(e))
+					default:
+						// \c and the sequences env does not know.
+						return out, false
+					}
+				case '$':
 					dynamic = true
 				default:
 					cur.WriteByte(s[i])
 				}
-			}
-			if i >= len(s) {
-				return out, false
 			}
 		case c == '\\':
 			if i+1 >= len(s) {
 				return out, false
 			}
 			i++
-			if s[i] == 'c' {
+			switch e := s[i]; {
+			case e == 'c':
 				// \c ends the string there.
 				flush()
 				return out, true
-			}
-			if s[i] == '_' {
+			case e == '_':
 				flush()
-				continue
+			case escaped(e) != 0:
+				cur.WriteByte(escaped(e))
+				have = true
+			default:
+				return out, false
 			}
-			cur.WriteByte(s[i])
-			have = true
 		case c == '$':
 			have, dynamic = true, true
 		default:
