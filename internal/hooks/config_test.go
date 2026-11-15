@@ -119,10 +119,14 @@ func TestParseConfigRefuses(t *testing.T) {
 
 		{"no type", hook(`"command": "true"`), []string{`no "type"`, `"type": "command"`}},
 		{"a type that is not a string", hook(`"type": 1, "command": "true"`), []string{`"type" must be a string`}},
-		{"an http hook", hook(`"type": "http", "url": "https://example.com/hook"`), []string{`"type": "http"`, "command hooks only", "would not run as written"}},
-		{"an mcp_tool hook", hook(`"type": "mcp_tool", "server": "s", "tool": "t"`), []string{`"type": "mcp_tool"`, "command hooks only"}},
-		{"a prompt hook", hook(`"type": "prompt", "prompt": "is it done?"`), []string{`"type": "prompt"`, "command hooks only"}},
-		{"an agent hook", hook(`"type": "agent", "prompt": "is it done?"`), []string{`"type": "agent"`, "command hooks only"}},
+		{"an http hook with no url", hook(`"type": "http"`), []string{`the http hook has no "url"`}},
+		{"an http hook with a command", hook(`"type": "http", "url": "https://example.com/hook", "command": "x"`), []string{`the hook has "command", which a hook of "type": "http" does not take`}},
+		{"an http hook in the background", hook(`"type": "http", "url": "https://example.com/hook", "async": true`), []string{`"async", which a hook of "type": "http" does not take`}},
+		{"a command hook with a url", hook(`"type": "command", "command": "x", "url": "https://example.com/hook"`), []string{`"url", which a hook of "type": "command" does not take`}},
+		{"an http hook whose url is not http", hook(`"type": "http", "url": "ftp://example.com/hook"`), []string{"the hook's url cannot be used: it must start with http:// or https://"}},
+		{"an mcp_tool hook", hook(`"type": "mcp_tool", "server": "s", "tool": "t"`), []string{`"type": "mcp_tool"`, "command hooks and http hooks only"}},
+		{"a prompt hook", hook(`"type": "prompt", "prompt": "is it done?"`), []string{`"type": "prompt"`, "command hooks and http hooks only"}},
+		{"an agent hook", hook(`"type": "agent", "prompt": "is it done?"`), []string{`"type": "agent"`, "command hooks and http hooks only"}},
 
 		{"an if filter that is not a string", hook(`"type": "command", "command": "true", "if": ["Bash(rm *)"]`), []string{`"if" is one permission rule`, "this one is a list"}},
 		{"an empty if filter", hook(`"type": "command", "command": "true", "if": " "`), []string{`"if" is empty`, `leave "if" out`}},
@@ -192,7 +196,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	  "PreToolUse": [
 	    { "matcher": "Bash", "hooks": [
 	        { "type": "command", "command": "./ok.sh" },
-	        { "type": "http", "url": "https://example.com" },
+	        { "type": "prompt", "prompt": "is it safe?" },
 	        { "type": "command", "command": "./filtered.sh", "if": 7, "timeout": -1 } ] } ],
 	  "stop": [ { "hooks": [ { "type": "command", "command": "./tests.sh" } ] } ],
 	  "PermissionRequest": [ { "hooks": [ { "type": "command", "command": "./answer.sh" } ] } ]
@@ -203,7 +207,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	}
 	text := err.Error()
 	contains(t, "the error", text,
-		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "http"`,
+		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "prompt"`,
 		`gnosh.json: PreToolUse group 1, hook 3: "if" is one permission rule`,
 		`gnosh.json: PreToolUse group 1, hook 3: the timeout "-1" cannot be used`,
 		`gnosh.json: "stop" is not a hook event`,
@@ -218,7 +222,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	// PermissionRequest hooks.
 	fires := []Event{PreToolUse, Stop}
 	all := problemsText(Check(cfg, Options{Fires: fires}))
-	contains(t, "Check", all, `"type": "http"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
+	contains(t, "Check", all, `"type": "prompt"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
 }
 
 func TestNewHook(t *testing.T) {

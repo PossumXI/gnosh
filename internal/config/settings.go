@@ -197,8 +197,8 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 				bad(m.line, "a hook's \"type\" is a string, and here it is %s.", m.val.kind.word())
 				break
 			}
-			if typ = m.val.str; typ != "command" {
-				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
+			if typ = m.val.str; typ != "command" && typ != "http" {
+				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\" and \"http\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
 			}
 		case m.key == "command":
 			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
@@ -215,6 +215,40 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 			h.Args = make([]string, 0, len(items))
 			for _, it := range items {
 				h.Args = append(h.Args, it.str)
+			}
+		case m.key == "url":
+			if m.val.kind != jString || m.val.str == "" {
+				bad(m.line, "an http hook's \"url\" is the address the event is sent to, as a string.")
+				break
+			}
+			s.secrets.addURL(m.val.str)
+			if why := checkURL(m.val.str); why != "" {
+				bad(m.line, "the address of the http hook cannot be used: %s.", why)
+				break
+			}
+			h.URL = m.val.str
+		case m.key == "headers":
+			if m.val.kind != jObject {
+				bad(m.line, "an http hook's \"headers\" is an object of header names and their values, and here it is %s.", m.val.kind.word())
+				break
+			}
+			h.Headers = map[string]string{}
+			for _, hd := range s.unique(m.val, "headers.") {
+				if hd.val.kind != jString {
+					bad(hd.line, "the value of the header %s is a string, and here it is %s.", showName(hd.key), hd.val.kind.word())
+					continue
+				}
+				s.secrets.add(hd.val.str)
+				h.Headers[hd.key] = hd.val.str
+			}
+		case m.key == "allowedEnvVars":
+			items, isList := m.val.strings()
+			if !isList {
+				bad(m.line, "an http hook's \"allowedEnvVars\" is a list of the names of the variables its headers may use, and here it is %s.", m.val.kind.word())
+				break
+			}
+			for _, it := range items {
+				h.AllowedEnvVars = append(h.AllowedEnvVars, it.str)
 			}
 		case m.key == "statusMessage":
 			if m.val.kind != jString {
@@ -262,16 +296,21 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 	if good && typ == "" {
 		bad(n.line, "this hook handler has no \"type\". Add \"type\": \"command\".")
 	}
-	if good && h.Command == "" {
+	switch {
+	case !good:
+	case typ == "http" && (h.Command != "" || h.Args != nil || h.Async || h.AsyncRewake):
+		bad(n.line, "this http hook has a \"command\", \"args\", \"async\" or \"asyncRewake\", which only a command hook takes.")
+	case typ == "http" && h.URL == "":
+		bad(n.line, "this http hook has no \"url\" to send the event to.")
+	case typ == "command" && (h.URL != "" || h.Headers != nil || h.AllowedEnvVars != nil):
+		bad(n.line, "this command hook has a \"url\", \"headers\" or \"allowedEnvVars\", which only an http hook takes. Write \"type\": \"http\" for one.")
+	case typ == "command" && h.Command == "":
 		bad(n.line, "this hook handler has no \"command\", so it would run nothing.")
 	}
 	if !good {
 		return
 	}
-	text := h.Command
-	for _, a := range h.Args {
-		text += " " + strconv.Quote(a)
-	}
+	text := h.CommandLine()
 	s.add(op{kind: KindHook, text: "hook " + e.name + ": " + text, origin: h.Origin, feature: FeatureHooks, what: "a hook",
 		apply: func(b *builder) { b.addHook(h) }})
 }

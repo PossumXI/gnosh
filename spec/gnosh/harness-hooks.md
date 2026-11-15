@@ -110,7 +110,13 @@ In JSON settings, Claude Code's own block, pasted as it is:
 
 Rules:
 
-- gnosh runs `command` hooks only.
+- gnosh runs `command` hooks and `http` hooks. An `http` hook POSTs the
+  event as JSON to its `url`, with its `headers` (in whose values `$NAME`
+  is a variable `allowedEnvVars` names, and nothing for any other), and
+  reads the body of the answer as a command's stdout; an answer with
+  another status than 2xx, or none in time, is a hook that could not
+  check, which blocks where a hook can block (`spec/DECISIONS.md`, item
+  37).
 - `statusMessage` is shown in place of the working line's own words while
   the hook runs, as CC's spinner text is.
 - Fields of a CC hook that are **accepted and change nothing**: `once`,
@@ -126,7 +132,7 @@ Rules:
   its stderr. One that cannot be evaluated is a warning. The session's end
   stops those still running (`spec/DECISIONS.md`, item 35).
 - Anything else a CC hook can ask for is a **startup error that names it**:
-  another `type` (`http`, `mcp_tool`, `prompt`, `agent`), a matcher on an
+  another `type` (`mcp_tool`, `prompt`, `agent`), a matcher on an
   event that takes none (CC ignores it), a matcher gnosh's regular
   expressions cannot read. (The `if` filter is built:
   `spec/DECISIONS.md`, item 32.) The

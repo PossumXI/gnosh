@@ -149,7 +149,11 @@ func TestSettingsRefusals(t *testing.T) {
 		{"a handler that is not an object", `{"hooks": {"Stop": [{"hooks": ["./x.sh"]}]}}`, 1, []string{"a hook handler is an object"}},
 		{"a handler with no type", `{"hooks": {"Stop": [{"hooks": [{"command": "x"}]}]}}`, 1, []string{`has no "type"`}},
 		{"a handler with no command", `{"hooks": {"Stop": [{"hooks": [{"type": "command"}]}]}}`, 1, []string{`has no "command"`}},
-		{"an http hook", `{"hooks": {"Stop": [{"hooks": [{"type": "http", "url": "https://example.com"}]}]}}`, 1, []string{`"type": "http"`, `"command" only`, "not run some other way"}},
+		{"an http hook with no url", `{"hooks": {"Stop": [{"hooks": [{"type": "http"}]}]}}`, 1, []string{`this http hook has no "url"`}},
+		{"an http hook with a command", `{"hooks": {"Stop": [{"hooks": [{"type": "http", "url": "https://example.com", "command": "x"}]}]}}`, 1, []string{`this http hook has a "command"`}},
+		{"a command hook with headers", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "headers": {"A": "b"}}]}]}}`, 1, []string{`this command hook has a "url", "headers"`}},
+		{"an http hook whose url is not http", `{"hooks": {"Stop": [{"hooks": [{"type": "http", "url": "ftp://x"}]}]}}`, 1, []string{"the address of the http hook cannot be used"}},
+		{"a hook of another type", `{"hooks": {"Stop": [{"hooks": [{"type": "mcp_tool", "server": "s"}]}]}}`, 1, []string{`"type": "mcp_tool"`, `"command" and "http" only`}},
 		{"a prompt hook", `{"hooks": {"Stop": [{"hooks": [{"type": "prompt", "prompt": "ok?"}]}]}}`, 1, []string{`"type": "prompt"`}},
 		{"a hook whose if is not a string", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "if": 1}]}]}}`, 1, []string{`a hook's "if" is one permission rule`}},
 		{"a hook whose if is empty", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "if": ""}]}]}}`, 1, []string{`a hook's "if" is one permission rule`}},
@@ -444,5 +448,22 @@ func TestSettingsHookAsync(t *testing.T) {
 		{"type": "command", "command": "./now.sh", "async": false}]}]}}`))
 	if len(cfg.Hooks) != 3 || !cfg.Hooks[0].Async || cfg.Hooks[0].AsyncRewake || !cfg.Hooks[1].AsyncRewake || cfg.Hooks[1].Async || cfg.Hooks[2].Async || cfg.Hooks[2].AsyncRewake {
 		t.Errorf("hooks: %+v", cfg.Hooks)
+	}
+}
+
+// An http hook is read with its address, its headers and the variables
+// they may use, and a header's value is kept as a secret.
+func TestSettingsHTTPHook(t *testing.T) {
+	cfg := mustLoad(t, withConfig("{"+one+`, "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+		{"type": "http", "url": "http://127.0.0.1:8099/check", "headers": {"Authorization": "Bearer $TOKEN", "X-Key": "abc123def"}, "allowedEnvVars": ["TOKEN"], "timeout": 5}]}]}}`))
+	if len(cfg.Hooks) != 1 {
+		t.Fatalf("hooks: %+v", cfg.Hooks)
+	}
+	h := cfg.Hooks[0]
+	if h.URL != "http://127.0.0.1:8099/check" || h.Headers["Authorization"] != "Bearer $TOKEN" || len(h.AllowedEnvVars) != 1 || h.Command != "" || h.CommandLine() != "POST http://127.0.0.1:8099/check" {
+		t.Errorf("the http hook: %+v", h)
+	}
+	if strings.Contains(cfg.String(), "abc123def") {
+		t.Errorf("a header's value is shown:\n%s", cfg.String())
 	}
 }

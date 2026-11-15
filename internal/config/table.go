@@ -302,6 +302,10 @@ var hookFields = map[string]string{
 	"onFailure":     "same",
 	"if":            "",
 	"args":          "",
+	// The fields of an http hook.
+	"url":            "",
+	"headers":        "",
+	"allowedEnvVars": "",
 }
 
 // hookFieldSame is the one value each "same" field may have.

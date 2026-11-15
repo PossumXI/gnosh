@@ -275,6 +275,9 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 	case p.cancelled:
 		v.cancelled = true
 		return v
+	case p.startErr != nil && h.URL != "":
+		v.failure = "its server could not be reached (" + p.startErr.Error() + ")"
+		return v
 	case p.startErr != nil:
 		v.failure = "it could not be started (" + startError(p.startErr) + ")"
 		return v

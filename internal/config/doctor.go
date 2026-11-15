@@ -281,7 +281,9 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 	for _, h := range cfg.AllHooks {
 		e := findHookEvent(h.Event)
 		why := commandTrouble(cfg, h.Command, pr)
-		if h.Args != nil {
+		if h.URL != "" {
+			why = "" // (an address is only known to answer when it does)
+		} else if h.Args != nil {
 			// The exec form names the program alone, and no shell reads it.
 			root := cfg.Paths.ProjectRoot
 			why = programTrouble(cfg, strings.NewReplacer("${CLAUDE_PROJECT_DIR}", root, "${GNOSH_PROJECT_DIR}", root).Replace(h.Command), pr)

@@ -387,3 +387,15 @@ or kept with the reason said (27).
     stream-json waits the same way once its input is over, and in
     stream-json output each turn's result line is written as the turn
     ends. Sub-agents in a run still wait in the foreground (item 31).
+37. **http hooks run, and fail closed as command hooks do.** Claude
+    Code's `"type": "http"` sends the event to a URL and reads the answer
+    as a command hook's stdout; a status other than 2xx is a non-blocking
+    error there. gnosh runs them the same way but holds them to its own
+    rule for a hook that could not check (the principles' D1): no answer,
+    a late one or one with another status than 2xx blocks where a hook
+    can block. Headers use only the variables `allowedEnvVars` names, as
+    in Claude Code; a header's value written in the file is kept as a
+    secret; no redirect is followed. `allowedHttpHookUrls` and
+    `httpHookAllowedEnvVars` are not adopted: the person's own files are
+    where the hooks come from, and a folder's own are held until it is
+    trusted.

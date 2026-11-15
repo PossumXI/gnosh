@@ -271,10 +271,13 @@ func jsonOf(v any) json.RawMessage {
 // runner that reads that shape. Timeouts are in seconds.
 func (c *Config) HooksJSON() []byte {
 	type handler struct {
-		Type    string    `json:"type"`
-		Command string    `json:"command"`
-		Args    *[]string `json:"args,omitempty"`
-		Timeout float64   `json:"timeout,omitempty"`
+		Type           string            `json:"type"`
+		Command        string            `json:"command,omitempty"`
+		Args           *[]string         `json:"args,omitempty"`
+		URL            string            `json:"url,omitempty"`
+		Headers        map[string]string `json:"headers,omitempty"`
+		AllowedEnvVars []string          `json:"allowedEnvVars,omitempty"`
+		Timeout        float64           `json:"timeout,omitempty"`
 	}
 	type group struct {
 		Matcher string    `json:"matcher,omitempty"`
@@ -283,6 +286,9 @@ func (c *Config) HooksJSON() []byte {
 	block := map[string][]group{}
 	for _, h := range c.Hooks {
 		hd := handler{Type: "command", Command: h.Command, Timeout: h.Timeout.Seconds()}
+		if h.URL != "" {
+			hd = handler{Type: "http", URL: h.URL, Headers: h.Headers, AllowedEnvVars: h.AllowedEnvVars, Timeout: h.Timeout.Seconds()}
+		}
 		if h.Args != nil {
 			// (An empty list is still the exec form.)
 			args := h.Args

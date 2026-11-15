@@ -315,6 +315,12 @@ type Hook struct {
 	Async, AsyncRewake bool
 	// StatusMessage is what the person is shown while the hook runs.
 	StatusMessage string
+	// URL makes the hook an http hook: the event is POSTed to it. Headers
+	// go with the request, with $NAME filled in for the variables
+	// AllowedEnvVars names.
+	URL            string
+	Headers        map[string]string
+	AllowedEnvVars []string
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event
@@ -332,6 +338,9 @@ type Hook struct {
 // command line, or in the exec form the program and its arguments, each
 // quoted where a shell would need it.
 func (h Hook) CommandLine() string {
+	if h.URL != "" {
+		return "POST " + h.URL
+	}
 	if h.Args == nil {
 		return h.Command
 	}

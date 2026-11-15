@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -67,6 +68,17 @@ type Hook struct {
 	// StatusMessage is what the person is shown while the hook runs, in
 	// place of the working line's own words (Runner.StatusMessages).
 	StatusMessage string
+
+	// URL, when it is set, makes the hook an HTTP hook (Claude Code's
+	// "type": "http") in place of a command: the event is POSTed to it as
+	// JSON, and the body of the answer is read as a command hook's stdout
+	// is. An answer with another status than 2xx, or none, is a hook that
+	// could not be evaluated. Headers go with the request; $NAME and
+	// ${NAME} in their values are the variables AllowedEnvVars names, and
+	// nothing for any other.
+	URL            string
+	Headers        map[string]string
+	AllowedEnvVars []string
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -82,6 +94,9 @@ func (h Hook) label() string {
 // command line, or in the exec form the program and its arguments, each
 // argument quoted where a shell would need it.
 func (h Hook) CommandLine() string {
+	if h.URL != "" {
+		return "POST " + h.URL
+	}
 	if h.Args == nil {
 		return h.Command
 	}
@@ -130,6 +145,10 @@ type Spec struct {
 	Async, AsyncRewake bool
 	// StatusMessage is shown while the hook runs.
 	StatusMessage string
+	// URL, Headers and AllowedEnvVars make an HTTP hook (see Hook).
+	URL            string
+	Headers        map[string]string
+	AllowedEnvVars []string
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -151,9 +170,13 @@ func NewHook(s Spec) (Hook, error) {
 		AsyncRewake: s.AsyncRewake,
 
 		StatusMessage: s.StatusMessage,
-		Source:        s.Source,
-		Global:        s.Global,
-		If:            strings.TrimSpace(s.If),
+
+		URL:            s.URL,
+		Headers:        s.Headers,
+		AllowedEnvVars: s.AllowedEnvVars,
+		Source:         s.Source,
+		Global:         s.Global,
+		If:             strings.TrimSpace(s.If),
 	}
 	if msgs := hookProblems(h); len(msgs) > 0 {
 		problems := make([]Problem, len(msgs))
@@ -183,6 +206,20 @@ func timeoutProblem(text string) string {
 // noCommand is the problem of a hook that has nothing to run.
 const noCommand = "the hook has no command to run."
 
+// httpProblem says what is wrong with an http hook's address, or "".
+func httpProblem(raw string) string {
+	u, err := url.Parse(raw)
+	switch {
+	case err != nil:
+		return "it cannot be read as an address"
+	case u.Scheme != "http" && u.Scheme != "https":
+		return "it must start with http:// or https://"
+	case u.Host == "":
+		return "it names no host"
+	}
+	return ""
+}
+
 // hookProblems says everything that is wrong with h by itself, each as a
 // plain sentence. It is the one check every hook passes through, however
 // it was written.
@@ -192,7 +229,15 @@ func hookProblems(h Hook) []string {
 	if !known {
 		msgs = append(msgs, eventProblem(string(h.Event)))
 	}
-	if strings.TrimSpace(h.Command) == "" {
+	switch {
+	case h.URL != "":
+		if h.Command != "" || h.Args != nil || h.Async || h.AsyncRewake {
+			msgs = append(msgs, "the hook has both an address and a command. An http hook sends the event to its \"url\"; a command hook runs its \"command\"; and only a command hook runs in the background.")
+		}
+		if why := httpProblem(h.URL); why != "" {
+			msgs = append(msgs, "the hook's url cannot be used: "+why+".")
+		}
+	case strings.TrimSpace(h.Command) == "":
 		msgs = append(msgs, noCommand)
 	}
 	if strings.ContainsRune(h.Command, 0) {

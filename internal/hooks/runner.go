@@ -1,10 +1,12 @@
 package hooks
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -315,6 +317,10 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	var all sync.WaitGroup
 	for i, h := range sel {
 		all.Go(func() {
+			if h.URL != "" {
+				procs[i] = r.post(ctx, h.Hook, stdin, env, timeoutFor(h.Event, h.Timeout))
+				return
+			}
 			procs[i] = r.exec(ctx, h.Hook, stdin, env, dir, timeoutFor(h.Event, h.Timeout))
 		})
 	}
@@ -701,4 +707,75 @@ func (r *Runner) StatusMessages(in Input) []string {
 		}
 	}
 	return out
+}
+
+// hookClient sends http hooks' requests. It follows no redirect: an answer
+// that sends the event elsewhere is not an answer.
+var hookClient = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+// post runs an http hook: the event, as JSON, is the body of a POST to its
+// address, and the body of the answer is read as a command hook's stdout.
+// An answer with another status than 2xx is one gnosh cannot read.
+func (r *Runner) post(ctx context.Context, h Hook, body []byte, env []string, limit time.Duration) (p proc) {
+	p.exit, p.limit = -1, limit
+	began := r.now()
+	defer func() { p.took = r.now().Sub(began) }()
+	rctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, http.MethodPost, h.URL, bytes.NewReader(body))
+	if err != nil {
+		p.startErr = err
+		return p
+	}
+	req.Header.Set("Content-Type", "application/json")
+	vars := map[string]string{}
+	for _, kv := range env {
+		if name, val, ok := strings.Cut(kv, "="); ok {
+			vars[name] = val
+		}
+	}
+	for name, val := range h.Headers {
+		req.Header.Set(name, os.Expand(val, func(v string) string {
+			if slices.Contains(h.AllowedEnvVars, v) {
+				return vars[v]
+			}
+			return ""
+		}))
+	}
+	stopped := func() bool {
+		switch {
+		case ctx.Err() != nil:
+			p.cancelled = true
+		case rctx.Err() != nil:
+			p.timedOut = true
+		default:
+			return false
+		}
+		return true
+	}
+	resp, err := hookClient.Do(req)
+	if err != nil {
+		if !stopped() {
+			p.startErr = err
+		}
+		return p
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(r.maxOutput)+1))
+	if err != nil {
+		if !stopped() {
+			p.unknown = "reading its answer failed (" + err.Error() + ")"
+		}
+		return p
+	}
+	if len(data) > r.maxOutput {
+		p.lost, data = int64(len(data)-r.maxOutput), data[:r.maxOutput]
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		p.unknown = fmt.Sprintf("its server answered with HTTP status %d", resp.StatusCode)
+		p.stderr = string(data)
+		return p
+	}
+	p.exit, p.stdout = 0, string(data)
+	return p
 }

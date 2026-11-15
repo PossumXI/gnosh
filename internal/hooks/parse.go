@@ -210,9 +210,18 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 	case !hasType:
 		p.fail(place, "the hook has no \"type\". gnosh runs command hooks: \"type\": \"command\".")
 		return
-	case kind != "command":
-		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks only, so this hook would not run as written.", quote(kind))
+	case kind != "command" && kind != "http":
+		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks and http hooks only, so this hook would not run as written.", quote(kind))
 		return
+	}
+	// The fields of one type are a mistake on the other.
+	only := map[string]string{"command": "command", "args": "command", "async": "command", "asyncRewake": "command", "shell": "command",
+		"url": "http", "headers": "http", "allowedEnvVars": "http"}
+	for _, f := range fields {
+		if want, ok := only[f.key]; ok && want != kind && !isNull(f.value) {
+			p.fail(place, "the hook has %s, which a hook of \"type\": %s does not take.", quote(f.key), quote(kind))
+			return
+		}
 	}
 
 	h := Hook{Event: event, Matcher: pattern, Source: p.at(place)}
@@ -282,6 +291,25 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 			default:
 				p.fail(place, "\"if\" is one permission rule, as a string, such as \"Bash(git push *)\"; this one is %s.", kindOf(f.value))
 			}
+		case "url":
+			if h.URL, ok = asString(f.value); !ok || h.URL == "" {
+				p.fail(place, "\"url\" is the address the event is sent to, as a string; this one is %s.", kindOf(f.value))
+				badCommand = true
+			}
+		case "headers":
+			var headers map[string]string
+			if kindOf(f.value) != "an object" || json.Unmarshal(f.value, &headers) != nil {
+				p.fail(place, "\"headers\" is an object of header names and their values, each a string; this one is %s.", kindOf(f.value))
+				break
+			}
+			h.Headers = headers
+		case "allowedEnvVars":
+			var names []string
+			if kindOf(f.value) != "a list" || json.Unmarshal(f.value, &names) != nil {
+				p.fail(place, "\"allowedEnvVars\" is a list of the names of the variables a header may use; this one is %s.", kindOf(f.value))
+				break
+			}
+			h.AllowedEnvVars = names
 		case "args":
 			var args []string
 			if kindOf(f.value) != "a list" || json.Unmarshal(f.value, &args) != nil {
@@ -293,8 +321,12 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 			p.fail(place, "the hook has %s, which gnosh does not know. A command hook has \"type\", \"command\" and \"timeout\".", quote(f.key))
 		}
 	}
+	if kind == "http" && h.URL == "" && !badCommand {
+		p.fail(place, "the http hook has no \"url\" to send the event to.")
+		badCommand = true
+	}
 	for _, msg := range hookProblems(h) {
-		if badCommand && msg == noCommand {
+		if (badCommand || kind == "http") && msg == noCommand {
 			continue // already said, more exactly
 		}
 		p.fail(place, "%s", msg)
