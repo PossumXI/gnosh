@@ -108,6 +108,11 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 		return fmt.Errorf("this is still running in the background, and would be stopped: %s. /restart once it has ended, or /tasks stop <id> stops it", strings.Join(work, ", "))
 	}
 	r := cli.Relaunch{Session: l.ts.ID(), Mode: string(l.engine.Mode()), Effort: l.agent.Model().Level}
+	if l.inv.ResumeIsFile && !l.inv.ForkSession {
+		// A session opened from its file, which may lie outside this
+		// folder's sessions, is opened from its file again.
+		r.Session = l.ts.Path()
+	}
 	if ref, ok := l.modelRef(); ok {
 		r.Model = ref.String()
 	}

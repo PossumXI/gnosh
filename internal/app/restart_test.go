@@ -73,6 +73,24 @@ func TestRestart(t *testing.T) {
 		t.Errorf("the newer gnosh was said %d times", n)
 	}
 
+	// A session opened from its file is opened from its file again.
+	path := w.Sessions()[0]
+	started = nil
+	s = sitWith(t, w, func(o *Options) {
+		o.Executable = exe
+		o.Relaunch = func(args []string) error {
+			started = append(started, args)
+			return os.ErrPermission
+		}
+	}, "-r", path)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/restart")
+	s.see("gnosh starts again, in this session.")
+	s.exit()
+	if len(started) != 1 || !slices.Equal(started[0], []string{"--permission-mode=default", "--resume=" + path}) {
+		t.Errorf("gnosh started again with %q", started)
+	}
+
 	// A gnosh that cannot start itself again says how to go on, and says
 	// nothing of builds.
 	w = apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
