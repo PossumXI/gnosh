@@ -78,7 +78,7 @@ func TestThinkingSaysHowToSeeIt(t *testing.T) {
 	g := newRig(t, 80, 24, text.NoColor)
 	g.keys(`"go" <Enter>`).start()
 	g.ev(thought("one\ntwo\nthree\nfour\nfive\nsix\n"))
-	g.liveHas("~ thinking · Ctrl+O writes it out", "three", "four", "five", "six").liveLacks("two")
+	g.liveHas("~ thinking · Ctrl+O shows all of it", "three", "four", "five", "six").liveLacks("two")
 	g.wait(3*time.Second).ev(said("Done.\n"), replyEnd(core.StopEndTurn))
 	g.ev(request(2), thought("again\n"))
 	g.wait(2*time.Second).ev(said("Done again.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
@@ -88,44 +88,18 @@ func TestThinkingSaysHowToSeeIt(t *testing.T) {
 	g.once("~ thought for 3s · Ctrl+O shows it", "~ thought for 2s · Ctrl+O shows it")
 }
 
-// Ctrl+O writes out every thought of the turn that was folded, oldest
-// first, and not only the last. The last turn's thoughts can be asked for
-// until the next turn has thought something of its own.
-func TestEveryFoldedThoughtCanBeShown(t *testing.T) {
+// With the verbose option every thought is written out as it comes, and
+// nothing is folded.
+func TestVerboseWritesThoughtsOut(t *testing.T) {
 	g := newRig(t, 80, 40, text.NoColor)
+	g.s.detail = true
 	g.keys(`"go" <Enter>`).start()
 	g.ev(thought("the first thought\n"))
 	g.wait(2*time.Second).ev(said("Looking.\n"), replyEnd(core.StopEndTurn))
 	g.ev(request(2), thought("the second thought\n"))
-	g.wait(3*time.Second).ev(said("Still looking.\n"), replyEnd(core.StopEndTurn))
-	g.ev(request(3), thought("the third thought\n"))
-	g.wait(4*time.Second).ev(said("Done.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
-	g.committedLacks("the first thought", "the second thought", "the third thought")
-
-	// A new turn has begun and has not thought yet: the last turn's
-	// thoughts are still there to be shown.
-	g.keys(`"and again" <Enter>`).start()
-	g.keys(`<Ctrl+O>`)
-	g.once("~ thinking, 1 of 3, for 2s", "the first thought",
-		"~ thinking, 2 of 3, for 3s", "the second thought",
-		"~ thinking, 3 of 3, for 4s", "the third thought")
-	// They are written once: turning detail off and on again writes
-	// nothing more.
-	g.keys(`<Ctrl+O> <Ctrl+O>`)
-	g.once("the first thought", "the third thought")
-	g.keys(`<Ctrl+O>`)
-	if g.s.detail {
-		t.Fatal("detail is still on")
-	}
-
-	// The new turn thinks: its thoughts take the place of the last turn's.
-	g.ev(thought("a thought of the new turn\n"))
-	g.wait(time.Second).ev(said("Again.\n"), replyEnd(core.StopEndTurn))
-	g.ev(request(2), thought("its second, still arriving"))
-	g.keys(`<Ctrl+O>`)
-	g.once("~ thinking, of the reply before", "a thought of the new turn")
-	g.liveHas("its second, still arriving")
-	g.once("the first thought")
+	g.wait(3*time.Second).ev(said("Done.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
+	g.once("the first thought", "the second thought")
+	g.committedLacks("Ctrl+O shows it")
 }
 
 // The one word exit, or quit, leaves, as /exit does. A sentence that

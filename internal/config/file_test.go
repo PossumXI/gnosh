@@ -281,6 +281,7 @@ func TestOptions(t *testing.T) {
     "deliverablesServer": "127.0.0.1:8123",
     "debug": true,
     "sidePanel": true,
+    "verbose": true,
     "projectDataDir": ".agent"
   }
 }`
@@ -316,6 +317,7 @@ func TestOptions(t *testing.T) {
 	check("deliverablesServer", o.DeliverablesServer, Value[string]{V: "127.0.0.1:8123", Set: true, Origin: at("deliverablesServer")})
 	check("debug", o.Debug.V, true)
 	check("sidePanel", o.SidePanel.V, true)
+	check("verbose", o.Verbose.V, true)
 	check("projectDataDir", o.ProjectDataDir.V, ".agent")
 
 	// The table lists every key exactly once, All reports each, and the

@@ -545,7 +545,9 @@ func randomStep(g *rig, r *rand.Rand) {
 			term.Key{Code: term.KeyTab}, term.Key{Code: term.KeyTab, Mod: term.ModShift}, term.Key{Code: term.KeyBackspace},
 			term.Key{Code: term.KeyLeft}, term.Key{Code: term.KeyRight}, term.Key{Code: term.KeyEnter, Mod: term.ModShift},
 			term.Key{Code: term.KeyRune, Rune: 'c', Mod: term.ModCtrl}, term.Key{Code: term.KeyRune, Rune: 'd', Mod: term.ModCtrl},
-			term.Key{Code: term.KeyRune, Rune: 'o', Mod: term.ModCtrl}, term.Key{Code: term.KeyRune, Rune: 't', Mod: term.ModCtrl},
+			// (Ctrl+O, the transcript view, takes a screen of its own: see
+			// TestTranscriptView.)
+			term.Key{Code: term.KeyRune, Rune: 't', Mod: term.ModCtrl},
 			term.Key{Code: term.KeyRune, Rune: 'l', Mod: term.ModCtrl}, term.Key{Code: term.KeyRune, Rune: 'u', Mod: term.ModCtrl},
 			term.Key{Code: term.KeyRune, Rune: 'r', Mod: term.ModCtrl}, term.Key{Code: term.KeyRune, Rune: 's', Mod: term.ModCtrl},
 			term.Key{Code: term.KeyRune, Rune: 'g', Mod: term.ModCtrl}, term.Key{Code: term.KeyRune, Rune: 'x', Mod: term.ModCtrl},

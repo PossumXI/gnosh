@@ -126,6 +126,56 @@ func TestPanel(t *testing.T) {
 	}
 }
 
+// A view is a panel with no side: its text has the whole width. SetLines
+// replaces what it shows, and a view scrolled back keeps its top row
+// there; ScrollTo puts a row at the top.
+func TestView(t *testing.T) {
+	scr := vtest.New(40, 6)
+	scr.WriteString("the scrollback before\r\n")
+	v, err := OpenView(scr, 40, 6, vtest.Width, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cols, rows := v.Size(); cols != 40 || rows != 6 {
+		t.Fatalf("Size = %d, %d, want the whole screen", cols, rows)
+	}
+	var lines []string
+	for i := 0; i < 12; i++ {
+		lines = append(lines, fmt.Sprintf("row %d", i))
+	}
+	lines[3] = strings.Repeat("w", 39) + "Z"
+	if err := v.SetLines(lines...); err != nil {
+		t.Fatal(err)
+	}
+	v.SetLive([]string{"footer"}, -1, 0)
+	got := scr.Lines()
+	if !strings.HasPrefix(got[4], "row 11") || strings.TrimRight(got[5], " ") != "footer" || strings.Contains(strings.Join(got, ""), "│") {
+		t.Fatalf("the view shows %q", got)
+	}
+	if !v.ScrollTo(3) || v.Top() != 3 || got[0] == scr.Lines()[0] || strings.TrimRight(scr.Lines()[0], " ") != lines[3] {
+		t.Fatalf("ScrollTo(3): top %d, row 0 %q", v.Top(), scr.Lines()[0])
+	}
+	// The view grows at the end while scrolled back: it stays put.
+	v.SetLines(append(lines, "row 12", "row 13")...)
+	if v.Top() != 3 || strings.TrimRight(scr.Lines()[0], " ") != lines[3] {
+		t.Errorf("SetLines moved a view that was scrolled back: top %d", v.Top())
+	}
+	if v.ScrollTo(1000); v.Back() != 0 || !strings.HasPrefix(scr.Lines()[4], "row 13") {
+		t.Errorf("ScrollTo past the end: back %d, row 4 %q", v.Back(), scr.Lines()[4])
+	}
+	// At the end it follows what is added.
+	v.SetLines(append(lines, "row 12", "row 13", "row 14")...)
+	if !strings.HasPrefix(scr.Lines()[4], "row 14") {
+		t.Errorf("a view at its end did not follow: row 4 %q", scr.Lines()[4])
+	}
+	if _, err := v.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := scr.Lines(); !strings.HasPrefix(got[0], "the scrollback before") || scr.Mode(1000) {
+		t.Errorf("the screen after Close = %q", got)
+	}
+}
+
 // PanelFits says which terminals are wide enough for a panel.
 func TestPanelFits(t *testing.T) {
 	if PanelFits(PanelMinCols-1) || !PanelFits(PanelMinCols) {

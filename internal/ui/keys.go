@@ -100,7 +100,25 @@ func (s *session) input(ev term.Event) {
 		// The terminal is gnosh's again after the process was stopped:
 		// what was on the screen is no longer what the renderer left.
 		s.r.Reset()
+		if s.view != nil {
+			s.keep(s.view.p.Clear())
+		}
 		s.dirty = true
+	case term.Key, term.Mouse, term.Paste:
+		if s.view != nil {
+			// The transcript view takes every key while it is open.
+			if _, paste := ev.(term.Paste); !paste {
+				s.viewInput(ev)
+			}
+			return
+		}
+		s.typedOrMouse(ev)
+	}
+}
+
+// typedOrMouse takes in a key, a paste or the mouse.
+func (s *session) typedOrMouse(ev term.Event) {
+	switch ev := ev.(type) {
 	case term.Key:
 		s.typed(ev, &ev)
 	case term.Paste:
@@ -200,7 +218,7 @@ func (s *session) global(k term.Key) bool {
 	case s.panel != nil && k.IsKey(term.KeyPageDown, 0):
 		s.scrollPanel(-s.panel.Page())
 	case k.Is('o', term.ModCtrl):
-		s.toggleDetail()
+		s.toggleView()
 	case k.Is('t', term.ModCtrl):
 		switch {
 		case len(s.tasks) == 0:
@@ -459,7 +477,8 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.busy, s.stopping, s.ph = false, false, phIdle
 			s.reply, s.calls, s.queue, s.sending = reply{}, nil, nil, nil
 			s.q, s.qwait = nil, nil
-			s.folded, s.foldedOld, s.loop = nil, false, false
+			s.loop = false
+			s.closeView()
 			s.facts = map[string]string{}
 			s.changed = nil
 			s.lock()
@@ -632,30 +651,6 @@ func (s *session) allowEdits(q *question) bool {
 	return false
 }
 
-// toggleDetail turns detail on or off: with it on, the model's reasoning
-// and every tool's whole output are written into the scrollback from then
-// on. What is in the scrollback already is never drawn again, so the
-// reasoning that was folded is written out now: every thought of the turn
-// that is under way, or of the last one.
-func (s *session) toggleDetail() {
-	s.detail = !s.detail
-	if !s.detail {
-		s.flash("Detail off: reasoning is folded and outputs are shortened again.")
-		return
-	}
-	s.flash("Detail on: reasoning and whole outputs are written out from here on. Ctrl+O turns it off.")
-	// What was folded before, oldest first, and then the reasoning that is
-	// arriving right now: all of it so far.
-	s.unfold()
-	if rp := &s.reply; rp.thinking {
-		rp.thinkRest = rp.think.String()
-		if i := strings.LastIndexByte(rp.thinkRest, '\n'); i >= 0 {
-			s.thought(rp.thinkRest[:i])
-			rp.thinkRest = rp.thinkRest[i+1:]
-		}
-	}
-}
-
 // background moves the commands that are running to the background, when
 // the session can do that.
 func (s *session) background() {
@@ -690,6 +685,9 @@ func (s *session) ask(q agent.Question, sub string) {
 // open makes qs the question on the screen. It takes no key until the
 // person has had time to see it and has stopped typing.
 func (s *session) open(qs *question) {
+	// A question is for the person: the transcript view gives the screen
+	// back, so that it is seen.
+	s.closeView()
 	now := s.now()
 	qs.opened, qs.guarded = now, true
 	qs.quiet = now.Add(guardShown)
@@ -779,7 +777,7 @@ func (s *session) help() {
 		{"@", "a file to mention, completed as you type"},
 		{"Tab", "take a completion; on a folded paste, unfold it"},
 		{"Shift+Tab", "the next permission mode; it is always on the status line"},
-		{"Ctrl+O", "more detail, or less: reasoning and whole outputs"},
+		{"Ctrl+O", "the whole transcript: every thought, call and result"},
 		{"Ctrl+B, Ctrl+X b", "move the running command to the background"},
 		{"Ctrl+T", "hide or show the task list"},
 		{"Ctrl+G", "edit the prompt in your editor (also Ctrl+X Ctrl+E)"},

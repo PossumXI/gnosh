@@ -120,6 +120,8 @@
 //	                           or "off"
 //	  debug                    write more to the log
 //	  sidePanel                start with the side panel on (/panel)
+//	  verbose                  reasoning and whole outputs in the conversation
+//	                           as they come (Claude Code's verbose)
 //	  projectDataDir           the name of the project's data folder
 //
 // "model" and "smallModel" are each the model as a string, or an object

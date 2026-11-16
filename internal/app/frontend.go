@@ -235,6 +235,11 @@ type SessionControls interface {
 	// stands: what a feature last set (a *DeliverablesEvent says when it
 	// changes). It is empty when the session has none.
 	Deliverables() []Deliverable
+	// Transcript returns the session's conversation as its file holds it,
+	// the oldest entry first, for the transcript view (Ctrl+O): whole,
+	// with the work of popped steps and what came before a summary, but
+	// not what a rewind cut off.
+	Transcript() []TranscriptEntry
 }
 
 // CommandResult is what running a slash command came to.
@@ -303,6 +308,9 @@ type SessionInfo struct {
 	Version string
 	// Interactive says a person is there to be asked.
 	Interactive bool
+	// Verbose says the interface shows the model's reasoning and the
+	// calls' whole output as they come (the verbose option).
+	Verbose bool
 	// SidePanel says the session starts with the side panel on (the
 	// sidePanel option).
 	SidePanel bool

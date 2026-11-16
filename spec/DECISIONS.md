@@ -659,3 +659,27 @@ or kept with the reason said (27).
     own (recorded in its file), since the work tree is not opened again.
     Only the session the person is in has the tool, and only where it may
     run sub-agents in the background.
+49. **Ctrl+O is the transcript view, and detail is the verbose option.**
+    Jae, 14 November: "i dont like how the thinking just disappears after
+    two lines... what about ctrl-o or whatever to expand at least? or
+    whatever claude does". Ctrl+O first turned detail on: the reasoning
+    folded so far was written into the scrollback, and from then on
+    reasoning and whole outputs as they came. A thought could be read
+    again only until the next turn thought, which UI-22 asks more of.
+    Claude Code's Ctrl+O is a transcript viewer, and its inline detail is
+    the verbose setting; gnosh now has both the same way. Ctrl+O takes the
+    whole screen (term.OpenView, a Panel with no side) and shows the
+    conversation as the session's file holds it, rewinds applied: every
+    prompt with what came with it, each reply with its time, its model and
+    its reasoning, each call with its whole input and its result, notices,
+    summaries and the steps begun and ended, the work of popped steps
+    included. A thought still arriving shows at the end. Parts over 24
+    lines are cut until Ctrl+E; Up, Down, PageUp, PageDown, Home, End and
+    the wheel move; { and } go between prompts (Claude Code's keys); q,
+    Esc, Ctrl+C or Ctrl+O go back. The session goes on meanwhile: the view
+    takes in what is written to the file, and what the session said is
+    written into the scrollback when the view closes, as the side panel's
+    is. A question closes the view, so that it is seen. The verbose option
+    (Claude Code's key, under "options") starts the session with detail
+    on; the store of folded thoughts and Ctrl+O's writing them out are
+    gone.

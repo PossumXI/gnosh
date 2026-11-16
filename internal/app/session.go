@@ -1091,6 +1091,7 @@ func (l *live) info() SessionInfo {
 		Version:     l.p.o.BuildID,
 		Interactive: l.interactive,
 		SidePanel:   l.cfg.Options.SidePanel.V,
+		Verbose:     l.cfg.Options.Verbose.V,
 		Resume:      "gnosh -r " + l.ts.ID(),
 	}
 	if m.Provider != nil {

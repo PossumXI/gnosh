@@ -1,0 +1,126 @@
+package ui
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/text"
+)
+
+// screenText is what the terminal's screen shows now.
+func (g *rig) screenText() string { return strings.Join(g.scr.Lines(), "\n") }
+
+// viewHas fails the test unless the screen shows every piece.
+func (g *rig) viewHas(pieces ...string) {
+	g.t.Helper()
+	screen := g.screenText()
+	for _, p := range pieces {
+		if !strings.Contains(screen, p) {
+			g.t.Fatalf("the screen does not show %q:\n%s", p, screen)
+		}
+	}
+}
+
+// Ctrl+O, as Claude Code's: the whole conversation on the whole screen.
+// Every thought, the ones the session folded too, each reply with its
+// time and model, each call with its input and its result, long ones cut
+// until Ctrl+E; Home, End, { and } move through it; q gives the screen
+// back as it was, with what the session said meanwhile in the scrollback.
+func TestTranscriptView(t *testing.T) {
+	g := newRig(t, 80, 20, text.NoColor)
+	g.free = true
+	at := time.Date(2026, 11, 15, 14, 2, 11, 0, time.Local)
+	var long strings.Builder
+	for i := range 40 {
+		long.WriteString("output line " + string(rune('A'+i%26)) + "\n")
+	}
+	g.c.mu.Lock()
+	g.c.trans = []app.TranscriptEntry{
+		{Kind: "prompt", Time: at, Message: core.UserText("fix the test")},
+		{Kind: "reply", Time: at.Add(time.Second), Model: "qwen/qwen3.8-27b", Message: core.Message{Role: core.RoleAssistant, Blocks: []core.Block{
+			{Type: core.BlockThinking, Text: "the first thought of the session\n\nand its second line"},
+			core.Text("Running the tests."),
+			core.ToolUse("c1", "Bash", json.RawMessage(`{"command":"go test ./..."}`)),
+		}}},
+		{Kind: "results", Time: at.Add(2 * time.Second), Message: core.Message{Role: core.RoleUser, Blocks: []core.Block{
+			core.ToolResultBlock("c1", core.ToolResult{Content: []core.Block{core.Text(long.String())}}),
+		}}},
+		{Kind: "frame", Op: "push", Frame: "fix", Label: "make the test pass"},
+		{Kind: "notice", Level: agent.LevelWarning, Text: "a background command ended"},
+		{Kind: "prompt", Time: at.Add(time.Minute), Message: core.UserText("and the other one")},
+	}
+	g.c.mu.Unlock()
+	g.keys(`"go" <Enter>`).start()
+	g.keys(`<Ctrl+O>`)
+	if g.s.view == nil || !g.scr.AltScreenEver() {
+		t.Fatal("Ctrl+O did not open the transcript view")
+	}
+	g.viewHas("> and the other one", "⇥ step fix: make the test pass", "warning: a background command ended", "transcript · the session is working · q goes back")
+
+	g.keys(`<Home>`)
+	g.viewHas("> fix the test", "─ 14:02:12 · qwen/qwen3.8-27b ─", "~ the first thought of the session", "  and its second line",
+		"Running the tests.", "▸ Bash", `"command": "go test ./..."`, "⎿ output line A")
+	if strings.Contains(g.screenText(), "\n\n") {
+		t.Errorf("the view has an empty row:\n%s", g.screenText())
+	}
+	g.keys(`<End>`)
+	g.viewHas("… 16 more lines: Ctrl+E shows all")
+	g.keys(`<Ctrl+E> <End>`)
+	g.viewHas("output line N", "Ctrl+E cuts long parts")
+	if strings.Contains(g.screenText(), "more lines") {
+		t.Errorf("Ctrl+E left something cut:\n%s", g.screenText())
+	}
+	// { goes to the prompt before the top, } to the next one.
+	g.keys(`"{"`)
+	if top := g.s.view.p.Top(); top != 0 {
+		t.Errorf("{ from the end went to row %d, want the first prompt's", top)
+	}
+	g.keys(`"}"`)
+	g.viewHas("> and the other one")
+
+	// The session goes on meanwhile: what it says is kept for the
+	// scrollback, and the thought that is arriving shows at the end.
+	g.ev(thought("a thought still arriving\n"))
+	g.wait(time.Second)
+	g.viewHas("─ now ─", "~ a thought still arriving")
+	g.ev(said("Both pass.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
+	if strings.Contains(strings.Join(g.scr.Scrollback(), "\n"), "Both pass.") {
+		t.Errorf("the answer was written while the view had the screen")
+	}
+
+	// q: the screen as it was, and the answer where it would have been.
+	g.keys(`"q"`)
+	if g.s.view != nil || g.scr.Mode(1000) {
+		t.Fatal("q did not close the view")
+	}
+	all := strings.Join(g.all(), "\n")
+	if !strings.Contains(all, "> go") || !strings.Contains(all, "Both pass.") || strings.Contains(all, "output line A") {
+		t.Errorf("after the view the terminal shows:\n%s", all)
+	}
+
+	// A question closes it, so that the person sees the question.
+	g.keys(`<Ctrl+O>`)
+	if g.s.view == nil {
+		t.Fatal("Ctrl+O did not open the view again")
+	}
+	g.ev(&agent.QuestionEvent{Question: permission("p1")})
+	if g.s.view != nil || g.s.q == nil {
+		t.Fatalf("a question did not close the view")
+	}
+}
+
+// Where the session hands out no transcript, Ctrl+O says so.
+func TestTranscriptViewNeeds(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	g.s.c = struct{ app.Controls }{g.c}
+	g.keys(`<Ctrl+O>`)
+	if g.s.view != nil {
+		t.Fatal("the view opened with nothing to read")
+	}
+	g.liveHas("not joined to this build")
+}

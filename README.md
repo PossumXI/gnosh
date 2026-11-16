@@ -68,7 +68,8 @@ model works; nothing of it is kept), `/recap`, `/cost`, `/tasks`, `/diff`,
 disable), `/skills`, `/reload-skills`, `/hooks`, `/statusline` and `/doctor`, with gnosh's
 own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
 permission modes, Esc stops a turn and Esc twice goes back to an earlier
-prompt, Ctrl+O shows the model's reasoning, Ctrl+B moves a running command
+prompt, Ctrl+O shows the whole transcript (every thought, call and result)
+on the whole screen, Ctrl+B moves a running command
 to the background, `@path` in a prompt brings that file (or a directory's
 listing) along with it, and a line that begins with `!` is a command of your own.
 `/panel` (or the `sidePanel` option) draws the session on the whole screen

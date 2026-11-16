@@ -37,6 +37,11 @@ type Panel struct {
 	cols, rows int // the terminal's size
 	left       *Renderer
 	right      *Renderer
+	// hasSide says there is a side panel; a view (OpenView) has none, and
+	// its text has the whole width. keep is how many committed rows are
+	// kept to scroll back through.
+	hasSide bool
+	keep    int
 
 	hist  []rline  // what was committed, at the left width
 	since []string // what was committed while open, as given
@@ -62,8 +67,10 @@ const (
 	panelSideMin = 24
 	panelSideMax = 48
 	// panelKeep is how many committed rows the panel keeps to scroll back
-	// through.
+	// through, and viewKeep how many a view does: a long session's whole
+	// transcript.
 	panelKeep = 10000
+	viewKeep  = 200000
 )
 
 // The sequences only the panel writes.
@@ -91,7 +98,19 @@ func panelSide(cols int) int { return min(max(cols/3, panelSideMin), panelSideMa
 // wrapping off and the mouse on, and draws an empty frame. cols and rows
 // are the terminal's size; width is as for NewRenderer.
 func OpenPanel(out io.Writer, cols, rows int, width func(string) int, synced bool) (*Panel, error) {
-	p := &Panel{out: out, width: width, synced: synced, open: true, wantShown: true}
+	return openScreen(out, cols, rows, width, synced, true, panelKeep)
+}
+
+// OpenView takes the terminal's whole screen for a view with no side
+// panel, its text the whole width: the interface's transcript view
+// (Ctrl+O). It is a Panel in all else; SetLines gives it what it shows.
+func OpenView(out io.Writer, cols, rows int, width func(string) int, synced bool) (*Panel, error) {
+	return openScreen(out, cols, rows, width, synced, false, viewKeep)
+}
+
+// openScreen is OpenPanel and OpenView.
+func openScreen(out io.Writer, cols, rows int, width func(string) int, synced, side bool, keep int) (*Panel, error) {
+	p := &Panel{out: out, width: width, synced: synced, open: true, wantShown: true, hasSide: side, keep: keep}
 	p.size(cols, rows)
 	if _, err := io.WriteString(out, altScreenOn+AutoWrapOff+mouseOn+clearAll); err != nil {
 		return nil, err
@@ -103,7 +122,10 @@ func OpenPanel(out io.Writer, cols, rows int, width func(string) int, synced boo
 // for it.
 func (p *Panel) size(cols, rows int) {
 	p.cols, p.rows = saneSize(cols, rows)
-	side := panelSide(p.cols)
+	side := 0
+	if p.hasSide {
+		side = panelSide(p.cols)
+	}
 	p.left = &Renderer{cols: max(p.cols-side, 1), width: p.width}
 	p.right = &Renderer{cols: max(side-2, 1), width: p.width}
 }
@@ -137,13 +159,60 @@ func (p *Panel) Commit(lines ...string) error {
 			n++
 		}
 	}
-	if over := len(p.hist) - panelKeep; over > 0 {
+	if over := len(p.hist) - p.keep; over > 0 {
 		p.hist = append(p.hist[:0], p.hist[over:]...)
 	}
 	if p.back > 0 {
 		p.back += n
 	}
 	return p.paintLocked()
+}
+
+// SetLines puts lines in place of everything committed, and draws. While
+// the view is scrolled back, the row at its top stays at its top: the
+// lines of a view that grew at the end are still where they were.
+func (p *Panel) SetLines(lines ...string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	top := p.topLocked()
+	p.hist, p.since = p.hist[:0], p.since[:0]
+	for _, l := range lines {
+		for _, part := range strings.Split(l, "\n") {
+			part = strings.TrimSuffix(part, "\r")
+			p.hist = append(p.hist, p.left.prepare(part))
+			p.since = append(p.since, part)
+		}
+	}
+	if over := len(p.hist) - p.keep; over > 0 {
+		p.hist = append(p.hist[:0], p.hist[over:]...)
+	}
+	if p.back > 0 {
+		p.back = min(max(len(p.hist)-p.viewRows()-top, 0), p.maxBack())
+	}
+	return p.paintLocked()
+}
+
+// Top is the row of what was committed that the view shows at its top.
+func (p *Panel) Top() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.topLocked()
+}
+
+func (p *Panel) topLocked() int { return max(len(p.hist)-p.back-p.viewRows(), 0) }
+
+// ScrollTo moves the view so that row of what was committed is at its
+// top, or as near as the end lets it be, and reports whether it moved.
+func (p *Panel) ScrollTo(row int) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	was := p.back
+	p.back = min(max(len(p.hist)-p.viewRows()-row, 0), p.maxBack())
+	if p.back == was {
+		return false
+	}
+	_ = p.paintLocked()
+	return true
 }
 
 // SetLive replaces the live region, as Renderer.SetLive does.
@@ -298,11 +367,15 @@ func (p *Panel) paintLocked() error {
 		case start+y >= 0 && start+y < len(p.hist):
 			l = p.hist[start+y]
 		}
-		var r rline
-		if y < len(p.side) {
-			r = p.side[y]
+		row, end := l.text, l.width
+		if p.hasSide {
+			var r rline
+			if y < len(p.side) {
+				r = p.side[y]
+			}
+			row += strings.Repeat(" ", max(p.left.cols-l.width, 0)) + panelLine + " " + r.text
+			end = p.left.cols + 2 + r.width
 		}
-		row := l.text + strings.Repeat(" ", max(p.left.cols-l.width, 0)) + panelLine + " " + r.text
 		if row == p.shown[y] {
 			continue
 		}
@@ -311,7 +384,7 @@ func (p *Panel) paintLocked() error {
 		rows = strconv.AppendInt(rows, int64(y+1), 10)
 		rows = append(rows, ";1H"...)
 		rows = append(rows, row...)
-		if p.left.cols+2+r.width < p.cols {
+		if end < p.cols {
 			// (Not after a row that fills the screen: with wrapping off
 			// the cursor stays on the last cell, which would be erased.)
 			rows = append(rows, EraseToLineEnd...)

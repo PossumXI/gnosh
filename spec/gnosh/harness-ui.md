@@ -144,6 +144,9 @@ When a model sends its reasoning, gnosh shows it as it streams, set apart
 from the answer, and it can be read back afterwards. Jae asked on 2026-11-12
 how to see "the internal dialogue" (of another tool); with a local model the
 reasoning is all there, and it is the best clue to why a turn went wrong.
+Ctrl+O, the transcript view, shows every thought of the session, with the
+rest of the conversation whole (DECISIONS 49); the verbose option writes
+reasoning out as it comes.
 
 ### UI-23 Tool calls on screen (P1)
 

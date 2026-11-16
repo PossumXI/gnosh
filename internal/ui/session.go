@@ -41,8 +41,10 @@ type host interface {
 	// takes one; it reports whether it does.
 	desktop(text string) bool
 	// openPanel takes the terminal's whole screen for the side panel
-	// (panel.go), for a terminal of cols by rows.
+	// (panel.go), for a terminal of cols by rows, and openView for the
+	// transcript view (transcript.go).
 	openPanel(cols, rows int) (*term.Panel, error)
+	openView(cols, rows int) (*term.Panel, error)
 }
 
 // screen is what a session draws on: the terminal's own scrollback
@@ -154,10 +156,12 @@ type session struct {
 	c    app.Controls
 	host host
 	// r is what the session draws on: inline, the terminal's scrollback,
-	// or panel while the side panel is on.
+	// panel while the side panel is on, or view's held screen while the
+	// transcript view is open (transcript.go).
 	r      screen
 	inline *term.Renderer
 	panel  *term.Panel
+	view   *transcriptView
 	// changed are the files the session's calls changed, the newest
 	// first, for the panel.
 	changed []changedFile
@@ -229,15 +233,7 @@ type session struct {
 	retrySince time.Time
 
 	reply reply
-	// folded is the reasoning of the replies that were shown folded,
-	// oldest first, kept so that Ctrl+O can show it afterwards: every
-	// thought of the turn, not only the last. foldedOld says the turn they
-	// belong to is over and another has begun, so that the next thought to
-	// be folded starts the list anew; until then the last turn's thoughts
-	// can still be asked for.
-	folded    []foldedThought
-	foldedOld bool
-	calls     []*call
+	calls []*call
 	// queue is the prompts that wait for their turn, as the session
 	// reports them, and loop whether /loop is on.
 	queue []agent.QueuedPrompt
@@ -477,6 +473,11 @@ func (s *session) frame() {
 		s.keep(s.r.Commit(s.pending...))
 		s.pending = s.pending[:0]
 	}
+	if s.view != nil {
+		s.viewFrame()
+		s.dirty = false
+		return
+	}
 	if s.panel != nil {
 		s.keep(s.panel.SetPanel(s.panelLines(s.panel.TextWidth())))
 	}
@@ -505,6 +506,15 @@ func (s *session) resize(cols, rows int) {
 		return
 	}
 	s.termCols, s.rows = cols, rows
+	if s.view != nil {
+		// The view is laid out again for the new size; what the session
+		// says meanwhile is laid out for the scrollback's.
+		s.keep(s.view.p.Resize(cols, rows))
+		s.refreshView(true)
+		s.relayout(cols)
+		s.dirty = true
+		return
+	}
 	if s.panel != nil && !term.PanelFits(cols) {
 		s.closePanel()
 		s.flash("The terminal is too narrow for the side panel now; /panel brings it back once it is wider.")

@@ -204,6 +204,10 @@ func (g *rig) openPanel(cols, rows int) (*term.Panel, error) {
 	return term.OpenPanel(g.scr, cols, rows, vtest.Width, false)
 }
 
+func (g *rig) openView(cols, rows int) (*term.Panel, error) {
+	return term.OpenView(g.scr, cols, rows, vtest.Width, false)
+}
+
 func (g *rig) size() (int, int, bool) {
 	cols, rows := g.scr.Size()
 	return cols, rows, true
@@ -530,6 +534,14 @@ type controls struct {
 	sigs      chan os.Signal
 	tasks     []app.Task
 	deliv     []app.Deliverable
+	trans     []app.TranscriptEntry
+}
+
+// Transcript is the session's conversation as a test set it.
+func (c *controls) Transcript() []app.TranscriptEntry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.trans)
 }
 
 // answer is an answer the interface gave to a question.

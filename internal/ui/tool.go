@@ -525,16 +525,17 @@ func (s *session) note(words string) string {
 }
 
 // detailTip says, the first time something is shortened or folded in a
-// session, which key shows more. Once is enough.
+// session, which key shows all of it. Once is enough.
 func (s *session) detailTip() string {
 	if s.tipped {
 		return ""
 	}
 	s.tipped = true
-	return " (Ctrl+O shows more from now on)"
+	return " (Ctrl+O shows all of it)"
 }
 
-// limit is n while detail is off and detailLines while it is on.
+// limit is n while detail is off and detailLines while it is on (the
+// verbose option).
 func (s *session) limit(n int) int {
 	if s.detail {
 		return detailLines

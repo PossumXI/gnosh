@@ -65,6 +65,9 @@ type Options struct {
 	Debug Value[bool]
 	// SidePanel starts an interactive session with the side panel on.
 	SidePanel Value[bool]
+	// Verbose shows the model's reasoning and the calls' whole output in
+	// the conversation as they come (Claude Code's verbose).
+	Verbose Value[bool]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 }
@@ -189,6 +192,9 @@ var optionDefs = []optionDef{
 	{key: "sidePanel", kind: oBool, def: "false",
 		what: "start the interactive session with the side panel on: the files it changed and its deliverables beside the conversation, on the whole screen (/panel turns it on and off)", from: fromPlain,
 		truth: func(o *Options) *Value[bool] { return &o.SidePanel }},
+	{key: "verbose", kind: oBool, def: "false",
+		what: "show the model's reasoning and every call's whole output in the conversation as they come, not folded or cut short (the transcript view, Ctrl+O, shows them whole either way)", from: fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.Verbose }},
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
 		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},

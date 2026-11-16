@@ -500,9 +500,13 @@ func (u *UI) shut() {
 		return
 	}
 	u.shown.Store(nil)
+	if u.s != nil && u.s.view != nil {
+		// Whatever ended the interface, the terminal leaves the view's
+		// screen, and the panel's.
+		_, _ = u.s.view.p.Close()
+		u.s.view = nil
+	}
 	if u.s != nil && u.s.panel != nil {
-		// Whatever ended the interface, the terminal leaves the panel's
-		// screen.
 		_, _ = u.s.panel.Close()
 		u.s.panel = nil
 	}
@@ -625,6 +629,8 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	})
 	u.s = s
 	s.start()
+	// The verbose option: reasoning and whole outputs as they come.
+	s.detail = s.info.Verbose
 	if s.info.SidePanel {
 		// The sidePanel option: the session starts with the panel on.
 		s.openPanel()
@@ -872,8 +878,10 @@ func (u *UI) finish(c app.Controls, code int, why string) int {
 		}
 	}
 	s.endReply()
-	// The side panel gives the screen back, and what was said while it
-	// was on goes into the scrollback, where the rest of the session is.
+	// The transcript view and the side panel give the screen back, and
+	// what was said while they were on goes into the scrollback, where
+	// the rest of the session is.
+	s.closeView()
 	s.closePanel()
 	info := c.Info()
 	if _, err := os.Stat(info.Path); err == nil && info.Resume != "" {
@@ -1002,6 +1010,13 @@ func (u *UI) openPanel(cols, rows int) (*term.Panel, error) {
 		return nil, errors.New("there is no terminal to draw on")
 	}
 	return term.OpenPanel(u.t, cols, rows, u.m.Width, u.caps.SynchronizedOutput)
+}
+
+func (u *UI) openView(cols, rows int) (*term.Panel, error) {
+	if u.t == nil {
+		return nil, errors.New("there is no terminal to draw on")
+	}
+	return term.OpenView(u.t, cols, rows, u.m.Width, u.caps.SynchronizedOutput)
 }
 
 func (u *UI) size() (cols, rows int, ok bool) {

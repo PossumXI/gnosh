@@ -597,8 +597,9 @@ func TestHooks(t *testing.T) {
 	g.once("warning: hook: Stop hook `check.sh` could not evaluate")
 	g.ev(hookEvent("SessionStart", "", "", "none"))
 	g.committedLacks("SessionStart hook")
-	// With detail on, the silent ones are shown too.
-	g.keys(`<Ctrl+O>`).ev(hookEvent("SessionStart", "", "", "none"))
+	// With detail on (the verbose option), the silent ones are shown too.
+	g.s.detail = true
+	g.ev(hookEvent("SessionStart", "", "", "none"))
 	g.once("note: hook: SessionStart hook `check.sh` had nothing to say")
 }
 
@@ -905,8 +906,8 @@ type facts map[string]string
 
 func (f facts) StatusFacts() map[string]string { return f }
 
-// The model's reasoning is folded to one line unless detail is on, and
-// can be read back with Ctrl+O.
+// The model's reasoning is folded to one line unless detail is on (the
+// verbose option), when it is written out as it arrives.
 func TestThinking(t *testing.T) {
 	each(t, func(t *testing.T, cols int) {
 		g := newRig(t, cols, 24, text.NoColor)
@@ -915,13 +916,9 @@ func TestThinking(t *testing.T) {
 		g.liveHas("~ thinking", "change the one line")
 		g.committedLacks("First I should read the file")
 		g.wait(4*time.Second).ev(said("Done.\n"), replyEnd(core.StopEndTurn))
-		g.once("~ thought for 4s").committedLacks("First I should read the file")
-		g.keys(`<Ctrl+O>`)
-		g.once("First I should read the file.", "~ thinking, of the reply before").liveHas("Detail on")
-		if !g.s.detail {
-			t.Fatal("Ctrl+O did not turn detail on")
-		}
+		g.once("~ thought for 4s · Ctrl+O shows it").committedLacks("First I should read the file")
 		// With detail on it is written out as it arrives.
+		g.s.detail = true
 		g.ev(request(2), thought("Now the second step.\nAnd a third "))
 		g.once("Now the second step.").committedLacks("And a third")
 		g.liveHas("And a third")

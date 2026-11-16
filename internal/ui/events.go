@@ -64,7 +64,6 @@ func (s *session) handle(ev any) {
 		s.goIdle()
 	case *agent.TurnStartEvent:
 		s.busy = true
-		s.foldedOld = len(s.folded) > 0
 		s.setPhase(phStarting)
 	case *agent.PromptEvent:
 		s.prompt(ev)
@@ -354,63 +353,6 @@ func (s *session) thought(words string) {
 	s.put(rows...)
 }
 
-// foldedThought is the reasoning of one reply that was shown folded, and
-// how long the model took over it.
-type foldedThought struct {
-	words string
-	took  time.Duration
-}
-
-// foldedMax is the most reasoning, in bytes, that is kept for Ctrl+O. A
-// turn that thought more than this loses its oldest thoughts first.
-const foldedMax = 1 << 20
-
-// fold keeps a thought that was shown folded. The first of a new turn
-// takes the place of the last turn's.
-func (s *session) fold(words string, took time.Duration) {
-	if s.foldedOld {
-		s.folded, s.foldedOld = nil, false
-	}
-	if strings.TrimSpace(words) == "" {
-		return
-	}
-	s.folded = append(s.folded, foldedThought{words: words, took: took})
-	size := 0
-	for i := len(s.folded) - 1; i >= 0; i-- {
-		if size += len(s.folded[i].words); size > foldedMax && i < len(s.folded)-1 {
-			s.folded = append([]foldedThought(nil), s.folded[i+1:]...)
-			break
-		}
-	}
-}
-
-// unfold writes the thoughts that were shown folded into the scrollback,
-// oldest first, and lets go of them.
-func (s *session) unfold() {
-	n := 0
-	for _, th := range s.folded {
-		if len(s.thinkRows(th.words, s.cols)) > 0 {
-			n++
-		}
-	}
-	i := 0
-	for _, th := range s.folded {
-		rows := s.thinkRows(th.words, s.cols)
-		if len(rows) == 0 {
-			continue
-		}
-		i++
-		head := " thinking, of the reply before"
-		if n > 1 {
-			head = fmt.Sprintf(" thinking, %d of %d, for %s", i, n, span(th.took))
-		}
-		s.begin(blkThinking)
-		s.put(s.th.Thinking.Render(s.th.ThinkMark + head))
-		s.put(rows...)
-	}
-	s.folded, s.foldedOld = nil, false
-}
-
 // endThinking closes the reasoning that was arriving.
 func (s *session) endThinking() {
 	rp := &s.reply
@@ -424,9 +366,9 @@ func (s *session) endThinking() {
 		rp.thinkRest = ""
 		return
 	}
-	// Folded: one line says that the model thought and for how long, and
-	// the words are kept so that Ctrl+O can show them afterwards.
-	s.fold(rp.think.String(), took)
+	// Folded: one line says that the model thought and for how long. The
+	// words are in the session's file, where the transcript view (Ctrl+O)
+	// shows them.
 	rp.thinkRest = ""
 	line := s.th.Thinking.Render(s.th.ThinkMark+" thought for "+span(took)) +
 		s.th.Quiet.Render(s.th.Sep+"Ctrl+O shows it")
