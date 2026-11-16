@@ -93,6 +93,10 @@ Built:
   a terminal on the other side of ssh or tmux too. Your prompts are white
   and the model's answers green; on a terminal that says its background is
   light, both take colours that read there.
+- **What changed**, as Claude Code's `/release-notes`: a build made for
+  installing carries the subjects of the commits it was made from;
+  `/release-notes` lists them, and after `/restart` into a newer build
+  the session says what changed since the one it replaced.
 - **Themes**, as Claude Code's `/theme`: `auto` (for the background the
   terminal says it has), `dark`, `light`, or `ansi` (the terminal's own
   sixteen colours). Bare `/theme` opens a picker; `/theme light` or

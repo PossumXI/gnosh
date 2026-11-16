@@ -136,9 +136,12 @@ type program struct {
 	// one that /restart started (RestartedEnv): the session it opens is
 	// still on the screen.
 	restarted bool
-	started   os.FileInfo
-	restartMu sync.Mutex
-	restart   []string
+	// restartedFrom is the BuildID of the gnosh that /restart came from,
+	// when it said (whatsNew).
+	restartedFrom string
+	started       os.FileInfo
+	restartMu     sync.Mutex
+	restart       []string
 	// detached is what /background asked to go on with, once the session
 	// is closed, instead of a restart: the run's log, its prompt and the
 	// session it resumes.
@@ -219,7 +222,10 @@ func newProgram(o Options) *program {
 	if p.env[RestartedEnv] != "" {
 		// /restart's word to the gnosh it starts, and no one else's: it
 		// is gone before anything reads the environment.
-		p.restarted = p.env[RestartedEnv] == "1"
+		p.restarted = true
+		if from := p.env[RestartedEnv]; from != "1" {
+			p.restartedFrom = from
+		}
 		delete(p.env, RestartedEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, RestartedEnv+"=") })
 	}

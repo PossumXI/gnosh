@@ -571,6 +571,8 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.startStatusLine()
 	l.watchFiles(l.ctx)
 	l.startInitialPrompt()
+	// A session /restart opened in a newer build says what changed.
+	l.whatsNew()
 	return l, nil
 }
 

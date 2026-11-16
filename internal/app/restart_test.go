@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/gnosh-ai/gnosh/internal/buildinfo"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,8 +32,8 @@ func TestRestart(t *testing.T) {
 		o.Executable = exe
 		o.Relaunch = func(args, env []string) error {
 			started = append(started, args)
-			if !slices.Contains(env, RestartedEnv+"=1") {
-				t.Errorf("the gnosh /restart starts is not told it was restarted: %q", env)
+			if !slices.Contains(env, RestartedEnv+"="+buildinfo.BuildID) {
+				t.Errorf("the gnosh /restart starts is not told it was restarted, and from which build: %q", env)
 			}
 			if len(w.Sessions()) != 1 {
 				t.Errorf("gnosh starts again with %d session files", len(w.Sessions()))
