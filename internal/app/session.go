@@ -567,9 +567,11 @@ func (l *live) openTranscript(ctx context.Context) error {
 			return fmt.Errorf("the session %s could not be opened again: %w", l.reopen, err)
 		}
 		l.ts = ts
+		// (/resume opens a session whose conversation is not on the
+		// screen; a rewind's and a branch's is.)
+		l.showPast = l.source == "resume"
 		if l.source != "fork" {
 			l.source = "resume"
-			l.showPast = showPastOf(ts.Entries(), l.p.now())
 		}
 		return nil
 	}
@@ -657,26 +659,10 @@ func (l *live) openTranscript(ctx context.Context) error {
 		ts, l.source = copied, "fork"
 	}
 	l.ts = ts
-	l.showPast = l.source == "resume" && showPastOf(ts.Entries(), l.p.now())
+	// (Not for a gnosh /restart started: the session it opens is on the
+	// screen already.)
+	l.showPast = l.source == "resume" && !l.p.restarted
 	return l.nameSession()
-}
-
-// pastShownFor is how recently a session may have been written to and
-// still be on the screen: a session opened again within it was closed
-// moments ago in front of the person (/restart, a rewind), and its
-// conversation is not shown again.
-const pastShownFor = 15 * time.Second
-
-// showPastOf says whether the interface shows the end of a session's
-// conversation as the session opens again: when it has one, and it was
-// last written to longer ago than pastShownFor.
-func showPastOf(entries []transcript.Entry, now time.Time) bool {
-	for i := len(entries) - 1; i >= 0; i-- {
-		if !entries[i].Timestamp.IsZero() {
-			return now.Sub(entries[i].Timestamp) > pastShownFor && slices.ContainsFunc(entries, func(e transcript.Entry) bool { return e.Type == transcript.TypeUser })
-		}
-	}
-	return false
 }
 
 // nameSession gives the session the name -n asks for. A name the person

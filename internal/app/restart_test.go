@@ -28,8 +28,11 @@ func TestRestart(t *testing.T) {
 	var started [][]string
 	s := sitWith(t, w, func(o *Options) {
 		o.Executable = exe
-		o.Relaunch = func(args []string) error {
+		o.Relaunch = func(args, env []string) error {
 			started = append(started, args)
+			if !slices.Contains(env, restartedEnv+"=1") {
+				t.Errorf("the gnosh /restart starts is not told it was restarted: %q", env)
+			}
 			if len(w.Sessions()) != 1 {
 				t.Errorf("gnosh starts again with %d session files", len(w.Sessions()))
 			}
@@ -78,7 +81,7 @@ func TestRestart(t *testing.T) {
 	started = nil
 	s = sitWith(t, w, func(o *Options) {
 		o.Executable = exe
-		o.Relaunch = func(args []string) error {
+		o.Relaunch = func(args, env []string) error {
 			started = append(started, args)
 			return os.ErrPermission
 		}

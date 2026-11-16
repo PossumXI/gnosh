@@ -41,7 +41,7 @@ func (p *program) detachedPlan() *detachPlan {
 func (p *program) detach(args []string, d *detachPlan) int {
 	run := append(append(args, "--print", "--"), d.prompt)
 	p.logHead(d.log, d.session, d.prompt)
-	pid, err := p.o.Detach(run, d.log)
+	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), d.log)
 	if err != nil {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
 		return cli.ExitFailure
@@ -100,7 +100,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	run := append(args, "--print", "--", prompt)
 	log := filepath.Join(l.crashDir(), id+".background.log")
 	l.p.logHead(log, id, prompt)
-	pid, err := l.p.o.Detach(run, log)
+	pid, err := l.p.o.Detach(run, slices.Clone(l.p.o.Environ), log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}

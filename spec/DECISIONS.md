@@ -880,6 +880,8 @@ or kept with the reason said (27).
     header, so a session that a /background or /fork run had worked on
     showed nothing of what it did. Now its last prompt and the model's
     last answer to it are drawn (at most 30 lines of the answer; Ctrl+O
-    shows everything), under a quiet line saying so. Not when the
-    session was written to less than 15 s before it opened (/restart, a
-    rewind): its conversation is still on the screen.
+    shows everything), under a quiet line saying so: on -r and -c and on
+    /resume. Not after a rewind or /branch, nor in the gnosh /restart
+    starts, whose conversation is still on the screen: /restart says so
+    with GNOSH_RESTARTED=1, which gnosh takes out of its environment as it
+    starts.

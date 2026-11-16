@@ -18,7 +18,7 @@ func TestBackgroundCommand(t *testing.T) {
 	var got [][]string
 	var logs []string
 	s := sitWith(t, w, func(o *Options) {
-		o.Detach = func(args []string, log string) (int, error) {
+		o.Detach = func(args, env []string, log string) (int, error) {
 			got, logs = append(got, args), append(logs, log)
 			return 4242, nil
 		}
@@ -63,7 +63,7 @@ func TestForkCommand(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."}, apptest.Reply{Text: "Still here."})
 	var got [][]string
 	s := sitWith(t, w, func(o *Options) {
-		o.Detach = func(args []string, log string) (int, error) {
+		o.Detach = func(args, env []string, log string) (int, error) {
 			got = append(got, args)
 			return 4343, nil
 		}

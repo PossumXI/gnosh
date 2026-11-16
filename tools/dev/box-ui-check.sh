@@ -60,7 +60,9 @@
 #   keys        a keybindings.json: Ctrl+K stashes the box and brings it
 #               back, Ctrl+Y runs /cost, and the prompt then goes out
 #   bgsession   /background: the session ends in the pane and goes on as a
-#               run of its own, whose log gets the model's answer
+#               run of its own, whose log gets the model's answer; once the
+#               run lets go of it, gnosh -r opens it again and shows where
+#               it left off
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -175,7 +177,8 @@ if [ "$scenario" = restart ]; then
 	mkdir -p "$T/bin" && cp "$bin" "$T/bin/gnosh" || exit 1
 	bin=$T/bin/gnosh
 fi
-tmux new-session -d -s "$S" -x 110 -y 40 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $bin $flags"
+envs="env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8"
+tmux new-session -d -s "$S" -x 110 -y 40 "$envs $bin $flags"
 sleep 4
 echo "=== before"
 tmux capture-pane -p -t "$S"
@@ -290,7 +293,8 @@ bgsession)
 		screen | grep -q "done in" && break
 	done
 	tmux send-keys -t "$S" "/background Reply with exactly these three words: all is well" Enter
-	done_when() { grep -qi "all is well" "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null; }
+	# (The log's first line holds the prompt: the answer is a line of its own.)
+	done_when() { grep -qix "all is well" "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null; }
 	;;
 keys)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well"
@@ -331,6 +335,16 @@ echo "=== after ($i s)"
 screen
 if [ "$scenario" = bgsession ]; then
 	echo "=== the run's log: $(cat "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null | tr '\n' ' ')"
+	log=$(ls "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null | head -1)
+	id=$(basename "$log" .background.log)
+	for i in $(seq 1 120); do
+		$envs $bin session list 2>/dev/null | grep "$id" | grep -q "(open now)" || break
+		sleep 1
+	done
+	tmux respawn-pane -k -t "$S" "$envs $bin -r $id"
+	sleep 6
+	echo "=== opened again with gnosh -r"
+	screen | grep -v '^ *$' | tail -12
 fi
 if [ "$scenario" = config ]; then
 	echo "=== state file: $(tr -d '\n' < "$T/data/gnosh/state.json" 2>/dev/null || echo none)"

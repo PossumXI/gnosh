@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -31,10 +32,16 @@ func (p *program) restartArgs() []string {
 	return p.restart
 }
 
+// restartedEnv is set for the gnosh that /restart starts, so that it knows
+// the conversation of the session it opens is still on the screen (and
+// draws no recap of it). gnosh takes it out of its environment as it
+// starts, so nothing it runs sees it.
+const restartedEnv = "GNOSH_RESTARTED"
+
 // relaunch starts gnosh again with args, in place of this process. It
 // returns only when that could not be done, with the exit code.
 func (p *program) relaunch(args []string) int {
-	err := p.o.Relaunch(args)
+	err := p.o.Relaunch(args, append(slices.Clone(p.o.Environ), restartedEnv+"=1"))
 	p.errf("gnosh could not start again (%v). The session is kept: gnosh %s opens it again.", err, shellquote.Words(args))
 	return cli.ExitFailure
 }

@@ -76,11 +76,11 @@ func main() {
 		Build:        cli.BuildFromInfo(info).WithLinkedTime(buildinfo.BuildTime),
 		BuildID:      buildinfo.BuildID,
 		Executable:   self,
-		Relaunch: func(args []string) error {
-			return syscall.Exec(self, append([]string{os.Args[0]}, args...), os.Environ())
+		Relaunch: func(args, env []string) error {
+			return syscall.Exec(self, append([]string{os.Args[0]}, args...), env)
 		},
-		Detach: func(args []string, log string) (int, error) {
-			return detach(self, args, log)
+		Detach: func(args, env []string, log string) (int, error) {
+			return detach(self, args, env, log)
 		},
 	}))
 }
