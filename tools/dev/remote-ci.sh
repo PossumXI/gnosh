@@ -47,8 +47,13 @@ sha=$(git rev-parse --short=12 "$ref^{commit}")
 dir="$ROOT/gnosh-$sha"
 SSH="ssh ${KEY:+-i $KEY -o IdentitiesOnly=yes} -o BatchMode=yes -o ConnectTimeout=20"
 
+# Room first. The copies of other commits are kept for a look afterwards,
+# the newest eight of them; and Go's build cache, which grew to 39G in five
+# days on the devbox and filled its disk (2026-11-16), is cleared whenever
+# fewer than 20G are free.
+prep="ls -1dt $ROOT/gnosh-* 2>/dev/null | tail -n +9 | xargs -r rm -rf; mkdir -p $ROOT; free=\$(df -Pk $ROOT | awk 'NR==2 {print \$4}'); [ \"\$free\" -gt 20971520 ] || { echo \"remote-ci: \$((free / 1048576))G free: clearing Go's build cache\"; /usr/local/go/bin/go clean -cache; }"
 # shellcheck disable=SC2086,SC2029
-git archive "$sha" | $SSH "$HOST" "rm -rf $dir && mkdir -p $dir && tar -x -C $dir"
+git archive "$sha" | $SSH "$HOST" "$prep; rm -rf $dir && mkdir -p $dir && tar -x -C $dir"
 
 run="cd $dir && export PATH=/usr/local/go/bin:\$PATH && echo \"commit $sha in $dir\""
 if [ "$tidy" = 1 ]; then
