@@ -2,6 +2,7 @@ package text
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -13,20 +14,24 @@ import (
 // What is taken out:
 //
 //   - tag characters (U+E0000 to U+E007F), which spell text no terminal
-//     draws, except where they make an emoji flag (a black flag, tag
-//     letters, and the cancel tag that ends them);
+//     draws, except in the three subdivision flags emoji have (England,
+//     Scotland, Wales), and the code points after them that nothing is
+//     assigned to;
 //   - the controls that change the order text is drawn in (U+202A to
 //     U+202E, U+2066 to U+2069) and the marks that nudge it (U+200E,
 //     U+200F, U+061C);
 //   - zero-width spaces and joiners (U+200B, U+2060 to U+2064, U+FEFF,
-//     U+180E), the soft hyphen, and the format controls of interlinear
-//     notes and of music (U+FFF9 to U+FFFB, U+1D173 to U+1D17A);
+//     U+180E), the soft hyphen, the combining grapheme joiner, the old
+//     format controls (U+206A to U+206F), the Hangul fillers, and the
+//     format controls of interlinear notes and of music (U+FFF9 to
+//     U+FFFB, U+1D173 to U+1D17A);
 //   - the zero-width joiner and non-joiner (U+200D, U+200C), except
 //     between two characters that are not ASCII, where Persian and the
 //     scripts of India write them and emoji are joined with them;
 //   - variation selectors (U+FE00 to U+FE0F), except one right after a
-//     character that is not ASCII, or after a digit, # or * that a keycap
-//     mark (U+20E3) follows, which is how emoji are written; and those
+//     symbol, a mark of punctuation or a Han character, or after a digit,
+//     # or * that a keycap mark (U+20E3) follows, which is how emoji are
+//     written; and those
 //     from U+E0100 to U+E01EF, except one right after a Han character,
 //     which is how its variants are written.
 
@@ -45,9 +50,25 @@ type Invisible struct {
 // CleanInvisible returns s without the characters a terminal draws as
 // nothing (see above), and what it took out.
 func CleanInvisible(s string) (string, Invisible) {
+	out, _, found := clean(s, nil)
+	return out, found
+}
+
+// CleanInvisibleAt is CleanInvisible that also says where offsets into s
+// land in what it returns: each byte offset in at, which must stand on
+// character boundaries, comes back as the offset of the same place in the
+// result. It is how a paste inside a prompt keeps its bounds when the
+// whole prompt is cleaned at once. When s is not UTF-8, the places cannot
+// be told and the offsets come back nil.
+func CleanInvisibleAt(s string, at []int) (string, []int, Invisible) {
+	return clean(s, at)
+}
+
+// clean is CleanInvisible and CleanInvisibleAt.
+func clean(s string, at []int) (string, []int, Invisible) {
 	var found Invisible
 	if !mayHoldInvisible(s) {
-		return s, found
+		return s, at, found
 	}
 	src := s
 	if !utf8.ValidString(src) {
@@ -56,17 +77,18 @@ func CleanInvisible(s string) (string, Invisible) {
 		// would join them into a character, which may be one of these
 		// ("\xe2", a zero-width space, "\x80\x8b" is another one).
 		src = strings.ToValidUTF8(src, string(utf8.RuneError))
+		at = nil
 	}
 	var b strings.Builder
 	b.Grow(len(src))
-	run := 0     // invisible characters taken out in a row
-	prev := '\n' // the last character kept
+	var cuts [][2]int // the byte ranges of src taken out
+	run := 0          // invisible characters taken out in a row
+	prev := '\n'      // the last character kept
 	for i := 0; i < len(src); {
 		r, n := utf8.DecodeRuneInString(src[i:])
 		if r == 0x1F3F4 {
-			// A black flag with tag letters after it and the cancel tag
-			// at their end is an emoji flag (England, Scotland, Wales):
-			// kept whole.
+			// The flags of England, Scotland and Wales: a black flag, tag
+			// letters, and the cancel tag that ends them. Kept whole.
 			if end := flagTags(src, i+n); end > 0 {
 				b.WriteString(src[i:end])
 				i, prev, run = end, 0xE007F, 0
@@ -84,15 +106,30 @@ func CleanInvisible(s string) (string, Invisible) {
 			i += n
 			continue
 		}
+		cuts = append(cuts, [2]int{i, i + n})
 		found.Removed++
 		run++
 		found.Hiding = found.Hiding || hiding || run >= 3
 		i += n
 	}
 	if found.Removed == 0 {
-		return s, found
+		return s, at, found
 	}
-	return b.String(), found
+	var moved []int
+	if at != nil {
+		moved = make([]int, len(at))
+		for k, off := range at {
+			gone := 0
+			for _, c := range cuts {
+				if c[0] >= off {
+					break
+				}
+				gone += min(c[1], off) - c[0]
+			}
+			moved[k] = off - gone
+		}
+	}
+	return b.String(), moved, found
 }
 
 // mayHoldInvisible reports whether s has a character beyond ASCII at all:
@@ -107,17 +144,22 @@ func mayHoldInvisible(s string) bool {
 }
 
 // flagTags returns where an emoji flag's tags end when the text from at
-// holds them: one or more tag letters (U+E0020 to U+E007E) and the cancel
-// tag (U+E007F). It returns 0 when it does not.
+// holds the tags of one of the three subdivision flags emoji have (gbeng,
+// gbsct, gbwls) and the cancel tag after them. It returns 0 for any other
+// run of tags, which is text hidden behind a black flag.
 func flagTags(s string, at int) int {
-	letters := 0
+	var letters []byte
 	for i := at; i < len(s); {
 		r, n := utf8.DecodeRuneInString(s[i:])
 		switch {
-		case r >= 0xE0020 && r <= 0xE007E:
-			letters++
-		case r == 0xE007F && letters > 0:
-			return i + n
+		case r >= 0xE0061 && r <= 0xE007A && len(letters) < 5:
+			letters = append(letters, byte(r-0xE0000))
+		case r == 0xE007F:
+			switch string(letters) {
+			case "gbeng", "gbsct", "gbwls":
+				return i + n
+			}
+			return 0
 		default:
 			return 0
 		}
@@ -143,7 +185,7 @@ func invisible(r, prev, next rune) (cut, hiding bool) {
 		return !((base(prev) || selector(prev)) && base(next)), false
 	case r >= 0xFE00 && r <= 0xFE0F:
 		keycap := (prev >= '0' && prev <= '9' || prev == '#' || prev == '*') && next == 0x20E3
-		return !(base(prev) || keycap), false
+		return !(base(prev) && selectable(prev) || keycap), false
 	case r >= 0xE0100 && r <= 0xE01EF:
 		return !han(prev), false // the variants of Han characters
 	}
@@ -156,7 +198,9 @@ func invisible(r, prev, next rune) (cut, hiding bool) {
 func alwaysCut(r rune) bool {
 	return r == 0x200E || r == 0x200F || r == 0x061C || r == 0x200B || r >= 0x2060 && r <= 0x2064 ||
 		r == 0xFEFF || r == 0x180E || r == 0xAD || r >= 0xFFF9 && r <= 0xFFFB || r >= 0x1D173 && r <= 0x1D17A ||
-		r >= 0xE0000 && r <= 0xE007F || r >= 0x202A && r <= 0x202E || r >= 0x2066 && r <= 0x2069
+		r >= 0xE0000 && r <= 0xE007F || r >= 0x202A && r <= 0x202E || r >= 0x2066 && r <= 0x2069 ||
+		r >= 0x206A && r <= 0x206F || r == 0x034F || r == 0x115F || r == 0x1160 || r == 0x3164 || r == 0xFFA0 ||
+		r >= 0xE0080 && r <= 0xE00FF || r >= 0xE01F0 && r <= 0xE0FFF
 }
 
 // joiner reports whether r is the zero-width joiner or non-joiner.
@@ -176,6 +220,16 @@ func base(r rune) bool {
 		return false
 	}
 	return !alwaysCut(r) && !joiner(r) && !selector(r)
+}
+
+// selectable reports whether r is a character a variation selector from
+// U+FE00 to U+FE0F may follow: a symbol or a mark of punctuation (the
+// emoji, the copyright sign, a double exclamation mark), a Han character,
+// or U+2139, the one letter among the emoji. A selector after a letter or
+// a digit draws nothing and changes nothing,
+// and one after each letter of a text is a way to hide bytes in it.
+func selectable(r rune) bool {
+	return r == 0x2139 || han(r) || unicode.IsSymbol(r) || unicode.IsPunct(r)
 }
 
 // han reports whether r is a Han character, which the selectors from

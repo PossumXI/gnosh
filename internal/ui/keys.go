@@ -380,7 +380,7 @@ func (s *session) box(ev term.Event, k *term.Key) {
 		case editor.ModeCommand:
 			s.command(d)
 		default:
-			if w := strings.ToLower(strings.TrimSpace(d.Text)); (w == "exit" || w == "quit") && len(d.Pastes) == 0 {
+			if leaveWord(d.Text) && len(d.Pastes) == 0 {
 				// The one word leaves, as /exit does and as it does in
 				// Claude Code. To send the word to the model, say more.
 				s.command(editor.Draft{Text: "/exit"})

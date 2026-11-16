@@ -41,6 +41,14 @@ func TestCleanInvisible(t *testing.T) {
 		{"a pirate flag stays", "\U0001F3F4\u200D\u2620\uFE0F", "\U0001F3F4\u200D\u2620\uFE0F", 0, false},
 		{"non-ASCII text with nothing to take out", "caf\u00E9 \u65E5\u672C", "caf\u00E9 \u65E5\u672C", 0, false},
 		{"broken bytes around a zero-width space", "\xe2\u200B\x80\x8b", "\uFFFD\uFFFD", 1, false},
+		{"a black flag hiding a message", "\U0001F3F4\U000E0069\U000E0067\U000E006E\U000E006F\U000E0072\U000E0065\U000E0061\U000E006C\U000E006C\U000E007F", "\U0001F3F4", 10, true},
+		{"the flag of Scotland stays", "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F", "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F", 0, false},
+		{"a selector after a letter", "h\uFE01\u00E9\uFE02llo", "h\u00E9llo", 2, false},
+		{"a heart keeps its selector", "\u2764\uFE0F", "\u2764\uFE0F", 0, false},
+		{"the information sign keeps its selector", "\u2139\uFE0F", "\u2139\uFE0F", 0, false},
+		{"a Hangul filler", "a\u3164b", "ab", 1, false},
+		{"an old format control", "a\u206Bb", "ab", 1, false},
+		{"an unassigned tag", "a\U000E0080b", "ab", 1, false},
 		{"a no-break space before a joiner", "\u0645\u00A0\u200C\u062E", "\u0645\u00A0\u062E", 1, false},
 	} {
 		got, found := CleanInvisible(c.in)
@@ -72,4 +80,27 @@ func FuzzCleanInvisible(f *testing.F) {
 			t.Fatalf("%+q cleaned to %+q, which cleans again to %+q", s, got, again)
 		}
 	})
+}
+
+// CleanInvisibleAt says where places in the text land once it is cleaned:
+// a paste's bounds move back by what was taken out before them.
+func TestCleanInvisibleAt(t *testing.T) {
+	s := "ab\u200Bcd\u200B\u200Bef"
+	got, at, found := CleanInvisibleAt(s, []int{0, 2, 5, 7, 13, len(s)})
+	if got != "abcdef" || found.Removed != 3 {
+		t.Fatalf("CleanInvisibleAt = %+q, %+v", got, found)
+	}
+	want := []int{0, 2, 2, 4, 4, 6}
+	for i := range want {
+		if at[i] != want[i] {
+			t.Errorf("offset %d: got %v, want %v", i, at, want)
+			break
+		}
+	}
+	if _, at, _ := CleanInvisibleAt("plain", []int{0, 3}); len(at) != 2 || at[1] != 3 {
+		t.Errorf("a plain text's offsets moved: %v", at)
+	}
+	if _, at, _ := CleanInvisibleAt("\xe2\u200Bx", []int{0}); at != nil {
+		t.Errorf("offsets into text that is not UTF-8 came back: %v", at)
+	}
 }

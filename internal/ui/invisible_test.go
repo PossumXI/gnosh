@@ -57,13 +57,31 @@ func TestInvisibleCharactersTakenOut(t *testing.T) {
 		t.Errorf("the paste is marked at %v, want 6 to 906", spans)
 	}
 
+	// A shell line is never run cleaned: what was taken out changes what
+	// it runs.
+	g.s.input(pasteOf("!rm report\u200B.txt"))
+	g.frame().keys(`<Enter>`)
+	if got := g.c.sent(); len(got) != 3 || g.box() != "!rm report.txt" {
+		t.Fatalf("sent %q, box %+q: want the shell line back in the box", got, g.box())
+	}
+	g.committedHas("from the shell line, which changes what it runs; nothing was run")
+	g.keys(`<Ctrl+U> <Backspace>`)
+
+	// Nor is the word that leaves the session.
+	g.s.input(pasteOf("exit\u200B"))
+	g.frame().keys(`<Enter>`)
+	if g.box() != "exit" {
+		t.Fatalf("box %+q: want exit back in the box", g.box())
+	}
+	g.keys(`<Ctrl+U>`)
+
 	// Taken out, a space that hid a command makes one: it waits too.
 	g.s.input(pasteOf("\u200B/exit"))
 	g.frame().keys(`<Enter>`)
 	if got := g.c.sent(); len(got) != 3 || g.box() != "/exit" {
 		t.Fatalf("sent %q, box %+q: want nothing sent and /exit in the box", got, g.box())
 	}
-	g.committedHas("what is left begins as a command")
+	g.committedHas("what is left reads as a command")
 }
 
 // cleanDraft cleans what was typed and each paste, and keeps the paste
@@ -76,5 +94,22 @@ func TestCleanDraft(t *testing.T) {
 	}
 	if same, found := cleanDraft(editor.Draft{Text: "plain"}); same.Text != "plain" || found.Removed != 0 {
 		t.Errorf("a plain draft changed: %+q", same.Text)
+	}
+}
+
+// A joiner beside a paste is judged with its neighbour inside the paste:
+// Persian's non-joiner before a pasted word stays.
+func TestCleanDraftAcrossAPaste(t *testing.T) {
+	paste := strings.Repeat("\u062E", 900)
+	d := editor.Draft{Text: "\u0645\u200C" + paste, Pastes: []editor.Span{{Start: 5, End: 5 + len(paste)}}}
+	got, found := cleanDraft(d)
+	if found.Removed != 0 || got.Text != d.Text {
+		t.Errorf("the non-joiner before the paste was taken out (%d removed)", found.Removed)
+	}
+	d.Text = "x\u200B" + paste + "\u200By"
+	d.Pastes = []editor.Span{{Start: 4, End: 4 + len(paste)}}
+	got, found = cleanDraft(d)
+	if found.Removed != 2 || got.Text != "x"+paste+"y" || len(got.Pastes) != 1 || got.Pastes[0] != (editor.Span{Start: 1, End: 1 + len(paste)}) {
+		t.Errorf("cleanDraft = %d removed, pastes %v", found.Removed, got.Pastes)
 	}
 }

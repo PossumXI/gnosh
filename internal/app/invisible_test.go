@@ -25,7 +25,7 @@ func TestPlainTakesOutInvisibleCharacters(t *testing.T) {
 	s.typeLine("hi\U000E0069\U000E0067")
 	s.see("Took out 2 invisible characters that could hide text or reorder it; nothing was sent. What is left: hi")
 	s.typeLine("\u200B/exit")
-	s.see("what is left begins as a command, so it was not run: /exit")
+	s.see("what is left reads as a command, so it was not run: /exit")
 	if n := len(w.Model.Requests()); n != 1 {
 		t.Errorf("%d requests: a line that was held back went out", n)
 	}

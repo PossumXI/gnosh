@@ -839,8 +839,13 @@ func (f *plain) cleanLine(line string) (string, bool) {
 	case found.Hiding:
 		f.note("Took out %s that could hide text or reorder it; nothing was sent. What is left: %s", what, visible(clean))
 		return "", false
-	case (strings.HasPrefix(lead, "/") || strings.HasPrefix(lead, "!")) && !strings.HasPrefix(typed, "/") && !strings.HasPrefix(typed, "!"):
-		f.note("Took out %s, and what is left begins as a command, so it was not run: %s", what, visible(clean))
+	case strings.HasPrefix(typed, "!"):
+		// What is taken out of a command changes what it does, so it is
+		// never run before it is read.
+		f.note("Took out %s from the shell line, which changes what it runs, so it was not run: %s", what, visible(clean))
+		return "", false
+	case (strings.HasPrefix(lead, "/") || strings.HasPrefix(lead, "!")) && !strings.HasPrefix(typed, "/"):
+		f.note("Took out %s, and what is left reads as a command, so it was not run: %s", what, visible(clean))
 		return "", false
 	}
 	f.note("Took out %s before sending the line.", what)
