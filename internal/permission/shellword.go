@@ -992,6 +992,13 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 		b.add(part)
 		return
 	}
+	if strings.HasPrefix(p.src[n:], ":}") {
+		// dash takes the } after the colon for the expansion's operator
+		// and reads on to a later }, expanding (and running) all that lies
+		// between; bash calls it a bad substitution (oracle seed 114).
+		p.fail("a ${name:} expansion, which dash reads on to a later }")
+		return
+	}
 	op := posixOp(p.src[n:])
 	if op == "" {
 		p.exoticParam(b, inDouble)

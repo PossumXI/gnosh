@@ -1012,6 +1012,8 @@ func TestReadings(t *testing.T) {
 		"taskset 0x1 make x":                 "make x",              // the command after taskset's mask
 		"echo 'make x' | sh":                 "make x",              // what echo prints, when it is plain
 		"coproc make x":                      "",                    // not followed at all
+		"du x${X:} y; echo #c $(make x) }":   "",                    // oracle seed 114: dash reads ${X: on to the later }
+		"echo \"${X:}\"":                     "",                    // in quotes too
 		"x=${y}'a[$(make x)]'; :":            "make x",              // text the shell may evaluate later
 		"eval 'ls '$X' > out'":               "ls ${GNOSH_UNKNOWN}", // what stands in an eval, whatever else is in it
 		// The second round. Where a shell runs less than the engine reads,
