@@ -60,7 +60,7 @@ S=gnosh-uicheck-$scenario
 flags=""
 hooks=""
 case "$scenario" in
-basic | mention | config | fork) ;;
+basic | mention | config | fork | model | transcript) ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel) flags="-y" ;;
@@ -68,7 +68,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript)" >&2
 	exit 2
 	;;
 esac
@@ -154,6 +154,20 @@ fork)
 	tmux send-keys -t "$S" "/countlines" Enter
 	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
 	;;
+model)
+	# The picker only: Esc keeps the model, so the router swaps nothing.
+	tmux send-keys -t "$S" "/model" Enter
+	done_when() { screen | grep -q "Which model?"; }
+	;;
+transcript)
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "done in" && break
+	done
+	tmux send-keys -t "$S" C-o
+	done_when() { screen | grep -q "transcript ·"; }
+	;;
 panel)
 	tmux send-keys -t "$S" "/panel" Enter
 	sleep 2
@@ -215,6 +229,14 @@ if [ "$scenario" = plan ]; then
 	echo "=== hello.txt: $(cat "$T/work/hello.txt" 2>/dev/null || echo none)"
 	tmux send-keys -t "$S" Escape
 	sleep 2
+fi
+if [ "$scenario" = model ] || [ "$scenario" = transcript ]; then
+	# Esc keeps the model; q leaves the view, and the screen is as it was.
+	if [ "$scenario" = model ]; then key=Escape; else key=q; fi
+	tmux send-keys -t "$S" "$key"
+	sleep 2
+	echo "=== after $key"
+	screen
 fi
 tmux send-keys -t "$S" "/exit" Enter
 sleep 2
