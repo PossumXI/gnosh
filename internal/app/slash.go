@@ -219,7 +219,7 @@ func (s *slashSet) own() []SlashCommand {
 			Run: func(context.Context, *SlashContext) error {
 				return errors.New("the side panel is the interactive interface's own; /panel does nothing here")
 			}},
-		{Name: "tasks", Aliases: []string{"bashes"}, Args: "[stop <id>]", Summary: "The commands running in the background, and the ones that ran; stop <id> stops one.", InRun: true, Run: l.slashTasks},
+		{Name: "tasks", Aliases: []string{"bashes"}, Args: "[stop <id>]", Summary: "The commands running in the background and the ones that ran, and the sessions sent to the background; stop <id> stops a command.", InRun: true, Run: l.slashTasks},
 		{Name: "cost", Aliases: []string{"usage", "stats"}, Summary: "What this session has used: requests, tokens and time, by model.", InRun: true, Run: l.slashCost},
 		{Name: "agents", Summary: "The kinds of sub-agent there are, and where each is defined.", InRun: true, Run: l.slashAgents},
 		{Name: "memory", Summary: "The context files the model is given (GNOSH.md, AGENTS.md, CLAUDE.md), and where to put one.", InRun: true, Run: l.slashMemory},

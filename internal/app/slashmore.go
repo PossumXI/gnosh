@@ -131,6 +131,23 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 			c.Say("     its session file: %s", b.output)
 		}
 	}
+	// The runs /background and /fork started from this folder, from any
+	// session: they outlive the session that started them.
+	for _, r := range l.backgroundRuns() {
+		state := "done, started " + roundTime(l.p.now().Sub(r.started)) + " ago"
+		if r.running {
+			state = "running for " + roundTime(l.p.now().Sub(r.started))
+		}
+		c.Say("%s  a session in the background, %s: %s", shortID(r.session), state, oneLine(firstOf(r.prompt, "(its prompt is not in its log)"), 100))
+		if r.running {
+			c.Say("     what it prints: %s; gnosh -r %s opens it once it is done", l.tilde(r.log), r.session)
+		} else {
+			if r.last != "" {
+				c.Say("     it ended with: %s", oneLine(r.last, 120))
+			}
+			c.Say("     gnosh -r %s opens it; all it printed is in %s", r.session, l.tilde(r.log))
+		}
+	}
 	if l.shell == nil {
 		if len(agents) == 0 {
 			c.Say("This session runs no commands, so none runs in the background.")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -141,4 +142,93 @@ func (p *program) logHead(log, session, prompt string) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "gnosh: %s the session %s goes on in the background with: %s\n", p.now().UTC().Format(time.RFC3339), session, oneLine(prompt, 400))
+}
+
+// backgroundRun is a run that /background or /fork started from this
+// folder: the session it goes on with, its prompt, when it started,
+// whether it still runs (it holds its session while it does), and, once
+// it is done, the last line it printed.
+type backgroundRun struct {
+	session, prompt, log string
+	started              time.Time
+	running              bool
+	last                 string
+}
+
+// runsShown is how many runs in the background /tasks lists, the newest
+// first, and runsKept how old a run's log may be to be among them.
+const (
+	runsShown = 10
+	runsKept  = 7 * 24 * time.Hour
+)
+
+// backgroundRuns are the runs in the background of this folder's sessions
+// whose logs were written in the last week, the newest first. A log a
+// session was sent to the background more than once holds every run; the
+// last is the one told.
+func (l *live) backgroundRuns() []backgroundRun {
+	dir := l.crashDir()
+	if dir == "" {
+		return nil
+	}
+	paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
+	var out []backgroundRun
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil || l.p.now().Sub(info.ModTime()) > runsKept {
+			continue
+		}
+		id := strings.TrimSuffix(filepath.Base(p), ".background.log")
+		r := backgroundRun{session: id, log: p, started: info.ModTime()}
+		r.prompt, r.last, r.started = readRunLog(p, r.started)
+		r.running = transcript.InUse(filepath.Join(dir, id+".jsonl"))
+		if r.running {
+			r.last = ""
+		}
+		out = append(out, r)
+	}
+	slices.SortFunc(out, func(a, b backgroundRun) int { return b.started.Compare(a.started) })
+	if len(out) > runsShown {
+		out = out[:runsShown]
+	}
+	return out
+}
+
+// runLogRead is how much of the end of a run's log is read: its last
+// run's first line and last line are in it, but for a run that printed
+// more, which then shows no prompt.
+const runLogRead = 1 << 20
+
+// readRunLog reads the last run in a run's log: the prompt its first line
+// gives (logHead), when it started (started, when the line gives no
+// time), and the last line it printed after that.
+func readRunLog(path string, started time.Time) (prompt, last string, when time.Time) {
+	when = started
+	f, err := os.Open(path)
+	if err != nil {
+		return "", "", when
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > runLogRead {
+		_, _ = f.Seek(info.Size()-runLogRead, io.SeekStart)
+	}
+	data, _ := io.ReadAll(io.LimitReader(f, runLogRead))
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, "gnosh: "); ok {
+			if at, after, ok := strings.Cut(rest, " the session "); ok {
+				if _, p, ok := strings.Cut(after, " goes on in the background with: "); ok {
+					prompt, last = p, ""
+					if t, err := time.Parse(time.RFC3339, at); err == nil {
+						when = t
+					}
+					continue
+				}
+			}
+		}
+		if line != "" {
+			last = line
+		}
+	}
+	return prompt, last, when
 }

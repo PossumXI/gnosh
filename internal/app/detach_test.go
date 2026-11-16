@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -136,4 +137,47 @@ func TestOpenSessionsMarked(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 	hasNot(t, "the list once it is closed", run(t, w, "session", "list").wantCode(t, 0).out, "(open now)")
+}
+
+// /tasks lists the sessions /background and /fork sent off from this
+// folder: the latest run of each, running (it holds its session) or done
+// with the last line it printed, and how to open it.
+func TestTasksListsRunsInTheBackground(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
+	s := sitWith(t, w, func(*Options) {}, "-y", "say hi")
+	s.see("Hi.")
+	s.see("-- done in ")
+	dir := filepath.Dir(w.Sessions()[0])
+	const done, running = "01a1e4c6-59d1-7a20-a39f-c815401a8978", "01a1e4c7-0000-7000-8000-000000000001"
+	write := func(name, text string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(done+".background.log", "gnosh: 2026-11-16T10:00:00Z the session "+done+" goes on in the background with: an older run\nold output\n"+
+		"gnosh: 2026-11-16T11:00:00Z the session "+done+" goes on in the background with: fix the flaky test\nworking\nAll 42 tests pass.\n\n")
+	write(running+".background.log", "gnosh: 2026-11-16T12:00:00Z the session "+running+" goes on in the background with: write the docs\n")
+	write(running+".jsonl", "")
+	f, err := os.Open(filepath.Join(dir, running+".jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	s.typeLine("/tasks")
+	s.see("a session in the background, running for ")
+	s.see("write the docs")
+	s.see("gnosh -r " + running + " opens it once it is done")
+	s.see("a session in the background, done, started ")
+	s.see("fix the flaky test")
+	s.see("it ended with: All 42 tests pass.")
+	s.see("gnosh -r " + done + " opens it; all it printed is in ")
+	if strings.Contains(s.out.String(), "an older run") {
+		t.Error("an earlier run in the same log was listed")
+	}
+	s.typeLine("/exit")
+	s.exit()
 }
