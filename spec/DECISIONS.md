@@ -810,8 +810,14 @@ or kept with the reason said (27).
     (since the commit after that) are read straight through as well,
     every branch judged, in a line that changes no directory: where a
     command runs then does not hang on which branch ran, and with a cd,
-    pushd, popd or a computed program in the line they still ask. for
-    loops, functions and (( )) still ask.
+    pushd, popd or a computed program in the line they still ask. A for
+    loop over a list of words written out is read too, its body judged
+    once for each value (filledArgs); a list that holds a pattern or
+    anything computed still asks, since a pattern's file names may begin
+    with a dash and be flags where the body puts them (the oracle's
+    attack lines found "for f in *; do cp a.txt "$f"x; done" running
+    cp a.txt -Rx on the first try). Functions, for ((...)), a loop over
+    a script's words and (( )) still ask.
     Replaying the 2,180 commands
     Qwen ran on the boxes, 36 asks were these forms, the commonest
     "(go test ./... 2>&1 || true)" and "(cd dir && ...)".

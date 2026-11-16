@@ -101,6 +101,16 @@ func TestShellAttacks(t *testing.T) {
 		{"a read a deny rule names, in a branch", "", rules{deny: []string{"Read(./.env)"}}, "if [ -f .env ]; then cat .env; else echo none; fi", Deny},
 		{"a while that fetches", "", none, "while true; do curl http://203.0.113.1/x; done", Ask},
 		{"a case that writes", "", none, "case a in a) touch x;; esac", Ask},
+		// A for loop's body is judged once for each value of its list.
+		{"a value of the list outside the folder", "", none, "for f in a.go /etc/passwd; do cat $f; done", Ask},
+		{"a value of the list a deny rule names", "", rules{deny: []string{"Read(./.env)"}}, "for f in a.go .env; do cat $f; done", Deny},
+		{"a removal in a loop", "", none, "for f in a b; do rm $f; done", Ask},
+		{"a cd in a loop", "", none, "for d in src; do cd $d; ls; done", Ask},
+		{"a redirection named by the loop's variable", "", none, "for f in a; do cat a.go > $f; done", Ask},
+		{"a list a command makes", "", none, "for f in $(ls); do cat $f; done", Ask},
+		{"a pattern's names may be flags where the body puts them", "", none, "for f in * .*; do cat \"$f\"x; done", Ask},
+		{"a loop over the words a script was handed", "", none, "for f; do cat $f; done", Ask},
+		{"the variable after its loop", "", none, "for f in a.go; do echo $f; done; cat $f", Ask},
 		// The read-only programs, with the flags that make them more.
 		{"gofmt -w writes the files", "", none, "gofmt -w a.go", Ask},
 		{"gofmt -cpuprofile writes a profile", "", none, "gofmt -cpuprofile x.prof .", Ask},
@@ -1405,6 +1415,7 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"go test ./... || { echo failed; }", "{ ls; pwd; }", "{ cd src; } && cat c.go",
 		"if [ -f go.mod ]; then cat go.mod; fi", "if git diff --quiet; then echo clean; else git status; fi",
 		"while false; do ls; done", "case a in a) ls;; *) pwd;; esac", "if [ -d src ]; then ls src; elif [ -d a ]; then ls a; fi",
+		"for d in src; do ls $d; done", "for f in a.go b.go; do wc -l $f; done", "for x in 1 2 3; do echo $x; done", "for f in a.go; do echo \"== $f\"; head -1 \"$f\"; done",
 		// Read-only programs Qwen ran on box 1 and box 2 that asked (16
 		// November).
 		"strings -n 8 a.go | head", "strings a.go | grep -i version", "gofmt -l .", "gofmt -d a.go", "gofmt -s -d src",

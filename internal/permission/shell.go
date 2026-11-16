@@ -140,6 +140,7 @@ type script struct {
 	subst      bool // a command or process substitution
 	subshell   bool // ( ... )
 	cond       bool // an if, a while, an until or a case
+	forLoop    bool // a for loop over a list of words
 	compound   bool // a for loop, a function, (( )) and the other forms not read through
 	background bool // a command followed by &
 	piped      bool // a | anywhere
@@ -787,9 +788,16 @@ func (p *parser) command() {
 		p.expect("done")
 	case "for":
 		p.pos += 3
-		p.sc.compound = true
 		loops := len(p.sc.loops)
 		p.forHead()
+		if len(p.sc.loops) > loops && !p.sc.loops[loops].args {
+			// A loop over a list of words: its body is judged once for
+			// each value (decideShell).
+			p.sc.forLoop = true
+		} else {
+			// for ((...)), and a loop over the words a script was handed.
+			p.sc.compound = true
+		}
 		p.expect("do")
 		from := len(p.sc.cmds)
 		p.body("done")
