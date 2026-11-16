@@ -162,6 +162,12 @@ func usableTarget(target string) bool {
 	return true
 }
 
+// declareHost tells a model how another machine comes to be one it may
+// use: the person declares it, in a file the session watches (box 1, 16
+// November: Qwen tried a machine it had just made ten times, as a host and
+// with ssh).
+const declareHost = `ask the user to declare it as a host in gnosh's config: "hosts": {"NAME": {"ssh": "user@address"}} in gnosh.json, which a running session takes up at once`
+
 // findHost settles which machine a call's host argument names: nil for
 // this one. An error is worded for the model.
 func (m *Manager) findHost(name string) (*Host, error) {
@@ -173,11 +179,11 @@ func (m *Manager) findHost(name string) (*Host, error) {
 	h, ok := hosts[name]
 	switch {
 	case !ok && len(hosts) == 0:
-		return nil, fmt.Errorf("the %s %q was given, and no other machine is declared for this session, so the command was not run. Leave %s out to run it on this machine. To use another machine, ask the user to declare it as a host in gnosh's config (a name, and the destination ssh is to be given: user@address); do not reach it another way, such as with ssh in a command",
-			argHost, name, argHost)
+		return nil, fmt.Errorf("the %s %q was given, and no other machine is declared for this session, so the command was not run. Leave %s out to run it on this machine. To use another machine, %s; do not reach it another way, such as with ssh in a command",
+			argHost, name, argHost, declareHost)
 	case !ok:
-		return nil, fmt.Errorf("the %s %q is not a machine this session may run commands on, so the command was not run. The declared hosts are: %s. Leave %s out to run the command on this machine",
-			argHost, name, m.hostList(), argHost)
+		return nil, fmt.Errorf("the %s %q is not a machine this session may run commands on, so the command was not run. The declared hosts are: %s. Leave %s out to run the command on this machine. For a machine that is not declared, %s; do not reach it another way",
+			argHost, name, m.hostList(), argHost, declareHost)
 	case !usableTarget(h.Target):
 		return nil, fmt.Errorf("the host %s is declared with a destination that cannot be handed to ssh, so the command was not run. Tell the user: in gnosh's config the host needs an ssh destination of the form user@address", h.Name)
 	}

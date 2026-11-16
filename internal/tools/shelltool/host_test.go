@@ -254,7 +254,8 @@ func TestHostNames(t *testing.T) {
 	if err == nil || act.Command != "touch ran" {
 		t.Fatalf("Describe = %+v, %v; want an error beside the command", act, err)
 	}
-	for _, want := range []string{`"renderbox"`, "render (root@203.0.113.7), web (deploy@203.0.113.8)", "Leave host out"} {
+	for _, want := range []string{`"renderbox"`, "render (root@203.0.113.7), web (deploy@203.0.113.8)", "Leave host out",
+		`ask the user to declare it as a host in gnosh's config: "hosts": {"NAME": {"ssh": "user@address"}} in gnosh.json, which a running session takes up at once`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal %q does not say %q", err, want)
 		}
