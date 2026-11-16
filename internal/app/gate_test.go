@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -265,6 +266,34 @@ func TestSavedApprovalReadsWhatAPersonWrote(t *testing.T) {
 	// And gnosh loads what it wrote: the deny rule is still in force.
 	out := run(t, w, "-p", "/permissions").wantCode(t, 0).out
 	has(t, "/permissions after the save", out, "Bash(rm *)")
+}
+
+// /permissions allow, ask and deny put a rule in force and in the
+// project's local settings file; /permissions remove takes it out of
+// both; a rule from another file is named and left, and a rule gnosh would
+// not load is not written.
+func TestPermissionsEditsRules(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Deny("Bash(curl *)")
+	local := filepath.Join(w.Dir, ".gnosh", "settings.local.json")
+	perm := func(args string) string {
+		t.Helper()
+		return run(t, w, "--trust-folder", "-p", "/permissions "+args).wantCode(t, 0).out
+	}
+	has(t, "deny", perm("deny Bash(rm *)"), "The deny rule Bash(rm *) is in force, and kept in "+local)
+	has(t, "the local file", w.Read(local), `"deny"`, "Bash(rm *)")
+	has(t, "the next session", perm(""), "Bash(rm *)", "from "+local)
+	has(t, "allow, quoted", perm(`allow "Bash(go test *)"`), "The allow rule Bash(go test *) is in force")
+	has(t, "remove", perm("remove Bash(rm *)"), "The deny rule Bash(rm *) is taken out.")
+	if got := w.Read(local); strings.Contains(got, "Bash(rm *)") || !strings.Contains(got, "Bash(go test *)") {
+		t.Errorf("the local file after the removal:\n%s", got)
+	}
+	hasNot(t, "the next session", perm(""), "Bash(rm *)")
+	has(t, "a rule in the user's file", perm("remove Bash(curl *)"), "the deny rule Bash(curl *) comes from", "which gnosh does not write")
+	has(t, "a rule gnosh would not load", perm("allow NoSuchTool"), "NoSuchTool was not added")
+	hasNot(t, "the local file", w.Read(local), "NoSuchTool")
+	has(t, "a rule that is not there", perm("remove Bash(ls *)"), "No rule Bash(ls *) is in force")
+	has(t, "no rule", perm("deny"), "/permissions takes allow, ask, deny or remove")
 }
 
 // dropTool is a tool whose every call throws something away for good: it

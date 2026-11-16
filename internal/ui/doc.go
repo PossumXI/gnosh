@@ -327,6 +327,10 @@
 //   - /model with nothing after it, the picker: a method
 //     ModelChoices(ctx) []app.ModelChoice; switching is the command
 //     /model provider/model level.
+//   - /permissions with nothing after it, the picker: a method
+//     PermissionRules() (mode, []app.PermissionRule); adding a rule is the
+//     command /permissions allow, ask or deny and the rule, and taking one
+//     out /permissions remove and the rule.
 //   - Ctrl+O, the transcript view: a method Transcript()
 //     []app.TranscriptEntry.
 //   - /resume with nothing after it: a method ResumeChoices()

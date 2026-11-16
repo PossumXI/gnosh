@@ -445,6 +445,7 @@ var ownCommands = []struct {
 	{exportWords, func(s *session, line string) bool { return s.q == nil && s.chooseExport(line) }},
 	{memoryWords, func(s *session, line string) bool { return s.q == nil && s.chooseMemory(line) }},
 	{mcpWords, func(s *session, line string) bool { return s.q == nil && s.chooseMCP(line) }},
+	{permissionsWords, func(s *session, line string) bool { return s.q == nil && s.choosePermissions(line) }},
 	{effortWords, func(s *session, line string) bool { return s.q == nil && s.chooseEffort(line) }},
 	{panelWords, func(s *session, line string) bool {
 		s.ed.AddHistory(editor.Draft{Text: line})

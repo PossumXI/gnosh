@@ -596,6 +596,21 @@ func (l *live) keepApproval(s permission.Suggestion) {
 // but it is written again whole, as plain JSON, and they are not in what
 // is written.
 func (l *live) saveRules(rules []string) error {
+	return l.editLocalRules(func(lists map[string][]string) {
+		for _, r := range rules {
+			if !slices.Contains(lists["allow"], r) {
+				lists["allow"] = append(lists["allow"], r)
+			}
+		}
+	})
+}
+
+// editLocalRules changes the permission rules of the project's local
+// settings file (.gnosh/settings.local.json, never committed), which gnosh
+// writes as plain JSON, as Claude Code does its own: change is handed the
+// file's allow, ask and deny lists, under the file's lock. The rest of the
+// file stays as it was, and a file gnosh would not load is not written.
+func (l *live) editLocalRules(change func(lists map[string][]string)) error {
 	path := l.cfg.Paths.LocalSettings
 	dir := filepath.Dir(path)
 	_, statErr := os.Stat(dir)
@@ -633,21 +648,30 @@ func (l *live) saveRules(rules []string) error {
 			return fmt.Errorf("the \"permissions\" of %s are not an object (%v); the file was left as it is", path, err)
 		}
 	}
-	var allow []string
-	if raw, ok := perms["allow"]; ok {
-		if err := json.Unmarshal(raw, &allow); err != nil {
-			return fmt.Errorf("the \"permissions.allow\" of %s is not a list of rules (%v); the file was left as it is", path, err)
+	names := []string{"allow", "ask", "deny"}
+	lists := map[string][]string{}
+	for _, name := range names {
+		if raw, ok := perms[name]; ok {
+			var rules []string
+			if err := json.Unmarshal(raw, &rules); err != nil {
+				return fmt.Errorf("the \"permissions.%s\" of %s is not a list of rules (%v); the file was left as it is", name, path, err)
+			}
+			lists[name] = rules
 		}
 	}
-	for _, r := range rules {
-		if !slices.Contains(allow, r) {
-			allow = append(allow, r)
+	change(lists)
+	for _, name := range names {
+		rules := lists[name]
+		if _, had := perms[name]; len(rules) == 0 && !had {
+			continue
 		}
+		raw, err := json.Marshal(append([]string{}, rules...))
+		if err != nil {
+			return err
+		}
+		perms[name] = raw
 	}
 	var err2 error
-	if perms["allow"], err2 = json.Marshal(allow); err2 != nil {
-		return err2
-	}
 	if doc["permissions"], err2 = json.Marshal(perms); err2 != nil {
 		return err2
 	}

@@ -216,8 +216,8 @@ func New(o Options) (*Engine, error) {
 		}
 		e.layers = append(e.layers, ly)
 	}
-	e.session = &layer{Layer: Layer{Scope: ScopeSession, Name: "approved for this session"}, base: e.cwd}
-	e.saved = &layer{Layer: Layer{Scope: ScopeLocal, Name: "approved at a prompt and kept"}, base: e.cwd}
+	e.session = &layer{Layer: Layer{Scope: ScopeSession, Name: SessionLayer}, base: e.cwd}
+	e.saved = &layer{Layer: Layer{Scope: ScopeLocal, Name: KeptLayer}, base: e.cwd}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
@@ -405,22 +405,97 @@ func (e *Engine) Grant(rule string, scope GrantScope) error {
 	default:
 		return fmt.Errorf("permission: %q is not a way to keep an approval", scope)
 	}
-	for _, c := range ly.allow {
-		if c.Rule.String() == rule {
-			return nil
-		}
+	return e.keepIn(ly, rule, ListAllow)
+}
+
+// The names of the session's own layers, as Decision.Source and Explain
+// give them: the approvals for this session alone, and the rules kept for
+// the project while it runs (GrantLocal, Keep).
+const (
+	SessionLayer = "approved for this session"
+	KeptLayer    = "approved at a prompt and kept"
+)
+
+// Keep puts rule on list (allow, ask or deny) among the rules kept for
+// the project, where an approval kept at a prompt goes (GrantLocal): in
+// force at once. The caller writes it down.
+func (e *Engine) Keep(rule string, list List) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.keepIn(e.saved, rule, list)
+}
+
+// keepIn adds rule to the list of the layer ly, once.
+func (e *Engine) keepIn(ly *layer, rule string, list List) error {
+	cs, texts := ly.list(list)
+	if cs == nil {
+		return fmt.Errorf("permission: %q is not a list of rules", list)
 	}
 	r, err := ParseRule(rule)
+	if err == nil {
+		for _, c := range *cs {
+			if c.Rule.String() == r.String() {
+				return nil
+			}
+		}
+	}
 	var c *crule
 	if err == nil {
-		c, err = e.compile(r, ListAllow, ly)
+		c, err = e.compile(r, list, ly)
 	}
 	if err != nil {
-		return &RuleError{Rule: rule, Source: ly.Name, List: ListAllow, Err: err}
+		return &RuleError{Rule: rule, Source: ly.Name, List: list, Err: err}
 	}
-	ly.allow = append(ly.allow, c)
-	ly.Allow = append(ly.Allow, rule)
+	*cs = append(*cs, c)
+	*texts = append(*texts, rule)
 	return nil
+}
+
+// Drop takes rule off list in the session's own layers (approved for the
+// session, kept at a prompt) and in every layer whose Name is one of
+// sources, and reports from how many places it was taken.
+func (e *Engine) Drop(rule string, list List, sources ...string) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	want := rule
+	if r, err := ParseRule(rule); err == nil {
+		want = r.String()
+	}
+	n := 0
+	for _, ly := range append(slices.Clone(e.layers), e.session, e.saved) {
+		if ly != e.session && ly != e.saved && !slices.Contains(sources, ly.Name) {
+			continue
+		}
+		cs, texts := ly.list(list)
+		if cs == nil {
+			continue
+		}
+		*cs = slices.DeleteFunc(*cs, func(c *crule) bool {
+			if c.Rule.String() == want {
+				n++
+				return true
+			}
+			return false
+		})
+		*texts = slices.DeleteFunc(*texts, func(s string) bool {
+			r, err := ParseRule(s)
+			return err == nil && r.String() == want
+		})
+	}
+	return n
+}
+
+// list is the layer's rules on one list, compiled and as written.
+func (ly *layer) list(list List) (*[]*crule, *[]string) {
+	switch list {
+	case ListAllow:
+		return &ly.allow, &ly.Allow
+	case ListAsk:
+		return &ly.ask, &ly.Ask
+	case ListDeny:
+		return &ly.deny, &ly.Deny
+	}
+	return nil, nil
 }
 
 // AddLayer adds a source of rules while the session runs: a skill's

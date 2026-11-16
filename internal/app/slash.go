@@ -192,7 +192,7 @@ func (s *slashSet) own() []SlashCommand {
 				c.Say("/loop is off. The turn that is running, if any, finishes and nothing follows it.")
 				return nil
 			}},
-		{Name: "permissions", Summary: "The permission mode, the folders, and every rule with where it came from.", InRun: true, Run: l.slashPermissions},
+		{Name: "permissions", Args: "[allow|ask|deny|remove <rule>]", Summary: "The permission mode, the folders, and every rule with where it came from; or add or take out a rule.", InRun: true, Run: l.slashPermissions},
 		{Name: "hooks", Summary: "Every hook that is configured, by the moment it runs at.", InRun: true, Run: l.slashHooks},
 		{Name: "skills", Summary: "Every skill there is, where it came from, and who may run it.", InRun: true, Run: l.slashSkills},
 		{Name: "reload-skills", Summary: "Read the skill and command folders again now, and say what changed.", InRun: true, Run: l.slashReloadSkills},
@@ -763,6 +763,10 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 // each with where it came from. It only shows; rules are changed in the
 // settings files.
 func (l *live) slashPermissions(ctx context.Context, c *SlashContext) error {
+	if verb, rule, ok := strings.Cut(strings.TrimSpace(c.Args), " "); ok || verb != "" {
+		l.permissionsAct(c, verb, strings.TrimSpace(rule))
+		return nil
+	}
 	x := l.engine.Explain()
 	c.Say("Permission mode: %s", x.Mode)
 	if x.Trusted {
@@ -801,8 +805,86 @@ func (l *live) slashPermissions(ctx context.Context, c *SlashContext) error {
 	for _, n := range x.Notes {
 		c.Say("note: %s", n)
 	}
-	c.Say("Rules are written in the settings files; an approval you save goes to %s.", l.cfg.Paths.LocalSettings)
+	c.Say("Rules are written in the settings files; an approval you save goes to %s, and so does /permissions allow, ask or deny <rule>. /permissions remove <rule> takes one out.", l.cfg.Paths.LocalSettings)
 	return nil
+}
+
+// permissionsAct is /permissions allow|ask|deny <rule>, which puts the
+// rule in force and in the project's local settings file, and /permissions
+// remove <rule>, which takes it out of both, as Claude Code's /permissions
+// does. A rule in another file is named and left: gnosh's own files may
+// hold the person's comments, which a rewrite would lose.
+func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
+	const usage = "/permissions takes allow, ask, deny or remove, and a rule: /permissions deny Bash(rm *), say. With nothing after it, it lists the rules."
+	local := l.cfg.Paths.LocalSettings
+	if n := len(rule); n >= 2 && (rule[0] == '"' || rule[0] == '\'') && rule[n-1] == rule[0] {
+		rule = rule[1 : n-1]
+	}
+	switch verb {
+	case "allow", "ask", "deny":
+		if rule == "" {
+			c.Say("%s", usage)
+			return
+		}
+		list := permission.List(verb)
+		if err := l.engine.Keep(rule, list); err != nil {
+			c.Say("%s was not added: %v.", rule, strings.TrimRight(err.Error(), "."))
+			return
+		}
+		err := l.editLocalRules(func(lists map[string][]string) {
+			if !slices.Contains(lists[verb], rule) {
+				lists[verb] = append(lists[verb], rule)
+			}
+		})
+		if err != nil {
+			l.engine.Drop(rule, list)
+			c.Say("%s was not added: %v.", rule, strings.TrimRight(err.Error(), "."))
+			return
+		}
+		c.Say("The %s rule %s is in force, and kept in %s.", verb, rule, local)
+	case "remove", "rm", "delete":
+		if rule == "" {
+			c.Say("%s", usage)
+			return
+		}
+		want := rule
+		if r, err := permission.ParseRule(rule); err == nil {
+			want = r.String()
+		}
+		var found bool
+		var elsewhere []string
+		for _, r := range l.engine.Explain().Rules {
+			if r.Rule != want {
+				continue
+			}
+			found = true
+			switch r.Source {
+			case permission.KeptLayer, permission.SessionLayer, local:
+				l.engine.Drop(want, r.List, local)
+				err := l.editLocalRules(func(lists map[string][]string) {
+					lists[string(r.List)] = slices.DeleteFunc(lists[string(r.List)], func(s string) bool {
+						p, err := permission.ParseRule(s)
+						return s == rule || err == nil && p.String() == want
+					})
+				})
+				if err != nil {
+					c.Say("The %s rule %s is out of force for this session, and could not be taken out of %s: %v.", r.List, want, local, strings.TrimRight(err.Error(), "."))
+					continue
+				}
+				c.Say("The %s rule %s is taken out.", r.List, want)
+			default:
+				elsewhere = append(elsewhere, fmt.Sprintf("the %s rule %s comes from %s", r.List, want, r.Source))
+			}
+		}
+		switch {
+		case !found:
+			c.Say("No rule %s is in force; /permissions lists them.", want)
+		case len(elsewhere) > 0:
+			c.Say("%s, which gnosh does not write (it may hold your comments): take it out there, and it goes when gnosh starts next.", strings.Join(elsewhere, "; "))
+		}
+	default:
+		c.Say("%s", usage)
+	}
 }
 
 // slashHooks is /hooks: every hook in force, by the moment it runs at.

@@ -732,3 +732,16 @@ or kept with the reason said (27).
     leaves what is typed in the box. /effort with nothing after it lists
     the model's levels and auto, the one in force marked. In Apple's
     Terminal the Alt keys need Option set to act as Meta.
+53. **/permissions adds and takes out rules, and with nothing after it is
+    a picker,** as Claude Code's /permissions is. /permissions allow, ask
+    or deny and a rule puts it in force at once and keeps it in the
+    project's local settings file (.gnosh/settings.local.json, never
+    committed, where an approval kept at a prompt goes); /permissions
+    remove and a rule takes it out of force and out of that file. gnosh
+    writes that file as plain JSON, as Claude Code does its own, so a
+    rule in the person's own gnosh.json or the project's, which may hold
+    comments a rewrite would lose, is named with its file and left. A
+    rule gnosh would not load is not written. With nothing after it,
+    /permissions lists the rules in force under three rows a rule is
+    typed into (allow, ask, deny); picking a rule asks before it is taken
+    out. In a run, /permissions still prints the listing.
