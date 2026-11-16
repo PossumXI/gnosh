@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
@@ -110,10 +111,56 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 		// this session.
 		t.forked.Store(true)
 	}
+	l.background(func(ctx context.Context) { l.watchRun(ctx, id, log) })
 	c.Say("A copy of this conversation, %s, goes on in the background (process %d) with: %s", id, pid, oneLine(prompt, 200))
 	c.Say("It works in this same folder, beside this session. gnosh -r %s opens it once it is done; what it prints is in %s.", id, l.tilde(log))
 	return nil
 }
+
+// watchRun tells the person, while this session is open, when a run /fork
+// started is done, as Claude Code's agent view does: the run holds the
+// copy's session file while it works and lets go when it ends. A run that
+// never took the file is said to have ended without starting, with the
+// last line of its log, once it has had runStart to take it.
+func (l *live) watchRun(ctx context.Context, id, logPath string) {
+	path := filepath.Join(l.crashDir(), id+".jsonl")
+	started := l.p.now()
+	took := false
+	tick := time.NewTicker(runLook)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		if transcript.InUse(path) {
+			took = true
+			continue
+		}
+		if !took && l.p.now().Sub(started) < runStart {
+			continue
+		}
+		_, last, _ := readRunLog(logPath, started)
+		said := ""
+		if last != "" {
+			said = " It ended with: " + oneLine(last, 160)
+		}
+		if took {
+			l.notice(agent.LevelInfo, "fork", fmt.Sprintf("The fork %s is done (gnosh -r %s opens it).%s", shortID(id), id, said))
+		} else {
+			l.notice(agent.LevelWarning, "fork", fmt.Sprintf("The fork %s ended without taking its session (what it printed is in %s).%s", shortID(id), l.tilde(logPath), said))
+		}
+		return
+	}
+}
+
+// runLook is how often watchRun looks at a run's session, and runStart how
+// long a run has to take it before it is said not to have started.
+const (
+	runLook  = 2 * time.Second
+	runStart = 30 * time.Second
+)
 
 // copySession copies the conversation into a new session of this folder,
 // named after this one with what the copy is for, and returns its id.

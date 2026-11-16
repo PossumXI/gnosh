@@ -1,12 +1,14 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
@@ -205,4 +207,54 @@ func TestContinuePassesOverASessionOpenElsewhere(t *testing.T) {
 	}
 	r := run(t, w, "-c", "-p", "/status").wantCode(t, 0)
 	has(t, "what -c says", r.out+r.err, "The newest session of this folder, "+shortID(newer)+", is open in another gnosh", "-c goes on with "+shortID(older))
+}
+
+// While this session is open, it says when a run /fork started is done:
+// the run holds its session file while it works and lets go at its end.
+func TestForkSaysWhenItIsDone(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
+	s := sitWith(t, w, func(o *Options) {
+		o.Detach = func(args, env []string, log string) (int, error) {
+			id := ""
+			for _, a := range args {
+				if v, ok := strings.CutPrefix(a, "--resume="); ok {
+					id = v
+				}
+			}
+			path := filepath.Join(filepath.Dir(log), id+".jsonl")
+			held := make(chan error, 1)
+			go func() {
+				// As a run does: take the session, work, write the answer
+				// to the log, let go.
+				f, err := os.OpenFile(path, os.O_RDWR, 0)
+				if err != nil {
+					held <- err
+					return
+				}
+				defer f.Close()
+				if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+					held <- err
+					return
+				}
+				held <- nil
+				time.Sleep(5 * time.Second)
+				lf, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
+				if err == nil {
+					fmt.Fprintln(lf, "All 42 tests pass.")
+					lf.Close()
+				}
+			}()
+			return 4444, <-held
+		}
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("say hi")
+	s.see("Hi.")
+	s.see("-- done in ")
+	s.typeLine("/fork run the tests")
+	s.see("goes on in the background (process 4444)")
+	s.see("is done (gnosh -r ")
+	s.see("It ended with: All 42 tests pass.")
+	s.typeLine("/exit")
+	s.exit()
 }
