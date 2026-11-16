@@ -392,6 +392,10 @@ func (s *session) command(d editor.Draft) {
 		// And /memory (memorypick.go).
 		return
 	}
+	if mcpWords[strings.ToLower(line)] && s.q == nil && s.chooseMCP(line) {
+		// And /mcp (mcppick.go).
+		return
+	}
 	if configWords[strings.ToLower(line)] && s.q == nil {
 		if _, ok := s.c.(configChooser); ok {
 			// So is /config (configpick.go).

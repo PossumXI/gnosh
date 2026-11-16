@@ -314,6 +314,9 @@
 //     []app.ConfigChoice; changing one is the command /config key=value.
 //   - /export with nothing after it asks where to: the command
 //     /export --clipboard, or /export.
+//   - /mcp with nothing after it, the picker: a method MCPChoices()
+//     []app.MCPChoice; what is done to a server is the command /mcp
+//     reconnect, disable or enable and its name.
 //   - /memory with nothing after it, the picker: a method MemoryFiles()
 //     []app.MemoryFile; the one picked opens in the editor (host.editFile).
 //   - /model with nothing after it, the picker: a method

@@ -545,6 +545,14 @@ type controls struct {
 	models    []app.ModelChoice
 	options   []app.ConfigChoice
 	memFiles  []app.MemoryFile
+	servers   []app.MCPChoice
+}
+
+// MCPChoices is the MCP servers a test set.
+func (c *controls) MCPChoices() []app.MCPChoice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.servers)
 }
 
 // MemoryFiles is the context files a test set.

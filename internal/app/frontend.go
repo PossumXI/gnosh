@@ -253,6 +253,10 @@ type SessionControls interface {
 	// open in the person's editor: those the model is given, then the
 	// person's own and the project's GNOSH.md.
 	MemoryFiles() []MemoryFile
+	// MCPChoices lists the session's MCP servers as they stand now, for
+	// the picker that /mcp with nothing after it opens; what is done to
+	// one is the command /mcp reconnect, enable or disable and its name.
+	MCPChoices() []MCPChoice
 }
 
 // CommandResult is what running a slash command came to.

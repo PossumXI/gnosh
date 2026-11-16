@@ -715,4 +715,8 @@ or kept with the reason said (27).
     and then the person's own and the project's GNOSH.md (marked when not
     there yet), and opens the one picked in the person's editor in place,
     as Claude Code's opens its memory files; a change shows in the next
-    session.
+    session. /mcp with nothing after it lists the MCP servers with how
+    each stands, and Enter on one offers what fits it (reconnect it or
+    disable it for the session, or enable one that is disabled), which
+    runs as the /mcp command; with no server it says how to add one, as
+    before.
