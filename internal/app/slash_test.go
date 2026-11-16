@@ -96,10 +96,12 @@ func TestSlashCommandsInASession(t *testing.T) {
 	s.typeLine("/model no-such-model extra words here")
 	s.see("error: /model takes a model")
 
-	// /clear starts a fresh session; the one before is kept.
+	// /clear starts a fresh session; the one before is kept, under the
+	// name given.
 	before := w.Sessions()
-	s.typeLine("/clear")
+	s.typeLine("/clear model talk")
 	s.see("A new session is open: ")
+	s.see(`The one before is kept as "model talk"; gnosh -r "model talk" opens it again.`)
 	s.typeLine("hello again")
 	s.see("An answer from the other model.")
 	last := w.Model.Requests()[len(w.Model.Requests())-1]

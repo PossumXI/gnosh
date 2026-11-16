@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/config"
@@ -105,6 +106,27 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 	}
 	c.Say("(Kept in %s, never in your gnosh.json.)", l.tilde(l.cfg.Paths.StateFile))
 	return nil
+}
+
+// slashAutocompact is /autocompact [auto|<tokens>], Claude Code's: the
+// autoCompactWindow option, shown, set to a number of tokens, or with auto
+// taken away so that the window decides, as /config sets it.
+func (l *live) slashAutocompact(ctx context.Context, c *SlashContext) error {
+	arg := strings.TrimSpace(c.Args)
+	sub := *c
+	switch {
+	case arg == "":
+		sub.Args = "autoCompactWindow"
+	case strings.EqualFold(arg, "auto"):
+		sub.Args = "autoCompactWindow="
+	default:
+		n, err := strconv.Atoi(strings.ReplaceAll(strings.ReplaceAll(arg, ",", ""), "_", ""))
+		if err != nil {
+			return fmt.Errorf("/autocompact takes auto, or a number of tokens such as 200000; %q is neither", arg)
+		}
+		sub.Args = "autoCompactWindow=" + strconv.Itoa(n)
+	}
+	return l.slashConfig(ctx, &sub)
 }
 
 // liveOptions are the options a running session can change: /config puts

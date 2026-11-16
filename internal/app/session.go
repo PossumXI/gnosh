@@ -1300,6 +1300,9 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 		}
 		res.Reset = true
 		res.Text = "A new session is open: " + c.cur().ts.ID() + ". The one before is kept; " + l.info().Resume + " opens it again."
+		if name, byPerson := l.title(); byPerson && name != "" {
+			res.Text = "A new session is open: " + c.cur().ts.ID() + ". The one before is kept as " + strconv.Quote(name) + "; gnosh -r " + strconv.Quote(name) + " opens it again."
+		}
 	}
 	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
 		all := l.rewindAll

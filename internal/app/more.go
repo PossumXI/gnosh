@@ -167,6 +167,21 @@ func (l *live) slashRename(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
+// slashClear is /clear [name]. The controls open the new session
+// (controls.Command); a name given labels the one left behind, as Claude
+// Code's /clear does, for /resume and gnosh -r.
+func (l *live) slashClear(ctx context.Context, c *SlashContext) error {
+	name := cleanTitle(c.Args)
+	if name == "" {
+		return nil
+	}
+	if _, err := l.ts.Append(transcript.TitleEntry(name, transcript.SourceUser)); err != nil {
+		return fmt.Errorf("nothing was cleared: the name could not be written into the session's file: %w", err)
+	}
+	l.named.Store(true)
+	return nil
+}
+
 // SessionChoice is a session of the folder that can be opened in place of
 // the one that is open.
 type SessionChoice struct {

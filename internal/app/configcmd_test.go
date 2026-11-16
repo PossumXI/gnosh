@@ -85,6 +85,15 @@ func TestConfigLiveOptions(t *testing.T) {
 	s.see("memoryText is full when gnosh next starts")
 	s.typeLine("/config autoCompactEnabled=")
 	s.see("autoCompactEnabled is no longer set with /config")
+	// /autocompact is the autoCompactWindow option, as Claude Code's.
+	s.typeLine("/autocompact 200,000")
+	s.see("autoCompactWindow is 200000 from now on")
+	s.typeLine("/autocompact")
+	s.see("Now: 200000 (/config).")
+	s.typeLine("/autocompact auto")
+	s.see("autoCompactWindow is no longer set with /config")
+	s.typeLine("/autocompact lots")
+	s.see("/autocompact takes auto, or a number of tokens")
 	s.typeLine("/exit")
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
