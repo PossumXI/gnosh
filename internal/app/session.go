@@ -1142,6 +1142,7 @@ func (l *live) info() SessionInfo {
 		Vim:         l.cfg.Options.EditorMode.V == "vim",
 		OutputStyle: l.styleNow(),
 		Color:       l.sessionColor(),
+		Keybindings: l.keybindingsPath(),
 		Resume:      "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {

@@ -355,6 +355,9 @@ type SessionInfo struct {
 	// Color is the colour /color gave the session's prompt mark, one of
 	// PromptColors, or "" for the interface's own.
 	Color string
+	// Keybindings is the person's keybindings.json, where the keys of the
+	// interface are bound to other actions (/keybindings).
+	Keybindings string
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

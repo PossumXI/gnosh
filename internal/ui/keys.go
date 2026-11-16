@@ -125,6 +125,9 @@ func (s *session) input(ev term.Event) {
 		}
 		s.dirty = true
 	case term.Key, term.Mouse, term.Paste:
+		if k, ok := ev.(term.Key); ok && s.rebound(k) {
+			return
+		}
 		if s.view != nil {
 			// The transcript view takes every key while it is open.
 			if _, paste := ev.(term.Paste); !paste {
@@ -464,6 +467,7 @@ var ownCommands = []struct {
 	}},
 	{exportWords, func(s *session, line string) bool { return s.q == nil && s.chooseExport(line) }},
 	{memoryWords, func(s *session, line string) bool { return s.q == nil && s.chooseMemory(line) }},
+	{keybindingsWords, func(s *session, line string) bool { return s.q == nil && s.openKeybindings(line) }},
 	{mcpWords, func(s *session, line string) bool { return s.q == nil && s.chooseMCP(line) }},
 	{permissionsWords, func(s *session, line string) bool { return s.q == nil && s.choosePermissions(line) }},
 	{skillsWords, func(s *session, line string) bool { return s.q == nil && s.chooseSkills(line) }},

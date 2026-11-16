@@ -83,7 +83,8 @@ new build is installed, which the session says), `/compact`, `/resume`,
 and Edit changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissions`,
 `/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
 model works; nothing of it is kept), `/recap`, `/color` (this session's prompt mark in a colour of its own, kept
-with the session), `/cost`, `/tasks`, `/diff`,
+with the session), `/keybindings` (Claude Code's keybindings.json: a key bound
+to an action, null to take one away, command:<name> to run one), `/cost`, `/tasks`, `/diff`,
 `/export`,
 `/copy`, `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and
 disable), `/skills`, `/reload-skills`, `/hooks`, `/statusline`, `/debug` (debug

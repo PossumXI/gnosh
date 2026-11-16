@@ -205,6 +205,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "statusline", Args: "[what it shows]", Summary: "Have the model write a status line command from your words, try it, and add it to your gnosh.json.", InRun: true, Run: l.slashStatusLine},
 		{Name: "recap", Summary: "The session in one line: what it has done and where it stands. Nothing of it is kept.", InRun: true, Run: l.slashRecap},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
+		{Name: "keybindings", Summary: "Your keyboard shortcuts file, as Claude Code's keybindings.json: typed alone in the full interface, it opens in your editor.", InRun: true, Run: l.slashKeybindings},
 		{Name: "color", Args: "[" + strings.Join(PromptColors, "|") + "|default]", Summary: "Give this session's prompt mark a colour, to tell it from other sessions; with none named, one at random. It is kept with the session.", InRun: true, Run: l.slashColor},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},

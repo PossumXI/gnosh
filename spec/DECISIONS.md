@@ -844,3 +844,14 @@ or kept with the reason said (27).
     than gnosh started from) is said once, as a turn ends. The program
     file is the name gnosh was run by, found on the PATH, so that an
     install behind a link counts.
+61. **keybindings.json, as Claude Code's, for the contexts gnosh has.** The
+    file is ~/.config/gnosh/keybindings.json, in Claude Code's form. A key
+    bound to an action is taken as the key gnosh already knows that action
+    by, and goes to the handler that takes that key; null takes a key
+    away; command:<name> runs /<name>. The contexts are Global, Chat (Task
+    too) and Transcript, with 21 actions. Chords, the other contexts and
+    keys that always do what they do (Ctrl+C, Ctrl+D) are said and left
+    out. While a question is open no key is changed, so an answer is given
+    with the keys the question shows. The file is looked at again at most
+    once a second as keys come; /keybindings opens it in the editor, made
+    with nothing bound when it is not there.

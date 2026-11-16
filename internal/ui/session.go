@@ -202,6 +202,9 @@ type session struct {
 	sending []sent
 	// lastInput is when a key was last pressed.
 	lastInput time.Time
+	// keys is the keybindings file as it was last read (keybindings.go),
+	// nil before the first key.
+	keys *keyFile
 	// chord says Ctrl+X was pressed and the key after it is awaited.
 	chord bool
 	// stopArmed is when Ctrl+X Ctrl+K was pressed once, waiting for the
