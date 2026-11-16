@@ -30,7 +30,9 @@ Built:
   ended.
 - **A session** in the terminal's own scrollback.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small
-  model with the model's request, from the open web only), commands on
+  model with the model's request, from the open web only), WebSearch on a
+  SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,
+  with SearXNG's JSON format on; no tool without it), commands on
   declared hosts over ssh, and MCP servers, those gnosh starts itself and
   those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
   `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their

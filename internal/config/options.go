@@ -31,6 +31,9 @@ type Options struct {
 	// MemEmbeddingsURL is the embedding server for mem. Unset, nothing is
 	// sent anywhere.
 	MemEmbeddingsURL Value[string]
+	// WebSearchURL is the SearXNG server the WebSearch tool asks. Unset,
+	// there is no WebSearch tool.
+	WebSearchURL Value[string]
 
 	// AutoCompactEnabled switches the compaction backstop.
 	AutoCompactEnabled Value[bool]
@@ -199,6 +202,12 @@ var optionDefs = []optionDef{
 		what: "the embedding server for mem; unset sends nothing anywhere", from: fromPlain + ", with the APIs' word (embeddings)",
 		trust: KindAddress,
 		text:  func(o *Options) *Value[string] { return &o.MemEmbeddingsURL }},
+
+	// The web.
+	{key: "webSearchUrl", kind: oURL, def: "unset (no WebSearch tool)",
+		what: "the SearXNG server the WebSearch tool asks, with its JSON format on; unset, there is no WebSearch tool", from: fromPlain + ", with Claude Code's name for the tool",
+		trust: KindAddress,
+		text:  func(o *Options) *Value[string] { return &o.WebSearchURL }},
 
 	// What the agent hands over.
 	{key: "deliverablesServer", kind: oListen, def: DefaultDeliverablesServer,

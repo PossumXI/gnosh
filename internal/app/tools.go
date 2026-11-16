@@ -102,6 +102,10 @@ func (l *live) buildTools() error {
 	l.shell = shelltool.New(so)
 	all = append(all, l.wrapStop(l.shell.Tools())...)
 	all = append(all, &webFetchTool{l: l})
+	if u := strings.TrimRight(l.cfg.Options.WebSearchURL.V, "/"); u != "" {
+		// (Only with a search server named: see websearch.go.)
+		all = append(all, &webSearchTool{l: l, base: u})
+	}
 	// gnosh's own tools, as a sub-agent starts from them.
 	l.own = l.own[:0]
 	for _, t := range all {

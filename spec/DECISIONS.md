@@ -821,3 +821,13 @@ or kept with the reason said (27).
     Replaying the 2,180 commands
     Qwen ran on the boxes, 36 asks were these forms, the commonest
     "(go test ./... 2>&1 || true)" and "(cd dir && ...)".
+59. **WebSearch asks a SearXNG server the person names, or is not there.**
+    Claude Code's WebSearch runs on Anthropic's backend; gnosh keeps the
+    tool's name and inputs (query, allowed_domains, blocked_domains, mode)
+    and asks the server the webSearchUrl option names, with its JSON
+    format (/search?q=...&format=json). A self-hosted SearXNG keeps the
+    queries on the person's own machines, and needs no key and no
+    scraping of a search engine's pages. Without the option the session
+    has no WebSearch tool; a rule may still name it. It asks before it
+    runs, as Claude Code's does, and lists titles, addresses and a line of
+    each result; pages are read with WebFetch.

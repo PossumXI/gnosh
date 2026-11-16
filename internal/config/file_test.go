@@ -278,6 +278,7 @@ func TestOptions(t *testing.T) {
     "memoryText": "full",
     "memReviewCloses": false,
     "memEmbeddingsUrl": "http://127.0.0.1:8090",
+    "webSearchUrl": "http://127.0.0.1:8888",
     "deliverablesServer": "127.0.0.1:8123",
     "debug": true,
     "sidePanel": true,
@@ -317,6 +318,7 @@ func TestOptions(t *testing.T) {
 	check("memoryText", o.MemoryText.V, "full")
 	check("memReviewCloses", o.MemReviewCloses.V, false)
 	check("memEmbeddingsUrl", o.MemEmbeddingsURL.V, "http://127.0.0.1:8090")
+	check("webSearchUrl", o.WebSearchURL.V, "http://127.0.0.1:8888")
 	check("deliverablesServer", o.DeliverablesServer, Value[string]{V: "127.0.0.1:8123", Set: true, Origin: at("deliverablesServer")})
 	check("debug", o.Debug.V, true)
 	check("sidePanel", o.SidePanel.V, true)
