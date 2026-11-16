@@ -35,7 +35,8 @@ import (
 // worktreesDir is the folder of work trees in the project's data folder.
 const worktreesDir = "worktrees"
 
-// worktree is the work tree of one sub-agent.
+// worktree is the work tree of one sub-agent, or of a --worktree session
+// (sessionTree, sessiontree.go).
 type worktree struct {
 	repo   string // the repository's top folder
 	path   string // the work tree's folder
@@ -64,8 +65,15 @@ func runGit(ctx context.Context, environ []string, dir string, args ...string) (
 		return slices.ContainsFunc(gitEnvDrop, func(p string) bool { return strings.HasPrefix(kv, p) })
 	})
 	cmd.Env = append(env, "GIT_PAGER=cat", "PAGER=cat", "GIT_TERMINAL_PROMPT=0")
+	// A hook git runs (post-checkout, on worktree add) may leave a program
+	// behind that holds git's output open: once git itself has ended, or
+	// been stopped, what it printed is not waited for longer than this.
+	cmd.WaitDelay = 5 * time.Second
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("git did not finish in the time it is given (git %s)", strings.Join(args, " "))
+		}
 		var ee *exec.ExitError
 		if errors.As(err, &ee) && len(strings.TrimSpace(string(ee.Stderr))) > 0 {
 			return "", errors.New(oneLine(strings.TrimSpace(string(ee.Stderr)), 300))

@@ -391,8 +391,8 @@ recorded here for vocabulary, not as a requirement.
 - The built-in agents `claude`, `statusline-setup`, `claude-code-guide`.
 - The rule that an interactive main agent cannot wait for a sub-agent
   unless fork mode is off.
-- `SendMessage` as the resume mechanism — gnosh resumes through its own
-  means (a parameter on `Agent`, or `mem`); to be settled in gnosh's spec.
+- (`SendMessage` as the resume mechanism was on this list; gnosh has
+  adopted it since: spec/DECISIONS.md 48.)
 
 ## Unverified (docs silent)
 

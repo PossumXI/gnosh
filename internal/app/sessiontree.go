@@ -88,7 +88,7 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 		name = madeUpTreeName()
 	}
 	if !treeNameRe.MatchString(name) {
-		return fail("%q cannot name a work tree: a name is letters, digits, dots, dashes and underscores, 64 at most, and begins with a letter or a digit (a prompt right after --worktree is taken for the name: write --worktree= for a made-up one, or the prompt first)", name)
+		return fail("%q cannot name a work tree: a name is letters, digits, dots, dashes and underscores, 64 at most, and begins with a letter or a digit (a prompt right after --worktree is taken for the name: for a made-up one, put the prompt first or another flag between them)", name)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -149,6 +149,11 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	st.gitPrograms = trust.GitPrograms(folder)
 	st.load(true)
 	if st.cfg == nil {
+		// The work tree's own configuration has a mistake (its commit's,
+		// which the checkout may have fixed since): it is said, and the
+		// work tree goes or stays as at a session's end.
+		st.printProblems()
+		st.leaveTree()
 		return cli.ExitFailure
 	}
 	how := "made, on the branch " + t.branch + " at " + shortCommit(t.base)
@@ -203,14 +208,7 @@ func (st *startup) leaveTree() {
 	defer cancel()
 	env, out := st.p.o.Environ, st.p.stderr
 	what, err := treeHolds(ctx, env, &t.worktree)
-	if err == nil && len(what) == 0 && !t.named && !t.reused {
-		if _, err := runGit(ctx, env, t.repo, "worktree", "remove", t.path); err == nil {
-			_, _ = runGit(ctx, env, t.repo, "branch", "-d", t.branch)
-			fmt.Fprintf(out, "gnosh: the work tree %s was left as it was made, and is removed with its branch.\n", t.path)
-			return
-		}
-	}
-	why := "it was named"
+	why := ""
 	switch {
 	case err != nil:
 		why = err.Error()
@@ -218,6 +216,20 @@ func (st *startup) leaveTree() {
 		why = "it holds " + strings.Join(what, " and ")
 	case t.reused:
 		why = "it was there before"
+	case t.named:
+		why = "it was named"
+	}
+	if why == "" {
+		_, err := runGit(ctx, env, t.repo, "worktree", "remove", t.path)
+		if err == nil {
+			if _, err := runGit(ctx, env, t.repo, "branch", "-d", t.branch); err != nil {
+				fmt.Fprintf(out, "gnosh: the work tree %s was left as it was made, and is removed; its branch %s is left (%v).\n", t.path, t.branch, err)
+				return
+			}
+			fmt.Fprintf(out, "gnosh: the work tree %s was left as it was made, and is removed with its branch.\n", t.path)
+			return
+		}
+		why = fmt.Sprintf("it could not be removed: %v", err)
 	}
 	fmt.Fprintf(out, "gnosh: the work tree %s, on the branch %s, is kept (%s). gnosh --worktree %s works in it again; git -C %s worktree remove %s takes it away.\n",
 		t.path, t.branch, why, t.name, t.repo, t.path)

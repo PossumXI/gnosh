@@ -40,10 +40,10 @@ import (
 // tool call waits for the sub-agent, and the sub-agent's last reply is the
 // tool's result.
 //
-// What is not built: resuming a sub-agent, and a definition's own MCP
-// servers and memory folder. A call or a definition that asks for one of
-// them is refused with a result that says so; none is run as something
-// else.
+// A sub-agent that ended is given more to do with SendMessage
+// (sendmessage.go). What is not built: a definition's own MCP servers and
+// memory folder. A definition that asks for one of them is refused with a
+// result that says so; none is run as something else.
 
 // agentToolName is the name of the tool, which is Claude Code's.
 const agentToolName = "Agent"

@@ -239,7 +239,7 @@ type Agent struct {
 	noAuto     bool
 	cwd        string
 	roots      []string
-	tree       *core.WorkTree // a sub-agent's own work tree (SubOptions.Tree)
+	tree       *core.WorkTree // its work tree (Options.Tree, SubOptions.Tree), or its parent's
 	loop       loopState
 	questions  map[string]chan Answer
 	state      State

@@ -512,7 +512,8 @@ or kept with the reason said (27).
     - **Trust:** making one runs git, so it happens only in a trusted
       folder, as /diff does.
     - **--agent:** a session that runs as a kind that asks for isolation
-      is refused for now; that would be `-w`, which is not built.
+      runs only with --worktree (47), which gives it the work tree of its
+      own; without it, it is refused and told so.
     - **effort:** the Agent call also takes `effort` now, over its
       kind's.
     - **Its changes stay there:** the gate refuses a sub-agent's edit

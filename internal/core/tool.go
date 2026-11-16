@@ -144,8 +144,9 @@ type ToolEnv struct {
 	// be called from any goroutine and must not block.
 	Progress func(Progress)
 
-	// Tree, for a call of a sub-agent that works in a git work tree of
-	// its own (isolation worktree), is that work tree; nil otherwise.
+	// Tree, for a call of a session or sub-agent that works in a git work
+	// tree apart from the person's checkout (--worktree, isolation
+	// worktree, or its parent's), is that work tree; nil otherwise.
 	Tree *WorkTree
 }
 

@@ -72,12 +72,37 @@ func TestWorktreeFlagKeepsToItsTree(t *testing.T) {
 	has(t, "the refusal", toolResult(t, w, 1, "c1"), "The same file in your work tree is "+filepath.Join(w.Dir, ".gnosh", "worktrees", "iso", "notes.txt"))
 }
 
+// A work tree whose own configuration has a mistake (its commit's, which
+// the checkout has fixed since) starts nothing, says why, and goes when
+// nobody named it.
+func TestWorktreeFlagConfigMistake(t *testing.T) {
+	w := repoWorld(t)
+	w.Write("gnosh.json", `{"permissions": {"allow": ["NoSuchTool"]}}`+"\n")
+	gitIn(t, w.Dir, "add", "gnosh.json")
+	gitIn(t, w.Dir, "commit", "-q", "-m", "a bad rule")
+	w.Write("gnosh.json", `{"permissions": {"allow": ["Read"]}}`+"\n")
+	r := run(t, w, "--trust-folder", "--worktree", "-p", "hi").wantCode(t, 1)
+	has(t, "stderr", r.err, "the configuration has a mistake, so nothing was started", "NoSuchTool", "was left as it was made, and is removed with its branch")
+	if trees, _ := filepath.Glob(filepath.Join(w.Dir, ".gnosh", "worktrees", "*-*")); len(trees) != 0 {
+		t.Errorf("work trees left: %q", trees)
+	}
+}
+
+// --agent with a kind that asks for a work tree of its own runs with
+// --worktree, which gives the session one, and is refused without it.
+func TestRunAsIsolatedAgent(t *testing.T) {
+	w := repoWorld(t, apptest.Reply{Text: "Isolated."})
+	w.Write(w.ConfigDir()+"/agents/iso.md", "---\nname: iso\ndescription: Works apart.\nisolation: worktree\n---\nYou work apart.\n")
+	has(t, "without --worktree", run(t, w, "-p", "--agent", "iso", "x").wantCode(t, 1).err, "asks for isolation worktree", "start it with --worktree as well")
+	has(t, "with --worktree", run(t, w, "--trust-folder", "--worktree", "apart", "-p", "--agent", "iso", "x").wantCode(t, 0).out, "Isolated.")
+}
+
 // --worktree needs a trusted folder in a git repository, and a name that can be a
 // folder's and a branch's.
 func TestWorktreeFlagRefusals(t *testing.T) {
 	w := repoWorld(t)
 	has(t, "an untrusted folder", run(t, w, "--worktree", "x", "-p", "hi").wantCode(t, 1).err, "--worktree: a work tree is made with git, and this folder is not trusted")
-	has(t, "a bad name", run(t, w, "--trust-folder", "--worktree", "fix the bug", "-p", "hi").wantCode(t, 1).err, `"fix the bug" cannot name a work tree`, "--worktree=")
+	has(t, "a bad name", run(t, w, "--trust-folder", "--worktree", "fix the bug", "-p", "hi").wantCode(t, 1).err, `"fix the bug" cannot name a work tree`, "put the prompt first or another flag between them")
 	has(t, "a name that climbs out", run(t, w, "--trust-folder", "--worktree", "../x", "-p", "hi").wantCode(t, 1).err, `"../x" cannot name a work tree`)
 	plain := apptest.NewWorld(t)
 	has(t, "no repository", run(t, plain, "--trust-folder", "--worktree", "x", "-p", "hi").wantCode(t, 1).err, "is not in one")

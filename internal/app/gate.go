@@ -31,6 +31,9 @@ import (
 //  1. The PreToolUse hooks, for every call, a sub-agent's included. A
 //     block ends it there: the model reads the reason, and no rule is
 //     looked at. A hook may also change the call's arguments.
+//     Then, for a session or sub-agent with a git work tree of its own,
+//     the work tree: a call that would change files or run in a checkout
+//     the work tree was made from is refused, whatever the rules allow.
 //  2. The permission engine, on the arguments the hooks left, with the
 //     hooks' verdict folded in (permission.Decision.WithHook): a deny rule
 //     beats a hook's approval, a hook's "ask" asks even when the call
@@ -659,7 +662,7 @@ func (l *live) saveRules(rules []string) error {
 	return config.WriteFileAtomic(path, content, 0o600)
 }
 
-// outsideTree says why a sub-agent with the work tree t may not change
+// outsideTree says why a session or sub-agent with the work tree t may not change
 // paths, when one of them is in the checkout the work tree was made from
 // and not in the work tree; "" when none is. A relative path is read from
 // cwd.
