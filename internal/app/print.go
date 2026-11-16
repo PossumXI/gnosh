@@ -429,6 +429,7 @@ func (f *printer) Event(ev any) {
 			// What had arrived of the reply is thrown away; the next try
 			// writes it afresh.
 			f.buf.Reset()
+			f.safe.Reset()
 			f.inMessage = false
 			f.partialEnd(core.StopCancelled, core.Usage{})
 		}
@@ -1137,16 +1138,22 @@ func (f *printer) reportCommand(c Controls, res CommandResult, err error) int {
 	if err != nil {
 		f.stderr("%v", err)
 	}
-	text := strings.TrimRight(res.Text, "\n")
+	said := strings.TrimRight(res.Text, "\n")
 	if f.format == cli.FormatText {
-		if text != "" {
-			fmt.Fprintln(f.p.stdout, text)
+		if f.live {
+			// What a command says may be a model's words (/btw, /recap)
+			// or notes a model wrote (/mem): on a terminal they may only
+			// colour themselves.
+			said = strings.TrimRight(text.Safe(said), "\n")
+		}
+		if said != "" {
+			fmt.Fprintln(f.p.stdout, said)
 		}
 	} else {
 		info := c.Info()
 		obj := resultObject{
 			Type: "result", Subtype: "success", UUID: newUUID(), SessionID: info.ID,
-			Result:     ptr(text),
+			Result:     ptr(said),
 			DurationMS: f.p.now().Sub(f.p.start).Milliseconds(),
 			ModelUsage: map[string]modelUsage{}, PermissionDenials: []denial{},
 			LocalCommand: res.Name,

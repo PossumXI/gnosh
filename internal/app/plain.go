@@ -832,8 +832,9 @@ func (f *plain) cleanLine(line string) (string, bool) {
 		return line, true
 	}
 	what := countWords(found.Removed, "invisible character", "invisible characters")
-	typed := strings.TrimLeft(line, " \t")
-	lead := strings.TrimLeft(clean, " \t")
+	// (Trimmed as line() trims a line before it looks for a ! or a /.)
+	typed := strings.TrimSpace(line)
+	lead := strings.TrimSpace(clean)
 	switch {
 	case strings.TrimSpace(clean) == "":
 		f.note("The line held only invisible characters, so nothing was sent.")

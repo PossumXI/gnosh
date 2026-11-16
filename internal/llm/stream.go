@@ -186,7 +186,7 @@ func (p *provider) endedEarly(last []byte) *core.ProviderError {
 // session in the same way, since the conversation keeps it.
 func (p *provider) open(ctx context.Context, w wire, req *core.Request) (*exchange, error) {
 	send := req
-	if p.noImages.Load() {
+	if p.LeavesOutImages(req.Model) {
 		send = withoutImages(req)
 	}
 	for {
@@ -204,7 +204,7 @@ func (p *provider) open(ctx context.Context, w wire, req *core.Request) (*exchan
 		err = x.statusError()
 		x.close()
 		if send == req && hasImages(req) && imagesRefused(err) {
-			p.noImages.Store(true)
+			p.noImages.Store(req.Model, true)
 			send = withoutImages(req)
 			continue
 		}

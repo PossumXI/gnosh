@@ -214,8 +214,8 @@ type LoadReporter interface {
 // because its server said it cannot take them: it then sends each as a
 // line saying it was left out.
 type ImageDropper interface {
-	// LeavesOutImages reports whether it does so now.
-	LeavesOutImages() bool
+	// LeavesOutImages reports whether it does so now for model.
+	LeavesOutImages(model string) bool
 }
 
 // TokenCounter is a Provider that can count a request's prompt tokens

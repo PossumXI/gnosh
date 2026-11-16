@@ -29,6 +29,9 @@ func TestPlainTakesOutInvisibleCharacters(t *testing.T) {
 	if n := len(w.Model.Requests()); n != 1 {
 		t.Errorf("%d requests: a line that was held back went out", n)
 	}
+	// A shell line that a blank of another kind begins is still one.
+	s.typeLine("\u00A0!rm report\u200B.txt")
+	s.see("from the shell line, which changes what it runs, so it was not run")
 	s.typeLine("/exit")
 	s.exit()
 }

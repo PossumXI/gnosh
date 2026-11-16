@@ -176,14 +176,14 @@ func (l *llamaCpp) CountTokens(ctx context.Context, req *core.Request) (int, err
 	if req == nil {
 		return 0, l.fail(core.ErrInvalidRequest, "there is no request to count")
 	}
-	if l.noImages.Load() {
+	if l.LeavesOutImages(req.Model) {
 		req = withoutImages(req)
 	}
 	n, err := l.countTokens(ctx, req)
 	if err != nil && hasImages(req) && imagesRefused(err) {
 		// The server takes no images: counted, and from now on sent,
 		// without them (images.go).
-		l.noImages.Store(true)
+		l.noImages.Store(req.Model, true)
 		return l.countTokens(ctx, withoutImages(req))
 	}
 	return n, err

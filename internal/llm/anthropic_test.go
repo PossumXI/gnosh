@@ -519,7 +519,7 @@ func TestAnthropicRequest(t *testing.T) {
 		"temperature": 0.5,
 		"top_p": 0.9,
 		"stop_sequences": ["END"],
-		"thinking": {"type": "enabled", "budget_tokens": 2000},
+		"thinking": {"type": "adaptive"},
 		"output_config": {"effort": "high"},
 		"system": [
 			{"type": "text", "text": "You are gnosh.", "cache_control": {"type": "ephemeral"}},
@@ -692,7 +692,9 @@ func TestAnthropicThinkingAndMaxTokens(t *testing.T) {
 		{"the configured default", core.Thinking{}, 0, 8000, `"max_tokens": 8000`},
 		{"the request's cap wins over the default", core.Thinking{}, 1234, 8000, `"max_tokens": 1234`},
 		{"a default cap makes room for the budget", core.Thinking{Mode: "on", BudgetTokens: 10000}, 0, 8000, `"max_tokens": 18000, "thinking": {"type": "enabled", "budget_tokens": 10000}`},
-		{"the request's cap is sent as it is", core.Thinking{Mode: "on", BudgetTokens: 10000}, 2000, 0, `"max_tokens": 2000, "thinking": {"type": "enabled", "budget_tokens": 10000}`},
+		{"the request's cap is sent as it is, the budget under it", core.Thinking{Mode: "on", BudgetTokens: 10000}, 2000, 0, `"max_tokens": 2000, "thinking": {"type": "enabled", "budget_tokens": 1999}`},
+		{"a budget under the least is the least", core.Thinking{Mode: "on", BudgetTokens: 500}, 0, 0, `"max_tokens": 64000, "thinking": {"type": "enabled", "budget_tokens": 1024}`},
+		{"a cap with no room for the least budget", core.Thinking{Mode: "on", BudgetTokens: 4096}, 1000, 0, `"max_tokens": 1000, "thinking": {"type": "adaptive"}`},
 	}
 	for _, tt := range tests {
 		f := newFake(t, playing(events(messageDelta("end_turn", ""), messageStop)))

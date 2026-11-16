@@ -431,7 +431,7 @@ type streamItem struct {
 // none.
 func (a *Agent) tellImagesLeftOut(m Model) {
 	d, ok := m.Provider.(core.ImageDropper)
-	if !ok || !d.LeavesOutImages() {
+	if !ok || !d.LeavesOutImages(m.Info.ID) {
 		return
 	}
 	if _, told := a.imagesTold.LoadOrStore(modelKey(m), true); told {
@@ -447,11 +447,8 @@ func (a *Agent) stream(ctx context.Context, t *turn, purpose string, req *core.R
 	// the other way round, so that neither pushes the other out of a
 	// model server's cache while it is being answered.
 	a.setPhase(PhaseRequest, "waiting for another request to "+m.label()+" to finish")
-	a.makeWay()
-	select {
-	case a.modelLock <- struct{}{}:
-	case <-ctx.Done():
-		return rep, ctx.Err()
+	if err := a.takeModel(ctx); err != nil {
+		return rep, err
 	}
 	defer func() { <-a.modelLock }()
 

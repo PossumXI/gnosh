@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -204,9 +204,11 @@ type provider struct {
 	maxTokensField   string
 	defaultMaxTokens int
 
-	// noImages says the server refused a request's images: from then on
-	// each image is sent as a line saying it was left out (images.go).
-	noImages atomic.Bool
+	// noImages holds the models (by the name a request gives) whose server
+	// refused a request's images: from then on each image is sent to
+	// them as a line saying it was left out (images.go). A server that
+	// serves several models may have the eyes for one and not another.
+	noImages sync.Map
 }
 
 // newProvider checks a Config and makes the provider it describes, with

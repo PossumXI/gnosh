@@ -141,6 +141,24 @@ func (a *Agent) giveWay(ctx context.Context) (context.Context, func()) {
 	}
 }
 
+// takeModel takes the model for a request that does not yield, stopping
+// every side request that does, again and again while it waits: one that
+// registered after a stop and took the model first is stopped too.
+func (a *Agent) takeModel(ctx context.Context) error {
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		a.makeWay()
+		select {
+		case a.modelLock <- struct{}{}:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+		}
+	}
+}
+
 // makeWay stops every side request that yields: the session's own request
 // wants the model.
 func (a *Agent) makeWay() {
@@ -178,10 +196,16 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 		return fmt.Errorf("%s %s the %s request: %w", m.label(), what, purpose, err)
 	}
 
-	select {
-	case a.modelLock <- struct{}{}:
-	case <-tctx.Done():
-		return res, fail("could not be sent", tctx.Err())
+	if sr.Yield {
+		select {
+		case a.modelLock <- struct{}{}:
+		case <-tctx.Done():
+			return res, fail("could not be sent", tctx.Err())
+		}
+	} else if err := a.takeModel(tctx); err != nil {
+		// (One that does not give way, /btw say, makes a suggestion give
+		// way to it as the session's own requests do.)
+		return res, fail("could not be sent", err)
 	}
 	defer func() { <-a.modelLock }()
 

@@ -257,7 +257,9 @@ func (j *join) largeStep(info agent.RequestInfo) string {
 	top := stack[len(stack)-1]
 	grown := info.Used - top.TotalAtPush
 	room := info.Point - top.TotalAtPush
-	if top.UUID == "" || top.TotalAtPush <= 0 || room <= 0 || grown <= room/2 {
+	// (And at least a tenth of the point: a todo entered with little room
+	// left is not large after a few hundred tokens.)
+	if top.UUID == "" || top.TotalAtPush <= 0 || room <= 0 || grown <= room/2 || grown <= info.Point/10 {
 		return ""
 	}
 	j.mu.Lock()

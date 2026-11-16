@@ -121,3 +121,28 @@ func TestWithoutImages(t *testing.T) {
 		t.Errorf("a request with no image was copied")
 	}
 }
+
+// A server that refused the images of one model may have the eyes for
+// another it serves: the next model is sent its images.
+func TestImagesAreLeftOutForTheModelThatRefusedThem(t *testing.T) {
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		body := f.last().Body
+		if bytes.Contains(body, []byte("image_url")) && bytes.Contains(body, []byte(`"model":"m"`)) {
+			answering(500, nil, llamaNoMmproj)(f, w, r)
+			return
+		}
+		f.play(w, r, okStream)
+	})
+	p := f.provider(TypeLlamaCpp, nil)
+	wantOK(t, drain(p.Stream(context.Background(), readAPicture())))
+	other := readAPicture()
+	other.Model = "vision"
+	wantOK(t, drain(p.Stream(context.Background(), other)))
+	reqs := f.requests()
+	if len(reqs) != 3 || !bytes.Contains(reqs[2].Body, []byte("image_url")) {
+		t.Errorf("the other model was not sent its image (%d requests)", len(reqs))
+	}
+	if d := p.(core.ImageDropper); !d.LeavesOutImages("m") || d.LeavesOutImages("vision") {
+		t.Errorf("LeavesOutImages: m %v, vision %v; want true, false", d.LeavesOutImages("m"), d.LeavesOutImages("vision"))
+	}
+}

@@ -25,6 +25,10 @@ var (
 
 // Stream sends req to the service's messages endpoint and yields the
 // answer's events.
+
+// minThinkingBudget is the least thinking budget the Messages API takes.
+const minThinkingBudget = 1024
+
 func (a *anthropic) Stream(ctx context.Context, req *core.Request) iter.Seq2[core.Event, error] {
 	return a.stream(ctx, a, req)
 }
@@ -58,6 +62,18 @@ func (a *anthropic) encode(req *core.Request) ([]byte, error) {
 		}
 	}
 	body["max_tokens"] = limit
+	// A budget has to stand below the cap: a cap set under it takes the
+	// budget down, and one with no room for the least budget leaves the
+	// thinking to the model.
+	if th, ok := body["thinking"].(obj); ok && th["type"] == "enabled" {
+		if budget, _ := th["budget_tokens"].(int); budget >= limit {
+			if budget = limit - 1; budget >= minThinkingBudget {
+				th["budget_tokens"] = budget
+			} else {
+				body["thinking"] = obj{"type": "adaptive"}
+			}
+		}
+	}
 
 	if req.Temperature != nil {
 		body["temperature"] = *req.Temperature
@@ -119,7 +135,8 @@ func (a *anthropic) messagesBody(req *core.Request, cache bool) (obj, error) {
 	case t.Mode == "off":
 		body["thinking"] = obj{"type": "disabled"}
 	case t.BudgetTokens > 0:
-		body["thinking"] = obj{"type": "enabled", "budget_tokens": t.BudgetTokens}
+		// (The API takes a budget of at least 1,024 tokens.)
+		body["thinking"] = obj{"type": "enabled", "budget_tokens": max(t.BudgetTokens, minThinkingBudget)}
 	case t.Mode == "on":
 		body["thinking"] = obj{"type": "adaptive"}
 	}

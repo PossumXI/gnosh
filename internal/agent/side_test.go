@@ -389,7 +389,7 @@ func TestYieldingSideRequestGivesWay(t *testing.T) {
 // droppingModel is a fake model whose server has refused images.
 type droppingModel struct{ *fakeModel }
 
-func (droppingModel) LeavesOutImages() bool { return true }
+func (droppingModel) LeavesOutImages(string) bool { return true }
 
 // A model whose provider leaves images out is named once in a notice, when
 // it first answers: the model may not say it saw no picture.

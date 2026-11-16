@@ -25,3 +25,17 @@ func TestPrintToATerminalIsSafe(t *testing.T) {
 		t.Errorf("printed to a pipe: %q, want the reply as it is", r.out)
 	}
 }
+
+// What a command says, printed to a terminal, is held to the same: /btw
+// prints the model's words.
+func TestCommandOutputToATerminalIsSafe(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Noted."})
+	run(t, w, "-p", "remember seven").wantCode(t, 0)
+	w.Model.Add(apptest.Reply{Text: "It was seven.\x1b]52;c;cm0gLXJmIH4=\x07"})
+	o := testOptions(w, "-c", "-p", "/btw which number?")
+	o.StdoutIsTerminal = true
+	r := runWith(t, t.Context(), o).wantCode(t, 0)
+	if strings.Contains(r.out, "\x1b]52") || !strings.Contains(r.out, "It was seven.") {
+		t.Errorf("/btw printed to a terminal: %q", r.out)
+	}
+}
