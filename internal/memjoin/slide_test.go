@@ -231,8 +231,9 @@ func TestLargeStepLine(t *testing.T) {
 		t.Fatalf("the model was never told that the todo is large:\n%s", conversation(reqs[len(reqs)-1]))
 	}
 	line := lastUser(t, reqs[said])
-	if !strings.HasPrefix(line, "<gnosh>This todo is large: pop it with what you have, or split it into todos under it (you are in `"+todo+"`, and about ") ||
-		!strings.HasSuffix(line, " tokens came in since you entered it).</gnosh>") {
+	if !strings.HasPrefix(line, "<gnosh>This todo is large: about ") ||
+		!strings.Contains(line, " tokens came in since you entered `"+todo+"`. If its work is one piece per file or item, put each piece under it as a todo of its own") ||
+		!strings.HasSuffix(line, "Or pop this one with what you have.</gnosh>") {
 		t.Errorf("the large-step line:\n%s", line)
 	}
 	if n := strings.Count(string(reqs[len(reqs)-1].Body), "This todo is large"); n != 1 {
