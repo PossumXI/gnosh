@@ -20,8 +20,10 @@ import (
 // its runs before (its session file is its history) and the tools of its
 // kind, and its report comes as a notice, as a background sub-agent's
 // does. Explore and Plan are one-shot, as Claude Code's are; a sub-agent
-// that was stopped is not taken up again; and one that worked in a git
-// work tree of its own is not, since the work tree is not opened again.
+// that was stopped or ended for good is not taken up again; and one that
+// worked in a git work tree of its own is not, since the work tree is not
+// opened again. The call is judged as starting a sub-agent of its kind is
+// (resumeAsStart in gate.go), and is offered only where Agent is.
 
 // sendMessageName is the tool's name, as Claude Code's.
 const sendMessageName = "SendMessage"
@@ -46,6 +48,18 @@ type sendMessageInput struct {
 // to do once it ended.
 func resumable(def agentdef.Def) bool {
 	return def.Name != "Explore" && def.Name != "Plan" && def.Isolation == ""
+}
+
+// takesMore reports whether a sub-agent of the kind def whose last run
+// ended as ended (its status) is given more to do: its report then ends
+// with its id, and SendMessage takes it up. One that was stopped is not,
+// nor one ended for good (halted).
+func takesMore(def agentdef.Def, ended string) bool {
+	switch ended {
+	case "completed", "partial", "failed":
+		return resumable(def)
+	}
+	return false
 }
 
 // subagentsDir is the folder of the session's sub-agents' session files.
@@ -85,7 +99,7 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 		return core.ErrorResult("Nothing was sent: give both to, the sub-agent's id, and message, what it is to do."), nil
 	}
 	refuse := func(format string, args ...any) (core.ToolResult, error) {
-		return core.ErrorResult("Nothing was sent: " + fmt.Sprintf(format, args...) + "."), nil
+		return core.ErrorResult("Nothing was sent: " + strings.TrimRight(fmt.Sprintf(format, args...), ".") + "."), nil
 	}
 	for _, b := range l.backgroundAgents() {
 		if b.id == to {
@@ -109,7 +123,9 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 		return refuse("a %s sub-agent does one task and is not given more; start a new one with Agent", def.Name)
 	case meta[metaEnded] == "stopped":
 		return refuse("the sub-agent %s was stopped, and a stopped sub-agent is not taken up again; start a new one with Agent", to)
-	case meta[metaEnded] == "":
+	case meta[metaEnded] == "halted":
+		return refuse("the sub-agent %s was ended for good (by a permission the person refused, a hook, or a tool that said stop), and is not taken up again", to)
+	case !takesMore(def, meta[metaEnded]):
 		return refuse("the sub-agent %s never ended a run that could be taken up", to)
 	}
 	if why := l.cannotRunAgent(def); why != "" {
@@ -120,7 +136,7 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 	}
 	s, err := l.newSub(l.ctx, l.agent, nil, def, call.ID, "", true, to)
 	if err != nil {
-		return refuse("%s", strings.TrimRight(err.Error(), "."))
+		return refuse("%v", err)
 	}
 	out := l.startBackground(s, agentInput{Description: firstOf(strings.TrimSpace(in.Summary), "more to do"), Prompt: message})
 	return out, nil

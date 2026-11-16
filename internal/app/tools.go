@@ -108,8 +108,9 @@ func (l *live) buildTools() error {
 	// at its depth, only the session the person is in may ask them a
 	// question, and plan mode is the session's to switch.
 	all = append(all, &agentTool{l: l})
-	if l.backgroundOff(nil) == "" {
-		// A sub-agent that ended is given more to do in the background.
+	if l.backgroundOff(nil) == "" && l.engine.ToolEnabled(agentToolName) {
+		// A sub-agent that ended is given more to do in the background,
+		// where sub-agents may be started at all.
 		all = append(all, &sendMessageTool{l: l})
 	}
 	if l.inv.PermissionPrompts != "none" {

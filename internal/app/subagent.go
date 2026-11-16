@@ -932,7 +932,7 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.To
 	if s.ts != nil {
 		_, _ = s.ts.AppendAll(transcript.MetaEntry(metaEnded, status))
 	}
-	if s.owner == nil && resumable(s.def) && (status == "completed" || status == "partial") && !out.IsError {
+	if s.owner == nil && takesMore(s.def, status) && !out.IsError {
 		// Its id, which SendMessage takes to give it more to do.
 		if n := len(out.Content); n > 0 && out.Content[n-1].Type == core.BlockText {
 			out.Content[n-1].Text += "\n\n[agent id: " + s.id + "]"

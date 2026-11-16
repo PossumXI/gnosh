@@ -70,10 +70,14 @@ type startup struct {
 
 // ownTools are the names of the tools gnosh itself has, in the order a
 // model is told of them. It is the first half of the one list of tool
-// names; the features' names are the second.
+// names; the features' names are the second. A permission rule or a
+// --disallowedTools that names a tool not in it stops startup, so every
+// tool offeredTools can make is here (TestOwnToolsNameEveryTool): a rule
+// as Claude Code writes it, WebFetch(domain:...) say, was refused.
 func ownTools() []string {
 	d := fstools.Defaults()
-	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, agentToolName, askToolName, skillToolName}
+	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
+		webFetchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, skillToolName}
 }
 
 // toolNames returns the one list of tool names of this program: gnosh's

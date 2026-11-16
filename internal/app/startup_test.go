@@ -1,11 +1,44 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
+
+// Every tool a model is offered can be named in a permission rule: a rule
+// naming one that ownTools left out stopped startup, as "is not a tool
+// gnosh has" (WebFetch(domain:...), Monitor, SendMessage and the plan mode
+// tools were).
+func TestOwnToolsNameEveryTool(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploys.\n---\nDeploy the site.\n")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply { return &apptest.Reply{Text: "Hi."} })
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	names := toolNamesOf(w.Model.Requests()[0])
+	for _, want := range []string{"Agent", "SendMessage", "WebFetch", "Monitor", "Skill", "EnterPlanMode"} {
+		if !slices.Contains(names, want) {
+			t.Errorf("%s was not offered, so this test does not cover it: %v", want, names)
+		}
+	}
+	for _, name := range names {
+		if !slices.Contains(ownTools(), name) {
+			t.Errorf("%s is offered but is not among ownTools()", name)
+		}
+	}
+	rules := []string{`"WebFetch(domain:example.com)"`}
+	for _, name := range names {
+		rules = append(rules, `"`+name+`"`)
+	}
+	w.Settings(`{"permissions": {"ask": [` + strings.Join(rules, ", ") + `]}}`)
+	r := run(t, w, "-p", "hi")
+	if strings.Contains(r.err, "is not a tool gnosh has") {
+		t.Errorf("a rule naming an offered tool stopped startup:\n%s", r.err)
+	}
+	r.wantCode(t, 0)
+}
 
 // Every mistake in the configuration stops startup, with the file and the
 // line it is on: nothing is sent to a model and nothing is printed on

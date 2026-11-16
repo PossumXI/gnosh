@@ -3,9 +3,11 @@ package app
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
 
@@ -81,6 +83,80 @@ func TestSendMessageRefusals(t *testing.T) {
 	}
 	if !anyRequestHas(w, "Looked.") || anyRequestHas(w, "[agent id:") {
 		t.Errorf("an Explore sub-agent's report gave an id to resume it by, or none came")
+	}
+}
+
+// SendMessage is judged as starting a sub-agent of the kind it takes up
+// again: a deny rule about that kind, made after the sub-agent ended,
+// refuses the call, and nothing runs.
+func TestSendMessageObeysAgentRules(t *testing.T) {
+	w := apptest.NewWorld(t)
+	idRe := regexp.MustCompile(`\[agent id: ([0-9a-f-]+)\]`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		m := idRe.FindStringSubmatch(body)
+		switch {
+		case strings.Contains(body, "You are a sub-agent inside gnosh"):
+			return &apptest.Reply{Text: "There are 3 apples."}
+		case strings.Contains(body, "judged as starting one is"):
+			return &apptest.Reply{Text: "Refused."}
+		case m != nil && strings.Contains(body, "more please"):
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "SendMessage", Args: fmt.Sprintf(`{"to":%q,"message":"now count the oranges"}`, m[1])}}}
+		case m != nil:
+			return &apptest.Reply{Text: "Counted."}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"count apples","prompt":"count the apples"}`}}}
+	})
+	run(t, w, "-p", "count").wantCode(t, 0)
+	if !anyRequestHas(w, "[agent id:") {
+		t.Fatal("the sub-agent's report gave no id")
+	}
+	w.Deny("Agent(general-purpose)")
+	run(t, w, "-c", "-p", "more please").wantCode(t, 0)
+	if !anyRequestHas(w, "The deny rule Agent(general-purpose)") {
+		t.Errorf("the deny rule about general-purpose sub-agents did not refuse SendMessage")
+	}
+	for _, r := range w.Model.Requests() {
+		body := string(r.Body)
+		if strings.Contains(body, "You are a sub-agent inside gnosh") && strings.Contains(body, "now count the oranges") {
+			t.Errorf("the refused sub-agent ran again")
+		}
+	}
+}
+
+// With Agent switched off there is no SendMessage either: it takes up only
+// what Agent started.
+func TestNoSendMessageWithoutAgent(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Deny("Agent")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply { return &apptest.Reply{Text: "Hi."} })
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	names := toolNamesOf(w.Model.Requests()[0])
+	if slices.Contains(names, "Agent") || slices.Contains(names, "SendMessage") {
+		t.Errorf("tools offered with Agent switched off: %v", names)
+	}
+}
+
+// Which ends of a run leave a sub-agent to be given more to do.
+func TestTakesMore(t *testing.T) {
+	general := agentdef.Def{Name: "general-purpose"}
+	for _, c := range []struct {
+		def   agentdef.Def
+		ended string
+		want  bool
+	}{
+		{general, "completed", true},
+		{general, "partial", true},
+		{general, "failed", true},
+		{general, "halted", false},
+		{general, "stopped", false},
+		{general, "", false},
+		{agentdef.Def{Name: "Explore"}, "completed", false},
+		{agentdef.Def{Name: "worker", Isolation: "worktree"}, "completed", false},
+	} {
+		if got := takesMore(c.def, c.ended); got != c.want {
+			t.Errorf("takesMore(%s, %q) = %v, want %v", c.def.Name, c.ended, got, c.want)
+		}
 	}
 }
 

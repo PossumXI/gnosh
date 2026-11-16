@@ -149,7 +149,8 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	// machine (left blank, or named "local") as the call for this machine
 	// that it is, and any other as a command on another machine, which
 	// always asks.
-	d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action)).WithHook(verdict, hookReason)
+	d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action))
+	d = l.resumeAsStart(ctx, cwd, call, d).WithHook(verdict, hookReason)
 	confirm := action.Confirm && cannot == nil
 	if confirm {
 		// Asked every time: a kept approval would be the rule that this
@@ -268,15 +269,6 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 	if own.Behavior == permission.Deny || !l.featureTool(call.Name) {
 		return own
 	}
-	stricter := func(why string, other permission.Decision) {
-		if other.Behavior == permission.Allow || own.Behavior == permission.Deny {
-			return
-		}
-		if other.Behavior == permission.Deny || own.Behavior == permission.Allow {
-			other.Reason = why + " " + other.Reason
-			own = other
-		}
-	}
 	switch action.Kind {
 	case core.ActionExecute:
 		if strings.TrimSpace(action.Command) == "" {
@@ -303,7 +295,7 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 			return own
 		}
 		input := json.RawMessage(`{"command":` + string(quoted) + `,"host":` + string(host) + `}`)
-		stricter(call.Name+" runs a command on another machine for this call, which is judged as that command is.",
+		own = stricter(own, call.Name+" runs a command on another machine for this call, which is judged as that command is.",
 			l.engine.DecideAt(cwd, shelltool.BashName,
 				core.ToolCall{ID: call.ID, Name: shelltool.BashName, Input: input},
 				core.Action{Kind: core.ActionExecute, Command: action.Command, Summary: action.Summary}))
@@ -327,10 +319,53 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 				// already, and the tool's own answer stands.
 				continue
 			}
-			stricter(call.Name+" hands over a file for this call, which is judged as reading that file is.", d)
+			own = stricter(own, call.Name+" hands over a file for this call, which is judged as reading that file is.", d)
 		}
 	}
 	return own
+}
+
+// stricter is other, its reason led by why, where other is the stricter
+// answer (a refusal over anything, a question over a yes), and own
+// otherwise.
+func stricter(own permission.Decision, why string, other permission.Decision) permission.Decision {
+	if other.Behavior == permission.Allow || own.Behavior == permission.Deny {
+		return own
+	}
+	if other.Behavior == permission.Deny || own.Behavior == permission.Allow {
+		other.Reason = why + " " + other.Reason
+		return other
+	}
+	return own
+}
+
+// resumeAsStart judges a SendMessage call also as the Agent call that would start
+// a sub-agent of the kind it takes up again, and keeps the stricter answer:
+// a deny or ask rule about a kind of sub-agent (Agent(name)) covers giving
+// one of that kind more to do, as it covers starting one. A call whose
+// sub-agent cannot be found is left as it is; it refuses itself when it
+// runs.
+func (l *live) resumeAsStart(ctx context.Context, cwd string, call core.ToolCall, own permission.Decision) permission.Decision {
+	if call.Name != sendMessageName || own.Behavior == permission.Deny {
+		return own
+	}
+	var in sendMessageInput
+	if json.Unmarshal(call.Input, &in) != nil {
+		return own
+	}
+	meta, err := subagentMeta(ctx, l.subagentsDir(), strings.TrimSpace(in.To))
+	if err != nil {
+		return own
+	}
+	kind := meta[metaAgentType]
+	input, err := json.Marshal(agentInput{Description: firstOf(strings.TrimSpace(in.Summary), "more to do"), Prompt: in.Message, Type: kind})
+	if err != nil {
+		return own
+	}
+	as := core.ToolCall{ID: call.ID, Name: agentToolName, Input: input}
+	act, _ := (&agentTool{l: l}).Describe(as, nil)
+	return stricter(own, sendMessageName+" gives a "+kind+" sub-agent more to do, which is judged as starting one is.",
+		l.engine.DecideAt(cwd, agentToolName, as, act))
 }
 
 // featureTool reports whether a tool is one a feature brought, and not
