@@ -237,6 +237,9 @@ type live struct {
 	// configNow is what /config put in force in this session, by option.
 	configMu  sync.Mutex
 	configNow map[string]json.RawMessage
+	// newBuildSaid says the person was told of a newer gnosh installed
+	// (restart.go).
+	newBuildSaid atomic.Bool
 	// bgEver says the session has had work in the background, and
 	// bgUntold that the ends of that work are no longer told to the model
 	// (the run has stopped waiting for it).
@@ -1446,18 +1449,8 @@ func (c *controls) Deliverables() []Deliverable { return c.cur().deliverables() 
 // had any.
 func (c *controls) BackgroundWork() (running []string, ever bool) {
 	l := c.cur()
-	if l.shell != nil {
-		for _, t := range l.shell.Tasks() {
-			ever = true
-			if t.Running {
-				running = append(running, t.ID+" ("+oneLine(firstOf(t.Description, firstLine(t.Command)), 80)+")")
-			}
-		}
-	}
-	for _, b := range l.backgroundAgents() {
-		running = append(running, b.id+" ("+oneLine(b.desc, 80)+")")
-	}
-	return running, ever || len(running) > 0 || l.bgEver.Load()
+	running = l.runningWork()
+	return running, l.shell != nil && len(l.shell.Tasks()) > 0 || len(running) > 0 || l.bgEver.Load()
 }
 
 // CheckBackground hands the model a checkpoint in a run that has waited

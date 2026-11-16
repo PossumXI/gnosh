@@ -831,3 +831,16 @@ or kept with the reason said (27).
     has no WebSearch tool; a rule may still name it. It asks before it
     runs, as Claude Code's does, and lists titles, addresses and a line of
     each result; pages are read with WebFetch.
+60. **/restart starts gnosh again in the session, from the program file
+    there is now** (Claude Code's /restart, also /update). gnosh is
+    installed by rename while sessions run, and a long session kept the
+    build it started with. The session closes as /exit closes it, and the
+    process becomes gnosh started anew (exec) with its own flags written
+    out whole, --resume=<the session> in place of -c, -r, --session-id,
+    --fork-session and -n, no prompt words, and the permission mode, the
+    model and the thinking level as they stand; a work tree is kept and
+    named. It waits while a turn or background work runs, since closing
+    would stop them. A changed program file (another file, time or size
+    than gnosh started from) is said once, as a turn ends. The program
+    file is the name gnosh was run by, found on the PATH, so that an
+    install behind a link counts.

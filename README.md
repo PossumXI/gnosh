@@ -77,7 +77,9 @@ Built:
   and `"vimInsertModeRemaps": ["jj"]` makes a pair stand for Esc.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
-`/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write
+`/restart` (gnosh starts again in the same session, the newer one once a
+new build is installed, which the session says), `/compact`, `/resume`,
+`/branch`, `/rewind` (the conversation, the files Write
 and Edit changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissions`,
 `/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
 model works; nothing of it is kept), `/recap`, `/cost`, `/tasks`, `/diff`,
