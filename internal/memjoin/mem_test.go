@@ -219,8 +219,8 @@ func TestTaskListFromMem(t *testing.T) {
 	}
 	b.mem(`mem.Todo("rename the project", "rename it in the code", "rename it in the tests").Push()`)
 	want := []gnovmtools.TaskLine{
-		{Title: "rename it in the code", AtWork: "rename it in the code", State: gnovmtools.LineWorking},
-		{Title: "rename it in the tests", AtWork: "rename it in the tests", State: gnovmtools.LineOpen},
+		{Name: "rename-project/rename-code", Title: "rename it in the code", AtWork: "rename it in the code", State: gnovmtools.LineWorking},
+		{Name: "rename-project/rename-tests", Title: "rename it in the tests", AtWork: "rename it in the tests", State: gnovmtools.LineOpen},
 	}
 	check := func(what string, want []gnovmtools.TaskLine) {
 		t.Helper()
@@ -286,7 +286,7 @@ func TestTaskListFromMem(t *testing.T) {
 	}
 	// It is kept in words of the join's own, and reads back as it was. A
 	// value that is no list of this build's is not read.
-	if got, want := stored[len(stored)-1], `[{"title":"rename it in the code","state":"done"},{"title":"rename it in the tests","state":"done"}]`; got != want {
+	if got, want := stored[len(stored)-1], `[{"name":"rename-project/rename-code","title":"rename it in the code","state":"done"},{"name":"rename-project/rename-tests","title":"rename it in the tests","state":"done"}]`; got != want {
 		t.Errorf("the task list as the session's file keeps it:\n%s\nwant:\n%s", got, want)
 	}
 	if back, ok := decodeTasks(stored[len(stored)-1]); !ok || fmt.Sprint(back) != fmt.Sprint(want) {

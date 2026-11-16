@@ -40,6 +40,7 @@ func (t *taskState) load(entries []transcript.Entry) {
 // is the one being worked where that is something else, and its state as
 // the word the state gives itself.
 type keptLine struct {
+	Name   string `json:"name,omitempty"`
 	Title  string `json:"title"`
 	AtWork string `json:"at_work,omitempty"`
 	State  string `json:"state"`
@@ -49,7 +50,7 @@ type keptLine struct {
 func encodeTasks(list []gnovmtools.TaskLine) string {
 	kept := make([]keptLine, len(list))
 	for i, l := range list {
-		kept[i] = keptLine{Title: l.Title, State: l.State.String()}
+		kept[i] = keptLine{Name: l.Name, Title: l.Title, State: l.State.String()}
 		if l.AtWork != l.Title {
 			kept[i].AtWork = l.AtWork
 		}
@@ -73,7 +74,7 @@ func decodeTasks(value string) (list []gnovmtools.TaskLine, ok bool) {
 		if k.Title == "" || !known {
 			return nil, false
 		}
-		l := gnovmtools.TaskLine{Title: k.Title, AtWork: k.AtWork, State: state}
+		l := gnovmtools.TaskLine{Name: k.Name, Title: k.Title, AtWork: k.AtWork, State: state}
 		if l.AtWork == "" {
 			l.AtWork = l.Title
 		}
@@ -154,9 +155,16 @@ func sameTasks(a, b []gnovmtools.TaskLine) bool {
 // showTasks hands the front end the session's task list, which it shows
 // under the prompt: mem's todos for the last task a call of the session
 // changed, each with where it stands. While the session stands in a
-// frame, the line in progress reads the frame: in `id` "purpose". stack
-// is the session's stack as it stands. The front end's task has names of
-// its own for the three parts of a line, and they are filled here.
+// frame, the line in progress that holds that frame reads it: in `id`
+// "purpose". stack is the session's stack as it stands. The front end's
+// task has names of its own for the three parts of a line, and they are
+// filled here.
+//
+// A session may hold several todos at once (mem's holds: a todo entered
+// on the way, or started), and each is a line in progress; only the one
+// the session stands in reads the frame, and the others their own words
+// (Jae, 16 November 2026: the frame stood on three lines at once, "why is
+// there repetition").
 func (j *join) showTasks(stack []transcript.Frame) {
 	if !j.main || j.s.Tasks == nil {
 		return
@@ -164,11 +172,36 @@ func (j *join) showTasks(stack []transcript.Frame) {
 	j.mu.Lock()
 	list := slices.Clone(j.tasks.list)
 	j.mu.Unlock()
+	// The line that reads the frame: the one in progress that is the frame
+	// the session stands in, or holds it; else the one line in progress,
+	// when there is one (the session stands in the task, the line is its
+	// next todo); else none.
+	reads, working := -1, 0
+	var top transcript.Frame
+	if n := len(stack); n > 0 {
+		top = stack[n-1]
+	}
+	for i, l := range list {
+		if l.State != gnovmtools.LineWorking {
+			continue
+		}
+		working++
+		if reads < 0 && top.ID != "" && l.Name != "" && (l.Name == top.ID || strings.HasPrefix(top.ID, l.Name+"/")) {
+			reads = i
+		}
+	}
+	if reads < 0 && working == 1 {
+		for i, l := range list {
+			if l.State == gnovmtools.LineWorking {
+				reads = i
+			}
+		}
+	}
 	tasks := make([]app.Task, 0, len(list))
-	for _, l := range list {
+	for i, l := range list {
 		task := app.Task{Content: l.Title, ActiveForm: l.AtWork, Status: taskStatus(l.State)}
-		if n := len(stack); n > 0 && l.State == gnovmtools.LineWorking {
-			task.ActiveForm = fmt.Sprintf("in `%s` %q", stack[n-1].ID, stack[n-1].Label)
+		if i == reads && top.ID != "" {
+			task.ActiveForm = fmt.Sprintf("in `%s` %q", top.ID, top.Label)
 		}
 		tasks = append(tasks, task)
 	}

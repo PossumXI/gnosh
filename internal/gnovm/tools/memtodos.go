@@ -21,6 +21,9 @@ import (
 // shown in it: a step of the goal, or the goal itself when it has no
 // steps.
 type TaskLine struct {
+	// Name is the todo's name in mem, as its frame goes by while a session
+	// stands in it ("" in a list a session's file kept before names were).
+	Name string
 	// Title is the todo's words, as mem holds them.
 	Title string
 	// AtWork is how the line reads while it is the one being worked. For
@@ -87,7 +90,7 @@ func MemTodos(g gnovm.MemGoal, sessionID string) []TaskLine {
 		if g.Status == "done" {
 			state = LineDone
 		}
-		return []TaskLine{{Title: g.Title, AtWork: g.Title, State: state}}
+		return []TaskLine{{Name: g.Name, Title: g.Title, AtWork: g.Title, State: state}}
 	}
 	started := false
 	for _, s := range g.Steps {
@@ -105,7 +108,7 @@ func MemTodos(g gnovm.MemGoal, sessionID string) []TaskLine {
 			!started && (g.Next == s.Name || strings.HasPrefix(g.Next, s.Name+"/")):
 			state = LineWorking
 		}
-		todos = append(todos, TaskLine{Title: s.Title, AtWork: s.Title, State: state})
+		todos = append(todos, TaskLine{Name: s.Name, Title: s.Title, AtWork: s.Title, State: state})
 	}
 	return todos
 }

@@ -1374,8 +1374,9 @@ func TestDecodeParams(t *testing.T) {
 // one line for each that is not dropped or forgotten; one with none is
 // itself.
 func TestMemTodos(t *testing.T) {
+	names := map[string]string{"build": "ship/build", "test": "ship/test", "docs": "ship/docs", "tag it": "tag"}
 	line := func(title string, state LineState) TaskLine {
-		return TaskLine{Title: title, AtWork: title, State: state}
+		return TaskLine{Name: names[title], Title: title, AtWork: title, State: state}
 	}
 	steps := []gnovm.MemStep{
 		{Name: "ship/build", Title: "build", Status: "done"},

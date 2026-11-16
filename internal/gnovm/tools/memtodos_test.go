@@ -34,7 +34,7 @@ func TestMemGoalIsTheSessionsTodos(t *testing.T) {
 	setter := &todoSetter{todos: map[string][]TaskLine{}}
 	run := toolsOver(newLazy(t), Options{OnMemGoals: SessionTodos(setter)}).Tool(RunToolName)
 	todo := func(title string, state LineState) TaskLine {
-		return TaskLine{Title: title, AtWork: title, State: state}
+		return TaskLine{Name: "ship/" + title, Title: title, AtWork: title, State: state}
 	}
 
 	call(t, run, `{"name": "mem", "code": "s := mem.Todo(\"ship it\"); s.Todo(\"build\"); s.Todo(\"test\"); s.Todo(\"tag\")"}`)
