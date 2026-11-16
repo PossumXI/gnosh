@@ -322,7 +322,7 @@ func (l *live) statusInput() statusInput {
 		in.Worktree = &statusTree{Name: t.name, Path: t.path, Branch: t.branch, OriginalCwd: t.from, OriginalBranch: t.fromBranch}
 	}
 	in.Version = firstOf(l.p.o.BuildID, "devel")
-	in.OutputStyle.Name = "default"
+	in.OutputStyle.Name = l.styleNow()
 	in.Cost.TotalDurationMS = l.p.now().Sub(l.p.start).Milliseconds()
 	in.PermissionMode = string(l.engine.Mode())
 	if l.agent == nil {

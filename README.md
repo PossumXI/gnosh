@@ -57,6 +57,12 @@ Built:
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.
+- **Output styles**, as Claude Code's: `/output-style Concise` (or
+  Proactive, Explanatory, Learning) changes how the model replies from the
+  next message on, kept in the project's local settings. A style of your
+  own is a Markdown file in `~/.config/gnosh/output-styles/` (or a trusted
+  project's `.gnosh/output-styles/`) with `name`, `description` and
+  `keep-coding-instructions` in its frontmatter.
 - **Vim's keys** in the box, as Claude Code's editor mode: `"options":
   {"editorMode": "vim"}` in your gnosh.json, or `/config editorMode=vim`
   at once. NORMAL, INSERT and VISUAL modes, motions, operators with counts,

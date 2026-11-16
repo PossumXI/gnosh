@@ -177,6 +177,11 @@ type live struct {
 
 	// skillRuns are the skills that went into the conversation, the most
 	// recent last, each with its text as it went in.
+	// styles are the output styles there are, and styleName the one in
+	// force (outputstyle.go).
+	styleMu   sync.Mutex
+	styles    []outputStyle
+	styleName string
 	skillMu   sync.Mutex
 	skillRuns []skillRun
 	// skillsWoken are the skills for some files (paths) the model has been
@@ -401,6 +406,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		return l, err
 	}
 	l.agentNotices()
+	l.loadStyles()
 	system, err := l.systemPrompt()
 	l.system = system
 	if err != nil {
@@ -1122,6 +1128,7 @@ func (l *live) info() SessionInfo {
 		SidePanel:   l.cfg.Options.SidePanel.V,
 		Verbose:     l.cfg.Options.Verbose.V,
 		Vim:         l.cfg.Options.EditorMode.V == "vim",
+		OutputStyle: l.styleNow(),
 		Resume:      "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {

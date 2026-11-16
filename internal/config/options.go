@@ -73,6 +73,11 @@ type Options struct {
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 
+	// OutputStyle is the output style's name (Claude Code's outputStyle):
+	// "default", one of gnosh's own, or one of the person's or the
+	// project's files.
+	OutputStyle Value[string]
+
 	// EditorMode is how the box takes keys: "normal", readline's keys, or
 	// "vim". VimInsertModeRemaps are the pairs of characters that, typed
 	// one after the other in vim's INSERT mode, stand for Esc ("jj").
@@ -112,6 +117,7 @@ const (
 	oListen                  // where a server of gnosh's own listens: an address of this machine alone with a port, or "off"
 	oPathList                // a list of paths
 	oNameList                // a list of names
+	oName                    // a name, as a string that is not empty
 )
 
 // optionDef describes one key of the "options" object: what its value
@@ -213,6 +219,12 @@ var optionDefs = []optionDef{
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
 		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},
+
+	// How the model replies.
+	{key: "outputStyle", kind: oName, def: "default",
+		what: "how the model replies: Proactive, Concise, Explanatory, Learning, or a style of your own (/output-style switches it)",
+		from: fromClaudeCode + ": the settings key",
+		text: func(o *Options) *Value[string] { return &o.OutputStyle }},
 
 	// The box.
 	{key: "editorMode", kind: oEnum, def: "normal",
@@ -361,6 +373,8 @@ func (o *optionDef) takes() string {
 		return "a path"
 	case oPathList:
 		return "a list of paths, set in gnosh.json"
+	case oName:
+		return "a name"
 	}
 	return "a list of names, set in gnosh.json"
 }

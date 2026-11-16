@@ -67,6 +67,33 @@ type SystemInput struct {
 	// Append, when not empty, is sent last. It is what
 	// --append-system-prompt gives.
 	Append string
+
+	// Style is the output style the person chose (Claude Code's
+	// outputStyle), or nil for the default.
+	Style *Style
+}
+
+// Style is an output style: instructions on how the model replies, sent
+// right after the core. KeepCoding keeps the core's first line, the coding
+// agent's role; without it a style of the person's own gives the model its
+// role (core-any-role), and the rest of the core, which is how to work in
+// gnosh, stays.
+type Style struct {
+	Name, Description string
+	Text              string
+	KeepCoding        bool
+}
+
+// BuiltinStyles are the output styles gnosh has of its own, Claude Code's
+// four besides its default, in the order a list shows them. Each keeps the
+// coding instructions.
+func (s *Set) BuiltinStyles() []Style {
+	return []Style{
+		{Name: "Proactive", Description: "starts work at once and makes the routine choices itself", Text: s.fill(textStyleProactive, nil), KeepCoding: true},
+		{Name: "Concise", Description: "leads with the result, and leaves out the lead-in, the narration and the recap", Text: s.fill(textStyleConcise, nil), KeepCoding: true},
+		{Name: "Explanatory", Description: "adds short Insight blocks on the choices behind the work", Text: s.fill(textStyleExplain, nil), KeepCoding: true},
+		{Name: "Learning", Description: "explains its choices and leaves pieces of code for you to write", Text: s.fill(textStyleLearning, nil), KeepCoding: true},
+	}
 }
 
 // System returns the system prompt as parts, the part that changes least
@@ -74,7 +101,9 @@ type SystemInput struct {
 // part that does not apply is left out:
 //
 //  1. the fixed core, with the security rule as its last lines: the same
-//     bytes whatever is in SystemInput;
+//     bytes whatever is in SystemInput, but for a Style of the person's
+//     own that does not keep the coding instructions, whose role stands in
+//     place of the core's first line; then the Style, when there is one;
 //  2. the note that there are no tools, when there are none;
 //  3. the part about mem, when the session has gnovm_run: the lean text,
 //     or with Memory set to MemoryFull the full one;
@@ -86,7 +115,7 @@ type SystemInput struct {
 //     everything before it in a model server's cache;
 //  7. Append.
 //
-// With Replace set, parts 1, 3, 4 and 6 give way to it.
+// With Replace set, parts 1 (the Style with it), 3, 4 and 6 give way to it.
 func (s *Set) System(in SystemInput) []string {
 	var parts []string
 	add := func(part string) {
@@ -95,10 +124,20 @@ func (s *Set) System(in SystemInput) []string {
 		}
 	}
 	own := strings.TrimSpace(in.Replace) == ""
-	if own {
-		add(s.Core())
-	} else {
+	switch {
+	case !own:
 		add(in.Replace)
+	case in.Style != nil && !in.Style.KeepCoding:
+		// The coding agent's role gives way to the style's; how to work
+		// in gnosh stays.
+		core := s.Core()
+		_, rest, _ := strings.Cut(core, "\n")
+		add(s.fill(textCoreAnyRole, nil) + "\n" + rest)
+	default:
+		add(s.Core())
+	}
+	if own && in.Style != nil {
+		add(in.Style.Text)
 	}
 	if len(in.Tools) == 0 {
 		add(s.fill(textNoTools, nil))

@@ -777,6 +777,13 @@ func (s *source) options(f jfield) {
 				continue
 			}
 			s.add(op{kind: def.trustKind(), text: key + ": " + where, origin: o, apply: func(b *builder) { def.text(&b.opts).put(where, o) }})
+		case oName:
+			if v.kind != jString || strings.TrimSpace(v.str) == "" || !printable(v.str) {
+				s.errorf(m.line, "%q is a name as a string that is not empty and holds no control character, and here it is %s.", key, emptyString(v))
+				continue
+			}
+			name := strings.TrimSpace(v.str)
+			s.add(op{kind: def.trustKind(), text: key + ": " + name, origin: o, apply: func(b *builder) { def.text(&b.opts).put(name, o) }})
 		case oPath:
 			if v.kind != jString || v.str == "" || !printable(v.str) {
 				s.errorf(m.line, "%q is a path as a string that is not empty and holds no control character, and here it is %s.", key, emptyString(v))

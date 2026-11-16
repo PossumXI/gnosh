@@ -294,6 +294,8 @@ func (l *live) systemPrompt() ([]string, error) {
 	if l.cfg.Options.MemoryText.V == "full" {
 		in.Memory = prompt.MemoryFull
 	}
+	// The output style chosen (outputstyle.go).
+	in.Style = l.currentStyle()
 	for _, c := range l.contribs {
 		if c.c.System != nil {
 			c.c.System(&in)

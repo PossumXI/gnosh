@@ -37,6 +37,11 @@ const (
 // its ".md".
 const (
 	textCore             = "core"
+	textCoreAnyRole      = "core-any-role"
+	textStyleProactive   = "style-proactive"
+	textStyleConcise     = "style-concise"
+	textStyleExplain     = "style-explanatory"
+	textStyleLearning    = "style-learning"
 	textSecurity         = "security"
 	textNoTools          = "no-tools"
 	textMemory           = "memory"
@@ -122,6 +127,16 @@ func specs() []spec {
 			when: "The first part of every system prompt: the same bytes in every session, project and machine."},
 		{name: textSecurity, kind: KindSystem,
 			when: "The last lines of that first part: security work is helped, not refused. A file of its own, so that it can be replaced alone."},
+		{name: textCoreAnyRole, kind: KindSystem,
+			when: "In place of the core's first line, the coding agent's role, under a custom output style that does not keep the coding instructions (keep-coding-instructions)."},
+		{name: textStyleProactive, kind: KindSystem,
+			when: "After the core, under the built-in output style Proactive: start at once, assume the routine, check in before harm."},
+		{name: textStyleConcise, kind: KindSystem,
+			when: "After the core, under the built-in output style Concise: the result first, nothing around it."},
+		{name: textStyleExplain, kind: KindSystem,
+			when: "After the core, under the built-in output style Explanatory: Insight blocks on the choices made."},
+		{name: textStyleLearning, kind: KindSystem,
+			when: "After the core, under the built-in output style Learning: Insights, and a piece of the code left to the user (TODO(human))."},
 		{name: textNoTools, kind: KindSystem,
 			when: "A part of the system prompt only when the session has no tools at all."},
 		{name: textMemory, kind: KindSystem,

@@ -890,7 +890,7 @@ func (f *printer) init() {
 		MCPServers:     append([]MCPServerStatus{}, info.MCPServers...),
 		PermissionMode: info.Mode,
 		SlashCommands:  append([]string{}, info.Commands...),
-		OutputStyle:    "default",
+		OutputStyle:    firstOf(info.OutputStyle, defaultStyle),
 		Skills:         skills,
 		Plugins:        []string{},
 		APIKeySource:   "none",

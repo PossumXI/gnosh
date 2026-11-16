@@ -283,6 +283,7 @@ func TestOptions(t *testing.T) {
     "sidePanel": true,
     "verbose": true,
     "projectDataDir": ".agent",
+    "outputStyle": "Concise",
     "editorMode": "vim",
     "vimInsertModeRemaps": ["jj", "jk"]
   }
@@ -321,6 +322,7 @@ func TestOptions(t *testing.T) {
 	check("sidePanel", o.SidePanel.V, true)
 	check("verbose", o.Verbose.V, true)
 	check("projectDataDir", o.ProjectDataDir.V, ".agent")
+	check("outputStyle", o.OutputStyle.V, "Concise")
 	check("editorMode", o.EditorMode.V, "vim")
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 

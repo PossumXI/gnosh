@@ -234,3 +234,47 @@ func TestMarkers(t *testing.T) {
 		t.Error("the checkpoint does not show its marker on a line of its own")
 	}
 }
+
+// An output style stands right after the core, and changes nothing else.
+// gnosh's own keep the core whole; a style without the coding instructions
+// puts its role in place of the core's first line and keeps the rest; the
+// person's own system prompt sends no style.
+func TestSystemStyles(t *testing.T) {
+	s := Builtin()
+	in := SystemInput{Tools: toolSpecs("Read", "gnovm_run"), Instructions: "INSTRUCTIONS-OF-THE-PROJECT"}
+	plain := s.System(in)
+	styles := s.BuiltinStyles()
+	if len(styles) != 4 {
+		t.Fatalf("%d built-in styles, want Claude Code's four", len(styles))
+	}
+	for _, st := range styles {
+		if !st.KeepCoding || st.Text == "" || st.Description == "" || !strings.Contains(st.Text, "Output style: "+st.Name) {
+			t.Errorf("the built-in style %s: %+v", st.Name, st)
+		}
+		in.Style = &st
+		got := s.System(in)
+		if len(got) != len(plain)+1 || got[0] != plain[0] || got[1] != st.Text || !slices.Equal(got[2:], plain[1:]) {
+			t.Errorf("under %s the parts are\n%q\nwant the plain ones with the style second", st.Name, got)
+		}
+	}
+	own := Style{Name: "Pirate", Text: "Speak as a pirate would."}
+	in.Style = &own
+	got := s.System(in)
+	if strings.Contains(got[0], "You are the coding agent inside gnosh") || !strings.HasPrefix(got[0], "You are the agent inside gnosh") {
+		t.Errorf("a style without the coding instructions keeps the coding agent's role:\n%s", clip(got[0], 300))
+	}
+	_, rest, _ := strings.Cut(plain[0], "\n")
+	if !strings.HasSuffix(got[0], rest) || got[1] != own.Text {
+		t.Errorf("a style of one's own: the rest of the core or the style is not there:\n%q", got[:2])
+	}
+	own.KeepCoding = true
+	if got := s.System(in); got[0] != plain[0] {
+		t.Error("keep-coding-instructions does not keep the core whole")
+	}
+	in.Replace = "REPLACED-BY-THE-PERSON"
+	for _, part := range s.System(in) {
+		if strings.Contains(part, own.Text) {
+			t.Error("the person's own system prompt is sent with a style")
+		}
+	}
+}

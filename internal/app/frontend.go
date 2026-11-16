@@ -349,6 +349,9 @@ type SessionInfo struct {
 	// SidePanel says the session starts with the side panel on (the
 	// sidePanel option).
 	SidePanel bool
+	// OutputStyle is the name of the output style in force, "default" for
+	// none.
+	OutputStyle string
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

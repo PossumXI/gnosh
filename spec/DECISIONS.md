@@ -782,3 +782,18 @@ or kept with the reason said (27).
     INSERT mode, ready for the next prompt. "." types again the text of an
     INSERT session, never a history step, a submit or a paste from the
     ring, which a replay must not do twice.
+57. **Output styles, as Claude Code's outputStyle and /output-style.**
+    gnosh has Claude Code's four besides the default (Proactive, Concise,
+    Explanatory, Learning), each written in gnosh's words from what
+    Claude Code's documentation says the style does, and a person's own
+    or a trusted project's Markdown files in an output-styles folder
+    beside their skills, the closest first. The style is sent right after
+    gnosh's core, the one choice of the person's that changes the system
+    prompt. A style of one's own without keep-coding-instructions puts a
+    plain role in place of the core's first line (the coding agent) and
+    keeps the rest, which is how to work in gnosh, not how to code: gnosh
+    has no software-engineering section to leave out. /output-style keeps
+    the choice in the project's local settings file, as Claude Code
+    does, which a folder that is not trusted does not read: the choice
+    then holds for the session, and the command says so. A name no style
+    has is said at the start, and the default used.

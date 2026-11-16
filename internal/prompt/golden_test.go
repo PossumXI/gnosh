@@ -88,6 +88,20 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "styles",
+			texts: []string{textCoreAnyRole, textStyleProactive, textStyleConcise, textStyleExplain, textStyleLearning},
+			cases: func(s *Set) []goldenCase {
+				var cases []goldenCase
+				for _, st := range s.BuiltinStyles() {
+					cases = append(cases, goldenCase{"the built-in output style " + st.Name + " (" + st.Description + ")", st.Text})
+				}
+				own := Style{Name: "Pirate", Text: "Speak as a pirate would, and keep the work exact."}
+				sys := s.System(SystemInput{Tools: toolSpecs("Read"), Style: &own})
+				cases = append(cases, goldenCase{"the core under a style of the person's own that does not keep the coding instructions", sys[0]})
+				return cases
+			},
+		},
+		{
 			file:  "memory-full",
 			texts: []string{textMemoryFull},
 			cases: func(s *Set) []goldenCase {

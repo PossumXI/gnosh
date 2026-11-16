@@ -90,6 +90,17 @@
 //     and when unsure the model asks and then goes ahead. The sentence is
 //     written fresh from that requirement.
 //
+//   - style-proactive, style-concise, style-explanatory or style-learning,
+//     right after the core, when the person chose one of Claude Code's
+//     four output styles (outputStyle, /output-style), or the text of a
+//     style of their own. The texts say what each style does in gnosh's
+//     words, from what Claude Code's documentation says the styles do. A
+//     style of the person's own that does not keep the coding
+//     instructions puts core-any-role in place of the core's first line,
+//     the coding agent's role; the rest of the core, how to work in gnosh,
+//     stays. These are the one choice of the person's that changes the
+//     system prompt: a choice made on purpose, for the whole session.
+//
 //   - no-tools, only in a session with no tools at all: a model with no
 //     tools otherwise writes its tool calls out as text.
 //
