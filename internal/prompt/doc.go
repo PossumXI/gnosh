@@ -293,7 +293,10 @@
 //   - summary, with summary-extra for what the person asked of it
 //     (Summary), is the request for a summary. It is about 200 tokens and
 //     asks for at most 500 words: what the user asked, in their words;
-//     what is done; what was found that the rest needs; what is left, with
+//     what is done, and only what tool calls did (a change found or
+//     planned is not done: a summary on box 2, 16 November 2026, called
+//     32 typo fixes done of which 6 were made); what was found that the
+//     rest needs; what is left, every change not yet made among it, with
 //     the user's latest request quoted, and every point where they said
 //     to stop or ask first. It leaves out file contents and,
 //     in a session with mem, everything mem holds, since gnosh hands that

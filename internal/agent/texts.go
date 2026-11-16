@@ -175,7 +175,7 @@ var defaultTexts = Texts{
 		"1. What the user asked for: every message of the user's, in their own words where they are short, and what they meant by each.\n" +
 		"2. What was done: the steps taken and what came of each, with the names of the files read and changed and the commands run.\n" +
 		"3. What was found: facts about the project, decisions made and why, errors met and how each was fixed.\n" +
-		"4. Where things stand: what is finished, what is half done, and anything running in the background.\n" +
+		"4. Where things stand: what is finished, what is half done, what was found or planned and not yet done, and anything running in the background.\n" +
 		"5. The next step: what you were about to do, quoting the user's own words for it.\n\n" +
 		"Call no tools. Answer with the summary and nothing else.",
 	SummaryExtra: "The user asks this of the summary: %s",
