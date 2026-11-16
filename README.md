@@ -133,6 +133,12 @@ if [[ $TERM_PROGRAM == Apple_Terminal ]]; then
 fi
 ```
 
+ssh keeps your terminal: it reads what you type, asks for passwords, and
+stops with Ctrl+Z or `~^Z` as it does alone, and its exit status is
+gnosh's. Only what it writes passes through gnosh. The clipboard is only
+ever written, never read, but anything shown on the far side can write it,
+as in terminals that take OSC 52 themselves.
+
 ## Reading on
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): how it is put together.

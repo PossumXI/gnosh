@@ -387,10 +387,10 @@ func Default() *Table {
 		passes: true, dashHint: "gnosh ssh must be the first word, and then every word after it is ssh's",
 		flags:   []*flag{help},
 		summary: "Run ssh, putting what the far side copies on this machine's clipboard.",
-		about: "Every word after ssh is ssh's (but for -h or --help alone, which shows this), and gnosh ssh ends with ssh's status. At a terminal, ssh runs on a terminal of gnosh's own: what is typed and what comes back pass through as they are, " +
-			"and the text of each copy the far side makes through the terminal (OSC 52: gnosh's /copy, tmux's copy mode) is put on this machine's clipboard as well. " +
+		about: "Every word after ssh is ssh's (but for -h or --help alone, which shows this), and gnosh ssh ends with ssh's status. At a terminal, ssh keeps the terminal, its passwords and its job, and what it writes passes through gnosh as it is, " +
+			"which puts the text of each copy the far side makes through the terminal (OSC 52: gnosh's /copy, tmux's copy mode) on this machine's clipboard as well. " +
 			"Apple's Terminal drops such copies, so there a shell function can send each interactive ssh through gnosh ssh. " +
-			"Without a terminal, or where this machine has no clipboard tool (pbcopy, wl-copy, xclip, xsel), gnosh ssh is plain ssh."})
+			"Without a terminal, where this machine has no clipboard tool (pbcopy, wl-copy, xclip, xsel), or with -f, gnosh ssh is plain ssh."})
 
 	mcp := t.command(root, &command{name: "mcp", needSub: true, pri: 1,
 		argsUsage: "<command>", flags: []*flag{help},

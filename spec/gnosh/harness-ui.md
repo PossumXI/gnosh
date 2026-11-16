@@ -74,15 +74,17 @@ The earlier fix for Apple's Terminal, built 2026-11-09. With native
 selection (UI-1) it is no longer needed for dragging; it still makes `/copy`
 and other programs' copies arrive from the far side of ssh.
 
-- `gnosh ssh <ssh arguments>` runs `ssh` on a terminal of its own, passes
-  keys and output through untouched, follows the window's size, and passes
-  on the signals a terminal sends.
+- `gnosh ssh <ssh arguments>` runs `ssh` with the user's own terminal:
+  ssh reads the keys, asks for passwords, writes its messages and is
+  stopped and continued with the shell's job, as it is alone. Only its
+  output passes through gnosh, untouched, and ssh's exit status (or the
+  signal that ended it) is gnosh's.
 - Each "set the clipboard" sequence it sees in the output is put on **this**
   computer's clipboard.
 - A request to **read** or **clear** the clipboard is never acted on.
-- Copies are done in order, a few at a time, and a stuck clipboard never
-  freezes the screen.
-- Without a terminal it runs plain `ssh`.
+- Copies are made one at a time, the newest winning, and a stuck clipboard
+  never freezes the screen.
+- Without a terminal, or with `-f`, gnosh hands itself over to plain `ssh`.
 - One line in the user's shell startup file sends interactive `ssh` typed in
   Apple's Terminal through it.
 

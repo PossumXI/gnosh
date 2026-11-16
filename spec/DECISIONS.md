@@ -563,16 +563,34 @@ or kept with the reason said (27).
     which a program on the far side of ssh puts text on the clipboard
     (gnosh's /copy, tmux's copy mode), so in it nothing copied on the
     far side ever reached the Mac. Jae asked for copying there to work
-    three times. `gnosh ssh [ssh arguments...]` runs ssh on a
-    pseudo-terminal of gnosh's own, passes every byte through as it is,
-    and puts the text of each OSC 52 write on this machine's clipboard
-    as well (pbcopy on macOS; wl-copy, xclip or xsel on a Linux
-    desktop). Queries and clears are not acted on, nor are the 8-bit
-    forms of the sequence, whose bytes are also parts of UTF-8
-    characters. It follows the window's size, passes signals on, and
-    ends with ssh's status; copies queue sixteen deep, the oldest giving
-    way, so a clipboard that hangs never holds the screen up. Without a
-    terminal, or with no clipboard tool, it is plain ssh. main runs it
+    three times. `gnosh ssh [ssh arguments...]` runs ssh with the
+    terminal it was given and a pipe for its standard output, which gnosh
+    writes on to the terminal as it comes, putting the text of each OSC
+    52 write on this machine's clipboard as well (pbcopy on macOS;
+    wl-copy, xclip or xsel on a Linux desktop). ssh keeps the rest: it
+    reads what is typed, sets the terminal up, asks for passwords on it
+    (so Apple's Terminal still sees a password prompt), writes its own
+    messages wherever standard error goes, and stays in the shell's job,
+    so Ctrl+Z stops it as it would; when it stops by itself (~^Z), gnosh
+    stops the same way. A first version ran ssh on a pseudo-terminal of
+    gnosh's own. A review of it (fifteen findings, all confirmed) found
+    that this made ssh a session leader whose exit hung up its ProxyJump
+    child and ControlPersist master, lost job control and the password
+    prompt's protection, sent standard error to the screen, stopped
+    `ssh ... &` on SIGTTOU, and could hang when the terminal went away;
+    most of that went with the pseudo-terminal. Signals that end a
+    program, sent to gnosh, are passed on (one ignored when gnosh
+    started, as nohup's SIGHUP, stays ignored, for ssh too), and when a
+    signal ends ssh gnosh ends by it as well, so a shell loop stops at
+    Ctrl+C. The clipboard holds one text, so a copy that waits while
+    another is made gives way to a newer one, and a clipboard that hangs
+    never holds the screen up. Queries and clears are not acted on, nor
+    are the 8-bit forms of the sequence, whose bytes are also parts of
+    UTF-8 characters, and the clipboard is never read back; as in the
+    terminals that take OSC 52, anything shown on the far side may put
+    text on the clipboard. Without a terminal, with no clipboard tool, or
+    when ssh is to go on in the background (-f, ForkAfterAuthentication),
+    gnosh hands its process over to ssh (exec). main runs it
     before anything else is read, so every word after `ssh` is ssh's;
     the table has it for help (`-h` or `--help` alone shows that). A
     shell function in Apple's Terminal can send each interactive ssh

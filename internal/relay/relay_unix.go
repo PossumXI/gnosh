@@ -10,163 +10,132 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
-	xterm "golang.org/x/term"
-
-	"github.com/gnosh-ai/gnosh/internal/term"
 )
 
-// drainWait is how long the relay waits, once ssh has ended, for the rest
-// of what it wrote: something it left running may hold its terminal open.
-const drainWait = 2 * time.Second
-
-// copyWait is how long the copies still queued at the end are given.
-const copyWait = 3 * time.Second
-
-// isTerminal reports whether f is a terminal.
-func isTerminal(f *os.File) bool { return f != nil && xterm.IsTerminal(int(f.Fd())) }
-
-// relay runs ssh on a pseudo-terminal of its own: what is typed goes to it
-// as it is, what it writes goes to the terminal as it is, and the text of
-// each clipboard write in what it writes goes to o.Copy. started says ssh
-// was started; when it was not, err says why and nothing was changed.
-func relay(path string, o Options) (status int, started bool, err error) {
-	inFd, outFd := int(o.In.Fd()), int(o.Out.Fd())
-	master, slave, err := term.OpenPTY()
+// relay runs ssh with gnosh's input and error as they are and a pipe for
+// its output, which is written on to the terminal as it comes, the far
+// side's copies taken from it on the way.
+func relay(path string, o Options) (int, syscall.Signal) {
+	r, w, err := os.Pipe()
 	if err != nil {
-		return 0, false, err
+		fmt.Fprintf(o.Err, "gnosh ssh: the clipboard relay could not start (%v), so ssh runs without it.\n", err)
+		return plain(path, o)
 	}
-	defer master.Close()
-	// Plain blocking reads and writes on the master, as on the terminal:
-	// not every system's poller takes a pseudo-terminal (Fd makes the
-	// file blocking).
-	master.Fd()
-	// ssh's terminal starts as this one is: its settings, and its size.
-	if t, err := unix.IoctlGetTermios(inFd, ioctlGetTermios); err == nil {
-		_ = control(slave, func(fd int) error { return unix.IoctlSetTermios(fd, ioctlSetTermios, t) })
-	}
-	resize := func() {
-		if ws, err := unix.IoctlGetWinsize(outFd, unix.TIOCGWINSZ); err == nil {
-			_ = control(master, func(fd int) error { return unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, ws) })
-		}
-	}
-	resize()
-
-	cmd := exec.Command(path, o.Args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
-	sigs := make(chan os.Signal, 8)
-	signal.Notify(sigs, syscall.SIGWINCH, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
-	defer signal.Stop(sigs)
-	if err := cmd.Start(); err != nil {
-		slave.Close()
-		return 0, false, err
-	}
-	// Only ssh holds its terminal now, so that its end ends the reading.
-	slave.Close()
-
-	saved, rawErr := xterm.MakeRaw(inFd)
-	if rawErr == nil {
-		defer xterm.Restore(inFd, saved)
-	}
-
-	copies := make(chan string, copiesQueued)
-	copied := make(chan struct{})
-	var failed int
-	var lastErr error
+	defer r.Close()
+	cmd := command(path, o)
+	cmd.Stdout = w
+	cp := newCopier(o.Copy)
+	shown := make(chan struct{})
 	go func() {
-		defer close(copied)
-		for text := range copies {
-			if err := o.Copy(text); err != nil {
-				failed, lastErr = failed+1, err
-			}
-		}
+		defer close(shown)
+		pass(r, o.Out, cp.offer)
 	}()
-	offer := func(text string) {
-		for {
-			select {
-			case copies <- text:
-				return
-			default:
-				select {
-				case <-copies:
-				default:
-				}
-			}
-		}
-	}
-
-	// What is typed goes to ssh. (The reading ends with gnosh.)
-	go func() { _, _ = io.Copy(master, o.In) }()
-	// What ssh writes goes to the terminal, and through the scanner.
-	drained := make(chan struct{})
-	go func() {
-		defer close(drained)
-		var sc scanner
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := master.Read(buf)
-			if n > 0 {
-				if _, werr := o.Out.Write(buf[:n]); werr != nil {
-					return
-				}
-				sc.feed(buf[:n], offer)
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	waited := make(chan error, 1)
-	go func() { waited <- cmd.Wait() }()
-
-	var werr error
-loop:
-	for {
-		select {
-		case sig := <-sigs:
-			if sig == syscall.SIGWINCH {
-				resize()
-				continue
-			}
-			_ = cmd.Process.Signal(sig)
-		case werr = <-waited:
-			break loop
-		}
-	}
+	code, sig := supervise(cmd, o.Err, func() { w.Close() })
 	select {
-	case <-drained:
+	case <-shown:
 	case <-time.After(drainWait):
 	}
-	close(copies)
-	finished := false
-	select {
-	case <-copied:
-		finished = true
-	case <-time.After(copyWait):
-	}
-	if rawErr == nil {
-		_ = xterm.Restore(inFd, saved)
-	}
-	switch {
-	case !finished:
-		fmt.Fprintf(o.Err, "gnosh ssh: the clipboard took more than %s; the last of the far side's copies may not have reached it.\n", copyWait)
+	switch all, failed, err := cp.finish(copyWait); {
+	case !all:
+		fmt.Fprintf(o.Err, "gnosh ssh: the clipboard took more than %s; the far side's last copy may not have reached it.\n", copyWait)
 	case failed > 0:
-		fmt.Fprintf(o.Err, "gnosh ssh: %d of the far side's copies did not reach the clipboard (%v).\n", failed, lastErr)
+		fmt.Fprintf(o.Err, "gnosh ssh: %d of the far side's copies did not reach the clipboard (%v).\n", failed, err)
 	}
-	return exitStatus(werr), true, nil
+	return code, sig
 }
 
-// control runs fn with f's descriptor, leaving f as it was.
-func control(f *os.File, fn func(fd int) error) error {
-	conn, err := f.SyscallConn()
+// plain runs ssh with gnosh's own input and output, nothing in between.
+// Where it may, gnosh hands its process over to ssh, which is then just
+// what it is by itself.
+func plain(path string, o Options) (int, syscall.Signal) {
+	if o.Exec {
+		err := syscall.Exec(path, append([]string{o.SSH}, o.Args...), os.Environ())
+		fmt.Fprintf(o.Err, "gnosh ssh: %s: %v\n", path, err)
+		return 126, 0
+	}
+	return supervise(command(path, o), o.Err, func() {})
+}
+
+// supervise starts cmd and waits for it to end. The signals that end a
+// program, sent to gnosh, are passed on to it: those a terminal sends
+// reach it by themselves, and one more of the same changes nothing. One
+// that was ignored when gnosh started (nohup's SIGHUP) stays ignored, by
+// ssh too. started is called once cmd has started, or failed to.
+func supervise(cmd *exec.Cmd, errOut io.Writer, started func()) (int, syscall.Signal) {
+	sigs := make(chan os.Signal, 8)
+	for _, s := range []os.Signal{syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGHUP} {
+		if !signal.Ignored(s) {
+			signal.Notify(sigs, s)
+		}
+	}
+	defer signal.Stop(sigs)
+	err := cmd.Start()
+	started()
 	if err != nil {
-		return err
+		fmt.Fprintf(errOut, "gnosh ssh: %v\n", err)
+		return 126, 0
 	}
-	var ferr error
-	if err := conn.Control(func(fd uintptr) { ferr = fn(int(fd)) }); err != nil {
-		return err
+	pid := cmd.Process.Pid
+	ended := make(chan syscall.WaitStatus, 1)
+	go func() { ended <- waitFor(pid) }()
+	for {
+		select {
+		case s := <-sigs:
+			_ = syscall.Kill(pid, s.(syscall.Signal))
+		case ws := <-ended:
+			_ = cmd.Process.Release()
+			if ws.Signaled() {
+				return 128 + int(ws.Signal()), ws.Signal()
+			}
+			return ws.ExitStatus(), 0
+		}
 	}
-	return ferr
+}
+
+// stopSettle is how long a stop of ssh's is let settle before gnosh acts
+// on it: when the shell stopped the whole job and has gone on with it,
+// ssh is going on again by then.
+const stopSettle = 50 * time.Millisecond
+
+// waitFor waits for the process pid to end and says how it ended. When the
+// process stops by itself (ssh's ~^Z), gnosh stops the same way, so that
+// the shell sees its job stopped, and the shell's fg goes on with both.
+func waitFor(pid int) syscall.WaitStatus {
+	for {
+		var ws syscall.WaitStatus
+		_, err := syscall.Wait4(pid, &ws, syscall.WUNTRACED, nil)
+		switch {
+		case err == syscall.EINTR:
+			continue
+		case err != nil:
+			// (It cannot be waited for, so how it ended is not known.)
+			return syscall.WaitStatus(255 << 8)
+		case !ws.Stopped():
+			return ws
+		}
+		time.Sleep(stopSettle)
+		if !stopped(pid) {
+			continue
+		}
+		_ = syscall.Kill(syscall.Getpid(), ws.StopSignal())
+		time.Sleep(stopSettle)
+		if stopped(pid) {
+			_ = syscall.Kill(pid, syscall.SIGCONT)
+		}
+	}
+}
+
+// dieOf ends gnosh by sig, as ssh was ended, where sig is one that ends a
+// program and that gnosh does not keep for itself; otherwise it returns,
+// and gnosh ends with 128 and its number.
+func dieOf(sig syscall.Signal) {
+	switch sig {
+	case syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGKILL:
+	default:
+		return
+	}
+	signal.Reset(sig)
+	_ = syscall.Kill(syscall.Getpid(), sig)
+	// (It reaches gnosh on another thread, as a signal may.)
+	time.Sleep(time.Second)
 }
