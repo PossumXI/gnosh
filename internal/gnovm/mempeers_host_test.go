@@ -15,6 +15,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -285,4 +286,82 @@ func TestRenamePeers(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []string{"forgotten-1", "forgotten-1/a"}, p.Stack)
 	require.Equal(t, "forgotten-1/b", p.Waits[0].Id)
+}
+
+func TestCallsShowOrNext(t *testing.T) {
+	t.Parallel()
+	for code, want := range map[string]bool{
+		"mem.Show()":                     true,
+		"mem.Next()":                     true,
+		"mem.Pop(\"found\")\nmem.Next()": true,
+		"print(mem.Show())":              true,
+		"mem.Frame(\"x\").Next()":        false,
+		"print(mem.JSON(\"release\"))":   false,
+		"mem.Pop(\"found\")":             false,
+		"next.Show()":                    false,
+		"func x() {}":                    false,
+		"":                               false,
+	} {
+		require.Equal(t, want, callsShowOrNext(code), "%q", code)
+	}
+}
+
+// Sessions started together on one plan each see all of it free; each is
+// told how many others work it while they do, so that it takes one todo at
+// a time instead of doing the whole plan alone.
+func TestPeersAreToldOfEachOther(t *testing.T) {
+	t.Parallel()
+	data := t.TempDir()
+	h := newTestMemHost(t, filepath.Join(data, "proj", "mem"))
+	h.data = data
+	ctx := context.Background()
+	res, err := h.call(ctx, memRequest{Code: "r := mem.Todo(\"release\")\nr.Todo(\"bump the version\")\nr.Todo(\"tag it\")", User: true})
+	require.NoError(t, err, res.Output)
+	call := func(session, code string, sub bool) string {
+		t.Helper()
+		res, err := h.call(ctx, memRequest{Code: code, Session: session, SubAgent: sub, Run: true})
+		require.NoError(t, err, res.Output)
+		return res.Output
+	}
+	const told, one, two = "working this plan now", "1 other gnosh session is working this plan now", "2 other gnosh sessions are working this plan now"
+
+	joinPeers(h.dir, "p1")
+	require.NotContains(t, call("p1", "mem.Show()", false), told, "alone, there is nobody to tell of")
+
+	joinPeers(h.dir, "p2")
+	require.NotContains(t, call("p1", "mem.Show()", false), told, "p2 joined but is not in a turn")
+	release2 := takeTurn(t, data, "p2")
+	require.Contains(t, call("p1", "mem.Show()", false), one)
+	out := call("p1", "mem.Next()", false)
+	require.Equal(t, 1, strings.Count(out, told), out)
+	p, ok := h.readPeer("p1")
+	require.True(t, ok)
+	require.True(t, p.Peer, "a call that writes the record keeps its joining")
+
+	require.NotContains(t, call("p1", `print(mem.JSON("release"))`, false), told, "only Show and Next tell")
+	require.NotContains(t, call("p3", "mem.Show()", true), told, "a sub-agent works for its session and is not told")
+	release3 := takeTurn(t, data, "p3")
+	require.Contains(t, call("p1", "mem.Show()", false), one, "p3's record is a sub-agent's, which never joined")
+	release3()
+
+	joinPeers(h.dir, "p4")
+	release4 := takeTurn(t, data, "p4")
+	require.Contains(t, call("p1", "mem.Show()", false), two)
+	release4()
+	release2()
+	require.NotContains(t, call("p1", "mem.Show()", false), told, "the others' turns ended")
+}
+
+func TestJoinPeersNeedsAPlan(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "proj", "mem")
+	joinPeers(dir, "p1")
+	_, err := os.Stat(dir)
+	require.True(t, os.IsNotExist(err), "joining makes no mem")
+	require.NoError(t, writePeerIn(dir, memPeer{Session: "p1", Stack: []string{"release", "release/tag-it"}}))
+	joinPeers(dir, "p1")
+	p, ok := readPeerIn(dir, "p1")
+	require.True(t, ok)
+	require.True(t, p.Peer)
+	require.Equal(t, []string{"release", "release/tag-it"}, p.Stack, "joining keeps the stack the record had")
 }
