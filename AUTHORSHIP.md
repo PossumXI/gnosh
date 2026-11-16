@@ -104,6 +104,18 @@ anyway; and, by the same rule, `/config` and `/export` with nothing after them
 open pickers too (item 51), and Ctrl+O became Claude Code's transcript view
 (item 49), which his 14 November words had asked for.
 
+16 November 2026, with a screenshot of the task list under the prompt, the
+line in hand three times over:
+
+> see clipboard, why is there repetition
+
+Set: a line of the task list reads the frame the session stands in only
+where it is that todo, and the others read their own words. Claude's part:
+the cause was a session holding three todos of its plan at once, each pushed
+from inside the one before; mem's receipts now say when a push stands on an
+open todo and where a pop comes back to, and the session's settings files are
+taken in while it runs (item 55), found in the same session's log.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
