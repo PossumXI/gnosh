@@ -314,10 +314,6 @@ func (l *live) slashInit(ctx context.Context, c *SlashContext) error {
 		Notice: "/init: the model is writing the project's GNOSH.md."})
 }
 
-// slashExport is /export [file]: the conversation as plain text, in a file.
-// A relative name is the working directory's, a name with no extension gets
-// .txt, and with no name it is <date>-<session's name>.txt there. A file
-// that is there already is never written over.
 // slashCopy is /copy [N]: the model's last reply, or the Nth from the end,
 // goes to the person's clipboard, through the terminal (OSC 52).
 func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
@@ -348,23 +344,44 @@ func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
 	if n > 1 {
 		which = fmt.Sprintf("The model's reply %d from the end", n)
 	}
+	l.toClipboard(ctx, c, which, text)
+	return nil
+}
+
+// toClipboard puts text on the person's clipboard: with this machine's
+// own tool where the person's terminal is on this machine, and otherwise
+// through the terminal (OSC 52); and says which, of what (which).
+func (l *live) toClipboard(ctx context.Context, c *SlashContext, which, text string) {
 	size := countWords(utf8.RuneCountInString(text), "character", "characters")
 	failed := ""
 	if tool := clipboard.Tool(runtime.GOOS, l.p.getenv, l.p.lookPath); tool != nil {
 		err := clipboard.Copy(ctx, tool, l.p.o.Environ, text)
 		if err == nil {
 			c.Say("%s (%s) is on the clipboard.", which, size)
-			return nil
+			return
 		}
 		failed = fmt.Sprintf(" (%s failed: %v)", filepath.Base(tool[0]), err)
 	}
 	c.Copy(text)
 	c.Say("%s (%s) is on its way to the clipboard through the terminal%s: one that does not take OSC 52 (Apple's Terminal, or tmux without set-clipboard) copies nothing.", which, size, failed)
-	return nil
 }
 
+// exportClipboard is what /export takes to put the conversation on the
+// clipboard instead of in a file: the interface's /export picker runs it.
+const exportClipboard = "--clipboard"
+
+// slashExport is /export [file | --clipboard]: the conversation as plain
+// text, in a file, or on the clipboard. A relative name is the working
+// directory's, a name with no extension gets .txt, and with no name it is
+// <date>-<session's name>.txt there. A file that is there already is
+// never written over.
 func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
 	name := strings.TrimSpace(c.Args)
+	if name == exportClipboard {
+		// (What the interface's picker runs for "the clipboard".)
+		l.toClipboard(ctx, c, "The conversation", exportText(l.ts.Entries()))
+		return nil
+	}
 	if name == "" {
 		title, _ := l.title()
 		name = l.p.now().Format("2006-01-02") + "-" + fileSlug(firstOf(title, "session")) + ".txt"

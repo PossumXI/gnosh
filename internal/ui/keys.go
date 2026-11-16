@@ -384,6 +384,10 @@ func (s *session) command(d editor.Draft) {
 			return
 		}
 	}
+	if exportWords[strings.ToLower(line)] && s.q == nil && s.chooseExport(line) {
+		// So is /export (exportpick.go).
+		return
+	}
 	if configWords[strings.ToLower(line)] && s.q == nil {
 		if _, ok := s.c.(configChooser); ok {
 			// So is /config (configpick.go).

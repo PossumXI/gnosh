@@ -216,7 +216,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "memory", Summary: "The context files the model is given (GNOSH.md, AGENTS.md, CLAUDE.md), and where to put one.", InRun: true, Run: l.slashMemory},
 		{Name: "mcp", Args: "[reconnect|enable|disable <server>|all]", Summary: "The MCP servers: where each is configured, whether it is connected, and its tools; or reconnect, enable or disable one, or all.", InRun: true, Run: l.slashMCP},
 		{Name: "diff", Summary: "What has changed in the working tree since the last commit, the model's edits among it.", InRun: true, Run: l.slashDiff},
-		{Name: "export", Args: "[file]", Summary: "Write the conversation to a file as plain text: the name given, or <date>-<session>.txt here.", Run: l.slashExport},
+		{Name: "export", Args: "[file | --clipboard]", Summary: "Write the conversation to a file as plain text: the name given, or <date>-<session>.txt here; --clipboard puts it on the clipboard instead.", Run: l.slashExport},
 		{Name: "copy", Args: "[N]", Summary: "Copy the model's last reply, or the Nth from the end, to the clipboard.", Run: l.slashCopy},
 		{Name: "init", Summary: "Have the model look through the project and write its GNOSH.md, or improve the one there is.", Run: l.slashInit},
 		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
