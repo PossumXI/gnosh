@@ -78,6 +78,13 @@ Built:
   at once. NORMAL, INSERT and VISUAL modes, motions, operators with counts,
   text objects, `.` and undo by changes; the mode is on the status line,
   and `"vimInsertModeRemaps": ["jj"]` makes a pair stand for Esc.
+- **Being told it waits**, as Claude Code's `preferredNotifChannel`: a
+  desktop note in a terminal known to take one, or, with `"options":
+  {"preferredNotifChannel": "terminal_bell"}` (or `/config
+  preferredNotifChannel=terminal_bell`), the terminal's bell, which reaches
+  a terminal on the other side of ssh or tmux too. Your prompts are white
+  and the model's answers green; on a terminal that says its background is
+  light, both take colours that read there.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/restart` (gnosh starts again in the same session, the newer one once a new
