@@ -127,10 +127,28 @@ func (e *Editor) SetVimRemaps(pairs []string) {
 // key keeps the meaning the box gives it (Enter, the arrows, Ctrl keys, and
 // everything in INSERT mode but Esc).
 func (e *Editor) vimKey(k term.Key, cmd command, armed press) (Result, bool) {
+	var res Result
+	var done bool
 	if e.vim.mode == VimInsert {
-		return e.vimInsertKey(k, cmd, armed)
+		res, done = e.vimInsertKey(k, cmd, armed)
+	} else {
+		res, done = e.vimNormalKey(k, cmd, armed)
 	}
-	return e.vimNormalKey(k, cmd, armed)
+	e.vimSnap()
+	return res, done
+}
+
+// vimSnap puts the cursor on the start of the item it is in. The vim keys
+// work out places by bytes in a few spots (a quote's inside, a line's
+// indent), and a character that joins what stands before it (a combining
+// accent after a quote or a space) can make such a place the middle of
+// an item.
+func (e *Editor) vimSnap() {
+	e.fix()
+	s, home := e.lines[e.cur.line].s, e.home(e.cur.line)
+	if e.cur.col > home && e.cur.col < len(s) {
+		e.cur.col = e.itemBefore(s, e.cur.col, home)
+	}
 }
 
 // vimInsertKey handles a key in INSERT mode.
@@ -1032,8 +1050,13 @@ func (e *Editor) vimWordBack(p pos, big bool) pos {
 func (e *Editor) firstNonBlank(l int) int {
 	s := e.lines[l].s
 	col := e.home(l)
-	for col < len(s) && (s[col] == ' ' || s[col] == '\t') {
-		col++
+	for col < len(s) {
+		end := e.itemEnd(s, col)
+		if it := s[col:end]; it != " " && it != "\t" {
+			// (A space that a combining accent joins is no blank.)
+			break
+		}
+		col = end
 	}
 	return col
 }
