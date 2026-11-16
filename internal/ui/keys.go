@@ -907,6 +907,7 @@ func (s *session) help() {
 		{"Ctrl+S", "put the prompt aside, and bring it back"},
 		{"Ctrl+L", "draw the bottom of the screen again"},
 		{"Ctrl+Z", "suspend gnosh; fg brings it back"},
+		{"/config editorMode=vim", "vim's keys in the box: Esc for NORMAL mode, i to type, v to select"},
 		{"?", "in an empty box: this list"},
 	}
 	wide := 0
