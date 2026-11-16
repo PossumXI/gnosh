@@ -252,6 +252,10 @@ func TestShellAttacks(t *testing.T) {
 		{"xargs runs git status --porcelain=...", "", attackRealistic, "echo --prefix | xargs git status", Ask},
 		// A line the reader cannot follow is never waved past a guard.
 		{"the reader stops at the quotes; the shell runs rm y", ModeBypass, attackGuards, "echo ${x:-\"a\"}; $'\\x72m' y", Ask},
+		// dash has no $'...': to it $'\' is $ and a plain '\', so what
+		// bash reads as quoted text after it runs (oracle seed 111).
+		{"dash runs tee pwned", "", none, "ss -falsetln $'\\'; tee pwned; echo $'\\'''", Ask},
+		{"dash runs rm y", ModeBypass, attackGuards, "echo $'\\'; rm y; echo $'\\'''", Ask},
 		{"the name is r plus a default of m", ModeBypass, attackGuards, "r${x:-\"m\"} -rf y", Ask},
 		{"the reader stops at the quotes; the shell reads .env", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "echo ${x:-\"a\"}; cat .env", Deny},
 		// Commands that change the shell the rest of the line runs in.
@@ -1389,7 +1393,7 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"cat a.txt | grep foo | wc -l", "git status | head -20", "ls -la | grep go", "git diff | head -100", "git log --oneline | wc -l",
 		"grep -rn foo . | sort | uniq -c | sort -rn | head", "find . -name '*.go' | wc -l", "cat go.mod | head -5",
 		"cd src && ls", "cd src && go test ./...", "pwd && ls", "ls && git status", "git status && git diff", "ls; pwd",
-		"echo hello", "echo \"hello world\"", "echo done", "true", "date", "date +%s", "which go", "command -v go",
+		"echo hello", "echo \"hello world\"", "echo done", "echo $'a\\\\' $'tab\\there'", "true", "date", "date +%s", "which go", "command -v go",
 		"test -f go.mod", "[ -d src ]", "[[ -f go.mod ]]", "[[ -f go.mod ]] && echo yes", "[[ -d src && -f go.mod ]]", "[[ -d src && ! -e b ]]",
 		"stat go.mod", "du -sh .", "file README.md", "diff a.txt b.txt", "sort names.txt | uniq", "cut -d: -f1 names.txt",
 		"sed -n '1,20p' main.go", "sed -n 5p main.go", "basename /x/y.go .go", "dirname /x/y", "nl main.go", "uname -a", "whoami",
