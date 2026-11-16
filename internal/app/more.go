@@ -212,7 +212,12 @@ func (l *live) resumeChoices() []SessionChoice {
 		if info.ID == l.ts.ID() || len(out) == 30 {
 			continue
 		}
-		out = append(out, SessionChoice{ID: info.ID, Title: firstOf(info.Title, info.FirstPrompt, "(no prompt yet)"), Modified: info.Modified, Prompts: info.Prompts})
+		title := firstOf(info.Title, info.FirstPrompt, "(no prompt yet)")
+		if transcript.InUse(info.Path) {
+			// (Another gnosh holds it, which opening it would be refused.)
+			title += " (open now)"
+		}
+		out = append(out, SessionChoice{ID: info.ID, Title: title, Modified: info.Modified, Prompts: info.Prompts})
 	}
 	return out
 }

@@ -122,6 +122,13 @@ func TestOpenSessionsMarked(t *testing.T) {
 	if err := os.WriteFile(strings.TrimSuffix(path, ".jsonl")+".background.log", []byte("working\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// Another session's /resume list marks it too.
+	other := sit(t, w)
+	other.see("Type a prompt and Enter.")
+	other.typeLine("/resume")
+	other.see("(open now)")
+	other.typeLine("/exit")
+	other.exit()
 	r := run(t, w, "-r", id, "-p", "hello")
 	has(t, "opening it again", r.out+r.err, "is open in another gnosh", "If it is a run in the background, it lets go of the session when it is done", ".background.log")
 	s.typeLine("/exit")
