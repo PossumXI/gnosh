@@ -131,7 +131,7 @@ func (l *live) slashAutocompact(ctx context.Context, c *SlashContext) error {
 
 // liveOptions are the options a running session can change: /config puts
 // them in force at once.
-var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true}
+var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true, "theme": true}
 
 // applyOption puts what /config set in force in the running session, for
 // an option that can be (liveOptions), and reports whether it was.
@@ -153,9 +153,9 @@ func (l *live) applyOption(key string, raw json.RawMessage) bool {
 		l.notifMu.Lock()
 		l.notif = channel
 		l.notifMu.Unlock()
-	case "editorMode":
-		// (The interface's to put in force, as verbose is: the box is
-		// its own.)
+	case "editorMode", "theme":
+		// (The interface's to put in force, as verbose is: the box and
+		// its colours are its own.)
 	case "promptSuggestionEnabled":
 		var on bool
 		if json.Unmarshal(raw, &on) != nil {
@@ -355,4 +355,18 @@ func configArgs(s string) ([]string, error) {
 		out = append(out, b.String())
 	}
 	return out, nil
+}
+
+// slashTheme is /theme: the theme option, which /config sets as well. With
+// a name it is /config theme=<name>; with none it says which is in force.
+// (The full interface opens a picker for it instead.)
+func (l *live) slashTheme(ctx context.Context, c *SlashContext) error {
+	name := strings.ToLower(strings.TrimSpace(c.Args))
+	if name == "" {
+		c.Say("The theme is %s: auto (for the background the terminal says it has), dark, light, or ansi (the terminal's own sixteen colours). /theme <name> sets it.", firstOf(l.cfg.Options.Theme.V, "auto"))
+		return nil
+	}
+	set := *c
+	set.Args = "theme=" + name
+	return l.slashConfig(ctx, &set)
 }

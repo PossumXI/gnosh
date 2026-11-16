@@ -1194,6 +1194,7 @@ func (l *live) info() SessionInfo {
 		SidePanel:    l.cfg.Options.SidePanel.V,
 		Verbose:      l.cfg.Options.Verbose.V,
 		Vim:          l.cfg.Options.EditorMode.V == "vim",
+		Theme:        l.cfg.Options.Theme.V,
 		OutputStyle:  l.styleNow(),
 		Color:        l.sessionColor(),
 		Keybindings:  l.keybindingsPath(),

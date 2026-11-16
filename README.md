@@ -93,6 +93,10 @@ Built:
   a terminal on the other side of ssh or tmux too. Your prompts are white
   and the model's answers green; on a terminal that says its background is
   light, both take colours that read there.
+- **Themes**, as Claude Code's `/theme`: `auto` (for the background the
+  terminal says it has), `dark`, `light`, or `ansi` (the terminal's own
+  sixteen colours). Bare `/theme` opens a picker; `/theme light` or
+  `/config theme=light` sets it, at once and for every project.
 - **A budget for thinking**: a model on a llama.cpp server thinks at most
   4,096 tokens before a reply, and is then told to go on with what it has
   (the server's reasoning_budget_tokens). `"models": {"<provider>/<id>":

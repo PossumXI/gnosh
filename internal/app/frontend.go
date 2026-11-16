@@ -374,6 +374,8 @@ type SessionInfo struct {
 	// "terminal_bell", "iterm2", "iterm2_with_bell", "kitty", "ghostty"
 	// or "notifications_disabled".
 	NotifChannel string
+	// Theme is the theme option: "auto", "dark", "light" or "ansi".
+	Theme string
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

@@ -474,6 +474,7 @@ var ownCommands = []struct {
 		}
 		return ok
 	}},
+	{themeWords, func(s *session, line string) bool { return s.q == nil && s.chooseTheme(line) }},
 	{configWords, func(s *session, line string) bool {
 		// (Asked before the picker opens: the picker is a question too.)
 		if _, ok := s.c.(configChooser); !ok || s.q != nil {
@@ -627,6 +628,13 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			// So is the editorMode option.
 			s.ed.SetVim(mode == "vim")
 			s.reportVim()
+		}
+		if name, ok := configSet(line, "theme"); ok && err == nil && res.Name == "config" {
+			// And the theme option: the colours change at once.
+			s.setTheme(name)
+		}
+		if name, ok := themeSet(line); ok && err == nil && res.Name == "theme" {
+			s.setTheme(name)
 		}
 		if res.Quit {
 			// (/restart and /background: the session goes on in another

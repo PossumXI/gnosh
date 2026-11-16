@@ -62,7 +62,14 @@ type screen interface {
 
 // config is what a session is made with.
 type config struct {
-	theme    Theme
+	theme Theme
+	// profile is the colours the terminal takes, and light says it said
+	// its background is light: what the theme option picks a theme from.
+	// themed says theme is the interface's own, which the option may
+	// change (a test's given one is kept).
+	profile  text.Profile
+	light    bool
+	themed   bool
 	metrics  text.Metrics
 	now      func() time.Time
 	controls app.Controls
@@ -153,11 +160,16 @@ type reply struct {
 // (or a test) hands it what the session and the terminal report, one
 // thing at a time, and asks it to draw.
 type session struct {
-	th   Theme
-	m    text.Metrics
-	now  func() time.Time
-	c    app.Controls
-	host host
+	th Theme
+	// profile, light and themed are config's, for the theme option
+	// (themecmd.go).
+	profile text.Profile
+	light   bool
+	themed  bool
+	m       text.Metrics
+	now     func() time.Time
+	c       app.Controls
+	host    host
 	// r is what the session draws on: inline, the terminal's scrollback,
 	// panel while the side panel is on, or view's held screen while the
 	// transcript view is open (transcript.go).
@@ -316,7 +328,8 @@ type session struct {
 // newSession makes a session. Nothing is drawn until start.
 func newSession(cfg config) *session {
 	s := &session{
-		th: cfg.theme, m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, inline: cfg.renderer, host: cfg.host,
+		th: cfg.theme, profile: cfg.profile, light: cfg.light, themed: cfg.themed,
+		m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, inline: cfg.renderer, host: cfg.host,
 		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), termCols: max(cfg.cols, 1), home: cfg.home,
 		branchOf: cfg.branch, listDir: cfg.files, selectKey: cfg.selectKey,
 		facts: map[string]string{},

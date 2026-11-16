@@ -184,6 +184,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "effort", Args: "[level|max|auto]", Summary: "Show or set how much the model thinks: one of its levels, max for the most, or auto for its own default. It sticks.", InRun: true, Run: l.slashEffort},
 		{Name: "model", Args: "[provider/model [level]]", Summary: "List the models, or switch to one. The choice is saved.", InRun: true, Run: l.slashModel},
 		{Name: "status", Summary: "What this session is, what it is doing, and every setting with where it came from.", InRun: true, Run: l.slashStatus},
+		{Name: "theme", Args: "[auto|dark|light|ansi]", Summary: "The interface's colours: for the terminal's background, dark, light, or the terminal's own sixteen. Kept for every project.", InRun: true, Run: l.slashTheme},
 		{Name: "config", Args: "[key[=value] ...]", Summary: "gnosh's options and where each value comes from; key=value sets one for every project, from gnosh's next start, and key= takes it away.", InRun: true, Run: l.slashConfig},
 		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done.", Run: l.slashLoop},
 		{Name: "noloop", Aliases: []string{"no_loop", "no-loop"}, Summary: "Turn /loop off.",

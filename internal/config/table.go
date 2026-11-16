@@ -148,7 +148,7 @@ var permissionKeys = []keyDef{
 // claudeCodeKeys are the settings keys Claude Code documents that gnosh
 // has not built (spec/cc/settings.md). One of them in a config file stops
 // startup like any other key gnosh does not read, and the message says
-// whose key it is. The two that gnosh has under "options", with Claude
+// whose key it is. Those that gnosh has under "options", with Claude
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
 	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
@@ -157,7 +157,7 @@ var claudeCodeKeys = []string{
 	"bashOutputMaxChars", "showTurnDuration", "language", "spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "fallbackModel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
-	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "theme", "enabledMcpjsonServers",
+	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "enabledMcpjsonServers",
 	"disabledMcpjsonServers", "enableAllProjectMcpServers", "allowedMcpServers", "deniedMcpServers",
 	"allowedHttpHookUrls", "httpHookAllowedEnvVars", "worktree", "sandbox",
 	"apiKeyHelper", "awsAuthRefresh", "forceLoginMethod", "allowedProviders", "availableModels", "modelPicker",

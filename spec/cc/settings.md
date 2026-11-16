@@ -160,7 +160,8 @@ from project or local files.
 `effortLevel`, `fallbackModel`, `alwaysThinkingEnabled`,
 `showThinkingSummaries`, `plansDirectory` (default `~/.claude/plans`; gnosh
 keeps plans in `mem`), `autoMemoryEnabled`, `autoMemoryDirectory` (gnosh
-memory is its own design), `idleCompaction`, `tui`, `theme`,
+memory is its own design), `idleCompaction`, `tui` (`theme` is an option of
+gnosh's own, auto, dark, light or ansi, with `/theme`),
 `enabledMcpjsonServers`, `disabledMcpjsonServers`,
 `enableAllProjectMcpServers`, `allowedMcpServers`, `deniedMcpServers`,
 `allowedHttpHookUrls`, `httpHookAllowedEnvVars`, `worktree.*`,

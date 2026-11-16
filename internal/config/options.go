@@ -85,6 +85,10 @@ type Options struct {
 	// "vim". VimInsertModeRemaps are the pairs of characters that, typed
 	// one after the other in vim's INSERT mode, stand for Esc ("jj").
 	EditorMode Value[string]
+	// Theme is the interface's colours: "auto" (as the terminal says its
+	// background is), "dark", "light", or "ansi" (the terminal's own
+	// sixteen colours).
+	Theme Value[string]
 	// PreferredNotifChannel is how the interface tells a person who seems
 	// to be away that the session waits for them: "auto" (a desktop note
 	// through a terminal that is known to take one), "terminal_bell",
@@ -250,6 +254,10 @@ var optionDefs = []optionDef{
 		what: "how the box takes keys: \"normal\" (readline's keys) or \"vim\" (vim's NORMAL, INSERT and VISUAL modes); not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"normal", "vim"}, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.EditorMode }},
+	{key: "theme", kind: oEnum, def: "auto",
+		what: "the interface's colours: \"auto\" (for the background the terminal says it has), \"dark\", \"light\", or \"ansi\" (the terminal's own sixteen colours, which its owner chose); also /theme; not from a project's file",
+		from: fromClaudeCode + ": the theme setting and /theme, with gnosh's own colours", enum: []string{"auto", "dark", "light", "ansi"}, ownOnly: true,
+		text: func(o *Options) *Value[string] { return &o.Theme }},
 	{key: "preferredNotifChannel", kind: oEnum, def: "auto",
 		what: "how a person who seems to be away is told the session waits: \"auto\" (a desktop note where the terminal is known to take one), \"terminal_bell\" (the bell, which reaches a terminal over ssh and through tmux too), \"iterm2\", \"iterm2_with_bell\", \"kitty\" or \"ghostty\" (that terminal's desktop note, for one gnosh cannot see, over ssh), or \"notifications_disabled\"; not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"auto", "terminal_bell", "iterm2", "iterm2_with_bell", "kitty", "ghostty", "notifications_disabled"}, ownOnly: true,

@@ -142,6 +142,8 @@
 //	                           from a project's file)
 //	  vimInsertModeRemaps      pairs typed in vim's INSERT mode that stand
 //	                           for Esc, as ["jj"] (not from a project's file)
+//	  theme                    the interface's colours: auto, dark, light or
+//	                           ansi (the terminal's own sixteen); /theme
 //	  promptSuggestionEnabled  after a turn, the person's likely next prompt
 //	                           in the box, Tab to take it (off; not from a
 //	                           project's file)

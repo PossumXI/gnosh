@@ -634,7 +634,8 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 		cols, rows = 80, 24
 	}
 	s := newSession(config{
-		theme: u.th, metrics: u.m, now: u.now, controls: c, renderer: u.r, host: u,
+		theme: u.th, profile: u.profile(), light: u.caps.LightBackground, themed: u.o.Theme == nil,
+		metrics: u.m, now: u.now, controls: c, renderer: u.r, host: u,
 		cols: cols, rows: rows, home: u.env("HOME"), selectKey: selectKey(u.env("TERM_PROGRAM")),
 		branch: gitBranch, files: listDir,
 	})
@@ -642,6 +643,8 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	s.start()
 	// The verbose option: reasoning and whole outputs as they come.
 	s.detail = s.info.Verbose
+	// The theme option: the interface's colours.
+	s.setTheme(s.info.Theme)
 	// The editorMode and vimInsertModeRemaps options: vim's keys.
 	s.ed.SetVimRemaps(s.info.VimRemaps)
 	s.ed.SetVim(s.info.Vim)
