@@ -63,7 +63,7 @@ func TestSystemParts(t *testing.T) {
 					for _, rep := range []string{"", "REPLACED-BY-THE-PERSON"} {
 						name := fmt.Sprintf("tools=%s gno=%v instructions=%v append=%v replace=%v", toolsName, gno, instr != "", app != "", rep != "")
 						t.Run(name, func(t *testing.T) {
-							in := SystemInput{Tools: toolSpecs(tools...), GnoProject: gno, Instructions: instr, Append: app, Replace: rep}
+							in := SystemInput{Tools: toolSpecs(tools...), GnoProject: gno, GnoGuides: goldenGuides, Instructions: instr, Append: app, Replace: rep}
 							got := partNames(t, s.System(in))
 							own := rep == ""
 							want := map[string]bool{

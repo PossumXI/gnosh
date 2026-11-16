@@ -56,6 +56,7 @@ var (
 		{ID: "fix-flaky", Purpose: "fix the flaky test"},
 		{ID: "fix-flaky/find-cause", Purpose: "find why TestFlaky fails"},
 	}
+	goldenGuides       = []string{"/home/dev/.cache/gnosh/gno-docs/gno-interrealm-v2.md", "/home/dev/.cache/gnosh/gno-docs/gno-security-guide.md"}
 	goldenInstructions = "Instruction files, the nearest last.\n=== /home/dev/project/AGENTS.md (the project's) ===\nUse tabs, never spaces.\n"
 )
 
@@ -69,6 +70,7 @@ func goldenFiles() []goldenFile {
 					{"a session with everything", parts(s.System(SystemInput{
 						Tools:        toolSpecs("Read", "Edit", "Bash", "gnovm_run", "Deliver"),
 						GnoProject:   true,
+						GnoGuides:    goldenGuides,
 						Instructions: goldenInstructions,
 						Append:       "Answer in French.",
 					}))},
@@ -77,6 +79,7 @@ func goldenFiles() []goldenFile {
 					{"the person's own system prompt", parts(s.System(SystemInput{
 						Tools:        toolSpecs("Read", "gnovm_run", "Deliver"),
 						GnoProject:   true,
+						GnoGuides:    goldenGuides,
 						Instructions: goldenInstructions,
 						Replace:      "You review Go code. Say what is wrong and nothing else.",
 						Append:       "Answer in French.",

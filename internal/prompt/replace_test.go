@@ -386,6 +386,6 @@ func FuzzLoad(f *testing.F) {
 			}
 		})
 		everyBare(set, "v", func(string, string) {})
-		set.System(SystemInput{Tools: toolSpecs("gnovm_run", "Deliver"), GnoProject: true})
+		set.System(SystemInput{Tools: toolSpecs("gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides})
 	})
 }

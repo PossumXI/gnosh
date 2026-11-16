@@ -45,8 +45,12 @@ type SystemInput struct {
 	Memory MemoryForm
 
 	// GnoProject says the working directory holds Gno code: a gnomod.toml,
-	// a gno.mod, a gnowork.toml or a .gno file.
+	// a gno.mod, a gnowork.toml or a .gno file. GnoGuides are where the Gno
+	// project's interrealm and security guides are on this machine, in
+	// that order (gnodocs), for the audit the part about Gno asks for; the
+	// part is sent only with both.
 	GnoProject bool
+	GnoGuides  []string
 
 	// Instructions is the project's and the person's own instruction
 	// files, already put together by the package that reads them. It is
@@ -106,8 +110,8 @@ func (s *Set) System(in SystemInput) []string {
 			add(s.fill(textMemory, nil))
 		}
 	}
-	if own && in.GnoProject {
-		add(s.fill(textGno, nil))
+	if own && in.GnoProject && len(in.GnoGuides) == 2 {
+		add(s.fill(textGno, values{"interrealm": in.GnoGuides[0], "security": in.GnoGuides[1]}))
 	}
 	add(Untrusted(strings.TrimSpace(in.Instructions)))
 	if own && hasTool(in.Tools, toolDeliver) {

@@ -38,7 +38,7 @@ Your memory is `mem`, kept by gnosh for this project: it outlives the session an
 --- next part ---
 
 <gno>
-This project has Gno code. A plan that writes or changes Gno code has an audit todo, right after the todo that writes the code and before its tests, any deploy and any "done": audit the Gno code rule by rule against `gnosh://skills/gno/references/gno-interrealm-v2.md` and `gnosh://skills/gno/references/gno-security-guide.md`. In it, read both, check every exported function against each of their rules, fix what breaks one, and close the todo with each finding and its fix.
+This project has Gno code. A plan that writes or changes Gno code has an audit todo, right after the todo that writes the code and before its tests, any deploy and any "done": audit the Gno code rule by rule against the Gno project's own guides, `/home/dev/.cache/gnosh/gno-docs/gno-interrealm-v2.md` and `/home/dev/.cache/gnosh/gno-docs/gno-security-guide.md`. In it, read both with Read, check every exported function against each of their rules, fix what breaks one, and close the todo with each finding and its fix.
 </gno>
 
 --- next part ---

@@ -192,6 +192,11 @@ type live struct {
 	skillRead time.Time
 	skillOver map[string]string
 
+	// gnoGuidePaths are where the Gno project's guides were written for
+	// this session (gnoGuides), once.
+	gnoGuidesOnce sync.Once
+	gnoGuidePaths []string
+
 	// hookChanged holds the ids of the calls of the question tool whose
 	// arguments a PreToolUse hook wrote: only such a call may carry its
 	// own answers.

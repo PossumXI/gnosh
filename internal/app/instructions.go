@@ -11,8 +11,10 @@ import (
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/gnodocs"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
+	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 )
@@ -198,6 +200,28 @@ func (l *live) gitState() prompt.Git {
 	return g
 }
 
+// gnoGuides writes the Gno project's interrealm and security guides
+// (gnodocs) to a folder in gnosh's cache, once a session, lets Read open
+// them there without a question, and returns their paths for the system
+// prompt's part about Gno, which asks for an audit against them; nil when
+// they could not be written, and the part is then left out.
+func (l *live) gnoGuides() []string {
+	l.gnoGuidesOnce.Do(func() {
+		dir := filepath.Join(l.cfg.Paths.CacheDir, "gno-docs")
+		paths, err := gnodocs.Write(dir)
+		if err != nil {
+			l.flog.logf("prompt", "the Gno guides could not be written to %s (%v), so the model is not asked to audit Gno code against them", dir, err)
+			return
+		}
+		rule := "Read(/" + filepath.ToSlash(dir) + "/**)"
+		if err := l.engine.AddLayer(permission.Layer{Scope: permission.ScopeSession, Name: "the Gno project's guides, which gnosh keeps", Allow: []string{rule}}); err != nil {
+			l.flog.logf("permission", "the rule %s could not be added (%v); reading the Gno guides will ask", rule, err)
+		}
+		l.gnoGuidePaths = paths
+	})
+	return l.gnoGuidePaths
+}
+
 // hasGnoCode reports whether a folder holds Gno code: a Gno module file at
 // its top or in the folder gnosh was started in, or a .gno file not far
 // below. The look is bounded, so that a huge tree costs nothing.
@@ -261,6 +285,9 @@ func (l *live) systemPrompt() ([]string, error) {
 		GnoProject: hasGnoCode(l.cfg.Paths.ProjectRoot, l.cfg.Paths.Cwd),
 		Replace:    replace,
 		Append:     extra,
+	}
+	if in.GnoProject {
+		in.GnoGuides = l.gnoGuides()
 	}
 	// Which of the two texts about mem is sent is an option of the
 	// config (Options.MemoryText).

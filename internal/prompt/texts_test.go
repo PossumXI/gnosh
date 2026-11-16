@@ -165,7 +165,7 @@ func TestBudgets(t *testing.T) {
 	if got := EstimateTokens(s.Core()); got > budgetCore {
 		t.Errorf("the fixed core is about %d tokens, over its budget of %d", got, budgetCore)
 	}
-	all := s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true})
+	all := s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides})
 	if len(all) != 4 {
 		t.Fatalf("a session with everything has %d parts of gnosh's own, want 4", len(all))
 	}
@@ -176,7 +176,7 @@ func TestBudgets(t *testing.T) {
 	if total > budgetSystem {
 		t.Errorf("gnosh's own parts of the system prompt come to about %d tokens, over the budget of %d", total, budgetSystem)
 	}
-	full := s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, Memory: MemoryFull})
+	full := s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides, Memory: MemoryFull})
 	if len(full) != 4 {
 		t.Fatalf("a session with everything and the full text about mem has %d parts of gnosh's own, want 4", len(full))
 	}
@@ -219,9 +219,9 @@ func TestSizes(t *testing.T) {
 	}
 	core := s.Core()
 	t.Logf("%-22s %-7s %6d %6d", "(the fixed core)", "system", len(core), EstimateTokens(core))
-	all := strings.Join(s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true}), "\n\n")
+	all := strings.Join(s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides}), "\n\n")
 	t.Logf("%-22s %-7s %6d %6d", "(everything on)", "system", len(all), EstimateTokens(all))
-	full := strings.Join(s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, Memory: MemoryFull}), "\n\n")
+	full := strings.Join(s.System(SystemInput{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides, Memory: MemoryFull}), "\n\n")
 	t.Logf("%-22s %-7s %6d %6d", "(everything on, full)", "system", len(full), EstimateTokens(full))
 	t.Logf("%-22s %-7s %6d %6d", "(the mem line)", "line", len(s.MemLine()), EstimateTokens(s.MemLine()))
 }
@@ -250,8 +250,8 @@ func TestCoreIsFixed(t *testing.T) {
 	inputs := []SystemInput{
 		{},
 		{Tools: toolSpecs("Read")},
-		{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, Instructions: "x", Append: "y"},
-		{GnoProject: true, Instructions: "2026-10-30 /home/dev/project qwen3.8-27b"},
+		{Tools: toolSpecs("Read", "gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides, Instructions: "x", Append: "y"},
+		{GnoProject: true, GnoGuides: goldenGuides, Instructions: "2026-10-30 /home/dev/project qwen3.8-27b"},
 		{Tools: toolSpecs("gnovm_run"), Append: "today is Friday"},
 	}
 	for i, in := range inputs {
@@ -278,8 +278,8 @@ func TestCoreIsFixed(t *testing.T) {
 	}
 	// Every other part gnosh writes is as fixed as the core: it depends on
 	// which parts apply, never on what a session is about.
-	x := a.System(SystemInput{Tools: toolSpecs("gnovm_run", "Deliver"), GnoProject: true})
-	y := b.System(SystemInput{Tools: toolSpecs("Deliver", "Bash", "gnovm_run"), GnoProject: true})
+	x := a.System(SystemInput{Tools: toolSpecs("gnovm_run", "Deliver"), GnoProject: true, GnoGuides: goldenGuides})
+	y := b.System(SystemInput{Tools: toolSpecs("Deliver", "Bash", "gnovm_run"), GnoProject: true, GnoGuides: goldenGuides})
 	if !slices.Equal(x, y) {
 		t.Error("gnosh's own parts differ between two sessions with the same parts on")
 	}
