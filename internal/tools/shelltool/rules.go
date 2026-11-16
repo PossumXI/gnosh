@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -171,18 +172,55 @@ func amount(s string) (time.Duration, bool) {
 // reaches returns "ssh" or "scp" when a command begins with a line that
 // runs one of them, in any of its commands, and "" otherwise.
 func reaches(command string) string {
-	line, _ := firstCommandLine(command)
-	for _, p := range pieces(line) {
-		if p.sep == "(" {
-			// What stands before a parenthesis is a function's name, a
-			// dollar sign or a pattern, not a command.
-			continue
-		}
-		if prog := path.Base(programOf(p.text)); prog == "ssh" || prog == "scp" {
-			return prog
+	// Every line of it, not only the first (box 1, 16 November: ssh on the
+	// second line, under an assignment and a comment, ran); the text of a
+	// here-document is no command.
+	for _, line := range commandLines(command) {
+		for _, p := range pieces(line) {
+			if p.sep == "(" {
+				// What stands before a parenthesis is a function's name, a
+				// dollar sign or a pattern, not a command.
+				continue
+			}
+			if prog := path.Base(programOf(p.text)); prog == "ssh" || prog == "scp" {
+				return prog
+			}
 		}
 	}
 	return ""
+}
+
+// heredocRe finds where a here-document begins on a line: << or <<-, and
+// the word that ends it, quoted or not.
+var heredocRe = regexp.MustCompile(`<<(-?)\s*(?:'([^']*)'|"([^"]*)"|\\?([A-Za-z0-9_]+))`)
+
+// commandLines are the lines of a command that hold commands: not blank,
+// not comments, and not the text of a here-document.
+func commandLines(command string) []string {
+	var out []string
+	var ends []string // the words that end the open here-documents, in order
+	var dash []bool   // each may stand indented by tabs (<<-)
+	for _, line := range strings.Split(command, "\n") {
+		if len(ends) > 0 {
+			l := line
+			if dash[0] {
+				l = strings.TrimLeft(l, "\t")
+			}
+			if l == ends[0] {
+				ends, dash = ends[1:], dash[1:]
+			}
+			continue
+		}
+		if t := strings.TrimSpace(line); t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		out = append(out, line)
+		for _, m := range heredocRe.FindAllStringSubmatch(line, -1) {
+			ends = append(ends, m[2]+m[3]+m[4])
+			dash = append(dash, m[1] == "-")
+		}
+	}
+	return out
 }
 
 // leadingSleep returns how long a command only sleeps before it does

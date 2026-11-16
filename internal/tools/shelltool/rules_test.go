@@ -72,10 +72,16 @@ func TestReaches(t *testing.T) {
 		{"echo ok 2>&1", ""},
 		{"", ""},
 		{"   \n\n", ""},
-		// A later line is not looked at: a file written with a
-		// here-document may say anything.
+		// The text of a here-document is no command: a file written with
+		// one may say anything.
 		{"cat > deploy.sh <<'EOF'\nssh render ./deploy\nscp a b:\nEOF", ""},
-		{"echo one\nssh render ls", ""},
+		{"cat > d.sh <<-EOF\n\tssh render ./deploy\n\tEOF\necho done", ""},
+		{"cat <<A <<\"B\"\nssh x\nA\nscp y\nB\nls", ""},
+		// Every line is looked at (box 1, 16 November: ssh under an
+		// assignment and a comment ran).
+		{"echo one\nssh render ls", "ssh"},
+		{"D=104.248.69.97 # the vlm droplet\nssh -o BatchMode=yes root@$D 'bash -s' <<'EOF'\nset -e\nEOF", "ssh"},
+		{"cat > d.sh <<'EOF'\nls\nEOF\nscp d.sh render:", "scp"},
 	}
 	for _, tt := range tests {
 		if got := reaches(tt.command); got != tt.want {
