@@ -43,6 +43,14 @@ func lockFile(f *os.File) (bool, error) {
 // far longer than InUse holds its look, far shorter than a person notices.
 const lockLook = 20 * time.Millisecond
 
+// Hold takes the writer's lock on a file that is not a session's (a crash
+// file), so that InUse reports it in use for as long as f is open. It
+// reports false when another open of the file holds it.
+func Hold(f *os.File) bool {
+	ok, err := lockFile(f)
+	return ok && err == nil
+}
+
 // InUse reports whether a gnosh holds the session file at path open for
 // writing now: a session, a run or a sub-agent. It takes and lets go of a
 // shared lock, which the writer's lock refuses; it reports false when the
