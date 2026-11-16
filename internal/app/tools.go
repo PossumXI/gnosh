@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"os/user"
 	"path"
@@ -271,11 +270,6 @@ func (l *live) closeShell() {
 	case <-time.After(60 * time.Second):
 		l.p.warnf("the session's commands had not all stopped after a minute; gnosh goes on without waiting for them.")
 	}
-}
-
-// waitIdle waits until the session has nothing in hand, or until ctx ends.
-func (l *live) waitIdle(ctx context.Context) error {
-	return l.agent.Wait(ctx)
 }
 
 // gnoRunTool is the GnoVM feature's tool that runs Gno, mem's calls among
