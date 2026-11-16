@@ -667,6 +667,11 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		if len(m.Levels) == 0 {
 			level = "no switch known for this model"
 		}
+		if m.ThinkingBudget > 0 && m.Level != "off" {
+			// (thinkingBudget, MAX_THINKING_TOKENS: the server ends the
+			// thinking there.)
+			level += fmt.Sprintf(", at most %d tokens before a reply", m.ThinkingBudget)
+		}
 		c.Say("thinking     %s", level)
 	} else {
 		c.Say("model        none: prompts fail until one is chosen with /model")

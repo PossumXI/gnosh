@@ -34,3 +34,15 @@ func TestThinkingBudget(t *testing.T) {
 	has(t, "MAX_THINKING_TOKENS=0", got, `"enable_thinking":false`)
 	hasNot(t, "MAX_THINKING_TOKENS=0", got, "reasoning_budget_tokens")
 }
+
+// /status says how long the model may think.
+func TestStatusSaysTheThinkingBudget(t *testing.T) {
+	w := apptest.NewWorld(t)
+	r := run(t, w, "-p", "/status").wantCode(t, 0)
+	has(t, "/status", r.out, "thinking     on, at most 4096 tokens before a reply")
+	o := testOptions(w, "-p", "/status")
+	o.Environ = append(o.Environ, "MAX_THINKING_TOKENS=0")
+	r = runWith(t, t.Context(), o).wantCode(t, 0)
+	has(t, "/status with thinking off", r.out, "thinking     off")
+	hasNot(t, "/status with thinking off", r.out, "at most")
+}
