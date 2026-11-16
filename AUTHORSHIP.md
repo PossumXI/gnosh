@@ -133,6 +133,30 @@ and a person's session joins the plan's peers when its turn begins
 one; six sessions with a planner lost to one on llama.cpp and were 1.6×
 faster than one on vLLM.
 
+16 November 2026, on the home AI box (passed on by the session running
+scenarios there):
+
+> let gnosh my prompt be mmm... white, sure, and the reponse (not thinking) be sorta green, neo
+
+Set: what he types is white and the model's answers are green, its thinking
+as it was (`30d07c7`). Claude's part: the green is #4ADE80 on a terminal of
+true colour and the bright green of the sixteen otherwise, and on a terminal
+that says its background is light both take darker colours that read there.
+
+16 November 2026, after a Claude Code session of his had gone past a "then
+prompt me" in his order once its conversation was summarized:
+
+> make a report on why you missed my command, the bug report on gnosh.ai, and also how gnosh is better; make a scenario and test that gnosh does better, or fix it until it is to match the website. i mean, use the ai box etc, but after what you're currently working on
+
+Set: the scenario `stop-where-told` (a long order with "then prompt me"
+before its last step), run on the AI box with mem and without, and the
+summary's wording, which now keeps every stop the person set
+(`cb3234a`). Claude's part: the same runs showed a summary calling 32 fixes
+done of which 6 were made, so a summary now keeps what was done apart from
+what was only found (`13d2c49`); and a todo whose start kept sliding out
+while the model read its files again, so a slide now names the files its
+rounds edited (`70a55ce`).
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
