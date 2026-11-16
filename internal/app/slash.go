@@ -158,7 +158,7 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 		err = cmd.Run(ctx, c)
 	}()
 	res.Text = strings.TrimRight(out.String(), "\n")
-	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart")
+	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart" || cmd.Name == "background")
 	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments): %v", cmd.Name, len(args), err)
 	return res, err
 }
@@ -170,6 +170,8 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "help", Summary: "List the commands.", InRun: true, Run: s.help},
 		{Name: "exit", Aliases: []string{"quit"}, Summary: "End the session. It is kept, and can be resumed.",
 			Run: func(context.Context, *SlashContext) error { return nil }},
+		{Name: "background", Aliases: []string{"bg"}, Args: "<prompt>", Summary: "Let the session go on without this terminal: it ends here and works on the prompt as a run of its own (gnosh -p), and gnosh -r opens it again once that is done.",
+			Run: l.slashBackground},
 		{Name: "restart", Aliases: []string{"update"}, Summary: "Start gnosh again in this session, with the same flags: a newer gnosh installed since this one started is the one that runs.",
 			Run: l.slashRestart},
 		{Name: "clear", Aliases: []string{"new", "reset"}, Args: "[name]", Summary: "Start a fresh session. The one before is kept, under the name given, if one is.",

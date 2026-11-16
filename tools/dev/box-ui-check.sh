@@ -59,6 +59,8 @@
 #               session, and the model still knows the first turn
 #   keys        a keybindings.json: Ctrl+K stashes the box and brings it
 #               back, Ctrl+Y runs /cost, and the prompt then goes out
+#   bgsession   /background: the session ends in the pane and goes on as a
+#               run of its own, whose log gets the model's answer
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -71,7 +73,7 @@ flags=""
 hooks=""
 opts=""
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession) ;;
 vim) opts='"editorMode": "vim", ' ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
@@ -81,7 +83,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession)" >&2
 	exit 2
 	;;
 esac
@@ -279,6 +281,17 @@ restart)
 	tmux send-keys -t "$S" "What were the three words I first asked you to reply with? Answer with only those three words and call no tool." Enter
 	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 3 ] && [ "$(screen | grep -c "done in")" -ge 3 ]; }
 	;;
+bgsession)
+	# The pane stays when gnosh ends, so that what it says last is seen.
+	tmux set-option -t "$S" remain-on-exit on >/dev/null
+	tmux send-keys -t "$S" "Reply with exactly the one word ready, and call no tool." Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "done in" && break
+	done
+	tmux send-keys -t "$S" "/background Reply with exactly these three words: all is well" Enter
+	done_when() { grep -qi "all is well" "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null; }
+	;;
 keys)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well"
 	sleep 1
@@ -316,6 +329,9 @@ for i in $(seq 1 300); do
 done
 echo "=== after ($i s)"
 screen
+if [ "$scenario" = bgsession ]; then
+	echo "=== the run's log: $(cat "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null | tr '\n' ' ')"
+fi
 if [ "$scenario" = config ]; then
 	echo "=== state file: $(tr -d '\n' < "$T/data/gnosh/state.json" 2>/dev/null || echo none)"
 fi

@@ -123,3 +123,21 @@ func FuzzRelaunchArgs(f *testing.F) {
 		}
 	})
 }
+
+// /background's run is the relaunch with -p and the prompt after --: a
+// print run of the same session, on that prompt, whatever it holds.
+func TestRelaunchAsARun(t *testing.T) {
+	tab := allBuilt(t)
+	const id = "01a1dced-2312-7888-b312-da27ecb33d6d"
+	args, err := tab.RelaunchArgs(words(t, `gnosh -y --allowedTools Read -c`), Relaunch{Session: id, Mode: ModeAcceptEdits})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := tab.Parse(append(args, "--print", "--", "-p fix the tests; --help"), tty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Command != CmdPrint || inv.Conversation != ConversationResume || inv.Resume != id || inv.Prompt != "-p fix the tests; --help" || inv.PermissionMode != ModeAcceptEdits {
+		t.Errorf("the run reads as %+v", inv)
+	}
+}

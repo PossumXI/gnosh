@@ -612,9 +612,9 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.reportVim()
 		}
 		if res.Quit {
-			// (/restart: gnosh starts again in this session at once, and
-			// says itself how to resume it if it cannot.)
-			s.restarting = res.Name == "restart"
+			// (/restart and /background: the session goes on in another
+			// gnosh at once, which says itself how to come back to it.)
+			s.restarting = res.Name == "restart" || res.Name == "background"
 			s.leave(0, "prompt_input_exit")
 			return
 		}

@@ -79,6 +79,9 @@ func main() {
 		Relaunch: func(args []string) error {
 			return syscall.Exec(self, append([]string{os.Args[0]}, args...), os.Environ())
 		},
+		Detach: func(args []string, log string) (int, error) {
+			return detach(self, args, log)
+		},
 	}))
 }
 

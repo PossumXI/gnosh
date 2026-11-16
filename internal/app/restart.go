@@ -86,15 +86,36 @@ func (l *live) runningWork() []string {
 // with, and ends the session; the program starts again once the session
 // is closed (Main).
 func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
-	p := l.p
-	switch {
-	case p.o.Relaunch == nil:
+	if l.p.o.Relaunch == nil {
 		return errors.New("this gnosh cannot start itself again. /exit ends the session, and " + l.info().Resume + " opens it again")
-	case c.Agent.State().Busy:
-		return errors.New("a turn is running, and would be stopped: /restart once it has ended, or Esc stops it")
+	}
+	args, err := l.goOnArgs(c, "restart")
+	if err != nil {
+		return err
+	}
+	p := l.p
+	p.restartMu.Lock()
+	p.restart = args
+	p.restartMu.Unlock()
+	if p.newBuild() {
+		c.Say("gnosh starts again, the newer one, in this session.")
+	} else {
+		c.Say("gnosh starts again, in this session.")
+	}
+	return nil
+}
+
+// goOnArgs is the command line that opens this session again, with its
+// flags as they stand, for a command (restart, background) that ends the
+// session for another gnosh to go on with it. It refuses while a turn or
+// work in the background runs, which ending the session would stop.
+func (l *live) goOnArgs(c *SlashContext, name string) ([]string, error) {
+	p := l.p
+	if c.Agent.State().Busy {
+		return nil, fmt.Errorf("a turn is running, and would be stopped: /%s once it has ended, or Esc stops it", name)
 	}
 	if work := l.runningWork(); len(work) > 0 {
-		return fmt.Errorf("this is still running in the background, and would be stopped: %s. /restart once it has ended, or /tasks stop <id> stops it", strings.Join(work, ", "))
+		return nil, fmt.Errorf("this is still running in the background, and would be stopped: %s. /%s once it has ended, or /tasks stop <id> stops it", strings.Join(work, ", "), name)
 	}
 	r := cli.Relaunch{Session: l.ts.ID(), Mode: string(l.engine.Mode()), Effort: l.agent.Model().Level}
 	if l.inv.ResumeIsFile && !l.inv.ForkSession {
@@ -110,15 +131,7 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 	}
 	args, err := p.table.RelaunchArgs(p.o.Args, r)
 	if err != nil {
-		return fmt.Errorf("the command line to start again with could not be made (%v). /exit ends the session, and %s opens it again", err, l.info().Resume)
+		return nil, fmt.Errorf("the command line to go on with could not be made (%v). /exit ends the session, and %s opens it again", err, l.info().Resume)
 	}
-	p.restartMu.Lock()
-	p.restart = args
-	p.restartMu.Unlock()
-	if p.newBuild() {
-		c.Say("gnosh starts again, the newer one, in this session.")
-	} else {
-		c.Say("gnosh starts again, in this session.")
-	}
-	return nil
+	return args, nil
 }

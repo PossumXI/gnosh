@@ -71,6 +71,12 @@ type Options struct {
 	// step, taken once the session is closed, and it returns only when it
 	// could not be done. Nil means gnosh cannot start itself again.
 	Relaunch func(args []string) error
+	// Detach, when not nil, starts the program file at Executable with
+	// these arguments as a process of its own, which goes on when this
+	// one and its terminal are gone, writing what it prints to the file at
+	// log; it returns the process's id. It is /background's last step,
+	// taken once the session is closed. Nil means gnosh cannot do that.
+	Detach func(args []string, log string) (int, error)
 
 	// Now is the clock. Nil means time.Now.
 	Now func() time.Time
@@ -129,6 +135,10 @@ type program struct {
 	started   os.FileInfo
 	restartMu sync.Mutex
 	restart   []string
+	// detached is what /background asked to go on with, once the session
+	// is closed, instead of a restart: the run's log, its prompt and the
+	// session it resumes.
+	detached *detachPlan
 }
 
 // lockedWriter lets several goroutines write whole lines to one stream.
@@ -163,7 +173,11 @@ func Main(ctx context.Context, o Options) (code int) {
 	}()
 	code = p.run(ctx)
 	if args := p.restartArgs(); args != nil && code == cli.ExitOK {
-		// Everything of the session is closed: gnosh starts again in it.
+		// Everything of the session is closed: gnosh starts again in it,
+		// here or on its own.
+		if d := p.detachedPlan(); d != nil {
+			return p.detach(args, d)
+		}
 		return p.relaunch(args)
 	}
 	return code
