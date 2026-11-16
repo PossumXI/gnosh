@@ -51,18 +51,21 @@ func (l *live) slashContext(ctx context.Context, c *SlashContext) error {
 	}
 	files := est(l.startInstructions())
 	defs := est(l.startAgentTypes()) + est(l.skillsLine())
-	window := "unknown"
-	if cs.Window > 0 {
-		window = thousands(cs.Window)
+	// The loop counts with each request; before the first there is no
+	// count, and the window is only what the configuration says, if it
+	// says.
+	switch configured := l.agent.Model().Info.ContextWindow; {
+	case cs.Window > 0:
+		window := thousands(cs.Window)
 		if !cs.Known {
 			window += " (assumed: the server did not say)"
 		}
-	}
-	c.Say("The model's window is %s tokens; room is made when the conversation reaches %s.", window, thousands(cs.Point))
-	if cs.Window > 0 {
+		c.Say("The model's window is %s tokens; room is made when the conversation reaches %s.", window, thousands(cs.Point))
 		c.Say("In use at the last count: about %s (%d%%), with about %s to go before room is made.", thousands(cs.Used), cs.Used*100/cs.Window, thousands(cs.Room()))
-	} else {
-		c.Say("In use at the last count: about %s.", thousands(cs.Used))
+	case configured > 0:
+		c.Say("The model's window is %s tokens, as configured. Nothing has been sent to it yet; the first request counts what is in it.", thousands(configured))
+	default:
+		c.Say("Nothing has been sent to the model yet: the first request asks its server how large its window is, and counts what is in it.")
 	}
 	c.Say("  gnosh's instructions to the model         %s", thousands(system))
 	c.Say("  what the model is told of its %d tools     %s", len(toolRows), thousands(tools))
