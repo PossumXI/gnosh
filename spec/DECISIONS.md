@@ -984,19 +984,25 @@ or kept with the reason said (27).
     characters a terminal draws as nothing, and with them words or an
     order of words the person never saw. As Enter sends a prompt (and
     the prompt the command line gave), text.CleanInvisible takes out tag
-    characters (but not an emoji flag's), the controls and marks of the
-    drawing order, zero-width spaces, the soft hyphen, the interlinear
-    and musical format controls, joiners except between two characters
-    beyond ASCII (Persian, the scripts of India, emoji), and variation
-    selectors except one after a character beyond ASCII, a keycap's, or
-    a Han variant's. Claude Code sometimes sends the cleaned prompt and
-    sometimes puts it back; its docs do not say when, so gnosh's rule
-    is: it is put back, with nothing sent, when what was taken out could
-    hide text or change its order (tag characters, the order controls,
-    three or more in a row, the way hidden bytes are spelled) or when
-    what is left begins as a command or a shell line and what was typed
-    did not; otherwise it is sent and the person told. Bytes that are
-    not UTF-8 are read as the replacement character first, so taking a
-    character out never joins two pieces into a new one. Print mode
-    sends its prompt as given.
+    characters (all but the three subdivision flags emoji have, England,
+    Scotland and Wales: any other run of tags behind a black flag is
+    hidden text), the controls and marks of the drawing order, zero-width
+    spaces, the soft hyphen, the old format controls, the combining
+    grapheme joiner, the Hangul fillers, the interlinear and musical
+    format controls, joiners except between two characters beyond ASCII
+    (Persian, the scripts of India, emoji), and variation selectors
+    except one after a symbol, a mark of punctuation or a Han character,
+    a keycap's, or a Han variant's. The whole prompt is cleaned at once,
+    so a character beside a paste is judged with its neighbours. Claude
+    Code sometimes sends the cleaned prompt and sometimes puts it back;
+    its docs do not say when, so gnosh's rule is: it is put back, with
+    nothing sent, when what was taken out could hide text or change its
+    order (tag characters, the order controls, three or more in a row,
+    the way hidden bytes are spelled), when what is left begins as a
+    command or a shell line, or is the word that leaves, and what was
+    typed did not, and always for a shell line, whose command what was
+    taken out changes; otherwise it is sent and the person told. Bytes
+    that are not UTF-8 are read as the replacement character first, so
+    taking a character out never joins two pieces into a new one. Print
+    mode sends its prompt as given.
 
