@@ -425,6 +425,21 @@ type streamItem struct {
 // is read on a goroutine of its own, so that the session's goroutine can
 // always be stopped: when the turn is stopped and the provider has not
 // ended its answer once the grace is over, stream goes on without it.
+// tellImagesLeftOut says once for a model that its server cannot take
+// images, once its provider has begun leaving them out: the model may not
+// say so itself, and a person who showed it a picture should know it saw
+// none.
+func (a *Agent) tellImagesLeftOut(m Model) {
+	d, ok := m.Provider.(core.ImageDropper)
+	if !ok || !d.LeavesOutImages() {
+		return
+	}
+	if _, told := a.imagesTold.LoadOrStore(modelKey(m), true); told {
+		return
+	}
+	a.notice(LevelWarning, "model", m.label()+" cannot take images, so each picture in the conversation is sent to it as a line saying it was left out.")
+}
+
 func (a *Agent) stream(ctx context.Context, t *turn, purpose string, req *core.Request, m Model, show bool) (*reply, error) {
 	rep := &reply{model: m}
 
@@ -522,6 +537,7 @@ func (a *Agent) stream(ctx context.Context, t *turn, purpose string, req *core.R
 				rep.first = a.clock.Now().Sub(began)
 				a.alive(m)
 				a.setPhase(PhaseReply, "reading the reply from "+m.label())
+				a.tellImagesLeftOut(m)
 			}
 			// Every tool call goes by an id nobody else in the session
 			// has: results are matched to calls by it, and so is the

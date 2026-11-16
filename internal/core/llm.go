@@ -210,6 +210,14 @@ type LoadReporter interface {
 	Load(ctx context.Context, model string) (ServerLoad, error)
 }
 
+// ImageDropper is a Provider that may leave a request's images out,
+// because its server said it cannot take them: it then sends each as a
+// line saying it was left out.
+type ImageDropper interface {
+	// LeavesOutImages reports whether it does so now.
+	LeavesOutImages() bool
+}
+
 // TokenCounter is a Provider that can count a request's prompt tokens
 // without running it.
 type TokenCounter interface {

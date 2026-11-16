@@ -385,3 +385,28 @@ func TestYieldingSideRequestGivesWay(t *testing.T) {
 		t.Errorf("side events = %+v", evs)
 	}
 }
+
+// droppingModel is a fake model whose server has refused images.
+type droppingModel struct{ *fakeModel }
+
+func (droppingModel) LeavesOutImages() bool { return true }
+
+// A model whose provider leaves images out is named once in a notice, when
+// it first answers: the model may not say it saw no picture.
+func TestImagesLeftOutAreTold(t *testing.T) {
+	r := newRig(t, func(o *Options) { o.Model.Provider = droppingModel{o.Model.Provider.(*fakeModel)} })
+	r.model.push(say("one"))
+	r.model.push(say("two"))
+	r.run("look at the picture")
+	r.run("and again")
+	r.drain()
+	n := 0
+	for _, ev := range eventsOf[*NoticeEvent](r.rec) {
+		if strings.Contains(ev.Text, "cannot take images") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("the person was told %d times that the model cannot take images, want once", n)
+	}
+}

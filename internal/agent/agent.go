@@ -206,17 +206,18 @@ type Agent struct {
 	ready  chan struct{}   // closed when the log has been looked at for the first time
 	wake   chan struct{}   // holds a token when the session's goroutine has something to look at
 
-	modelLock chan struct{} // holds a token while a request to a model is in flight
-	yieldMu   sync.Mutex
-	yielders  map[*context.CancelCauseFunc]struct{} // side requests that give way to the session's own
-	logMu     sync.Mutex                            // serialises calls to the Log; let go with unlockLog
-	lateMu    sync.Mutex                            // guards late
-	late      []Entry                               // notices raised while the Log was busy, stored when it is free
-	store     *sync.Map                             // the tools' own state for the session
-	intakeWG  sync.WaitGroup
-	closeOnce sync.Once
-	turnNow   atomic.Value // the running turn's id, a string
-	live      atomic.Value // the model that last sent something, as modelKey names it
+	modelLock  chan struct{} // holds a token while a request to a model is in flight
+	imagesTold sync.Map      // the models the person was told cannot take images
+	yieldMu    sync.Mutex
+	yielders   map[*context.CancelCauseFunc]struct{} // side requests that give way to the session's own
+	logMu      sync.Mutex                            // serialises calls to the Log; let go with unlockLog
+	lateMu     sync.Mutex                            // guards late
+	late       []Entry                               // notices raised while the Log was busy, stored when it is free
+	store      *sync.Map                             // the tools' own state for the session
+	intakeWG   sync.WaitGroup
+	closeOnce  sync.Once
+	turnNow    atomic.Value // the running turn's id, a string
+	live       atomic.Value // the model that last sent something, as modelKey names it
 
 	mu         sync.Mutex
 	closing    bool

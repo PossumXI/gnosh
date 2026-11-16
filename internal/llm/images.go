@@ -32,6 +32,11 @@ var refusals = []string{
 	"vision is not supported",
 }
 
+// LeavesOutImages reports whether the server has refused a request's
+// images, so that each is now sent as a line saying it was left out
+// (core.ImageDropper).
+func (p *provider) LeavesOutImages() bool { return p.noImages.Load() }
+
 // imagesRefused reports whether err is a server saying it cannot take
 // the request's images.
 func imagesRefused(err error) bool {
