@@ -300,7 +300,11 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 	if hosts, _ := m.hostSet(); len(hosts) > 0 {
 		switch prog := reaches(a.command); prog {
 		case "ssh":
-			return fmt.Errorf("the command runs ssh, and in this session another machine is reached by naming it as %s in the call, never with ssh in a command: that is what lets every result say which machine it came from. The declared hosts are: %s. Give the command for the other machine alone, with %s set to the machine's name. For a machine that is not declared, %s",
+			// (Box 1, 16 November: told this, Qwen built the name as
+			// S=s; S="${S}sh" and decoded it from base64. Such a line is
+			// held for a person by the permission rules, and nobody was
+			// there.)
+			return fmt.Errorf("the command runs ssh, and in this session another machine is reached by naming it as %s in the call, never with ssh in a command: that is what lets every result say which machine it came from. The declared hosts are: %s. Give the command for the other machine alone, with %s set to the machine's name. For a machine that is not declared, %s. Do not spell ssh another way (put together in a variable, or decoded): a program whose name is not written out is held for the user to approve, and the turn waits on it",
 				argHost, m.hostList(), argHost, declareHost)
 		case "scp":
 			return fmt.Errorf("the command runs scp, and in this session another machine is reached by naming it as %s in the call, never with scp or ssh in a command: that is what lets every result say which machine it came from. The declared hosts are: %s. To move a file, read it on one machine with a command and write it on the other (the file tools here; cat with a here-document there), or tell the user what needs copying",
