@@ -1887,18 +1887,25 @@ func TestSettingSources(t *testing.T) {
 // A later file wins; disableAllHooks and safe mode turn it off, as they do
 // hooks; and a project's waits for trust, while the user's own stays.
 // skillOverrides: how far each skill is seen, a later file winning for
-// each name; a folder that is not trusted keeps its own, since each value
-// only takes away; any other value is a mistake.
+// each name; a folder that is not trusted keeps only what takes away at
+// least as much as the person's own (a cloned repository may not turn a
+// skill the person switched off back on); any other value is a mistake.
 func TestSkillOverrides(t *testing.T) {
 	fs := newFS().
 		put(userJSON, `{"skillOverrides": {"deploy": "off", "notes": "name-only"}}`).
-		put(projJSON, `{"skillOverrides": {"deploy": "user-invocable-only"}}`)
+		put(projJSON, `{"skillOverrides": {"deploy": "user-invocable-only", "notes": "off", "lint": "name-only"}}`)
 	in := inputs(fs)
-	for _, trusted := range []bool{true, false} {
-		in.Trusted = trusted
-		cfg := mustLoad(t, in)
-		if d, n := cfg.SkillOverrides["deploy"], cfg.SkillOverrides["notes"]; d.V != "user-invocable-only" || d.Origin.File != projJSON || n.V != "name-only" {
-			t.Errorf("trusted %v: SkillOverrides = %+v", trusted, cfg.SkillOverrides)
+	for _, c := range []struct {
+		trusted             bool
+		deploy, notes, lint string
+	}{
+		{true, "user-invocable-only", "off", "name-only"},
+		{false, "off", "off", "name-only"},
+	} {
+		in.Trusted = c.trusted
+		o := mustLoad(t, in).SkillOverrides
+		if o["deploy"].V != c.deploy || o["notes"].V != c.notes || o["lint"].V != c.lint {
+			t.Errorf("trusted %v: SkillOverrides = %+v", c.trusted, o)
 		}
 	}
 	_, problems := load(t, withConfig(`{"skillOverrides": {"deploy": "hidden"}}`))

@@ -47,9 +47,10 @@ type builder struct {
 	denyInstead    Value[bool]
 	dirs           []ListItem
 
-	env       map[string]EnvVar
-	skillOver map[string]Value[string]
-	opts      Options
+	env           map[string]EnvVar
+	skillOver     map[string]Value[string] // the person's own files
+	skillOverProj map[string]Value[string] // the project's
+	opts          Options
 }
 
 // newBuilder returns a builder holding the defaults.
@@ -61,6 +62,7 @@ func newBuilder(in *Inputs, probs *problems) *builder {
 		stateThinking: map[string]Value[string]{},
 		env:           map[string]EnvVar{},
 		skillOver:     map[string]Value[string]{},
+		skillOverProj: map[string]Value[string]{},
 		opts:          defaultOptions(),
 	}
 }
@@ -323,12 +325,18 @@ func (b *builder) setEnv(v EnvVar) {
 	b.env[v.Name] = v
 }
 
-// setSkillOverride sets how far the skill name is seen. A later file wins.
+// setSkillOverride sets how far the skill name is seen. A later file wins;
+// a project's file is kept apart, since in a folder that is not trusted it
+// may only take away (finish).
 func (b *builder) setSkillOverride(name string, v Value[string]) {
-	if have, ok := b.skillOver[name]; ok && v.Origin.Layer < have.Origin.Layer {
+	m := b.skillOver
+	if v.Origin.Layer == LayerProject {
+		m = b.skillOverProj
+	}
+	if have, ok := m[name]; ok && v.Origin.Layer < have.Origin.Layer {
 		return
 	}
-	b.skillOver[name] = v
+	m[name] = v
 }
 
 // sweep takes out of the builder everything a project's file put there

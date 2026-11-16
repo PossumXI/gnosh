@@ -293,6 +293,13 @@ func TestPermissionsEditsRules(t *testing.T) {
 	has(t, "a rule gnosh would not load", perm("allow NoSuchTool"), "NoSuchTool was not added")
 	hasNot(t, "the local file", w.Read(local), "NoSuchTool")
 	has(t, "a rule that is not there", perm("remove Bash(ls *)"), "No rule Bash(ls *) is in force")
+	// The same words on two lists: removing one, named, leaves the other.
+	perm("allow Bash(git push *)")
+	perm("ask Bash(git push *)")
+	has(t, "remove from one list", perm("remove allow Bash(git push *)"), "The allow rule Bash(git push *) is taken out.")
+	if got := w.Read(local); !strings.Contains(got, `"ask": [`) || !strings.Contains(got, "Bash(git push *)") {
+		t.Errorf("the ask rule went with the allow rule:\n%s", got)
+	}
 	has(t, "no rule", perm("deny"), "/permissions takes allow, ask, deny or remove")
 }
 

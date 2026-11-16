@@ -36,7 +36,7 @@ func TestPermissionsPicker(t *testing.T) {
 	// The fifth: a rule in the person's own file is only named.
 	g.keys(`"/permissions" <Enter> <Down> <Down> <Down> <Down> <Enter>`)
 	g.liveHas("which gnosh does not write")
-	if got := ran(); !slices.Equal(got, []string{"/permissions allow Bash(go test *)", "/permissions remove Bash(rm *)"}) {
+	if got := ran(); !slices.Equal(got, []string{"/permissions allow Bash(go test *)", "/permissions remove deny Bash(rm *)"}) {
 		t.Fatalf("ran %q", got)
 	}
 }

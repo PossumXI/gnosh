@@ -232,8 +232,8 @@ func TestSubAgentWorktreeInAWorktreeSession(t *testing.T) {
 func TestGnoshOwn(t *testing.T) {
 	tree := t.TempDir()
 	for rel, want := range map[string]bool{
-		".gnosh/worktrees/":               true,
-		".gnosh/worktrees/agent-1/x.go":   true,
+		".gnosh/worktrees/.gitignore":     true,
+		".gnosh/worktrees/agent-1/x.go":   false,
 		".gnosh/settings.local.json":      true,
 		".gnosh/settings.local.json.lock": true,
 		".gnosh/.gitignore":               true,
@@ -245,14 +245,53 @@ func TestGnoshOwn(t *testing.T) {
 		}
 	}
 	os.MkdirAll(filepath.Join(tree, ".gnosh", "worktrees"), 0o755)
+	os.WriteFile(filepath.Join(tree, ".gnosh", "worktrees", ".gitignore"), []byte("*\n"), 0o644)
 	os.WriteFile(filepath.Join(tree, ".gnosh", "settings.local.json"), []byte("{}"), 0o600)
-	if !gnoshOwn(tree, ".gnosh/") {
+	if !gnoshOwn(tree, ".gnosh/") || !gnoshOwn(tree, ".gnosh/worktrees/") {
 		t.Errorf("a data folder of gnosh's own files alone counted as work")
 	}
+	// A work tree kept in the folder of work trees holds work: the tree it
+	// lies in must not go with it (review, 16 November).
+	os.MkdirAll(filepath.Join(tree, ".gnosh", "worktrees", "agent-1"), 0o755)
+	if gnoshOwn(tree, ".gnosh/worktrees/") || gnoshOwn(tree, ".gnosh/") {
+		t.Errorf("a folder of work trees with a kept work tree in it was taken for gnosh's alone")
+	}
+	os.RemoveAll(filepath.Join(tree, ".gnosh", "worktrees", "agent-1"))
 	os.MkdirAll(filepath.Join(tree, ".gnosh", "skills"), 0o755)
 	if gnoshOwn(tree, ".gnosh/") {
 		t.Errorf("a data folder with a skills folder in it was taken for gnosh's alone")
 	}
+}
+
+// An unnamed --worktree session that changed nothing itself, but whose
+// sub-agent's work tree was kept with work in it, keeps its own tree:
+// removing it would take the sub-agent's work along (review, 16 November).
+func TestWorktreeFlagKeepsASubAgentsKeptTree(t *testing.T) {
+	w := repoWorld(t)
+	treeRe := regexp.MustCompile(`You work in a git work tree of your own, at (/[^:]+):`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		if strings.Contains(body, "You are a sub-agent inside gnosh") {
+			if strings.Contains(body, `"role":"tool"`) {
+				return &apptest.Reply{Text: "Wrote it."}
+			}
+			m := treeRe.FindStringSubmatch(body)
+			if m == nil {
+				return &apptest.Reply{Text: "No tree."}
+			}
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "w1", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":"kept\n"}`, filepath.Join(m[1], "notes.txt"))}}}
+		}
+		if strings.Contains(body, `"role":"tool"`) {
+			return &apptest.Reply{Text: "Done."}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"note it","prompt":"Write notes.txt.","isolation":"worktree"}`}}}
+	})
+	r := run(t, w, "--trust-folder", "--worktree", "-y", "-p", "go").wantCode(t, 0)
+	kept, _ := filepath.Glob(filepath.Join(w.Dir, ".gnosh", "worktrees", "*", ".gnosh", "worktrees", "agent-*", "notes.txt"))
+	if len(kept) != 1 {
+		t.Errorf("the sub-agent's kept work is gone: %q\n%s", kept, r.err)
+	}
+	has(t, "stderr", r.err, "is kept (it holds")
 }
 
 // An unnamed --worktree session that kept a rule in its local settings

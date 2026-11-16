@@ -123,6 +123,16 @@ func (ld *loader) finish() *Config {
 		cfg.Env = append(cfg.Env, b.env[name])
 	}
 	cfg.SkillOverrides = maps.Clone(b.skillOver)
+	for name, v := range b.skillOverProj {
+		// The project's file wins as a later file does where the folder is
+		// trusted; where it is not, only where it takes away at least as
+		// much as the person's own setting (a cloned repository turning a
+		// skill the person switched off back on: review, 16 November).
+		have, ok := cfg.SkillOverrides[name]
+		if !ok || in.Trusted || slices.Index(SkillVisibilities, v.V) >= slices.Index(SkillVisibilities, have.V) {
+			cfg.SkillOverrides[name] = v
+		}
+	}
 
 	cfg.Context = ContextFiles{
 		Off:            cfg.Switches.SafeMode.V,

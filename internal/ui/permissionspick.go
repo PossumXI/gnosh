@@ -86,7 +86,7 @@ func (s *session) removeRuleMenu(r app.PermissionRule) {
 	}, CancelHint: "keep it", Theme: s.th.Menu, Metrics: s.m})
 	pick.local = func(res menu.Result) {
 		if !res.Cancelled && res.Index == 0 {
-			s.run("/permissions remove " + r.Rule)
+			s.run("/permissions remove " + r.List + " " + r.Rule)
 		}
 	}
 	s.openLocal(pick)

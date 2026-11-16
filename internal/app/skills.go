@@ -205,10 +205,17 @@ func (l *live) skills() *skill.Set {
 	l.skillMu.Lock()
 	defer l.skillMu.Unlock()
 	if l.skillSet == nil || time.Since(l.skillRead) > skillsFresh {
-		l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
-		l.skillSet.Override(l.skillOverridesLocked())
+		l.readSkillsLocked()
 	}
 	return l.skillSet
+}
+
+// readSkillsLocked reads the skill folders again, with l.skillMu held, and
+// puts the person's settings of how far each is seen over them: no reading
+// leaves a skill switched off seen, even for a moment.
+func (l *live) readSkillsLocked() {
+	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
+	l.skillSet.Override(l.skillOverridesLocked())
 }
 
 // skillOverridesLocked is how far each skill is seen now, by name, with
@@ -262,7 +269,7 @@ func (l *live) slashReloadSkills(ctx context.Context, c *SlashContext) error {
 		return nil
 	}
 	l.skillMu.Lock()
-	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
+	l.readSkillsLocked()
 	all := l.skillSet.All()
 	l.skillMu.Unlock()
 	var names []string

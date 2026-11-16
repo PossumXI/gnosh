@@ -827,22 +827,37 @@ func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
 			return
 		}
 		list := permission.List(verb)
-		if err := l.engine.Keep(rule, list); err != nil {
+		added, err := l.engine.Keep(rule, list)
+		if err != nil {
 			c.Say("%s was not added: %v.", rule, strings.TrimRight(err.Error(), "."))
 			return
 		}
-		err := l.editLocalRules(func(lists map[string][]string) {
+		err = l.editLocalRules(func(lists map[string][]string) {
 			if !slices.Contains(lists[verb], rule) {
 				lists[verb] = append(lists[verb], rule)
 			}
 		})
 		if err != nil {
-			l.engine.Drop(rule, list)
+			if added {
+				// (Only what this command put in force is taken back: a rule
+				// that was in force already stays.)
+				l.engine.Unkeep(rule, list)
+			}
 			c.Say("%s was not added: %v.", rule, strings.TrimRight(err.Error(), "."))
 			return
 		}
 		c.Say("The %s rule %s is in force, and kept in %s.", verb, rule, local)
 	case "remove", "rm", "delete":
+		// remove [allow|ask|deny] <rule>: with a list named, the rule is
+		// taken out of that list alone (the picker names it), so that an
+		// ask rule beside an allow rule of the same words stays.
+		only := ""
+		if w, rest, ok := strings.Cut(rule, " "); ok && (w == "allow" || w == "ask" || w == "deny") {
+			only, rule = w, strings.TrimSpace(rest)
+			if n := len(rule); n >= 2 && (rule[0] == '"' || rule[0] == '\'') && rule[n-1] == rule[0] {
+				rule = rule[1 : n-1]
+			}
+		}
 		if rule == "" {
 			c.Say("%s", usage)
 			return
@@ -853,13 +868,18 @@ func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
 		}
 		var found bool
 		var elsewhere []string
+		done := map[permission.List]bool{}
 		for _, r := range l.engine.Explain().Rules {
-			if r.Rule != want {
+			if r.Rule != want || only != "" && string(r.List) != only {
 				continue
 			}
 			found = true
 			switch r.Source {
 			case permission.KeptLayer, permission.SessionLayer, local:
+				if done[r.List] {
+					continue
+				}
+				done[r.List] = true
 				l.engine.Drop(want, r.List, local)
 				err := l.editLocalRules(func(lists map[string][]string) {
 					lists[string(r.List)] = slices.DeleteFunc(lists[string(r.List)], func(s string) bool {

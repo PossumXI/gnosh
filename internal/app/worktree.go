@@ -70,6 +70,11 @@ func runGit(ctx context.Context, environ []string, dir string, args ...string) (
 	// been stopped, what it printed is not waited for longer than this.
 	cmd.WaitDelay = 5 * time.Second
 	out, err := cmd.Output()
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// git itself ended well; what a hook left behind holding its
+		// output does not undo that.
+		err = nil
+	}
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return "", fmt.Errorf("git did not finish in the time it is given (git %s)", strings.Join(args, " "))
@@ -262,10 +267,25 @@ func gnoshOwn(tree, rel string) bool {
 	rel = strings.TrimSuffix(rel, "/")
 	own := func(rel string) bool {
 		switch rel {
-		case ownDir + "/.gitignore", ownDir + "/settings.local.json", ownDir + "/settings.local.json.lock", ownDir + "/" + worktreesDir:
+		case ownDir + "/.gitignore", ownDir + "/settings.local.json", ownDir + "/settings.local.json.lock", ownDir + "/" + worktreesDir + "/.gitignore":
+			return true
+		case ownDir + "/" + worktreesDir:
+			// The folder of work trees is gnosh's only while no work tree is
+			// in it: one kept there (a sub-agent's, with its work) would go
+			// with the tree it lies in, and git's own check passes over it,
+			// since the folder is ignored.
+			entries, err := os.ReadDir(filepath.Join(tree, rel))
+			if err != nil {
+				return false
+			}
+			for _, e := range entries {
+				if e.Name() != ".gitignore" {
+					return false
+				}
+			}
 			return true
 		}
-		return strings.HasPrefix(rel, ownDir+"/"+worktreesDir+"/")
+		return false
 	}
 	if rel != ownDir {
 		return own(rel)

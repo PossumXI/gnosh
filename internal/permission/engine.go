@@ -405,7 +405,8 @@ func (e *Engine) Grant(rule string, scope GrantScope) error {
 	default:
 		return fmt.Errorf("permission: %q is not a way to keep an approval", scope)
 	}
-	return e.keepIn(ly, rule, ListAllow)
+	_, err := e.keepIn(ly, rule, ListAllow)
+	return err
 }
 
 // The names of the session's own layers, as Decision.Source and Explain
@@ -418,24 +419,33 @@ const (
 
 // Keep puts rule on list (allow, ask or deny) among the rules kept for
 // the project, where an approval kept at a prompt goes (GrantLocal): in
-// force at once. The caller writes it down.
-func (e *Engine) Keep(rule string, list List) error {
+// force at once. added is false when it was there already. The caller
+// writes it down.
+func (e *Engine) Keep(rule string, list List) (added bool, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.keepIn(e.saved, rule, list)
 }
 
-// keepIn adds rule to the list of the layer ly, once.
-func (e *Engine) keepIn(ly *layer, rule string, list List) error {
+// Unkeep takes back a rule Keep added, from the kept rules alone.
+func (e *Engine) Unkeep(rule string, list List) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.saved.drop(rule, list)
+}
+
+// keepIn adds rule to the list of the layer ly, once; added is false when
+// it was there already.
+func (e *Engine) keepIn(ly *layer, rule string, list List) (added bool, err error) {
 	cs, texts := ly.list(list)
 	if cs == nil {
-		return fmt.Errorf("permission: %q is not a list of rules", list)
+		return false, fmt.Errorf("permission: %q is not a list of rules", list)
 	}
 	r, err := ParseRule(rule)
 	if err == nil {
 		for _, c := range *cs {
 			if c.Rule.String() == r.String() {
-				return nil
+				return false, nil
 			}
 		}
 	}
@@ -444,11 +454,11 @@ func (e *Engine) keepIn(ly *layer, rule string, list List) error {
 		c, err = e.compile(r, list, ly)
 	}
 	if err != nil {
-		return &RuleError{Rule: rule, Source: ly.Name, List: list, Err: err}
+		return false, &RuleError{Rule: rule, Source: ly.Name, List: list, Err: err}
 	}
 	*cs = append(*cs, c)
 	*texts = append(*texts, rule)
-	return nil
+	return true, nil
 }
 
 // Drop takes rule off list in the session's own layers (approved for the
@@ -457,31 +467,39 @@ func (e *Engine) keepIn(ly *layer, rule string, list List) error {
 func (e *Engine) Drop(rule string, list List, sources ...string) int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	want := rule
-	if r, err := ParseRule(rule); err == nil {
-		want = r.String()
-	}
 	n := 0
 	for _, ly := range append(slices.Clone(e.layers), e.session, e.saved) {
 		if ly != e.session && ly != e.saved && !slices.Contains(sources, ly.Name) {
 			continue
 		}
-		cs, texts := ly.list(list)
-		if cs == nil {
-			continue
-		}
-		*cs = slices.DeleteFunc(*cs, func(c *crule) bool {
-			if c.Rule.String() == want {
-				n++
-				return true
-			}
-			return false
-		})
-		*texts = slices.DeleteFunc(*texts, func(s string) bool {
-			r, err := ParseRule(s)
-			return err == nil && r.String() == want
-		})
+		n += ly.drop(rule, list)
 	}
+	return n
+}
+
+// drop takes rule off the layer's list, and says how many times it was
+// there.
+func (ly *layer) drop(rule string, list List) int {
+	want := rule
+	if r, err := ParseRule(rule); err == nil {
+		want = r.String()
+	}
+	cs, texts := ly.list(list)
+	if cs == nil {
+		return 0
+	}
+	n := 0
+	*cs = slices.DeleteFunc(*cs, func(c *crule) bool {
+		if c.Rule.String() == want {
+			n++
+			return true
+		}
+		return false
+	})
+	*texts = slices.DeleteFunc(*texts, func(s string) bool {
+		r, err := ParseRule(s)
+		return err == nil && r.String() == want
+	})
 	return n
 }
 
