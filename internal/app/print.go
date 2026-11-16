@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gnosh-ai/gnosh/internal/text"
 	"io"
 	"os"
 	"slices"
@@ -48,8 +49,10 @@ type printer struct {
 	format  string
 	verbose bool
 	// live says standard output is a terminal, where a person watches the
-	// words arrive.
+	// words arrive. safe is what of the reply may be written there: its
+	// styles, and no other escape sequence (text.SafeStream).
 	live bool
+	safe text.SafeStream
 
 	mu sync.Mutex
 	c  Controls
@@ -529,9 +532,11 @@ func (f *printer) offer(res agent.TurnResult) {
 	}
 }
 
-// stderr prints one line on standard error.
+// stderr prints one line on standard error, where a person reads it: what
+// a model wrote may be in it (a tool's input), so it may only colour
+// itself (text.Safe).
 func (f *printer) stderr(format string, args ...any) {
-	fmt.Fprintln(f.p.stderr, "gnosh: "+strings.TrimRight(fmt.Sprintf(format, args...), "\n"))
+	fmt.Fprintln(f.p.stderr, "gnosh: "+text.Safe(strings.TrimRight(fmt.Sprintf(format, args...), "\n")))
 }
 
 // sessionID is the session's id.
@@ -559,6 +564,12 @@ func (f *printer) text(s string) {
 		}
 		f.separate()
 		f.inMessage = true
+	}
+	// On a terminal, what the model writes may only colour itself: an
+	// escape sequence in it could otherwise move the cursor, set the
+	// title or write the clipboard. (A pipe or a file gets it as it is.)
+	if s = f.safe.Write(s); s == "" {
+		return
 	}
 	fmt.Fprint(f.p.stdout, s)
 	f.wroteAny, f.endsLine = true, strings.HasSuffix(s, "\n")
@@ -626,6 +637,7 @@ func (f *printer) endReply() {
 		}
 		f.buf.Reset()
 	}
+	f.safe.Reset()
 	f.inMessage = false
 }
 

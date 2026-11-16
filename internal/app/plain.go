@@ -200,7 +200,7 @@ const (
 func visible(s string) string {
 	clean := true
 	for i := 0; i < len(s); i++ {
-		if c := s[i]; (c < 0x20 && c != '\n' && c != '\t') || c == 0x7f {
+		if c := s[i]; (c < 0x20 && c != '\n' && c != '\t') || c == 0x7f || c == 0xc2 && i+1 < len(s) && s[i+1] >= 0x80 && s[i+1] <= 0x9f {
 			clean = false
 			break
 		}
@@ -210,7 +210,9 @@ func visible(s string) string {
 	}
 	var b strings.Builder
 	for _, r := range s {
-		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f {
+		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f || r >= 0x80 && r <= 0x9f {
+			// (The C1 controls, from U+0080, some terminals read as the
+			// escape sequences they stand for.)
 			fmt.Fprintf(&b, `\x%02x`, r)
 			continue
 		}
