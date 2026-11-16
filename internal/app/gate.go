@@ -72,6 +72,23 @@ type gate struct {
 // dangerous removal when permissions are otherwise skipped.
 const criticalWait = 2 * time.Minute
 
+// criticalTimeout is the refusal of a call gnosh asks a person about even
+// with permissions skipped, when nobody answered in time: why it asked, in
+// the engine's words, and what to do. A program whose name is put
+// together when the line runs is asked about because it could be rm (box
+// 1, 16 November: Qwen built ssh as S=s; S="${S}sh"; $S to slip past the
+// refusal of ssh, and was told only that it was a removal).
+func criticalTimeout(why string) string {
+	s := "This call did not run: gnosh asks a person about it even with permissions skipped, and nobody answered within two minutes."
+	if why = strings.TrimSpace(why); why != "" {
+		s += " Why it asks: " + why
+	}
+	if strings.Contains(why, "the program it runs") {
+		return s + " Write the program's name out as a plain word: a name put together in the line could be rm, for all gnosh can tell."
+	}
+	return s + " If it is really wanted, say what you were about to do and why, and let the user run it."
+}
+
 // Check decides about one call.
 func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision, error) {
 	l := g.l
@@ -220,7 +237,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	case errors.Is(err, agent.ErrNobodyToAsk):
 		return agent.Decision{Reason: l.unattended(d), Unattended: true}, nil
 	case err != nil && ctx.Err() == nil && askCtx.Err() != nil:
-		return agent.Decision{Reason: "This call did not run: it is a removal gnosh always asks about, and nobody approved it within two minutes. If it is really wanted, say what you were about to remove and why, and let the user run it."}, nil
+		return agent.Decision{Reason: criticalTimeout(d.Reason)}, nil
 	case err != nil:
 		return agent.Decision{}, err
 	}

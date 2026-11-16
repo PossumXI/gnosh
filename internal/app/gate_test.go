@@ -519,3 +519,14 @@ func TestPermissionPromptsNone(t *testing.T) {
 	has(t, "the tools offered with host", string(reqs[2].Body), `"name":"AskUserQuestion"`)
 	hasNot(t, "what the model read with host", toolResult(t, w, 3, "c1"), "do not send this call again")
 }
+
+// When nobody answers the question gnosh puts even with permissions
+// skipped, the model is told why it was asked, and for a program whose
+// name the line puts together, to write it out.
+func TestCriticalTimeoutSaysWhy(t *testing.T) {
+	got := criticalTimeout("A dangerous removal cannot be ruled out: the line gives the program it runs ($S) more values than gnosh follows.")
+	has(t, "a name put together", got, "nobody answered within two minutes", "Why it asks: A dangerous removal cannot be ruled out: the line gives the program it runs ($S)", "Write the program's name out as a plain word")
+	got = criticalTimeout("This removal looks dangerous (rm -rf ~).")
+	has(t, "a removal", got, "Why it asks: This removal looks dangerous (rm -rf ~).", "say what you were about to do and why")
+	hasNot(t, "a removal", got, "plain word")
+}
