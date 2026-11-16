@@ -294,13 +294,17 @@
 //     (Summary), is the request for a summary. It is about 200 tokens and
 //     asks for at most 500 words: what the user asked, in their words;
 //     what is done; what was found that the rest needs; what is left, with
-//     the user's latest request quoted. It leaves out file contents and,
+//     the user's latest request quoted, and every point where they said
+//     to stop or ask first. It leaves out file contents and,
 //     in a session with mem, everything mem holds, since gnosh hands that
 //     back itself. The long form it replaces took a median of five minutes
 //     to answer on the person's own machine.
 //   - summary-intro and after-summary (SummaryIntro, AfterSummary) stand
 //     before and after the summary once it has replaced the conversation:
-//     this is a summary you wrote; carry on from it without asking.
+//     this is a summary you wrote; carry on from it, stopping where the
+//     user asked to be told or asked, and otherwise without asking. (A
+//     plain "carry on without asking" took the model past such a stop:
+//     Claude Code's own summary line did, on 16 November 2026.)
 //     earlier-left-out (EarlierLeftOut) opens a summary request whose
 //     earliest turns did not fit.
 //

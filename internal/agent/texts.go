@@ -180,8 +180,9 @@ var defaultTexts = Texts{
 		"Call no tools. Answer with the summary and nothing else.",
 	SummaryExtra: "The user asks this of the summary: %s",
 	SummaryIntro: "The earlier part of this conversation ran out of room in your context and was replaced by the summary of it that follows.",
-	SummaryAfter: "Carry on with the task from where the summary leaves it. Do not ask the user to repeat anything, " +
-		"and do not ask whether to go on.",
+	SummaryAfter: "Carry on with the task from where the summary leaves it. Keep every stop the user set: where they " +
+		"asked to be told or asked before a step, stop there and do that first. Do not ask the user to repeat anything, " +
+		"and otherwise do not ask whether to go on.",
 	TrimNote: "The earliest part of the conversation is left out here, because the whole of it no longer fits.",
 
 	LoopContinue: "Keep going with the task. When all of it is finished and checked, reply with " + LoopDone + " alone on a line.",

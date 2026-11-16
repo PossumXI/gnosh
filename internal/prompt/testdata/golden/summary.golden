@@ -1,6 +1,6 @@
 === the request ===
 <gnosh>This conversation is about to be replaced by a summary, because it is running out of room. Write that summary now: plain text, at most 500 words, and no tool call. You will carry on from it alone, so keep:
-1. What the user asked for: every request and correction they gave, in their own words, in order.
+1. What the user asked for: every request and correction they gave, in their own words, in order, and every point where they said to stop or ask first.
 2. What is done: the files changed and what changed in them, the commands that mattered and what they showed.
 3. What you found out or decided that the rest of the work needs, with the file and line where it lives.
 4. What is still to do, and the very next step. Quote the user's latest request word for word.
@@ -8,7 +8,7 @@ Leave out file contents, long output and the story of how you got there.</gnosh>
 
 === the request, with mem, a size and the person's wishes ===
 <gnosh>This conversation is about to be replaced by a summary, because it is running out of room. Write that summary now: plain text, at most 300 words, and no tool call. You will carry on from it alone, so keep:
-1. What the user asked for: every request and correction they gave, in their own words, in order.
+1. What the user asked for: every request and correction they gave, in their own words, in order, and every point where they said to stop or ask first.
 2. What is done: the files changed and what changed in them, the commands that mattered and what they showed.
 3. What you found out or decided that the rest of the work needs, with the file and line where it lives.
 4. What is still to do, and the very next step. Quote the user's latest request word for word.
@@ -23,8 +23,8 @@ and the names of the files</gnosh>
 <gnosh>The earlier part of this conversation ran out of room and was replaced by this summary, which you wrote:</gnosh>
 
 === after the summary ===
-<gnosh>Carry on with the task from where the summary leaves it. Do not ask the user to repeat anything, and do not ask whether to go on. The conversation as it was is in /home/dev/project/.gnosh/sessions/before-summary-3.jsonl: read from it only what you need.</gnosh>
+<gnosh>Carry on with the task from where the summary leaves it. Keep every stop the user set: where they asked to be told or asked before a step, stop there and do that first. Do not ask the user to repeat anything, and otherwise do not ask whether to go on. The conversation as it was is in /home/dev/project/.gnosh/sessions/before-summary-3.jsonl: read from it only what you need.</gnosh>
 
 === after the summary, nothing kept ===
-<gnosh>Carry on with the task from where the summary leaves it. Do not ask the user to repeat anything, and do not ask whether to go on.</gnosh>
+<gnosh>Carry on with the task from where the summary leaves it. Keep every stop the user set: where they asked to be told or asked before a step, stop there and do that first. Do not ask the user to repeat anything, and otherwise do not ask whether to go on.</gnosh>
 

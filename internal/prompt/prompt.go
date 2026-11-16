@@ -222,7 +222,7 @@ func specs() []spec {
 		{name: textSummaryIntro, kind: KindLine,
 			when: "Just before a summary, where it stands in place of the conversation it replaced."},
 		{name: textAfterSummary, kind: KindLine, may: []string{"path"},
-			when: "Just after that summary: carry on, without asking."},
+			when: "Just after that summary: carry on, keeping every stop the user set."},
 
 		{name: textPopNote, kind: KindResult, may: []string{"messages", "one_message", "calls", "one_call", "tools"},
 			when: "Appended to the answer of the call that entered a todo, once the todo is popped: what came between was removed."},
