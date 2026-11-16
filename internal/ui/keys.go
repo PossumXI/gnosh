@@ -371,6 +371,9 @@ func (s *session) box(ev term.Event, k *term.Key) {
 	switch res.Action {
 	case editor.ActionSubmit:
 		d := editor.Draft{Text: res.Text, Pastes: res.Pastes}
+		if !s.cleanToSend(&d, res.Mode) {
+			break
+		}
 		switch res.Mode {
 		case editor.ModeShell:
 			s.shell(d)

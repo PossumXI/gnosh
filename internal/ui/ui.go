@@ -655,8 +655,8 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 		u.ahead = u.ahead[1:]
 		u.terminal(ev)
 	}
-	if strings.TrimSpace(u.first) != "" {
-		s.send(editor.Draft{Text: u.first})
+	if d := (editor.Draft{Text: u.first}); strings.TrimSpace(d.Text) != "" && s.cleanToSend(&d, editor.ModePrompt) {
+		s.send(d)
 	}
 	u.draw()
 

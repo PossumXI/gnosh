@@ -731,6 +731,10 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 		}
 		return false
 	}
+	line, ok := f.cleanLine(line)
+	if !ok {
+		return false
+	}
 	text := strings.TrimSpace(line)
 	if text == "" {
 		return false
@@ -811,6 +815,36 @@ func (f *plain) command(ctx context.Context, c Controls, text string) (CommandRe
 			f.line(ctx, c, line)
 		}
 	}
+}
+
+// cleanLine takes the characters a terminal draws as nothing out of a
+// line typed to be sent, as the full interface does on Enter
+// (ui/invisible.go), and says so. It returns false, with nothing to send,
+// when what was taken out could hide text or change its order, or when
+// what is left begins as a command or a shell line and what was typed did
+// not: there is no box here to put the line back in, so what is left is
+// shown, to be typed again if it is meant.
+func (f *plain) cleanLine(line string) (string, bool) {
+	clean, found := text.CleanInvisible(line)
+	if found.Removed == 0 {
+		return line, true
+	}
+	what := countWords(found.Removed, "invisible character", "invisible characters")
+	typed := strings.TrimLeft(line, " \t")
+	lead := strings.TrimLeft(clean, " \t")
+	switch {
+	case strings.TrimSpace(clean) == "":
+		f.note("The line held only invisible characters, so nothing was sent.")
+		return "", false
+	case found.Hiding:
+		f.note("Took out %s that could hide text or reorder it; nothing was sent. What is left: %s", what, visible(clean))
+		return "", false
+	case (strings.HasPrefix(lead, "/") || strings.HasPrefix(lead, "!")) && !strings.HasPrefix(typed, "/") && !strings.HasPrefix(typed, "!"):
+		f.note("Took out %s, and what is left begins as a command, so it was not run: %s", what, visible(clean))
+		return "", false
+	}
+	f.note("Took out %s before sending the line.", what)
+	return clean, true
 }
 
 // submit sends a prompt.

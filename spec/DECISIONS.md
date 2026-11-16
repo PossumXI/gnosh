@@ -979,3 +979,24 @@ or kept with the reason said (27).
     Not from a project's file, since a project should not spend the
     person's requests. Claude Code's git-history example in a new
     session's box is not adopted.
+72. **Invisible characters are taken out of a prompt on Enter, as in
+    Claude Code.** Text copied from a page or a message can carry
+    characters a terminal draws as nothing, and with them words or an
+    order of words the person never saw. As Enter sends a prompt (and
+    the prompt the command line gave), text.CleanInvisible takes out tag
+    characters (but not an emoji flag's), the controls and marks of the
+    drawing order, zero-width spaces, the soft hyphen, the interlinear
+    and musical format controls, joiners except between two characters
+    beyond ASCII (Persian, the scripts of India, emoji), and variation
+    selectors except one after a character beyond ASCII, a keycap's, or
+    a Han variant's. Claude Code sometimes sends the cleaned prompt and
+    sometimes puts it back; its docs do not say when, so gnosh's rule
+    is: it is put back, with nothing sent, when what was taken out could
+    hide text or change its order (tag characters, the order controls,
+    three or more in a row, the way hidden bytes are spelled) or when
+    what is left begins as a command or a shell line and what was typed
+    did not; otherwise it is sent and the person told. Bytes that are
+    not UTF-8 are read as the replacement character first, so taking a
+    character out never joins two pieces into a new one. Print mode
+    sends its prompt as given.
+

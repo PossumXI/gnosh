@@ -93,6 +93,11 @@ Built:
   a terminal on the other side of ssh or tmux too. Your prompts are white
   and the model's answers green; on a terminal that says its background is
   light, both take colours that read there.
+- **No invisible characters in a prompt**, as in Claude Code: Enter takes
+  out what a terminal draws as nothing (tag characters, the controls of
+  the drawing order, zero-width spaces), keeping what Persian, the
+  scripts of India and emoji need. When they could have hidden text,
+  nothing is sent: the cleaned prompt is back in the box to read.
 - **Your likely next prompt**, as Claude Code's prompt suggestions: with
   `"options": {"promptSuggestionEnabled": true}` (or `/config
   promptSuggestionEnabled=true`), after a turn the model is asked, beside

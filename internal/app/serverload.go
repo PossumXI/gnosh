@@ -137,7 +137,7 @@ func loadText(load core.ServerLoad, estimate int) string {
 		s := load.Slots[mine]
 		text := "reading the prompt: " + kTokens(s.Read) + " of " + kTokens(s.Prompt) + " tokens"
 		if others := busy - 1; others > 0 {
-			text += ", beside " + plural(others, "other request", "other requests")
+			text += ", beside " + countWords(others, "other request", "other requests")
 		}
 		return text
 	case busy == 0:
@@ -147,7 +147,7 @@ func loadText(load core.ServerLoad, estimate int) string {
 	case busy == len(load.Slots):
 		return fmt.Sprintf("the server's %d slots are all busy with other requests; yours waits", busy)
 	}
-	return "the server is also answering " + plural(busy, "other request", "other requests")
+	return "the server is also answering " + countWords(busy, "other request", "other requests")
 }
 
 // near reports whether a server's count of a prompt's tokens is the
@@ -167,12 +167,4 @@ func kTokens(n int) string {
 	}
 	s := strconv.FormatFloat(float64(n)/1000, 'f', 1, 64)
 	return strings.TrimSuffix(s, ".0") + "k"
-}
-
-// plural is n and the word for it: "1 other request", "2 other requests".
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return strconv.Itoa(n) + " " + many
 }

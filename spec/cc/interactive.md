@@ -393,7 +393,8 @@ unless marked.
 - [ ] History per directory, Up/Down rules, Ctrl+R search, cleared-draft
       recall.
 - [ ] Paste collapsing at 800 characters / three lines, with the paste
-      marked as pasted for the model.
+      marked as pasted for the model; invisible characters taken out on
+      Enter (`spec/DECISIONS.md` 72).
 - [ ] Queueing while the model works; Up to take back.
 - [ ] Esc, Esc-Esc, Ctrl+C (clear, then exit), Ctrl+D (double press),
       Shift+Tab mode cycle, Ctrl+B, Ctrl+Z.
