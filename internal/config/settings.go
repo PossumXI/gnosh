@@ -396,6 +396,29 @@ func (s *source) statusLine(f jfield) {
 
 // settingsEnv reads the env object: variables for the commands and hooks
 // gnosh starts.
+// SkillVisibilities are the values of skillOverrides, as Claude Code's,
+// from the most seen to the least.
+var SkillVisibilities = []string{"on", "name-only", "user-invocable-only", "off"}
+
+// settingsSkillOverrides reads skillOverrides: how far each skill is seen,
+// by its name. Each value only takes away (a skill's own file says the
+// most it is seen), so a folder that is not trusted keeps its own too.
+func (s *source) settingsSkillOverrides(f jfield) {
+	if f.val.kind != jObject {
+		s.errorf(f.line, "\"skillOverrides\" is an object of skill names and how far each is seen (%s), and here it is %s, so none of it is in force.", strings.Join(SkillVisibilities, ", "), f.val.kind.word())
+		return
+	}
+	for _, m := range s.unique(f.val, "skillOverrides.") {
+		if m.val.kind != jString || !slices.Contains(SkillVisibilities, m.val.str) {
+			s.errorf(m.line, "the value of \"skillOverrides.%s\" is one of %s, and here it is %s.", m.key, strings.Join(SkillVisibilities, ", "), shown(m.val))
+			continue
+		}
+		name, v := m.key, Value[string]{V: m.val.str, Set: true, Origin: s.at(m.line)}
+		s.add(op{kind: KindHiddenSkill, text: "skillOverrides " + name + ": " + v.V, origin: v.Origin, what: "how far a skill is seen",
+			apply: func(b *builder) { b.setSkillOverride(name, v) }})
+	}
+}
+
 func (s *source) settingsEnv(f jfield) {
 	if f.val.kind != jObject {
 		s.errorf(f.line, "\"env\" is an object of variable names and string values, and here it is %s, so none of it is in force.", f.val.kind.word())

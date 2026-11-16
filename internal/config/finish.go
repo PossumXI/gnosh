@@ -122,6 +122,7 @@ func (ld *loader) finish() *Config {
 	for _, name := range slices.Sorted(maps.Keys(b.env)) {
 		cfg.Env = append(cfg.Env, b.env[name])
 	}
+	cfg.SkillOverrides = maps.Clone(b.skillOver)
 
 	cfg.Context = ContextFiles{
 		Off:            cfg.Switches.SafeMode.V,

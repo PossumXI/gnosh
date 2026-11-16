@@ -745,3 +745,15 @@ or kept with the reason said (27).
     /permissions lists the rules in force under three rows a rule is
     typed into (allow, ask, deny); picking a rule asks before it is taken
     out. In a run, /permissions still prints the listing.
+54. **skillOverrides, and /skills sets it,** as Claude Code has them. The
+    settings key maps a skill's name to how far it is seen: on (as its
+    file says), name-only (the model is told its name and not its
+    description), user-invocable-only (the person's alone, as
+    disable-model-invocation) or off (nobody may start it, and the menu
+    leaves it out; /skills still lists it, so it can be turned back on).
+    A later file wins for each name. Each value only takes away, so a
+    folder that is not trusted keeps its own. /skills <name> <how> sets
+    it for the rest of the session and keeps it in the project's local
+    settings file, which gnosh writes; /skills with nothing after it is a
+    picker of the skills, Enter on one asking how far. gnosh's own
+    hiddenSkills option stays beside it.

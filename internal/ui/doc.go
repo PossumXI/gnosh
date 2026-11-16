@@ -327,6 +327,9 @@
 //   - /model with nothing after it, the picker: a method
 //     ModelChoices(ctx) []app.ModelChoice; switching is the command
 //     /model provider/model level.
+//   - /skills with nothing after it, the picker: a method SkillChoices()
+//     []app.SkillChoice; how far one is seen is the command /skills
+//     <name> on, name-only, user-invocable-only or off.
 //   - /permissions with nothing after it, the picker: a method
 //     PermissionRules() (mode, []app.PermissionRule); adding a rule is the
 //     command /permissions allow, ask or deny and the rule, and taking one

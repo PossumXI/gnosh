@@ -49,6 +49,12 @@ type Skill struct {
 	// and NoUser that only a model may (user-invocable: false).
 	NoModel bool
 	NoUser  bool
+	// NameOnly says the model is told the skill's name alone, and Off that
+	// nobody may start it: the person's settings say so (Claude Code's
+	// skillOverrides name-only and off). Over says which of those settings
+	// is in force, or "".
+	NameOnly, Off bool
+	Over          string
 	// AllowedTools are permission rules that hold for the turn the skill
 	// is run in, as written. DisallowedTools are the tools (or rules) it
 	// takes away for that turn: calls they name are refused.
@@ -225,6 +231,25 @@ func (s *Set) Get(name string) (Skill, bool) {
 
 // All returns the skills, by name.
 func (s *Set) All() []Skill { return slices.Clone(s.skills) }
+
+// Override applies the person's settings of how far each skill is seen
+// (Claude Code's skillOverrides), by name, to the set: "on" leaves a skill
+// as its file says, "name-only" tells the model its name alone,
+// "user-invocable-only" keeps it from the model, and "off" from everyone.
+// A value only ever takes away.
+func (s *Set) Override(over map[string]string) {
+	for i := range s.skills {
+		sk := &s.skills[i]
+		switch sk.Over = over[sk.Name]; sk.Over {
+		case "name-only":
+			sk.NameOnly = true
+		case "user-invocable-only":
+			sk.NoModel = true
+		case "off":
+			sk.Off = true
+		}
+	}
+}
 
 // Skipped returns the files that hold no usable skill.
 func (s *Set) Skipped() []Skipped { return slices.Clone(s.skipped) }

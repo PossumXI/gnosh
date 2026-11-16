@@ -1886,6 +1886,25 @@ func TestSettingSources(t *testing.T) {
 // statusLine is Claude Code's: a command whose output is the status line.
 // A later file wins; disableAllHooks and safe mode turn it off, as they do
 // hooks; and a project's waits for trust, while the user's own stays.
+// skillOverrides: how far each skill is seen, a later file winning for
+// each name; a folder that is not trusted keeps its own, since each value
+// only takes away; any other value is a mistake.
+func TestSkillOverrides(t *testing.T) {
+	fs := newFS().
+		put(userJSON, `{"skillOverrides": {"deploy": "off", "notes": "name-only"}}`).
+		put(projJSON, `{"skillOverrides": {"deploy": "user-invocable-only"}}`)
+	in := inputs(fs)
+	for _, trusted := range []bool{true, false} {
+		in.Trusted = trusted
+		cfg := mustLoad(t, in)
+		if d, n := cfg.SkillOverrides["deploy"], cfg.SkillOverrides["notes"]; d.V != "user-invocable-only" || d.Origin.File != projJSON || n.V != "name-only" {
+			t.Errorf("trusted %v: SkillOverrides = %+v", trusted, cfg.SkillOverrides)
+		}
+	}
+	_, problems := load(t, withConfig(`{"skillOverrides": {"deploy": "hidden"}}`))
+	wantProblem(t, problems, Error, userJSON, 0, `"skillOverrides.deploy"`, "on, name-only, user-invocable-only, off")
+}
+
 func TestStatusLine(t *testing.T) {
 	cfg := mustLoad(t, withConfig(`{"statusLine": {"type": "command", "command": "~/bin/sl.sh", "padding": 2, "refreshInterval": 5}}`))
 	if sl := cfg.StatusLine; sl == nil || sl.Command != "~/bin/sl.sh" || sl.Padding != 2 || sl.Refresh != 5*time.Second || sl.Origin.File != userJSON {

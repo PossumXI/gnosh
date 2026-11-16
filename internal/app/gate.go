@@ -606,11 +606,50 @@ func (l *live) saveRules(rules []string) error {
 }
 
 // editLocalRules changes the permission rules of the project's local
-// settings file (.gnosh/settings.local.json, never committed), which gnosh
-// writes as plain JSON, as Claude Code does its own: change is handed the
-// file's allow, ask and deny lists, under the file's lock. The rest of the
-// file stays as it was, and a file gnosh would not load is not written.
+// settings file: change is handed the file's allow, ask and deny lists.
 func (l *live) editLocalRules(change func(lists map[string][]string)) error {
+	return l.editLocalSettings(func(doc map[string]json.RawMessage) error {
+		perms := map[string]json.RawMessage{}
+		if raw, ok := doc["permissions"]; ok {
+			if err := json.Unmarshal(raw, &perms); err != nil {
+				return fmt.Errorf("its \"permissions\" are not an object (%v)", err)
+			}
+		}
+		names := []string{"allow", "ask", "deny"}
+		lists := map[string][]string{}
+		for _, name := range names {
+			if raw, ok := perms[name]; ok {
+				var rules []string
+				if err := json.Unmarshal(raw, &rules); err != nil {
+					return fmt.Errorf("its \"permissions.%s\" is not a list of rules (%v)", name, err)
+				}
+				lists[name] = rules
+			}
+		}
+		change(lists)
+		for _, name := range names {
+			rules := lists[name]
+			if _, had := perms[name]; len(rules) == 0 && !had {
+				continue
+			}
+			raw, err := json.Marshal(append([]string{}, rules...))
+			if err != nil {
+				return err
+			}
+			perms[name] = raw
+		}
+		raw, err := json.Marshal(perms)
+		doc["permissions"] = raw
+		return err
+	})
+}
+
+// editLocalSettings changes the project's local settings file
+// (.gnosh/settings.local.json, never committed), which gnosh writes as
+// plain JSON, as Claude Code does its own: change is handed the file's
+// keys, under the file's lock, and an error from it leaves the file as it
+// is. A file gnosh would not load is not written.
+func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) error) error {
 	path := l.cfg.Paths.LocalSettings
 	dir := filepath.Dir(path)
 	_, statErr := os.Stat(dir)
@@ -642,38 +681,8 @@ func (l *live) editLocalRules(change func(lists map[string][]string)) error {
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	perms := map[string]json.RawMessage{}
-	if raw, ok := doc["permissions"]; ok {
-		if err := json.Unmarshal(raw, &perms); err != nil {
-			return fmt.Errorf("the \"permissions\" of %s are not an object (%v); the file was left as it is", path, err)
-		}
-	}
-	names := []string{"allow", "ask", "deny"}
-	lists := map[string][]string{}
-	for _, name := range names {
-		if raw, ok := perms[name]; ok {
-			var rules []string
-			if err := json.Unmarshal(raw, &rules); err != nil {
-				return fmt.Errorf("the \"permissions.%s\" of %s is not a list of rules (%v); the file was left as it is", name, path, err)
-			}
-			lists[name] = rules
-		}
-	}
-	change(lists)
-	for _, name := range names {
-		rules := lists[name]
-		if _, had := perms[name]; len(rules) == 0 && !had {
-			continue
-		}
-		raw, err := json.Marshal(append([]string{}, rules...))
-		if err != nil {
-			return err
-		}
-		perms[name] = raw
-	}
-	var err2 error
-	if doc["permissions"], err2 = json.Marshal(perms); err2 != nil {
-		return err2
+	if err := change(doc); err != nil {
+		return fmt.Errorf("%s was left as it is: %w", path, err)
 	}
 	content, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -681,7 +690,7 @@ func (l *live) editLocalRules(change func(lists map[string][]string)) error {
 	}
 	content = append(content, '\n')
 	if _, err := config.CheckWrite(l.st.inputs, path, content); err != nil {
-		return fmt.Errorf("gnosh would not load %s with the rule in it, so it was not written: %w", path, err)
+		return fmt.Errorf("gnosh would not load %s with the change in it, so it was not written: %w", path, err)
 	}
 	return config.WriteFileAtomic(path, content, 0o600)
 }

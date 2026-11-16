@@ -71,6 +71,10 @@
 //	                 status line under the prompt; a program to run, so a
 //	                 project's waits for trust, as a hook does
 //	model            the session's model
+//	skillOverrides   how far each skill is seen, by its name: "on" (as its
+//	                 file says), "name-only", "user-invocable-only" or
+//	                 "off"; a later file wins, and a folder that is not
+//	                 trusted keeps its own, since each only takes away
 //	$schema          accepted and not read
 //
 // gnosh's own keys stand beside them:

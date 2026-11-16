@@ -185,8 +185,12 @@ type live struct {
 	effortHeld   bool
 	effortBefore string
 	// skillSet is the skills as they were last read, and skillRead when.
+	// skillOver is how far each skill is seen (skillOverrides), as the
+	// settings had it when the session began and /skills changed it since;
+	// nil until first wanted.
 	skillSet  *skill.Set
 	skillRead time.Time
+	skillOver map[string]string
 
 	// hookChanged holds the ids of the calls of the question tool whose
 	// arguments a PreToolUse hook wrote: only such a call may carry its

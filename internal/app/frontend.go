@@ -262,6 +262,10 @@ type SessionControls interface {
 	// adding and taking out a rule are the commands /permissions allow,
 	// ask, deny and remove.
 	PermissionRules() (mode string, rules []PermissionRule)
+	// SkillChoices lists the skills, for the picker that /skills with
+	// nothing after it opens; how far one is seen is the command /skills
+	// <name> on|name-only|user-invocable-only|off.
+	SkillChoices() []SkillChoice
 	// Effort returns the thinking levels of the model in use and the
 	// level it thinks at ("" for its own default), for the picker that
 	// /effort with nothing after it opens and for Alt+T; setting one is

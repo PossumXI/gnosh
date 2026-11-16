@@ -47,8 +47,9 @@ type builder struct {
 	denyInstead    Value[bool]
 	dirs           []ListItem
 
-	env  map[string]EnvVar
-	opts Options
+	env       map[string]EnvVar
+	skillOver map[string]Value[string]
+	opts      Options
 }
 
 // newBuilder returns a builder holding the defaults.
@@ -59,6 +60,7 @@ func newBuilder(in *Inputs, probs *problems) *builder {
 		unset:         map[string]map[string]unsetVars{},
 		stateThinking: map[string]Value[string]{},
 		env:           map[string]EnvVar{},
+		skillOver:     map[string]Value[string]{},
 		opts:          defaultOptions(),
 	}
 }
@@ -319,6 +321,14 @@ func (b *builder) setEnv(v EnvVar) {
 		return
 	}
 	b.env[v.Name] = v
+}
+
+// setSkillOverride sets how far the skill name is seen. A later file wins.
+func (b *builder) setSkillOverride(name string, v Value[string]) {
+	if have, ok := b.skillOver[name]; ok && v.Origin.Layer < have.Origin.Layer {
+		return
+	}
+	b.skillOver[name] = v
 }
 
 // sweep takes out of the builder everything a project's file put there

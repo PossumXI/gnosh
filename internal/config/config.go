@@ -70,6 +70,11 @@ type Config struct {
 	// Env are the variables the env block sets for the commands and hooks
 	// gnosh starts, sorted by name.
 	Env []EnvVar
+	// SkillOverrides is Claude Code's skillOverrides: how far each skill is
+	// seen, by its name: "on" (as its file says), "name-only" (the model is
+	// told its name alone), "user-invocable-only" (the person's alone) or
+	// "off". A later file wins for each name.
+	SkillOverrides map[string]Value[string]
 	// Context says which instruction files gnosh reads, and in what order.
 	Context ContextFiles
 

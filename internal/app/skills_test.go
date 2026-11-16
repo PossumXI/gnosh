@@ -404,3 +404,40 @@ func TestSkillCommands(t *testing.T) {
 	has(t, "the allowed skill as the model read it", requestText(t, w, 1), "made")
 	w.Model.Done()
 }
+
+// skillOverrides, as /skills sets it: off keeps a skill from everyone,
+// user-invocable-only from the model, and name-only tells the model its
+// name alone; each is kept in the project's local settings file, and on
+// gives the skill back as its file says.
+func TestSkillOverridesBySlashSkills(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploys the site DEPLOY-DESC.\n---\nDeploy it.\n")
+	w.Write(w.ConfigDir()+"/skills/notes/SKILL.md", "---\nname: notes\ndescription: Writes notes NOTES-DESC.\n---\nWrite notes.\n")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply { return &apptest.Reply{Text: "Hi."} })
+	local := w.Dir + "/.gnosh/settings.local.json"
+	sk := func(args string) string {
+		t.Helper()
+		return run(t, w, "-p", "/skills "+args).wantCode(t, 0).out
+	}
+	told := func() string {
+		t.Helper()
+		run(t, w, "-p", "hi").wantCode(t, 0)
+		reqs := w.Model.Requests()
+		return string(reqs[len(reqs)-1].Body)
+	}
+	has(t, "off", sk("deploy off"), "The skill deploy is off: nobody may start it, and kept so in "+local)
+	has(t, "name-only", sk("notes name-only"), "The skill notes is told to the model by its name alone")
+	has(t, "the file", w.Read(local), `"skillOverrides"`, `"deploy": "off"`, `"notes": "name-only"`)
+	has(t, "the listing", sk(""), "switched off in your settings (skillOverrides)", "told its name alone")
+	body := told()
+	has(t, "what the model is told", body, "`notes`")
+	hasNot(t, "what the model is told", body, "NOTES-DESC", "`deploy`", "DEPLOY-DESC")
+	sk("notes user-invocable-only")
+	body = told()
+	hasNot(t, "with every skill kept from the model", body, "`notes`", "`deploy`", `"name":"Skill"`)
+	sk("deploy on")
+	sk("notes on")
+	has(t, "both on again", told(), "DEPLOY-DESC", "NOTES-DESC")
+	has(t, "a skill that is not there", sk("nosuch off"), "There is no skill named nosuch")
+	has(t, "a value that is not one", sk("deploy maybe"), "/skills <name> on|name-only|user-invocable-only|off")
+}

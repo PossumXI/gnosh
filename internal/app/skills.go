@@ -206,8 +206,47 @@ func (l *live) skills() *skill.Set {
 	defer l.skillMu.Unlock()
 	if l.skillSet == nil || time.Since(l.skillRead) > skillsFresh {
 		l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
+		l.skillSet.Override(l.skillOverridesLocked())
 	}
 	return l.skillSet
+}
+
+// skillOverridesLocked is how far each skill is seen now, by name, with
+// l.skillMu held.
+func (l *live) skillOverridesLocked() map[string]string {
+	if l.skillOver == nil {
+		l.skillOver = map[string]string{}
+		for name, v := range l.cfg.SkillOverrides {
+			l.skillOver[name] = v.V
+		}
+	}
+	return l.skillOver
+}
+
+// setSkillOverride sets how far the skill name is seen ("on" and the
+// like) for the rest of the session, and keeps it in the project's local
+// settings file, as Claude Code's /skills does.
+func (l *live) setSkillOverride(name, how string) error {
+	err := l.editLocalSettings(func(doc map[string]json.RawMessage) error {
+		over := map[string]string{}
+		if raw, ok := doc["skillOverrides"]; ok {
+			if err := json.Unmarshal(raw, &over); err != nil {
+				return fmt.Errorf("its \"skillOverrides\" is not an object of skill names and strings (%v)", err)
+			}
+		}
+		over[name] = how
+		raw, err := json.Marshal(over)
+		doc["skillOverrides"] = raw
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	l.skillMu.Lock()
+	l.skillOverridesLocked()[name] = how
+	l.skillSet = nil
+	l.skillMu.Unlock()
+	return nil
 }
 
 // skillsFresh is how long a reading of the skill folders is used.
@@ -247,7 +286,7 @@ func (l *live) slashReloadSkills(ctx context.Context, c *SlashContext) error {
 func (l *live) typedSkills() []CommandInfo {
 	var out []CommandInfo
 	for _, sk := range l.skills().All() {
-		if !sk.NoUser {
+		if !sk.NoUser && !sk.Off {
 			out = append(out, CommandInfo{Name: sk.Name, Args: sk.ArgumentHint, Summary: oneLine(sk.Description, 200), InRun: true})
 		}
 	}
@@ -271,7 +310,7 @@ func (l *live) skillHidden(name string) bool {
 func (l *live) forModel() []skill.Skill {
 	var out []skill.Skill
 	for _, sk := range l.skills().All() {
-		if !sk.NoModel && len(sk.Unbuilt) == 0 && !l.skillHidden(sk.Name) && (len(sk.Paths) == 0 || l.skillWoken(sk.Name)) {
+		if !sk.NoModel && !sk.Off && len(sk.Unbuilt) == 0 && !l.skillHidden(sk.Name) && (len(sk.Paths) == 0 || l.skillWoken(sk.Name)) {
 			out = append(out, sk)
 		}
 	}
@@ -314,7 +353,7 @@ func (l *live) skillsForFile(done agent.ToolDone) []agent.Part {
 	rel = filepath.ToSlash(rel)
 	var lines []string
 	for _, sk := range l.skills().All() {
-		if len(sk.Paths) == 0 || sk.NoModel || len(sk.Unbuilt) > 0 || l.skillHidden(sk.Name) || l.skillWoken(sk.Name) {
+		if len(sk.Paths) == 0 || sk.NoModel || sk.Off || len(sk.Unbuilt) > 0 || l.skillHidden(sk.Name) || l.skillWoken(sk.Name) {
 			continue
 		}
 		if pats, _ := instructions.CompilePaths(sk.Paths); !pats.Match(rel) {
@@ -364,7 +403,7 @@ func (l *live) skillsLine() string {
 	}
 	for i, sk := range list {
 		d := oneLine(sk.Description, skill.MaxDescription)
-		if d == "" || used+len(d)+2 > budget {
+		if d == "" || sk.NameOnly || used+len(d)+2 > budget {
 			continue
 		}
 		lines[i] += ": " + d
@@ -523,6 +562,9 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 		return CommandResult{}, false, nil
 	}
 	res := CommandResult{Handled: true, Name: "skill"}
+	if sk.Off {
+		return res, true, fmt.Errorf("the skill %s is switched off in your settings (skillOverrides); /skills %s on turns it back on", sk.Name, sk.Name)
+	}
 	if sk.NoUser {
 		return res, true, fmt.Errorf("the skill %s is for the model alone (its file says user-invocable: false), so typing it does nothing", sk.Name)
 	}
@@ -593,10 +635,14 @@ func (t *skillTool) find(input json.RawMessage) (sk skill.Skill, in skillInput, 
 		return sk, in, "the call names no skill"
 	}
 	sk, ok := t.l.skills().Get(name)
-	if ok && sk.NoModel {
-		return sk, in, fmt.Sprintf("the skill %s is one only the user starts (its file says disable-model-invocation). Do not carry out its steps another way: tell the user they can run it by typing /%s", sk.Name, sk.Name)
+	if ok && sk.NoModel && !sk.Off {
+		why := "its file says disable-model-invocation"
+		if sk.Over == "user-invocable-only" {
+			why = "the user's settings keep it for the user"
+		}
+		return sk, in, fmt.Sprintf("the skill %s is one only the user starts (%s). Do not carry out its steps another way: tell the user they can run it by typing /%s", sk.Name, why, sk.Name)
 	}
-	if !ok || t.l.skillHidden(name) {
+	if !ok || sk.Off || t.l.skillHidden(name) {
 		var names []string
 		for _, s := range t.l.forModel() {
 			names = append(names, s.Name)
@@ -677,28 +723,72 @@ func (l *live) skillsAfterSummary() string {
 
 // slashSkills is /skills: every skill there is, where it came from, who
 // may run it, and what stops one that cannot be run.
+// skillWho says who may start a skill, for /skills and its picker.
+func (l *live) skillWho(sk skill.Skill) string {
+	switch {
+	case sk.Off:
+		return "switched off in your settings (skillOverrides): /skills " + sk.Name + " on turns it back on"
+	case len(sk.Unbuilt) > 0:
+		return "cannot be run by this gnosh: it asks for " + strings.Join(sk.Unbuilt, ", ")
+	case sk.NoUser:
+		return "for the model alone"
+	case sk.Over == "user-invocable-only":
+		return "you type /" + sk.Name + "; your settings keep it from the model (skillOverrides)"
+	case sk.NoModel:
+		return "you type /" + sk.Name + "; the model may not load it"
+	case l.skillHidden(sk.Name):
+		return "you type /" + sk.Name + "; your settings hide it from the model"
+	case sk.NameOnly:
+		return "you type /" + sk.Name + ", and the model may load it, told its name alone (skillOverrides)"
+	}
+	return "you type /" + sk.Name + ", and the model may load it"
+}
+
+// skillVisibilityWords says what each value of skillOverrides does.
+var skillVisibilityWords = map[string]string{
+	"on":                  "on, as its file says",
+	"name-only":           "told to the model by its name alone",
+	"user-invocable-only": "yours alone to start: the model is not told of it",
+	"off":                 "off: nobody may start it",
+}
+
+// skillsAct is /skills <name> on|name-only|user-invocable-only|off: how
+// far the skill is seen, from now on and in later sessions, kept in the
+// project's local settings file (skillOverrides), as Claude Code's /skills
+// does.
+func (l *live) skillsAct(c *SlashContext, set *skill.Set, words []string) {
+	if len(words) != 2 || !slices.Contains(config.SkillVisibilities, words[1]) {
+		c.Say("/skills <name> %s sets how far a skill is seen; with nothing after it, /skills lists them.", strings.Join(config.SkillVisibilities, "|"))
+		return
+	}
+	name, how := strings.TrimPrefix(words[0], "/"), words[1]
+	if _, ok := set.Get(name); !ok {
+		c.Say("There is no skill named %s; /skills lists them.", name)
+		return
+	}
+	if err := l.setSkillOverride(name, how); err != nil {
+		c.Say("The skill %s was left as it was: %v.", name, strings.TrimRight(err.Error(), "."))
+		return
+	}
+	c.Say("The skill %s is %s, and kept so in %s.", name, skillVisibilityWords[how], l.cfg.Paths.LocalSettings)
+}
+
 func (l *live) slashSkills(ctx context.Context, c *SlashContext) error {
 	if l.skillsOff() {
 		c.Say("Skills are off in this session (safe mode, or --disable-slash-commands).")
 		return nil
 	}
 	set := l.skills()
+	if words := strings.Fields(c.Args); len(words) > 0 {
+		l.skillsAct(c, set, words)
+		return nil
+	}
 	if len(set.All()) == 0 {
 		c.Say("There are no skills. A skill is a folder with a SKILL.md in it: in %s for all your projects, or in %s of a project you trust.",
 			userDefDirs(l.cfg, "skills")[0], filepath.Join(ownDir, "skills"))
 	}
 	for _, sk := range set.All() {
-		who := "you type /" + sk.Name + ", and the model may load it"
-		switch {
-		case len(sk.Unbuilt) > 0:
-			who = "cannot be run by this gnosh: it asks for " + strings.Join(sk.Unbuilt, ", ")
-		case sk.NoUser:
-			who = "for the model alone"
-		case sk.NoModel:
-			who = "you type /" + sk.Name + "; the model may not load it"
-		case l.skillHidden(sk.Name):
-			who = "you type /" + sk.Name + "; your settings hide it from the model"
-		}
+		who := l.skillWho(sk)
 		hint := ""
 		if sk.ArgumentHint != "" {
 			hint = " " + sk.ArgumentHint

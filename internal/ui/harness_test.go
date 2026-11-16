@@ -547,6 +547,7 @@ type controls struct {
 	memFiles  []app.MemoryFile
 	servers   []app.MCPChoice
 	rules     []app.PermissionRule
+	skills    []app.SkillChoice
 	levels    []string
 	level     string
 	// agentsStopped counts the calls of StopBackgroundAgents, and
@@ -575,6 +576,13 @@ func (c *controls) MCPChoices() []app.MCPChoice {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.servers)
+}
+
+// SkillChoices is the skills a test set.
+func (c *controls) SkillChoices() []app.SkillChoice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.skills)
 }
 
 // PermissionRules is the rules a test set, in the default mode.
