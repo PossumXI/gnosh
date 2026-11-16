@@ -337,6 +337,8 @@ func (s *session) start() {
 	s.tasks = s.c.Tasks()
 	s.readDeliverables()
 	s.header()
+	// (What in the keybindings file cannot be used is said at once.)
+	s.keysNow()
 	if h, ok := s.c.(historian); ok {
 		var drafts []editor.Draft
 		for _, p := range h.History() {

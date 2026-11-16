@@ -192,3 +192,13 @@ func FuzzKeyBindings(f *testing.F) {
 		}
 	})
 }
+
+// A problem in the file is said as the session starts, before any key.
+func TestKeyBindingsProblemsAtStart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := os.WriteFile(path, []byte(`{"bindings": [{"context": "Chat", "bindings": {"ctl+k": "chat:stash"}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) { c.info.Keybindings = path })
+	g.committedHas(`"ctl" is no modifier`)
+}
