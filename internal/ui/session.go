@@ -255,7 +255,10 @@ type session struct {
 	cmdStop context.CancelFunc
 
 	// What the status line says.
-	info   app.SessionInfo
+	info app.SessionInfo
+	// color is the colour of the prompt mark the session asked for
+	// (/color), "" for the theme's own.
+	color  string
 	mode   string
 	ctxs   agent.ContextStatus
 	branch string
@@ -348,6 +351,12 @@ func (s *session) refresh() {
 	}
 	if s.branchOf != nil && s.cwd != "" {
 		s.branch = s.branchOf(s.cwd)
+	}
+	if s.info.Color != s.color {
+		// (/color, or a session opened again that had one.)
+		s.color = s.info.Color
+		s.th.tintPrompt(s.color)
+		s.ed.SetTheme(s.th.Editor)
 	}
 	s.dirty = true
 }

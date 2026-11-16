@@ -352,6 +352,9 @@ type SessionInfo struct {
 	// OutputStyle is the name of the output style in force, "default" for
 	// none.
 	OutputStyle string
+	// Color is the colour /color gave the session's prompt mark, one of
+	// PromptColors, or "" for the interface's own.
+	Color string
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

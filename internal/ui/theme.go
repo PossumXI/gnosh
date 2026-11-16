@@ -378,3 +378,34 @@ func (th Theme) wordmark() string {
 	}
 	return out
 }
+
+// promptColors are the colours a session's prompt mark may take (/color,
+// app.PromptColors), by Claude Code's names: with full colour, middle
+// tones that read on a dark and on a light background; with sixteen, the
+// terminal's own.
+var promptColors = map[string][2]text.Color{
+	"red":    {text.RGB(0xE0, 0x4A, 0x4A), text.Red},
+	"blue":   {text.RGB(0x4A, 0x8A, 0xF0), text.Blue},
+	"green":  {text.RGB(0x2E, 0xB0, 0x60), text.Green},
+	"yellow": {text.RGB(0xD9, 0xB0, 0x20), text.Yellow},
+	"purple": {text.RGB(0x9D, 0x5C, 0xFF), text.Magenta},
+	"orange": {text.RGB(0xF0, 0x84, 0x20), text.BrightRed},
+	"pink":   {text.RGB(0xF0, 0x25, 0x7F), text.BrightMagenta},
+	"cyan":   {text.RGB(0x20, 0xB8, 0xD0), text.Cyan},
+}
+
+// tintPrompt gives the prompt mark, in the box and before each prompt
+// sent from now on, the colour of that name; "" or a name it does not know
+// is the theme's own blue-green.
+func (th *Theme) tintPrompt(name string) {
+	c := th.Palette.Aqua
+	if pc, ok := promptColors[name]; ok {
+		c = pc[0]
+		if th.Profile == text.ANSI16 {
+			c = pc[1]
+		}
+	}
+	style := text.Style{}.In(th.Profile).Fg(c).Bold()
+	th.Prompt = style
+	th.Editor.PromptStyle = style
+}

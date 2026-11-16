@@ -240,6 +240,11 @@ type live struct {
 	// newBuildSaid says the person was told of a newer gnosh installed
 	// (restart.go).
 	newBuildSaid atomic.Bool
+	// color is the colour of the session's prompt mark (colorcmd.go),
+	// read from its file once (colorRead).
+	colorMu   sync.Mutex
+	color     string
+	colorRead bool
 	// bgEver says the session has had work in the background, and
 	// bgUntold that the ends of that work are no longer told to the model
 	// (the run has stopped waiting for it).
@@ -1136,6 +1141,7 @@ func (l *live) info() SessionInfo {
 		Verbose:     l.cfg.Options.Verbose.V,
 		Vim:         l.cfg.Options.EditorMode.V == "vim",
 		OutputStyle: l.styleNow(),
+		Color:       l.sessionColor(),
 		Resume:      "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {

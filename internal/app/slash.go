@@ -205,6 +205,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "statusline", Args: "[what it shows]", Summary: "Have the model write a status line command from your words, try it, and add it to your gnosh.json.", InRun: true, Run: l.slashStatusLine},
 		{Name: "recap", Summary: "The session in one line: what it has done and where it stands. Nothing of it is kept.", InRun: true, Run: l.slashRecap},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
+		{Name: "color", Args: "[" + strings.Join(PromptColors, "|") + "|default]", Summary: "Give this session's prompt mark a colour, to tell it from other sessions; with none named, one at random. It is kept with the session.", InRun: true, Run: l.slashColor},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
@@ -652,6 +653,9 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		c.Say("small model  %s at %s (the short side jobs)", l.small.ref, l.small.model.Address)
 	}
 	c.Say("permissions  mode %s", l.engine.Mode())
+	if color := l.sessionColor(); color != "" {
+		c.Say("color        %s (/color)", color)
+	}
 	// The machines commands run on: this one as results name it, and the
 	// declared hosts.
 	c.Say("machine      %s (%s)", shelltool.LocalName, firstOf(l.p.whoAndWhere(), "its name is not known"))
