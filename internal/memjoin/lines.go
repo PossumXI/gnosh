@@ -2,6 +2,7 @@ package memjoin
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	gnovmtools "github.com/gnosh-ai/gnosh/internal/gnovm/tools"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -179,22 +181,41 @@ func (j *join) frameLine() string {
 // liveSlides lists the slides the model is still to be told of: those
 // whose todo is on the stack as the same todo, each once.
 func (j *join) liveSlides() []prompt.Slide {
-	_, info := j.ts.View(transcript.ViewOptions{})
+	_, info := j.ts.View(transcript.ViewOptions{Trace: true})
+	type key struct {
+		frame  string
+		before bool
+	}
 	var out []prompt.Slide
-	seen := map[prompt.Slide]bool{}
+	at := map[key]int{}
+	names := fstools.Defaults()
+	cwd := j.env().Cwd
 	for _, c := range info.Cuts {
 		if c.Kind != transcript.OpSlide || !c.Live {
 			continue
 		}
-		sl := prompt.Slide{Frame: c.Frame}
+		k := key{frame: c.Frame}
 		if c.Frame == "" {
-			sl = prompt.Slide{Frame: c.Before, Before: true}
+			k = key{frame: c.Before, before: true}
 		}
-		if sl.Frame == "" || seen[sl] {
+		if k.frame == "" {
 			continue
 		}
-		seen[sl] = true
-		out = append(out, sl)
+		i, seen := at[k]
+		if !seen {
+			i = len(out)
+			at[k] = i
+			out = append(out, prompt.Slide{Frame: k.frame, Before: k.before})
+		}
+		// What the rounds that went had edited, so that the model does
+		// not go back over work it has done (box 2, 16 November: a todo
+		// over sixteen files slid thirteen times while the model read
+		// them again).
+		for _, p := range c.EditedPaths(names.EditName, names.WriteName) {
+			if file := j.shown(p, cwd); file != "" && !slices.Contains(out[i].Files, file) {
+				out[i].Files = append(out[i].Files, file)
+			}
+		}
 	}
 	return out
 }

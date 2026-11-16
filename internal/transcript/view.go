@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -168,6 +169,23 @@ type Cut struct {
 	// Replies lists the replies of the model inside the cut, in order,
 	// with their tool calls and what each call returned.
 	Replies []Reply
+}
+
+// EditedPaths returns the file paths that the calls of the cut's replies
+// to the named tools (the file-editing ones) wrote to and that succeeded,
+// each once, in order, as the calls gave them. It needs a cut made with
+// ViewOptions.Trace.
+func (c Cut) EditedPaths(tools ...string) []string {
+	var out []string
+	for _, r := range c.Replies {
+		for _, call := range r.Calls {
+			if call.Path == "" || !call.Answered || call.IsError || !slices.Contains(tools, call.Name) || slices.Contains(out, call.Path) {
+				continue
+			}
+			out = append(out, call.Path)
+		}
+	}
+	return out
 }
 
 // Mark returns the marker the frame rule gives the entries this cut

@@ -157,7 +157,7 @@ func specs() []spec {
 			when: "Last on every prompt a person types, in a session that has gnovm_run."},
 		{name: textFrameLine, kind: KindLine, need: []string{"id"}, may: []string{"purpose", "stack", "more", "slides"},
 			when: "After the mem line, while the session stands in a todo. Its first sentence also ends the mem reminder."},
-		{name: textSlide, kind: KindLine, need: []string{"show"}, may: []string{"frame", "before"},
+		{name: textSlide, kind: KindLine, need: []string{"show"}, may: []string{"frame", "before", "files"},
 			when: "After the oldest rounds were taken out of the view to make room: inside the next frame line, or as a note of its own before the next reply."},
 		{name: textLargeStep, kind: KindLine, need: []string{"id", "tokens"},
 			when: "Once per todo, before the next reply, when much has come in since the todo was entered."},

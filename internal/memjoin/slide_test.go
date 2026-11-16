@@ -159,6 +159,43 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 	has(t, "the frame line", frameLine, "The start of `"+todo+"` left your context to make room")
 }
 
+// A slide whose rounds edited files names them, so that the model does not
+// go back over work it has done (box 2, 16 November: a todo over sixteen
+// files slid thirteen times while the model read them again).
+func TestSlideNamesTheFilesEdited(t *testing.T) {
+	const todo = "review-files/read-all-four"
+	read := func(name string) map[string]any { return map[string]any{"file_path": name} }
+	w := newWorld(t,
+		reply(memCall("c1", `mem.Todo("review the files", "read all four").Push()`)),
+		reply(memCall("c2", `mem.Next()`)),
+		// (The read and the edit in one round, which slides out whole.)
+		reply(
+			call("c3", "Read", read("alpha.txt")),
+			call("c4", "Edit", map[string]any{"file_path": "alpha.txt", "old_string": "alpha line 0001", "new_string": "alpha line one"}),
+		),
+		reply(call("c5", "Read", read("bravo.txt"))),
+		reply(call("c6", "Read", read("charlie.txt"))),
+		reply(call("c7", "Read", read("delta.txt"))),
+		says("I read the four files and changed alpha.txt."),
+	)
+	for _, name := range []string{"alpha", "bravo", "charlie", "delta"} {
+		w.Write(name+".txt", filler(name, 6000))
+	}
+	w.Model.SetWindow(windowWithRoom(startTokens(t, "review the files")))
+	r := w.run("-y", "-p", "review the files")
+	r.wantCode(t, 0)
+	w.script.done()
+	has(t, "stderr", r.err, "slid `"+todo+"`")
+	reqs := w.script.requests()
+	var told string
+	for _, req := range reqs {
+		if got := lastUser(t, req); strings.Contains(got, "left your context to make room") {
+			told = got
+		}
+	}
+	has(t, "the slide's line", told, "The start of `"+todo+"` left your context to make room (there you edited alpha.txt, which is done);")
+}
+
 // The large-step line: well before the window fills, a todo that has
 // taken in more than half of what the window allows since it was entered
 // is said to be large, once.

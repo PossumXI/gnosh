@@ -156,6 +156,9 @@ type Slide struct {
 	// Before set, the rounds that came before it was entered.
 	Frame  string
 	Before bool
+	// Files are the files the rounds that went had edited, as the model
+	// is told of them, so that it does not go back to work it has done.
+	Files []string
 }
 
 // FrameLine returns the line that follows the mem line while the session
@@ -199,6 +202,13 @@ func (s *Set) slides(list []Slide) string {
 			continue
 		}
 		vals := values{"show": id}
+		if len(sl.Files) > 0 {
+			files := make([]string, len(sl.Files))
+			for i, f := range sl.Files {
+				files[i] = oneLine(f, maxName)
+			}
+			vals["files"] = strings.Join(files, ", ")
+		}
 		if sl.Before {
 			vals["before"] = id
 		} else {

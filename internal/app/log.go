@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -62,6 +64,9 @@ type sessionLog struct {
 	// pop a feature recorded, or a slide), so that what was given in it
 	// can be given again.
 	onCut func()
+	// cwd is the session's working directory now, against which the files
+	// a slide's rounds edited are named.
+	cwd func() string
 
 	// startedWith names the gnosh that begins the file, for its first
 	// entry; begun says the file has been looked at for one.
@@ -77,6 +82,22 @@ type sessionLog struct {
 	prompts map[string]string
 	// last is the entry of the newest prompt.
 	last string
+}
+
+// shownFile is a file a call named, as the model is told of it: relative
+// to the working directory where it lies under it.
+func (l *sessionLog) shownFile(path string) string {
+	cwd := ""
+	if l.cwd != nil {
+		cwd = l.cwd()
+	}
+	if cwd == "" || !filepath.IsAbs(path) {
+		return filepath.ToSlash(path)
+	}
+	if rel, err := filepath.Rel(cwd, filepath.Clean(path)); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return filepath.ToSlash(rel)
+	}
+	return filepath.Clean(path)
 }
 
 // lastPrompt is the session-file entry of the newest prompt, or "" before
@@ -502,14 +523,21 @@ func (l *sessionLog) MakeRoom(ctx context.Context, req agent.RoomRequest) (agent
 	var room agent.Room
 	var told []prompt.Slide
 	var notices []string
+	names := fstools.Defaults()
 	for _, c := range cuts {
 		room.Freed += c.Tokens
+		// The files the rounds that went had edited, as the frame line
+		// names them (memjoin liveSlides).
+		var files []string
+		for _, p := range c.EditedPaths(names.EditName, names.WriteName) {
+			files = append(files, l.shownFile(p))
+		}
 		switch {
 		case c.Frame != "":
-			told = append(told, prompt.Slide{Frame: c.Frame})
+			told = append(told, prompt.Slide{Frame: c.Frame, Files: files})
 			notices = append(notices, fmt.Sprintf("slid `%s`: about %s tokens of its start out of the model's context, instead of compacting", c.Frame, tokenCount(c.Tokens)))
 		case c.Before != "":
-			told = append(told, prompt.Slide{Frame: c.Before, Before: true})
+			told = append(told, prompt.Slide{Frame: c.Before, Before: true, Files: files})
 			notices = append(notices, fmt.Sprintf("slid what came before `%s`: about %s tokens out of the model's context, instead of compacting", c.Before, tokenCount(c.Tokens)))
 		}
 	}

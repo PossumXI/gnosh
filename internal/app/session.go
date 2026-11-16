@@ -468,6 +468,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 
 	// The log, and the agent.
 	l.log = newSessionLog(l.ts, l.texts)
+	l.log.cwd = l.cwd
 	l.log.startedWith = "gnosh " + p.o.BuildID
 	if name := l.agentName(); name != "" && name != l.storedAgent() {
 		l.log.runAs = name
