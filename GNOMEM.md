@@ -90,7 +90,7 @@ mem.Next()
 // in `build-greet/go-mod` "go.mod": do it now, with your tools; once what they return shows it done, pop it with that and what the next todo needs. …
 mem.Pop("module greet, go 1.22")
 // done `build-greet/go-mod` "go.mod" → module greet, go 1.22
-// next: `build-greet/hello-greet-go` "Hello in greet.go": mem.Next()
+// next: `build-greet/hello-greet-go` "Hello in greet.go": mem.Next(), if what you were asked goes on to it; if not, stop and say what is done
 mem.Note("build-greet/make-test-runs-tests", "make is not installed here")
 mem.Drop("build-greet/make-test-runs-tests", "no make on this machine")
 mem.Todo("test.sh runs the tests")

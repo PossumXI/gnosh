@@ -1148,10 +1148,15 @@ func (m *Mem) NextHint(id string) string {
 		}
 	}
 	if nt := m.nextTodo(parent); nt != nil {
+		// What comes next is only as far as the person asked: told "do only
+		// the next step", a model that was given the next todo's call
+		// made it, and did every step of a plan in one session
+		// (long-goal-sessions, box 2, 2026-11-16).
+		const ifAsked = ", if what you were asked goes on to it; if not, stop and say what is done"
 		if parent == present || present == "" && m.nextAtRoot() == nt.Id {
-			return "next: " + ref(nt.Id, nt.Purpose) + ": mem.Next()"
+			return "next: " + ref(nt.Id, nt.Purpose) + ": mem.Next()" + ifAsked
 		}
-		return "next: " + ref(nt.Id, nt.Purpose) + ": mem.Frame(" + quote(nt.Id) + ").Push()"
+		return "next: " + ref(nt.Id, nt.Purpose) + ": mem.Frame(" + quote(nt.Id) + ").Push()" + ifAsked
 	}
 	switch {
 	case p.OpenSteps > 0:
