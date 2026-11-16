@@ -78,13 +78,14 @@ Built:
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/restart` (gnosh starts again in the same session, the newer one once a new
-build is installed, which the session says), `/compact`, `/resume`, `/branch`,
-`/rewind` (the conversation, the files Write and Edit changed, or both),
-`/model`, `/effort`, `/config`, `/plan`, `/permissions`, `/add-dir`,
-`/status`, `/context`, `/btw` (a side question, also while the model works;
-nothing of it is kept), `/recap`, `/color` (this session's prompt mark in a
-colour of its own, kept with the session), `/keybindings` (Claude Code's
-keybindings.json: a key bound to an action, null to take one away,
+build is installed, which the session says), `/background` (the session goes
+on without the terminal, as a run of its own on the prompt given), `/compact`,
+`/resume`, `/branch`, `/rewind` (the conversation, the files Write and Edit
+changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissions`,
+`/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
+model works; nothing of it is kept), `/recap`, `/color` (this session's prompt
+mark in a colour of its own, kept with the session), `/keybindings` (Claude
+Code's keybindings.json: a key bound to an action, null to take one away,
 command:<name> to run one), `/cost`, `/tasks`, `/diff`, `/export`, `/copy`,
 `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and disable),
 `/skills`, `/reload-skills`, `/hooks`, `/statusline`, `/debug` (debug logging

@@ -857,3 +857,14 @@ or kept with the reason said (27).
     with the keys the question shows. The file is looked at again at most
     once a second as keys come; /keybindings opens it in the editor, made
     with nothing bound when it is not there.
+62. **/background (also /bg) hands the session to a run of its own.**
+    Claude Code's detaches a live session to its agent view; gnosh has no
+    such server, and two processes may not write one session. So the
+    session ends here as /exit ends it, and gnosh starts, in a process
+    of its own (setsid) that outlives the terminal, as gnosh -p
+    --resume=<the session> with the session's flags as they stand and the
+    prompt given after --. The run asks nobody, as every run, and its
+    output goes to <session>.background.log beside the session's file;
+    gnosh -r opens the session again once it is done. A prompt is
+    needed, and it waits while a turn or background work runs, as
+    /restart does.
