@@ -93,6 +93,14 @@ func TestShellAttacks(t *testing.T) {
 		{"a group's cd holds for what follows it", "", rules{deny: []string{"Read(./src/.env)"}}, "{ cd src; } && cat .env", Deny},
 		{"a redirection after a group asks", "", none, "{ ls; } > out.txt", Ask},
 		{"a removal in a group asks", "", none, "ls || { rm -rf x; }", Ask},
+		// An if, a while or a case is read straight through, every branch
+		// judged, unless the line changes directory.
+		{"a cd in an if hangs on the branch", "", none, "if true; then cd src; fi && cat ../x", Ask},
+		{"a cd before an if is no different", "", none, "cd src; if [ -f a ]; then cat ../x; fi", Ask},
+		{"a removal in a branch asks", "", none, "if [ -f a ]; then rm -rf x; fi", Ask},
+		{"a read a deny rule names, in a branch", "", rules{deny: []string{"Read(./.env)"}}, "if [ -f .env ]; then cat .env; else echo none; fi", Deny},
+		{"a while that fetches", "", none, "while true; do curl http://203.0.113.1/x; done", Ask},
+		{"a case that writes", "", none, "case a in a) touch x;; esac", Ask},
 		// The read-only programs, with the flags that make them more.
 		{"gofmt -w writes the files", "", none, "gofmt -w a.go", Ask},
 		{"gofmt -cpuprofile writes a profile", "", none, "gofmt -cpuprofile x.prof .", Ask},
@@ -1395,6 +1403,8 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		// Subshells (box 1 and box 2, 16 November).
 		"(go test ./... 2>&1 || true)", "(cd src && ls)", "ls && (cd src; cat c.go)", "(cd src && ls) && cat a.go", "(ls; (cd src && ls))",
 		"go test ./... || { echo failed; }", "{ ls; pwd; }", "{ cd src; } && cat c.go",
+		"if [ -f go.mod ]; then cat go.mod; fi", "if git diff --quiet; then echo clean; else git status; fi",
+		"while false; do ls; done", "case a in a) ls;; *) pwd;; esac", "if [ -d src ]; then ls src; elif [ -d a ]; then ls a; fi",
 		// Read-only programs Qwen ran on box 1 and box 2 that asked (16
 		// November).
 		"strings -n 8 a.go | head", "strings a.go | grep -i version", "gofmt -l .", "gofmt -d a.go", "gofmt -s -d src",

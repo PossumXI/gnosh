@@ -43,6 +43,29 @@ type lineState struct {
 	linked bool
 }
 
+// changesDir reports whether a command of the line may change the shell's
+// directory: cd, pushd or popd, by name or behind builtin or command, or a
+// program whose name is computed when the line runs.
+func changesDir(v *bashView) bool {
+	for _, c := range v.sc.cmds {
+		ws := c.words
+		for len(ws) > 1 && ws[0].static() && (ws[0].joined() == "builtin" || ws[0].joined() == "command") {
+			ws = ws[1:]
+		}
+		if len(ws) == 0 {
+			continue
+		}
+		if !ws[0].static() {
+			return true
+		}
+		switch baseName(ws[0].joined()) {
+		case "cd", "pushd", "popd":
+			return true
+		}
+	}
+	return false
+}
+
 // copyPlace is a copy of where the line stands, for putting it back.
 func (st *lineState) copyPlace() lineState {
 	return lineState{
@@ -1716,7 +1739,12 @@ func (e *Engine) decideShell(req *request) Decision {
 	case v.sc.compound:
 		// (A subshell is read as the commands in it, with its own
 		// directory: see the spans below.)
-		return ask("The command holds a loop, a group or another compound form, and gnosh asks about those.")
+		return ask("The command holds a for loop, a function or another compound form, and gnosh asks about those.")
+	case v.sc.cond && changesDir(v):
+		// An if, a while or a case is read straight through, every branch
+		// judged, which holds as long as where a command runs does not
+		// hang on which branch ran.
+		return ask("The command holds an if, a while or a case, and changes directory, so where its commands run hangs on which of them ran; gnosh asks about those.")
 	case v.sc.background:
 		return ask("The command starts a background job with &, and gnosh asks about those.")
 	case v.sc.exotic:

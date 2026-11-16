@@ -139,7 +139,8 @@ type script struct {
 	// What the line holds anywhere, nested or not.
 	subst      bool // a command or process substitution
 	subshell   bool // ( ... )
-	compound   bool // a loop, if, case, group or function
+	cond       bool // an if, a while, an until or a case
+	compound   bool // a for loop, a function, (( )) and the other forms not read through
 	background bool // a command followed by &
 	piped      bool // a | anywhere
 	setsVar    bool // a ${name:=value} expansion or a {name}> redirection, which assign
@@ -762,7 +763,7 @@ func (p *parser) command() {
 		return
 	case "if":
 		p.pos += 2
-		p.sc.compound = true
+		p.sc.cond = true
 		p.body("then")
 		p.expect("then")
 		p.body("elif", "else", "fi")
@@ -779,7 +780,7 @@ func (p *parser) command() {
 		p.expect("fi")
 	case "while", "until":
 		p.pos += 5
-		p.sc.compound = true
+		p.sc.cond = true
 		p.body("do")
 		p.expect("do")
 		p.body("done")
@@ -798,7 +799,7 @@ func (p *parser) command() {
 		p.expect("done")
 	case "case":
 		p.pos += 4
-		p.sc.compound = true
+		p.sc.cond = true
 		p.caseBody()
 	case "[[":
 		p.testCommand()
