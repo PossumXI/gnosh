@@ -73,9 +73,16 @@ func (l *llamaCpp) Models(ctx context.Context) ([]core.ModelInfo, error) {
 	out := make([]core.ModelInfo, 0, len(list.Data))
 	router := false
 	for _, m := range list.Data {
-		out = append(out, core.ModelInfo{ID: m.ID})
-		// Only a router says whether a model is loaded.
-		router = router || m.Status != nil
+		info := core.ModelInfo{ID: m.ID}
+		// Only a router says whether a model is loaded, and the context
+		// it is run with.
+		if m.Status != nil {
+			router, info.State = true, m.Status.Value
+		}
+		if m.ContextLength != nil {
+			info.ContextWindow = m.ContextLength.count()
+		}
+		out = append(out, info)
 	}
 	// A server that runs one model lists exactly one. Anything else is
 	// taken for a router: /props could only speak for one of its models.

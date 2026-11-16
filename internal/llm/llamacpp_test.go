@@ -311,7 +311,7 @@ func TestLlamaCppModels(t *testing.T) {
 			}
 			io.WriteString(w, `{"object":"list","data":[
 				{"id":"org/qwen:Q4","object":"model","status":{"value":"loaded","args":["llama-server","-ctx","4096"]}},
-				{"id":"gpt-oss","object":"model","status":{"value":"unloaded"}},
+				{"id":"gpt-oss","object":"model","status":{"value":"unloaded"},"context_length":131072},
 				{"id":"sleepy","object":"model","status":{"value":"sleeping","args":[]}},
 				{"id":"busy","object":"model","status":{"value":"loading"}}
 			]}`)
@@ -321,7 +321,9 @@ func TestLlamaCppModels(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []core.ModelInfo{{ID: "org/qwen:Q4"}, {ID: "gpt-oss"}, {ID: "sleepy"}, {ID: "busy"}}
+		// Each with what the router says of it: whether it is loaded, and
+		// the context it runs with where it says.
+		want := []core.ModelInfo{{ID: "org/qwen:Q4", State: "loaded"}, {ID: "gpt-oss", State: "unloaded", ContextWindow: 131072}, {ID: "sleepy", State: "sleeping"}, {ID: "busy", State: "loading"}}
 		if len(got) != len(want) {
 			t.Fatalf("got %+v", got)
 		}

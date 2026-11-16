@@ -172,6 +172,11 @@ type ModelInfo struct {
 	// MaxOutput is the most tokens the model writes in one answer. Zero
 	// means unknown.
 	MaxOutput int
+	// State is whether the server has the model loaded, as a server that
+	// loads and unloads models says it ("loaded", "unloaded"; llama.cpp's
+	// router): a switch to one not loaded waits while it is loaded. Empty
+	// means the server does not say.
+	State string
 }
 
 // ModelLister is a Provider that can say which models it serves.

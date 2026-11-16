@@ -80,6 +80,15 @@ func (s *session) modelMenu(choices []app.ModelChoice) {
 		case len(ch.Levels) > 0:
 			about = append(about, "thinking: "+strings.Join(ch.Levels, ", "))
 		}
+		switch {
+		case ch.Current:
+		case ch.State == "unloaded":
+			// (A server that holds one model at a time puts the other out
+			// to load this one: the first answer waits for that.)
+			about = append(about, "not loaded: the server loads it first, which takes a while")
+		case ch.State == "loading":
+			about = append(about, "loading now")
+		}
 		opts = append(opts, menu.Option{Label: oneLine(ch.Ref), Description: strings.Join(about, s.th.Sep)})
 	}
 	opts = append(opts, menu.Option{Label: "Keep the model as it is"})
