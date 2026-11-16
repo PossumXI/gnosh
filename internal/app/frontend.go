@@ -262,6 +262,10 @@ type SessionControls interface {
 	// /effort with nothing after it opens and for Alt+T; setting one is
 	// the command /effort and the level.
 	Effort() (levels []string, level string)
+	// StopBackgroundAgents stops the session's sub-agents that run in the
+	// background (Ctrl+X Ctrl+K), and says how many there were; the
+	// background commands go on. It may take a moment.
+	StopBackgroundAgents() int
 }
 
 // CommandResult is what running a slash command came to.

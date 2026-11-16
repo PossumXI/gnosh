@@ -3,6 +3,7 @@ package ui
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/text"
@@ -46,6 +47,32 @@ func TestEffortPickerAndKeys(t *testing.T) {
 	g.keys(`<Esc>`)
 	if g.box() != "half a prompt" {
 		t.Fatalf("after Alt+P the box holds %q", g.box())
+	}
+}
+
+// Ctrl+X Ctrl+K, as Claude Code's: the first press says what a second
+// does; a second within three seconds stops the background sub-agents;
+// one later than that only says it again.
+func TestStopAgentsKey(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) { c.agentsRunning = 2 })
+	stopped := func() int {
+		g.c.mu.Lock()
+		defer g.c.mu.Unlock()
+		return g.c.agentsStopped
+	}
+	g.keys(`<Ctrl+X> <Ctrl+K>`)
+	g.liveHas("again within 3 seconds stops every sub-agent")
+	if stopped() != 0 {
+		t.Fatal("one press stopped the sub-agents")
+	}
+	g.wait(time.Second).keys(`<Ctrl+X> <Ctrl+K>`)
+	if stopped() != 1 {
+		t.Fatalf("two presses called StopBackgroundAgents %d times", stopped())
+	}
+	g.once("2 sub-agents that ran in the background are stopped.")
+	g.keys(`<Ctrl+X> <Ctrl+K>`).wait(4 * time.Second).keys(`<Ctrl+X> <Ctrl+K>`)
+	if stopped() != 1 {
+		t.Fatal("two presses four seconds apart stopped the sub-agents")
 	}
 }
 

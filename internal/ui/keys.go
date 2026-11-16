@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app"
@@ -243,6 +244,44 @@ func (s *session) global(k term.Key) bool {
 	return true
 }
 
+// agentStopper is a session whose controls stop its background sub-agents
+// (app.SessionControls).
+type agentStopper interface {
+	StopBackgroundAgents() int
+}
+
+// stopAgentsWait is how soon Ctrl+X Ctrl+K must come again to stop the
+// background sub-agents.
+const stopAgentsWait = 3 * time.Second
+
+// stopAgentsKey is Ctrl+X Ctrl+K, as Claude Code's: pressed twice within
+// three seconds, it stops every sub-agent that runs in the background.
+// The first press says what the second does.
+func (s *session) stopAgentsKey() {
+	st, ok := s.c.(agentStopper)
+	if !ok {
+		s.flash("Stopping the background sub-agents (Ctrl+X Ctrl+K) is not joined to this build.")
+		return
+	}
+	now := s.now()
+	if s.stopArmed.IsZero() || now.Sub(s.stopArmed) > stopAgentsWait {
+		s.stopArmed = now
+		s.flash("Ctrl+X Ctrl+K again within 3 seconds stops every sub-agent that runs in the background.")
+		return
+	}
+	s.stopArmed = time.Time{}
+	s.host.spawn(func() func() {
+		n := st.StopBackgroundAgents()
+		return func() {
+			if n == 0 {
+				s.flash("No sub-agent runs in the background.")
+				return
+			}
+			s.say(count(n, "sub-agent that ran in the background is", "sub-agents that ran in the background are") + " stopped.")
+		}
+	})
+}
+
 // box gives a key or a paste to the prompt box and acts on what the box
 // asks for.
 func (s *session) box(ev term.Event, k *term.Key) {
@@ -265,6 +304,8 @@ func (s *session) box(ev term.Event, k *term.Key) {
 			case k.IsKey(term.KeyUp, 0):
 				// Alt+Up, for a terminal that does not send it.
 				s.withdrawLast()
+			case k.Is('k', term.ModCtrl), k.Is('k', 0):
+				s.stopAgentsKey()
 			default:
 				s.flash("Ctrl+X " + k.String() + " does nothing here. Ctrl+X Ctrl+E opens your editor.")
 			}
@@ -846,6 +887,7 @@ func (s *session) help() {
 		{"Alt+T", "thinking on or off (or the next level)"},
 		{"Alt+P", "switch the model, keeping what is typed"},
 		{"Ctrl+B, Ctrl+X b", "move the running command to the background"},
+		{"Ctrl+X Ctrl+K", "twice within 3 seconds: stop the background sub-agents"},
 		{"Ctrl+T", "hide or show the task list"},
 		{"Ctrl+G", "edit the prompt in your editor (also Ctrl+X Ctrl+E)"},
 		{"Ctrl+S", "put the prompt aside, and bring it back"},

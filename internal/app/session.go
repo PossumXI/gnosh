@@ -1441,6 +1441,18 @@ func (c *controls) StopBackground() {
 	l.stopBackgroundAgents(10 * time.Second)
 }
 
+// StopBackgroundAgents stops the session's sub-agents that run in the
+// background (the interface's Ctrl+X Ctrl+K, as Claude Code's), and says
+// how many there were. Background commands go on.
+func (c *controls) StopBackgroundAgents() int {
+	l := c.cur()
+	n := len(l.backgroundAgents())
+	if n > 0 {
+		l.stopBackgroundAgents(10 * time.Second)
+	}
+	return n
+}
+
 // Background moves the command a tool call waits for to the background.
 func (c *controls) Background(callID string) bool {
 	l := c.cur()

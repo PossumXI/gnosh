@@ -204,6 +204,8 @@
 //	                       comes back into the box with a line that says so (cc 2.6)
 //	?                      in an empty box: write the keys into the scrollback (cc 2.2)
 //	Ctrl+G, Ctrl+X Ctrl+E  edit the box's text in the person's own editor (cc 2.3)
+//	Ctrl+X Ctrl+K          twice within three seconds: stop every sub-agent that runs in the
+//	                       background; the background commands go on (cc 3)
 //	every other key        as in the editor: see its table
 //
 //	A question has the keys

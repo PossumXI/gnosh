@@ -548,6 +548,18 @@ type controls struct {
 	servers   []app.MCPChoice
 	levels    []string
 	level     string
+	// agentsStopped counts the calls of StopBackgroundAgents, and
+	// agentsRunning is what each says it stopped.
+	agentsStopped int
+	agentsRunning int
+}
+
+// StopBackgroundAgents counts its calls.
+func (c *controls) StopBackgroundAgents() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.agentsStopped++
+	return c.agentsRunning
 }
 
 // Effort is the model's thinking levels as a test set them.

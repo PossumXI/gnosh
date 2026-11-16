@@ -204,6 +204,9 @@ type session struct {
 	lastInput time.Time
 	// chord says Ctrl+X was pressed and the key after it is awaited.
 	chord bool
+	// stopArmed is when Ctrl+X Ctrl+K was pressed once, waiting for the
+	// second press that stops the background sub-agents.
+	stopArmed time.Time
 
 	// q is the question on the screen and qwait the ones behind it.
 	q     *question
