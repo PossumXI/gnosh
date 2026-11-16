@@ -72,6 +72,10 @@ prompt, Ctrl+O shows the whole transcript (every thought, call and result)
 on the whole screen, Ctrl+B moves a running command
 to the background, `@path` in a prompt brings that file (or a directory's
 listing) along with it, and a line that begins with `!` is a command of your own.
+With nothing after them, `/model`, `/effort`, `/config`, `/export`, `/memory`
+and `/mcp` open pickers, as Claude Code's do; Alt+T turns thinking on or off,
+Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents in the
+background.
 `/panel` (or the `sidePanel` option) draws the session on the whole screen
 beside a side panel of the files it changed and its deliverables, with their
 addresses; `/panel` again gives the screen back, with all that was said in
