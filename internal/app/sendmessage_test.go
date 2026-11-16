@@ -221,7 +221,7 @@ func TestTasksListsEndedSubAgents(t *testing.T) {
 	s.typeLine("/tasks")
 	s.see("Earlier in this session:")
 	s.see("sub-agent (general-purpose), done: ")
-	s.see("The model can give one more to do")
+	s.see("more to do (SendMessage to its id)")
 	s.typeLine("/exit")
 	s.exit()
 }

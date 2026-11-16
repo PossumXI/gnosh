@@ -187,10 +187,12 @@ func subagentMeta(ctx context.Context, dir, id string) (map[string]string, error
 var _ core.Tool = (*sendMessageTool)(nil)
 
 // earlierAgent is a sub-agent of this session that has ended: its id, its
-// kind, how its last run ended and what it was given to do.
+// kind, how its last run ended and what it was given to do, and whether
+// SendMessage would give it more (more).
 type earlierAgent struct {
 	id, kind, ended, task string
 	at                    time.Time
+	more                  bool
 }
 
 // earlierShown is how many ended sub-agents /tasks lists, the newest
@@ -213,7 +215,7 @@ func (l *live) earlierAgents(ctx context.Context) []earlierAgent {
 	var out []earlierAgent
 	for _, path := range files {
 		id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-		if running[id] {
+		if running[id] || transcript.InUse(path) {
 			continue
 		}
 		info, err := os.Stat(path)
@@ -226,12 +228,15 @@ func (l *live) earlierAgents(ctx context.Context) []earlierAgent {
 			continue
 		}
 		a := earlierAgent{id: id, at: info.ModTime()}
+		worktree := false
 		for _, e := range ts.Entries() {
 			switch {
 			case e.Type == transcript.TypeMeta && e.Key == metaAgentType:
 				a.kind = e.Value
 			case e.Type == transcript.TypeMeta && e.Key == metaEnded:
 				a.ended = e.Value
+			case e.Type == transcript.TypeMeta && e.Key == metaWorkTree:
+				worktree = e.Value != ""
 			case e.Type == transcript.TypeTitle && a.task == "":
 				a.task = e.Title
 			case e.Type == transcript.TypeUser && a.task == "":
@@ -240,6 +245,10 @@ func (l *live) earlierAgents(ctx context.Context) []earlierAgent {
 		}
 		_ = ts.Close()
 		if a.kind != "" {
+			// As SendMessage judges it: a kind that takes more, from a run
+			// that ended so it can, and not in a work tree of its own.
+			def, ok := l.agentDefs().Get(a.kind)
+			a.more = ok && !worktree && takesMore(def, a.ended)
 			out = append(out, a)
 		}
 	}

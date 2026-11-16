@@ -140,10 +140,16 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	// "Earlier in this session": the model can give one more to do.
 	if earlier := l.earlierAgents(ctx); len(earlier) > 0 {
 		c.Say("Earlier in this session:")
+		var more []string
 		for _, a := range earlier {
 			c.Say("%s  sub-agent (%s), %s: %s", a.id, a.kind, firstOf(endedWords[a.ended], "ended"), oneLine(firstOf(a.task, "(no task in its file)"), 100))
+			if a.more {
+				more = append(more, a.id)
+			}
 		}
-		c.Say("     The model can give one more to do (SendMessage to its id): ask it to.")
+		if len(more) > 0 {
+			c.Say("     The model can give %s more to do (SendMessage to its id): ask it to.", strings.Join(more, ", "))
+		}
 	}
 	// The runs /background and /fork started from this folder, from any
 	// session: they outlive the session that started them.
