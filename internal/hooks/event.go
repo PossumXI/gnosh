@@ -90,6 +90,11 @@ const (
 	// runs, before the change is taken in. A block keeps the settings the
 	// session had.
 	ConfigChange Event = "ConfigChange"
+	// PostToolBatch fires once after every tool call of a reply has
+	// finished, before the model is asked again. A hook can add text for
+	// the model, and a block ends the turn there, with the reason kept in
+	// the conversation.
+	PostToolBatch Event = "PostToolBatch"
 )
 
 // Events returns the events gnosh has, in the order the specification
@@ -101,6 +106,7 @@ func Events() []Event {
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
 		PermissionRequest, Notification, PreModelSwitch, PostModelSwitch,
 		DirectoryAdded, CwdChanged, UserPromptExpansion, ConfigChange,
+		PostToolBatch,
 	}
 }
 
@@ -299,6 +305,11 @@ func describe(e Event) (eventInfo, bool) {
 		}, true
 	case CwdChanged:
 		return eventInfo{class: warns, reads: true}, true
+	case PostToolBatch:
+		return eventInfo{
+			class: gate, mode: true, reads: true, halts: true,
+			fields: []string{"additionalContext"},
+		}, true
 	case ConfigChange:
 		// (Claude Code's policy_settings and skills are not here: gnosh
 		// has no managed settings and does not watch skill files, so a
@@ -339,8 +350,7 @@ func timeoutFor(e Event, own time.Duration) time.Duration {
 // Claude Code. A hook configured on one of them would never run.
 func claudeOnly(name string) (canBlock, ok bool) {
 	switch name {
-	case "PostToolBatch",
-		"WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
+	case "WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
 		"TeammateIdle", "Elicitation", "ElicitationResult":
 		return true, true
 	case "PermissionDenied", "FileChanged", "Setup", "MessageDisplay":

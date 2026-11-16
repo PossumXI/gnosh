@@ -375,6 +375,19 @@ var answerForms = []struct {
 		want:   expect{blocked: true, failed: true, decision: Deny, reason: "~not something a PreModelSwitch hook can say", result: ResultCouldNotEvaluate}},
 	{name: "plain words are not text for the model", event: PreModelSwitch, prints: "fine by me", want: expect{}},
 
+	// ---- PostToolBatch: text for the model after the batch; a block or
+	// "continue": false ends the turn before the next request.
+	{name: "added text", event: PostToolBatch,
+		prints: `{"hookSpecificOutput": {"hookEventName": "PostToolBatch", "additionalContext": "the suite ran: 2 failures"}}`,
+		want:   expect{context: "the suite ran: 2 failures"}},
+	{name: "block", event: PostToolBatch,
+		prints: `{"decision": "block", "reason": "stop and fix the build"}`,
+		want:   expect{blocked: true, reason: "stop and fix the build", result: ResultBlocked}},
+	{name: "continue false", event: PostToolBatch,
+		prints: `{"continue": false, "stopReason": "enough for today"}`,
+		want:   expect{endTurn: true, stop: "enough for today", result: ResultEndedTurn}},
+	{name: "plain words are not text for the model", event: PostToolBatch, prints: "ran the suite", want: expect{}},
+
 	// ---- ConfigChange: a block keeps the settings the session had.
 	{name: "block", event: ConfigChange,
 		prints: `{"decision": "block", "reason": "project settings change only with review"}`,

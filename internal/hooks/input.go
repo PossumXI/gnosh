@@ -170,12 +170,26 @@ type Input struct {
 	// Prompt is then the text it expands into.
 	ExpansionType, CommandName, CommandArgs, CommandSource string
 
+	// ToolCalls are, for PostToolBatch, every tool call of the batch, in
+	// the order the model wrote them ("tool_calls").
+	ToolCalls []BatchCall
+
 	// Extra holds further fields for stdin, by their JSON names, for
 	// things Claude Code documents that this package has no field for
 	// (such as "background_tasks" on Stop or "mcp_server" on a tool
 	// event). Values must be JSON-encodable. A name this package writes
 	// itself is not replaced.
 	Extra map[string]any
+}
+
+// BatchCall is one tool call of a batch, for PostToolBatch: the call, and
+// what the model reads of its result, as text ("tool_response"; Claude
+// Code's is the tool_result content the model is sent).
+type BatchCall struct {
+	ToolName     string
+	ToolUseID    string
+	ToolInput    json.RawMessage
+	ToolResponse string
 }
 
 // permissionModes are the values permission_mode can have.
@@ -354,6 +368,16 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 	case ConfigChange:
 		m["source"] = in.Source
 		set("file_path", in.FilePath)
+	case PostToolBatch:
+		calls := make([]map[string]any, 0, len(in.ToolCalls))
+		for _, c := range in.ToolCalls {
+			input := json.RawMessage(bytes.TrimSpace(c.ToolInput))
+			if len(input) == 0 || !json.Valid(input) {
+				input = json.RawMessage("{}")
+			}
+			calls = append(calls, map[string]any{"tool_name": c.ToolName, "tool_use_id": c.ToolUseID, "tool_input": input, "tool_response": c.ToolResponse})
+		}
+		m["tool_calls"] = calls
 	case UserPromptExpansion:
 		m["expansion_type"] = in.ExpansionType
 		m["command_name"] = in.CommandName

@@ -102,7 +102,7 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"an event with underscores", `{"pre_tool_use": []}`, []string{`"pre_tool_use" is not a hook event`, "this one is PreToolUse.", "Notification"}},
 		{"an event in capitals", `{"PRE_TOOL_USE": []}`, []string{`"PRE_TOOL_USE" is not a hook event`, "this one is PreToolUse.", "Notification"}},
 		{"an empty event name", `{"": []}`, []string{"names no event"}},
-		{"a Claude Code event that can block", `{"PostToolBatch": []}`, []string{`"PostToolBatch" is a Claude Code hook event that gnosh does not have`, "would never run", "can block"}},
+		{"a Claude Code event that can block", `{"WorktreeCreate": []}`, []string{`"WorktreeCreate" is a Claude Code hook event that gnosh does not have`, "would never run", "can block"}},
 		{"a Claude Code event that only watches", `{"FileChanged": []}`, []string{`"FileChanged" is a Claude Code hook event that gnosh does not have`, "would never run"}},
 		{"an event written twice", `{"Stop": [], "Stop": []}`, []string{`"Stop" is written twice`, "silently dropped"}},
 
@@ -252,7 +252,7 @@ func TestNewHookRefuses(t *testing.T) {
 	}{
 		{"an event nobody has", Spec{Event: "Stopp", Command: "true"}, []string{`"Stopp" is not a hook event`}},
 		{"an event with underscores", Spec{Event: "pre_tool_use", Command: "true"}, []string{`"pre_tool_use" is not a hook event`, "PreToolUse"}},
-		{"a Claude Code event gnosh does not have", Spec{Event: "PostToolBatch", Command: "true"}, []string{"Claude Code hook event that gnosh does not have", "can block"}},
+		{"a Claude Code event gnosh does not have", Spec{Event: "WorktreeCreate", Command: "true"}, []string{"Claude Code hook event that gnosh does not have", "can block"}},
 		{"no event", Spec{Command: "true"}, []string{"names no event"}},
 		{"no command", Spec{Event: "Stop"}, []string{"no command to run"}},
 		{"a matcher on Stop", Spec{Event: "Stop", Matcher: "Bash", Command: "true"}, []string{"a Stop hook takes no matcher"}},
@@ -340,7 +340,7 @@ func TestCheckRefusesEventsThatAreNotFired(t *testing.T) {
 }
 
 func TestCanBlock(t *testing.T) {
-	blocking := map[Event]bool{PreToolUse: true, UserPromptSubmit: true, UserPromptExpansion: true, Stop: true, SubagentStop: true, PreModelSwitch: true, ConfigChange: true}
+	blocking := map[Event]bool{PreToolUse: true, UserPromptSubmit: true, UserPromptExpansion: true, Stop: true, SubagentStop: true, PreModelSwitch: true, ConfigChange: true, PostToolBatch: true}
 	for _, e := range Events() {
 		if e.CanBlock() != blocking[e] {
 			t.Errorf("%s.CanBlock() = %v, want %v", e, e.CanBlock(), blocking[e])
@@ -349,8 +349,8 @@ func TestCanBlock(t *testing.T) {
 	if Event("stop").CanBlock() {
 		t.Error(`Event("stop").CanBlock() is true for a name that is not an event`)
 	}
-	if n := len(Events()); n != 21 {
-		t.Errorf("Events() has %d events, want 21", n)
+	if n := len(Events()); n != 22 {
+		t.Errorf("Events() has %d events, want 22", n)
 	}
 }
 
@@ -524,7 +524,7 @@ func TestMergeCarriesProblemsAlong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./ok.sh"}, {"type": "prompt", "prompt": "done?"}]}], "PostToolBatch": []}`), "b.json")
+	bad, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./ok.sh"}, {"type": "prompt", "prompt": "done?"}]}], "WorktreeCreate": []}`), "b.json")
 	if err == nil {
 		t.Fatal("the second block was accepted")
 	}
@@ -536,7 +536,7 @@ func TestMergeCarriesProblemsAlong(t *testing.T) {
 	if len(problems) != 2 {
 		t.Fatalf("got %d problems, want 2:\n%s", len(problems), problemsText(problems))
 	}
-	contains(t, "the problems", problemsText(problems), `b.json: Stop group 1, hook 2: the hook has "type": "prompt"`, `b.json: "PostToolBatch"`)
+	contains(t, "the problems", problemsText(problems), `b.json: Stop group 1, hook 2: the hook has "type": "prompt"`, `b.json: "WorktreeCreate"`)
 	_, err = NewRunner(all, Options{Fires: Events(), ProjectDir: "/project"})
 	var ce *ConfigError
 	if !errors.As(err, &ce) || len(ce.Problems) != 2 {

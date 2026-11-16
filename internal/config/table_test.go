@@ -152,14 +152,14 @@ func TestOptionTable(t *testing.T) {
 		}
 	}
 	// Every hook event has an entry, in the spec's order, and exactly the
-	// four with nothing to match take no matcher.
+	// five with nothing to match take no matcher.
 	var none []string
 	for _, e := range hookEvents {
 		if e.matcher == "" {
 			none = append(none, e.name)
 		}
 	}
-	if len(hookEvents) != 21 || !slices.Equal(none, []string{"UserPromptSubmit", "Stop", "SubagentStop", "CwdChanged"}) {
+	if len(hookEvents) != 22 || !slices.Equal(none, []string{"UserPromptSubmit", "Stop", "SubagentStop", "CwdChanged", "PostToolBatch"}) {
 		t.Errorf("hook events: %d, without a matcher %q", len(hookEvents), none)
 	}
 	if !slices.Equal(HookEventNames()[:6], []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "Stop"}) {

@@ -42,6 +42,9 @@ import (
 //
 //	SubagentStart,      when the Agent tool starts a sub-agent, and when
 //	SubagentStop        the sub-agent is about to finish (subagent.go)
+//	PostToolBatch       the loop's AfterRound moment
+//	ConfigChange        before a request, when a settings file changed
+//	                    (settingswatch.go)
 type hookRunner struct {
 	l *live
 	r *hooks.Runner
@@ -163,6 +166,7 @@ func (l *live) moments() agent.Moments {
 		SessionStart:  l.sessionStart,
 		PromptSubmit:  l.promptSubmit,
 		AfterTool:     l.afterTool,
+		AfterRound:    l.afterRound,
 		BeforeSummary: l.beforeSummary,
 		AfterSummary:  l.afterSummary,
 		TurnFailed:    l.turnFailed,
@@ -392,6 +396,43 @@ func (l *live) afterTool(ctx context.Context, done agent.ToolDone) (agent.ToolVe
 		l.cwdMoved(ctx, done.Result.Cwd)
 	}
 	return v, err
+}
+
+// afterRound runs the PostToolBatch hooks once every tool call of a reply
+// has finished, before the model is asked again: what they add goes to the
+// model after the results, and a block (or "continue": false) ends the
+// turn there, its reason kept in the conversation for the model.
+func (l *live) afterRound(ctx context.Context, done agent.RoundDone) (agent.ToolVerdict, error) {
+	if !l.hooks.has(hooks.PostToolBatch) {
+		return agent.ToolVerdict{}, nil
+	}
+	in := hooks.Input{Event: hooks.PostToolBatch, AgentID: done.AgentID, AgentType: done.AgentType}
+	for _, c := range done.Calls {
+		in.ToolCalls = append(in.ToolCalls, hooks.BatchCall{ToolName: c.Call.Name, ToolUseID: c.Call.ID, ToolInput: c.Call.Input, ToolResponse: core.TextOf(c.Result.Content)})
+	}
+	out, err := l.hooks.run(ctx, in)
+	if err != nil {
+		if ctx.Err() != nil {
+			return agent.ToolVerdict{}, nil
+		}
+		return agent.ToolVerdict{}, err
+	}
+	var v agent.ToolVerdict
+	if strings.TrimSpace(out.AdditionalContext) != "" {
+		v.Context = append(v.Context, agent.Part{Source: "hook:PostToolBatch", Text: hookWords(hooks.PostToolBatch, "", out.AdditionalContext)})
+	}
+	stop := ""
+	switch {
+	case out.Blocked:
+		stop = firstOf(out.Reason, "It gave no reason.")
+	case out.EndTurn:
+		stop = firstOf(out.StopReason, "It gave no reason.")
+	}
+	if stop != "" {
+		v.Context = append(v.Context, agent.Part{Source: "hook:PostToolBatch", Text: prompt.Wrap("A PostToolBatch hook the user set up stopped the turn after these tool calls, and says this:\n" + strings.TrimSpace(stop))})
+		v.Halt, v.Reason = true, "a PostToolBatch hook stopped the turn: "+oneLine(stop, 300)
+	}
+	return v, nil
 }
 
 // cwdMoved runs the CwdChanged hooks when a call of the session's own has

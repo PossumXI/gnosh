@@ -497,6 +497,14 @@ type Moments struct {
 	// the turn. An error is told to the model as feedback.
 	AfterTool func(ctx context.Context, done ToolDone) (ToolVerdict, error)
 
+	// AfterRound is called once after every tool call of a reply has
+	// finished and its result is stored, when the model is about to be
+	// asked again: not when the round ends the turn (a halt, a stop). It
+	// may add context for the model, stored after the round's results, and
+	// it may end the turn before the next request. An error ends the turn
+	// too: a check that could not run has not passed.
+	AfterRound func(ctx context.Context, done RoundDone) (ToolVerdict, error)
+
 	// BeforeSummary is called before a summary is asked for. What it
 	// returns is added to the instructions for the summary. It cannot stop
 	// the summary; an error is a warning.
@@ -542,6 +550,7 @@ type Moments struct {
 //	PreCompact          Moments.BeforeSummary
 //	PostCompact         Moments.AfterSummary
 //	SessionEnd          Moments.SessionEnd
+//	PostToolBatch       Moments.AfterRound
 //
 // The loop fires nothing for Notification (a front end times it from
 // QuestionEvent and IdleEvent) or for InstructionsLoaded.
@@ -549,7 +558,7 @@ func Fires() []string {
 	return []string{
 		"PreToolUse", "PermissionRequest", "PostToolUse", "PostToolUseFailure",
 		"UserPromptSubmit", "SessionStart", "Stop", "SubagentStart", "SubagentStop",
-		"StopFailure", "PreCompact", "PostCompact", "SessionEnd",
+		"StopFailure", "PreCompact", "PostCompact", "SessionEnd", "PostToolBatch",
 	}
 }
 
@@ -599,6 +608,18 @@ type RequestInfo struct {
 	// and the point at which room is made, both in tokens.
 	Used  int
 	Point int
+}
+
+// RoundDone is what AfterRound is told: the tool calls of one reply, in
+// the order the model wrote them, each with what it returned, and where
+// they ran.
+type RoundDone struct {
+	Calls      []ToolDone
+	Turn       string
+	Session    string
+	AgentID    string
+	AgentType  string
+	ParentCall string
 }
 
 // ToolDone is what AfterTool is told about a call.

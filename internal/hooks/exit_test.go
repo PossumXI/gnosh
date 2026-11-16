@@ -44,7 +44,7 @@ var exits = []struct {
 
 // Every exit status on every event that can block.
 func TestExitStatusOnEveryBlockingEvent(t *testing.T) {
-	for _, event := range []Event{PreToolUse, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, PreModelSwitch, ConfigChange} {
+	for _, event := range []Event{PreToolUse, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, PreModelSwitch, ConfigChange, PostToolBatch} {
 		for _, tt := range exits {
 			t.Run(string(event)+"/"+tt.name, func(t *testing.T) {
 				t.Parallel()
@@ -236,7 +236,7 @@ func TestCouldNotEvaluateOnEveryEvent(t *testing.T) {
 						t.Errorf("Blocked %v, PermissionDecision %q; want the call blocked", out.Blocked, out.PermissionDecision)
 					}
 					contains(t, "the reason", out.Reason, append(sentence, c.says...)...)
-				case PostToolUse, PostToolUseFailure, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange:
+				case PostToolUse, PostToolUseFailure, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange, PostToolBatch:
 					// The reason is feedback for the model; the prompt is
 					// blocked; the turn is held open; the settings are
 					// kept.
@@ -298,7 +298,7 @@ func TestExitTwoOnEveryEvent(t *testing.T) {
 				if !out.Blocked || out.PermissionDecision != Deny || out.Reason != "not like this" || rec.Result != ResultBlocked {
 					t.Errorf("got %+v", out)
 				}
-			case UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange:
+			case UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange, PostToolBatch:
 				if !out.Blocked || out.PermissionDecision != NoDecision || out.Reason != "not like this" || rec.Result != ResultBlocked {
 					t.Errorf("got %+v", out)
 				}

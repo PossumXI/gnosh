@@ -150,7 +150,55 @@ func (a *Agent) runTools(ctx context.Context, t *turn, rep *reply) roundOutcome 
 		}
 		r.err = a.appendLog(notes...)
 	}
+	if f := a.opts.Moments.AfterRound; f != nil && r.err == nil && r.halt == "" && !r.stopped && ctx.Err() == nil {
+		r.afterRound(f)
+	}
 	return roundOutcome{calls: r.calls, stopped: r.stopped || ctx.Err() != nil, halt: r.halt, haltBy: r.haltBy, err: r.err}
+}
+
+// afterRound tells the AfterRound moment how the round's calls went, once
+// they are all stored and the model is about to be asked again; what it
+// adds is stored after them, and it may end the turn there.
+func (r *round) afterRound(f func(context.Context, RoundDone) (ToolVerdict, error)) {
+	a, t := r.a, r.t
+	info := RoundDone{Turn: t.id, Session: a.session, AgentID: a.agentID, AgentType: a.agentType, ParentCall: a.parentCall}
+	for _, c := range r.calls {
+		call := c.call
+		call.Input = c.input
+		info.Calls = append(info.Calls, ToolDone{
+			Call: call, Tool: c.tool, Result: c.res, Duration: c.dur, Interrupted: c.interrupted,
+			Turn: t.id, Session: a.session, AgentID: a.agentID, AgentType: a.agentType, ParentCall: a.parentCall,
+		})
+	}
+	v, err := afterRoundSafely(r.ctx, f, info)
+	if r.ctx.Err() != nil {
+		// (Stopped while it ran: the turn ends as stopped.)
+		r.stopped = true
+		return
+	}
+	if err != nil {
+		a.notice(LevelWarning, "after-round", fmt.Sprintf("A check that runs after a round of tool calls could not run (%v), so the turn ends here.", err))
+		v.Halt, v.Reason = true, firstNonEmpty(v.Reason, fmt.Sprintf("a check after the round of tool calls could not run (%v)", err))
+	}
+	var notes []Entry
+	for _, p := range v.Context {
+		if strings.TrimSpace(p.Text) != "" {
+			notes = append(notes, Entry{Kind: EntryNote, Turn: t.id, Source: firstNonEmpty(p.Source, "after-round"), Blocks: []core.Block{core.Text(p.Text)}})
+		}
+	}
+	if r.err = a.appendLog(notes...); r.err == nil && v.Halt {
+		r.halt, r.haltBy = firstNonEmpty(v.Reason, "a check after the round of tool calls ended the turn"), "after-round"
+	}
+}
+
+// afterRoundSafely calls the AfterRound moment and catches a panic in it.
+func afterRoundSafely(ctx context.Context, f func(context.Context, RoundDone) (ToolVerdict, error), info RoundDone) (v ToolVerdict, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("it crashed: %v", p)
+		}
+	}()
+	return f(ctx, info)
 }
 
 // prepare readies a call's arguments for everything that reads them: the

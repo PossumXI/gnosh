@@ -923,3 +923,16 @@ or kept with the reason said (27).
     so policy_settings and skills never fire, and a matcher on them is
     warned about as fitting nothing. gnosh's own writes (saved approvals,
     /permissions) are no change, as in Claude Code.
+68. **PostToolBatch, as Claude Code's.** The agent loop has a moment of
+    its own for it (Moments.AfterRound): once every tool call of a reply
+    has finished and its result is stored, when the model is about to be
+    asked again. Not when the round ends the turn by itself (a halt, a
+    stop): there is no next request to come before. The hooks read
+    tool_calls, each with tool_name, tool_input, tool_use_id and
+    tool_response, the text the model reads of the result (Claude Code
+    passes the tool_result content as sent, a string or blocks; gnosh's
+    is always the text). additionalContext goes to the model after the
+    results; a block, "continue": false or a hook that could not check
+    ends the turn there, and the reason is kept in the conversation, so
+    the model reads it when the session goes on. Sub-agents' batches run
+    the hooks too, with agent_id and agent_type.

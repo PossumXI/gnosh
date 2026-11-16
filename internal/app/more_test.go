@@ -423,6 +423,38 @@ func TestPreModelSwitchHook(t *testing.T) {
 	s.exit()
 }
 
+// PostToolBatch runs once after all of a reply's tool calls, told every
+// call and what it returned: what it adds reaches the model with the next
+// request, and a block ends the turn there, its reason kept for the model.
+func TestPostToolBatchHook(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo one"}`}, {ID: "c2", Name: "Bash", Args: `{"command":"echo two"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"echo three"}`}}},
+		apptest.Reply{Text: "Seen."},
+	)
+	log := w.Home + "/hook-log"
+	once := w.Home + "/once"
+	batch := w.Script(w.Home+"/hooks/batch.sh", "cat >> "+log+"\necho >> "+log+"\n"+
+		"if [ ! -e "+once+" ]; then touch "+once+"; echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PostToolBatch\", \"additionalContext\": \"both echoes ran\"}}'; exit 0; fi\n"+
+		"echo 'stop here and report' >&2\nexit 2")
+	w.Settings(`{"hooks": {"PostToolBatch": [{"hooks": [{"type": "command", "command": "` + batch + `"}]}]}}`)
+	r := run(t, w, "-y", "-p", "go")
+	if n := len(w.Model.Requests()); n != 2 {
+		t.Fatalf("%d requests, want 2: the block comes before a third", n)
+	}
+	has(t, "the second request", string(w.Model.Requests()[1].Body), "both echoes ran")
+	has(t, "the run's output", r.err+r.out, "a PostToolBatch hook stopped the turn: stop here and report")
+	data, _ := os.ReadFile(log)
+	has(t, "what the hook read", string(data), `"hook_event_name":"PostToolBatch"`, `"tool_calls":[{"tool_input":{"command":"echo one"}`,
+		`{"tool_input":{"command":"echo two"}`, `\ntwo","tool_use_id":"call_`, `"tool_calls":[{"tool_input":{"command":"echo three"}`)
+	if n := strings.Count(string(data), `"hook_event_name":"PostToolBatch"`); n != 2 {
+		t.Errorf("the hook ran %d times for two batches", n)
+	}
+	// The reason stays in the conversation, for the model to read next.
+	run(t, w, "-c", "-p", "what stopped you?").wantCode(t, 0)
+	has(t, "the next turn's request", string(w.Model.Requests()[2].Body), "stop here and report")
+}
+
 // A PreModelSwitch hook's "ask" is a refusal in a run, where nobody can
 // answer, as in Claude Code.
 func TestPreModelSwitchAskInARun(t *testing.T) {

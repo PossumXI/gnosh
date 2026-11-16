@@ -54,6 +54,7 @@ added between 2026-10-22 and 2026-10-25, each "as in Claude Code".
 | `PermissionRequest` | When a permission question is about to be shown | The tool's name | It answers the question in the user's place: allow or deny. | All (unconfirmed for sub-agents) | P2 |
 | `PreModelSwitch` | Before a switch the person asked for (`/model`, its picker) is made | The model switched to, as provider/model or by its own name | Yes: the model stays. `"ask"` puts the switch to the person; in a run, nobody can answer, so it is a refusal. | Top | P2 |
 | `ConfigChange` | When a settings file (the person's gnosh.json, the project's, its local file) changes while the session runs, before the change is taken in | The source: `user_settings`, `project_settings`, `local_settings` | Yes: none of the new settings is taken in, and the person is told. | Top | P2 |
+| `PostToolBatch` | Once after every tool call of a reply has finished, before the model is asked again; not when the round itself ends the turn | Nothing | Yes: the model is not asked again, and the reason is kept in the conversation. It can add context next to the results. | All | P2 |
 | `Notification` | On a notification gnosh raises: a permission question that has waited, a finished turn with no reply | The type: `permission_prompt`, `idle_prompt` | No; it is not waited for. | Top | P2 |
 
 ### HOOK-2 Event names are exact, and an unknown one stops startup (P1)
@@ -74,7 +75,8 @@ Claude Code 2.1.310 had 33 events. The 18 gnosh lacks, best fit first:
    `directory` and `source` (`slash_command`); it cannot block or undo.
 2. `PreModelSwitch`, `PostModelSwitch` (gnosh has `/model`). Both are
    built (PostModelSwitch on 2026-11-13, PreModelSwitch on 2026-11-16).
-3. `PostToolBatch` (once after every call of a batch has finished).
+3. `PostToolBatch` (once after every call of a batch has finished). Built
+   on 2026-11-16 (the agent loop's AfterRound moment).
 4. `PermissionDenied`.
 5. `CwdChanged`, `FileChanged`.
 
