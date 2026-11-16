@@ -282,7 +282,9 @@ func TestOptions(t *testing.T) {
     "debug": true,
     "sidePanel": true,
     "verbose": true,
-    "projectDataDir": ".agent"
+    "projectDataDir": ".agent",
+    "editorMode": "vim",
+    "vimInsertModeRemaps": ["jj", "jk"]
   }
 }`
 	cfg := mustLoad(t, withConfig(text))
@@ -319,6 +321,8 @@ func TestOptions(t *testing.T) {
 	check("sidePanel", o.SidePanel.V, true)
 	check("verbose", o.Verbose.V, true)
 	check("projectDataDir", o.ProjectDataDir.V, ".agent")
+	check("editorMode", o.EditorMode.V, "vim")
+	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 
 	// The table lists every key exactly once, All reports each, and the
 	// file above sets every one of them.

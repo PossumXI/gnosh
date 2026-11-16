@@ -57,6 +57,11 @@ Built:
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.
+- **Vim's keys** in the box, as Claude Code's editor mode: `"options":
+  {"editorMode": "vim"}` in your gnosh.json, or `/config editorMode=vim`
+  at once. NORMAL, INSERT and VISUAL modes, motions, operators with counts,
+  text objects, `.` and undo by changes; the mode is on the status line,
+  and `"vimInsertModeRemaps": ["jj"]` makes a pair stand for Esc.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write

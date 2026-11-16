@@ -127,6 +127,10 @@
 //	  verbose                  reasoning and whole outputs in the conversation
 //	                           as they come (Claude Code's verbose)
 //	  projectDataDir           the name of the project's data folder
+//	  editorMode               "normal" or "vim": how the box takes keys
+//	                           (not from a project's file)
+//	  vimInsertModeRemaps      pairs typed in vim's INSERT mode that stand
+//	                           for Esc, as ["jj"] (not from a project's file)
 //
 // "model" and "smallModel" are each the model as a string, or an object
 // when how the model is asked matters:

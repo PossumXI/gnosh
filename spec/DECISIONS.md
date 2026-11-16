@@ -769,3 +769,16 @@ or kept with the reason said (27).
     told why. Box 1, 16 November: a host added to gnosh.json mid-session
     was no host the session knew, and the model, told so, tried ssh
     spelled so as to slip past the refusal.
+56. **Vim's keys, as Claude Code's editorMode "vim",** with what its
+    documentation lists (modes, motions, operators, text objects, VISUAL
+    mode, "." and undo) and counts, which it does not list and vim users
+    type without thinking. editorMode and vimInsertModeRemaps are options
+    under "options", as gnosh keeps the Claude Code settings it built
+    that are not permission rules, hooks or env; a top-level key is
+    pointed there. Neither is taken from a project's file: Claude Code
+    leaves a project's remaps out so that a repository cannot remap the
+    person's keys, and the same reason holds for the mode. /config
+    switches the mode at once. A sent or cleared box starts again in
+    INSERT mode, ready for the next prompt. "." types again the text of an
+    INSERT session, never a history step, a submit or a paste from the
+    ring, which a replay must not do twice.

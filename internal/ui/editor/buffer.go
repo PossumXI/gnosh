@@ -162,6 +162,9 @@ func (e *Editor) edit(a, b pos, ins string, kind editKind) bool {
 	e.undo = append(e.undo, change{at: a, del: del, ins: ins, cb: cb, ca: e.cur, wb: e.walk, wa: e.walk, kind: kind})
 	if extra := len(e.undo) - e.undoLimit; extra > 0 {
 		e.undo = slices.Delete(e.undo, 0, extra)
+		// A change of the vim keys that is still being made starts that
+		// much earlier in the list, or has lost its start (vimGroupEnd).
+		e.vim.undoLen -= extra
 	}
 	return true
 }
@@ -216,6 +219,7 @@ func (e *Editor) undoOne() bool {
 	}
 	u := e.undo[n-1]
 	e.undo = e.undo[:n-1]
+	e.vim.undoLen = -1 // a change of the vim keys being made is cut into
 	e.splice(u.at, advance(u.at, u.ins), u.del)
 	e.cur, e.walk = u.cb, e.slot(u.wb)
 	e.fix()
@@ -232,6 +236,7 @@ func (e *Editor) redoOne() bool {
 	}
 	r := e.redo[n-1]
 	e.redo = e.redo[:n-1]
+	e.vim.undoLen = -1
 	e.splice(r.at, advance(r.at, r.del), r.ins)
 	e.cur, e.walk = r.ca, e.slot(r.wa)
 	e.fix()

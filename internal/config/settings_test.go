@@ -339,6 +339,29 @@ func TestSettingsFlag(t *testing.T) {
 	}
 }
 
+// How the box takes keys is the person's: editorMode and
+// vimInsertModeRemaps in a project's file are said and left out, as Claude
+// Code leaves a project's remaps out; a pair that is not two characters
+// stops startup like any mistake.
+func TestEditorModeIsYourOwn(t *testing.T) {
+	fsys := newFS().put(projJSON, `{"options": {"editorMode": "vim", "vimInsertModeRemaps": ["jj"]}}`)
+	cfg, problems := load(t, inputs(fsys))
+	if cfg == nil || cfg.Options.EditorMode.Set || len(cfg.Options.VimInsertModeRemaps) != 0 {
+		t.Fatalf("a project's editorMode and remaps must not be in force: %+v", cfg)
+	}
+	wantProblem(t, problems, Warning, projJSON, 1, "options.editorMode", "not taken from a project's file")
+	wantProblem(t, problems, Warning, projJSON, 1, "options.vimInsertModeRemaps", "not taken from a project's file")
+
+	cfg = mustLoad(t, inputs(newFS().put(userJSON, `{"options": {"editorMode": "vim", "vimInsertModeRemaps": ["jj"]}}`)))
+	if cfg.Options.EditorMode.V != "vim" || len(cfg.Options.VimInsertModeRemaps) != 1 {
+		t.Fatalf("your own editorMode and remaps: %+v", cfg.Options)
+	}
+	_, problems = load(t, inputs(newFS().put(userJSON, `{"options": {"vimInsertModeRemaps": ["jjj"]}}`)))
+	wantProblem(t, problems, Error, userJSON, 1, "jjj", "two characters")
+	_, problems = load(t, inputs(newFS().put(userJSON, `{"editorMode": "vim"}`)))
+	wantProblem(t, problems, Error, userJSON, 1, "editorMode", "inside \"options\"")
+}
+
 // A repository cannot switch the questions off: bypassPermissions as a
 // project's default mode is not put in force, and that is said. The auto
 // mode does not exist; asking for it in a file starts the session in the

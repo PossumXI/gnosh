@@ -632,6 +632,9 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	s.start()
 	// The verbose option: reasoning and whole outputs as they come.
 	s.detail = s.info.Verbose
+	// The editorMode and vimInsertModeRemaps options: vim's keys.
+	s.ed.SetVimRemaps(s.info.VimRemaps)
+	s.ed.SetVim(s.info.Vim)
 	if s.info.SidePanel {
 		// The sidePanel option: the session starts with the panel on.
 		s.openPanel()

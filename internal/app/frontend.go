@@ -349,6 +349,11 @@ type SessionInfo struct {
 	// SidePanel says the session starts with the side panel on (the
 	// sidePanel option).
 	SidePanel bool
+	// Vim says the box takes vim's keys (the editorMode option, "vim"),
+	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
+	// vimInsertModeRemaps option).
+	Vim       bool
+	VimRemaps []string
 	// Resume is the command line that opens this session again.
 	Resume string
 	// NotifyHooks says a Notification hook is configured, so that the

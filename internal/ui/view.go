@@ -611,9 +611,15 @@ var modeNames = map[string]string{
 // default, since it is always in sight, and then the command's lines, made
 // safe to draw and set in by the padding.
 func (s *session) customLines(width int) []string {
-	var out []string
+	var out, head []string
+	if v := s.vimWords(); v != "" {
+		head = append(head, s.th.Mode.Render(v))
+	}
 	if s.mode != "" && s.mode != "default" {
-		out = append(out, s.modeWords())
+		head = append(head, s.modeWords())
+	}
+	if len(head) > 0 {
+		out = append(out, strings.Join(head, "  "))
 	}
 	pad := strings.Repeat(" ", min(s.customPad, width/2))
 	for _, l := range s.custom {
@@ -626,6 +632,15 @@ func (s *session) customLines(width int) []string {
 		out = append(out, pad+l)
 	}
 	return out
+}
+
+// vimWords names the mode of the box's vim keys as vim's status line does
+// ("-- INSERT --"), or is "" when they are off.
+func (s *session) vimWords() string {
+	if v := s.ed.Vim(); v != editor.VimOff {
+		return "-- " + v.String() + " --"
+	}
+	return ""
 }
 
 // modeWords is the permission mode as the status line names it, styled.
@@ -654,6 +669,9 @@ func (s *session) modeWords() string {
 func (s *session) statusLine(width int) string {
 	th := &s.th
 	var segs []segment
+	if v := s.vimWords(); v != "" {
+		segs = append(segs, segment{v, th.Mode, 95})
+	}
 	if !s.busy && s.cmdRun == "" && s.q == nil {
 		segs = append(segs, segment{"idle", th.Status, 85})
 	}

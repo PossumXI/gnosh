@@ -520,21 +520,29 @@ func (s *session) run(line string) {
 // verboseSet reads a /config line for the verbose option set true or
 // false, the last time it is named.
 func verboseSet(line string) (on, ok bool) {
+	switch v, _ := configSet(line, "verbose"); v {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	return false, false
+}
+
+// configSet is the value a /config line gives the option key, without its
+// quotes, and whether it gives one.
+func configSet(line, key string) (string, bool) {
 	words := strings.Fields(line)
 	if len(words) == 0 || !strings.EqualFold(words[0], "/config") {
-		return false, false
+		return "", false
 	}
+	val, ok := "", false
 	for _, w := range words[1:] {
-		if v, found := strings.CutPrefix(w, "verbose="); found {
-			switch strings.Trim(v, `"'`) {
-			case "true":
-				on, ok = true, true
-			case "false":
-				on, ok = false, true
-			}
+		if v, found := strings.CutPrefix(w, key+"="); found {
+			val, ok = strings.Trim(v, `"'`), true
 		}
 	}
-	return on, ok
+	return val, ok
 }
 
 // ran takes in what a slash command came to.
@@ -573,6 +581,10 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			// The verbose option is the interface's own: what /config set
 			// is in force here at once.
 			s.detail = on
+		}
+		if mode, ok := configSet(line, "editorMode"); ok && mode != "" && err == nil && res.Name == "config" {
+			// So is the editorMode option.
+			s.ed.SetVim(mode == "vim")
 		}
 		if res.Quit {
 			s.leave(0, "prompt_input_exit")

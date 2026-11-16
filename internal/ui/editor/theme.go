@@ -43,6 +43,9 @@ type Theme struct {
 	// Match of the part of the entry that matched, and Note of what is
 	// said after the search and of the line of keys under it.
 	SearchLabel, Match, Note text.Style
+	// Selection is the look of the text a VISUAL selection of the vim
+	// keys holds.
+	Selection text.Style
 }
 
 // DefaultTheme is gnosh's look for the box, written for the colour
@@ -83,5 +86,6 @@ func DefaultTheme(p text.Profile) Theme {
 		SearchLabel:  plain.Fg(purple),
 		Match:        plain.Fg(pink).Underline(),
 		Note:         plain.Dim(),
+		Selection:    plain.Reverse(),
 	}
 }

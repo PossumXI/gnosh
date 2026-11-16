@@ -151,6 +151,35 @@
 // The second press of Esc, Ctrl+C or Ctrl+D counts when it comes within
 // DoublePress (0.8 s) of the first and no other key came between.
 //
+// # Vim's keys
+//
+// SetVim (Claude Code's editorMode "vim") gives the box vim's modes, and
+// the status line is told the mode with Vim. INSERT mode has the keys
+// above, but Esc and Ctrl+[ go to NORMAL mode, and a pair set with
+// SetVimRemaps (vimInsertModeRemaps: "jj") typed within a second does the
+// same and leaves neither character. NORMAL mode, with counts throughout
+// (3w, d2w, 2dd):
+//
+//	h j k l, Space, Backspace      move; j and k from the first row or the last walk the history
+//	w W b B e E                    words (letters, digits and _, or other characters) and WORDs (all but blanks)
+//	0 ^ $ gg G                     the line's start, first character, end; the first and last lines (a count: that line)
+//	f F t T, then a character      to it on the line, or to just before it; ; again, , the other way
+//	%                              the bracket that matches the next one on the line
+//	d c y > <, then a motion       delete, change, yank, indent, dedent; doubled (dd, >>) for whole lines
+//	iw aw iW aW i" a" i' a' i( a( i[ a[ i{ a{ i< a<  text objects after d c y, and in VISUAL mode
+//	x X r D C s S Y p P J ~ u .    as vim's: . makes the last change again
+//	i I a A o O                    INSERT mode, before, at the first character, after, at the end, on a new line
+//	v V                            VISUAL mode by characters, by lines
+//	/                              the history search (Ctrl+R)
+//	Esc                            drops a command half typed; else as Esc above: while busy, ActionInterrupt
+//
+// In VISUAL mode a motion moves the selection's end, o swaps its ends,
+// and d x y c s p P r ~ u U > < J act on it. Enter sends from any mode,
+// and a box that was sent or cleared starts again in INSERT mode. Each
+// change is one step of undo, with the INSERT session it began; "."
+// types again the text of an INSERT session, from where the last move in
+// it left off, as vim's does.
+//
 // # What the specs left open, and what was chosen
 //
 //   - A line is the text between two line breaks, however many rows it is

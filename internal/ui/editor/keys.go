@@ -227,6 +227,11 @@ func (e *Editor) key(k term.Key) Result {
 			return res
 		}
 	}
+	if e.vim.mode != VimOff && !e.plain {
+		if res, done := e.vimKey(k, cmd, armed); done {
+			return res
+		}
+	}
 	return e.run(k, cmd, armed)
 }
 

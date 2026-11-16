@@ -146,15 +146,35 @@ var pool = func() []term.Event {
 	return append(evs, term.Paste{Text: strings.Repeat("long ", 180)}, term.Paste{Text: "bad \xff\xfe bytes \uFDD0\uFDD1\uFDD2"})
 }()
 
+// vimPool is pool with the keys of vim's NORMAL and VISUAL modes added,
+// twice over, so that commands are typed whole often enough.
+var vimPool = append(append([]term.Event(nil), pool...), keyscript.MustParse(`
+	"h" "j" "k" "l" "w" "W" "b" "e" "0" "^" "$" "G" "g" "%" ";" "," "f" "t" "F" "T"
+	"d" "c" "y" ">" "<" "p" "P" "x" "X" "D" "C" "s" "S" "Y" "J" "u" "r" "~"
+	"i" "I" "A" "o" "O" "v" "V" "2" "3" "(" ")" "\"" "'" "U"
+	"d" "c" "y" "p" "x" "u" "w" "b" "i" "a" "v" "." "." "j" "k"
+	<Esc> <Esc> <Esc> <Ctrl+[>
+`)...)
+
 // session runs the events that data picks through an editor, drawing it
 // after each at a width that data also changes, and checks after every
 // event that the editor and its view are sound. At the end it takes back
 // every edit and checks that the box is as it was when its undo history
 // began, then makes them all again.
 func session(t *testing.T, data []byte, width int) {
+	sessionWith(t, data, width, false)
+}
+
+// sessionWith is session, with vim's keys on when vim is set.
+func sessionWith(t *testing.T, data []byte, width int, vim bool) {
 	now := time.Unix(1_800_000_000, 0)
 	h := &hook{}
-	e := New(Options{Complete: h.complete, MaxHeight: 5, MenuHeight: 3, Placeholder: "type here", Now: func() time.Time { return now }})
+	events := pool
+	if vim {
+		events = vimPool
+	}
+	e := New(Options{Complete: h.complete, MaxHeight: 5, MenuHeight: 3, Placeholder: "type here", Now: func() time.Time { return now },
+		Vim: vim, VimRemaps: []string{"jk"}})
 	e.SetHistory([]Draft{
 		{Text: "an old prompt"},
 		{Text: "two\nlines of 世界"},
@@ -176,7 +196,7 @@ func session(t *testing.T, data []byte, width int) {
 			e.SetQueued(b%3 == 0)
 			continue
 		}
-		ev := pool[int(b)%len(pool)]
+		ev := events[int(b)%len(events)]
 		res := e.Handle(ev)
 		when := fmt.Sprintf("event %d (%v) at width %d", i, ev, width)
 		if res.Action == ActionSubmit {
@@ -229,6 +249,19 @@ func FuzzEditor(f *testing.F) {
 	})
 }
 
+func FuzzEditorVim(f *testing.F) {
+	f.Add([]byte("hello"), uint8(40))
+	for seed := range 20 {
+		rng := rand.New(rand.NewSource(int64(seed) + 77))
+		data := make([]byte, 160)
+		rng.Read(data)
+		f.Add(data, uint8(seed*13))
+	}
+	f.Fuzz(func(t *testing.T, data []byte, width uint8) {
+		sessionWith(t, data, int(width), true)
+	})
+}
+
 // The same property over a fixed set of random sessions, so that it is
 // checked on every run and not only while fuzzing.
 func TestRandomSessions(t *testing.T) {
@@ -247,6 +280,8 @@ func TestRandomSessions(t *testing.T) {
 			}
 		}
 		session(t, data, rng.Intn(256))
+		// And the same with vim's keys on.
+		sessionWith(t, data, rng.Intn(256), true)
 	}
 }
 

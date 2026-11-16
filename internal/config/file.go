@@ -707,6 +707,10 @@ func (s *source) options(f jfield) {
 			continue
 		}
 		key, v, o := "options."+def.key, m.val, s.at(m.line)
+		if def.ownOnly && (s.scope == "project" || s.scope == "local") {
+			s.probs.warnf(s.file, m.line, "%q is not taken from a project's file, so that a repository cannot change how the box takes your keys. Set it in your own gnosh.json, with /config, or with --settings.", key)
+			continue
+		}
 		if v.kind == jNull {
 			// Putting an option back is never a setting that only takes
 			// something away: it can bring back what a list had hidden.
@@ -794,6 +798,12 @@ func (s *source) options(f jfield) {
 				if it.str == "" || !printable(it.str) {
 					s.errorf(it.line, "an entry of %q is empty, or holds a control character.", key)
 					continue
+				}
+				if def.each != nil {
+					if why := def.each(it.str); why != "" {
+						s.errorf(it.line, "the entry %s of %q is not one gnosh can use: an entry %s.", showName(it.str), key, why)
+						continue
+					}
 				}
 				value, at := it.str, s.at(it.line)
 				if def.kind == oPathList {

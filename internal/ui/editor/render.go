@@ -19,6 +19,9 @@ const minDetail = 16
 // other looks are the unit kinds.
 const lookMatch uint8 = 100
 
+// lookSelect is the look of text a VISUAL selection holds.
+const lookSelect uint8 = 101
+
 // vrow is one row of the text as it is shown: row ri of line li, which
 // is row g of the whole text.
 type vrow struct{ li, ri, g int }
@@ -63,6 +66,13 @@ func (e *Editor) Render(width int) View {
 		rows, below := e.window()
 		var spans []Span
 		spansFor := -1
+		look := lookMatch
+		selecting := e.vim.mode.visual() && e.srch == nil
+		var selFrom, selTo pos
+		if selecting {
+			selFrom, selTo, _ = e.vimSelection()
+			look = lookSelect
+		}
 		for i, vr := range rows {
 			mark := ""
 			above := i == 0 && e.top > 0
@@ -79,7 +89,10 @@ func (e *Editor) Render(width int) View {
 			if e.srch != nil && spansFor != vr.li {
 				spans, spansFor = e.matchSpans(l.s), vr.li
 			}
-			v.Lines = append(v.Lines, e.prefix(pw, vr.g == 0, mark)+e.rowText(l, l.rows[vr.ri], spans))
+			if selecting && spansFor != vr.li {
+				spans, spansFor = selectSpans(vr.li, len(l.s), selFrom, selTo), vr.li
+			}
+			v.Lines = append(v.Lines, e.prefix(pw, vr.g == 0, mark)+e.rowText(l, l.rows[vr.ri], spans, look))
 		}
 		if !e.locked && e.srch == nil {
 			v.CursorRow, v.CursorCol = g-e.top, pw+e.cursorCell()
@@ -156,9 +169,29 @@ func (e *Editor) style(st text.Style) text.Style {
 	return st
 }
 
+// selectSpans is the part of line li, n bytes long, that a selection from
+// a up to b holds.
+func selectSpans(li, n int, a, b pos) []Span {
+	if li < a.line || li > b.line {
+		return nil
+	}
+	start, end := 0, n
+	if li == a.line {
+		start = a.col
+	}
+	if li == b.line {
+		end = b.col
+	}
+	if end <= start {
+		return nil
+	}
+	return []Span{{start, end}}
+}
+
 // rowText draws the items of one row. spans are the parts of the line
-// that matched the history search.
-func (e *Editor) rowText(l *line, r row, spans []Span) string {
+// drawn with spanLook: what matched the history search (lookMatch), or
+// what a VISUAL selection holds (lookSelect).
+func (e *Editor) rowText(l *line, r row, spans []Span, spanLook uint8) string {
 	var out, run strings.Builder
 	look := uint8(255)
 	flush := func() {
@@ -173,6 +206,8 @@ func (e *Editor) rowText(l *line, r row, spans []Span) string {
 			st = e.th.Control
 		case lookMatch:
 			st = e.th.Match
+		case lookSelect:
+			st = e.th.Selection
 		}
 		out.WriteString(e.style(st).Render(run.String()))
 		run.Reset()
@@ -184,7 +219,7 @@ func (e *Editor) rowText(l *line, r row, spans []Span) string {
 		if lk == unitText {
 			for _, sp := range spans {
 				if off >= sp.Start && off < sp.End {
-					lk = lookMatch
+					lk = spanLook
 					break
 				}
 			}

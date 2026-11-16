@@ -1121,7 +1121,11 @@ func (l *live) info() SessionInfo {
 		Interactive: l.interactive,
 		SidePanel:   l.cfg.Options.SidePanel.V,
 		Verbose:     l.cfg.Options.Verbose.V,
+		Vim:         l.cfg.Options.EditorMode.V == "vim",
 		Resume:      "gnosh -r " + l.ts.ID(),
+	}
+	for _, it := range l.cfg.Options.VimInsertModeRemaps {
+		info.VimRemaps = append(info.VimRemaps, it.V)
 	}
 	if m.Provider != nil {
 		info.Provider = m.Provider.Name()

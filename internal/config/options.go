@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // ListItem is one value of a list option, with where it came from.
@@ -71,6 +72,12 @@ type Options struct {
 	Verbose Value[bool]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
+
+	// EditorMode is how the box takes keys: "normal", readline's keys, or
+	// "vim". VimInsertModeRemaps are the pairs of characters that, typed
+	// one after the other in vim's INSERT mode, stand for Esc ("jj").
+	EditorMode          Value[string]
+	VimInsertModeRemaps []ListItem
 }
 
 // ServerOff is the value of an option that names where a server of gnosh's
@@ -121,6 +128,13 @@ type optionDef struct {
 	bounded  bool     // the number must lie between min and max
 	trust    string   // what an untrusted folder's setting counts as; "" is KindOption
 	fromCwd  bool     // a relative path is under the working directory, not beside the file
+	// ownOnly takes the option from the person's own files alone (their
+	// gnosh.json, /config, --settings): a project's file is warned about
+	// and left out, so that a repository cannot change how the box takes
+	// the person's keys.
+	ownOnly bool
+	// each, for a list, says what is wrong with an entry, or "".
+	each func(string) string
 
 	truth func(*Options) *Value[bool]
 	num   func(*Options) *Value[int]
@@ -199,6 +213,22 @@ var optionDefs = []optionDef{
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
 		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},
+
+	// The box.
+	{key: "editorMode", kind: oEnum, def: "normal",
+		what: "how the box takes keys: \"normal\" (readline's keys) or \"vim\" (vim's NORMAL, INSERT and VISUAL modes); not from a project's file",
+		from: fromClaudeCode + ": the settings key", enum: []string{"normal", "vim"}, ownOnly: true,
+		text: func(o *Options) *Value[string] { return &o.EditorMode }},
+	{key: "vimInsertModeRemaps", kind: oNameList, def: "none",
+		what: "pairs of characters that, typed within a second of each other in vim's INSERT mode, stand for Esc, as [\"jj\"]; not from a project's file",
+		from: fromClaudeCode + ": the settings key, as a list, since Esc is the one thing a pair can stand for", ownOnly: true,
+		each: func(v string) string {
+			if utf8.RuneCountInString(v) != 2 || strings.TrimSpace(v) != v {
+				return "is two characters that are not blanks"
+			}
+			return ""
+		},
+		list: func(o *Options) *[]ListItem { return &o.VimInsertModeRemaps }},
 }
 
 // findOption returns the description of an option key, or nil.

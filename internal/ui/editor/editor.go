@@ -238,6 +238,11 @@ type Options struct {
 	Metrics text.Metrics
 	// UndoLimit is how many steps of undo are kept. Zero means 1000.
 	UndoLimit int
+	// Vim starts the box with vim's keys, in INSERT mode (SetVim), and
+	// VimRemaps are the INSERT-mode pairs that stand for Esc
+	// (SetVimRemaps).
+	Vim       bool
+	VimRemaps []string
 }
 
 // DoublePress is how soon a second press of Esc, Ctrl+C or Ctrl+D must
@@ -327,6 +332,8 @@ type Editor struct {
 	locked, busy, queued bool
 	armed                press // the key waiting for its second press
 
+	vim vimState // vim's keys (vim.go)
+
 	// What the event being handled has done so far.
 	changed     bool // the text changed
 	typed       bool // by typing, deleting or pasting
@@ -384,6 +391,10 @@ func New(o Options) *Editor {
 		e.undoLimit = defaultUndoLimit
 	}
 	e.measurePrefix()
+	e.SetVimRemaps(o.VimRemaps)
+	if o.Vim && !e.plain {
+		e.SetVim(true)
+	}
 	return e
 }
 
@@ -405,6 +416,10 @@ func (e *Editor) Handle(ev term.Event) Result {
 		before := e.cur
 		e.armed = press{}
 		res = e.paste(ev)
+		if res.Changed || e.changed {
+			// A selection does not outlast a change under it.
+			e.vimLeaveVisual()
+		}
 		e.finish(&res, before)
 	}
 	return res
@@ -536,6 +551,11 @@ func (e *Editor) Reset() {
 	e.walk, e.kept = -1, nil
 	e.lastKind = kindNone
 	e.armed = press{}
+	if e.vim.grouping {
+		// A change of the vim keys being made starts again from here.
+		e.vim.grouping = false
+		e.vimGroupBegin()
+	}
 }
 
 // closeAll closes the list of candidates and the history search, putting
