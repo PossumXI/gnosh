@@ -116,6 +116,7 @@ var modelFields = []keyDef{
 	{"contextWindow", "", "the model's window, in tokens", fromAPIs + ": the context window"},
 	{"maxOutputTokens", "", "the reply limit sent with a request", fromAPIs + ": the max output tokens, and Claude Code's CLAUDE_CODE_MAX_OUTPUT_TOKENS"},
 	{"thinkingLevels", "", "the model's thinking levels, the least thinking first; an empty list says it has no switch", fromPlain},
+	{"thinkingBudget", "", "the most tokens the model may think before a reply, 0 for no cap; 4096 for a llama.cpp server's model when not given", fromClaudeCode + ": its MAX_THINKING_TOKENS, for one model"},
 }
 
 // slotFields is every field of "model" and "smallModel" written as an

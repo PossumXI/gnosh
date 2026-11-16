@@ -234,7 +234,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textMonitorLines, textAgentEnded, textBtw, textRecap, textNextPrompt, textMention, textAgentMention, textStructured, textPrintWait, textStatusLine},
+			texts: []string{textInterrupted, textBackgroundEnded, textMonitorLines, textAgentEnded, textBtw, textRecap, textNextPrompt, textThinkingBudget, textMention, textAgentMention, textStructured, textPrintWait, textStatusLine},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -254,6 +254,7 @@ func goldenFiles() []goldenFile {
 					{"before a side question (/btw)", s.Btw()},
 					{"the question of /recap", s.Recap()},
 					{"the question of a prompt suggestion", s.NextPrompt()},
+					{"the end of thinking whose budget ran out", s.ThinkingBudget()},
 					{"a run that has waited long for its background work", s.PrintWait("10m0s", "bg1 (npm run dev), bg2 (watch the logs)")},
 					{"the prompt of /statusline", s.StatusLine("the model and the git branch", "/home/dev/.config/gnosh/statusline.sh", "/home/dev/.config/gnosh/gnosh.json", `{"cwd": "/home/dev/project", "model": {"id": "local/qwen3.8-27b"}}`)},
 					{"a kind of sub-agent named with @agent-", s.AgentMention("reviewer")},

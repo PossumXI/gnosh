@@ -619,6 +619,12 @@ func (s *Set) Recap() string {
 	return s.fill(textRecap, nil)
 }
 
+// ThinkingBudget returns the words put at the end of a model's thinking
+// when its budget for thinking runs out.
+func (s *Set) ThinkingBudget() string {
+	return s.fill(textThinkingBudget, nil)
+}
+
 // NextPrompt returns the question asked after a turn when prompt
 // suggestions are on: the person's likely next prompt, in their words, in
 // a request beside the session's that is not kept.

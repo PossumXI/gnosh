@@ -214,6 +214,12 @@ func (b *builder) addModel(ref ModelRef, ch modelChange, o Origin) {
 	if ch.maxOutput != nil {
 		m.MaxOutputTokens.put(*ch.maxOutput, ch.maxAt)
 	}
+	if ch.noBudget {
+		m.ThinkingBudget = Value[int]{}
+	}
+	if ch.budget != nil {
+		m.ThinkingBudget.put(*ch.budget, ch.budgetAt)
+	}
 	if ch.noLevels {
 		m.ThinkingLevels = Value[[]string]{}
 	}
@@ -385,6 +391,10 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 			if m.ThinkingLevels.Set && from(m.ThinkingLevels.Origin) {
 				note("thinkingLevels of model " + m.Ref())
 				m.ThinkingLevels = Value[[]string]{}
+			}
+			if m.ThinkingBudget.Set && from(m.ThinkingBudget.Origin) {
+				note("thinkingBudget of model " + m.Ref())
+				m.ThinkingBudget = Value[int]{}
 			}
 		}
 		for _, slot := range []struct {

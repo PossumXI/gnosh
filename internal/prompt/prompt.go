@@ -73,6 +73,7 @@ const (
 	textBtw              = "btw"
 	textRecap            = "recap"
 	textNextPrompt       = "next-prompt"
+	textThinkingBudget   = "thinking-budget"
 	textPrintWait        = "print-wait"
 	textStatusLine       = "statusline"
 	textMention          = "mention"
@@ -204,6 +205,8 @@ func specs() []spec {
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,
 			when: "As the question of /recap, in a request beside the session's that is not kept."},
+		{name: textThinkingBudget, kind: KindLine,
+			when: "At the end of the model's thinking when its thinking budget runs out, where the server can put it (llama.cpp's reasoning_budget_message)."},
 		{name: textNextPrompt, kind: KindLine,
 			when: "After a turn, with promptSuggestionEnabled on, in a request beside the session's that is not kept: the person's likely next prompt, which the box shows."},
 		{name: textStatusLine, kind: KindLine, need: []string{"wish", "script", "settings", "sample"},

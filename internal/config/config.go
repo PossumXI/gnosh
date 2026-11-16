@@ -258,6 +258,10 @@ type Model struct {
 	// first. Not set means the model's ID decides; set and empty means the
 	// model has no thinking switch.
 	ThinkingLevels Value[[]string]
+	// ThinkingBudget is the most tokens the model may think before a
+	// reply, when it thinks; 0 means no cap. Not set means MAX_THINKING_TOKENS,
+	// or gnosh's own cap for a llama.cpp server, or none.
+	ThinkingBudget Value[int]
 	// Origin is the last place that set the model.
 	Origin Origin
 }

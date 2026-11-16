@@ -443,9 +443,12 @@ type modelChange struct {
 	levels     []string
 	hasLevels  bool
 	noLevels   bool
+	budget     *int
+	noBudget   bool
 	windowAt   Origin
 	maxAt      Origin
 	levelsAt   Origin
+	budgetAt   Origin
 	registered Origin
 }
 
@@ -503,6 +506,16 @@ func (s *source) model(ref ModelRef, m jfield) {
 				ch.window, ch.windowAt = &n, s.at(fl.line)
 			default:
 				ch.maxOutput, ch.maxAt = &n, s.at(fl.line)
+			}
+		case "thinkingBudget":
+			n, whole := v.whole()
+			switch {
+			case v.kind == jNull:
+				ch.noBudget = true
+			case !whole || n < 0:
+				s.errorf(fl.line, "%q is a number of tokens the model may think before a reply, 0 for no cap: a whole number written with digits alone. Here it is %s.", key, shown(v))
+			default:
+				ch.budget, ch.budgetAt = &n, s.at(fl.line)
 			}
 		case "thinkingLevels":
 			items, isList := v.strings()

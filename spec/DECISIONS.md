@@ -1005,4 +1005,21 @@ or kept with the reason said (27).
     that are not UTF-8 are read as the replacement character first, so
     taking a character out never joins two pieces into a new one. Print
     mode sends its prompt as given.
+73. **A model on a llama.cpp server thinks at most 4,096 tokens before a
+    reply, unless told otherwise.** On Jae's AI box, with thinking on,
+    Qwen thought for 14,270 tokens (31 minutes) before one reply, and
+    seven turns before it were stopped by hand with no reply at all; the
+    server had no budget, and gnosh left the budget to its start-up flag.
+    llama.cpp's server takes one in each request (reasoning_budget_tokens,
+    from build b9982; the box runs b11714) and puts a message at the end
+    of the thinking when it runs out (reasoning_budget_message): gnosh
+    sends the budget whenever the model may think, with its own note
+    (thinking-budget.md). The budget is MAX_THINKING_TOKENS, Claude Code's
+    variable, when it is set above 0; then the model's own thinkingBudget
+    in gnosh.json (0 for no cap, not from a project's file unless the
+    folder is trusted, like the model's other fields); then 4,096 for a
+    llama.cpp server, some minutes at the speed of a model on the
+    person's own machine and more than an ordinary step takes; and none
+    elsewhere. MAX_THINKING_TOKENS=0 turns thinking off, as in Claude
+    Code. A server too old for the fields ignores them.
 

@@ -94,6 +94,9 @@ func (c *Config) String() string {
 		if m.ThinkingLevels.Set {
 			about += "  thinkingLevels: [" + list(m.ThinkingLevels.V) + "]"
 		}
+		if m.ThinkingBudget.Set {
+			about += fmt.Sprintf("  thinkingBudget: %d", m.ThinkingBudget.V)
+		}
 		line("  %s%s%s", m.Ref(), about, from(m.Origin))
 	}
 	if len(c.Models) == 0 {

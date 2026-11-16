@@ -93,6 +93,12 @@ Built:
   a terminal on the other side of ssh or tmux too. Your prompts are white
   and the model's answers green; on a terminal that says its background is
   light, both take colours that read there.
+- **A budget for thinking**: a model on a llama.cpp server thinks at most
+  4,096 tokens before a reply, and is then told to go on with what it has
+  (the server's reasoning_budget_tokens). `"models": {"<provider>/<id>":
+  {"thinkingBudget": N}}` sets a model's own (0 for no cap), and Claude
+  Code's `MAX_THINKING_TOKENS` sets it for every model (0 turns thinking
+  off).
 - **No invisible characters in a prompt**, as in Claude Code: Enter takes
   out what a terminal draws as nothing (tag characters, the controls of
   the drawing order, zero-width spaces), keeping what Persian, the

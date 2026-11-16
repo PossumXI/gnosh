@@ -29,6 +29,10 @@ type Limits struct {
 	// MaxOutputTokens is CLAUDE_CODE_MAX_OUTPUT_TOKENS: how long one reply
 	// may run. Not set means no limit is sent.
 	MaxOutputTokens Value[int]
+	// MaxThinkingTokens is MAX_THINKING_TOKENS: the most tokens a model
+	// may think before a reply, over each model's own thinkingBudget; 0
+	// turns thinking off. Not set means each model's own.
+	MaxThinkingTokens Value[int]
 	// FileReadMaxTokens is CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS: the
 	// most one read returns. Default: 25,000.
 	FileReadMaxTokens Value[int]
@@ -60,6 +64,7 @@ var limitVars = []struct{ name, what, from string }{
 	{"BASH_MAX_TIMEOUT_MS", "the most a command's own timeout may ask for", fromClaudeCode},
 	{"BASH_MAX_OUTPUT_LENGTH", "characters of a command's output the model reads", fromClaudeCode},
 	{"CLAUDE_CODE_MAX_OUTPUT_TOKENS", "how long one reply may run", fromClaudeCode},
+	{"MAX_THINKING_TOKENS", "tokens a model may think before a reply; 0 turns thinking off", fromClaudeCode},
 	{"CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", "the most one read returns", fromClaudeCode},
 	{"CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "seconds a file search may run", fromClaudeCode},
 	{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "tokens of context before room is made; outranks the autoCompactWindow option", fromClaudeCode},
@@ -168,6 +173,9 @@ func (ld *loader) limits() Limits {
 	}
 	if n, o, ok := ld.whole("CLAUDE_CODE_MAX_OUTPUT_TOKENS", 1); ok {
 		l.MaxOutputTokens.put(n, o)
+	}
+	if n, o, ok := ld.whole("MAX_THINKING_TOKENS", 0); ok {
+		l.MaxThinkingTokens.put(n, o)
 	}
 	if n, o, ok := ld.whole("CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", 1); ok {
 		l.FileReadMaxTokens.put(n, o)

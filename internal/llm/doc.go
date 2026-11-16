@@ -248,8 +248,12 @@
 //	                    of the top-level field. Both go to the model's chat
 //	                    template: a model that thinks or does not (Qwen)
 //	                    reads the first, one with levels (gpt-oss) the
-//	                    second. BudgetTokens is ignored: the server's
-//	                    budget is a start-up flag
+//	                    second
+//	Thinking.BudgetTokens reasoning_budget_tokens, with BudgetNote as
+//	                    reasoning_budget_message, unless Mode is "off": the
+//	                    server ends the thinking there and puts the note at
+//	                    its end (server builds from b9982 on; an older one
+//	                    ignores both)
 //	Request.Tools       parallel_tool_calls: true when there are tools; the
 //	                    server allows one call per answer otherwise
 //	MaxTokens           max_tokens

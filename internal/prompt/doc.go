@@ -274,6 +274,9 @@
 //     words from the conversation, call no tool, start on nothing.
 //   - recap (Recap) is the question of /recap, asked the same way: the
 //     session in one line, for the person.
+//   - thinking-budget (ThinkingBudget) is put at the end of the model's
+//     thinking when its budget runs out (thinkingBudget, MAX_THINKING_TOKENS),
+//     by a server that can: the model goes on to its answer.
 //   - next-prompt (NextPrompt) is asked the same way after a turn, when
 //     promptSuggestionEnabled is on: the prompt the person would most
 //     likely send next, a few words on one line, which their box shows.

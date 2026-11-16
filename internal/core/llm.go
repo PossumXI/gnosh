@@ -22,6 +22,10 @@ type Thinking struct {
 	// BudgetTokens caps the reasoning, for providers that take a budget.
 	// Zero means the provider's default.
 	BudgetTokens int
+	// BudgetNote is what a provider that can (llama.cpp's server) puts at
+	// the end of the reasoning when BudgetTokens runs out, so the model
+	// knows why its thinking ended. Empty means nothing is put there.
+	BudgetNote string
 	// Effort is "low", "medium" or "high", for providers that take a level.
 	// Empty means the provider's default.
 	Effort string

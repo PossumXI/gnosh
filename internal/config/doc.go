@@ -97,6 +97,8 @@
 //	  maxOutputTokens the reply limit sent with a request
 //	  thinkingLevels  its thinking levels, the least thinking first; an
 //	                  empty list says the model has no thinking switch
+//	  thinkingBudget  the most tokens it may think before a reply, 0 for
+//	                  no cap (a llama.cpp server's model: 4096 unless set)
 //	model       the session's model, as "<provider>/<model id>"
 //	smallModel  the model for the short side jobs (titles, summaries,
 //	            checks); the session's model does them when none is named

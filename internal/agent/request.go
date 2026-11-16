@@ -187,9 +187,19 @@ func (a *Agent) assemble(su setup, msgs []core.Message) *core.Request {
 		MaxTokens:   m.MaxTokens,
 		Temperature: m.Temperature,
 		TopP:        m.TopP,
-		Thinking:    thinkingFor(m.Level),
+		Thinking:    m.mainThinking(),
 		Extra:       maps.Clone(m.Extra),
 	}
+}
+
+// mainThinking is the thinking a main request asks for: the model's level,
+// and its budget when it thinks at all.
+func (m Model) mainThinking() core.Thinking {
+	t := thinkingFor(m.Level)
+	if t.Mode != "off" && m.ThinkingBudget > 0 {
+		t.BudgetTokens, t.BudgetNote = m.ThinkingBudget, m.BudgetNote
+	}
+	return t
 }
 
 // checkView reports what is wrong with msgs as a conversation to send, or

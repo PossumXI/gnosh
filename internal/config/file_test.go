@@ -114,7 +114,8 @@ func TestModels(t *testing.T) {
       "name": "Qwen",
       "contextWindow": 262144,
       "maxOutputTokens": 8000,
-      "thinkingLevels": ["off", "on"]
+      "thinkingLevels": ["off", "on"],
+      "thinkingBudget": 2048
     },
     "q/org/name:tag": {},
     "q/quiet": {"thinkingLevels": []}
@@ -128,7 +129,7 @@ func TestModels(t *testing.T) {
 	}
 	m := cfg.Models[0]
 	if m.Ref() != "q/qwen3.8-27b" || m.Name != "Qwen" || m.ContextWindow.V != 262144 || m.MaxOutputTokens.V != 8000 ||
-		!m.ThinkingLevels.Set || !slices.Equal(m.ThinkingLevels.V, []string{"off", "on"}) {
+		!m.ThinkingLevels.Set || !slices.Equal(m.ThinkingLevels.V, []string{"off", "on"}) || !m.ThinkingBudget.Set || m.ThinkingBudget.V != 2048 {
 		t.Errorf("model: %+v", m)
 	}
 	if o := m.ContextWindow.Origin; o.File != userJSON || o.Line != lineOf(t, text, `"contextWindow"`) || m.Origin.Line != 4 {
@@ -622,7 +623,7 @@ func TestFileRefusals(t *testing.T) {
 		{"a model with no provider in front", `{` + q + `, "models": {"qwen": {}}}`, "", []string{`"models" names a model as "<provider>/<model id>"`, "no provider in front"}},
 		{"a model with a blank in its name", `{` + q + `, "models": {"q/a b": {}}}`, "", []string{"not a usable model name"}},
 		{"a model on a provider that is not there", `{` + q + `, "models": {"nope/m": {}}}`, "", []string{`"models" registers nope/m`, "no provider named nope", `Declare it under "providers"`, "The providers so far are: q"}},
-		{"a model of the wrong shape", `{` + q + `, "models": {"q/m": 262144}}`, "", []string{"the model q/m is an object", "name, contextWindow, maxOutputTokens, thinkingLevels", "262144"}},
+		{"a model of the wrong shape", `{` + q + `, "models": {"q/m": 262144}}`, "", []string{"the model q/m is an object", "name, contextWindow, maxOutputTokens, thinkingLevels, thinkingBudget", "262144"}},
 		{"an unknown field of a model", `{` + q + `, "models": {"q/m": {"window": 1000}}}`, "", []string{`"window"`, "not a field of a model", "contextWindow"}},
 		{"a window that is not a number", `{` + q + `, "models": {"q/m": {"contextWindow": "big"}}}`, "", []string{`"models.q/m.contextWindow" is a number of tokens`, "a string"}},
 		{"a window of zero", `{` + q + `, "models": {"q/m": {"contextWindow": 0}}}`, "", []string{"a whole number of at least 1", "Here it is 0"}},

@@ -198,6 +198,7 @@ func TestLlamaCppRequest(t *testing.T) {
 		"stream_options": {"include_usage": true},
 		"cache_prompt": true,
 		"chat_template_kwargs": {"enable_thinking": true, "reasoning_effort": "high"},
+		"reasoning_budget_tokens": 2000,
 		"parallel_tool_calls": true,
 		"max_tokens": 1000,
 		"temperature": 0.5,
@@ -238,11 +239,13 @@ func TestLlamaCppRequest(t *testing.T) {
 		"messages": [{"role": "user", "content": "hi"}]
 	}`)
 
-	// Thinking left to the model: the template is not told anything.
+	// Thinking left to the model: the template is not told anything, and a
+	// budget still holds, for a model that thinks by default.
 	req = &core.Request{Model: "qwen", Messages: []core.Message{core.UserText("hi")}, Thinking: core.Thinking{BudgetTokens: 500}}
 	wantOK(t, drain(p.Stream(context.Background(), req)))
 	wantJSON(t, "request body, thinking left alone", f.last().Body, `{
 		"model": "qwen", "stream": true, "stream_options": {"include_usage": true}, "cache_prompt": true,
+		"reasoning_budget_tokens": 500,
 		"messages": [{"role": "user", "content": "hi"}]
 	}`)
 }
@@ -510,4 +513,25 @@ func TestLlamaCppLoad(t *testing.T) {
 		t.Errorf("a server without /slots gave no error")
 	}
 	off.waitClosed()
+}
+
+// A thinking budget goes to the server as reasoning_budget_tokens, with
+// the note for the end of the thinking, unless thinking is off.
+func TestLlamaCppThinkingBudget(t *testing.T) {
+	f := newFake(t, playing(okStream))
+	p := f.provider(TypeLlamaCpp, nil)
+	req := &core.Request{Model: "qwen", Messages: []core.Message{core.UserText("hi")},
+		Thinking: core.Thinking{Mode: "on", BudgetTokens: 4096, BudgetNote: "\n\nTime is up.\n"}}
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	wantJSON(t, "request body", f.last().Body, `{
+		"model": "qwen", "stream": true, "stream_options": {"include_usage": true}, "cache_prompt": true,
+		"chat_template_kwargs": {"enable_thinking": true},
+		"reasoning_budget_tokens": 4096, "reasoning_budget_message": "\n\nTime is up.\n",
+		"messages": [{"role": "user", "content": "hi"}]
+	}`)
+	req.Thinking.Mode = "off"
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	if body := string(f.last().Body); strings.Contains(body, "reasoning_budget") {
+		t.Errorf("a budget went with thinking off: %s", body)
+	}
 }

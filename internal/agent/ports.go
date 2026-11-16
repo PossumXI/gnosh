@@ -49,6 +49,12 @@ type Model struct {
 	// a local server.
 	MaxTokens int
 
+	// ThinkingBudget caps how many tokens a main reply may think, when the
+	// model thinks; zero sends no cap. BudgetNote is put at the end of the
+	// thinking when the cap is reached, where the provider can.
+	ThinkingBudget int
+	BudgetNote     string
+
 	// Temperature and TopP are sent on main requests when not nil.
 	Temperature *float64
 	TopP        *float64

@@ -47,6 +47,15 @@ func (o *openAI) llamaFields(body obj, req *core.Request) {
 	if len(kwargs) > 0 {
 		body["chat_template_kwargs"] = kwargs
 	}
+	// A budget for the thinking: the server ends the reasoning there, with
+	// the note, and the model goes on to its answer. (A server too old to
+	// know the fields thinks as long as it likes, as before.)
+	if t := req.Thinking; t.BudgetTokens > 0 && t.Mode != "off" {
+		body["reasoning_budget_tokens"] = t.BudgetTokens
+		if t.BudgetNote != "" {
+			body["reasoning_budget_message"] = t.BudgetNote
+		}
+	}
 
 	// The server allows one tool call per answer unless asked for more.
 	// The other two formats allow several by default, and a harness that
