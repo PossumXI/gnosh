@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -1050,26 +1051,64 @@ func (u *UI) edit(draft string) (string, error) {
 	if werr != nil {
 		return "", fmt.Errorf("The prompt could not be written to a file for the editor: %v", werr)
 	}
-	_ = u.r.Clear()
-	if err := u.t.Release(); err != nil {
-		return "", fmt.Errorf("The terminal could not be handed to the editor: %v", err)
+	ran, err := u.runEditor(program, path)
+	if err != nil {
+		return "", err
 	}
-	cmd := exec.Command("/bin/sh", "-c", program+` "$1"`, "sh", path)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = u.o.In, u.o.Out, u.o.Out
-	u.lent.Store(true)
-	runErr := cmd.Run()
-	u.lent.Store(false)
-	if err := u.t.Resume(); err != nil {
-		return "", fmt.Errorf("The terminal could not be taken back from the editor: %v", err)
-	}
-	u.awaitResume()
-	u.r.Reset()
-	if runErr != nil {
-		return "", fmt.Errorf("%s did not end well (%v), so the box is as it was.", oneLine(program), runErr)
+	if ran != nil {
+		return "", fmt.Errorf("%s did not end well (%v), so the box is as it was.", oneLine(program), ran)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("What the editor saved could not be read: %v", err)
 	}
 	return string(data), nil
+}
+
+// editFile lets the person edit a file in their own editor (VISUAL,
+// EDITOR), in place: /memory's picker opens a context file so.
+func (u *UI) editFile(path string) error {
+	if u.o.Editor != nil {
+		data, _ := os.ReadFile(path)
+		u.lent.Store(true)
+		out, err := u.o.Editor(string(data))
+		u.lent.Store(false)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, []byte(out), 0o644)
+	}
+	program := firstNonEmpty(u.env("VISUAL"), u.env("EDITOR"))
+	if program == "" {
+		return errors.New("Set VISUAL or EDITOR to open it in your own editor.")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("%s cannot be made: %v", filepath.Dir(path), err)
+	}
+	ran, err := u.runEditor(program, path)
+	if err == nil && ran != nil {
+		err = fmt.Errorf("%s did not end well (%v).", oneLine(program), ran)
+	}
+	return err
+}
+
+// runEditor hands the terminal to the editor program on path, and takes
+// it back. ran is how the editor ended; err says the terminal could not
+// be handed over or taken back.
+func (u *UI) runEditor(program, path string) (ran, err error) {
+	_ = u.r.Clear()
+	if err := u.t.Release(); err != nil {
+		return nil, fmt.Errorf("The terminal could not be handed to the editor: %v", err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", program+` "$1"`, "sh", path)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = u.o.In, u.o.Out, u.o.Out
+	u.lent.Store(true)
+	ran = cmd.Run()
+	u.lent.Store(false)
+	if err := u.t.Resume(); err != nil {
+		return ran, fmt.Errorf("The terminal could not be taken back from the editor: %v", err)
+	}
+	u.awaitResume()
+	u.r.Reset()
+	return ran, nil
 }

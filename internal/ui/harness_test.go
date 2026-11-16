@@ -69,7 +69,9 @@ type rig struct {
 	// suspendErr, when not nil, is why the process cannot be stopped.
 	suspendErr error
 	editor     func(string) (string, error)
-	files      map[string][]fileEntry
+	// editedFiles are the files opened in the editor, in order.
+	editedFiles []string
+	files       map[string][]fileEntry
 }
 
 // stamp is where every rig's clock starts.
@@ -202,6 +204,11 @@ func (g *rig) copy(text string) error {
 
 func (g *rig) openPanel(cols, rows int) (*term.Panel, error) {
 	return term.OpenPanel(g.scr, cols, rows, vtest.Width, false)
+}
+
+func (g *rig) editFile(path string) error {
+	g.editedFiles = append(g.editedFiles, path)
+	return nil
 }
 
 func (g *rig) openView(cols, rows int) (*term.Panel, error) {
@@ -537,6 +544,14 @@ type controls struct {
 	trans     []app.TranscriptEntry
 	models    []app.ModelChoice
 	options   []app.ConfigChoice
+	memFiles  []app.MemoryFile
+}
+
+// MemoryFiles is the context files a test set.
+func (c *controls) MemoryFiles() []app.MemoryFile {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.memFiles)
 }
 
 // ConfigChoices is the options a test set.

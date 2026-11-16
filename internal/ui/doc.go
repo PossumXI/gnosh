@@ -314,6 +314,8 @@
 //     []app.ConfigChoice; changing one is the command /config key=value.
 //   - /export with nothing after it asks where to: the command
 //     /export --clipboard, or /export.
+//   - /memory with nothing after it, the picker: a method MemoryFiles()
+//     []app.MemoryFile; the one picked opens in the editor (host.editFile).
 //   - /model with nothing after it, the picker: a method
 //     ModelChoices(ctx) []app.ModelChoice; switching is the command
 //     /model provider/model level.

@@ -31,6 +31,9 @@ type host interface {
 	// editor, it has erased the live region first and made the renderer
 	// start afresh afterwards.
 	edit(text string) (string, error)
+	// editFile lets the person edit a file in their own editor, in place,
+	// as edit does a text.
+	editFile(path string) error
 	// size is the terminal's size as it stands, when it can be told.
 	size() (cols, rows int, ok bool)
 	// copy puts text on the person's clipboard through the terminal.

@@ -249,6 +249,10 @@ type SessionControls interface {
 	// the picker that /config with nothing after it opens; changing one is
 	// the command /config key=value.
 	ConfigChoices() []ConfigChoice
+	// MemoryFiles lists the context files the /memory picker offers to
+	// open in the person's editor: those the model is given, then the
+	// person's own and the project's GNOSH.md.
+	MemoryFiles() []MemoryFile
 }
 
 // CommandResult is what running a slash command came to.

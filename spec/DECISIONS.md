@@ -710,4 +710,9 @@ or kept with the reason said (27).
     front end are as they were. /export with nothing after it asks the
     same way, as Claude Code's does: the clipboard (/export --clipboard,
     which goes as /copy goes, through gnosh ssh's relay to the Mac too)
-    or a file here named for the day and the session.
+    or a file here named for the day and the session. /memory with
+    nothing after it lists the context files, those the model is given
+    and then the person's own and the project's GNOSH.md (marked when not
+    there yet), and opens the one picked in the person's editor in place,
+    as Claude Code's opens its memory files; a change shows in the next
+    session.
