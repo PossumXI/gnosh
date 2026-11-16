@@ -209,6 +209,25 @@ func (e *Engine) CommandDirs(dir, command string) (dirs []string, why string) {
 	return unionStrings(dirs, more), ""
 }
 
+// CommandWrites are the files a shell command line names for writing, as
+// absolute paths, for a shell started in dir: a redirection's target,
+// cp's and mv's last word, sed -i's files and the like, and each with its
+// links followed where the engine follows them. Only what can be told is
+// there: a file named by text computed when the line runs, or written by
+// a program on its own account, is not.
+func (e *Engine) CommandWrites(dir, command string) []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	at := *e
+	if strings.HasPrefix(dir, "/") {
+		at.cur = path.Clean(dir)
+	}
+	req := &request{canon: toolBash}
+	req.view = at.viewBash(command)
+	at.shellPaths(req)
+	return req.writes
+}
+
 // cdChanger names a variable the line sets that changes where a cd goes:
 // CDPATH, which a cd to a plain name searches, and HOME, where a cd with
 // no folder and ~ lead. It is "" when the line sets neither.

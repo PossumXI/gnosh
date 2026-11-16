@@ -745,8 +745,8 @@ func checkoutName(t core.WorkTree, repo string) string {
 // made from and not in the work tree, or when where it runs cannot be
 // told from its text; "" when it stays in the work tree, or elsewhere.
 // Claude Code checks a command's working directory the same way. What a
-// command writes into the checkout by its own paths ("cp a /repo/b") is
-// not looked at here; the rules judge that as for any command.
+// command writes into the checkout by the paths it names ("cp a /repo/b")
+// is refused as well, as far as the engine can tell those paths.
 func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	if strings.TrimSpace(command) == "" {
 		return ""
@@ -771,6 +771,20 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 			same = ": the same folder there is " + s
 		}
 		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command would run in %s, in %s. Run it in your work tree instead%s.", t.Path, d, checkoutName(t, repo), same)
+	}
+	// Nor does it write into the checkout by the files it names: a
+	// redirection's target, cp's last word, sed -i's files and the like,
+	// as far as they can be told.
+	for _, p := range l.engine.CommandWrites(cwd, command) {
+		repo, real := checkoutOf(t, p)
+		if repo == "" {
+			continue
+		}
+		same := "under your work tree"
+		if s, ok := sameIn(t.Path, repo, real); ok {
+			same = "in your work tree, " + s
+		}
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command writes %s, in %s. Write the same file %s, instead.", t.Path, p, checkoutName(t, repo), same)
 	}
 	// Nor is git pointed there from the work tree: git -C, --git-dir,
 	// --work-tree, GIT_DIR and its kin.

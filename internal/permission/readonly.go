@@ -1008,7 +1008,7 @@ var gitGlobal = map[string]bool{"--no-pager": true, "--no-optional-locks": true}
 // ../other/secret a.txt" compares two files, one of them outside the
 // repository, and prints both.
 var gitRead = map[string]roSpec{
-	"status": {short: "sbvz", long: "--short --branch --porcelain --porcelain= --long --untracked-files --untracked-files= --ignored --ignored= --show-stash --ahead-behind --no-ahead-behind --renames --no-renames --verbose --column --no-column"},
+	"status": {short: "sbvz", optional: "u", long: "--short --branch --porcelain --porcelain= --long --untracked-files --untracked-files= --ignored --ignored= --show-stash --ahead-behind --no-ahead-behind --renames --no-renames --verbose --column --no-column"},
 	"diff": {short: "pubwRWzMCa", optional: "U", noGlob: true,
 		long: "--stat --stat= --numstat --shortstat --name-only --name-status --cached --staged --patch --unified --unified= --no-color --color --color= --word-diff --word-diff= --color-words --ignore-all-space --ignore-space-change --ignore-blank-lines --minimal --patience --histogram --diff-filter= --find-renames --find-renames= --summary --check --no-ext-diff --no-textconv --exit-code --quiet --relative --raw --compact-summary --dirstat --no-renames --merge-base --function-context --no-prefix --abbrev --abbrev= --full-index --text --diff-algorithm="},
 	"log": {short: "pusi", valued: "nSG", digits: true, noGlob: true,

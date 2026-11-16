@@ -2,6 +2,7 @@ package permission
 
 import (
 	"path"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -406,6 +407,32 @@ func TestCommandDirs(t *testing.T) {
 		}
 		if !ok || got != c.want {
 			t.Errorf("CommandDirs(%q, %q) = %q, %v; want %q", c.dir, c.cmd, got, ok, c.want)
+		}
+	}
+}
+
+// CommandWrites: the files a line names for writing, where they can be
+// told.
+func TestCommandWrites(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeDefault, rules{}))
+	for _, c := range []struct {
+		cmd  string
+		want string // in the result, or "" for nothing
+	}{
+		{"echo x > /repo/out.txt", "/repo/out.txt"},
+		{"cp /repo/a.go b.go", "/proj/b.go"},
+		{"cp a.go /repo/b.go", "/repo/b.go"},
+		{"sed -i s/x/y/ /repo/f.go", "/repo/f.go"},
+		{"cd /repo && touch x", "/repo/x"},
+		{"cat /repo/a.go", ""},
+		{"echo hi > /dev/null", ""},
+	} {
+		got := e.CommandWrites("/proj", c.cmd)
+		switch {
+		case c.want == "" && len(got) > 0:
+			t.Errorf("CommandWrites(%q) = %q, want none", c.cmd, got)
+		case c.want != "" && !slices.Contains(got, c.want):
+			t.Errorf("CommandWrites(%q) = %q, want %s among them", c.cmd, got, c.want)
 		}
 	}
 }

@@ -93,6 +93,8 @@ func TestWorktreeFlagCommandsStay(t *testing.T) {
 	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"ls"}`}}})
 	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "git -C "+w.Dir+" status")}}})
 	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c5", Name: "Bash", Args: `{"command":"mem.Show()"}`}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c6", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "echo x > "+filepath.Join(w.Dir, "out.txt"))}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c7", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "cp "+filepath.Join(w.Dir, "main.go")+" copy.go")}}})
 	w.Model.Add(apptest.Reply{Text: "Done."})
 	run(t, w, "--trust-folder", "--worktree", "cmds", "-p", "look").wantCode(t, 0)
 	tree := filepath.Join(w.Dir, ".gnosh", "worktrees", "cmds")
@@ -104,4 +106,13 @@ func TestWorktreeFlagCommandsStay(t *testing.T) {
 	has(t, "git pointed at the checkout", toolResult(t, w, 4, "c4"), "This call did not run", "this command points git at "+w.Dir)
 	// Qwen once wrote mem's call as a shell command (box 1).
 	has(t, "mem as a shell command", toolResult(t, w, 5, "c5"), "cannot be read as a shell command", "it is called with gnovm_run")
+	// A write into the checkout by the path a command names is refused;
+	// reading from the checkout into the work tree is not.
+	has(t, "a write by path", toolResult(t, w, 6, "c6"), "This call did not run", "this command writes "+filepath.Join(w.Dir, "out.txt"), "in your work tree, "+filepath.Join(tree, "out.txt"))
+	if w.Exists("out.txt") {
+		t.Errorf("the command wrote into the person's checkout")
+	}
+	if got := toolResult(t, w, 7, "c7"); strings.Contains(got, "work tree of your own") {
+		t.Errorf("a copy from the checkout into the work tree was held to the work tree: %q", got)
+	}
 }

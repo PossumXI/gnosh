@@ -1339,6 +1339,8 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"cat <<EOF\nRUN apt-get update && \\\n    apt-get install -y x\nEOF", "cat <<EOF\na \\\\\nEOF",
 		"git log -5 --format='%h %s'", "git log --since=\"2 weeks ago\" --oneline", "git log --author=\"Jae Kwon\" -3", "cut -d' ' -f1 names.txt",
 		"git show HEAD:src/a.go", "git log origin/main..HEAD --oneline", "git status -sb", "git branch -vv", "git rev-parse --abbrev-ref HEAD",
+		"git status --porcelain=v1 -uall", "git status -uno", "git status -s -u", // Qwen, box 1
+		"git status --porcelain=v1 -uall && echo --- && git diff --numstat HEAD",
 		"date '+%Y-%m-%d %H:%M'", "stat -c '%s %n' go.mod", "find . -name \"*.go\" -not -path \"./vendor/*\"", "tr -d '\\n'", "sort -t, -k2 names.txt",
 		"grep -E 'a|b' names.txt", "grep -rn \"foo(bar)\" .", "git diff HEAD -- '*.go'", "git diff --name-only HEAD~1 | grep '\\.go$'",
 		"ls *.go", "wc -l src/*.go", "echo héllo wörld", "grep -rn 'naïve' .", "echo \"tab\there\"",
