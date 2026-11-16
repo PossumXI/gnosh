@@ -551,10 +551,11 @@ func (p *program) sessionsCommand(ctx context.Context, inv cli.Invocation) int {
 				Modified    time.Time `json:"modified"`
 				Prompts     int       `json:"prompts"`
 				Path        string    `json:"path"`
+				Open        bool      `json:"open,omitempty"`
 			}
 			rows := []row{}
 			for _, info := range list {
-				rows = append(rows, row{info.ID, info.Title, info.FirstPrompt, info.Created, info.Modified, info.Prompts, info.Path})
+				rows = append(rows, row{info.ID, info.Title, info.FirstPrompt, info.Created, info.Modified, info.Prompts, info.Path, transcript.InUse(info.Path)})
 			}
 			enc := json.NewEncoder(p.stdout)
 			enc.SetIndent("", "  ")
@@ -566,7 +567,12 @@ func (p *program) sessionsCommand(ctx context.Context, inv cli.Invocation) int {
 			return cli.ExitOK
 		}
 		for _, info := range list {
-			fmt.Fprintf(p.stdout, "%s  %s  %3d prompt(s)  %s\n", info.ID, info.Modified.Local().Format("2006-01-02 15:04"), info.Prompts, oneLine(firstOf(info.Title, info.FirstPrompt, "(no prompt yet)"), 80))
+			open := ""
+			if transcript.InUse(info.Path) {
+				// (A session, or a run /background or /fork started.)
+				open = "  (open now)"
+			}
+			fmt.Fprintf(p.stdout, "%s  %s  %3d prompt(s)  %s%s\n", info.ID, info.Modified.Local().Format("2006-01-02 15:04"), info.Prompts, oneLine(firstOf(info.Title, info.FirstPrompt, "(no prompt yet)"), 80), open)
 		}
 		return cli.ExitOK
 	case cli.CmdSessionRename:

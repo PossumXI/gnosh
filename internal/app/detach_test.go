@@ -106,3 +106,25 @@ func TestForkCommand(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(filepath.Dir(w.Sessions()[0]), resume+".jsonl"))
 	has(t, "the copy", string(data), "say hi")
 }
+
+// A session open in a gnosh is marked in gnosh session list, and opening it
+// again is refused with a word about the run's log when it has one.
+func TestOpenSessionsMarked(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
+	s := sit(t, w, "say hi")
+	s.see("Hi.")
+	s.see("-- done in ")
+	out := run(t, w, "session", "list").wantCode(t, 0).out
+	has(t, "the list while the session is open", out, "(open now)")
+	has(t, "the list as JSON", run(t, w, "session", "list", "--json").wantCode(t, 0).out, `"open": true`)
+	path := w.Sessions()[0]
+	id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+	if err := os.WriteFile(strings.TrimSuffix(path, ".jsonl")+".background.log", []byte("working\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, w, "-r", id, "-p", "hello")
+	has(t, "opening it again", r.out+r.err, "is open in another gnosh", "If it is a run in the background, it lets go of the session when it is done", ".background.log")
+	s.typeLine("/exit")
+	s.exit()
+	hasNot(t, "the list once it is closed", run(t, w, "session", "list").wantCode(t, 0).out, "(open now)")
+}
