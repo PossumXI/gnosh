@@ -24,7 +24,8 @@ type matcher struct {
 
 // compileMatcher reads pattern. With narrow set, a list is made of letters,
 // digits, "_" and "|" only, and "|" alone separates its names; that is the
-// rule for the one event whose values are error kinds.
+// rule for StopFailure, whose values are error kinds, and for FileChanged,
+// whose are file names, as in Claude Code.
 func compileMatcher(pattern string, narrow bool) (matcher, error) {
 	if pattern == "" || pattern == "*" {
 		return matcher{all: true}, nil

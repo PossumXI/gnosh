@@ -8,8 +8,9 @@ type Relaunch struct {
 	// Session is the session's id, or the path of its file.
 	Session string
 	// Fresh says the session has written nothing yet, so it has no file to
-	// resume: the new start makes it under its id (--session-id), with the
-	// name -n gave it.
+	// resume: the new start makes it under its id (--session-id). (Not with
+	// -n's name: a session -n named has its name written as it is made,
+	// so a fresh one is one that /clear began, which -n did not name.)
 	Fresh bool
 	// Mode is the permission mode the session is in.
 	Mode string
@@ -54,7 +55,6 @@ func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
 	yolo, skipped, within, model := false, false, false, false
 	for _, o := range p.occs {
 		switch name := o.f.main(); {
-		case name == "--name" && r.Fresh:
 		case o.f.id == idContinue || o.f.id == idResume || o.f.id == idSessionID || o.f.id == idFork || name == "--name":
 			continue
 		case o.f.id == idYolo:

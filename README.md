@@ -50,7 +50,9 @@ Built:
   events: the tool and prompt events, Stop and SubagentStop, the session
   and summary events, PreModelSwitch and PostModelSwitch, ConfigChange,
   PostToolBatch, CwdChanged, DirectoryAdded and FileChanged among them.
-  Not yet: WorktreeCreate, WorktreeRemove and MessageDisplay.
+  Not yet: WorktreeCreate, WorktreeRemove and MessageDisplay; Setup,
+  PermissionDenied, TaskCreated, TaskCompleted, TeammateIdle and the
+  Elicitation events belong to things gnosh does not have.
 - **What the model is given:** instruction files, skills (with
   allowed-tools and disallowed-tools, effort, `context: fork` in a
   sub-agent, paths, hooks of their own, and commands run before the model

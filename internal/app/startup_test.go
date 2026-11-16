@@ -378,6 +378,29 @@ func TestModelIsNeverGuessed(t *testing.T) {
 		t.Errorf("the request names the model %v", got)
 	}
 
+	// /clear asks again, and in a session that reads lines the answer is
+	// the question's: a command that runs does not take it (the review of
+	// 16 November: the line went to the command, and on to the next
+	// session as its first prompt).
+	w = bare(t, apptest.Reply{Text: "The first model answers."})
+	s = sit(t, w)
+	s.see("? Which model?")
+	s.typeLine("2")
+	s.see("model local/second-model")
+	s.typeLine("/clear")
+	s.see("? Which model?")
+	s.see("Type a number and Enter.")
+	s.typeLine("1")
+	s.see("A new session is open")
+	s.typeLine("hello")
+	s.see("The first model answers.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := w.Model.Requests()
+	if len(reqs) != 1 || reqs[0].JSON["model"] != "first-model" {
+		t.Fatalf("after /clear and a pick of the first model, %d requests, the first naming %v", len(reqs), reqs[0].JSON["model"])
+	}
+
 	// With one model there is nothing to choose.
 	w = apptest.NewWorld(t, apptest.Reply{Text: "The only model answers."})
 	w.Write(w.SettingsFile(), `{"providers": {"local": {"type": "llamacpp", "baseUrl": "`+w.Model.URL+`"}}}`+"\n")

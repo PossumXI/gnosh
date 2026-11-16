@@ -69,7 +69,11 @@ no gate.
 
 ### HOOK-3 Claude Code events gnosh does not fire yet (P2)
 
-Claude Code 2.1.310 had 33 events. The 18 gnosh lacks, best fit first:
+Claude Code 2.1.310 had 33 events. On 16 November 2026 gnosh has 23 of
+them; the 10 it lacks are WorktreeCreate, WorktreeRemove, MessageDisplay,
+Setup, PermissionDenied, TaskCreated, TaskCompleted, TeammateIdle,
+Elicitation and ElicitationResult. The list as it stood when this was
+written, best fit first:
 
 1. `DirectoryAdded` (gnosh has `/add-dir`; work on it had begun and was not
    landed). CC runs it in the background after the directory is added, with

@@ -29,6 +29,8 @@ import (
 // detachPlan is what /background goes on with once the session is closed.
 type detachPlan struct {
 	session, prompt, log string
+	// path is the session's file, which the run holds while it works.
+	path string
 }
 
 // detachedPlan is the plan /background made, or nil.
@@ -42,7 +44,7 @@ func (p *program) detachedPlan() *detachPlan {
 // to the session, or, when it cannot, how to go on by hand.
 func (p *program) detach(args []string, d *detachPlan) int {
 	run := append(append(args, "--print", "--"), d.prompt)
-	p.logHead(d.log, d.session, d.prompt)
+	p.logHead(d.log, d.session, d.path, d.prompt)
 	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), d.log)
 	if err != nil {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
@@ -66,7 +68,7 @@ func (l *live) slashBackground(ctx context.Context, c *SlashContext) error {
 		return err
 	}
 	id := l.ts.ID()
-	d := &detachPlan{session: id, prompt: prompt, log: filepath.Join(l.crashDir(), id+".background.log")}
+	d := &detachPlan{session: id, prompt: prompt, log: filepath.Join(l.crashDir(), id+".background.log"), path: l.ts.Path()}
 	p := l.p
 	p.restartMu.Lock()
 	p.restart, p.detached = args, d
@@ -101,7 +103,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	}
 	run := append(args, "--print", "--", prompt)
 	log := filepath.Join(l.crashDir(), id+".background.log")
-	l.p.logHead(log, id, prompt)
+	l.p.logHead(log, id, filepath.Join(l.crashDir(), id+".jsonl"), prompt)
 	pid, err := l.p.o.Detach(run, slices.Clone(l.p.o.Environ), log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
@@ -141,7 +143,7 @@ func (l *live) watchRun(ctx context.Context, id, logPath string) {
 		if !took && l.p.now().Sub(started) < runStart {
 			continue
 		}
-		_, last, _ := readRunLog(logPath, started)
+		_, last, _, _ := readRunLog(logPath, started)
 		said := ""
 		if last != "" {
 			said = " It ended with: " + oneLine(last, 160)
@@ -180,16 +182,24 @@ func (l *live) copySession(what string) (string, error) {
 }
 
 // logHead begins a run's log with what it is: when it started, the
-// session it goes on with, and its prompt. The run's own output follows.
-// A log that cannot be written to is left to the run, which says why.
-func (p *program) logHead(log, session, prompt string) {
+// session it goes on with, its prompt, and the session's file (which the
+// run holds while it works). The run's own output follows. A log that
+// cannot be written to is left to the run, which says why.
+func (p *program) logHead(log, session, path, prompt string) {
 	f, err := os.OpenFile(log, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "gnosh: %s the session %s goes on in the background with: %s\n", p.now().UTC().Format(time.RFC3339), session, oneLine(prompt, 400))
+	if path != "" {
+		fmt.Fprintf(f, "%s%s\n", runFileLine, path)
+	}
 }
+
+// runFileLine begins the line of a run's log that names its session's
+// file.
+const runFileLine = "gnosh: its session file is "
 
 // backgroundRun is a run that /background or /fork started from this
 // folder: the session it goes on with, its prompt, when it started,
@@ -227,8 +237,10 @@ func (l *live) backgroundRuns() []backgroundRun {
 		}
 		id := strings.TrimSuffix(filepath.Base(p), ".background.log")
 		r := backgroundRun{session: id, log: p, started: info.ModTime()}
-		r.prompt, r.last, r.started = readRunLog(p, r.started)
-		r.running = transcript.InUse(filepath.Join(dir, id+".jsonl"))
+		var file string
+		r.prompt, r.last, r.started, file = readRunLog(p, r.started)
+		// (A session opened from its file elsewhere is held there.)
+		r.running = transcript.InUse(firstOf(file, filepath.Join(dir, id+".jsonl")))
 		if r.running {
 			r.last = ""
 		}
@@ -248,12 +260,13 @@ const runLogRead = 1 << 20
 
 // readRunLog reads the last run in a run's log: the prompt its first line
 // gives (logHead), when it started (started, when the line gives no
-// time), and the last line it printed after that.
-func readRunLog(path string, started time.Time) (prompt, last string, when time.Time) {
+// time), the last line it printed after that, and its session's file
+// when the log names it.
+func readRunLog(path string, started time.Time) (prompt, last string, when time.Time, file string) {
 	when = started
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", when
+		return "", "", when, ""
 	}
 	defer f.Close()
 	if info, err := f.Stat(); err == nil && info.Size() > runLogRead {
@@ -262,10 +275,14 @@ func readRunLog(path string, started time.Time) (prompt, last string, when time.
 	data, _ := io.ReadAll(io.LimitReader(f, runLogRead))
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
+		if p, ok := strings.CutPrefix(line, runFileLine); ok {
+			file = p
+			continue
+		}
 		if rest, ok := strings.CutPrefix(line, "gnosh: "); ok {
 			if at, after, ok := strings.Cut(rest, " the session "); ok {
 				if _, p, ok := strings.Cut(after, " goes on in the background with: "); ok {
-					prompt, last = p, ""
+					prompt, last, file = p, "", ""
 					if t, err := time.Parse(time.RFC3339, at); err == nil {
 						when = t
 					}
@@ -277,5 +294,5 @@ func readRunLog(path string, started time.Time) (prompt, last string, when time.
 			last = line
 		}
 	}
-	return prompt, last, when
+	return prompt, last, when, file
 }

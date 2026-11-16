@@ -33,8 +33,14 @@ import (
 // settingsWatch is how the settings files stood when they were last
 // looked at: a few stats before each request, which is all a look costs.
 type settingsWatch struct {
-	mu     sync.Mutex
-	stamps map[string]fileStamp
+	mu sync.Mutex
+	// stamps are the files as they were last looked at, and accepted as
+	// they were last taken in: a change a ConfigChange hook blocked has
+	// been seen and not accepted, so that no later reload, for another
+	// file's change, takes it in unchecked. recheck says the hooks were
+	// stopped before they had judged, so the files are looked at again.
+	stamps, accepted map[string]fileStamp
+	recheck          bool
 	// hosts are the hosts in force since the settings were read again; nil
 	// while they are the ones the session started with.
 	hosts []config.Host
@@ -94,7 +100,22 @@ func (l *live) sawOwnWrite(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.stamps != nil {
-		w.stamps[path] = stampOf(path)
+		s := stampOf(path)
+		w.stamps[path], w.accepted[path] = s, s
+	}
+}
+
+// watchSettings notes how the settings files stand as the session starts:
+// what it loaded is what it has accepted, so that a change made before the
+// first request is a change too.
+func (l *live) watchSettings() {
+	w := &l.settings
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.stamps, w.accepted = map[string]fileStamp{}, map[string]fileStamp{}
+	for _, path := range l.settingsPaths() {
+		s := stampOf(path)
+		w.stamps[path], w.accepted[path] = s, s
 	}
 }
 
@@ -105,28 +126,51 @@ func (l *live) sawOwnWrite(path string) {
 func (l *live) settingsChanged(ctx context.Context, info agent.RequestInfo) ([]agent.Part, error) {
 	w := &l.settings
 	w.mu.Lock()
-	first := w.stamps == nil
-	if first {
-		w.stamps = map[string]fileStamp{}
-	}
-	var changed []string
-	for _, path := range l.settingsPaths() {
-		s := stampOf(path)
-		if old, seen := w.stamps[path]; seen && old != s || !seen && !first && s.ok {
-			changed = append(changed, path)
+	if w.stamps == nil {
+		// (Not noted as the session started: this first look is the
+		// baseline.)
+		w.stamps, w.accepted = map[string]fileStamp{}, map[string]fileStamp{}
+		for _, path := range l.settingsPaths() {
+			s := stampOf(path)
+			w.stamps[path], w.accepted[path] = s, s
 		}
-		w.stamps[path] = s
-	}
-	w.mu.Unlock()
-	if len(changed) == 0 {
+		w.mu.Unlock()
 		return nil, nil
 	}
-	names := make([]string, len(changed))
-	for i, p := range changed {
+	changed := w.recheck
+	w.recheck = false
+	// pending are the files that are not as they were last taken in: the
+	// ones that changed now, and any whose change was blocked before.
+	var pending []string
+	for _, path := range l.settingsPaths() {
+		s := stampOf(path)
+		if old, seen := w.stamps[path]; seen && old != s || !seen && s.ok {
+			changed = true
+		}
+		w.stamps[path] = s
+		if acc, ok := w.accepted[path]; ok && acc != s || !ok && s.ok {
+			pending = append(pending, path)
+		}
+	}
+	w.mu.Unlock()
+	if !changed || len(pending) == 0 {
+		return nil, nil
+	}
+	names := make([]string, len(pending))
+	for i, p := range pending {
 		names[i] = l.tilde(p)
 	}
 	which := strings.Join(names, " and ")
-	if why, blocked := l.configChange(ctx, changed); blocked {
+	why, blocked, stopped := l.configChange(ctx, pending)
+	switch {
+	case stopped:
+		// Judged again before the next request: nothing is taken in
+		// that its hooks did not pass.
+		w.mu.Lock()
+		w.recheck = true
+		w.mu.Unlock()
+		return nil, nil
+	case blocked:
 		l.flog.logf("settings", "%s changed, and a ConfigChange hook blocked it", which)
 		l.notice(agent.LevelWarning, "settings", fmt.Sprintf("%s changed, and a ConfigChange hook the user set up blocked it: the session keeps the settings it had. %s", which, oneLine(why, 300)))
 		return nil, nil
@@ -142,16 +186,23 @@ func (l *live) settingsChanged(ctx context.Context, info agent.RequestInfo) ([]a
 		l.notice(agent.LevelWarning, "settings", fmt.Sprintf("%s changed, and gnosh would not load the settings now (%s): the session keeps the settings it started with.", which, oneLine(why, 300)))
 		return nil, nil
 	}
-	return l.applySettings(cfg, which), nil
+	parts := l.applySettings(cfg, which)
+	w.mu.Lock()
+	for _, p := range pending {
+		w.accepted[p] = w.stamps[p]
+	}
+	w.mu.Unlock()
+	return parts, nil
 }
 
-// configChange runs the ConfigChange hooks for each settings file that
-// changed, told which it is, and reports whether one blocked the change
-// (and why): then none of the new settings is taken in. A file named by
-// --settings is no source Claude Code has, and runs none.
-func (l *live) configChange(ctx context.Context, changed []string) (string, bool) {
+// configChange runs the ConfigChange hooks for each settings file that is
+// not as it was last taken in, told which it is, and reports whether one
+// blocked the change (and why), or whether they were stopped before they
+// had judged: either way none of the new settings is taken in. A file
+// named by --settings is no source Claude Code has, and runs none.
+func (l *live) configChange(ctx context.Context, changed []string) (why string, blocked, stopped bool) {
 	if !l.hooks.has(hooks.ConfigChange) {
-		return "", false
+		return "", false, false
 	}
 	var whys []string
 	for _, path := range changed {
@@ -162,14 +213,13 @@ func (l *live) configChange(ctx context.Context, changed []string) (string, bool
 		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.ConfigChange, Source: source, FilePath: path})
 		switch {
 		case err != nil:
-			// (The turn was stopped while they ran: nothing is taken in
-			// unchecked.)
-			whys = append(whys, "The ConfigChange hooks were stopped before they finished.")
+			// (The turn was stopped while they ran.)
+			return "", false, true
 		case out.Blocked:
 			whys = append(whys, firstOf(out.Reason, "It gave no reason."))
 		}
 	}
-	return strings.Join(whys, " "), len(whys) > 0
+	return strings.Join(whys, " "), len(whys) > 0, false
 }
 
 // settingsSource is Claude Code's name for the settings file at path:

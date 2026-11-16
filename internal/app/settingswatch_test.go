@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -84,4 +85,62 @@ func TestConfigChangeHook(t *testing.T) {
 	if n := strings.Count(string(data), `"hook_event_name":"ConfigChange"`); n != 2 {
 		t.Errorf("the hook ran %d times for two changes:\n%s", n, data)
 	}
+}
+
+// A change a ConfigChange hook blocked stays out: a later change to
+// another settings file reloads nothing while the blocked one is still
+// blocked, and a change made before the first request (here by a
+// SessionStart hook) is judged too, not taken for the baseline.
+func TestConfigChangeBlockHolds(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write("a.txt", "x\n")
+	w.Write("b.txt", "x\n")
+	log := w.Home + "/hook-log"
+	gate := w.Script(w.Home+"/hooks/gate.sh", "cat >> "+log+"\necho >> "+log+"\necho 'frozen' >&2\nexit 2")
+	hooksBlock := `"hooks": {"ConfigChange": [{"matcher": "user_settings", "hooks": [{"type": "command", "command": "` + gate + `"}]}]}`
+	w.Settings(`{` + hooksBlock + `}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		switch n {
+		case 0:
+			w.Settings(`{` + hooksBlock + `, "permissions": {"deny": ["Bash(rm *)"]}}`)
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo first"}`}}}
+		case 1:
+			// Another settings file changes: the blocked change must not
+			// ride in with it.
+			w.Write(".gnosh/settings.local.json", `{"permissions": {"allow": ["Bash(echo *)"]}}`)
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"echo second"}`}}}
+		case 2:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"rm -f a.txt"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	r := run(t, w, "-y", "-p", "go").wantCode(t, 0)
+	if w.Exists("a.txt") {
+		t.Errorf("the deny rule whose change was blocked came in with another file's change")
+	}
+	has(t, "the person's notice", r.err+r.out, "a ConfigChange hook the user set up blocked it")
+	hasNot(t, "the person's notice", r.err+r.out, "are in force now")
+
+	// A change made before the first request is judged.
+	w2 := apptest.NewWorld(t, apptest.Reply{Text: "Done."})
+	gate2 := w2.Script(w2.Home+"/hooks/gate.sh", "cat > /dev/null\necho 'frozen' >&2\nexit 2")
+	prepared := w2.Home + "/prepared.json"
+	early := w2.Script(w2.Home+"/hooks/early.sh", "cat > /dev/null\ncp "+prepared+" "+w2.SettingsFile())
+	w2.Settings(`{"hooks": {"ConfigChange": [{"matcher": "user_settings", "hooks": [{"type": "command", "command": "` + gate2 + `"}]}],
+		"SessionStart": [{"hooks": [{"type": "command", "command": "` + early + `"}]}]}}`)
+	data, err := os.ReadFile(w2.SettingsFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	m["permissions"] = map[string]any{"deny": []any{"Bash(rm *)"}}
+	data, _ = json.Marshal(m)
+	if err := os.WriteFile(prepared, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = run(t, w2, "-y", "-p", "go").wantCode(t, 0)
+	has(t, "the notice for a change made before the first request", r.err+r.out, "a ConfigChange hook the user set up blocked it")
 }

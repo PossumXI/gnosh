@@ -527,6 +527,8 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		small := l.small.model
 		opts.Small = &small
 	}
+	// (What the session loaded is the settings it has taken in.)
+	l.watchSettings()
 	a, err := agent.New(opts)
 	l.agent = a
 	// Published for the code that runs beside the session's opening (a
@@ -1222,6 +1224,9 @@ func (l *live) kill() {
 func (l *live) close(reason string) {
 	l.closeOnce.Do(func() {
 		l.closing.Store(true)
+		// No FileChanged hook runs after SessionEnd: the watcher ends
+		// first.
+		l.stopWatching()
 		if l.agent != nil {
 			// End stops the turn and then tells the SessionEnd moment,
 			// which closes the shell and runs the hooks.

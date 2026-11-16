@@ -24,6 +24,11 @@ import (
 
 // fileWatch is how the watched files stood at the last look.
 type fileWatch struct {
+	// stop ends the watcher, and done is closed once it has ended: the
+	// session stops it before its SessionEnd hooks run.
+	stop func()
+	done chan struct{}
+
 	mu sync.Mutex
 	// dynamic are the files the hooks named (watchPaths), in force until
 	// a hook names others.
@@ -40,8 +45,11 @@ func (l *live) watchFiles(ctx context.Context) {
 	if !l.hooks.has(hooks.FileChanged) {
 		return
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	l.watch.stop, l.watch.done = cancel, make(chan struct{})
 	l.lookAtWatched(ctx, true)
 	go func() {
+		defer close(l.watch.done)
 		t := time.NewTicker(watchEvery)
 		defer t.Stop()
 		for {
@@ -53,6 +61,19 @@ func (l *live) watchFiles(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// stopWatching ends the watcher and waits, a moment at most, for a
+// FileChanged hook it runs to end, so that none runs after SessionEnd.
+func (l *live) stopWatching() {
+	if l.watch.stop == nil {
+		return
+	}
+	l.watch.stop()
+	select {
+	case <-l.watch.done:
+	case <-time.After(15 * time.Second):
+	}
 }
 
 // watchedPaths are the files watched now: the matchers' and the hooks'.
@@ -89,13 +110,13 @@ func (l *live) lookAtWatched(ctx context.Context, first bool) {
 	w := &l.watch
 	paths := l.watchedPaths()
 	w.mu.Lock()
-	if w.stamps == nil {
-		w.stamps = map[string]fileStamp{}
-	}
+	// Only the files watched now are kept: one dropped and watched again
+	// later starts afresh, as one newly watched does.
+	stamps := make(map[string]fileStamp, len(paths))
 	for _, p := range paths {
 		now := stampOf(p)
 		was, seen := w.stamps[p]
-		w.stamps[p] = now
+		stamps[p] = now
 		switch {
 		case first || !seen:
 		case !was.ok && now.ok:
@@ -106,9 +127,10 @@ func (l *live) lookAtWatched(ctx context.Context, first bool) {
 			changes = append(changes, change{p, "change"})
 		}
 	}
+	w.stamps = stamps
 	w.mu.Unlock()
 	for _, c := range changes {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || l.closing.Load() {
 			return
 		}
 		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.FileChanged, FilePath: c.path, FileEvent: c.event, EnvFile: l.envFile()})

@@ -95,11 +95,12 @@ func TestRelaunchArgs(t *testing.T) {
 	}
 
 	// A session that has written nothing has no file to resume: the new
-	// start makes it under its id, with the name -n gave it.
+	// start makes it under its id. Such a session is one /clear began, so
+	// -n's name is not its own and is left out.
 	got, err := tab.RelaunchArgs(words(t, `gnosh -c -n "a name" --allowedTools Read`), Relaunch{Session: id, Fresh: true})
-	if want := []string{"--name=a name", "--allowedTools=Read", "--session-id=" + id}; err != nil || !slices.Equal(got, want) {
+	if want := []string{"--allowedTools=Read", "--session-id=" + id}; err != nil || !slices.Equal(got, want) {
 		t.Errorf("a fresh session relaunches as %q (%v), want %q", got, err, want)
-	} else if inv, err := tab.Parse(got, tty); err != nil || inv.Conversation != ConversationNew || inv.SessionID != id || inv.Name != "a name" {
+	} else if inv, err := tab.Parse(got, tty); err != nil || inv.Conversation != ConversationNew || inv.SessionID != id || inv.Name != "" {
 		t.Errorf("a fresh session's relaunch reads as %+v (%v)", inv, err)
 	}
 

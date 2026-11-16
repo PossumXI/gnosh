@@ -529,8 +529,22 @@ func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
 	if fromRef, ok := l.modelRef(); ok {
 		from = fromRef.String()
 	}
-	if err := l.beforeModelSwitch(ctx, c, from, ref.String(), name); err != nil {
+	// The hooks may take their time, and may ask the person: the lock is
+	// let go meanwhile, so that what else needs the model (a sub-agent
+	// asking for its own) does not wait on them. A switch made meanwhile
+	// stands, and this one is not made over it.
+	l.switchMu.Unlock()
+	err = l.beforeModelSwitch(ctx, c, from, ref.String(), name)
+	l.switchMu.Lock()
+	if err != nil {
 		return err
+	}
+	now := c.Agent.Model().Info.ID
+	if nowRef, ok := l.modelRef(); ok {
+		now = nowRef.String()
+	}
+	if now != from {
+		return fmt.Errorf("the model was not changed to %s: it became %s while the PreModelSwitch hooks ran", ref, now)
 	}
 	if err := c.Agent.SetModel(mu.model); err != nil {
 		return fmt.Errorf("the model was not changed: %w", err)
