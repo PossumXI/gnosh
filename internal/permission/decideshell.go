@@ -90,8 +90,15 @@ func (e *Engine) judgeLooped(v *bashView, i int, c *simpleCmd, st *lineState) pa
 			pv.exact, pv.prefix = "", ""
 			return pv
 		}
-		if k == 0 {
+		switch {
+		case k == 0:
 			first = pv
+		case first.rule == nil && pv.rule != nil:
+			// A value an allow rule let through, after values that only
+			// read: the loop runs because of the rule, and says so
+			// (oracle seed 115: "for f in a.txt <outside>/secret.txt; do
+			// strings "$f"; done" was put down to only reading).
+			first.rule = pv.rule
 		}
 	}
 	return first

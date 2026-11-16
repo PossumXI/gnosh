@@ -989,6 +989,24 @@ func TestTimeAndARedirection(t *testing.T) {
 	}
 }
 
+// A loop whose values pass partly by only reading and partly by an allow
+// rule runs because of the rule, and its decision names it, as the same
+// commands written one after the other do (oracle seed 115).
+func TestLoopNamesTheRuleThatLetItRun(t *testing.T) {
+	e := engine(t, ModeDefault, rules{allow: []string{"Bash(strings /etc/hosts)"}})
+	for _, line := range []string{
+		`for f in a.go /etc/hosts; do strings "$f"; done`,
+		`strings a.go; strings /etc/hosts`,
+	} {
+		if d := bash(e, line); d.Behavior != Allow || !strings.Contains(d.Reason, "Bash(strings /etc/hosts)") {
+			t.Errorf("%q: got %s (%s), want it allowed by the rule", line, d.Behavior, d.Reason)
+		}
+	}
+	if d := bash(engine(t, ModeDefault, rules{}), `for f in a.go /etc/hosts; do strings "$f"; done`); d.Behavior != Ask {
+		t.Errorf("without the rule: got %s (%s), want ask", d.Behavior, d.Reason)
+	}
+}
+
 // TestReadings: lines the oracle found the engine reading another way
 // than the shell, where no rule was dodged by it. The command that runs
 // must be among the ones the engine reads.
