@@ -92,6 +92,18 @@ whole screen, and it never comes on by itself.
 
 Set: this repository is public.
 
+16 November 2026, on the home AI box (passed on by the session running
+scenarios there):
+
+> the modal doesn't seem to pop up when i type ssh ai and /model
+
+Set: `/model` with nothing after it opens a picker, as Claude Code's and the
+earlier gnosh's did (`spec/DECISIONS.md` item 50). Claude's part: the
+thinking level is asked next, the cursor on the level the switch would take
+anyway; and, by the same rule, `/config` and `/export` with nothing after them
+open pickers too (item 51), and Ctrl+O became Claude Code's transcript view
+(item 49), which his 14 November words had asked for.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

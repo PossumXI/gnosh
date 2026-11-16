@@ -707,4 +707,7 @@ or kept with the reason said (27).
     set). The change runs as /config key=value, quoted where it holds a
     blank, which keeps it for every project as typing it does; a list is
     left to gnosh.json. /config with a key, print mode and the plain
-    front end are as they were.
+    front end are as they were. /export with nothing after it asks the
+    same way, as Claude Code's does: the clipboard (/export --clipboard,
+    which goes as /copy goes, through gnosh ssh's relay to the Mac too)
+    or a file here named for the day and the session.
