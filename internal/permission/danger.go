@@ -642,13 +642,17 @@ func (e *Engine) overwriteDanger(v *bashView, name string, c *simpleCmd, dirs []
 			}
 		}
 	} else {
-		_, targets = flagsAndOperands(c.words[1:], func(f string) bool {
-			switch f {
-			case "-s", "--size", "-r", "--reference", "-n", "--iterations", "--random-source":
-				return true
-			}
-			return false
-		})
+		// The flags that take a value are each program's own: truncate's
+		// -r names a reference file, and shred has no -r, so the word
+		// after "shred -rf" is its target (oracle seed 116).
+		valued := map[string]bool{"-s": true, "--size": true}
+		switch name {
+		case "truncate":
+			valued["-r"], valued["--reference"] = true, true
+		case "shred":
+			valued["-n"], valued["--iterations"], valued["--random-source"] = true, true, true
+		}
+		_, targets = flagsAndOperands(c.words[1:], func(f string) bool { return valued[f] })
 	}
 	if why := e.targetsDanger(v, v.place(c), name, targets, dirs, fromSubst, true); why != "" {
 		return why + " (what it holds would be destroyed)"
@@ -1085,7 +1089,9 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 			// directory right under the root, where X is empty; oracle
 			// seed 105.)
 			inName := lastUnknown >= strings.LastIndex(strings.TrimRight(s, "/"), "/")+1
-			if c := cleanPath(s); c == "" || path.Dir(c) == "/" && c != e.home && c != e.cwd && c != e.cur && !inName {
+			// (The root itself is no lone name under it: "$d/." is / where
+			// d is empty; oracle seed 116.)
+			if c := cleanPath(s); c == "" || c != "/" && path.Dir(c) == "/" && c != e.home && c != e.cwd && c != e.cur && !inName {
 				return ""
 			}
 			if why := e.targetDanger(litOf(s), dirs, fromSubst, recursive); why != "" {

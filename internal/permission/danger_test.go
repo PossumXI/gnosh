@@ -141,6 +141,9 @@ func TestOtherDestroyers(t *testing.T) {
 		"dd if=/dev/zero of=/dev/sda", "dd of=/dev/nvme0n1 if=x", "shred -u *", "shred -u ~/*", "truncate -s 0 *", "truncate -s0 ./*",
 		"shred /dev/sda1", "truncate -s 0 .git/*", "shred -u \"$DIR\"/*", "truncate --size=0 ~/.config/gnosh/*", "dd if=x of=/dev/disk2",
 		"shred -n 3 -u /proj/*",
+		// An empty variable before "/." leaves the root, and shred has no
+		// -r to take the word after it (oracle seed 116).
+		"shred -rf $d/.", "shred $d/.", "truncate -s 0 $d/.", "rm -rf $d/.",
 		// rsync that deletes what is in the way, or takes its sources away.
 		"rsync -a --delete src/ .", "rsync -a --delete empty/ ~/", "rsync --del a/ /", "rsync -av --delete-after src/ ..",
 		"rsync -a --delete x/ ~/.config/gnosh", "rsync -a --delete -e ssh host:dir/ .", "rsync -a --remove-source-files * host:/backup/",

@@ -580,6 +580,12 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 		if b := baseName(rc.name); destroyers[b] && rc.path != "" {
 			ws := []word{litOf(b)}
 			for _, a := range rc.args {
+				// As for rm above: a variable in front of a lone name at
+				// the top that is not one of the usual ones ("$OUT/build")
+				// is not a target the engine claims to stop.
+				if abs, ok := cleanAbs(a, rc.cwd); ok && abs != "/" && path.Dir(abs) == "/" && !topLevelNames[path.Base(abs)] && !lc.writes(a) {
+					continue
+				}
 				ws = append(ws, litOf(a))
 			}
 			known := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
