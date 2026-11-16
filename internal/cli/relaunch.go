@@ -87,9 +87,20 @@ func (o *occurrence) spelled() []string {
 			return []string{name + "=" + o.value}
 		}
 	case kindList:
-		out := make([]string, len(o.raw))
-		for i, v := range o.raw {
-			out[i] = name + "=" + v
+		// One flag for each argument that put something in the list: an
+		// argument that put nothing ("," for rules, a blank path) would be
+		// an empty list on its own, which is refused.
+		var out []string
+		for _, v := range o.raw {
+			if items, _ := splitRules(v); o.f.list == listRules && len(items) == 0 || o.f.list != listRules && blank(v) {
+				continue
+			}
+			out = append(out, name+"="+v)
+		}
+		if len(out) == 0 {
+			// (A list with nothing in it parsed only where that means
+			// something: --tools "".)
+			out = []string{name + "="}
 		}
 		return out
 	}

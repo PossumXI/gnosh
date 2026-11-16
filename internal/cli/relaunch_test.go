@@ -90,3 +90,36 @@ func TestRelaunchArgs(t *testing.T) {
 		t.Error("relaunched with no session")
 	}
 }
+
+// Any command line that opens a session has a relaunch that opens the same
+// session as it: the same flags in force, the session resumed, no prompt.
+// A relaunch that read otherwise would start a /restart in another state,
+// or not at all.
+func FuzzRelaunchArgs(f *testing.F) {
+	tab := allBuilt(f)
+	addSeeds(f, func(line string) { f.Add(line) })
+	const id = "01a1dced-2312-7888-b312-da27ecb33d6d"
+	f.Fuzz(func(t *testing.T, line string) {
+		args := cut(line)
+		before, err := tab.Parse(args, tty)
+		if err != nil || before.Command != CmdInteractive {
+			return
+		}
+		got, err := tab.RelaunchArgs(args, Relaunch{Session: id})
+		if err != nil {
+			t.Fatalf("%q: no relaunch: %v", args, err)
+		}
+		after, err := tab.Parse(got, tty)
+		if err != nil {
+			t.Fatalf("%q: the relaunch %q does not parse: %v", args, got, err)
+		}
+		if after.Command != CmdInteractive || after.Conversation != ConversationResume || after.Resume != id || after.Prompt != "" {
+			t.Fatalf("%q: the relaunch %q opens %v %v %q with the prompt %q", args, got, after.Command, after.Conversation, after.Resume, after.Prompt)
+		}
+		before.Conversation, before.Resume, before.ResumeIsFile, before.Prompt = after.Conversation, after.Resume, after.ResumeIsFile, after.Prompt
+		before.SessionID, before.ForkSession, before.Name = "", false, ""
+		if !reflect.DeepEqual(before, after) {
+			t.Fatalf("%q: the relaunch %q reads otherwise:\n got %+v\nwant %+v", args, got, after, before)
+		}
+	})
+}
