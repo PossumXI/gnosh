@@ -189,7 +189,7 @@ func parseArgs(args []word, spec roSpec) parsed {
 	}
 	for i := 0; i < len(args); i++ {
 		w := args[i]
-		if !w.static() && !(spec.anyArgs && w.counters()) {
+		if !w.static() && !(spec.anyArgs && (w.counters() || w.literalParts())) {
 			out.bad = "an argument is computed when the command runs: " + w.raw
 			return out
 		}

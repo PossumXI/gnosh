@@ -296,6 +296,21 @@ func (w word) counters() bool {
 	return true
 }
 
+// literalParts reports whether every part of the word is text as written:
+// no variable, command or arithmetic. What the shell may still do to it
+// (zsh's =name, a ~ form, a pattern) is a path, a name or a list of file
+// names, which to a command that only prints its arguments ("echo ===",
+// which zsh would take for the path of ==) is no more than text. (A
+// pattern is a listing, and is read as one: see opsWords.)
+func (w word) literalParts() bool {
+	for _, p := range w.parts {
+		if p.kind != partLit {
+			return false
+		}
+	}
+	return !w.brace
+}
+
 // plain reports whether the word is static text with nothing for the shell
 // to do: no quoting, no pattern, no braces, no tilde.
 func (w word) plain() bool {

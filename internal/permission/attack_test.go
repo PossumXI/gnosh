@@ -1390,6 +1390,7 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"grep -E 'a|b' names.txt", "grep -rn \"foo(bar)\" .", "git diff HEAD -- '*.go'", "git diff --name-only HEAD~1 | grep '\\.go$'",
 		"ls *.go", "wc -l src/*.go", "echo héllo wörld", "grep -rn 'naïve' .", "echo \"tab\there\"",
 		"git diff HEAD --stat -- notes.txt; echo \"exit: $?\"", // Qwen, box 1
+		"echo === && ls", "cat a.go && echo === && git status", "echo ==== done ====", // Qwen, box 2
 		"go test ./... > /dev/null 2>&1; echo \"exit=$?\"", "echo $?", "ls; echo \"status $? pid $$ last $! args $#\"",
 		// Subshells (box 1 and box 2, 16 November).
 		"(go test ./... 2>&1 || true)", "(cd src && ls)", "ls && (cd src; cat c.go)", "(cd src && ls) && cat a.go", "(ls; (cd src && ls))",
