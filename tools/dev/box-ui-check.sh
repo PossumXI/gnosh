@@ -17,6 +17,8 @@
 #	ssh ai-remote bash -s -- monitor < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- worktree < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- panel < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- suggest < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- invisible < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -63,6 +65,10 @@
 #               run of its own, whose log gets the model's answer; once the
 #               run lets go of it, gnosh -r opens it again and shows where
 #               it left off
+#   suggest     promptSuggestionEnabled: after the answer, the model's
+#               guess at the next prompt is in the box, and Tab takes it
+#   invisible   a prompt with a zero-width space in it goes without it, and
+#               the screen says so
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -75,8 +81,9 @@ flags=""
 hooks=""
 opts=""
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible) ;;
 vim) opts='"editorMode": "vim", ' ;;
+suggest) opts='"promptSuggestionEnabled": true, ' ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
@@ -85,7 +92,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible)" >&2
 	exit 2
 	;;
 esac
@@ -309,6 +316,16 @@ keys)
 	tmux send-keys -t "$S" Enter
 	done_when() { screen | grep -q "Nothing has been asked of a model" && [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "done in"; }
 	;;
+suggest)
+	tmux send-keys -t "$S" "What is the second line of notes.txt? Answer with that one word." Enter
+	done_when() { screen | grep -q "(Tab takes it)"; }
+	;;
+invisible)
+	# A zero-width space (UTF-8 e2 80 8b) inside a word, typed as text.
+	tmux send-keys -t "$S" -l "$(printf 'Reply with exactly these three words: all is we\342\200\213ll')"
+	tmux send-keys -t "$S" Enter
+	done_when() { screen | grep -q "Took out 1 invisible character" && screen | grep -q "done in"; }
+	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q "HOOK-WAKE" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
@@ -350,6 +367,13 @@ if [ "$scenario" = bgsession ]; then
 	sleep 6
 	echo "=== opened again with gnosh -r"
 	screen | grep -v '^ *$' | tail -12
+fi
+if [ "$scenario" = suggest ]; then
+	tmux send-keys -t "$S" Tab
+	sleep 1
+	echo "=== after Tab"
+	screen | grep -v '^ *$' | tail -6
+	tmux send-keys -t "$S" C-u
 fi
 if [ "$scenario" = config ]; then
 	echo "=== state file: $(tr -d '\n' < "$T/data/gnosh/state.json" 2>/dev/null || echo none)"
