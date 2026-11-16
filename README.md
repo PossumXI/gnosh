@@ -28,7 +28,10 @@ Built:
   the run's own, and `--agent` to run the session as one. It waits for the
   background commands its turns start and lets the model answer how they
   ended.
-- **A session** in the terminal's own scrollback.
+- **A session** in the terminal's own scrollback. Opened again (`-r`,
+  `-c`, `/resume`), it shows where it left off: its last prompt and the
+  model's last answer. It can go on without the terminal (`/background`,
+  `/fork`), and `gnosh session list` marks the sessions open now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small
   model with the model's request, from the open web only), WebSearch on a
   SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,
