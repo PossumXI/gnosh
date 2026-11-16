@@ -358,6 +358,9 @@ type SessionInfo struct {
 	// Keybindings is the person's keybindings.json, where the keys of the
 	// interface are bound to other actions (/keybindings).
 	Keybindings string
+	// ShowPast says the session was opened again, and its conversation is
+	// not on the screen: the interface shows where it left off.
+	ShowPast bool
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

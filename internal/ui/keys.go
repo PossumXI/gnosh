@@ -632,6 +632,8 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.lock()
 		}
 		s.refresh()
+		// (/resume: the session opened shows where it left off.)
+		s.recap()
 		// A command may have put another session behind the controls,
 		// with a task list of its own or none, and deliverables of its
 		// own or none.

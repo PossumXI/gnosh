@@ -875,3 +875,11 @@ or kept with the reason said (27).
     they stand, on the prompt. Claude Code's fork may make itself a work
     tree; gnosh's works in the same folder, and says so, since a fresh
     tree would hold none of the changes the conversation remembers making.
+64. **A session opened again shows where it left off.** Claude Code draws
+    a resumed session's conversation; gnosh's interface drew only its
+    header, so a session that a /background or /fork run had worked on
+    showed nothing of what it did. Now its last prompt and the model's
+    last answer to it are drawn (at most 30 lines of the answer; Ctrl+O
+    shows everything), under a quiet line saying so. Not when the
+    session was written to less than 15 s before it opened (/restart, a
+    rewind): its conversation is still on the screen.

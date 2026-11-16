@@ -240,6 +240,9 @@ type live struct {
 	// newBuildSaid says the person was told of a newer gnosh installed
 	// (restart.go).
 	newBuildSaid atomic.Bool
+	// showPast says the session was opened again long enough after it
+	// was last written to that the interface shows where it left off.
+	showPast bool
 	// promptID is the id of the last prompt the person sent, for the
 	// status line.
 	promptMu sync.Mutex
@@ -562,6 +565,7 @@ func (l *live) openTranscript(ctx context.Context) error {
 		l.ts = ts
 		if l.source != "fork" {
 			l.source = "resume"
+			l.showPast = showPastOf(ts.Entries(), l.p.now())
 		}
 		return nil
 	}
@@ -649,7 +653,26 @@ func (l *live) openTranscript(ctx context.Context) error {
 		ts, l.source = copied, "fork"
 	}
 	l.ts = ts
+	l.showPast = l.source == "resume" && showPastOf(ts.Entries(), l.p.now())
 	return l.nameSession()
+}
+
+// pastShownFor is how recently a session may have been written to and
+// still be on the screen: a session opened again within it was closed
+// moments ago in front of the person (/restart, a rewind), and its
+// conversation is not shown again.
+const pastShownFor = 15 * time.Second
+
+// showPastOf says whether the interface shows the end of a session's
+// conversation as the session opens again: when it has one, and it was
+// last written to longer ago than pastShownFor.
+func showPastOf(entries []transcript.Entry, now time.Time) bool {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if !entries[i].Timestamp.IsZero() {
+			return now.Sub(entries[i].Timestamp) > pastShownFor && slices.ContainsFunc(entries, func(e transcript.Entry) bool { return e.Type == transcript.TypeUser })
+		}
+	}
+	return false
 }
 
 // nameSession gives the session the name -n asks for. A name the person
@@ -1152,6 +1175,7 @@ func (l *live) info() SessionInfo {
 		OutputStyle: l.styleNow(),
 		Color:       l.sessionColor(),
 		Keybindings: l.keybindingsPath(),
+		ShowPast:    l.showPast,
 		Resume:      "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {

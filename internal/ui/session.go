@@ -263,6 +263,8 @@ type session struct {
 
 	// What the status line says.
 	info app.SessionInfo
+	// recapped is the id of the session whose recap was shown (recap.go).
+	recapped string
 	// color is the colour of the prompt mark the session asked for
 	// (/color), "" for the theme's own.
 	color  string
@@ -339,6 +341,7 @@ func (s *session) start() {
 	s.header()
 	// (What in the keybindings file cannot be used is said at once.)
 	s.keysNow()
+	s.recap()
 	if h, ok := s.c.(historian); ok {
 		var drafts []editor.Draft
 		for _, p := range h.History() {
