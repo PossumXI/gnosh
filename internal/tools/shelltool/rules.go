@@ -2,6 +2,7 @@ package shelltool
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -306,6 +307,11 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 				argHost, m.hostList())
 		}
 	}
+	if a.host == nil {
+		if note := m.misreadBefore(a.command); note != "" {
+			return errors.New(note)
+		}
+	}
 	main := env == nil || env.ParentSessionID == ""
 	if limit := m.opt.LongSleep; limit > 0 && a.host == nil && !a.background && main {
 		if d := leadingSleep(a.command); d >= limit {
@@ -314,6 +320,42 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 		}
 	}
 	return nil
+}
+
+// misreadBefore says, before a command runs, what was meant by one that
+// cannot run as written: one that runs a session tool's name, or code for a
+// tool (Options.Misread), as a program, where no program of that name is
+// installed. Without it the person is asked about a command that only
+// fails, and the model learns why after it has (box 1 and box 2, 16
+// November: one command of Qwen's in twenty was mem.Show() or gnovm_run
+// typed into the shell). Only the first line is read, as the other rules
+// read it: a later one may be inside a quoted text that runs on (a commit
+// message about mem.Show(), say).
+func (m *Manager) misreadBefore(command string) string {
+	line, _ := firstCommandLine(command)
+	for _, p := range pieces(line) {
+		prog := programOf(p.text)
+		if prog == "" || strings.ContainsAny(prog, "/$`") {
+			continue
+		}
+		if _, ok := m.onPath(prog); ok {
+			continue
+		}
+		if slices.Contains(m.opt.ToolNames, prog) {
+			return toolNotProgram(prog)
+		}
+		if m.opt.Misread != nil {
+			if note := m.opt.Misread(command, []string{prog}); note != "" {
+				return note
+			}
+		}
+	}
+	return ""
+}
+
+// toolNotProgram is the note for a tool's name run as a program.
+func toolNotProgram(name string) string {
+	return name + " is one of your tools, not a program: call it as a tool, with its arguments, instead of typing it into a command"
 }
 
 // lookedUp returns the program a command looked for, when looking a
@@ -387,7 +429,7 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 			first = programOf(ps[0].text)
 		}
 		if a.host == nil && first != "" && slices.Contains(m.opt.ToolNames, first) {
-			notes = append(notes, first+" is one of your tools, not a program: call it as a tool, with its arguments, instead of typing it into a command")
+			notes = append(notes, toolNotProgram(first))
 		} else {
 			notes = append(notes, "exit code 127 means a program the command names is not installed "+where+". "+instead)
 		}

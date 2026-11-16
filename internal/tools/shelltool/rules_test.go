@@ -273,36 +273,63 @@ func TestNotesUnderAFailure(t *testing.T) {
 		t.Errorf("the shell's own message is gone:\n%s", core.TextOf(res.Content))
 	}
 
-	// Misread is asked about a failed command on this machine, with the
-	// programs its first line runs, and what it says is the only note.
+	// Misread is asked, before a command runs, about each program of its
+	// first line that is not installed, and a command it says was misread
+	// does not run: what it says is the refusal. A command on this machine
+	// that fails is put to it again, with the programs its first line
+	// runs, and what it says then is the only note.
 	var asked [][]string
 	mr := newManager(t, Options{ToolNames: []string{"gnovm_run"}, Misread: func(command string, programs []string) string {
 		asked = append(asked, programs)
-		if len(programs) > 0 && programs[0] == "gnosh_mem_xyz" {
+		if slices.Contains(programs, "gnosh_mem_xyz") || slices.Contains(programs, "sh") && strings.Contains(command, "x(") {
 			return "it was Gno"
 		}
 		return ""
 	}})
-	res = bash(t, mr, env, "gnosh_mem_xyz show")
-	if exitCode(t, res) != 127 || !hasNote(res, "it was Gno") || hasNote(res, "is not installed") {
+	res = bash(t, mr, env, "touch ran && gnosh_mem_xyz show")
+	if !res.IsError || core.TextOf(res.Content) != "it was Gno" {
 		t.Errorf("a misread command:\n%s", core.TextOf(res.Content))
 	}
-	bash(t, mr, env, "echo 'x(' | sh -s")
+	if _, err := os.Stat(filepath.Join(env.Cwd, "ran")); err == nil {
+		t.Error("a misread command ran")
+	}
+	res = bash(t, mr, env, "echo 'x(' | sh -s")
+	if exitCode(t, res) == 0 || !hasNote(res, "it was Gno") {
+		t.Errorf("a misread command that failed:\n%s", core.TextOf(res.Content))
+	}
 	bash(t, mr, env, "echo fine")
+	// (Only the first line is read before the run: a later one may be in
+	// a quoted text that goes on, and here it is.)
+	if res := bash(t, mr, env, "echo 'one\ngnosh_mem_xyz show'"); res.IsError {
+		t.Errorf("a text that goes on to a second line is taken for a command:\n%s", core.TextOf(res.Content))
+	}
 	if want := [][]string{{"gnosh_mem_xyz"}, {"echo", "sh"}}; !slices.EqualFunc(asked, want, slices.Equal) {
 		t.Errorf("Misread was asked about %q, want %q", asked, want)
 	}
 
-	// One of the session's tools, typed as a command.
-	for _, command := range []string{"GnoshReadTool notes.txt", "gnovm_run 'mem.Next()'", "FOO=1 GnoshEditTool a b"} {
-		res := bash(t, m, env, command)
-		name := strings.Fields(strings.TrimPrefix(command, "FOO=1 "))[0]
-		if exitCode(t, res) != 127 || !hasNote(res, name+" is one of your tools, not a program: call it as a tool, with its arguments, instead of typing it into a command") {
-			t.Errorf("%q:\n%s", command, core.TextOf(res.Content))
+	// One of the session's tools, typed as a command, does not run either.
+	for _, c := range []struct{ command, name string }{
+		{"GnoshReadTool notes.txt", "GnoshReadTool"},
+		{"gnovm_run 'mem.Next()'", "gnovm_run"},
+		{"FOO=1 GnoshEditTool a b", "GnoshEditTool"},
+		{"touch ran && GnoshReadTool x", "GnoshReadTool"},
+	} {
+		res := bash(t, m, env, c.command)
+		if want := c.name + " is one of your tools, not a program: call it as a tool, with its arguments, instead of typing it into a command"; !res.IsError || core.TextOf(res.Content) != want {
+			t.Errorf("%q:\n%s", c.command, core.TextOf(res.Content))
 		}
-		if hasNote(res, "is not installed") {
-			t.Errorf("%q is answered as a missing program:\n%s", command, core.TextOf(res.Content))
+		if _, err := os.Stat(filepath.Join(env.Cwd, "ran")); err == nil {
+			t.Errorf("%q ran", c.command)
 		}
+	}
+	// A program of that name, where there is one, runs.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "GnoshReadTool"), []byte("#!/bin/sh\necho the program\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mp := newManager(t, Options{ToolNames: []string{"GnoshReadTool"}, Env: []string{"PATH=" + bin + ":" + os.Getenv("PATH")}})
+	if res := bash(t, mp, env, "GnoshReadTool x"); res.IsError || !strings.Contains(printed(res), "the program") {
+		t.Errorf("an installed program named like a tool:\n%s", core.TextOf(res.Content))
 	}
 
 	// A lookup that found nothing prints nothing, and is told the same.

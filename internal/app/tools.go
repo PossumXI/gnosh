@@ -285,14 +285,17 @@ const gnoRunTool = "gnovm_run"
 // gnoCall finds a call on mem written as Gno: mem.Show(), mem.Todo(...).
 var gnoCall = regexp.MustCompile(`\bmem\.[A-Z][A-Za-z0-9_]*\(`)
 
-// misreadGno says of a command that failed that it was Gno for mem typed
-// into a shell, when it was: mem, or one of its calls, run as a program
-// (mem show, mem.Show()), or Gno handed to a shell or to gnosh (echo
-// 'mem.Show()' | bash). A model new to mem tries these first.
+// misreadGno says of a command that it was Gno for mem typed into a shell,
+// when it was: mem, one of its calls, or a name made up from it or from the
+// tool, run as a program (mem show, mem.Show(), mem_next, gnovm_list), or
+// Gno handed to a shell or to gnosh (echo 'mem.Show()' | bash). A model new
+// to mem tries these first. The shell tool asks before a command runs,
+// about the programs that are not installed, and after one fails.
 func misreadGno(command string, programs []string) string {
 	for _, p := range programs {
 		p = path.Base(p)
-		if p == "mem" || strings.HasPrefix(p, "mem.") || (gnoCall.MatchString(command) && slices.Contains([]string{"bash", "sh", "dash", "zsh", "gnosh"}, p)) {
+		madeUp := p == "mem" || p == "gnovm" || strings.HasPrefix(p, "mem.") || strings.HasPrefix(p, "mem_") || strings.HasPrefix(p, "gnovm_")
+		if madeUp || (gnoCall.MatchString(command) && slices.Contains([]string{"bash", "sh", "dash", "zsh", "gnosh"}, p)) {
 			return "mem is Gno, which your " + gnoRunTool + " tool runs: it is no program, and no shell runs it. Call " + gnoRunTool + " with the Gno itself (mem.Show(), say) instead of putting it in a command"
 		}
 	}

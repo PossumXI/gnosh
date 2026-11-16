@@ -117,6 +117,19 @@ func (m *Manager) sshProgram(h *Host) (string, error) {
 		}
 		return name, nil
 	}
+	if path, ok := m.onPath(name); ok {
+		return path, nil
+	}
+	return "", gone
+}
+
+// onPath finds a program in the directories of the PATH commands are given,
+// the absolute ones only.
+func (m *Manager) onPath(name string) (string, bool) {
+	usable := func(path string) bool {
+		st, err := os.Stat(path)
+		return err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0
+	}
 	for _, kv := range commandEnv(m.opt.Environ(), "", m.opt.Env) {
 		dirs, ok := strings.CutPrefix(kv, "PATH=")
 		if !ok {
@@ -127,11 +140,11 @@ func (m *Manager) sshProgram(h *Host) (string, error) {
 				continue
 			}
 			if path := filepath.Join(dir, name); usable(path) {
-				return path, nil
+				return path, true
 			}
 		}
 	}
-	return "", gone
+	return "", false
 }
 
 // usableTarget reports whether a destination can be handed to ssh: it is

@@ -166,12 +166,15 @@ type Options struct {
 	// exists is answered with word that it is a tool, to be called as one.
 	ToolNames []string
 
-	// Misread, when not nil, is asked about a command on this machine that
-	// failed, and says what was meant when it can tell: code written for
-	// one of the session's tools and typed into a shell, say. programs are
-	// the programs the command's first line runs, as the shell would find
-	// them, in order. What it says is the note on the failure, in place of
-	// the others; "" leaves them.
+	// Misread, when not nil, says what was meant by a command on this
+	// machine when it can tell: code written for one of the session's tools
+	// and typed into a shell, say. It is asked before the command runs,
+	// about each program of its first line that is not installed, one at a
+	// time, and what it says then is the refusal: the command does not
+	// run. It is asked again after a command fails, with the programs the
+	// first line runs, as the shell would find them, in order, and what it
+	// says then is the note on the failure, in place of the others. ""
+	// leaves the command, or the notes, as they are.
 	Misread func(command string, programs []string) string
 
 	// LongSleep, when not zero, refuses a foreground command of the

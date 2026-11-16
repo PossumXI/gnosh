@@ -325,6 +325,12 @@
 //     that begins by sleeping that long or longer is refused, with what to
 //     do instead: run the wait in the background and be told when it ends.
 //     Several shorter sleeps one after another count together.
+//   - A command on this machine whose first line runs, as a program that
+//     is not installed, the name of one of the session's tools
+//     (Options.ToolNames), or a name Options.Misread says was meant for a
+//     tool (gnosh's: mem.Show() and its kin, typed into a shell), is
+//     refused before it runs, with what to call instead. It would only
+//     fail, after a person was asked about it.
 //   - Under a failure: exit code 127 gets a note that the program is not
 //     installed on that machine, to do it another way or ask the user, and
 //     not to search the disk; a lookup that found nothing (which, command

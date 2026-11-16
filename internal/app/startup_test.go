@@ -75,6 +75,13 @@ func TestMisreadGno(t *testing.T) {
 		{"grep -n 'mem.Show(' main.go", []string{"grep"}, false},
 		{"echo hi | bash", []string{"echo", "bash"}, false},
 		{"memtest --all", []string{"memtest"}, false},
+		// Names made up from mem and from the tool (box 1 and box 2, 16
+		// November).
+		{"mem_next", []string{"mem_next"}, true},
+		{"cd x && gnovm_list", []string{"cd", "gnovm_list"}, true},
+		{"gnovm run 'mem.Show()'", []string{"gnovm"}, true},
+		{"gnodev ./r", []string{"gnodev"}, false},
+		{"memory_check", []string{"memory_check"}, false},
 	} {
 		if got := misreadGno(c.command, c.programs) != ""; got != c.want {
 			t.Errorf("misreadGno(%q) gave a note: %v, want %v", c.command, got, c.want)
