@@ -385,6 +385,54 @@ func TestModelSwitchAndDirectoryHooks(t *testing.T) {
 	s.exit()
 }
 
+// PreModelSwitch runs before /model switches the model, with the models
+// and the conversation's size: a refusal (exit 2) keeps the model and
+// says why, and "ask" puts the switch to the person, whose yes makes it.
+func TestPreModelSwitchHook(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Noted."})
+	log := w.Home + "/hook-log"
+	once := w.Home + "/refused-once"
+	pre := w.Script(w.Home+"/hooks/pre.sh", "cat >> "+log+"\necho >> "+log+"\n"+
+		"if [ ! -e "+once+" ]; then touch "+once+"; echo 'not before the release' >&2; exit 2; fi\n"+
+		`echo '{"hookSpecificOutput": {"hookEventName": "PreModelSwitch", "permissionDecision": "ask", "permissionDecisionReason": "the switch sends the whole conversation again"}}'`)
+	post := w.Script(w.Home+"/hooks/post.sh", "cat >> "+log+"\necho >> "+log)
+	w.Settings(`{"hooks": {"PreModelSwitch": [{"matcher": "test-model", "hooks": [{"type": "command", "command": "` + pre + `"}]}],
+		"PostModelSwitch": [{"hooks": [{"type": "command", "command": "` + post + `"}]}]}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/model local/test-model")
+	s.see("refused the switch to local/test-model. not before the release")
+	if data, _ := os.ReadFile(log); strings.Contains(string(data), "PostModelSwitch") {
+		t.Fatalf("a refused switch ran the PostModelSwitch hooks:\n%s", data)
+	}
+	s.typeLine("/model local/test-model")
+	s.see("the switch sends the whole conversation again")
+	s.typeLine("2")
+	s.see("the model was not changed")
+	s.typeLine("/model local/test-model")
+	s.see("the switch sends the whole conversation again")
+	s.typeLine("1")
+	s.see("The model is local/test-model")
+	data, _ := os.ReadFile(log)
+	has(t, "what the hooks read", string(data), `"hook_event_name":"PreModelSwitch"`, `"to_model":"local/test-model"`,
+		`"requested_model":"local/test-model"`, `"source":"command"`, `"context_tokens":`, `"hook_event_name":"PostModelSwitch"`)
+	if n := strings.Count(string(data), `"hook_event_name":"PostModelSwitch"`); n != 1 {
+		t.Fatalf("PostModelSwitch ran %d times for one switch made:\n%s", n, data)
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// A PreModelSwitch hook's "ask" is a refusal in a run, where nobody can
+// answer, as in Claude Code.
+func TestPreModelSwitchAskInARun(t *testing.T) {
+	w := apptest.NewWorld(t)
+	pre := w.Script(w.Home+"/hooks/pre.sh", `cat > /dev/null; echo '{"hookSpecificOutput": {"hookEventName": "PreModelSwitch", "permissionDecision": "ask", "permissionDecisionReason": "costly"}}'`)
+	w.Settings(`{"hooks": {"PreModelSwitch": [{"hooks": [{"type": "command", "command": "` + pre + `"}]}]}}`)
+	r := run(t, w, "-p", "/model local/test-model")
+	has(t, "the run's output", r.out+r.err, "nobody is here to confirm it. costly")
+}
+
 // CwdChanged runs when a command leaves the shell in another directory:
 // it reads the old one and the new one, once per move, and an export it
 // writes to the environment file reaches the next command.

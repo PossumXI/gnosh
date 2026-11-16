@@ -333,6 +333,11 @@ for i in $(seq 1 300); do
 done
 echo "=== after ($i s)"
 screen
+if [ "$scenario" = basic ]; then
+	# The prompt and the answer with their colours, ESC shown as ^[.
+	echo "=== colours:"
+	tmux capture-pane -p -e -S -80 -t "$S" | grep -a -i "all is well" | cat -v | cut -c1-300
+fi
 if [ "$scenario" = bgsession ]; then
 	echo "=== the run's log: $(cat "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null | tr '\n' ' ')"
 	log=$(ls "$T"/data/gnosh/projects/*/*.background.log 2>/dev/null | head -1)

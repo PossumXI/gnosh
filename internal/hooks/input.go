@@ -89,8 +89,9 @@ type Input struct {
 
 	// Source says, for SessionStart, how the session comes to start:
 	// startup, resume, clear, compact or fork ("source"); SessionStart
-	// matchers are tested against it. For PostModelSwitch it is what
-	// switched the model (command), and for DirectoryAdded what added the
+	// matchers are tested against it. For PreModelSwitch and
+	// PostModelSwitch it is what asked for the switch (command), and for
+	// DirectoryAdded what added the
 	// directory (slash_command), which DirectoryAdded matchers are tested
 	// against.
 	Source string
@@ -145,11 +146,15 @@ type Input struct {
 	Title            string
 	NotificationType string
 
-	// FromModel, ToModel and RequestedModel are, for PostModelSwitch, the
-	// model before, the model after (PostModelSwitch matchers are tested
-	// against it), and the name it was asked for by ("from_model",
-	// "to_model", "requested_model").
+	// FromModel, ToModel and RequestedModel are, for PreModelSwitch and
+	// PostModelSwitch, the model before, the model after (their matchers
+	// are tested against it), and the name it was asked for by
+	// ("from_model", "to_model", "requested_model").
 	FromModel, ToModel, RequestedModel string
+	// ContextTokens is, for PreModelSwitch and PostModelSwitch, how many
+	// tokens the conversation came to at the last count: what the next
+	// request sends the new model ("context_tokens").
+	ContextTokens int
 	// Directory is, for DirectoryAdded, the directory added ("directory").
 	Directory string
 	// OldCwd and NewCwd are, for CwdChanged, the directory the shell was
@@ -192,7 +197,7 @@ func (in *Input) subject() string {
 		return in.LoadReason
 	case Notification:
 		return in.NotificationType
-	case PostModelSwitch:
+	case PreModelSwitch, PostModelSwitch:
 		return in.ToModel
 	case DirectoryAdded:
 		return in.Source
@@ -200,6 +205,20 @@ func (in *Input) subject() string {
 		return in.CommandName
 	}
 	return ""
+}
+
+// subjects returns every name the event's matchers may fit: the subject,
+// and for a model switch also the model's own name without its provider,
+// so that "qwen3.8-27b" fits qwen/qwen3.8-27b, as in Claude Code
+// "claude-opus-5" fits every spelling of that model.
+func (in *Input) subjects() []string {
+	s := in.subject()
+	if in.Event == PreModelSwitch || in.Event == PostModelSwitch {
+		if _, id, ok := strings.Cut(s, "/"); ok && id != "" {
+			return []string{s, id}
+		}
+	}
+	return []string{s}
 }
 
 // check says what is wrong with the Input as the agent loop built it.
@@ -315,11 +334,12 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 		m["message"] = in.Message
 		set("title", in.Title)
 		m["notification_type"] = in.NotificationType
-	case PostModelSwitch:
+	case PreModelSwitch, PostModelSwitch:
 		m["from_model"] = in.FromModel
 		m["to_model"] = in.ToModel
 		m["requested_model"] = in.RequestedModel
 		m["source"] = in.Source
+		m["context_tokens"] = in.ContextTokens
 	case DirectoryAdded:
 		m["directory"] = in.Directory
 		m["source"] = in.Source

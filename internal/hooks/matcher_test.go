@@ -190,6 +190,8 @@ func TestValueMatchersChooseTheHooks(t *testing.T) {
 	all = append(all, hooks(Stop, "", "*")...)
 	all = append(all, hooks(UserPromptSubmit, "")...)
 	all = append(all, hooks(SubagentStop, "*")...)
+	all = append(all, hooks(PreModelSwitch, "test-model", "local/test-model", "other-model|big")...)
+	all = append(all, hooks(PostModelSwitch, "test-model")...)
 	r := newRunner(t, options(t), all...)
 
 	tests := []struct {
@@ -219,6 +221,12 @@ func TestValueMatchersChooseTheHooks(t *testing.T) {
 		{"the end of a turn", func(in *Input) {}, Stop, []string{"(none)", "*"}},
 		{"a prompt", func(in *Input) { in.Prompt = "Bash Stop startup" }, UserPromptSubmit, []string{"(none)"}},
 		{"the end of a sub-agent", func(in *Input) { in.AgentType = "Explore" }, SubagentStop, []string{"*"}},
+		// A model is matched as provider/model and by its own name.
+		{"a switch", func(in *Input) { in.ToModel = "local/test-model" }, PreModelSwitch, []string{"local/test-model", "test-model"}},
+		{"a switch to a model named like it", func(in *Input) { in.ToModel = "local/test-model-2" }, PreModelSwitch, []string{"local/test-model"}},
+		{"a switch to another provider's model", func(in *Input) { in.ToModel = "remote/big" }, PreModelSwitch, []string{"other-model|big"}},
+		{"a model with no provider", func(in *Input) { in.ToModel = "test-model" }, PreModelSwitch, []string{"test-model"}},
+		{"after a switch", func(in *Input) { in.ToModel = "remote/test-model" }, PostModelSwitch, []string{"test-model"}},
 	}
 	for _, tt := range tests {
 		in := input(tt.ev)

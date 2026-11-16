@@ -26,6 +26,8 @@ type Outcome struct {
 	//     next instruction.
 	//   - PostToolUse, PostToolUseFailure: the call has run. Reason goes
 	//     to the model as feedback, after the tool's output.
+	//   - PreModelSwitch: the model must not be switched. The person is
+	//     given Reason.
 	//
 	// On every other event Blocked is false whatever the hooks said: see
 	// Warnings.
@@ -54,6 +56,10 @@ type Outcome struct {
 	//
 	// PermissionRequest: Allow, Deny (the model is given Reason and goes
 	// on) or NoDecision (show the question).
+	//
+	// PreModelSwitch: Deny (Blocked is true), Ask (the person is asked
+	// whether to switch, with Reason; where nobody can answer, the switch
+	// is refused), or Allow and NoDecision (the switch is made).
 	PermissionDecision Decision
 
 	// UpdatedInput, when not nil, replaces the tool call's whole input
@@ -567,10 +573,10 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 	case info.class == answers:
 	case out.Blocked:
 		out.Reason = join(blocks)
-		if event == PreToolUse {
+		if event == PreToolUse || event == PreModelSwitch {
 			out.PermissionDecision = Deny
 		}
-	case event != PreToolUse:
+	case event != PreToolUse && event != PreModelSwitch:
 	case len(asks) > 0:
 		out.PermissionDecision, out.Reason = Ask, join(asks)
 		out.UpdatedInput = input

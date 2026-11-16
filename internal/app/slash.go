@@ -529,6 +529,9 @@ func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
 	if fromRef, ok := l.modelRef(); ok {
 		from = fromRef.String()
 	}
+	if err := l.beforeModelSwitch(ctx, c, from, ref.String(), name); err != nil {
+		return err
+	}
 	if err := c.Agent.SetModel(mu.model); err != nil {
 		return fmt.Errorf("the model was not changed: %w", err)
 	}

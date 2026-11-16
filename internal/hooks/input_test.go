@@ -227,9 +227,14 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			want: with(common(Notification), map[string]any{"message": "the turn finished a minute ago", "notification_type": "idle_prompt"}),
 		},
 		{
+			name: "PreModelSwitch",
+			in:   Input{Event: PreModelSwitch, FromModel: "local/a", ToModel: "local/b", RequestedModel: "b", Source: "command", ContextTokens: 182340},
+			want: with(common(PreModelSwitch), map[string]any{"from_model": "local/a", "to_model": "local/b", "requested_model": "b", "source": "command", "context_tokens": 182340.0}),
+		},
+		{
 			name: "PostModelSwitch",
 			in:   Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", RequestedModel: "b", Source: "command"},
-			want: with(common(PostModelSwitch), map[string]any{"from_model": "local/a", "to_model": "local/b", "requested_model": "b", "source": "command"}),
+			want: with(common(PostModelSwitch), map[string]any{"from_model": "local/a", "to_model": "local/b", "requested_model": "b", "source": "command", "context_tokens": 0.0}),
 		},
 		{
 			name: "DirectoryAdded",
@@ -436,6 +441,7 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 			with(always(InstructionsLoaded), "GNOSH_INSTRUCTIONS_LOAD_REASON", "nested_traversal")},
 		{"Notification", Input{Event: Notification, NotificationType: "idle_prompt", Message: "idle"},
 			with(always(Notification), "GNOSH_NOTIFICATION_TYPE", "idle_prompt")},
+		{"PreModelSwitch", Input{Event: PreModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PreModelSwitch)},
 		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
 		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
 		{"UserPromptExpansion", Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", Prompt: "x"}, always(UserPromptExpansion)},

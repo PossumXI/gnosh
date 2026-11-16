@@ -66,6 +66,8 @@
 //	StopFailure         nothing; what it prints is not read      error kind       600 s
 //	InstructionsLoaded  nothing; what it prints is not read      load reason      600 s
 //	Notification        nothing; what it prints is not read      notification     600 s
+//	PreModelSwitch      the model is not switched                model switched to 30 s
+//	PostModelSwitch     one warning; cannot block                model switched to 30 s
 //
 // A hook's own "timeout" replaces the default; on SessionEnd it counts up
 // to 60 seconds. A hook on an event that takes no matcher must not have
@@ -251,7 +253,7 @@
 //
 // Check returns every problem at once, and NewRunner refuses a
 // configuration that has one: an event name that is not exactly one of
-// the nineteen (a misspelling, another letter case, or a Claude Code event
+// gnosh's events (a misspelling, another letter case, or a Claude Code event
 // gnosh does not have); an event this build does not fire
 // (Options.Fires); a hook type other than "command"; an "if" that is not
 // a string; "args"; a background hook; "onFailure" other than "continue"; any field

@@ -193,15 +193,15 @@ func parseAnswer(event Event, info eventInfo, out []byte) answer {
 							permission = s
 						}
 					}
-					if event != PreToolUse {
-						a.fail("it gives \"permissionDecision\", which only a PreToolUse hook can")
+					if event != PreToolUse && event != PreModelSwitch {
+						a.fail("it gives \"permissionDecision\", which only a PreToolUse or PreModelSwitch hook can")
 					}
 				case g.key == "permissionDecisionReason":
 					// Read on every event too: it is the reason of a deny
 					// that holds wherever it was written.
 					permReason, _ = a.str(g)
-					if event != PreToolUse && !hasKey(inner, "permissionDecision") {
-						a.fail("it gives \"permissionDecisionReason\", which only a PreToolUse hook can")
+					if event != PreToolUse && event != PreModelSwitch && !hasKey(inner, "permissionDecision") {
+						a.fail("it gives \"permissionDecisionReason\", which only a PreToolUse or PreModelSwitch hook can")
 					}
 				case !slices.Contains(info.fields, g.key):
 					a.fail("\"hookSpecificOutput\" has %s, which is not something a %s hook can say%s", quote(g.key), event, known(info.fields))
@@ -242,7 +242,7 @@ func parseAnswer(event Event, info eventInfo, out []byte) answer {
 	// proper form; a refusal in another form is still a refusal, and
 	// anything else in another form is a mistake.
 	switch event {
-	case PreToolUse:
+	case PreToolUse, PreModelSwitch:
 		switch {
 		case permission != "": // it wins over the older top-level form
 			a.refuse, a.ask, a.approve = permission == "deny", permission == "ask", permission == "allow"

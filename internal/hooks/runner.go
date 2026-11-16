@@ -25,7 +25,7 @@ type Options struct {
 	// Fires lists the events the program really fires. It has no
 	// default: a hook configured on an event that is not listed would
 	// never run, so Check reports it and NewRunner refuses it, and Run
-	// refuses an event that is not listed. Events returns all fifteen.
+	// refuses an event that is not listed. Events returns all of them.
 	Fires []Event
 
 	// ProjectDir is the project's root, where the session started. Hooks
@@ -475,7 +475,7 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		case toolName:
 			matched, guardOnly = r.tools.fit(h.m, in.ToolName)
 		case ownValue:
-			matched = h.m.matches(in.subject())
+			matched = h.m.matchesAny(in.subjects())
 		}
 		if !matched {
 			continue

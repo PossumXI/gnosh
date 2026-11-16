@@ -44,7 +44,7 @@ var exits = []struct {
 
 // Every exit status on every event that can block.
 func TestExitStatusOnEveryBlockingEvent(t *testing.T) {
-	for _, event := range []Event{PreToolUse, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop} {
+	for _, event := range []Event{PreToolUse, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, PreModelSwitch} {
 		for _, tt := range exits {
 			t.Run(string(event)+"/"+tt.name, func(t *testing.T) {
 				t.Parallel()
@@ -62,7 +62,7 @@ func TestExitStatusOnEveryBlockingEvent(t *testing.T) {
 					lacks(t, "the reason", out.Reason, "could not check")
 				}
 				wantDecision := NoDecision
-				if event == PreToolUse && tt.blocks {
+				if (event == PreToolUse || event == PreModelSwitch) && tt.blocks {
 					wantDecision = Deny
 				}
 				if out.PermissionDecision != wantDecision {
@@ -229,8 +229,9 @@ func TestCouldNotEvaluateOnEveryEvent(t *testing.T) {
 
 				sentence := []string{"The " + string(event) + ` hook "audio-check" could not check this`, "A check that could not run does not pass."}
 				switch event {
-				case PreToolUse:
-					// The call is blocked, and the model reads why.
+				case PreToolUse, PreModelSwitch:
+					// The call (or the switch) is blocked, and the model
+					// (or the person) reads why.
 					if !out.Blocked || out.PermissionDecision != Deny {
 						t.Errorf("Blocked %v, PermissionDecision %q; want the call blocked", out.Blocked, out.PermissionDecision)
 					}
@@ -292,7 +293,7 @@ func TestExitTwoOnEveryEvent(t *testing.T) {
 				t.Errorf("CouldNotEvaluate %v, EndTurn %v for a plain block", out.CouldNotEvaluate, out.EndTurn)
 			}
 			switch event {
-			case PreToolUse:
+			case PreToolUse, PreModelSwitch:
 				if !out.Blocked || out.PermissionDecision != Deny || out.Reason != "not like this" || rec.Result != ResultBlocked {
 					t.Errorf("got %+v", out)
 				}

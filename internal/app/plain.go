@@ -88,6 +88,9 @@ type plain struct {
 	// ask when a question has waited a while.
 	idle *time.Timer
 	ask  *time.Timer
+	// held are the lines typed while a command ran that did not answer a
+	// question of it: they are taken, in order, once it is done.
+	held []string
 
 	wake chan struct{}
 }
@@ -581,6 +584,15 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 			}
 			again = recheck.C
 		}
+		if len(f.held) > 0 {
+			line := f.held[0]
+			f.held = f.held[1:]
+			if quit := f.line(ctx, c, line); quit {
+				c.Quit("prompt_input_exit")
+				return f.leave(c, cli.ExitOK)
+			}
+			continue
+		}
 		f.prompt()
 		select {
 		case line, ok := <-lines:
@@ -749,7 +761,7 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 		return false
 	}
 	if strings.HasPrefix(text, "/") {
-		res, err := c.Command(ctx, text)
+		res, err := f.command(ctx, c, text)
 		if res.Handled || err != nil {
 			if res.Copy != "" {
 				fmt.Fprint(f.out, term.ClipboardWrite(res.Copy))
@@ -769,6 +781,52 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 	}
 	f.submit(c, line)
 	return false
+}
+
+// command runs a typed /command. A command may put a question while it
+// runs (a PreModelSwitch hook's "ask" does), so the lines typed meanwhile
+// are read: one answers the question that waits, and the others are held
+// until the command is done.
+func (f *plain) command(ctx context.Context, c Controls, text string) (CommandResult, error) {
+	type result struct {
+		res CommandResult
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		res, err := c.Command(ctx, text)
+		done <- result{res, err}
+	}()
+	f.mu.Lock()
+	nobody := f.nobody
+	f.mu.Unlock()
+	var lines <-chan string
+	if f.in != nil && !nobody {
+		lines = f.in.lines
+	}
+	for {
+		select {
+		case r := <-done:
+			return r.res, r.err
+		case line, ok := <-lines:
+			if !ok {
+				// The input ended: the question that waits is answered
+				// no, and the loop finds the end again afterwards.
+				lines = nil
+				f.setNobody(c)
+				continue
+			}
+			f.typed()
+			f.mu.Lock()
+			asked := f.question != nil
+			f.mu.Unlock()
+			if asked {
+				f.line(ctx, c, line)
+			} else {
+				f.held = append(f.held, line)
+			}
+		}
+	}
 }
 
 // submit sends a prompt.

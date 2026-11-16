@@ -885,3 +885,18 @@ or kept with the reason said (27).
     starts, whose conversation is still on the screen: /restart says so
     with GNOSH_RESTARTED=1, which gnosh takes out of its environment as it
     starts.
+65. **PreModelSwitch, as Claude Code's.** /model (and its picker, which
+    runs /model) runs the PreModelSwitch hooks once the model is found
+    and before it is switched to. exit 2, "decision": "block" or
+    "permissionDecision": "deny" keeps the model as it was and says why;
+    "ask" puts the switch to the person, and is a refusal in a run, where
+    nobody can answer; a hook that could not check refuses, as every
+    gnosh gate does. The hooks read from_model, to_model, requested_model,
+    source ("command") and context_tokens (the conversation's size at the
+    last count). Claude Code's price fields (prompt_cache_warm, cache_ttl,
+    estimated_cache_write_usd, pricing) are left out: gnosh knows no
+    prices and no cache lifetimes for the models it talks to. Claude
+    Code matches a model's canonical name; gnosh matches the model as
+    provider/model and by its own name, so "qwen3.8-27b" fits
+    qwen/qwen3.8-27b. PreModelSwitch and PostModelSwitch hooks get 30
+    seconds by default, as in Claude Code.

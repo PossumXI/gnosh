@@ -178,7 +178,7 @@ func input(event Event) Input {
 		in.LoadReason = "session_start"
 	case Notification:
 		in.NotificationType = "idle_prompt"
-	case PostModelSwitch:
+	case PreModelSwitch, PostModelSwitch:
 		in.FromModel, in.ToModel, in.RequestedModel, in.Source = "local/a", "local/b", "local/b", "command"
 	case DirectoryAdded:
 		in.Directory, in.Source = "/project/docs", "slash_command"

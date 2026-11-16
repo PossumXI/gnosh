@@ -37,6 +37,8 @@ import (
 //	InstructionsLoaded  when instruction files are loaded
 //	Notification        when the front end says a question or an idle
 //	                    session has waited
+//	PreModelSwitch,     /model, before and after the switch
+//	PostModelSwitch
 //
 //	SubagentStart,      when the Agent tool starts a sub-agent, and when
 //	SubagentStop        the sub-agent is about to finish (subagent.go)
@@ -272,13 +274,50 @@ func (l *live) sessionStart(ctx context.Context, info agent.StartInfo) ([]agent.
 	return hookParts(hooks.SessionStart, out), nil
 }
 
+// beforeModelSwitch runs the PreModelSwitch hooks before /model makes a
+// switch. A refusal, or a hook that could not check, keeps the model as it
+// is. "ask" puts the switch to the person, and is a refusal where nobody
+// can answer (a run), as in Claude Code.
+func (l *live) beforeModelSwitch(ctx context.Context, c *SlashContext, from, to, requested string) error {
+	if !l.hooks.has(hooks.PreModelSwitch) {
+		return nil
+	}
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PreModelSwitch, FromModel: from, ToModel: to, RequestedModel: requested,
+		Source: "command", ContextTokens: c.Agent.Context().Used})
+	switch {
+	case err != nil:
+		return fmt.Errorf("the model was not changed: the PreModelSwitch hooks could not be run (%w)", err)
+	case out.Blocked:
+		return fmt.Errorf("the model was not changed: a PreModelSwitch hook the user set up refused the switch to %s. %s", to, firstOf(out.Reason, "It gave no reason."))
+	case out.PermissionDecision != hooks.Ask:
+		return nil
+	}
+	ans, err := c.Agent.Ask(ctx, agent.Question{
+		Kind:  "model-switch",
+		Title: "Switch the model to " + to + "? A PreModelSwitch hook asks.",
+		Text:  out.Reason,
+		Choices: []agent.Choice{
+			{Key: "yes", Label: "Yes, switch to " + to},
+			{Key: "no", Label: "No, keep " + from},
+		},
+	})
+	switch {
+	case errors.Is(err, agent.ErrNobodyToAsk):
+		return fmt.Errorf("the model was not changed: a PreModelSwitch hook the user set up wants the switch to %s confirmed, and nobody is here to confirm it. %s", to, out.Reason)
+	case err != nil || ans.Choice != "yes":
+		return fmt.Errorf("the model was not changed: it is still %s", from)
+	}
+	return nil
+}
+
 // modelSwitched runs the PostModelSwitch hooks once /model has switched
 // the model: what they add goes to the model with the next request.
 func (l *live) modelSwitched(ctx context.Context, from, to, requested string) {
 	if !l.hooks.has(hooks.PostModelSwitch) {
 		return
 	}
-	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostModelSwitch, FromModel: from, ToModel: to, RequestedModel: requested, Source: "command"})
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostModelSwitch, FromModel: from, ToModel: to, RequestedModel: requested,
+		Source: "command", ContextTokens: l.agent.Context().Used})
 	if err != nil || strings.TrimSpace(out.AdditionalContext) == "" {
 		return
 	}
