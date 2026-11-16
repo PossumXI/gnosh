@@ -353,3 +353,35 @@ func TestSideQuestionWhileACallRuns(t *testing.T) {
 		t.Errorf("the session's own request after the side question holds %q as the call's result", got)
 	}
 }
+
+// A side request that gives way (Yield) is stopped when the session's own
+// next request wants the model, so a turn never waits behind it; one that
+// does not give way is waited for.
+func TestYieldingSideRequestGivesWay(t *testing.T) {
+	r, _ := sideRig(t)
+	reached := make(chan struct{})
+	r.model.push(step{at: once(reached), stall: true})
+	r.model.push(say("the answer"))
+	side := make(chan error, 1)
+	go func() {
+		_, err := r.a.Side(context.Background(), SideRequest{Purpose: "suggestion", Session: true, Yield: true, Prompt: "what next?", Timeout: time.Minute})
+		side <- err
+	}()
+	<-reached
+	began := time.Now()
+	res := r.run("a prompt")
+	if res.Reason != EndCompleted {
+		t.Fatalf("the turn ended %v", res.Reason)
+	}
+	if took := time.Since(began); took > 5*time.Second {
+		t.Errorf("the turn waited %s behind the side request", took)
+	}
+	if err := <-side; !errors.Is(err, ErrYielded) {
+		t.Errorf("the side request ended with %v, want ErrYielded", err)
+	}
+	r.drain()
+	evs := eventsOf[*SideEvent](r.rec)
+	if len(evs) != 1 || !errors.Is(evs[0].Err, ErrYielded) {
+		t.Errorf("side events = %+v", evs)
+	}
+}

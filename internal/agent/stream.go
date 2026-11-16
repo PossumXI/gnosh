@@ -432,6 +432,7 @@ func (a *Agent) stream(ctx context.Context, t *turn, purpose string, req *core.R
 	// the other way round, so that neither pushes the other out of a
 	// model server's cache while it is being answered.
 	a.setPhase(PhaseRequest, "waiting for another request to "+m.label()+" to finish")
+	a.makeWay()
 	select {
 	case a.modelLock <- struct{}{}:
 	case <-ctx.Done():

@@ -20,6 +20,9 @@ import (
 var (
 	// ErrClosed means the session has been closed.
 	ErrClosed = errors.New("agent: the session is closed")
+	// ErrYielded means a side request that gives way (SideRequest.Yield)
+	// was stopped because the session's own next request wanted the model.
+	ErrYielded = errors.New("agent: the side request gave way to the session's own")
 	// ErrBlank means a prompt held neither text nor an attachment.
 	ErrBlank = errors.New("agent: the prompt is empty, so nothing was sent")
 	// ErrNobodyToAsk means a question was put in a session nobody attends.
@@ -204,10 +207,12 @@ type Agent struct {
 	wake   chan struct{}   // holds a token when the session's goroutine has something to look at
 
 	modelLock chan struct{} // holds a token while a request to a model is in flight
-	logMu     sync.Mutex    // serialises calls to the Log; let go with unlockLog
-	lateMu    sync.Mutex    // guards late
-	late      []Entry       // notices raised while the Log was busy, stored when it is free
-	store     *sync.Map     // the tools' own state for the session
+	yieldMu   sync.Mutex
+	yielders  map[*context.CancelCauseFunc]struct{} // side requests that give way to the session's own
+	logMu     sync.Mutex                            // serialises calls to the Log; let go with unlockLog
+	lateMu    sync.Mutex                            // guards late
+	late      []Entry                               // notices raised while the Log was busy, stored when it is free
+	store     *sync.Map                             // the tools' own state for the session
 	intakeWG  sync.WaitGroup
 	closeOnce sync.Once
 	turnNow   atomic.Value // the running turn's id, a string

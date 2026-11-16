@@ -36,6 +36,12 @@ type SideRequest struct {
 	// Timeout is how long each model is given to answer, in real time.
 	// Zero means two minutes.
 	Timeout time.Duration
+	// Yield makes the request give way to the session's own: when the
+	// session's next request (a turn's, a summary's) wants the model while
+	// this one waits for it or is being answered, this one is stopped and
+	// Side returns ErrYielded. A prompt suggestion is asked so: it is worth
+	// nothing once a turn has begun, by a prompt, a /loop or a hook.
+	Yield bool
 	// Session makes the request the session's own next one, with Prompt
 	// after the conversation: its system prompt, its tools and its
 	// messages as they stand, so that a model server that kept the
@@ -110,16 +116,49 @@ func (a *Agent) Side(ctx context.Context, sr SideRequest) (SideResult, error) {
 			Purpose: purpose, Provider: res.Provider, Model: res.Model,
 			Usage: res.Usage, Duration: res.Duration, Fallback: res.Fallback, Err: err,
 		})
-		if err == nil || ctx.Err() != nil {
+		if err == nil || ctx.Err() != nil || errors.Is(err, ErrYielded) {
 			break
 		}
 	}
 	return res, err
 }
 
+// giveWay registers a side request that yields (SideRequest.Yield) and
+// returns its context and what takes it off again.
+func (a *Agent) giveWay(ctx context.Context) (context.Context, func()) {
+	yctx, cancel := context.WithCancelCause(ctx)
+	a.yieldMu.Lock()
+	if a.yielders == nil {
+		a.yielders = map[*context.CancelCauseFunc]struct{}{}
+	}
+	a.yielders[&cancel] = struct{}{}
+	a.yieldMu.Unlock()
+	return yctx, func() {
+		a.yieldMu.Lock()
+		delete(a.yielders, &cancel)
+		a.yieldMu.Unlock()
+		cancel(nil)
+	}
+}
+
+// makeWay stops every side request that yields: the session's own request
+// wants the model.
+func (a *Agent) makeWay() {
+	a.yieldMu.Lock()
+	defer a.yieldMu.Unlock()
+	for cancel := range a.yielders {
+		(*cancel)(ErrYielded)
+	}
+}
+
 // sideOnce asks one model.
 func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m Model, timeout time.Duration) (SideResult, error) {
 	res := SideResult{Provider: m.Provider.Name(), Model: m.Info.ID}
+	if sr.Yield {
+		yctx, done := a.giveWay(ctx)
+		defer done()
+		ctx = yctx
+	}
 	tctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	stop := context.AfterFunc(a.root, cancel) // a closed session asks nothing more
@@ -127,6 +166,8 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 
 	fail := func(what string, err error) error {
 		switch {
+		case errors.Is(context.Cause(ctx), ErrYielded):
+			return ErrYielded
 		case ctx.Err() != nil:
 			return ctx.Err()
 		case a.root.Err() != nil:

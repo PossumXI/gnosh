@@ -17,8 +17,9 @@ import (
 // most likely send next, and the interface shows it in the empty box,
 // where Tab or the right arrow takes it and typing drops it. The option is
 // off unless set, as Claude Code has it off for other providers' models:
-// each suggestion is a request to the model, and a prompt sent while one
-// is being made would wait for it, so a prompt sent stops it.
+// each suggestion is a request to the model. It gives way to any request
+// of the session's own (agent.SideRequest.Yield), and a prompt sent stops
+// it at once.
 
 // SuggestionEvent is the person's likely next prompt, for the interface
 // to show in the empty box until they type.
@@ -28,7 +29,7 @@ type SuggestionEvent struct {
 
 // How a suggestion is asked for: a few words, soon, or not at all.
 const (
-	suggestTokens = 64
+	suggestTokens = 400 // room for a model whose least thinking is still some
 	suggestWait   = 60 * time.Second
 	suggestChars  = 200
 )
@@ -75,13 +76,20 @@ func (l *live) suggestNext(res agent.TurnResult) {
 		return
 	}
 	a := l.agentReady.Load()
-	if a == nil || a.State().Queued > 0 {
+	if a == nil {
+		return
+	}
+	if st := a.State(); st.Queued > 0 || st.Loop {
+		// The next turn is already coming (what was queued, or /loop's).
 		return
 	}
 	ctx, cancel := l.suggest.start(l.ctx)
 	l.background(func(context.Context) {
 		defer cancel()
-		out, err := a.Side(ctx, agent.SideRequest{Purpose: "suggestion", Session: true, Prompt: l.texts.NextPrompt(), MaxTokens: suggestTokens, Timeout: suggestWait})
+		// It gives way (Yield) to any request of the session's own, so a
+		// turn that begins by any road (a prompt, a !line, a skill, /loop,
+		// a hook) never waits behind it.
+		out, err := a.Side(ctx, agent.SideRequest{Purpose: "suggestion", Session: true, Yield: true, Prompt: l.texts.NextPrompt(), MaxTokens: suggestTokens, Timeout: suggestWait})
 		if err != nil || ctx.Err() != nil || a.State().Busy {
 			return
 		}
