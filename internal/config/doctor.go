@@ -406,6 +406,16 @@ func blocksWhat(event string) string {
 		return "every tool call it matches"
 	case "UserPromptSubmit":
 		return "every prompt"
+	case "UserPromptExpansion":
+		return "every typed command it matches that expands into a prompt"
+	case "PreModelSwitch":
+		return "every switch to a model it matches"
+	case "ConfigChange":
+		return "every change to the settings files it matches, which then is not taken in"
+	case "PostToolBatch":
+		return "every turn at its first round of tool calls"
+	case "SubagentStop":
+		return "the end of every sub-agent"
 	}
 	return "the end of every turn"
 }

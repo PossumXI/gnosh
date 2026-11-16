@@ -240,7 +240,9 @@ const hookFile = `{` + box + `,
       {"matcher": "Edit", "hooks": [{"type": "command", "command": "gofmt -l ."}]},
       {"hooks": [{"type": "command", "command": "./hooks/missing.sh"}]}],
     "PermissionRequest": [{"hooks": [{"type": "command", "command": "./hooks/answer.sh"}]}],
-    "SessionStart": [{"hooks": [{"type": "command", "command": "[ -f .env ] && echo ready"}]}]
+    "SessionStart": [{"hooks": [{"type": "command", "command": "[ -f .env ] && echo ready"}]}],
+    "PreModelSwitch": [{"hooks": [{"type": "command", "command": "./hooks/models.sh"}]}],
+    "PostToolBatch": [{"hooks": [{"type": "command", "command": "./hooks/batch.sh"}]}]
   }
 }`
 
@@ -259,11 +261,14 @@ func TestDoctorHooks(t *testing.T) {
 	wantFinding(t, findings, "hooks", Note, "PostToolUse:", "the file /work/proj/hooks/missing.sh is not there")
 	wantFinding(t, findings, "hooks", Note, "PermissionRequest", "every question it matches is put to you instead")
 	wantFinding(t, findings, "hooks", Fine, "SessionStart", "echo ready")
+	wantFinding(t, findings, "hooks", Fail, "PreModelSwitch", "every switch to a model it matches")
+	wantFinding(t, findings, "hooks", Fail, "PostToolBatch", "every turn at its first round of tool calls")
 	wantFinding(t, findings, "hooks", Fine, "Stop:", "present.sh")
 
 	// With everything in place there is nothing to fail on.
 	m = &fakeMachine{programs: []string{"python3", "gofmt", "nosuchprogram"}, files: []string{
-		"/work/proj/hooks/present.sh", "/work/proj/hooks/tests.sh", "/work/proj/hooks/guard.py", "/work/proj/hooks/missing.sh", "/work/proj/hooks/answer.sh"}}
+		"/work/proj/hooks/present.sh", "/work/proj/hooks/tests.sh", "/work/proj/hooks/guard.py", "/work/proj/hooks/missing.sh", "/work/proj/hooks/answer.sh",
+		"/work/proj/hooks/models.sh", "/work/proj/hooks/batch.sh"}}
 	if findings = doctor(t, withConfig(hookFile), m); !CanRun(findings) {
 		t.Errorf("with every program and script there, a turn can run: %v", findings)
 	}
@@ -275,7 +280,7 @@ func TestDoctorHooks(t *testing.T) {
 	if !CanRun(findings) {
 		t.Errorf("in safe mode a hook that cannot run holds nothing up: %v", findings)
 	}
-	wantFinding(t, findings, "hooks", Note, "8 hooks are configured and none runs", "safe mode")
+	wantFinding(t, findings, "hooks", Note, "10 hooks are configured and none runs", "safe mode")
 	wantFinding(t, findings, "config", Note, "safe mode is on", "--safe-mode", "hooks, instruction files, skills on disk and custom commands are off")
 }
 
