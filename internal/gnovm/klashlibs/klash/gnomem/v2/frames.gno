@@ -586,7 +586,13 @@ func (m *Mem) enter(id, thought string, above bool) {
 	case m.holder(id, it, me) != "":
 		panic(m.heldText(id, it))
 	case onStack(stack, id):
-		panic("`" + id + "` is already on your stack")
+		// Where it stands, and the way back to it (box 1, 2026-11-16: Qwen
+		// pushed a todo it was under, and was told only that it was there).
+		top := stack[len(stack)-1]
+		if top == id {
+			panic("you are in `" + id + "` already: go on with its work, and pop it with what came of it once it is done")
+		}
+		panic("`" + id + "` is on your stack already, under `" + top + "`, the todo you are in now: finish `" + top + "` and pop it with what came of it, or mem.Leave(\"why\") to leave it open, and so on up to `" + id + "`")
 	}
 	if s := deepestUnder(stack, id); s != "" {
 		panic("`" + id + "` cannot go above its own todo `" + s + "`, which is on your stack: pop or drop that first")

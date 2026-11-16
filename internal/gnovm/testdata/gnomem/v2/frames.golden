@@ -21,7 +21,7 @@ todos:
 in `side-quest` "side quest": do it now, with your tools; once what they return shows it done, pop it with that and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `side-quest`]
 > s1: mem.Frame().Push()
-error: `side-quest` is already on your stack
+error: you are in `side-quest` already: go on with its work, and pop it with what came of it once it is done
 > s1: mem.Pop("nothing to see yet")
 done `side-quest` "side quest" → nothing to see yet
 That closes `side-quest`, the whole plan: its work is done and stays done, though it is out of your context now. Tell the user what came of it from the results above.
@@ -44,10 +44,12 @@ added `fix-flaky-test/rename-port-flag` "rename the port flag"
 > s1: mem.Todo("rename the port flag")
 error: `fix-flaky-test` "fix the flaky test" already has an open todo "rename the port flag"
 > s1: mem.Frame("fix-flaky-test").Push()
-error: `fix-flaky-test` is already on your stack
+error: you are in `fix-flaky-test` already: go on with its work, and pop it with what came of it once it is done
 > s1: mem.Next()
 in `fix-flaky-test/reproduce` "reproduce it": do it now, with your tools; once what they return shows it done, pop it with that and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `fix-flaky-test/reproduce`]
+> s1: mem.Frame("fix-flaky-test").Push()
+error: `fix-flaky-test` is on your stack already, under `fix-flaky-test/reproduce`, the todo you are in now: finish `fix-flaky-test/reproduce` and pop it with what came of it, or mem.Leave("why") to leave it open, and so on up to `fix-flaky-test`
 > s1: mem.Think("port", "the user says the shared port is 8080")
 thought `port` kept on `fix-flaky-test/reproduce`
 > s1: mem.Think("port", "again")
@@ -105,7 +107,7 @@ thought `port` is now the todo `fix-flaky-test/find-why-testflaky-fails/port`
 in `fix-flaky-test/find-why-testflaky-fails/port` (thought: "the user says the shared port is 8080"): do it now, with your tools; once what they return shows it done, pop it with that and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `fix-flaky-test/find-why-testflaky-fails/port`]
 > s1: mem.Thought("port").Push()
-error: `fix-flaky-test/find-why-testflaky-fails/port` is already on your stack
+error: you are in `fix-flaky-test/find-why-testflaky-fails/port` already: go on with its work, and pop it with what came of it once it is done
 > s1: mem.Frame("fix-flaky-test/reproduce")
 [x] `fix-flaky-test/reproduce` "reproduce it" (under `fix-flaky-test` "fix the flaky test")
   done → it fails 3 of 20 runs on the shared port

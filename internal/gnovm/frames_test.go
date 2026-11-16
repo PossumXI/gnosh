@@ -94,6 +94,9 @@ func TestFramesStory(t *testing.T) {
 	s.run("s1", "", `mem.Todo("rename the port flag")`)
 	s.run("s1", "", `mem.Frame("fix-flaky-test").Push()`)
 	s.run("s1", "", `mem.Next()`)
+	// A todo under the one the model is in is pushed again: the answer is
+	// the way back to it.
+	s.run("s1", "", `mem.Frame("fix-flaky-test").Push()`)
 	// Thoughts on the present frame.
 	s.run("s1", "", `mem.Think("port", "the user says the shared port is 8080")`)
 	s.run("s1", "", `mem.Think("port", "again")`)
