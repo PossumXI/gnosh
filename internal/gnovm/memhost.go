@@ -262,6 +262,7 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 		return memResult{Output: call.Output, Closes: call.Closes, Notes: notes, Instance: j.instance}, errClosesToCheck
 	}
 	if call.batch == nil {
+		h.tellPeers(q, who, &res)
 		h.afterCall(r, q, mc, call, &res, false)
 		return res, nil
 	}
@@ -301,8 +302,21 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	if hint := nextHint(r, caller, q.Goal, q.Frames, call.Frames, call.NilPush, mc.working, q.SubAgent); hint != "" {
 		res.Output += hint + "\n"
 	}
+	h.tellPeers(q, who, &res)
 	h.afterCall(r, q, mc, call, &res, true)
 	return res, nil
+}
+
+// tellPeers ends an agent's mem.Show() or mem.Next() with how many other
+// sessions work the plan now, when any do (peersLine). A sub-agent works
+// for its session, and is not told.
+func (h *memHost) tellPeers(q memRequest, who string, res *memResult) {
+	if who != "agent" || q.SubAgent || !callsShowOrNext(q.Code) {
+		return
+	}
+	if n := h.livePeers(q.Session); n > 0 {
+		res.Output += peersLine(n)
+	}
 }
 
 // nextHint is what a receipt ends with after a pop that no push followed
