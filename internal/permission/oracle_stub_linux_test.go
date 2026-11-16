@@ -49,6 +49,8 @@ var realTools = map[string]bool{
 	"whoami": true, "uname": true, "seq": true, "find": true, "sed": true, "date": true, "git": true,
 	"env": true, "xargs": true, "timeout": true, "nice": true, "nohup": true, "stdbuf": true,
 	"setsid": true, "time": true,
+	// Read-only since 16 November (b8b739d): what they do is checked too.
+	"strings": true, "ps": true, "ss": true, "sleep": true,
 }
 
 // editTools join them when the mode is one that lets files be changed.

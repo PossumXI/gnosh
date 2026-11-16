@@ -241,6 +241,8 @@ var genBases = []string{
 	"cat a.txt | grep foo | wc -l", "echo hello", "npm run test -- unit", "make build", "ls", "cd src && ls",
 	"head -5 a.txt", "find . -name '*.go'", "git log --oneline -5", "wc -l a.txt b.txt", "[[ -f a.txt ]] && echo yes",
 	"date +%s", "pwd", "git diff", "ls *.md", "cat notes.md", "echo \"hello world\"", "git show HEAD", "sed -n 1p a.txt",
+	// Read-only since 16 November.
+	"strings a.txt | head -3", "gofmt -l .", "git grep -n foo", "ps aux | head -3", "ss -tln", "sleep 0 && ls", "echo \"exit: $?\"",
 }
 
 // genPayloads are what a line should never run without its owner's say.
@@ -249,6 +251,8 @@ var genPayloads = []string{
 	"mv .git /tmp/g", "chmod -R 000 .", "git clean -fdx", "rsync -a --delete src/ .", "shred -u *", "mv * /tmp/",
 	"cat @OUT@/secret.txt", "make evil", "python -c 1", "echo x > pwned", "cat ~/.ssh/id_ed25519", "r\\m x", "'rm' x",
 	"\"rm\" -rf x", "r''m x", "$'rm' x", "$'\\x72m' x", "@BIN@/p0/rm x", "git commit -m x", "tee pwned",
+	// What the read-only programs of 16 November must not do unasked.
+	"gofmt -w a.txt", "strings @OUT@/secret.txt", "git grep --open-files-in-pager=@BIN@/p0/curl foo", "git grep -f @OUT@/secret.txt x",
 }
 
 // genJoiners smuggle a payload (%P; %Q is the payload in single quotes)

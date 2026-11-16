@@ -1244,7 +1244,7 @@ var (
 )
 
 func init() {
-	for _, n := range strings.Fields("ls cat head tail wc nl grep which diff stat du sort uniq cut tr basename dirname realpath readlink file whoami uname seq find sed date git env xargs timeout nice nohup stdbuf setsid time") {
+	for _, n := range strings.Fields("ls cat head tail wc nl grep which diff stat du sort uniq cut tr basename dirname realpath readlink file whoami uname seq find sed date git env xargs timeout nice nohup stdbuf setsid time strings ps ss sleep") {
 		realNames[n] = true
 	}
 }
