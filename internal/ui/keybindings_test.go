@@ -164,3 +164,31 @@ func TestKeyBindingChords(t *testing.T) {
 		t.Fatalf("/compact ran %d times", n)
 	}
 }
+
+// Whatever the file holds, reading it never panics, and a key it binds is
+// already in the form keys are looked up by.
+func FuzzKeyBindings(f *testing.F) {
+	for _, seed := range []string{
+		`{"bindings": [{"context": "Chat", "bindings": {"ctrl+e": "chat:externalEditor", "ctrl+s": null}}]}`,
+		`{"bindings": [{"context": "Global", "bindings": {"ctrl+k ctrl+s": "command:compact", "shift+K": "app:redraw"}}]}`,
+		`{"bindings": [{"context": "Transcript", "bindings": {"q": "transcript:exit", "f12": null, "ctrl++": "chat:undo"}}]}`,
+		`{"bindings": null}`, `[]`, `{`, ``,
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, data string) {
+		b, _ := parseKeyBindings([]byte(data))
+		for ctx, keys := range b.byCtx {
+			for k := range keys {
+				if canonKey(k) != k {
+					t.Fatalf("%s: %v is kept as it is not looked up", ctx, k)
+				}
+			}
+		}
+		for _, stroke := range strings.Fields(data) {
+			if k, err := parseStroke(stroke); err == nil && canonKey(k) != k {
+				t.Fatalf("parseStroke(%q) = %v, which is not looked up as it is", stroke, k)
+			}
+		}
+	})
+}
