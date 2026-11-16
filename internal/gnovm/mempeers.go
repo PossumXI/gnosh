@@ -71,10 +71,6 @@ type memPeer struct {
 	Peer    bool      `json:"peer,omitempty"`
 }
 
-func (h *memHost) peerPath(session string) string {
-	return peerPathIn(h.dir, session)
-}
-
 func peerPathIn(memdir, session string) string {
 	return filepath.Join(memdir, "peers", sessionKey(session)+".json")
 }
