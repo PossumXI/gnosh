@@ -248,6 +248,9 @@ func TestOtherDestroyers(t *testing.T) {
 		"f() { mv \"$@\"; }; f .$git /tmp/g", "f() { mv \"$1\" /tmp/g; }; f .$git", "d=.; f() { rm -rf \"$1\"; }; f $d$X",
 		"set -- /; rm -rf \"$1\"", "sh -c 'rm -rf \"$1\"' sh /", "bash -c 'rm -rf \"$0\"' ~", "bash -c 'mv \"$@\"' _ .git /tmp/g", "f() { \"$@\"; }; f rm -rf /",
 		"function g { chmod -R 000 $1; }; g .", "f() { shift; rm -rf \"$1\"; }; f x ~", "set -- . /tmp/x; mv \"$@\"", "f() { git -C \"$1\" clean -fdx; }; f ..",
+		// A brace that nothing closes is a character like any, and leaves
+		// the first word alone (oracle seed 117).
+		"f() { mv \"$@\"{; }; f .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{", "f() { rm -rf x{ \"$@\"; }; f .",
 		// The program is one of more values than gnosh follows.
 		"for t in a b c d e f g h i j k l m n o p q r; do $t x; done",
 	}

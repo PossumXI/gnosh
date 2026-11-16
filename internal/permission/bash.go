@@ -1179,10 +1179,18 @@ func (e *Engine) filledAll(v *bashView, w word) (out []lineVal, strict, ok bool)
 }
 
 // braced reports whether bash's braces may make several words of the
-// word: it holds an unquoted brace, and a { among what is written of it.
-// (A } alone opens nothing: in "${a[*]}x}" it is a character like any.)
+// word: it holds an unquoted brace, and a { among what is written of it
+// with a } somewhere after it. A brace with nothing to close it opens
+// nothing: in "${a[*]}x}" the } is a character like any, and so is the {
+// in "$@"{, which leaves .git standing alone among the words of "f() {
+// mv "$@"{; }; f .git /tmp/g" (oracle seed 117).
 func braced(w word) bool {
-	return w.brace && strings.Contains(w.joined(), "{")
+	if !w.brace {
+		return false
+	}
+	s := w.joined()
+	open := strings.Index(s, "{")
+	return open >= 0 && strings.Contains(s[open+1:], "}")
 }
 
 // filledWith is filledAll with a way to say what a pattern matched.

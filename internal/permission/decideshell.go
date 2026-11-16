@@ -1434,6 +1434,12 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 	words := c.words
 	why := ""
 	viaXargs := false
+	// inShell: every wrapper the command was reached through runs it in
+	// the shell itself (builtin, command, bash's keyword time), so that a
+	// cd there moves the shell. Behind any other (stdbuf, env, nohup,
+	// timeout...) a cd is a program of its own, which moves nothing
+	// (oracle seed 117).
+	inShell := true
 	var first cmdFacts
 	for depth := 0; ; depth++ {
 		f := facts(words)
@@ -1456,13 +1462,13 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		relProg := strings.Contains(prog, "/") && !strings.HasPrefix(prog, "/")
 		if !plan && !((st.moved || st.unknown) && relProg) {
 			if r := e.allowCommand(words, viaXargs); r != nil {
-				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg)
+				e.afterPartIn(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg, inShell)
 				return partVerdict{ok: true, rule: r, state: state}
 			}
 		}
 		if !viaXargs {
 			if w := e.partRuns(c, f, st, depth, staticInput); w == "" {
-				e.afterPart(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg)
+				e.afterPartIn(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg, inShell)
 				return partVerdict{ok: true}
 			} else if why == "" {
 				why = w
@@ -1480,6 +1486,9 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 			break
 		}
 		viaXargs = viaXargs || words[0].joined() == "xargs"
+		if n := words[0].joined(); words[0].quoted || n != "builtin" && n != "command" && n != "time" {
+			inShell = false
+		}
 		words = inner
 	}
 	e.afterPart(first, c.words, st, c.sep != sepPipe && c.sep != sepOr && !c.neg)
@@ -1488,6 +1497,19 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		pv.exact, pv.prefix = e.suggestRules(c, first, st)
 	}
 	return pv
+}
+
+// afterPartIn is afterPart for a command reached through wrappers: one that
+// does not run it in the shell itself leaves the shell where it is, whatever
+// the command, so a cd there moves nothing.
+func (e *Engine) afterPartIn(f cmdFacts, words []word, st *lineState, own, inShell bool) {
+	switch f.name {
+	case "cd", "pushd", "popd":
+		if !inShell {
+			return
+		}
+	}
+	e.afterPart(f, words, st, own)
 }
 
 // afterPart notes what a part that is going to run does to the shell's

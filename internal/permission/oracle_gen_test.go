@@ -950,6 +950,9 @@ var attackLines = []string{
 	"cd src && cd nope && ls; cat ../../outside/secret.txt", "cd nope && ls || cat sneaky.txt", "cd a.txt && ls; cat ../outside/secret.txt", "cd nope && ls\ncat sneaky.txt",
 	"ls | cd link-in || cd sub/nope </dev/null && cat ../outside/secret.txt", "true || cd sub/deep && cat ../../../outside/secret.txt", "cd nope || cd sub && cat sneaky.txt",
 	"cd src && cat main.go", "cd src && cat main.go && cat ../a.txt", "cd src && cat main.go | head -1", "cd sub && cd deep && cat file.txt", "cd src && ls; ls",
+	// Oracle seed 117: a cd run as a program fails, and the one in the
+	// braces after || is the shell's own.
+	"stdbuf -o0 cd sub/nope || { cd sub/nope; } && ! diff a.txt ../outside/secret.txt && rm ../a.txt", "env cd sub || { cd sub; } && cat ../outside/secret.txt",
 	// A value made of a variable that is set later, or not for sure, or
 	// with a ~ that the shell expands where it is assigned.
 	"w=.e${d}nv d=x; cat $w", "w=.e${d}nv; d=x; cat $w", "false && d=x; w=.e${d}nv; cat $w", "d=x; unset d; w=.e${d}nv; cat $w", "d=x; read d </dev/null; w=.e${d}nv; cat $w",
@@ -971,6 +974,7 @@ var attackLines = []string{
 	"set -- rm -rf x; \"$@\"", "f() { echo \"$@\"; }; f . / ~", "set -euo pipefail; ls", "sh -c 'git \"$@\"' sh clean -fdx", "f() { git \"$@\"; }; f status; f clean -fdx",
 	"a=(status); a+=(clean -fdx); git \"${a[@]}\"", "set -- clean -fdx; git \"$@\"", "f() { git \"$@\"; }; f status; f diff", "f() { git $1 $2 $3; }; f clean -fdx", "f() { mv $1 $2; }; f /tmp/g .git",
 	"f() { shift; git \"$@\"; }; f x clean -fdx", "f() { mv $1 $2; }; f a.txt b.txt", "a=(-fdx build); git clean \"${a[@]}\"",
+	"f() { mv \"$@\"{; }; f .git /tmp/g", "f() { mv \"$@\"}; }; f .git /tmp/g", "set -- .git /tmp/g; mv x\"$@\"{", // oracle seed 117: a { that nothing closes
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
 	// A name that starts with a dash is a flag to the command it is handed to.

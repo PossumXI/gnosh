@@ -756,7 +756,15 @@ func (p *parser) command() {
 		// and so is not read that way: such a group asks.
 		p.pos++
 		p.sc.group = true
+		// The group's first command stands where the group stands: after
+		// an || it may not run at all, and a cd in it is no sure move
+		// ("a || { cd d; } && c" runs c where the line was when a went
+		// well; oracle seed 117).
+		sep, first := p.sep, len(p.sc.cmds)
 		p.body("}")
+		if len(p.sc.cmds) > first && p.sc.cmds[first].sep == sepStart {
+			p.sc.cmds[first].sep = sep
+		}
 		p.expect("}")
 		mark := len(p.sc.cmds)
 		p.trailingRedirs()
