@@ -351,6 +351,15 @@ func (c *controls) resume(ctx context.Context, id string) (string, error) {
 		return "", fmt.Errorf("the session %s cannot be opened (%v), so this one stays open", id, err)
 	}
 	_ = probe.Close()
+	if probe.ID() != old.ts.ID() && transcript.InUse(probe.Path()) {
+		// Another gnosh writes it (a /fork or /background run, most
+		// likely), and one session has one writer: this one stays.
+		why := fmt.Sprintf("the session %s is open in another gnosh, and one session has one writer, so this one stays open", probe.ID())
+		if log := strings.TrimSuffix(probe.Path(), ".jsonl") + ".background.log"; fileExists(log) {
+			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done; what it prints is in %s", old.tilde(log))
+		}
+		return "", errors.New(why)
+	}
 	old.close("resume")
 	next, err := c.p.openSession(ctx, c.st, c.front, "resume", id)
 	if err != nil {

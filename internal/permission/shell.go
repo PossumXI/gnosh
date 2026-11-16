@@ -1359,6 +1359,35 @@ func cutsTime(c *simpleCmd) bool {
 	return c.timeCut > 0 && c.timeCut < len(c.words) && timeWord(c.words[c.timeCut])
 }
 
+// bashTimeStart returns where the program that bash's keyword time runs
+// stands among ws, which begin with the keyword: after each time bash takes
+// one -p and then one -- as its own (parse.y's timespec), and a ! or
+// another time may follow; the next word is the program, a dash word
+// included. "time -p -p cat x" runs a program named -p, where a plain
+// sh's /usr/bin/time takes both -p for its own and runs cat.
+func bashTimeStart(ws []word) int {
+	plain := func(i int, s string) bool {
+		return i < len(ws) && ws[i].static() && !ws[i].quoted && ws[i].joined() == s
+	}
+	i := 0
+	for {
+		switch {
+		case plain(i, "time"):
+			i++
+			if plain(i, "-p") {
+				i++
+			}
+			if plain(i, "--") {
+				i++
+			}
+		case plain(i, "!"):
+			i++
+		default:
+			return i
+		}
+	}
+}
+
 // redir reads the redirection at p.pos into cmd.
 func (p *parser) redir(cmd *simpleCmd) {
 	if cmd.timeCut == 0 && timeWords(cmd.words) {

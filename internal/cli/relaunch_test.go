@@ -34,6 +34,16 @@ func TestRelaunchArgs(t *testing.T) {
 		{`--debug=api,hooks --tools "" --session-id 6f1c2a9e-4b7d-4c1a-9e2f-3a5b6c7d8e9f`, Relaunch{Session: id},
 			[]string{"--debug=api,hooks", "--tools=", "--resume=" + id}},
 		{`--system-prompt "-be brief" -C hi`, Relaunch{Session: id}, []string{"--system-prompt=-be brief", "--resume=" + id}},
+		// Started in bypassPermissions by its name, then switched to
+		// asking: the new start can still go back, as after -y.
+		{`--permission-mode bypassPermissions`, Relaunch{Session: id, Mode: ModeDefault},
+			[]string{"--permission-mode=default", "--allow-dangerously-skip-permissions", "--resume=" + id}},
+		// A model picked as the session started, named by no flag, goes
+		// along; -m given twice is written once.
+		{`-c`, Relaunch{Session: id, Model: "qwen/b"}, []string{"--model=qwen/b", "--resume=" + id}},
+		{`-m qwen/a -m qwen/c`, Relaunch{Session: id, Model: "qwen/b"}, []string{"--model=qwen/b", "--resume=" + id}},
+		// /effort auto since --effort high: the flag goes.
+		{`--effort high -c`, Relaunch{Session: id, Effort: EffortDefault}, []string{"--resume=" + id}},
 	}
 	for _, c := range cases {
 		args := words(t, "gnosh "+c.line)
@@ -69,7 +79,11 @@ func TestRelaunchArgs(t *testing.T) {
 		if c.r.Model != "" {
 			before.Model = c.r.Model
 		}
-		if c.r.Effort != "" {
+		switch c.r.Effort {
+		case "":
+		case EffortDefault:
+			before.Effort = ""
+		default:
 			before.Effort = c.r.Effort
 		}
 		if c.r.Tree != "" {
@@ -78,6 +92,15 @@ func TestRelaunchArgs(t *testing.T) {
 		if !reflect.DeepEqual(before, after) {
 			t.Errorf("%s: the relaunch reads otherwise:\n got %+v\nwant %+v", c.line, after, before)
 		}
+	}
+
+	// A session that has written nothing has no file to resume: the new
+	// start makes it under its id, with the name -n gave it.
+	got, err := tab.RelaunchArgs(words(t, `gnosh -c -n "a name" --allowedTools Read`), Relaunch{Session: id, Fresh: true})
+	if want := []string{"--name=a name", "--allowedTools=Read", "--session-id=" + id}; err != nil || !slices.Equal(got, want) {
+		t.Errorf("a fresh session relaunches as %q (%v), want %q", got, err, want)
+	} else if inv, err := tab.Parse(got, tty); err != nil || inv.Conversation != ConversationNew || inv.SessionID != id || inv.Name != "a name" {
+		t.Errorf("a fresh session's relaunch reads as %+v (%v)", inv, err)
 	}
 
 	// Only a session's line, and only with a session to resume.

@@ -55,6 +55,11 @@ func main() {
 	cwd, _ := os.Getwd() // empty when it is not known; the program says so
 	info, _ := debug.ReadBuildInfo()
 	self := selfPath()
+	// The program reads /restart's mark from Environ; nothing it starts
+	// from the process's own environment (git, the editor, a worker) may
+	// see it.
+	environ := os.Environ()
+	_ = os.Unsetenv(app.RestartedEnv)
 	os.Exit(app.Main(context.Background(), app.Options{
 		Args:             os.Args[1:],
 		Stdin:            os.Stdin,
@@ -62,7 +67,7 @@ func main() {
 		Stderr:           os.Stderr,
 		StdinIsTerminal:  term.IsTerminal(int(os.Stdin.Fd())),
 		StdoutIsTerminal: term.IsTerminal(int(os.Stdout.Fd())),
-		Environ:          os.Environ(),
+		Environ:          environ,
 		Cwd:              cwd,
 		Features:         features(),
 		// The full interface, where there is a terminal it can draw on.

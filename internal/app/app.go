@@ -133,7 +133,7 @@ type program struct {
 	// started is the program file as gnosh started from it (nil when it
 	// is not known), and restart the command line /restart asked to start
 	// again with, once the session is closed. restarted says this gnosh is
-	// one that /restart started (restartedEnv): the session it opens is
+	// one that /restart started (RestartedEnv): the session it opens is
 	// still on the screen.
 	restarted bool
 	started   os.FileInfo
@@ -216,12 +216,12 @@ func newProgram(o Options) *program {
 		}
 	}
 	p.home = p.env["HOME"]
-	if p.env[restartedEnv] != "" {
+	if p.env[RestartedEnv] != "" {
 		// /restart's word to the gnosh it starts, and no one else's: it
 		// is gone before anything reads the environment.
-		p.restarted = p.env[restartedEnv] == "1"
-		delete(p.env, restartedEnv)
-		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, restartedEnv+"=") })
+		p.restarted = p.env[RestartedEnv] == "1"
+		delete(p.env, RestartedEnv)
+		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, RestartedEnv+"=") })
 	}
 	if o.Executable != "" {
 		p.started, _ = os.Stat(o.Executable)

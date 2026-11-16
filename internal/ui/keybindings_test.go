@@ -165,6 +165,37 @@ func TestKeyBindingChords(t *testing.T) {
 	}
 }
 
+// The first key of a chord keeps its own binding when no chord follows:
+// taken away, it does nothing; bound, it does its action. A key that does
+// not end a chord may start one. chat:clearInput clears the box.
+func TestKeyBindingChordFirstKeyAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := os.WriteFile(path, []byte(`{"bindings": [{"context": "Chat", "bindings": {
+		"ctrl+k": null, "ctrl+k ctrl+s": "command:compact",
+		"ctrl+y": "chat:clearInput", "ctrl+y ctrl+y": "command:cost"}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) {
+		c.info.Keybindings = path
+		c.info.Commands = append(c.info.Commands, "compact", "cost")
+	})
+	g.keys(`"abc" <Ctrl+A> <Ctrl+K> "z"`)
+	if got := g.box(); got != "zabc" {
+		t.Fatalf("Ctrl+K, taken away, then z left %q in the box, want zabc", got)
+	}
+	g.keys(`<Ctrl+Y> "q"`)
+	if got := g.box(); got != "q" {
+		t.Fatalf("Ctrl+Y (chat:clearInput) then q left %q in the box, want q", got)
+	}
+	g.keys(`<Ctrl+K> <Ctrl+K> <Ctrl+S>`)
+	if !slices.Contains(g.c.commands, "/compact") {
+		t.Fatalf("Ctrl+K Ctrl+K Ctrl+S did not end in the chord: ran %q", g.c.commands)
+	}
+	if got := g.box(); got != "q" {
+		t.Fatalf("the Ctrl+K that did not end a chord changed the box to %q", got)
+	}
+}
+
 // Whatever the file holds, reading it never panics, and a key it binds is
 // already in the form keys are looked up by.
 func FuzzKeyBindings(f *testing.F) {

@@ -128,6 +128,9 @@ func (s *session) input(ev term.Event) {
 		if k, ok := ev.(term.Key); ok && s.rebound(k) {
 			return
 		}
+		if _, key := ev.(term.Key); !key {
+			s.dropHeldKey()
+		}
 		if s.view != nil {
 			// The transcript view takes every key while it is open.
 			if _, paste := ev.(term.Paste); !paste {
@@ -838,6 +841,7 @@ func (s *session) open(qs *question) {
 	// A question is for the person: the transcript view gives the screen
 	// back, so that it is seen.
 	s.closeView()
+	s.dropHeldKey()
 	now := s.now()
 	qs.opened, qs.guarded = now, true
 	qs.quiet = now.Add(guardShown)

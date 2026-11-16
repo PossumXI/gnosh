@@ -3111,6 +3111,12 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 			// bash runs what follows the redirection, a "-p" included; a
 			// plain sh's time reads the words as its own. Both are read.
 			e.addDerived(v, &simpleCmd{words: c.words[c.timeCut:], redirs: c.redirs, sep: c.sep, nest: nest}, prev, depth)
+		} else if at := bashTimeStart(c.words); name == "time" && at > 0 && at < len(c.words) && strings.HasPrefix(c.words[at].joined(), "-") {
+			// bash's time takes one -p and one -- for its own, so bash runs
+			// a dash word after them as the program ("time -p -p cat x" runs
+			// -p), where a plain sh's time takes it for an option. Both are
+			// read.
+			e.addDerived(v, &simpleCmd{words: c.words[at:], redirs: c.redirs, sep: c.sep, nest: nest}, prev, depth)
 		}
 		for _, start := range e.wrappedAt(v, spec, args, nest, depth) {
 			inner := args[start:]

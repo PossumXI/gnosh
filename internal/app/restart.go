@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
@@ -32,16 +33,17 @@ func (p *program) restartArgs() []string {
 	return p.restart
 }
 
-// restartedEnv is set for the gnosh that /restart starts, so that it knows
+// RestartedEnv is set for the gnosh that /restart starts, so that it knows
 // the conversation of the session it opens is still on the screen (and
 // draws no recap of it). gnosh takes it out of its environment as it
-// starts, so nothing it runs sees it.
-const restartedEnv = "GNOSH_RESTARTED"
+// starts (Options.Environ here, the process's own in main), so nothing it
+// runs sees it.
+const RestartedEnv = "GNOSH_RESTARTED"
 
 // relaunch starts gnosh again with args, in place of this process. It
 // returns only when that could not be done, with the exit code.
 func (p *program) relaunch(args []string) int {
-	err := p.o.Relaunch(args, append(slices.Clone(p.o.Environ), restartedEnv+"=1"))
+	err := p.o.Relaunch(args, append(slices.Clone(p.o.Environ), RestartedEnv+"=1"))
 	p.errf("gnosh could not start again (%v). The session is kept: gnosh %s opens it again.", err, shellquote.Words(args))
 	return cli.ExitFailure
 }
@@ -123,22 +125,31 @@ func (l *live) goOnArgs(c *SlashContext, name string) ([]string, error) {
 	if work := l.runningWork(); len(work) > 0 {
 		return nil, fmt.Errorf("this is still running in the background, and would be stopped: %s. /%s once it has ended, or /tasks stop <id> stops it", strings.Join(work, ", "), name)
 	}
-	session := l.ts.ID()
-	if l.inv.ResumeIsFile && !l.inv.ForkSession {
+	session, fresh := l.ts.ID(), false
+	switch _, err := os.Stat(l.ts.Path()); {
+	case errors.Is(err, fs.ErrNotExist):
+		// Nothing written yet (a session just begun, or just cleared):
+		// there is no file to resume, so the new start makes the session
+		// under its id.
+		fresh = true
+	case l.inv.ResumeIsFile && !l.inv.ForkSession:
 		// A session opened from its file, which may lie outside this
 		// folder's sessions, is opened from its file again.
 		session = l.ts.Path()
 	}
-	return l.relaunchFor(session)
+	return l.relaunchFor(session, fresh)
 }
 
 // relaunchFor is the command line that opens session with this session's
 // flags as they stand: its permission mode, model, thinking level and work
-// tree.
-func (l *live) relaunchFor(session string) ([]string, error) {
+// tree. fresh says the session has no file yet.
+func (l *live) relaunchFor(session string, fresh bool) ([]string, error) {
 	p := l.p
-	r := cli.Relaunch{Session: session, Mode: string(l.engine.Mode()), Effort: l.agent.Model().Level}
-	if ref, ok := l.modelRef(); ok {
+	r := cli.Relaunch{Session: session, Fresh: fresh, Mode: string(l.engine.Mode()), Effort: firstOf(l.agent.Model().Level, cli.EffortDefault)}
+	if ref, ok := l.modelRef(); ok && (l.inv.Model != "" || l.modelPicked) {
+		// The model the command line named, or the one picked as the
+		// session started, which is kept nowhere; one from the settings,
+		// or saved by /model, the new start finds there itself.
 		r.Model = ref.String()
 	}
 	if t := l.st.tree; t != nil {

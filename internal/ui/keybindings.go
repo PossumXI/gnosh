@@ -49,7 +49,7 @@ var keyActions = map[string]keyAction{
 	"history:previous":         {namedKey(term.KeyUp, 0)},
 	"history:next":             {namedKey(term.KeyDown, 0)},
 	"chat:cancel":              {namedKey(term.KeyEscape, 0)},
-	"chat:clearInput":          {ctrlKey('l')},
+	"chat:clearInput":          {}, // no key of gnosh's: doKeyAction clears the box
 	"chat:killAgents":          {ctrlKey('x'), ctrlKey('k')},
 	"chat:cycleMode":           {namedKey(term.KeyTab, term.ModShift)},
 	"chat:modelPicker":         {altKey('p')},
@@ -310,21 +310,30 @@ func (s *session) rebound(k term.Key) bool {
 			s.doKeyAction(action)
 			return true
 		}
-		// No chord of the person's: the first key goes where it would
-		// have gone, and this one after it.
-		s.passKey(*held)
-	} else {
-		for _, cx := range []string{ctx, "Global"} {
-			for pair := range b.chords[cx] {
-				if pair[0] == c {
-					held := k
-					s.keyHeld, s.keyHeldAt = &held, s.now()
-					s.flash(k.String() + " … (the next key ends the chord)")
-					return true
-				}
+		// No chord of the person's: the first key does what it does on
+		// its own (its binding, nothing when it was taken away, or what
+		// gnosh does with it), and this one after it.
+		if !s.boundKey(ctx, canonKey(*held)) {
+			s.passKey(*held)
+		}
+	}
+	for _, cx := range []string{ctx, "Global"} {
+		for pair := range b.chords[cx] {
+			if pair[0] == c {
+				held := k
+				s.keyHeld, s.keyHeldAt = &held, s.now()
+				s.flash(k.String() + " … (the next key ends the chord)")
+				return true
 			}
 		}
 	}
+	return s.boundKey(ctx, c)
+}
+
+// boundKey carries out the action the keybindings give the key c on its
+// own, in the context or Global, and reports whether they give one.
+func (s *session) boundKey(ctx string, c term.Key) bool {
+	b := s.keys.b
 	action, ok := b.byCtx[ctx][c]
 	if !ok {
 		action, ok = b.byCtx["Global"][c]
@@ -334,6 +343,13 @@ func (s *session) rebound(k term.Key) bool {
 	}
 	s.doKeyAction(action)
 	return true
+}
+
+// dropHeldKey forgets the first key of a chord when something other than
+// a key comes (a paste, the mouse) or a question opens: what comes next
+// is not the chord's second key.
+func (s *session) dropHeldKey() {
+	s.keyHeld = nil
 }
 
 // passKey hands a key on past the bindings, to where it is taken.
@@ -359,6 +375,10 @@ func (s *session) doKeyAction(action string) {
 	switch name, command := strings.CutPrefix(action, "command:"); {
 	case action == "":
 		// Taken away.
+	case action == "chat:clearInput":
+		if s.view == nil {
+			s.ed.Clear()
+		}
 	case command:
 		if s.view == nil {
 			s.command(editor.Draft{Text: "/" + name})

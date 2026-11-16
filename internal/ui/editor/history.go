@@ -148,6 +148,10 @@ func (e *Editor) show(i int) {
 	}
 }
 
+// Clear empties the box as Esc Esc does, keeping what was in it for Up to
+// bring back (the keybindings' chat:clearInput).
+func (e *Editor) Clear() { e.clear() }
+
 // clear empties the box (Esc Esc, Ctrl+C). What was in it is kept as a
 // history entry for this session, and so is the draft that was put by
 // when the person walked into the history, so nothing typed is lost.

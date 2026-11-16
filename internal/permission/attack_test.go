@@ -975,6 +975,13 @@ func TestTimeAndARedirection(t *testing.T) {
 		{ModeDefault, allowed, "time -p 2>&1 teepwned x", Allow},
 		{ModeDefault, allowed, "time 2>&1 teepwned x", Allow},
 		{ModeDefault, allowed, "time ls src", Allow},
+		// bash's time takes one -p and one --: a second runs as the
+		// program (oracle seed 113: "time -p -p cat ~/.ssh/id_ed25519").
+		{ModeDefault, allowed, "time -p -p teepwned", Ask},
+		{ModeDefault, allowed, "time -- -p teepwned", Ask},
+		{ModeDefault, allowed, "time -p -- -- teepwned", Ask},
+		{ModeDefault, allowed, "time time -p teepwned", Allow},
+		{ModeBypass, attackGuards, "time -p -p rm x", Deny},
 	} {
 		if d := bash(engine(t, tc.mode, tc.r), tc.cmd); d.Behavior != tc.want {
 			t.Errorf("%q in %s: got %s (%s), want %s", tc.cmd, tc.mode, d.Behavior, d.Reason, tc.want)

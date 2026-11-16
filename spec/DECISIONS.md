@@ -900,3 +900,14 @@ or kept with the reason said (27).
     provider/model and by its own name, so "qwen3.8-27b" fits
     qwen/qwen3.8-27b. PreModelSwitch and PostModelSwitch hooks get 30
     seconds by default, as in Claude Code.
+66. **What goes on with a session is told what it cannot find itself.**
+    /restart, /background and /fork start gnosh with the session's flags
+    (cli.RelaunchArgs). A session that has written nothing yet has no file
+    to resume, so it is started again under its id (--session-id, with
+    the name -n gave it). A model picked from the list as the session
+    started is kept nowhere, so it is passed on (--model); a model from
+    the settings, or saved by /model, is found there again. A session
+    that started in bypassPermissions by its name, as after -y, can go
+    back to it; /effort auto drops --reasoning-effort. A work tree a
+    /fork run was started in is kept when the session ends, and /resume
+    refuses a session another gnosh writes before it closes this one.

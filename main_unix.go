@@ -27,7 +27,9 @@ func detach(self string, args, env []string, log string) (int, error) {
 		return 0, err
 	}
 	pid := cmd.Process.Pid
-	// (Not waited for: it goes on after this process ends.)
-	_ = cmd.Process.Release()
+	// Reaped when it ends while this process still runs (a /fork run
+	// beside the session), so that it leaves no zombie; it goes on, not
+	// waited for, after this process ends.
+	go func() { _ = cmd.Wait() }()
 	return pid, nil
 }

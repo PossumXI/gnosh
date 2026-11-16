@@ -47,6 +47,9 @@ type live struct {
 	// session came to be, in the SessionStart hook's words.
 	interactive bool
 	source      string
+	// modelPicked says the model was picked when the session started,
+	// from a list, as nothing chose one (set before the session runs).
+	modelPicked bool
 
 	store     *transcript.Store
 	ts        *transcript.Session
@@ -446,7 +449,11 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 				q.Choices = append(q.Choices, agent.Choice{Key: m, Label: m})
 			}
 			ans, err := asker.AskBefore(q)
-			return ans.Choice, err == nil && slices.Contains(models, ans.Choice)
+			ok := err == nil && slices.Contains(models, ans.Choice)
+			// (Kept nowhere: a gnosh that goes on with this session is
+			// told it, relaunchFor.)
+			l.modelPicked = l.modelPicked || ok
+			return ans.Choice, ok
 		}
 	}
 	if err := l.setupModels(ctx, pick); err != nil {

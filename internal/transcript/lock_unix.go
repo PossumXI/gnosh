@@ -6,12 +6,18 @@ import (
 	"errors"
 	"os"
 	"syscall"
+	"time"
 )
 
-// lockFile takes the advisory lock that marks f's one writer, without
-// waiting. It reports false when another open of the file holds it. The
-// lock goes when f is closed or the process ends.
+// lockFile takes the advisory lock that marks f's one writer. It reports
+// false when another open of the file holds it. The lock goes when f is
+// closed or the process ends.
+//
+// It does not wait for a writer, but it does wait out a look: InUse holds
+// a shared lock for a moment, which refuses this one as a writer's would,
+// so a refusal counts only once it has lasted lockLook.
 func lockFile(f *os.File) (bool, error) {
+	var since time.Time
 	for {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		switch {
@@ -20,12 +26,22 @@ func lockFile(f *os.File) (bool, error) {
 		case errors.Is(err, syscall.EINTR):
 			continue
 		case errors.Is(err, syscall.EWOULDBLOCK):
-			return false, nil
+			if since.IsZero() {
+				since = time.Now()
+			}
+			if time.Since(since) >= lockLook {
+				return false, nil
+			}
+			time.Sleep(time.Millisecond)
 		default:
 			return false, err
 		}
 	}
 }
+
+// lockLook is how long a refused lock is tried again before it counts:
+// far longer than InUse holds its look, far shorter than a person notices.
+const lockLook = 20 * time.Millisecond
 
 // InUse reports whether a gnosh holds the session file at path open for
 // writing now: a session, a run or a sub-agent. It takes and lets go of a

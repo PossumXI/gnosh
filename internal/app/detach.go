@@ -93,7 +93,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	if err != nil {
 		return fmt.Errorf("the conversation could not be copied: %v", err)
 	}
-	args, err := l.relaunchFor(id)
+	args, err := l.relaunchFor(id, false)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and the command line to start it could not be (%v): gnosh -r %s opens it", id, err, id)
 	}
@@ -103,6 +103,11 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	pid, err := l.p.o.Detach(run, slices.Clone(l.p.o.Environ), log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
+	}
+	if t := l.st.tree; t != nil {
+		// The run works in this session's work tree, which must outlive
+		// this session.
+		t.forked.Store(true)
 	}
 	c.Say("A copy of this conversation, %s, goes on in the background (process %d) with: %s", id, pid, oneLine(prompt, 200))
 	c.Say("It works in this same folder, beside this session. gnosh -r %s opens it once it is done; what it prints is in %s.", id, l.tilde(log))

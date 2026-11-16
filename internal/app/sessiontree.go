@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
@@ -39,6 +40,9 @@ type sessionTree struct {
 	// named says the person gave the name, and reused that the work tree
 	// was there already: either keeps it at the end.
 	named, reused bool
+	// forked says a /fork run was started in it, which may still be
+	// working there when this session ends: that keeps it too.
+	forked atomic.Bool
 	// from is the folder the session was started in, and fromBranch the
 	// branch checked out there ("" when none could be read).
 	from, fromBranch string
@@ -221,6 +225,8 @@ func (st *startup) leaveTree() {
 		why = err.Error()
 	case len(what) > 0:
 		why = "it holds " + strings.Join(what, " and ")
+	case t.forked.Load():
+		why = "a /fork run was started in it"
 	case t.reused:
 		why = "it was there before"
 	case t.named:

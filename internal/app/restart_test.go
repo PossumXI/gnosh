@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestRestart(t *testing.T) {
 		o.Executable = exe
 		o.Relaunch = func(args, env []string) error {
 			started = append(started, args)
-			if !slices.Contains(env, restartedEnv+"=1") {
+			if !slices.Contains(env, RestartedEnv+"=1") {
 				t.Errorf("the gnosh /restart starts is not told it was restarted: %q", env)
 			}
 			if len(w.Sessions()) != 1 {
@@ -104,5 +105,29 @@ func TestRestart(t *testing.T) {
 	s.typeLine("/exit")
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
+	}
+}
+
+// A session that has written nothing yet has no file to resume: /restart
+// (and /background) start gnosh again under its id.
+func TestRestartBeforeAnything(t *testing.T) {
+	w := apptest.NewWorld(t)
+	var started [][]string
+	s := sitWith(t, w, func(o *Options) {
+		o.Relaunch = func(args, env []string) error {
+			started = append(started, args)
+			return os.ErrPermission
+		}
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/restart")
+	s.see("gnosh starts again, in this session.")
+	s.exit()
+	m := regexp.MustCompile(`session (\S+) in `).FindStringSubmatch(s.out.String())
+	if m == nil {
+		t.Fatalf("no session id on the screen:\n%s", s.out.String())
+	}
+	if len(started) != 1 || !slices.Equal(started[0], []string{"--permission-mode=default", "--session-id=" + m[1]}) {
+		t.Errorf("gnosh started again with %q", started)
 	}
 }
