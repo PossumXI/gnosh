@@ -889,7 +889,7 @@ func (u *UI) finish(c app.Controls, code int, why string) int {
 	s.closeView()
 	s.closePanel()
 	info := c.Info()
-	if _, err := os.Stat(info.Path); err == nil && info.Resume != "" {
+	if _, err := os.Stat(info.Path); err == nil && info.Resume != "" && !s.restarting {
 		s.begin(blkTurn)
 		s.put(wrap(u.m, u.th.wordmark()+" "+u.th.Quiet.Render("To resume this session: ")+oneLine(info.Resume), s.cols, "", "  ")...)
 	}

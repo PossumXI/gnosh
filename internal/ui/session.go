@@ -293,10 +293,12 @@ type session struct {
 	idleTold  bool
 
 	// done says the session is over; code is the exit code and why the
-	// reason, in the SessionEnd hooks' words.
-	done bool
-	code int
-	why  string
+	// reason, in the SessionEnd hooks' words. restarting says it ends for
+	// /restart.
+	done       bool
+	restarting bool
+	code       int
+	why        string
 }
 
 // newSession makes a session. Nothing is drawn until start.
