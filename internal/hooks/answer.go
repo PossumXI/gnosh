@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -56,6 +57,10 @@ type answer struct {
 	input json.RawMessage
 	// context is "additionalContext": text for the model.
 	context string
+	// watch is "watchPaths", the files to watch from now on, and watchSet
+	// says it was given (an empty list clears the list).
+	watch    []string
+	watchSet bool
 	// notes says, in plain words, what the hook asked for that gnosh does
 	// not act on and that is harmless to leave undone.
 	notes []string
@@ -230,7 +235,19 @@ func parseAnswer(event Event, info eventInfo, out []byte) answer {
 						a.note("it asked for skills to be loaded again, which gnosh does not do from a hook")
 					}
 				case g.key == "watchPaths":
-					a.note("it asked for files to be watched, which gnosh does not do")
+					var paths []string
+					if kindOf(g.value) != "a list" || json.Unmarshal(g.value, &paths) != nil {
+						a.fail("\"watchPaths\" must be a list of absolute paths; this one is %s", kindOf(g.value))
+						continue
+					}
+					a.watch, a.watchSet = []string{}, true
+					for _, p := range paths {
+						if !filepath.IsAbs(p) {
+							a.fail("\"watchPaths\" holds %s, which is not an absolute path", quote(p))
+							continue
+						}
+						a.watch = append(a.watch, filepath.Clean(p))
+					}
 				}
 			}
 		default:

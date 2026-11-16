@@ -275,6 +275,7 @@ func (l *live) sessionStart(ctx context.Context, info agent.StartInfo) ([]agent.
 	if err != nil {
 		return nil, err
 	}
+	l.setWatched(out)
 	return hookParts(hooks.SessionStart, out), nil
 }
 
@@ -451,7 +452,9 @@ func (l *live) cwdMoved(ctx context.Context, dir string) {
 	l.lastCwd = dir
 	l.cwdMu.Unlock()
 	if l.hooks.has(hooks.CwdChanged) {
-		_, _ = l.hooks.run(ctx, hooks.Input{Event: hooks.CwdChanged, OldCwd: old, NewCwd: dir, EnvFile: l.envFile()})
+		if out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.CwdChanged, OldCwd: old, NewCwd: dir, EnvFile: l.envFile()}); err == nil {
+			l.setWatched(out)
+		}
 	}
 }
 

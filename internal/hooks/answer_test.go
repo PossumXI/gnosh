@@ -334,7 +334,7 @@ var answerForms = []struct {
 		want:   expect{failed: true, warnings: []string{"initialUserMessage"}, result: ResultCouldNotEvaluate}},
 	{name: "what is noted and not done", event: SessionStart,
 		prints: `{"hookSpecificOutput": {"sessionTitle": "Build", "watchPaths": ["/project/.env"], "reloadSkills": true, "additionalContext": "x"}}`,
-		want:   expect{context: "x", notes: []string{"name the session", "files to be watched", "skills to be loaded again"}}},
+		want:   expect{context: "x", notes: []string{"name the session", "skills to be loaded again"}}},
 	{name: "ending the turn", event: SessionStart,
 		prints: `{"continue": false, "stopReason": "the license has run out"}`,
 		want:   expect{endTurn: true, stop: "the license has run out", result: ResultEndedTurn}},
@@ -387,6 +387,17 @@ var answerForms = []struct {
 		prints: `{"continue": false, "stopReason": "enough for today"}`,
 		want:   expect{endTurn: true, stop: "enough for today", result: ResultEndedTurn}},
 	{name: "plain words are not text for the model", event: PostToolBatch, prints: "ran the suite", want: expect{}},
+
+	// ---- FileChanged: a message is shown; nothing can be stopped.
+	{name: "a message", event: FileChanged,
+		prints: `{"systemMessage": ".envrc changed: direnv allow ran"}`,
+		want:   expect{system: []string{".envrc changed: direnv allow ran"}, result: ResultWarning}},
+	{name: "a block is only an objection", event: FileChanged,
+		prints: `{"decision": "block", "reason": "no"}`,
+		want:   expect{warnings: []string{"objected"}, result: ResultWarning}},
+	{name: "a relative path to watch", event: FileChanged,
+		prints: `{"hookSpecificOutput": {"hookEventName": "FileChanged", "watchPaths": ["rel/.env"]}}`,
+		want:   expect{failed: true, warnings: []string{"not an absolute path"}, result: ResultCouldNotEvaluate}},
 
 	// ---- ConfigChange: a block keeps the settings the session had.
 	{name: "block", event: ConfigChange,
@@ -616,5 +627,29 @@ func TestLongAnswersAreClipped(t *testing.T) {
 		if n := len([]rune(got)); n > 260 {
 			t.Errorf("%s: the text is %d characters long, want about 200:\n%s", tt.event, n, got)
 		}
+	}
+}
+
+// watchPaths, from SessionStart, CwdChanged and FileChanged hooks, are the
+// files to watch from then on: every hook's, once each; an empty list
+// clears them, and a hook that says nothing of them leaves them.
+func TestWatchPaths(t *testing.T) {
+	for _, event := range []Event{SessionStart, CwdChanged, FileChanged} {
+		r := newRunner(t, options(t),
+			Hook{Event: event, Command: `echo '{"hookSpecificOutput": {"hookEventName": "` + string(event) + `", "watchPaths": ["/p/.env", "/p/.envrc"]}}'`},
+			Hook{Event: event, Command: `echo '{"hookSpecificOutput": {"hookEventName": "` + string(event) + `", "watchPaths": ["/p/.env", "/q/x"]}}'`},
+		)
+		out := run(t, r, input(event))
+		if !out.WatchSet || strings.Join(out.WatchPaths, " ") != "/p/.env /p/.envrc /q/x" {
+			t.Errorf("%s: WatchSet %v, WatchPaths %q", event, out.WatchSet, out.WatchPaths)
+		}
+	}
+	r := newRunner(t, options(t), Hook{Event: CwdChanged, Command: `echo '{"hookSpecificOutput": {"hookEventName": "CwdChanged", "watchPaths": []}}'`})
+	if out := run(t, r, input(CwdChanged)); !out.WatchSet || len(out.WatchPaths) != 0 {
+		t.Errorf("an empty list: WatchSet %v, WatchPaths %q", out.WatchSet, out.WatchPaths)
+	}
+	r = newRunner(t, options(t), Hook{Event: CwdChanged, Command: `echo '{"systemMessage": "moved"}'`})
+	if out := run(t, r, input(CwdChanged)); out.WatchSet {
+		t.Errorf("a hook that named no files set the list: %q", out.WatchPaths)
 	}
 }

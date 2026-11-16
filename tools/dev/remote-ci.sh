@@ -45,7 +45,9 @@ done
 
 sha=$(git rev-parse --short=12 "$ref^{commit}")
 dir="$ROOT/gnosh-$sha"
-SSH="ssh ${KEY:+-i $KEY -o IdentitiesOnly=yes} -o BatchMode=yes -o ConnectTimeout=20"
+# (Keepalives: a connection that dies on the way, as a laptop's network
+# drop does, fails the run within two minutes instead of hanging it.)
+SSH="ssh ${KEY:+-i $KEY -o IdentitiesOnly=yes} -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=4"
 
 # Room first. The copies of other commits are kept for a look afterwards,
 # the newest eight of them; and Go's build cache, which grew to 39G in five

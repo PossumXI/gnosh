@@ -227,6 +227,11 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			want: with(common(Notification), map[string]any{"message": "the turn finished a minute ago", "notification_type": "idle_prompt"}),
 		},
 		{
+			name: "FileChanged",
+			in:   Input{Event: FileChanged, FilePath: "/project/.envrc", FileEvent: "unlink", EnvFile: "/state/env.sh"},
+			want: with(common(FileChanged), map[string]any{"file_path": "/project/.envrc", "event": "unlink"}),
+		},
+		{
 			name: "PostToolBatch",
 			in: Input{Event: PostToolBatch, ToolCalls: []BatchCall{
 				{ToolName: "Read", ToolUseID: "toolu_01", ToolInput: json.RawMessage(`{"file_path":"/p/a.go"}`), ToolResponse: "1\tpackage a"},
@@ -460,6 +465,8 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 		{"PreModelSwitch", Input{Event: PreModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PreModelSwitch)},
 		{"ConfigChange", Input{Event: ConfigChange, Source: "user_settings", FilePath: "/home/gnosh.json"}, always(ConfigChange)},
 		{"PostToolBatch", Input{Event: PostToolBatch}, always(PostToolBatch)},
+		{"FileChanged", Input{Event: FileChanged, FilePath: "/project/.envrc", FileEvent: "change", EnvFile: "/state/gnosh/env/session-1.sh"},
+			with(always(FileChanged), "GNOSH_ENV_FILE", "/state/gnosh/env/session-1.sh", "CLAUDE_ENV_FILE", "/state/gnosh/env/session-1.sh")},
 		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
 		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
 		{"UserPromptExpansion", Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", Prompt: "x"}, always(UserPromptExpansion)},

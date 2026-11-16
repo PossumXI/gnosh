@@ -254,7 +254,7 @@ func TestCouldNotEvaluateOnEveryEvent(t *testing.T) {
 						t.Fatalf("got %d warnings, want 1: %q", len(out.Warnings), out.Warnings)
 					}
 					contains(t, "the warning", out.Warnings[0], append([]string{`The PermissionRequest hook "audio-check" did not answer the permission question`, "The question goes to the user instead."}, c.says...)...)
-				case SessionStart, PreCompact, PostCompact, SubagentStart, PostModelSwitch, DirectoryAdded, CwdChanged:
+				case SessionStart, PreCompact, PostCompact, SubagentStart, PostModelSwitch, DirectoryAdded, CwdChanged, FileChanged:
 					// These cannot block. One warning; the session, the
 					// summary, the sub-agent or the switch goes ahead.
 					if out.Blocked || out.Reason != "" || out.PermissionDecision != NoDecision {
@@ -315,7 +315,7 @@ func TestExitTwoOnEveryEvent(t *testing.T) {
 					t.Fatalf("warnings: %q", out.Warnings)
 				}
 				contains(t, "the warning", out.Warnings[0], `"guard" did not answer`, "status 2", `"deny" in JSON`)
-			case SessionStart, SubagentStart, PreCompact, PostCompact, SessionEnd, PostModelSwitch, DirectoryAdded, CwdChanged:
+			case SessionStart, SubagentStart, PreCompact, PostCompact, SessionEnd, PostModelSwitch, DirectoryAdded, CwdChanged, FileChanged:
 				// An objection is a warning.
 				if out.Blocked || out.Reason != "" || rec.Result != ResultWarning {
 					t.Errorf("got %+v", out)

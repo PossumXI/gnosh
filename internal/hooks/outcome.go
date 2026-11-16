@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -86,6 +87,14 @@ type Outcome struct {
 	// SystemMessages are warnings the hooks asked gnosh to show the user
 	// ("systemMessage"). They block nothing.
 	SystemMessages []string
+
+	// WatchPaths are the files to watch for FileChanged from now on, in
+	// place of the ones hooks named before ("watchPaths", from SessionStart,
+	// CwdChanged and FileChanged hooks): every hook's, in the order
+	// configured. WatchSet says a hook gave the list; an empty one clears
+	// it.
+	WatchPaths []string
+	WatchSet   bool
 
 	// Warnings are sentences of gnosh's own for the user about hooks that
 	// had something to say where nothing can be blocked: a hook that
@@ -237,6 +246,9 @@ type verdict struct {
 	context string
 	warning string
 	input   json.RawMessage
+	// watch is the hook's watchPaths, and watchSet says it gave them.
+	watch    []string
+	watchSet bool
 	// notes says what else there is to know.
 	notes []string
 }
@@ -365,6 +377,9 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 	v.notes = append(v.notes, a.notes...)
 	v.warning = clip(a.warning, r.maxText)
 	v.context = clip(a.context, r.maxText)
+	if len(a.errs) == 0 {
+		v.watch, v.watchSet = a.watch, a.watchSet
+	}
 	reason := clip(a.reason, r.maxText)
 	switch {
 	case !a.halt:
@@ -486,6 +501,14 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		if v.warning != "" {
 			rec.Result = ResultWarning
 			out.SystemMessages = append(out.SystemMessages, v.warning)
+		}
+		if v.watchSet && v.failure == "" {
+			out.WatchSet = true
+			for _, p := range v.watch {
+				if !slices.Contains(out.WatchPaths, p) {
+					out.WatchPaths = append(out.WatchPaths, p)
+				}
+			}
 		}
 		if v.context != "" {
 			contexts = append(contexts, v.context)

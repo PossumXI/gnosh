@@ -936,3 +936,18 @@ or kept with the reason said (27).
     ends the turn there, and the reason is kept in the conversation, so
     the model reads it when the session goes on. Sub-agents' batches run
     the hooks too, with agent_id and agent_type.
+69. **FileChanged, as Claude Code's, by looking twice a second.** Claude
+    Code watches files with the system's file events; gnosh, which uses
+    the standard library alone, looks at the watched files every 500 ms
+    (a stat each), and only while a FileChanged hook is configured. The
+    files are the ones the FileChanged matchers name (split on "|", each
+    a file name in the folder the session started in; a group with no
+    matcher adds none and runs for every watched file) and the last
+    watchPaths a SessionStart, CwdChanged or FileChanged hook gave (an
+    empty list clears them; only absolute paths are taken). A file made,
+    changed or removed runs the hooks with file_path and event (add,
+    change, unlink); the first look at a file only notes how it stands.
+    The hooks get the environment file (GNOSH_ENV_FILE, CLAUDE_ENV_FILE)
+    as CwdChanged's do, and their systemMessage is shown. Matchers are
+    Claude Code's narrow kind: only letters, digits, _ and | make exact
+    names, so ".envrc" is a pattern, as there.

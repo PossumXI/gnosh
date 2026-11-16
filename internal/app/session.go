@@ -50,6 +50,9 @@ type live struct {
 	// modelPicked says the model was picked when the session started,
 	// from a list, as nothing chose one (set before the session runs).
 	modelPicked bool
+	// watch is how the files FileChanged hooks watch stood at the last
+	// look (filewatch.go).
+	watch fileWatch
 
 	store     *transcript.Store
 	ts        *transcript.Session
@@ -558,6 +561,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.mcp = l.loadMCP()
 	l.startMCP()
 	l.startStatusLine()
+	l.watchFiles(l.ctx)
 	l.startInitialPrompt()
 	return l, nil
 }

@@ -159,7 +159,7 @@ func TestOptionTable(t *testing.T) {
 			none = append(none, e.name)
 		}
 	}
-	if len(hookEvents) != 22 || !slices.Equal(none, []string{"UserPromptSubmit", "Stop", "SubagentStop", "CwdChanged", "PostToolBatch"}) {
+	if len(hookEvents) != 23 || !slices.Equal(none, []string{"UserPromptSubmit", "Stop", "SubagentStop", "CwdChanged", "PostToolBatch"}) {
 		t.Errorf("hook events: %d, without a matcher %q", len(hookEvents), none)
 	}
 	if !slices.Equal(HookEventNames()[:6], []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "Stop"}) {

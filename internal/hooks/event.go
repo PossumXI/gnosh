@@ -95,6 +95,11 @@ const (
 	// the model, and a block ends the turn there, with the reason kept in
 	// the conversation.
 	PostToolBatch Event = "PostToolBatch"
+	// FileChanged fires when a watched file is made, changed or removed,
+	// whatever did it. Nothing can be stopped; a hook's systemMessage is
+	// shown, it may write export lines to the session's environment file,
+	// and it may say which files are watched from then on (watchPaths).
+	FileChanged Event = "FileChanged"
 )
 
 // Events returns the events gnosh has, in the order the specification
@@ -106,7 +111,7 @@ func Events() []Event {
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
 		PermissionRequest, Notification, PreModelSwitch, PostModelSwitch,
 		DirectoryAdded, CwdChanged, UserPromptExpansion, ConfigChange,
-		PostToolBatch,
+		PostToolBatch, FileChanged,
 	}
 }
 
@@ -187,8 +192,9 @@ type eventInfo struct {
 	// values lists every value the subject can take, when they are a
 	// fixed list.
 	values []string
-	// narrow marks the one event whose list matchers are made of letters,
-	// digits, "_" and "|" only (StopFailure, as in Claude Code).
+	// narrow marks the events whose list matchers are made of letters,
+	// digits, "_" and "|" only (StopFailure and FileChanged, as in Claude
+	// Code).
 	narrow bool
 
 	// mode says that the event's input carries permission_mode.
@@ -304,7 +310,12 @@ func describe(e Event) (eventInfo, bool) {
 			reads:  true,
 		}, true
 	case CwdChanged:
-		return eventInfo{class: warns, reads: true}, true
+		return eventInfo{class: warns, reads: true, fields: []string{"watchPaths"}}, true
+	case FileChanged:
+		return eventInfo{
+			class: warns, subject: ownValue, what: "the file's name", narrow: true,
+			reads: true, fields: []string{"watchPaths"},
+		}, true
 	case PostToolBatch:
 		return eventInfo{
 			class: gate, mode: true, reads: true, halts: true,
@@ -353,7 +364,7 @@ func claudeOnly(name string) (canBlock, ok bool) {
 	case "WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
 		"TeammateIdle", "Elicitation", "ElicitationResult":
 		return true, true
-	case "PermissionDenied", "FileChanged", "Setup", "MessageDisplay":
+	case "PermissionDenied", "Setup", "MessageDisplay":
 		return false, true
 	}
 	return false, false

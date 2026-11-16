@@ -255,6 +255,7 @@ var hookEvents = []hookEvent{
 	{"UserPromptExpansion", "the command's name", true},
 	{"ConfigChange", "the source", true},
 	{"PostToolBatch", "", true},
+	{"FileChanged", "the file's name", false},
 }
 
 // HookEventNames returns the names of the hook events gnosh knows, in the

@@ -70,6 +70,7 @@
 //	PostModelSwitch     one warning; cannot block                model switched to 30 s
 //	ConfigChange        the new settings are not taken in        source           600 s
 //	PostToolBatch       the model is not asked again             (no matcher)     600 s
+//	FileChanged         one warning; cannot block                file's name      600 s
 //
 // A hook's own "timeout" replaces the default; on SessionEnd it counts up
 // to 60 seconds. A hook on an event that takes no matcher must not have

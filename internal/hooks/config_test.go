@@ -103,7 +103,7 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"an event in capitals", `{"PRE_TOOL_USE": []}`, []string{`"PRE_TOOL_USE" is not a hook event`, "this one is PreToolUse.", "Notification"}},
 		{"an empty event name", `{"": []}`, []string{"names no event"}},
 		{"a Claude Code event that can block", `{"WorktreeCreate": []}`, []string{`"WorktreeCreate" is a Claude Code hook event that gnosh does not have`, "would never run", "can block"}},
-		{"a Claude Code event that only watches", `{"FileChanged": []}`, []string{`"FileChanged" is a Claude Code hook event that gnosh does not have`, "would never run"}},
+		{"a Claude Code event that only watches", `{"MessageDisplay": []}`, []string{`"MessageDisplay" is a Claude Code hook event that gnosh does not have`, "would never run"}},
 		{"an event written twice", `{"Stop": [], "Stop": []}`, []string{`"Stop" is written twice`, "silently dropped"}},
 
 		{"an event that is not a list", `{"Stop": {"hooks": []}}`, []string{"must be a list of matcher groups", "an object"}},
@@ -349,8 +349,8 @@ func TestCanBlock(t *testing.T) {
 	if Event("stop").CanBlock() {
 		t.Error(`Event("stop").CanBlock() is true for a name that is not an event`)
 	}
-	if n := len(Events()); n != 22 {
-		t.Errorf("Events() has %d events, want 22", n)
+	if n := len(Events()); n != 23 {
+		t.Errorf("Events() has %d events, want 23", n)
 	}
 }
 

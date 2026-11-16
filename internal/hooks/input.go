@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -98,7 +99,7 @@ type Input struct {
 	Source string
 	// Model names the model, for SessionStart ("model").
 	Model string
-	// EnvFile is, for SessionStart and CwdChanged, the path of the session's own
+	// EnvFile is, for SessionStart, CwdChanged and FileChanged, the path of the session's own
 	// environment file. Hooks get it as GNOSH_ENV_FILE and
 	// CLAUDE_ENV_FILE and may append export lines to it.
 	EnvFile string
@@ -127,7 +128,11 @@ type Input struct {
 	// CompactSummary is the summary, for PostCompact ("compact_summary").
 	CompactSummary string
 
-	// FilePath is also, for ConfigChange, the settings file that changed.
+	// FilePath is also, for ConfigChange, the settings file that changed,
+	// and for FileChanged the watched file (its name is what the matchers
+	// are tested against); FileEvent is then what happened to it: change,
+	// add or unlink ("event").
+	FileEvent string
 	//
 	// FilePath, MemoryType, LoadReason, TriggerFilePath and
 	// ParentFilePath describe a context file, for InstructionsLoaded
@@ -222,6 +227,8 @@ func (in *Input) subject() string {
 		return in.CommandName
 	case ConfigChange:
 		return in.Source
+	case FileChanged:
+		return filepath.Base(in.FilePath)
 	}
 	return ""
 }
@@ -368,6 +375,9 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 	case ConfigChange:
 		m["source"] = in.Source
 		set("file_path", in.FilePath)
+	case FileChanged:
+		m["file_path"] = in.FilePath
+		m["event"] = in.FileEvent
 	case PostToolBatch:
 		calls := make([]map[string]any, 0, len(in.ToolCalls))
 		for _, c := range in.ToolCalls {
@@ -495,7 +505,7 @@ func (in *Input) environ(info eventInfo, base []string, dir, projectDir, memStat
 		vars["GNOSH_SESSION_START_SOURCE"] = in.Source
 		set("GNOSH_ENV_FILE", in.EnvFile)
 		set("CLAUDE_ENV_FILE", in.EnvFile)
-	case CwdChanged:
+	case CwdChanged, FileChanged:
 		set("GNOSH_ENV_FILE", in.EnvFile)
 		set("CLAUDE_ENV_FILE", in.EnvFile)
 	case SessionEnd:
