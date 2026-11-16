@@ -405,12 +405,17 @@ func TestPreModelSwitchHook(t *testing.T) {
 	if data, _ := os.ReadFile(log); strings.Contains(string(data), "PostModelSwitch") {
 		t.Fatalf("a refused switch ran the PostModelSwitch hooks:\n%s", data)
 	}
+	// (The answer is typed once the question is open: the hook's record,
+	// which says the same words, comes first, and a line typed before the
+	// question is not taken for its answer.)
 	s.typeLine("/model local/test-model")
-	s.see("the switch sends the whole conversation again")
+	s.see("? Switch the model to local/test-model? A PreModelSwitch hook asks.")
+	s.see("Type a number and Enter.")
 	s.typeLine("2")
 	s.see("the model was not changed")
 	s.typeLine("/model local/test-model")
-	s.see("the switch sends the whole conversation again")
+	s.see("? Switch the model to local/test-model? A PreModelSwitch hook asks.")
+	s.see("Type a number and Enter.")
 	s.typeLine("1")
 	s.see("The model is local/test-model")
 	data, _ := os.ReadFile(log)
