@@ -362,68 +362,73 @@ func (s *session) shell(d editor.Draft) {
 	s.ed.AddHistory(d)
 }
 
+// ownCommands are the commands the interface carries out itself when
+// nothing follows them, at once, also while a turn runs: the pickers (the
+// session's command with words after it is what each runs), the side
+// panel and the list of deliverables. take says whether it took the
+// line: where the session's controls cannot do their part, or a question
+// is on the screen, the line goes to the session's command as it is.
+var ownCommands = []struct {
+	words map[string]bool
+	take  func(s *session, line string) bool
+}{
+	{rewindWords, func(s *session, _ string) bool {
+		_, ok := s.c.(rewinder)
+		if ok {
+			s.rewind()
+		}
+		return ok
+	}},
+	{resumeWords, func(s *session, _ string) bool {
+		_, ok := s.c.(resumer)
+		if ok {
+			s.resume()
+		}
+		return ok
+	}},
+	{modelWords, func(s *session, line string) bool {
+		_, ok := s.c.(modelChooser)
+		if ok {
+			s.chooseModel(line)
+		}
+		return ok
+	}},
+	{configWords, func(s *session, line string) bool {
+		// (Asked before the picker opens: the picker is a question too.)
+		if _, ok := s.c.(configChooser); !ok || s.q != nil {
+			return false
+		}
+		s.chooseConfig(line)
+		return true
+	}},
+	{exportWords, func(s *session, line string) bool { return s.q == nil && s.chooseExport(line) }},
+	{memoryWords, func(s *session, line string) bool { return s.q == nil && s.chooseMemory(line) }},
+	{mcpWords, func(s *session, line string) bool { return s.q == nil && s.chooseMCP(line) }},
+	{effortWords, func(s *session, line string) bool { return s.q == nil && s.chooseEffort(line) }},
+	{panelWords, func(s *session, line string) bool {
+		s.ed.AddHistory(editor.Draft{Text: line})
+		s.togglePanel()
+		return true
+	}},
+	{deliverWords, func(s *session, line string) bool {
+		ok := s.listsDeliverables()
+		if ok {
+			s.listDeliverables(line)
+		}
+		return ok
+	}},
+}
+
 // command takes a line that begins with a slash. While a turn runs it
 // waits for the session to go idle, unless it is one of the few commands
 // that act at once.
 func (s *session) command(d editor.Draft) {
 	line := strings.TrimSpace(d.Text)
 	word, _, _ := strings.Cut(strings.TrimPrefix(line, "/"), " ")
-	if rewindWords[strings.ToLower(line)] {
-		if _, ok := s.c.(rewinder); ok {
-			// With no number after it, the command is the list to pick
-			// from.
-			s.rewind()
+	for _, own := range ownCommands {
+		if own.words[strings.ToLower(line)] && own.take(s, line) {
 			return
 		}
-	}
-	if resumeWords[strings.ToLower(line)] {
-		if _, ok := s.c.(resumer); ok {
-			s.resume()
-			return
-		}
-	}
-	if modelWords[strings.ToLower(line)] {
-		if _, ok := s.c.(modelChooser); ok {
-			// With nothing after it, the command is the picker (modelpick.go).
-			s.chooseModel(line)
-			return
-		}
-	}
-	if exportWords[strings.ToLower(line)] && s.q == nil && s.chooseExport(line) {
-		// So is /export (exportpick.go).
-		return
-	}
-	if memoryWords[strings.ToLower(line)] && s.q == nil && s.chooseMemory(line) {
-		// And /memory (memorypick.go).
-		return
-	}
-	if mcpWords[strings.ToLower(line)] && s.q == nil && s.chooseMCP(line) {
-		// And /mcp (mcppick.go).
-		return
-	}
-	if effortWords[strings.ToLower(line)] && s.q == nil && s.chooseEffort(line) {
-		// And /effort (effortpick.go).
-		return
-	}
-	if configWords[strings.ToLower(line)] && s.q == nil {
-		if _, ok := s.c.(configChooser); ok {
-			// So is /config (configpick.go).
-			s.chooseConfig(line)
-			return
-		}
-	}
-	if panelWords[strings.ToLower(line)] {
-		// The side panel is the interface's own, at once, also while a
-		// turn runs.
-		s.ed.AddHistory(editor.Draft{Text: line})
-		s.togglePanel()
-		return
-	}
-	if deliverWords[strings.ToLower(line)] && s.listsDeliverables() {
-		// The list is the interface's own to draw, at once, also while a
-		// turn runs.
-		s.listDeliverables(line)
-		return
 	}
 	if s.busy && !atOnce[strings.ToLower(word)] {
 		s.cmdq = append(s.cmdq, line)
