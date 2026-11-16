@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -264,6 +265,26 @@ func TestNotesUnderAFailure(t *testing.T) {
 	}
 	if !strings.Contains(printed(res), "gnosh_no_such_command_xyz") {
 		t.Errorf("the shell's own message is gone:\n%s", core.TextOf(res.Content))
+	}
+
+	// Misread is asked about a failed command on this machine, with the
+	// programs its first line runs, and what it says is the only note.
+	var asked [][]string
+	mr := newManager(t, Options{ToolNames: []string{"gnovm_run"}, Misread: func(command string, programs []string) string {
+		asked = append(asked, programs)
+		if len(programs) > 0 && programs[0] == "gnosh_mem_xyz" {
+			return "it was Gno"
+		}
+		return ""
+	}})
+	res = bash(t, mr, env, "gnosh_mem_xyz show")
+	if exitCode(t, res) != 127 || !hasNote(res, "it was Gno") || hasNote(res, "is not installed") {
+		t.Errorf("a misread command:\n%s", core.TextOf(res.Content))
+	}
+	bash(t, mr, env, "echo 'x(' | sh -s")
+	bash(t, mr, env, "echo fine")
+	if want := [][]string{{"gnosh_mem_xyz"}, {"echo", "sh"}}; !slices.EqualFunc(asked, want, slices.Equal) {
+		t.Errorf("Misread was asked about %q, want %q", asked, want)
 	}
 
 	// One of the session's tools, typed as a command.

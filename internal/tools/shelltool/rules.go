@@ -328,6 +328,16 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 		where = "on " + a.host.Name
 	}
 	const instead = "Do it another way, or ask the user where the program is; do not search the disk for it"
+	if e.code != 0 && a.host == nil && m.opt.Misread != nil {
+		line, _ := firstCommandLine(a.command)
+		var programs []string
+		for _, p := range pieces(line) {
+			programs = append(programs, programOf(p.text))
+		}
+		if note := m.opt.Misread(a.command, programs); note != "" {
+			return []string{note}
+		}
+	}
 	var notes []string
 	switch name := lookedUp(a.command); {
 	case name != "" && e.code != 0 && strings.TrimSpace(body) == "":

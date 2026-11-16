@@ -427,7 +427,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			l.instr.Forget()
 		}
 	}
-	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), "gnovm_run"))
+	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool))
 	if err != nil {
 		return l, err
 	}
@@ -1501,6 +1501,15 @@ func (c *controls) close() {
 // the folder and its config, opens the session, hands it to its front end,
 // and closes it.
 func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code int) {
+	if inv.PrintImplied && p.env["GNOSH"] == "1" {
+		// A command a gnosh session runs (its shells set GNOSH=1) that
+		// names gnosh without -p is a model that took gnosh for a program
+		// of some other kind (gnosh gnovm): a run of its own here would
+		// answer its words, saying no to every question, beside the
+		// session that started it and on the same model.
+		fmt.Fprintln(p.stderr, `gnosh: in a command a gnosh session runs, gnosh answers a prompt only with -p (gnosh -p "..."), so nothing ran. gnosh help lists its commands.`)
+		return 1
+	}
 	interactive := inv.Command == cli.CmdInteractive
 	var front Frontend
 	switch {

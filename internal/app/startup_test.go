@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -38,6 +39,47 @@ func TestOwnToolsNameEveryTool(t *testing.T) {
 		t.Errorf("a rule naming an offered tool stopped startup:\n%s", r.err)
 	}
 	r.wantCode(t, 0)
+}
+
+// gnosh named without -p by a command a gnosh session runs (GNOSH=1),
+// whose output is no terminal, answers nothing: it would answer its words
+// saying no to everything, on the same model. gnosh -p there runs as
+// anywhere.
+func TestNoSessionInsideAGnoshCommand(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply { return &apptest.Reply{Text: "Hi."} })
+	o := testOptions(w, "gnovm")
+	o.Environ = append(o.Environ, "GNOSH=1")
+	r := runWith(t, context.Background(), o)
+	if r.code != 1 || !strings.Contains(r.err, "gnosh answers a prompt only with -p") || len(w.Model.Requests()) != 0 {
+		t.Errorf("code %d, %d requests, stderr:\n%s", r.code, len(w.Model.Requests()), r.err)
+	}
+	o = testOptions(w, "-p", "hi")
+	o.Environ = append(o.Environ, "GNOSH=1")
+	runWith(t, context.Background(), o).wantCode(t, 0)
+}
+
+// What a model new to mem types into a shell is answered with word of
+// gnovm_run; other failures are not.
+func TestMisreadGno(t *testing.T) {
+	for _, c := range []struct {
+		command  string
+		programs []string
+		want     bool
+	}{
+		{"mem show", []string{"mem"}, true},
+		{"mem.Show()", []string{"mem.Show()"}, true},
+		{"mem.Show() 2>&1 | head -100", []string{"mem.Show()", "head"}, true},
+		{"echo 'mem.Show()' | bash -s", []string{"echo", "bash"}, true},
+		{`echo "mem.Todo(\"x\").Push()" | gnosh gnovm`, []string{"echo", "gnosh"}, true},
+		{"grep -n 'mem.Show(' main.go", []string{"grep"}, false},
+		{"echo hi | bash", []string{"echo", "bash"}, false},
+		{"memtest --all", []string{"memtest"}, false},
+	} {
+		if got := misreadGno(c.command, c.programs) != ""; got != c.want {
+			t.Errorf("misreadGno(%q) gave a note: %v, want %v", c.command, got, c.want)
+		}
+	}
 }
 
 // Every mistake in the configuration stops startup, with the file and the

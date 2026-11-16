@@ -166,6 +166,14 @@ type Options struct {
 	// exists is answered with word that it is a tool, to be called as one.
 	ToolNames []string
 
+	// Misread, when not nil, is asked about a command on this machine that
+	// failed, and says what was meant when it can tell: code written for
+	// one of the session's tools and typed into a shell, say. programs are
+	// the programs the command's first line runs, as the shell would find
+	// them, in order. What it says is the note on the failure, in place of
+	// the others; "" leaves them.
+	Misread func(command string, programs []string) string
+
 	// LongSleep, when not zero, refuses a foreground command of the
 	// model's that begins by sleeping for this long or longer, and says
 	// what to do instead. It is for a session that tells the model when a

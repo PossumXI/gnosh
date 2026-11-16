@@ -328,8 +328,10 @@
 //   - Under a failure: exit code 127 gets a note that the program is not
 //     installed on that machine, to do it another way or ask the user, and
 //     not to search the disk; a lookup that found nothing (which, command
-//     -v) gets the same; and a command whose first word is one of the
-//     session's tools (Options.ToolNames) is told to call the tool.
+//     -v) gets the same; a command whose first word is one of the
+//     session's tools (Options.ToolNames) is told to call the tool; and
+//     Options.Misread may say, in place of all these, what a failed
+//     command was meant to be (gnosh's: Gno for mem, typed into a shell).
 //
 // # Closing
 //

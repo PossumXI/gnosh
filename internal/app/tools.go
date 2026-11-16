@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os/user"
+	"path"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
@@ -79,6 +82,9 @@ func (l *live) buildTools() error {
 		Hosts:     shellHosts(l.cfg),
 		Local:     l.p.whoAndWhere(),
 		ToolNames: l.p.toolNames(),
+	}
+	if slices.Contains(so.ToolNames, gnoRunTool) {
+		so.Misread = misreadGno
 	}
 	if l.interactive || l.inv.Command == cli.CmdPrint {
 		// A session somebody attends is told when a background command
@@ -270,4 +276,25 @@ func (l *live) closeShell() {
 // waitIdle waits until the session has nothing in hand, or until ctx ends.
 func (l *live) waitIdle(ctx context.Context) error {
 	return l.agent.Wait(ctx)
+}
+
+// gnoRunTool is the GnoVM feature's tool that runs Gno, mem's calls among
+// it.
+const gnoRunTool = "gnovm_run"
+
+// gnoCall finds a call on mem written as Gno: mem.Show(), mem.Todo(...).
+var gnoCall = regexp.MustCompile(`\bmem\.[A-Z][A-Za-z0-9_]*\(`)
+
+// misreadGno says of a command that failed that it was Gno for mem typed
+// into a shell, when it was: mem, or one of its calls, run as a program
+// (mem show, mem.Show()), or Gno handed to a shell or to gnosh (echo
+// 'mem.Show()' | bash). A model new to mem tries these first.
+func misreadGno(command string, programs []string) string {
+	for _, p := range programs {
+		p = path.Base(p)
+		if p == "mem" || strings.HasPrefix(p, "mem.") || (gnoCall.MatchString(command) && slices.Contains([]string{"bash", "sh", "dash", "zsh", "gnosh"}, p)) {
+			return "mem is Gno, which your " + gnoRunTool + " tool runs: it is no program, and no shell runs it. Call " + gnoRunTool + " with the Gno itself (mem.Show(), say) instead of putting it in a command"
+		}
+	}
+	return ""
 }
