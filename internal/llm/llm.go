@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -202,6 +203,10 @@ type provider struct {
 	cacheTTL         string // "" or "1h"
 	maxTokensField   string
 	defaultMaxTokens int
+
+	// noImages says the server refused a request's images: from then on
+	// each image is sent as a line saying it was left out (images.go).
+	noImages atomic.Bool
 }
 
 // newProvider checks a Config and makes the provider it describes, with

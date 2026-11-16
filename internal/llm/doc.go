@@ -134,6 +134,16 @@
 // Status is then the one the error names, if it names one, and zero
 // otherwise.
 //
+// A server that cannot take images refuses the whole request: llama.cpp's
+// server started without its vision part says "image input is not
+// supported" (HTTP 500), and others serving a model for text alone say
+// it in their own words (images.go, refusals). A provider told that sends
+// the request again at once with each image as a line that says it was
+// left out, and from then on never sends one, in a stream or a count of
+// tokens. Without that, a picture a tool read would fail every later
+// request of the session the same way, since the conversation keeps it.
+// The caller's request is not changed.
+//
 // When does a stream that ends without a stop reason still count? Only if
 // the server sent its own last word ("[DONE]", or "message_stop") and some
 // answer arrived. The server plainly meant to stop there, so the reason is

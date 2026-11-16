@@ -56,21 +56,12 @@ func (p *provider) stream(ctx context.Context, w wire, req *core.Request) iter.S
 			yield(core.Event{}, p.fail(core.ErrInvalidRequest, "there is no request to send"))
 			return
 		}
-		body, err := w.encode(req)
-		if err != nil {
-			yield(core.Event{}, err)
-			return
-		}
-		x, err := p.send(ctx, http.MethodPost, w.streamURL(), body, "text/event-stream")
+		x, err := p.open(ctx, w, req)
 		if err != nil {
 			yield(core.Event{}, err)
 			return
 		}
 		defer x.close()
-		if !x.ok() {
-			yield(core.Event{}, x.statusError())
-			return
-		}
 		x.traceResponse(nil)
 
 		rd := newSSEReader(x)
@@ -185,4 +176,38 @@ func (p *provider) endedEarly(last []byte) *core.ProviderError {
 	e := p.fail(core.ErrBadResponse, "the stream ended before the model said why it stopped")
 	e.Body = string(clip(last, bodyStart))
 	return e
+}
+
+// open sends req and returns the exchange of an answer that has begun.
+// A server that refuses the images in a request (imagesRefused) is sent
+// the request again at once without them, and from then on is never sent
+// one: each image is a line of text that says it was left out. Without
+// that, a picture a tool read would fail every later request of the
+// session in the same way, since the conversation keeps it.
+func (p *provider) open(ctx context.Context, w wire, req *core.Request) (*exchange, error) {
+	send := req
+	if p.noImages.Load() {
+		send = withoutImages(req)
+	}
+	for {
+		body, err := w.encode(send)
+		if err != nil {
+			return nil, err
+		}
+		x, err := p.send(ctx, http.MethodPost, w.streamURL(), body, "text/event-stream")
+		if err != nil {
+			return nil, err
+		}
+		if x.ok() {
+			return x, nil
+		}
+		err = x.statusError()
+		x.close()
+		if send == req && hasImages(req) && imagesRefused(err) {
+			p.noImages.Store(true)
+			send = withoutImages(req)
+			continue
+		}
+		return nil, err
+	}
 }
