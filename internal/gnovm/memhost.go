@@ -309,9 +309,11 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 
 // tellPeers ends an agent's mem.Show() or mem.Next() with how many other
 // sessions work the plan now, when any do (peersLine). A sub-agent works
-// for its session, and is not told.
+// for its session, and is not told. A Next that entered a todo while others
+// hold todos of the plan has said so already, naming them (enter() in
+// frames.gno), and is not told twice.
 func (h *memHost) tellPeers(q memRequest, who string, res *memResult) {
-	if who != "agent" || q.SubAgent || !callsShowOrNext(q.Code) {
+	if who != "agent" || q.SubAgent || !callsShowOrNext(q.Code) || strings.Contains(res.Output, " on this plan now:") {
 		return
 	}
 	if n := h.livePeers(q.Session); n > 0 {

@@ -315,7 +315,7 @@ func TestPeersAreToldOfEachOther(t *testing.T) {
 	h := newTestMemHost(t, filepath.Join(data, "proj", "mem"))
 	h.data = data
 	ctx := context.Background()
-	res, err := h.call(ctx, memRequest{Code: "r := mem.Todo(\"release\")\nr.Todo(\"bump the version\")\nr.Todo(\"tag it\")", User: true})
+	res, err := h.call(ctx, memRequest{Code: "r := mem.Todo(\"release\").Parallel()\nr.Todo(\"bump the version\")\nr.Todo(\"tag it\")", User: true})
 	require.NoError(t, err, res.Output)
 	call := func(session, code string, sub bool) string {
 		t.Helper()
@@ -326,6 +326,7 @@ func TestPeersAreToldOfEachOther(t *testing.T) {
 	const told, one, two = "working this plan now", "1 other gnosh session is working this plan now", "2 other gnosh sessions are working this plan now"
 
 	joinPeers(h.dir, "p1")
+	release1 := takeTurn(t, data, "p1")
 	require.NotContains(t, call("p1", "mem.Show()", false), told, "alone, there is nobody to tell of")
 
 	joinPeers(h.dir, "p2")
@@ -337,6 +338,12 @@ func TestPeersAreToldOfEachOther(t *testing.T) {
 	p, ok := h.readPeer("p1")
 	require.True(t, ok)
 	require.True(t, p.Peer, "a call that writes the record keeps its joining")
+	// p2's Next enters a todo while p1 holds one: enter() names p1 already,
+	// and the count is not said twice.
+	out = call("p2", "mem.Next()", false)
+	require.Equal(t, 1, strings.Count(out, " on this plan now:"), out)
+	require.Contains(t, out, "also works on this plan now", out)
+	require.NotContains(t, out, told, out)
 
 	require.NotContains(t, call("p1", `print(mem.JSON("release"))`, false), told, "only Show and Next tell")
 	require.NotContains(t, call("p3", "mem.Show()", true), told, "a sub-agent works for its session and is not told")
@@ -350,6 +357,7 @@ func TestPeersAreToldOfEachOther(t *testing.T) {
 	release4()
 	release2()
 	require.NotContains(t, call("p1", "mem.Show()", false), told, "the others' turns ended")
+	release1()
 }
 
 func TestJoinPeersNeedsAPlan(t *testing.T) {
