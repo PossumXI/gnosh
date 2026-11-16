@@ -647,6 +647,18 @@ func (b *wordBuilder) done() word {
 	if b.w.brace && b.w.raw == "{}" {
 		b.w.brace = false
 	}
+	if b.w.tilde {
+		// The shells leave the ~ as it is when anything between it and
+		// the first slash after it was quoted: "~''" is a file named ~,
+		// and so is "~'/x'" a path under one (oracle seed 121).
+		prefix := b.w.raw[1:]
+		if i := strings.IndexByte(prefix, '/'); i >= 0 {
+			prefix = prefix[:i]
+		}
+		if strings.ContainsAny(prefix, "'\"\\") {
+			b.w.tilde = false
+		}
+	}
 	return b.w
 }
 

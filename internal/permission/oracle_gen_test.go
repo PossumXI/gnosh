@@ -980,6 +980,7 @@ var attackLines = []string{
 	"f() { shift; git \"$@\"; }; f x clean -fdx", "f() { mv $1 $2; }; f a.txt b.txt", "a=(-fdx build); git clean \"${a[@]}\"",
 	"f() { mv \"$@\"{; }; f .git /tmp/g", "f() { mv \"$@\"}; }; f .git /tmp/g", "set -- .git /tmp/g; mv x\"$@\"{", // oracle seed 117: a { that nothing closes
 	"f() { mv \"$@\"{,x}; }; f .git /tmp/g", "sh -c 'mv \"$@\"{,x}' sh .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{,.bak}", // braces bash takes apart first, and dash not at all
+	"~'' ..", "cat ~''/.ssh/id_rsa", "rm -rf ~''", "cat ~'/x'", // oracle seed 121: a quote after the ~ leaves it a ~
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
