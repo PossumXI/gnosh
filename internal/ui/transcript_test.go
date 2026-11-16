@@ -41,6 +41,7 @@ func TestTranscriptView(t *testing.T) {
 	}
 	g.c.mu.Lock()
 	g.c.trans = []app.TranscriptEntry{
+		{Kind: "notice", Time: at, Message: core.UserText("<gnosh>Where this session runs: here.</gnosh>")},
 		{Kind: "prompt", Time: at, Message: core.UserText("fix the test")},
 		{Kind: "reply", Time: at.Add(time.Second), Model: "qwen/qwen3.8-27b", Message: core.Message{Role: core.RoleAssistant, Blocks: []core.Block{
 			{Type: core.BlockThinking, Text: "the first thought of the session\n\nand its second line"},
@@ -63,6 +64,11 @@ func TestTranscriptView(t *testing.T) {
 	g.viewHas("> and the other one", "⇥ step fix: make the test pass", "warning: a background command ended", "transcript · the session is working · q goes back")
 
 	g.keys(`<Home>`)
+	// What gnosh added is shown without its marker: the label says whose.
+	g.viewHas("gnosh: Where this session runs: here.")
+	if strings.Contains(g.screenText(), "<gnosh>") {
+		t.Errorf("the view shows gnosh's marker:\n%s", g.screenText())
+	}
 	g.viewHas("> fix the test", "─ 14:02:12 · qwen/qwen3.8-27b ─", "~ the first thought of the session", "  and its second line",
 		"Running the tests.", "▸ Bash", `"command": "go test ./..."`, "⎿ output line A")
 	if strings.Contains(g.screenText(), "\n\n") {
@@ -77,7 +83,7 @@ func TestTranscriptView(t *testing.T) {
 	}
 	// { goes to the prompt before the top, } to the next one.
 	g.keys(`"{"`)
-	if top := g.s.view.p.Top(); top != 0 {
+	if top := g.s.view.p.Top(); top != g.s.view.prompts[0] {
 		t.Errorf("{ from the end went to row %d, want the first prompt's", top)
 	}
 	g.keys(`"}"`)

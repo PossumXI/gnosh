@@ -385,7 +385,7 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 			add(rowsOf(texts[0], plain, mark, strings.Repeat(" ", s.m.Width(th.PromptMark)), false)...)
 			// The rest came with the prompt: what gnosh and the hooks added.
 			for _, t := range texts[1:] {
-				add(part(rowsOf(t, quiet, "  + ", "    ", false))...)
+				add(part(rowsOf(unwrapped(t), quiet, "  + ", "    ", false))...)
 			}
 		case "reply":
 			head := when
@@ -412,12 +412,12 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 				case b.Type == core.BlockToolResult && !shown[b.ToolUseID]:
 					add(part(rowsOf(resultText(b), plain, quiet("  ⎿ "+oneLine(b.ToolUseID)+": "), "    ", false))...)
 				case b.Type == core.BlockText:
-					add(part(rowsOf(b.Text, quiet, "  + ", "    ", false))...)
+					add(part(rowsOf(unwrapped(b.Text), quiet, "  + ", "    ", false))...)
 				}
 			}
 		case "hook":
 			for _, t := range blockTexts(e.Message) {
-				add(part(rowsOf(t, quiet, "  hook: ", "    ", false))...)
+				add(part(rowsOf(unwrapped(t), quiet, "  hook: ", "    ", false))...)
 			}
 		case "notice":
 			if e.Text != "" {
@@ -432,7 +432,7 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 				continue
 			}
 			for _, t := range blockTexts(e.Message) {
-				add(part(rowsOf(t, quiet, "  gnosh: ", "    ", false))...)
+				add(part(rowsOf(unwrapped(t), quiet, "  gnosh: ", "    ", false))...)
 			}
 		case "summary":
 			add(part(rowsOf(e.Text, quiet, "※ what came before, in short: ", "  ", true))...)
@@ -448,6 +448,23 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 		}
 	}
 	return lines, prompts
+}
+
+// unwrapped is a text gnosh added, without the marker around it (the
+// <gnosh> of prompt.Open and Close, or mem's own <mem>): the label beside
+// it in the view already says whose it is. A text that is more than one
+// marked piece is left as it is.
+func unwrapped(s string) string {
+	t := strings.TrimSpace(s)
+	for _, tag := range []string{"gnosh", "mem"} {
+		open, end := "<"+tag+">", "</"+tag+">"
+		if strings.HasPrefix(t, open) && strings.HasSuffix(t, end) {
+			if inner := t[len(open) : len(t)-len(end)]; !strings.Contains(inner, end) {
+				return strings.TrimSpace(inner)
+			}
+		}
+	}
+	return s
 }
 
 // blockTexts are the texts of a message's text blocks.
