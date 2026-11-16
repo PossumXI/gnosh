@@ -53,6 +53,24 @@ func TestBuildFromInfo(t *testing.T) {
 	if !got.Time.IsZero() || got.Commit != "abc" || got.Modified {
 		t.Errorf("BuildFromInfo = %+v", got)
 	}
+	// Installed from a module (go install ...@latest) there is no commit
+	// recorded, and the pseudo-version names it and its time, in each of
+	// its forms; a tagged version names neither.
+	for v, want := range map[string]string{
+		"v0.0.0-20261116052125-e0bf8238c6f6":        "2026-11-16T05:21:25Z e0bf8238c6f6 (gnosh)",
+		"v1.2.4-0.20261116052125-e0bf8238c6f6":      "2026-11-16T05:21:25Z e0bf8238c6f6 (gnosh)",
+		"v1.3.0-rc.1.0.20261116052125-e0bf8238c6f6": "2026-11-16T05:21:25Z e0bf8238c6f6 (gnosh)",
+		"v0.0.0-20261116052125-e0bf8238c6f6+dirty":  "2026-11-16T05:21:25Z e0bf8238c6f6 (gnosh)",
+		"v1.2.3":                            "unknown-time unknown-commit (gnosh)",
+		"(devel)":                           "unknown-time unknown-commit (gnosh)",
+		"v0.0.0-2026111605212-e0bf8238c6f6": "unknown-time unknown-commit (gnosh)",
+		"v0.0.0-20261116052125-e0bf8238c6f6-something": "unknown-time unknown-commit (gnosh)",
+	} {
+		info := &debug.BuildInfo{Main: debug.Module{Path: "github.com/gnosh-ai/gnosh", Version: v}}
+		if line := VersionLine(BuildFromInfo(info)); line != want {
+			t.Errorf("installed at %s: VersionLine = %q, want %q", v, line, want)
+		}
+	}
 }
 
 // A time given at link time fills in a build that has none of its own,

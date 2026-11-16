@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"regexp"
 	"runtime/debug"
 	"time"
 )
@@ -85,5 +86,32 @@ func BuildFromInfo(info *debug.BuildInfo) Build {
 			b.Modified = s.Value == "true"
 		}
 	}
+	if b.Commit == "" {
+		// Installed from a module (go install ...@latest), a program has no
+		// commit recorded, but its pseudo-version names the commit and its
+		// time: v0.0.0-20261116052125-e0bf8238c6f6.
+		if t, commit, ok := pseudoVersion(info.Main.Version); ok {
+			b.Time, b.Commit = t, commit
+		}
+	}
 	return b
+}
+
+// pseudoVersionRe matches the end of a Go pseudo-version, in each of its
+// three forms (vX.0.0-T-H, vX.Y.Z-pre.0.T-H, vX.Y.Z-0.T-H): the commit's
+// time T, to the second in UTC, and the first 12 digits of its hash H,
+// with what may follow after a "+".
+var pseudoVersionRe = regexp.MustCompile(`^v\d+\.\d+\.\d+-(?:[0-9A-Za-z.-]*\.)?(\d{14})-([0-9a-f]{12})(?:\+[0-9A-Za-z.-]+)?$`)
+
+// pseudoVersion reads a commit and its time out of a Go pseudo-version.
+func pseudoVersion(v string) (time.Time, string, bool) {
+	m := pseudoVersionRe.FindStringSubmatch(v)
+	if m == nil {
+		return time.Time{}, "", false
+	}
+	t, err := time.Parse("20060102150405", m[1])
+	if err != nil {
+		return time.Time{}, "", false
+	}
+	return t.UTC(), m[2], true
 }
