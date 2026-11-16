@@ -219,6 +219,8 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "diff", Summary: "What has changed in the working tree since the last commit, the model's edits among it.", InRun: true, Run: l.slashDiff},
 		{Name: "export", Args: "[file | --clipboard]", Summary: "Write the conversation to a file as plain text: the name given, or <date>-<session>.txt here; --clipboard puts it on the clipboard instead.", Run: l.slashExport},
 		{Name: "copy", Args: "[N]", Summary: "Copy the model's last reply, or the Nth from the end, to the clipboard.", Run: l.slashCopy},
+		{Name: "review", Args: "[what to look at]", Summary: "Have the model review the changes on this branch for bugs, changing nothing.", InRun: true, Run: l.slashReview},
+		{Name: "security-review", Args: "[what to look at]", Summary: "Have the model review the changes on this branch for security vulnerabilities, changing nothing.", InRun: true, Run: l.slashSecurityReview},
 		{Name: "init", Summary: "Have the model look through the project and write its GNOSH.md, or improve the one there is.", Run: l.slashInit},
 		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {

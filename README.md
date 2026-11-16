@@ -57,6 +57,11 @@ Built:
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.
+- **`/review` and `/security-review`**, as Claude Code's: the model reviews
+  the changes since the branch left the default branch, committed or not,
+  for bugs or for ways in, and changes no file. Both run in `gnosh -p` too;
+  in a Gno project the security review holds Gno code against the Gno
+  guides.
 - **Output styles**, as Claude Code's: `/output-style Concise` (or
   Proactive, Explanatory, Learning) changes how the model replies from the
   next message on, kept in the project's local settings. A style of your

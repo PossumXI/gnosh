@@ -1,0 +1,119 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
+)
+
+// This file is /review and /security-review, as Claude Code has them: the
+// model reviews the changes on this branch, from where it left the default
+// branch, committed or not, for bugs or for ways in, and changes no file.
+// gnosh works out the range; the model runs the diff and reads what is
+// around it.
+
+// reviewRange says what a review covers: the git diff command that shows
+// the changes, and in words, what they are.
+type reviewRange struct {
+	diff, what string
+}
+
+// reviewBase works out the changes a review covers in dir: from the point
+// where HEAD left the default branch (origin's, else main or master) to the
+// working tree, or with no such branch, what is not committed yet.
+func (l *live) reviewBase(ctx context.Context, dir string) (reviewRange, error) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	if inside, err := l.git(ctx, dir, "rev-parse", "--is-inside-work-tree"); err != nil || inside != "true" {
+		return reviewRange{}, errors.New("this folder is not in a git repository, so there are no changes to review")
+	}
+	var base string
+	if ref, err := l.git(ctx, dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && ref != "" {
+		base = ref
+	} else {
+		for _, b := range []string{"origin/main", "origin/master", "main", "master"} {
+			if _, err := l.git(ctx, dir, "rev-parse", "--verify", "--quiet", b+"^{commit}"); err == nil {
+				base = b
+				break
+			}
+		}
+	}
+	if base != "" {
+		if mb, err := l.git(ctx, dir, "merge-base", "HEAD", base); err == nil && mb != "" {
+			short := mb
+			if len(short) > 12 {
+				short = short[:12]
+			}
+			r := reviewRange{diff: "git diff " + short, what: fmt.Sprintf("from where this branch left %s (%s) to the working tree, committed or not", base, short)}
+			if stat, _ := l.git(ctx, dir, "diff", "--stat", mb); stat == "" {
+				return reviewRange{}, fmt.Errorf("there are no changes since this branch left %s, so there is nothing to review", base)
+			}
+			return r, nil
+		}
+	}
+	if stat, _ := l.git(ctx, dir, "diff", "--stat", "HEAD"); stat == "" {
+		return reviewRange{}, errors.New("there is no default branch to compare with (origin's, main or master), and nothing that is not committed, so there is nothing to review")
+	}
+	return reviewRange{diff: "git diff HEAD", what: "not committed yet (there is no default branch to compare with)"}, nil
+}
+
+// slashReview is /review: the changes on this branch, reviewed for bugs.
+func (l *live) slashReview(ctx context.Context, c *SlashContext) error {
+	return l.review(ctx, c, "review", reviewTask)
+}
+
+// slashSecurityReview is /security-review: the changes on this branch,
+// reviewed for ways in.
+func (l *live) slashSecurityReview(ctx context.Context, c *SlashContext) error {
+	return l.review(ctx, c, "security-review", securityReviewTask)
+}
+
+// review sends the model a review of the branch's changes to make. task
+// takes the range in words and its diff command.
+func (l *live) review(ctx context.Context, c *SlashContext, name, task string) error {
+	if !l.st.trusted {
+		return fmt.Errorf("/%s runs git, and this folder is not trusted: a repository's own settings can name programs git runs. gnosh trust trusts it", name)
+	}
+	r, err := l.reviewBase(ctx, l.cwd())
+	if err != nil {
+		return err
+	}
+	text := fmt.Sprintf(task, r.what, "`"+r.diff+"`")
+	if name == "security-review" && hasGnoCode(l.cfg.Paths.ProjectRoot, l.cfg.Paths.Cwd) {
+		if g := l.gnoGuides(); len(g) == 2 {
+			text += fmt.Sprintf("\n\nThis project holds Gno code: read the Gno guides first and hold the Gno changes against them rule by rule: %s (interrealm) and %s (security).", g[0], g[1])
+		}
+	}
+	if focus := strings.TrimSpace(c.Args); focus != "" {
+		text += "\n\nThe user asks you to look at this in particular: " + focus
+	}
+	c.Say("The model reviews the changes %s.", r.what)
+	return c.Send(agent.Prompt{Hidden: true, Source: name, Text: prompt.Wrap(text),
+		Notice: "/" + name + ": the model is reviewing the changes."})
+}
+
+// reviewTask is what /review asks of the model: the range in words, then
+// the command that shows it.
+const reviewTask = `The user typed /review. Review the changes %s for bugs. %s shows them. Read the changed files around each change, and the code that calls into them, before you judge a change.
+
+Look for what will go wrong when this code runs: a wrong result; a case that is not handled (empty, nil, zero, the last one, an error); a crash, a leak or a race; a promise to a caller that is broken; a test that does not test what it says. For each, give the file and line, how sure you are, and how it fails: the input, and what comes out instead of what should. Leave out style, naming and taste unless they hide a bug. If you find nothing, say so plainly. Change no file.`
+
+// securityReviewTask is what /security-review asks of the model: the range
+// in words, then the command that shows it.
+const securityReviewTask = `The user typed /security-review. Review the changes %s for security vulnerabilities. %s shows them. Read the changed files around each change, and what calls into them, so that you know where the data comes from and who can send it.
+
+Look for what an attacker could actually do with this code:
+- input that reaches a shell, a query, a template, a path or a deserializer unchecked (injection, path traversal);
+- checks of who may do what that are missing, can be skipped, or test the wrong value (authentication, authorization, ownership);
+- secrets in the code, in logs or in errors, and data sent where it should not go;
+- cryptography used wrongly: home-made schemes, fixed or reused nonces and keys, weak randomness, comparisons that leak time;
+- requests to an address the user controls (SSRF), redirects to one, and script injected into what is served (XSS);
+- a check and its use that a second request can come between;
+- in Gno code, what the Gno guides warn of: who the caller is across realms, coins sent and received, storage a caller can make grow.
+
+Report only what you are confident is a real way in, each with: how bad it is (high, medium or low), the file and line, what an attacker does, step by step, and the fix. Leave out style, hardening that would merely be nice, and what matters only if another bug exists. If you find nothing real, say so plainly: that is a good result. Change no file.`
