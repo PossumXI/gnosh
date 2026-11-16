@@ -2905,25 +2905,15 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 		}
 	case name == "source" || name == ".":
 		// A file that is sourced is a program of its own, which no rule
-		// reads. Text the line itself supplies is read.
-		switch {
-		case len(args) == 0:
-		case args[0].hasSubst():
-			v.setOpaque("a script that a command prints is run in this shell")
-		case !args[0].static() || args[0].glob || args[0].brace:
-			// A name that is not known ahead of time (a variable, a
-			// pattern, braces) may be /dev/stdin: what is fed to the
-			// command is then its script.
-			e.fedScript(v, c, prev, nest, depth, true)
-		default:
-			f := args[0].joined()
-			if strings.HasPrefix(f, "/") {
-				f = oneDisk(cleanPath(f))
-			}
-			if f == "/dev/stdin" || strings.HasPrefix(f, "/dev/fd/") || strings.HasPrefix(f, "/proc/self/fd/") || strings.HasPrefix(f, "/proc/thread-self/fd/") {
-				if !e.fedScript(v, c, prev, nest, depth, true) {
-					v.bareShell = true
-				}
+		// reads. Text the line itself supplies is read. The file is the
+		// first word that stays: a word that may come to nothing (an
+		// unquoted $* or ${X}, a "$@" with no words) leaves the next one
+		// to be the file, so each such next one is judged as it too
+		// ("source $* ${X} <(cmd)" runs what cmd prints; oracle seed 122).
+		for _, w := range args {
+			e.sourcedArg(v, c, prev, nest, depth, w)
+			if !mayVanish(w) {
+				break
 			}
 		}
 	case name == "eval":
@@ -4018,4 +4008,46 @@ func prefixOnlyExact(ws []word) bool {
 		}
 	}
 	return false
+}
+
+// sourcedArg judges w as the file source or . runs.
+func (e *Engine) sourcedArg(v *bashView, c *simpleCmd, prev *simpleCmd, nest nesting, depth int, w word) {
+	switch {
+	case w.hasSubst():
+		v.setOpaque("a script that a command prints is run in this shell")
+	case !w.static() || w.glob || w.brace:
+		// A name that is not known ahead of time (a variable, a pattern,
+		// braces) may be /dev/stdin: what is fed to the command is then
+		// its script.
+		e.fedScript(v, c, prev, nest, depth, true)
+	default:
+		f := w.joined()
+		if strings.HasPrefix(f, "/") {
+			f = oneDisk(cleanPath(f))
+		}
+		if f == "/dev/stdin" || strings.HasPrefix(f, "/dev/fd/") || strings.HasPrefix(f, "/proc/self/fd/") || strings.HasPrefix(f, "/proc/thread-self/fd/") {
+			if !e.fedScript(v, c, prev, nest, depth, true) {
+				v.bareShell = true
+			}
+		}
+	}
+}
+
+// mayVanish reports whether a word may come to no word at all when the
+// line runs: nothing in it but what is expanded, outside quotes (an empty
+// value is then no word), or every word of a list ("$@", "${a[@]}"), which
+// may hold none.
+func mayVanish(w word) bool {
+	if w.static() || w.joined() != "" {
+		return false
+	}
+	if !w.quoted {
+		return true
+	}
+	for _, p := range w.parts {
+		if !(p.kind == partVar && p.all) {
+			return false
+		}
+	}
+	return true
 }

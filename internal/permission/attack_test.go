@@ -210,6 +210,10 @@ func TestShellAttacks(t *testing.T) {
 		{"source /dev/stdin runs the here-string", ModeBypass, attackGuards, ". /dev/stdin <<< 'rm x'", Deny},
 		{"source /dev/stdin runs the here-string", ModeBypass, attackGuards, "source /dev/stdin <<< 'rm x'", Deny},
 		{"a script a command prints is sourced", ModeBypass, attackGuards, "source <(echo rm x)", Ask},
+		// Words that come to nothing leave the next one to be the file
+		// (oracle seed 122).
+		{"a script a command prints is sourced after words that vanish", ModeBypass, attackGuards, "source $* ${X} <(echo rm x)", Ask},
+		{"the same with a list that may be empty", ModeBypass, attackGuards, "f() { . \"$@\" <(echo rm x); }; f", Ask},
 		{"history expansion rewrites the third line", ModeBypass, attackGuards, "set -o history -o histexpand\necho x\n!!:s/echo/rm/", Ask},
 		{"set -k turns arguments into assignments", ModeBypass, attackGuards, "set -k; make x=1", Ask},
 		{"env -S takes its script attached", ModeBypass, attackGuards, "env -S'rm x'", Deny},
