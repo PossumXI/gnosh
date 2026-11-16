@@ -208,8 +208,11 @@ mention)
 	done_when() { screen | grep -q "@notes.txt read" && screen | grep -q "done in"; }
 	;;
 config)
+	# Bare /config opens the picker of the options; Esc closes it.
 	tmux send-keys -t "$S" "/config" Enter
 	sleep 2
+	tmux send-keys -t "$S" Escape
+	sleep 1
 	tmux send-keys -t "$S" "/config memoryText=full" Enter
 	sleep 2
 	tmux send-keys -t "$S" "/config memoryText" Enter
