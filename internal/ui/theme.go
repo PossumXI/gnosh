@@ -49,6 +49,29 @@ type Palette struct {
 	// brand's two it is light: on a white background it is faint, and
 	// nothing but a mark is drawn in it.
 	Aqua text.Color
+
+	// Prompt is the text of the person's prompts, in the box and in the
+	// conversation, and Reply the prose of the model's answers (not its
+	// thinking, not code). Jae chose them (16 November 2026: "let gnosh my
+	// prompt be mmm... white, sure, and the response (not thinking) be
+	// sorta green, neo"): white, and a phosphor green. They are for a dark
+	// background, as the brand's are; on a terminal that says its
+	// background is light, OnLight gives them back the terminal's own
+	// colour and a green dark enough to read there. Default is the
+	// terminal's own colour.
+	Prompt, Reply text.Color
+}
+
+// OnLight is the palette for a terminal whose background is light: the
+// person's prompts in the terminal's own colour, and the answers in a
+// green that reads on white.
+func (pal Palette) OnLight(p text.Profile) Palette {
+	pal.Prompt = text.Default
+	pal.Reply = text.RGB(0x15, 0x80, 0x3D)
+	if p == text.ANSI16 {
+		pal.Reply = text.Green
+	}
+	return pal
 }
 
 // DefaultPalette returns gnosh's own colours for the profile p. With
@@ -61,6 +84,7 @@ func DefaultPalette(p text.Profile) Palette {
 			Purple: text.Magenta, Pink: text.BrightMagenta, Lilac: text.Cyan,
 			Green: text.Green, Gold: text.Yellow, Rose: text.Red, Grey: text.Default,
 			Mint: text.Green, Sun: text.Yellow, Aqua: text.BrightCyan,
+			Prompt: text.BrightWhite, Reply: text.BrightGreen,
 		}
 	}
 	return Palette{
@@ -74,6 +98,8 @@ func DefaultPalette(p text.Profile) Palette {
 		Mint:   text.RGB(0x00, 0xFF, 0xB2),
 		Sun:    text.RGB(0xFB, 0xD2, 0x37),
 		Aqua:   text.RGB(0x68, 0xFF, 0xD6),
+		Prompt: text.RGB(0xFF, 0xFF, 0xFF),
+		Reply:  text.RGB(0x4A, 0xDE, 0x80),
 	}
 }
 
@@ -234,7 +260,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		PendingMark: "✧",
 
 		Prompt:     plain.Fg(pal.Aqua).Bold(),
-		PromptText: plain,
+		PromptText: plain.Fg(pal.Prompt),
 		Tool:       plain.Fg(pal.Purple),
 		ToolName:   plain.Bold(),
 		ToolArg:    plain,
@@ -287,7 +313,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		PromptStyle:  plain.Fg(pal.Aqua).Bold(),
 		ShellStyle:   plain.Fg(pal.Gold).Bold(),
 		CommandStyle: plain.Fg(pal.Green).Bold(),
-		Text:         plain,
+		Text:         plain.Fg(pal.Prompt),
 		Placeholder:  quiet,
 		Paste:        plain.Fg(pal.Purple),
 		Control:      plain.Fg(pal.Gold),
@@ -328,6 +354,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 	}
 
 	md := markdown.DefaultTheme()
+	md.Text = plain.Fg(pal.Reply)
 	md.Heading = plain.Fg(pal.Pink).Bold()
 	md.HeadingMark = plain.Fg(pal.Purple)
 	md.Code = plain.Fg(pal.Lilac)

@@ -447,6 +447,12 @@ func (u *UI) open() error {
 		caps, others, _ := term.Probe(context.Background(), t, events, 0)
 		u.caps, u.probed = caps, true
 		u.ahead = append(u.ahead, others...)
+		if caps.LightBackground && u.o.Theme == nil {
+			// The person's white and the answers' bright green are for a
+			// dark background (Palette.Prompt, Reply).
+			p := u.profile()
+			u.th = NewTheme(p, DefaultPalette(p).OnLight(p))
+		}
 	}
 	u.setModes()
 	cols, rows, err := t.Size()

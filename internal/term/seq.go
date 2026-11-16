@@ -89,6 +89,10 @@ const (
 	// a ReplyCursorPosition; tell the decoder to expect it (see
 	// Decoder.ExpectCursorPosition and Terminal.QueryCursorPosition).
 	QueryCursorPosition = "\x1b[6n"
+	// QueryBackground asks the terminal for its background colour (OSC
+	// 11). A terminal that tells answers with a ReplyString "11;rgb:...".
+	QueryBackground = "\x1b]11;?\x1b\\"
+
 	// QueryDeviceAttributes asks the terminal what it is (DA1). Every
 	// terminal answers it, which makes it the way to tell "no" from
 	// "not yet" for the questions sent before it.
