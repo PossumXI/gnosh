@@ -68,6 +68,15 @@ func TestShellAttacks(t *testing.T) {
 		// Quoting.
 		{"inside double quotes, \\\" in backticks is a quote", ModeBypass, attackGuards, "echo \"`echo \\\"'\\\" ; rm x; echo \\\"'\\\"`\"", Deny},
 		{"$\"...\" may be translated, and the translation is expanded", "", attackRealistic, "echo $\"x\"", Ask},
+		// Only the shell's counters ($? $$ $! $#) are numbers whatever the
+		// line holds: a word the script was handed, a variable, a name
+		// looked up through another, or a counter in a file name pattern
+		// is still computed.
+		{"$1 is a word the script was handed", "", none, "echo \"exit: $1\"", Ask},
+		{"$X beside $? is any text", "", none, "echo $? $X", Ask},
+		{"${!x} is the variable x names", "", none, "echo ${!x}", Ask},
+		{"a counter in a pattern is a listing", "", none, "echo /etc/*$?", Ask},
+		{"a counter on a line to a file still writes it", "", none, "echo $? > out.txt", Ask},
 		{"a no-break space is a blank in some locales", "", attackRealistic, "ls\u00a0-la", Ask},
 		{"a no-break space is a blank in some locales", ModeBypass, attackGuards, "git\u00a0push", Ask},
 		{"a zero-width space cannot be seen", "", attackRealistic, "echo a\u200bb", Ask},
@@ -1347,6 +1356,8 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"date '+%Y-%m-%d %H:%M'", "stat -c '%s %n' go.mod", "find . -name \"*.go\" -not -path \"./vendor/*\"", "tr -d '\\n'", "sort -t, -k2 names.txt",
 		"grep -E 'a|b' names.txt", "grep -rn \"foo(bar)\" .", "git diff HEAD -- '*.go'", "git diff --name-only HEAD~1 | grep '\\.go$'",
 		"ls *.go", "wc -l src/*.go", "echo héllo wörld", "grep -rn 'naïve' .", "echo \"tab\there\"",
+		"git diff HEAD --stat -- notes.txt; echo \"exit: $?\"", // Qwen, box 1
+		"go test ./... > /dev/null 2>&1; echo \"exit=$?\"", "echo $?", "ls; echo \"status $? pid $$ last $! args $#\"",
 	}
 	fs := fakeFS{files: []string{"/proj/a.go", "/proj/b.go", "/proj/src/c.go", "/proj/src/d.go"}}
 	for _, mode := range []Mode{ModeDefault, ModeAcceptEdits, ModeDontAsk} {

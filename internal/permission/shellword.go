@@ -275,6 +275,27 @@ func (w word) static() bool {
 	return !w.eqHead
 }
 
+// counters reports whether the word is static text but for the shell's own
+// counters, $? $$ $! and $#. Each stands for a number, or for nothing, and
+// no line and no environment can make it stand for anything else, so the
+// word stays one word with nothing in it for the shell to match against
+// file names: to a command that only prints its arguments (echo "exit:
+// $?") it is as harmless as its text.
+func (w word) counters() bool {
+	if w.glob || w.brace || w.tilde || w.eqHead || w.eqTilde || w.bareSubst {
+		return false
+	}
+	for _, p := range w.parts {
+		switch {
+		case p.kind == partLit:
+		case p.kind == partVar && len(p.name) == 1 && strings.Contains("?$!#", p.name) && p.op == "" && !p.all:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // plain reports whether the word is static text with nothing for the shell
 // to do: no quoting, no pattern, no braces, no tilde.
 func (w word) plain() bool {
