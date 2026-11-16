@@ -382,7 +382,13 @@ func (s *session) endThinking() {
 	// words are in the session's file, where the transcript view (Ctrl+O)
 	// shows them.
 	rp.thinkRest = ""
-	line := s.th.Thinking.Render(s.th.ThinkMark+" thought for "+span(took)) +
+	said := s.th.ThinkMark + " thought for " + span(took)
+	if s.thoughtToBudget() {
+		// The server cut the thought at its budget and put gnosh's note
+		// at its end: so that a thought that stops short reads as that.
+		said += fmt.Sprintf(", up to its budget of %d tokens", s.info.ThinkingBudget)
+	}
+	line := s.th.Thinking.Render(said) +
 		s.th.Quiet.Render(s.th.Sep+"Ctrl+O shows it")
 	s.begin(blkThinking)
 	s.put(fit(s.m, line, s.cols))
@@ -716,4 +722,11 @@ func (s *session) retitle() {
 	}
 	s.titled = want
 	_ = s.host.title(want)
+}
+
+// thoughtToBudget reports whether the thought of the reply now arriving
+// was cut at its budget: it ends with the note the server puts there.
+func (s *session) thoughtToBudget() bool {
+	note := strings.TrimSpace(s.info.BudgetNote)
+	return note != "" && s.info.ThinkingBudget > 0 && strings.HasSuffix(strings.TrimSpace(s.reply.think.String()), note)
 }

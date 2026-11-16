@@ -331,6 +331,12 @@ type SessionInfo struct {
 	Model    string
 	Address  string
 	Thinking string
+	// ThinkingBudget is the most tokens the model may think before a
+	// reply (thinkingBudget, MAX_THINKING_TOKENS; 0 for no cap), and
+	// BudgetNote the words the server puts at the end of a thought it cut
+	// there, by which the interface knows one was cut.
+	ThinkingBudget int
+	BudgetNote     string
 	// MCPServers are the session's MCP servers and how each stands:
 	// "pending", "connected" or "failed".
 	MCPServers []MCPServerStatus

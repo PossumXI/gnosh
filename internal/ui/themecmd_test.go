@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app"
@@ -56,5 +57,19 @@ func TestThemeCommandChangesColours(t *testing.T) {
 	g.s.setTheme("light")
 	if g.s.th.Palette.Reply != text.BrightGreen {
 		t.Errorf("a given theme was changed")
+	}
+}
+
+// A thought the server cut at its budget says so on its folded line; one
+// that ended of itself does not.
+func TestThoughtCutAtItsBudget(t *testing.T) {
+	g := newRig(t, 120, 24, text.NoColor)
+	note := "\n\n<gnosh>Thinking time is up. Go on with what is worked out so far.</gnosh>\n"
+	g.s.info.ThinkingBudget, g.s.info.BudgetNote = 4096, note
+	g.ev(busy(), request(1), thought("Let me work it out."+note), said("4001"))
+	g.committedHas("thought for", "up to its budget of 4096 tokens")
+	g.ev(request(2), thought("Short."), said("done"))
+	if n := strings.Count(g.scroll(), "up to its budget"); n != 1 {
+		t.Errorf("the budget was said %d times, want once (for the thought it cut)", n)
 	}
 }
