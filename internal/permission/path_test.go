@@ -381,6 +381,20 @@ func TestCommandDirs(t *testing.T) {
 		{"/proj", "cd $X && ls", ""},
 		{"/proj", `eval "$CMD"`, ""},
 		{"/proj", "ls 'unclosed", ""},
+		// What sends a cd elsewhere than its words say.
+		{"/proj", "CDPATH=/repo; cd src && make", ""},
+		{"/proj", "export HOME=/repo; cd && make", ""},
+		{"/proj", "HOME=/repo cd ~ && make", ""},
+		// Programs sent to a folder by a flag, and wrappers that send their
+		// command there.
+		{"/proj", "env -C /repo make", "/proj /repo"},
+		{"/proj", "env --chdir=/repo git commit -am x", "/proj /repo"},
+		{"/proj", "env -C/repo make", "/proj /repo"},
+		{"/proj", "make -C sub all", "/proj /proj/sub"},
+		{"/proj", "tar -xf a.tar -C /repo", "/proj /repo"},
+		{"/proj", "sudo -D /repo ls", "/proj /repo"},
+		{"/proj", "env -C \"$D\" make", ""},
+		{"/proj", "grep -C 3 x f", "/proj"},
 	} {
 		dirs, why := e.CommandDirs(c.dir, c.cmd)
 		got, ok := strings.Join(dirs, " "), why == ""
@@ -393,6 +407,27 @@ func TestCommandDirs(t *testing.T) {
 		if !ok || got != c.want {
 			t.Errorf("CommandDirs(%q, %q) = %q, %v; want %q", c.dir, c.cmd, got, ok, c.want)
 		}
+	}
+}
+
+// PathKey: every name macOS takes for one file has one key, and a key is
+// under another where the path is.
+func TestPathKey(t *testing.T) {
+	same := [][2]string{
+		{"/Users/jae/src/app", "/users/JAE/Src/app/"},
+		{"/System/Volumes/Data/Users/jae/src", "/Users/jae/src"},
+		{"/.nofollow/Users/jae", "/Users/jae"},
+	}
+	for _, c := range same {
+		if PathKey(c[0]) != PathKey(c[1]) {
+			t.Errorf("PathKey(%q) = %q and PathKey(%q) = %q, want them alike", c[0], PathKey(c[0]), c[1], PathKey(c[1]))
+		}
+	}
+	if k, dir := PathKey("/System/Volumes/Data/Users/jae/SRC/app/x.go"), PathKey("/Users/jae/src/app"); !strings.HasPrefix(k, dir+"/") {
+		t.Errorf("PathKey: %q is not under %q", k, dir)
+	}
+	if PathKey("/Users/jae/src/app") == PathKey("/Users/jae/src/apps") {
+		t.Errorf("PathKey: two folders got one key")
 	}
 }
 

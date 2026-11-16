@@ -254,6 +254,8 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 	case ownExit && where.to != "":
 		res.Cwd = where.to
 		notes = append(notes, "working directory is now "+where.to)
+	case ownExit && where.checkout:
+		notes = append(notes, fmt.Sprintf("working directory reset to %s: %s is in the checkout your work tree was made from, so the session does not follow the command there", env.Cwd, where.outside))
 	case ownExit && where.outside != "":
 		notes = append(notes, fmt.Sprintf("working directory reset to %s: %s is outside the project, so the session does not follow the command there", env.Cwd, where.outside))
 	case !ownExit && (where.to != "" || where.outside != ""):

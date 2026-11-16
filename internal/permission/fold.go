@@ -2,6 +2,7 @@ package permission
 
 import (
 	"net/netip"
+	"path"
 	"strconv"
 	"strings"
 	"unicode"
@@ -180,6 +181,14 @@ func stableRune(r rune) bool {
 		r >= 0x3400 && r <= 0x4DBF || r >= 0x4E00 && r <= 0x9FFF || // unified ideographs
 		r >= 0x20000 && r <= 0x2A6DF
 }
+
+// PathKey is the key that every name of the file at the absolute path p
+// shares, as the guards compare paths: letter case, composed and
+// decomposed accents and macOS's second ways into its disk are folded
+// alike. When one key is another or under it, the two paths may be one
+// place. Two different files may share a key, which a guard takes as the
+// safe mistake.
+func PathKey(p string) string { return guardPath(path.Clean(p)) }
 
 // guardPath returns the key of a cleaned absolute path, segment by
 // segment.

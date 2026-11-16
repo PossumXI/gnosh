@@ -14,8 +14,10 @@ type moved struct {
 	// session stays where it is.
 	to string
 	// outside is the directory the shell ended in when that is outside
-	// every root, so the session does not follow it there.
-	outside string
+	// every root, so the session does not follow it there; checkout says
+	// it is in a checkout the session's work tree was made from instead.
+	outside  string
+	checkout bool
 }
 
 // place works out where the session should be after a shell that started
@@ -43,6 +45,16 @@ func place(final string, env *core.ToolEnv) moved {
 	}
 	if best == "" {
 		return moved{outside: final}
+	}
+	if t := env.Tree; t != nil && !within(final, physical(t.Path)) {
+		// A session with a git work tree of its own does not follow its
+		// shell into a checkout the work tree was made from, root or not:
+		// its calls there would all be refused, its next cd back included.
+		for _, c := range t.Checkouts() {
+			if within(final, physical(c)) {
+				return moved{outside: final, checkout: true}
+			}
+		}
 	}
 	rel, err := filepath.Rel(bestPhysical, final)
 	if err != nil {

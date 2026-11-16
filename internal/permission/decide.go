@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -198,7 +199,96 @@ func (e *Engine) CommandDirs(dir, command string) (dirs []string, why string) {
 	case v.dirsCapped:
 		return nil, "it goes to more folders than gnosh follows"
 	}
-	return dirs, ""
+	if name := cdChanger(v); name != "" {
+		return nil, "it sets " + name + ", which changes where a cd goes"
+	}
+	more, lost := at.flagDirs(v, dirs)
+	if lost {
+		return nil, "a program in it is sent to a folder only known when it runs (" + strings.Join(chdirNames, ", ") + ")"
+	}
+	return unionStrings(dirs, more), ""
+}
+
+// cdChanger names a variable the line sets that changes where a cd goes:
+// CDPATH, which a cd to a plain name searches, and HOME, where a cd with
+// no folder and ~ lead. It is "" when the line sets neither.
+func cdChanger(v *bashView) string {
+	for _, u := range v.units {
+		for _, a := range u.cmd.assigns {
+			if a.name == "CDPATH" || a.name == "HOME" {
+				return a.name
+			}
+		}
+		// export HOME=x, declare -x CDPATH=x, env HOME=x sh -c 'cd'.
+		for _, w := range u.cmd.words {
+			for _, name := range []string{"CDPATH", "HOME"} {
+				if strings.HasPrefix(w.raw, name+"=") || strings.HasPrefix(w.raw, name+"+=") {
+					return name
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// chdirFlags are the programs that run themselves, or the command they
+// are given, in a folder a flag of theirs names, and those flags.
+var chdirFlags = map[string][]string{
+	"env":   {"-C", "--chdir"},
+	"sudo":  {"-D", "--chdir"},
+	"make":  {"-C", "--directory"},
+	"gmake": {"-C", "--directory"},
+	"tar":   {"-C", "--directory"},
+	"ninja": {"-C"},
+}
+
+// chdirNames are chdirFlags' programs, in order, for messages.
+var chdirNames = func() []string {
+	var out []string
+	for name := range chdirFlags {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
+}()
+
+// flagDirs are the folders the line's commands are sent to by their flags
+// (env -C, make -C ...), read from each folder the line may be in. lost
+// says one of them is only known when the line runs.
+func (e *Engine) flagDirs(v *bashView, dirs []string) (out []string, lost bool) {
+	add := func(w word) {
+		if !w.static() {
+			lost = true
+			return
+		}
+		for _, d := range dirs {
+			if abs, ok := cleanAbs(w.value(e.home), d); ok {
+				out = unionStrings(out, []string{abs})
+			}
+		}
+	}
+	for _, u := range v.units {
+		ws := u.cmd.words
+		if len(ws) == 0 || !ws[0].static() {
+			continue
+		}
+		flags := chdirFlags[baseName(ws[0].joined())]
+		for i := 1; i < len(ws) && flags != nil; i++ {
+			l := ws[i].raw
+			for _, f := range flags {
+				switch {
+				case l == f && i+1 < len(ws):
+					i++
+					add(ws[i])
+				case strings.HasPrefix(l, f+"=") && strings.HasPrefix(f, "--"):
+					add(litOf(l[len(f)+1:]))
+				case len(f) == 2 && strings.HasPrefix(l, f) && len(l) > 2 && !strings.HasPrefix(l, "--"):
+					add(litOf(l[2:]))
+				}
+			}
+		}
+	}
+	return out, lost
 }
 
 // unreadable says why a line cannot be read to know what it runs, or "".

@@ -239,4 +239,22 @@ func TestPlace(t *testing.T) {
 	if got := place("/usr", everything); got.to != "/usr" {
 		t.Errorf("under the root /, place(/usr) = %+v", got)
 	}
+	// A session with a work tree of its own is followed into its tree,
+	// and not into the checkouts it was made from, roots though they are.
+	tree := filepath.Join(root, ".gnosh", "worktrees", "a")
+	inner := filepath.Join(tree, ".gnosh", "worktrees", "b")
+	for _, d := range []string{tree, inner} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	treed := &core.ToolEnv{Cwd: inner, Roots: []string{root, inner}, Tree: &core.WorkTree{Path: inner, Repo: tree, Outer: []string{root}}}
+	if got := place(filepath.Join(physical(inner), "x"), treed); got.to != filepath.Join(inner, "x") {
+		t.Errorf("in its work tree, place = %+v", got)
+	}
+	for _, final := range []string{physicalRoot, filepath.Join(physicalRoot, "src"), physical(tree)} {
+		if got := place(final, treed); got.to != "" || got.outside != final || !got.checkout {
+			t.Errorf("in a checkout its work tree was made from, place(%q) = %+v", final, got)
+		}
+	}
 }

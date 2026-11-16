@@ -368,9 +368,13 @@ type subSession struct {
 	dropHooks func()
 	// wt is its git work tree of its own (isolation worktree), or nil,
 	// start the folder in it that it starts in, and tree the work tree's
-	// folder, one of its roots.
+	// folder, one of its roots. wt is the goroutine's that runs the
+	// sub-agent, which ends the work tree; treeAt, what its calls are
+	// confined to, is set with it and never changes, for calls on other
+	// goroutines.
 	wt          *worktree
 	start, tree string
+	treeAt      *core.WorkTree
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
@@ -436,6 +440,17 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 			return s, err
 		}
 		s.tree = s.wt.path
+		s.treeAt = &core.WorkTree{Path: s.wt.path, Repo: s.wt.repo}
+		if pt := parent.Tree(); pt != nil {
+			// Made in another work tree (a --worktree session's, or a
+			// sub-agent's), it stays out of that one and of every
+			// checkout that one stays out of.
+			for _, c := range append([]string{pt.Path}, pt.Checkouts()...) {
+				if c != s.wt.repo && !slices.Contains(s.treeAt.Outer, c) {
+					s.treeAt.Outer = append(s.treeAt.Outer, c)
+				}
+			}
+		}
 		// (So that SendMessage knows it is not to be resumed without it.)
 		_, _ = s.ts.AppendAll(transcript.MetaEntry(metaWorkTree, s.wt.path))
 	}
@@ -539,7 +554,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	}
 	if s.wt != nil {
 		sub.Roots = append(slices.Clone(l.roots), s.tree)
-		sub.Tree = &core.WorkTree{Path: s.wt.path, Repo: s.wt.repo}
+		sub.Tree = s.treeAt
 	}
 	// The model: the call's, then the kind's (inherit is the session's),
 	// then CLAUDE_CODE_SUBAGENT_MODEL, which with
@@ -675,9 +690,9 @@ func (s *subSession) env() *core.ToolEnv {
 	}
 	roots := slices.Clone(s.l.roots)
 	env := &core.ToolEnv{Cwd: cwd, SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
-	if s.wt != nil {
+	if s.treeAt != nil {
 		roots = append(roots, s.tree)
-		env.Tree = &core.WorkTree{Path: s.wt.path, Repo: s.wt.repo}
+		env.Tree = s.treeAt
 	}
 	env.Roots = roots
 	return env

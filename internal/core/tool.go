@@ -155,7 +155,15 @@ type WorkTree struct {
 	// Path is the work tree's folder, and Repo the top folder of the
 	// checkout it was made from.
 	Path, Repo string
+	// Outer are the checkouts Repo was itself made from, when it is a
+	// work tree too (a sub-agent's, made in a --worktree session's): the
+	// innermost first, the person's own checkout last.
+	Outer []string
 }
+
+// Checkouts are every checkout the work tree stays out of: Repo, then
+// Outer.
+func (t WorkTree) Checkouts() []string { return append([]string{t.Repo}, t.Outer...) }
 
 // Progress is a piece of live output from a running tool call.
 type Progress struct {

@@ -664,21 +664,21 @@ func (l *live) saveRules(rules []string) error {
 // and not in the work tree; "" when none is. A relative path is read from
 // cwd.
 func outsideTree(t core.WorkTree, cwd string, paths []string) string {
-	in := within
 	for _, p := range paths {
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(cwd, p)
 		}
 		p = filepath.Clean(p)
-		if !in(p, t.Repo) || in(p, t.Path) {
+		repo, real := checkoutOf(t, p)
+		if repo == "" {
 			continue
 		}
-		rel, err := filepath.Rel(t.Repo, p)
-		if err != nil {
-			continue
+		same := "Change the same file under your work tree instead."
+		if s, ok := sameIn(t.Path, repo, real); ok {
+			same = "The same file in your work tree is " + s + ": change that one."
 		}
-		return fmt.Sprintf("You work in a git work tree of your own, at %s, so that your changes stay apart from the person's checkout at %s, and %s is in that checkout. The same file in your work tree is %s: change that one.",
-			t.Path, t.Repo, p, filepath.Join(t.Path, rel))
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, so that your changes stay apart from %s, and %s is in it. %s",
+			t.Path, checkoutName(t, repo), p, same)
 	}
 	return ""
 }
@@ -686,6 +686,58 @@ func outsideTree(t core.WorkTree, cwd string, paths []string) string {
 // within reports whether the path p is dir or inside it.
 func within(p, dir string) bool {
 	return p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, "/")+"/")
+}
+
+// checkoutOf finds the checkout of t that the path p is in, when p is not
+// in the work tree itself: the innermost of t.Checkouts that holds it, or
+// "". real is p with its symbolic links followed. The checkouts are
+// compared with the names macOS takes for one file folded alike
+// (permission.PathKey), so that /tmp/x for /private/tmp/x, another letter
+// case or /System/Volumes/Data is no way into them; the work tree is
+// compared exactly, so that only its own spelling is let through.
+func checkoutOf(t core.WorkTree, p string) (repo, real string) {
+	real = resolved(p)
+	if within(real, resolved(t.Path)) {
+		return "", real
+	}
+	key := permission.PathKey(real)
+	for _, c := range t.Checkouts() {
+		c = resolved(c)
+		if ck := permission.PathKey(c); within(key, ck) {
+			return c, real
+		}
+	}
+	return "", real
+}
+
+// resolved is the absolute path p with its symbolic links followed, or
+// cleaned when that cannot be done.
+func resolved(p string) string {
+	if r, err := resolvePath(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
+// sameIn is where the path real, in the checkout repo, is in the work tree
+// at tree; ok is false when real spells repo another way (letter case, a
+// second way into the disk) and it cannot be told letter for letter.
+func sameIn(tree, repo, real string) (string, bool) {
+	rel, err := filepath.Rel(repo, real)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", false
+	}
+	return filepath.Join(tree, rel), true
+}
+
+// checkoutName says which of t's checkouts repo is, for the model: the
+// person's own (the last), or a work tree yours was made from.
+func checkoutName(t core.WorkTree, repo string) string {
+	all := t.Checkouts()
+	if resolved(all[len(all)-1]) == repo {
+		return "the person's checkout at " + repo
+	}
+	return "the work tree at " + repo + ", which yours was made from"
 }
 
 // commandOutsideTree says why a shell command of a session with the work
@@ -707,27 +759,28 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	}
 	dirs, why := l.engine.CommandDirs(cwd, command)
 	if why != "" {
-		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command runs: %s. It could run in the person's checkout at %s.%s", t.Path, why, t.Repo, hint)
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command runs: %s. It could run in %s.%s", t.Path, why, checkoutName(t, resolved(t.Repo)), hint)
 	}
 	for _, d := range dirs {
-		if !within(d, t.Repo) || within(d, t.Path) {
+		repo, real := checkoutOf(t, d)
+		if repo == "" {
 			continue
 		}
-		same := t.Path
-		if rel, err := filepath.Rel(t.Repo, d); err == nil {
-			same = filepath.Join(t.Path, rel)
+		same := ""
+		if s, ok := sameIn(t.Path, repo, real); ok {
+			same = ": the same folder there is " + s
 		}
-		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command would run in %s, in the person's checkout at %s. Run it in your work tree instead: the same folder there is %s.", t.Path, d, t.Repo, same)
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command would run in %s, in %s. Run it in your work tree instead%s.", t.Path, d, checkoutName(t, repo), same)
 	}
 	// Nor is git pointed there from the work tree: git -C, --git-dir,
 	// --work-tree, GIT_DIR and its kin.
 	places, why := l.engine.GitPlaces(cwd, command)
 	if why != "" {
-		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command points git: %s. It could be the person's checkout at %s. Run git in your work tree as it is, with its words written out.", t.Path, why, t.Repo)
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command points git: %s. It could be %s. Run git in your work tree as it is, with its words written out.", t.Path, why, checkoutName(t, resolved(t.Repo)))
 	}
 	for _, p := range places {
-		if within(p, t.Repo) && !within(p, t.Path) {
-			return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command points git at %s, in the person's checkout at %s. Run git in your work tree, without -C, --git-dir, --work-tree or GIT_DIR: the work tree is a checkout of its own.", t.Path, p, t.Repo)
+		if repo, _ := checkoutOf(t, p); repo != "" {
+			return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command points git at %s, in %s. Run git in your work tree, without -C, --git-dir, --work-tree or GIT_DIR: the work tree is a checkout of its own.", t.Path, p, checkoutName(t, repo))
 		}
 	}
 	return ""

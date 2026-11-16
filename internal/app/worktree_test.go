@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/core"
 )
 
 // gitIn runs git in dir for a test, as nobody in particular.
@@ -192,6 +193,73 @@ func TestSubAgentWorktreeKeepsToItsTree(t *testing.T) {
 	made, _ := filepath.Glob(filepath.Join(w.Dir, ".gnosh", "worktrees", "agent-*", "notes.txt"))
 	if len(made) != 1 {
 		t.Errorf("notes.txt in the work tree: %q", made)
+	}
+}
+
+// A sub-agent's work tree made in a --worktree session's stays out of the
+// person's checkout too, not only out of the session's work tree it was
+// made from.
+func TestSubAgentWorktreeInAWorktreeSession(t *testing.T) {
+	w := repoWorld(t)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		if !strings.Contains(body, "You are a sub-agent inside gnosh") {
+			if strings.Contains(body, `"role":"tool"`) {
+				return &apptest.Reply{Text: "Done."}
+			}
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"note it","prompt":"Write notes.txt.","isolation":"worktree"}`}}}
+		}
+		if strings.Contains(body, `"role":"tool"`) {
+			return &apptest.Reply{Text: "Refused."}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "w1", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":"noted\n"}`, filepath.Join(w.Dir, "notes.txt"))}}}
+	})
+	// In bypassPermissions, where the work tree is all that stands between
+	// the sub-agent and the checkout.
+	run(t, w, "--trust-folder", "--worktree", "iso", "-y", "-p", "note it").wantCode(t, 0)
+	if w.Exists("notes.txt") {
+		t.Errorf("the sub-agent wrote into the person's checkout")
+	}
+	if !anyRequestHas(w, "so that your changes stay apart from the person's checkout at ") {
+		t.Errorf("the write was not refused as one into the person's checkout")
+	}
+}
+
+// checkoutOf sees the checkouts a work tree stays out of through symbolic
+// links and other spellings, and finds the innermost.
+func TestCheckoutOf(t *testing.T) {
+	root := resolved(t.TempDir())
+	repo := filepath.Join(root, "app")
+	outer := filepath.Join(repo, ".gnosh", "worktrees", "s")
+	tree := filepath.Join(outer, ".gnosh", "worktrees", "a")
+	if err := os.MkdirAll(tree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(repo, link); err != nil {
+		t.Fatal(err)
+	}
+	wt := core.WorkTree{Path: tree, Repo: outer, Outer: []string{repo}}
+	for _, c := range []struct{ path, want string }{
+		{filepath.Join(repo, "main.go"), repo},
+		{filepath.Join(link, "main.go"), repo},
+		{filepath.Join(strings.ToUpper(repo), "main.go"), repo},
+		{filepath.Join(outer, "main.go"), outer},
+		{filepath.Join(tree, "main.go"), ""},
+		{filepath.Join(root, "elsewhere", "x"), ""},
+	} {
+		if got, _ := checkoutOf(wt, c.path); got != c.want {
+			t.Errorf("checkoutOf(%q) = %q, want %q", c.path, got, c.want)
+		}
+	}
+	if got := checkoutName(wt, repo); !strings.HasPrefix(got, "the person's checkout at ") {
+		t.Errorf("checkoutName(person's) = %q", got)
+	}
+	if got := checkoutName(wt, outer); !strings.HasPrefix(got, "the work tree at ") {
+		t.Errorf("checkoutName(the session's) = %q", got)
+	}
+	if got := outsideTree(wt, tree, []string{filepath.Join(link, "x.go")}); !strings.Contains(got, "The same file in your work tree is "+filepath.Join(tree, "x.go")) {
+		t.Errorf("outsideTree through a link: %q", got)
 	}
 }
 

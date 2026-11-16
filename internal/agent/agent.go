@@ -809,6 +809,11 @@ func (a *Agent) SetSystem(parts []string) {
 	a.mu.Unlock()
 }
 
+// Tree is the git work tree the session works in apart from the person's
+// checkout, its own or its parent's, or nil. It is set when the agent is
+// made and never changes.
+func (a *Agent) Tree() *core.WorkTree { return a.tree }
+
 // SetRoots replaces the directories the session works in.
 func (a *Agent) SetRoots(roots []string) {
 	a.mu.Lock()
