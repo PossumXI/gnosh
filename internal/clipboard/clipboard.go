@@ -9,7 +9,9 @@ package clipboard
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -52,11 +54,21 @@ func Tool(goos string, getenv func(string) string, look func(string) (string, er
 }
 
 // Copy runs tool with text on its standard input, in the environment env
-// (as os.Environ gives it; nil is this process's own).
+// (as os.Environ gives it; nil is this process's own). pbcopy reads its
+// input in the encoding of the locale, and where none is set in an
+// encoding that is not UTF-8, so it is given a UTF-8 locale: the text is
+// UTF-8.
 func Copy(ctx context.Context, tool []string, env []string, text string) error {
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tool[0], tool[1:]...)
+	if filepath.Base(tool[0]) == "pbcopy" {
+		if env == nil {
+			env = os.Environ()
+		}
+		// (Of two values of one variable, the last counts.)
+		env = append(env[:len(env):len(env)], "LC_ALL=en_US.UTF-8")
+	}
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader(text)
 	// Its output goes nowhere, not into a pipe: wl-copy and xclip leave a

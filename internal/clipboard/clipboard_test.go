@@ -1,10 +1,44 @@
 package clipboard
 
 import (
+	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// pbcopy is run in a UTF-8 locale whatever gnosh's is, so that text that
+// is not ASCII reaches the clipboard as it was; another tool gets the
+// environment as it is.
+func TestCopyLocale(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in tools are shell scripts")
+	}
+	dir := t.TempDir()
+	for _, name := range []string{"pbcopy", "xclip"} {
+		tool := filepath.Join(dir, name)
+		out := tool + ".seen"
+		script := "#!/bin/sh\nenv > " + out + "\ncat >> " + out + "\n"
+		if err := os.WriteFile(tool, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := Copy(context.Background(), []string{tool}, []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}, "héllo ✦"); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := string(b)
+		utf8 := strings.Contains(seen, "LC_ALL=en_US.UTF-8\n") && !strings.Contains(seen, "LC_ALL=C\n")
+		if utf8 != (name == "pbcopy") || !strings.HasSuffix(seen, "héllo ✦") {
+			t.Errorf("%s was run with:\n%s", name, seen)
+		}
+	}
+}
 
 // Tool picks the machine's own tool only where the terminal is on
 // this machine, and the one the desktop takes.
