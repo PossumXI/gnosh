@@ -18,40 +18,45 @@ permission, planned and finished a task in `mem`, and popped frames against
 a real model (Qwen 3.8 27B on llama.cpp). `tools/dev/remote-ci.sh` builds,
 vets and tests every package from a clean copy.
 
-Built: print mode (`gnosh -p`, which waits for the background commands its
-turns start and lets the model answer how they ended, with text, JSON and streamed JSON output,
-streamed JSON input for a conversation over standard input, `--json-schema`
-for a result as JSON that conforms to a schema,
-`--bare` for minimal mode, `--no-session-persistence` to keep nothing,
-`--permission-prompts none` for a run nobody is there to answer, and
-`--agents` for kinds of sub-agent of the run's own, and `--agent` to run the
-session as one), an
-interactive session in the terminal's own scrollback, the file and shell
-tools, WebFetch (a page read by the small model with the model's request,
-from the open web only), MCP servers, those gnosh starts itself and those
-at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
-`.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
-tools are `mcp__<server>__<tool>`), commands on
-declared hosts over ssh, permission modes (plan mode included, where the model presents its plan
-with ExitPlanMode and you approve it) and rules,
-hooks (command hooks in the shell and exec forms, in the background too,
-http hooks and mcp_tool hooks, with Claude Code's `if` filters, one
-permission rule each, and their status messages), a status line command
-(Claude Code's `statusLine`), instruction files, skills (with
-allowed-tools and disallowed-tools, effort, `context: fork` in a
-sub-agent, paths, hooks of their own, and commands run before the model
-sees them), sub-agents in the foreground and, in a session, in the
-background (general-purpose, Explore, Plan and your own, and given more to do
-once they end, with SendMessage), `mem` and frames
-with the close check, `/goal`, the slide and peers' turn locks, `gnosh mem`,
-`gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json, get, list and
-remove, with Claude Code's local, project and user scopes), `gnosh ssh`
-(ssh that puts what the far side copies on this machine's clipboard, for
-terminals that drop such copies, as Apple's Terminal does), `--worktree` (a
-session in a git work tree of its own, as Claude Code's), and
-deliverables: the `Deliver` tool by which
-the model names what was asked for, `/deliverables`, and each delivered file
-served at an address on this machine.
+Built:
+
+- **Print mode**, `gnosh -p`: text, JSON and streamed JSON output, streamed
+  JSON input for a conversation over standard input, `--json-schema` for a
+  result as JSON that conforms to a schema, `--bare` for minimal mode,
+  `--no-session-persistence` to keep nothing, `--permission-prompts none`
+  for a run nobody is there to answer, `--agents` for kinds of sub-agent of
+  the run's own, and `--agent` to run the session as one. It waits for the
+  background commands its turns start and lets the model answer how they
+  ended.
+- **A session** in the terminal's own scrollback.
+- **Tools:** the file and shell tools, WebFetch (a page read by the small
+  model with the model's request, from the open web only), commands on
+  declared hosts over ssh, and MCP servers, those gnosh starts itself and
+  those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
+  `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
+  tools are `mcp__<server>__<tool>`).
+- **Permissions:** modes, plan mode included (the model presents its plan
+  with ExitPlanMode and you approve it), and rules.
+- **Hooks:** command hooks in the shell and exec forms, in the background
+  too, http hooks and mcp_tool hooks, with Claude Code's `if` filters (one
+  permission rule each) and their status messages.
+- **What the model is given:** instruction files, skills (with
+  allowed-tools and disallowed-tools, effort, `context: fork` in a
+  sub-agent, paths, hooks of their own, and commands run before the model
+  sees them), and a status line command (Claude Code's `statusLine`).
+- **Sub-agents** in the foreground and, in a session, in the background:
+  general-purpose, Explore, Plan and your own, given more to do once they
+  end with SendMessage.
+- **`mem`** and frames, with the close check, `/goal`, the slide, peers'
+  turn locks, and `gnosh mem`.
+- **Commands:** `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json,
+  get, list and remove, with Claude Code's local, project and user scopes),
+  `gnosh ssh` (ssh that puts what the far side copies on this machine's
+  clipboard: see below), and `--worktree` (a session in a git work tree of
+  its own, as Claude Code's).
+- **Deliverables:** the `Deliver` tool, by which the model names what was
+  asked for, `/deliverables`, and each delivered file served at an address
+  on this machine.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write
