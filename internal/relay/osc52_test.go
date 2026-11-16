@@ -30,6 +30,21 @@ func scan(stream string, n int) []string {
 	return got
 }
 
+// A long copy's room is not kept for the rest of the session, whether
+// the copy ends or is cut off.
+func TestScannerGivesRoomBack(t *testing.T) {
+	long := strings.Repeat("x", 1<<20)
+	for _, stream := range []string{osc52("c", long, "\x07"), osc52("c", long, "\x18") + "\x1b]0;title"} {
+		var s scanner
+		var got []string
+		s.feed([]byte(stream), func(text string) { got = append(got, text) })
+		s.feed([]byte(osc52("c", "short", "\x07")), func(text string) { got = append(got, text) })
+		if cap(s.body) > keptRoom || got[len(got)-1] != "short" {
+			t.Errorf("after a long body the scanner keeps %d bytes of room and found %d copies", cap(s.body), len(got))
+		}
+	}
+}
+
 // The scanner finds each clipboard write, however the stream is cut up,
 // and nothing else.
 func TestScanner(t *testing.T) {

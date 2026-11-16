@@ -17,10 +17,10 @@
 // gnosh ssh is ssh: gnosh hands its process over to it.
 //
 // The relay puts on the clipboard what the far side sends, and never
-// reads the clipboard back. As with the terminals that take OSC 52 (most
-// of them do by default), anything shown on the far side's screen may
-// put text on the clipboard; plain ssh in Apple's Terminal keeps the
-// clipboard out of the far side's reach.
+// reads the clipboard back. As in a terminal that takes OSC 52 itself,
+// anything shown on the far side's screen may put text on the clipboard;
+// plain ssh in Apple's Terminal keeps the clipboard out of the far side's
+// reach.
 package relay
 
 import (

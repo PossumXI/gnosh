@@ -77,6 +77,10 @@ func (s *scanner) feed(p []byte, found func(text string)) {
 func (s *scanner) afterEsc(b byte) {
 	switch b {
 	case ']':
+		if cap(s.body) > keptRoom {
+			// (A long body that never ended gives its room back too.)
+			s.body = nil
+		}
 		s.st, s.body, s.skip = stOSC, s.body[:0], false
 	case 0x1b:
 		s.st = stEsc
@@ -85,10 +89,19 @@ func (s *scanner) afterEsc(b byte) {
 	}
 }
 
+// keptRoom is the most room the scanner keeps for the next body once one
+// has ended: a long copy's room is given back.
+const keptRoom = 64 << 10
+
 // end takes the end of a body, and calls found when it was a clipboard
 // write with text in it.
 func (s *scanner) end(found func(text string)) {
 	s.st = stGround
+	defer func() {
+		if cap(s.body) > keptRoom {
+			s.body = nil
+		}
+	}()
 	if s.skip {
 		return
 	}

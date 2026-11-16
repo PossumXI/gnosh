@@ -384,7 +384,7 @@ func Default() *Table {
 
 	t.command(root, &command{name: "ssh", cmd: CmdSSH, pri: 1, maxArgs: -1,
 		argsUsage: "[ssh arguments...]", argsShort: "[ssh args]",
-		passes: true, dashHint: "gnosh ssh must be the first word, and then every word after it is ssh's",
+		passes: true, dashHint: "gnosh ssh takes none of gnosh's own flags: it comes right after gnosh, and every word after it is ssh's",
 		flags:   []*flag{help},
 		summary: "Run ssh, putting what the far side copies on this machine's clipboard.",
 		about: "Every word after ssh is ssh's (but for -h or --help alone, which shows this), and gnosh ssh ends with ssh's status. At a terminal, ssh keeps the terminal, its passwords and its job, and what it writes passes through gnosh as it is, " +

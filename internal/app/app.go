@@ -306,7 +306,7 @@ func (p *program) run(ctx context.Context) int {
 	case cli.CmdSSH:
 		// main runs gnosh ssh before anything is read; it comes here only
 		// after other words.
-		p.errf("gnosh ssh must be the first word after gnosh, so that every word after it is ssh's: gnosh ssh [ssh arguments...]")
+		p.errf("gnosh ssh takes none of gnosh's own flags: it comes right after gnosh, and every word after it is ssh's (gnosh ssh [ssh arguments...]).")
 		return cli.ExitFailure
 	}
 	for _, f := range p.o.Features {
