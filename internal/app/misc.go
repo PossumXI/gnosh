@@ -222,7 +222,8 @@ func (g *fileLog) event(ev any) {
 	case *agent.ContextEvent:
 		g.debugf("context", "about %d of %d tokens (room is made at %d)", ev.Context.Used, ev.Context.Window, ev.Context.Point)
 	case *agent.SideEvent:
-		g.logf("model", "side request (%s) to %s/%s took %s: error %v", ev.Purpose, ev.Provider, ev.Model, ev.Duration.Round(time.Millisecond), ev.Err)
+		g.logf("model", "side request (%s) to %s/%s took %s: prompt %d (cached %d), written %d, error %v", ev.Purpose, ev.Provider, ev.Model, ev.Duration.Round(time.Millisecond),
+			ev.Usage.PromptTokens(), ev.Usage.CacheReadTokens, ev.Usage.OutputTokens, ev.Err)
 	case *agent.LoopEvent:
 		g.logf("turn", "/loop on %v after %d turns: %s", ev.On, ev.Turns, ev.Why)
 	case *agent.PromptReturnedEvent:
