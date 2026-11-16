@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,13 @@ func (l *live) suggestNext(res agent.TurnResult) {
 		return
 	}
 	if shows, ok := l.front.(Suggester); !ok || !shows.ShowsSuggestions() {
+		return
+	}
+	if !slices.Contains(res.Prompts, l.lastPrompt()) {
+		// A turn no prompt of the person's began (a background task's
+		// news, a hook, a goal): nobody is at the box for a guess at
+		// what they send next, which would cost the model a request, as
+		// Claude Code also holds back after such turns.
 		return
 	}
 	a := l.agentReady.Load()
