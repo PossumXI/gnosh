@@ -1022,4 +1022,23 @@ or kept with the reason said (27).
     person's own machine and more than an ordinary step takes; and none
     elsewhere. MAX_THINKING_TOKENS=0 turns thinking off, as in Claude
     Code. A server too old for the fields ignores them.
+74. **The theme option, as Claude Code's /theme, with gnosh's colours.**
+    Claude Code offers auto, light and dark, daltonized and ANSI themes
+    and custom ones. gnosh has its own palette (Jae's colours,
+    DECISIONS of 14 and 16 November in the UI notes) and offers four
+    ways to take it: auto (for the background the terminal says it has,
+    as before), dark and light (whatever it says: over ssh or in tmux a
+    terminal often says nothing), and ansi (the terminal's own sixteen
+    colours, which its owner chose). Bare /theme opens the option's
+    picker; /theme <name> and /config theme=<name> set it for every
+    project and at once. No daltonized or custom themes: gnosh never
+    tells a thing by colour alone.
+75. **A reply printed to a terminal may colour itself and do nothing
+    else, as Claude Code 2.1.325 has it for claude -p.** In print mode
+    to a terminal, the reply and gnosh's lines on standard error keep
+    their styles (SGR), tabs and line breaks; every other escape
+    sequence and control character, the C1 controls included, is left
+    out (text.Safe; text.SafeStream across the pieces of a reply). A
+    pipe or a file gets the reply as it is: it is data there, and the
+    reader decides what to do with it.
 
