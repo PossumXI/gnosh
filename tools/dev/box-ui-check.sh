@@ -49,6 +49,8 @@
 #   wtflag      the same repository, and gnosh started with --worktree demo:
 #               the session adds a line to notes.txt in .gnosh/worktrees/demo,
 #               and the folder's notes.txt stays as it was (acceptEdits)
+#   secreview   a branch that adds a handler with a shell injection:
+#               /security-review should find it
 #   vim         editorMode vim: a prompt typed in INSERT mode, Esc, x in
 #               NORMAL mode, and Enter sends it from NORMAL mode
 #
@@ -65,6 +67,7 @@ opts=""
 case "$scenario" in
 basic | mention | config | fork | model | transcript) ;;
 vim) opts='"editorMode": "vim", ' ;;
+secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel) flags="-y" ;;
@@ -72,7 +75,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview)" >&2
 	exit 2
 	;;
 esac
@@ -123,6 +126,35 @@ cd "$T/work" || exit 1
 if [ "$scenario" = worktree ] || [ "$scenario" = wtflag ]; then
 	git init -q && git -c user.name=check -c user.email=check@example.com add notes.txt &&
 		git -c user.name=check -c user.email=check@example.com commit -q -m notes || exit 1
+fi
+if [ "$scenario" = secreview ]; then
+	# A branch that adds a handler putting a query parameter into a shell
+	# command line: the one real way in for the review to find.
+	g() { git -c user.name=check -c user.email=check@example.com "$@"; }
+	printf 'module thumbs\n\ngo 1.22\n' > go.mod
+	g init -q -b main && g add go.mod notes.txt && g commit -q -m base || exit 1
+	g checkout -q -b thumbnails || exit 1
+	cat > handler.go <<'EOF'
+package thumbs
+
+import (
+	"net/http"
+	"os/exec"
+)
+
+// Thumb makes a thumbnail of the file named in the request.
+func Thumb(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("file")
+	out, err := exec.Command("sh", "-c", "convert uploads/"+name+" -resize 64x64 png:-").Output()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Write(out)
+}
+EOF
+	g add handler.go && g commit -q -m "thumbnails" || exit 1
 fi
 tmux new-session -d -s "$S" -x 110 -y 40 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $HOME/.local/bin/gnosh $flags"
 sleep 4
@@ -188,6 +220,10 @@ worktree)
 	;;
 wtflag)
 	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
+	done_when() { screen | grep -q "done in"; }
+	;;
+secreview)
+	tmux send-keys -t "$S" "/security-review" Enter
 	done_when() { screen | grep -q "done in"; }
 	;;
 vim)
