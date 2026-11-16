@@ -46,7 +46,11 @@ Built:
   with ExitPlanMode and you approve it), and rules.
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks and mcp_tool hooks, with Claude Code's `if` filters (one
-  permission rule each) and their status messages.
+  permission rule each) and their status messages, on 23 of Claude Code's
+  events: the tool and prompt events, Stop and SubagentStop, the session
+  and summary events, PreModelSwitch and PostModelSwitch, ConfigChange,
+  PostToolBatch, CwdChanged, DirectoryAdded and FileChanged among them.
+  Not yet: WorktreeCreate, WorktreeRemove and MessageDisplay.
 - **What the model is given:** instruction files, skills (with
   allowed-tools and disallowed-tools, effort, `context: fork` in a
   sub-agent, paths, hooks of their own, and commands run before the model
