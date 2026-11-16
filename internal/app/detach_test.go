@@ -40,6 +40,8 @@ func TestBackgroundCommand(t *testing.T) {
 	if logs[0] != filepath.Join(filepath.Dir(w.Sessions()[0]), id+".background.log") {
 		t.Errorf("its output goes to %s", logs[0])
 	}
+	head, _ := os.ReadFile(logs[0])
+	has(t, "the log's first line", string(head), "the session "+id+" goes on in the background with: fix the flaky test, then run them all")
 	has(t, "what is said on the way out", s.errs.String(), "gnosh: the session goes on in the background (process 4242)", id+".background.log", "gnosh -r "+id+" opens it again once it is done")
 	if _, err := os.Stat(w.Sessions()[0]); err != nil {
 		t.Errorf("the session's file: %v", err)

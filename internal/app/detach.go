@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
@@ -38,6 +40,7 @@ func (p *program) detachedPlan() *detachPlan {
 // to the session, or, when it cannot, how to go on by hand.
 func (p *program) detach(args []string, d *detachPlan) int {
 	run := append(append(args, "--print", "--"), d.prompt)
+	p.logHead(d.log, d.session, d.prompt)
 	pid, err := p.o.Detach(run, d.log)
 	if err != nil {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
@@ -96,6 +99,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	}
 	run := append(args, "--print", "--", prompt)
 	log := filepath.Join(l.crashDir(), id+".background.log")
+	l.p.logHead(log, id, prompt)
 	pid, err := l.p.o.Detach(run, log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
@@ -120,4 +124,16 @@ func (l *live) copySession(what string) (string, error) {
 		err = cerr
 	}
 	return id, err
+}
+
+// logHead begins a run's log with what it is: when it started, the
+// session it goes on with, and its prompt. The run's own output follows.
+// A log that cannot be written to is left to the run, which says why.
+func (p *program) logHead(log, session, prompt string) {
+	f, err := os.OpenFile(log, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "gnosh: %s the session %s goes on in the background with: %s\n", p.now().UTC().Format(time.RFC3339), session, oneLine(prompt, 400))
 }
