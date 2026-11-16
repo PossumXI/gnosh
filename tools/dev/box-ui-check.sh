@@ -103,14 +103,18 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
-mkdir -p "$T/config/gnosh/skills/countlines"
-cat > "$T/config/gnosh/skills/countlines/SKILL.md" <<'EOF'
+# The skill only where it is used: it is about notes.txt, and a model
+# asked to change that file in another scenario loads it.
+if [ "$scenario" = fork ]; then
+	mkdir -p "$T/config/gnosh/skills/countlines"
+	cat > "$T/config/gnosh/skills/countlines/SKILL.md" <<'EOF'
 ---
 description: Counts the lines of a file in a sub-agent.
 context: fork
 ---
 Count the lines of the file notes.txt in the working directory. Report the count as one number.
 EOF
+fi
 cd "$T/work" || exit 1
 if [ "$scenario" = worktree ] || [ "$scenario" = wtflag ]; then
 	git init -q && git -c user.name=check -c user.email=check@example.com add notes.txt &&
