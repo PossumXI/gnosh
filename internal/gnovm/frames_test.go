@@ -218,6 +218,14 @@ func TestFramesStory(t *testing.T) {
 	s.run("s5", "", `mem.Next()`)
 	s.run("s5", "", "mem.Pop(\"guide written\")\nmem.Pop(\"the docs are out\")")
 	s.run("s1", "", `println(mem.Show())`)
+	// A todo pushed from inside another it is not under stands on top of
+	// it: the receipt says the other stays open under it, held (box 1,
+	// 2026-11-16).
+	s.run("s6", "", `mem.Todo("tidy up", "sweep", "mop")`)
+	s.run("s6", "", `mem.Frame("tidy-up/sweep").Push()`)
+	s.run("s6", "", `mem.Frame("tidy-up/mop").Push()`)
+	s.run("s6", "", `mem.Pop("mopped")`)
+	s.run("s6", "", `mem.Pop("swept")`)
 
 	golden := filepath.Join("testdata", "gnomem", "v2", "frames.golden")
 	if os.Getenv("GNOMEM_V2_WRITE") != "" {

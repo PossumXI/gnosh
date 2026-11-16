@@ -604,6 +604,18 @@ func (m *Mem) enter(id, thought string, above bool) {
 	}
 	pushed(id, it.Title)
 	println(m.pushText(id, it, thought))
+	if n := len(stack); n > 0 && !strings.HasPrefix(id, stack[n-1]+"/") {
+		// A todo pushed from inside another it is not under stands on top
+		// of that one, which stays open, and held, under it (box 1,
+		// 2026-11-16: three todos of a plan held at once, each pushed from
+		// inside the one before, none popped).
+		under := stack[n-1]
+		title := ""
+		if u := m.get(under); u != nil {
+			title = u.Title
+		}
+		println(ref(under, title) + " stays open under it, and held by you: popping this one brings you back to it; if it is done, pop it then with what came of it.")
+	}
 	// The thoughts already on it, as a note left for it by another frame or
 	// session (mem.Note), or what it said when it was closed before: they
 	// reach the model as it starts the todo, with no search (QA,
@@ -1094,6 +1106,17 @@ func (m *Mem) NextHint(id string) string {
 		return ""
 	}
 	present := m.present()
+	if present != "" && present != parent && !strings.HasPrefix(parent, present+"/") && onStack(frames(), present) {
+		// The todo was pushed from inside another it is not under: the pop
+		// brings the session back to that one, which is its work now, not
+		// a todo to push (box 1, 2026-11-16: told to push the todo it stood
+		// in, the model was refused, "already on your stack").
+		title := ""
+		if q := m.get(present); q != nil {
+			title = q.Title
+		}
+		return "next: you are back in " + ref(present, title) + ", where you pushed this one from: go on with it, and pop it once it is done"
+	}
 	// With other sessions working on the plan, only Next knows what is
 	// left for this one, here or where it steps from; never a name to push,
 	// which another may take. A sub-agent works for its parent and is not

@@ -375,3 +375,22 @@ facts, newest first:
   `staging-database-db-stg-2` = the staging database is db-stg-7
   `staging-database-db-stg` = the staging database is db-stg-7
 
+> s6: mem.Todo("tidy up", "sweep", "mop")
+added `tidy-up` "tidy up"
+added `tidy-up/sweep` "sweep"
+added `tidy-up/mop` "mop"
+> s6: mem.Frame("tidy-up/sweep").Push()
+in `tidy-up/sweep` "sweep": do it now, with your tools; once what they return shows it done, pop it with that and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `tidy-up/sweep`]
+> s6: mem.Frame("tidy-up/mop").Push()
+in `tidy-up/mop` "mop": do it now, with your tools; once what they return shows it done, pop it with that and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+`tidy-up/sweep` "sweep" stays open under it, and held by you: popping this one brings you back to it; if it is done, pop it then with what came of it.
+  [push `tidy-up/mop`]
+> s6: mem.Pop("mopped")
+done `tidy-up/mop` "mop" → mopped
+next: you are back in `tidy-up/sweep` "sweep", where you pushed this one from: go on with it, and pop it once it is done
+  [pop `tidy-up/mop` → mopped]
+> s6: mem.Pop("swept")
+done `tidy-up/sweep` "sweep" → swept
+next: mem.Done("tidy-up", "…") once it holds
+  [pop `tidy-up/sweep` → swept]
