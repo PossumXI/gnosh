@@ -53,6 +53,10 @@ type live struct {
 	// watch is how the files FileChanged hooks watch stood at the last
 	// look (filewatch.go).
 	watch fileWatch
+	// suggestOn is the promptSuggestionEnabled option as it stands, and
+	// suggest the suggestion being made (suggest.go).
+	suggestOn atomic.Bool
+	suggest   suggester
 
 	store     *transcript.Store
 	ts        *transcript.Session
@@ -529,6 +533,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	// (What the session loaded is the settings it has taken in.)
 	l.watchSettings()
+	l.suggestOn.Store(l.cfg.Options.PromptSuggestionEnabled.V)
 	a, err := agent.New(opts)
 	l.agent = a
 	// Published for the code that runs beside the session's opening (a

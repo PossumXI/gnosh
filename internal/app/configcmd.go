@@ -131,7 +131,7 @@ func (l *live) slashAutocompact(ctx context.Context, c *SlashContext) error {
 
 // liveOptions are the options a running session can change: /config puts
 // them in force at once.
-var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true}
+var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true}
 
 // applyOption puts what /config set in force in the running session, for
 // an option that can be (liveOptions), and reports whether it was.
@@ -156,6 +156,12 @@ func (l *live) applyOption(key string, raw json.RawMessage) bool {
 	case "editorMode":
 		// (The interface's to put in force, as verbose is: the box is
 		// its own.)
+	case "promptSuggestionEnabled":
+		var on bool
+		if json.Unmarshal(raw, &on) != nil {
+			return false
+		}
+		l.suggestOn.Store(on)
 	case "autoCompactEnabled", "debug", "verbose":
 		var on bool
 		if json.Unmarshal(raw, &on) != nil {

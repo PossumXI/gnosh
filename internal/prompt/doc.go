@@ -274,6 +274,9 @@
 //     words from the conversation, call no tool, start on nothing.
 //   - recap (Recap) is the question of /recap, asked the same way: the
 //     session in one line, for the person.
+//   - next-prompt (NextPrompt) is asked the same way after a turn, when
+//     promptSuggestionEnabled is on: the prompt the person would most
+//     likely send next, a few words on one line, which their box shows.
 //   - statusline (StatusLine) is the prompt of /statusline: write a script
 //     from the user's words, try it on this session's JSON, and add the
 //     statusLine setting to their gnosh.json with the Edit tool.

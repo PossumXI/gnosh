@@ -92,6 +92,10 @@ type Options struct {
 	// "notifications_disabled".
 	PreferredNotifChannel Value[string]
 	VimInsertModeRemaps   []ListItem
+	// PromptSuggestionEnabled says that, after a turn of an interactive
+	// session, the session's model is asked for the person's likely next
+	// prompt, which the box shows until they type (Tab takes it).
+	PromptSuggestionEnabled Value[bool]
 }
 
 // ServerOff is the value of an option that names where a server of gnosh's
@@ -250,6 +254,10 @@ var optionDefs = []optionDef{
 		what: "how a person who seems to be away is told the session waits: \"auto\" (a desktop note where the terminal is known to take one), \"terminal_bell\" (the bell, which reaches a terminal over ssh and through tmux too), \"iterm2\", \"iterm2_with_bell\", \"kitty\" or \"ghostty\" (that terminal's desktop note, for one gnosh cannot see, over ssh), or \"notifications_disabled\"; not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"auto", "terminal_bell", "iterm2", "iterm2_with_bell", "kitty", "ghostty", "notifications_disabled"}, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.PreferredNotifChannel }},
+	{key: "promptSuggestionEnabled", kind: oBool, def: "false",
+		what: "after a turn, ask the session's model for your likely next prompt and show it in the box, where Tab or the right arrow takes it and typing drops it (off by default: each one is a short request to the model; not from a project's file)",
+		from: fromClaudeCode + ": the settings key, off as Claude Code has it off for models of other providers", ownOnly: true,
+		truth: func(o *Options) *Value[bool] { return &o.PromptSuggestionEnabled }},
 	{key: "vimInsertModeRemaps", kind: oNameList, def: "none",
 		what: "pairs of characters that, typed within a second of each other in vim's INSERT mode, stand for Esc, as [\"jj\"]; not from a project's file",
 		from: fromClaudeCode + ": the settings key, as a list, since Esc is the one thing a pair can stand for", ownOnly: true,

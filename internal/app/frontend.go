@@ -60,6 +60,14 @@ type Asker interface {
 	AskBefore(q agent.Question) (agent.Answer, error)
 }
 
+// Suggester is a Frontend that shows the person's likely next prompt
+// (SuggestionEvent) in its box. Only for one is the model asked for it
+// (promptSuggestionEnabled): a front end with no box to show it in would
+// pass over what the request made.
+type Suggester interface {
+	ShowsSuggestions() bool
+}
+
 // FrontendInfo is what the maker of an interactive front end is given
 // (Options.Interactive). The maker may decline, by returning nil: there is
 // no terminal it could draw on. The session is then given the plain front

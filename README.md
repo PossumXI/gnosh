@@ -93,6 +93,13 @@ Built:
   a terminal on the other side of ssh or tmux too. Your prompts are white
   and the model's answers green; on a terminal that says its background is
   light, both take colours that read there.
+- **Your likely next prompt**, as Claude Code's prompt suggestions: with
+  `"options": {"promptSuggestionEnabled": true}` (or `/config
+  promptSuggestionEnabled=true`), after a turn the model is asked, beside
+  the session, what you would most likely send next, and the empty box
+  shows it; Tab or the right arrow takes it, typing drops it. Off unless
+  set, as Claude Code has it for other providers' models: each one is a
+  short request to the model.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/restart` (gnosh starts again in the same session, the newer one once a new

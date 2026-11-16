@@ -140,6 +140,9 @@
 //	                           from a project's file)
 //	  vimInsertModeRemaps      pairs typed in vim's INSERT mode that stand
 //	                           for Esc, as ["jj"] (not from a project's file)
+//	  promptSuggestionEnabled  after a turn, the person's likely next prompt
+//	                           in the box, Tab to take it (off; not from a
+//	                           project's file)
 //
 // "model" and "smallModel" are each the model as a string, or an object
 // when how the model is asked matters:

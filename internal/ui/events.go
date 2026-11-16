@@ -166,6 +166,13 @@ func (s *session) handle(ev any) {
 	case *app.DeliverablesEvent:
 		s.deliv = ev.List
 		s.dirty = true
+	case *app.SuggestionEvent:
+		// The person's likely next prompt (promptSuggestionEnabled): shown
+		// in the box while it is empty and nothing runs.
+		if !s.busy && s.ed.IsEmpty() {
+			s.suggestion = oneLine(ev.Text)
+			s.dirty = true
+		}
 	case *app.StatusLineEvent:
 		s.custom, s.customPad = ev.Lines, ev.Padding
 		s.dirty = true
@@ -292,6 +299,7 @@ func mentionsSaid(parts []agent.Part) string {
 func (s *session) request(ev *agent.RequestEvent) {
 	switch ev.Purpose {
 	case "main":
+		s.suggestion = ""
 		s.endReply()
 		s.reply = reply{}
 		s.model, s.estimate, s.attempt = ev.Model, ev.Estimate, ev.Attempt

@@ -310,6 +310,17 @@ func (s *session) stopAgentsKey() {
 // box gives a key or a paste to the prompt box and acts on what the box
 // asks for.
 func (s *session) box(ev term.Event, k *term.Key) {
+	if s.suggestion != "" {
+		// Tab or the right arrow in the empty box takes the suggested
+		// prompt, as in Claude Code; anything else drops it.
+		take := k != nil && s.ed.IsEmpty() && (k.IsKey(term.KeyTab, 0) || k.IsKey(term.KeyRight, 0))
+		text := s.suggestion
+		s.suggestion = ""
+		if take {
+			s.ed.SetText(text)
+			return
+		}
+	}
 	if k != nil {
 		switch {
 		case s.chord:

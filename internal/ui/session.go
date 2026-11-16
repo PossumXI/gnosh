@@ -265,6 +265,9 @@ type session struct {
 	info app.SessionInfo
 	// recapped is the id of the session whose recap was shown (recap.go).
 	recapped string
+	// suggestion is the person's likely next prompt, shown in the empty
+	// box until they type (promptSuggestionEnabled).
+	suggestion string
 	// color is the colour of the prompt mark the session asked for
 	// (/color), "" for the theme's own.
 	color  string

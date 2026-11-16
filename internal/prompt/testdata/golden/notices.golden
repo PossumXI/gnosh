@@ -50,6 +50,9 @@ The page says:
 === the question of /recap ===
 <gnosh>In one line, say what this session has done so far and where it stands now. Call no tool, and start on nothing: the line is for the user, and it is not kept in the conversation.</gnosh>
 
+=== the question of a prompt suggestion ===
+<gnosh>Write the prompt the user would most likely send next, as they would type it: a few words, at most fifteen, on one line, and nothing else. If no next step is clear, write nothing. Call no tool and start on nothing: the line is shown to the user to take or leave, and it is not kept in the conversation.</gnosh>
+
 === a run that has waited long for its background work ===
 <gnosh>This run (gnosh -p) has waited 10m0s for background work that still runs: bg1 (npm run dev), bg2 (watch the logs). Nobody is watching the run. If what that work was for is done, or will not come, stop it with TaskStop and end your turn, and the run ends. Otherwise end your turn, and the run waits on. This is news from gnosh, not a request from the user.</gnosh>
 

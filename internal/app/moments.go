@@ -354,6 +354,8 @@ func hookParts(event hooks.Event, out hooks.Outcome) []agent.Part {
 // promptSubmit runs the UserPromptSubmit hooks on a prompt a person sent,
 // once, when it is sent. A block sends the prompt back with the reason.
 func (l *live) promptSubmit(ctx context.Context, p agent.Prompt) (agent.Admission, error) {
+	// (A suggestion still being made would hold this prompt's request up.)
+	l.suggest.stop()
 	if !l.hooks.has(hooks.UserPromptSubmit) {
 		return agent.Admission{}, nil
 	}
@@ -817,6 +819,7 @@ func (l *live) turnEnded(ctx context.Context, res agent.TurnResult) {
 		}
 	}
 	l.tellNewBuild()
+	l.suggestNext(res)
 }
 
 // sessionEnd is what happens when the session closes, in the order the

@@ -963,3 +963,19 @@ or kept with the reason said (27).
     usually there to keep something (a key, say) out of the
     conversation. The call has run all the same, and the replacement is
     what the session keeps.
+71. **Prompt suggestions, as Claude Code's, off unless set.** The ruling
+    of 13 November had them among what is not adopted; the next-prompt
+    kind is adopted now, under Claude Code's key, promptSuggestionEnabled
+    (also in /config, at once). After a turn that ended as it should, in a
+    session a person attends, out of plan mode and with nothing queued,
+    the session's model is asked beside the session, keeping nothing, for
+    the prompt the person would most likely send next (at most 64 tokens;
+    the first line is kept, at most 200 characters). The empty box shows
+    it; Tab or the right arrow takes it, anything else drops it, and a
+    prompt sent stops one still being made, so the prompt's own request
+    never waits behind it. Off by default, as Claude Code has it off for
+    models of other providers (it is on for its own): each is a request to
+    the model, which on a local box is the same GPU the next prompt wants.
+    Not from a project's file, since a project should not spend the
+    person's requests. Claude Code's git-history example in a new
+    session's box is not adopted.

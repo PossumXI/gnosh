@@ -72,6 +72,7 @@ const (
 	textMonitorLines     = "monitor-lines"
 	textBtw              = "btw"
 	textRecap            = "recap"
+	textNextPrompt       = "next-prompt"
 	textPrintWait        = "print-wait"
 	textStatusLine       = "statusline"
 	textMention          = "mention"
@@ -203,6 +204,8 @@ func specs() []spec {
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,
 			when: "As the question of /recap, in a request beside the session's that is not kept."},
+		{name: textNextPrompt, kind: KindLine,
+			when: "After a turn, with promptSuggestionEnabled on, in a request beside the session's that is not kept: the person's likely next prompt, which the box shows."},
 		{name: textStatusLine, kind: KindLine, need: []string{"wish", "script", "settings", "sample"},
 			when: "As the prompt of /statusline: write a status line script from the user's words, try it on the session's own JSON, and add it to their gnosh.json."},
 		{name: textPrintWait, kind: KindLine, need: []string{"waited", "work"},

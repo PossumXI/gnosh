@@ -199,6 +199,8 @@ func (s *session) lock() {
 // placeholder is what an empty prompt box says.
 func (s *session) placeholder() string {
 	switch {
+	case s.suggestion != "" && !s.busy:
+		return s.suggestion + "  (Tab takes it)"
 	case s.busy && len(s.personQueue()) > 0:
 		return "Type to queue another prompt; Up takes the queue back"
 	case s.busy:

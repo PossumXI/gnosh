@@ -226,6 +226,10 @@ func tmuxFeatures() string {
 	return strings.TrimSpace(string(out))
 }
 
+// ShowsSuggestions says the box shows the person's likely next prompt
+// (app.Suggester).
+func (u *UI) ShowsSuggestions() bool { return true }
+
 // Event takes in one thing the session reports. It only puts it in line
 // for the loop and returns, so a screen that is slow to draw never holds
 // the session up. Pieces of live output that follow each other are joined

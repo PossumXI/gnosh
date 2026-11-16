@@ -421,8 +421,9 @@ unless marked.
 - The fullscreen (alternate-screen) renderer and everything specific to it:
   mouse selection, in-app scrolling, `/tui`, `/focus`, `/scroll-speed`, the
   diff panel.
-- Emoji shortcodes, spell checking, voice dictation, prompt suggestions,
-  "you should know" notes, `/btw` panel, PR status badge, issue links,
+- Emoji shortcodes, spell checking, voice dictation, the git-history
+  example in a new session's box (the next-prompt suggestions are adopted,
+  off unless set: `spec/DECISIONS.md` 71), "you should know" notes, `/btw` panel, PR status badge, issue links,
   usage-limit waiting, fast mode toggle (Alt+O).
 - The task checklist as a todo-tool view (Ctrl+T shows the `mem` plan
   instead).

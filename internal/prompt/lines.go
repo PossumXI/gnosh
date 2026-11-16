@@ -619,6 +619,13 @@ func (s *Set) Recap() string {
 	return s.fill(textRecap, nil)
 }
 
+// NextPrompt returns the question asked after a turn when prompt
+// suggestions are on: the person's likely next prompt, in their words, in
+// a request beside the session's that is not kept.
+func (s *Set) NextPrompt() string {
+	return s.fill(textNextPrompt, nil)
+}
+
 // StatusLine returns the prompt of /statusline: what the user wants the
 // status line to show, where the script and the settings file are, and the
 // session's own JSON as a status line command is handed it.
