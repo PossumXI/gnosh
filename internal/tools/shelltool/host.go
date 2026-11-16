@@ -156,9 +156,10 @@ func (m *Manager) findHost(name string) (*Host, error) {
 	if name == "" || name == LocalName {
 		return nil, nil
 	}
-	h, ok := m.hosts[name]
+	hosts, _ := m.hostSet()
+	h, ok := hosts[name]
 	switch {
-	case !ok && len(m.hosts) == 0:
+	case !ok && len(hosts) == 0:
 		return nil, fmt.Errorf("the %s %q was given, and no other machine is declared for this session, so the command was not run. Leave %s out to run it on this machine. To use another machine, ask the user to declare it as a host in gnosh's config (a name, and the destination ssh is to be given: user@address); do not reach it another way, such as with ssh in a command",
 			argHost, name, argHost)
 	case !ok:
@@ -173,9 +174,10 @@ func (m *Manager) findHost(name string) (*Host, error) {
 // hostList names the declared hosts for a message: "render
 // (root@203.0.113.10), web (deploy@203.0.113.11)".
 func (m *Manager) hostList() string {
-	parts := make([]string, 0, len(m.hostNames))
-	for _, name := range m.hostNames {
-		parts = append(parts, name+" ("+m.hosts[name].Target+")")
+	hosts, names := m.hostSet()
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, name+" ("+hosts[name].Target+")")
 	}
 	return strings.Join(parts, ", ")
 }

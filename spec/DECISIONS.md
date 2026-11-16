@@ -757,3 +757,15 @@ or kept with the reason said (27).
     settings file, which gnosh writes; /skills with nothing after it is a
     picker of the skills, Enter on one asking how far. gnosh's own
     hiddenSkills option stays beside it.
+55. **A settings file changed while the session runs is taken in,** as
+    Claude Code takes in a change to its settings files: before each
+    request to the model, the settings files (the person's gnosh.json,
+    the project's, the local file, a --settings file) are looked at, and
+    when one changed the configuration is read again. The hosts and the
+    files' permission rules go in force at once; the model is told when
+    the hosts changed; the person is told what took effect and that the
+    rest (hooks, env, options, the model) waits for a new session. A file
+    gnosh would not load leaves the session as it was, and the person is
+    told why. Box 1, 16 November: a host added to gnosh.json mid-session
+    was no host the session knew, and the model, told so, tried ssh
+    spelled so as to slip past the refusal.

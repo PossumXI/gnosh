@@ -197,6 +197,10 @@ type live struct {
 	gnoGuidesOnce sync.Once
 	gnoGuidePaths []string
 
+	// settings is how the settings files stood when last looked at, for
+	// taking in a change while the session runs (settingswatch.go).
+	settings settingsWatch
+
 	// hookChanged holds the ids of the calls of the question tool whose
 	// arguments a PreToolUse hook wrote: only such a call may carry its
 	// own answers.

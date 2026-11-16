@@ -692,7 +692,12 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if _, err := config.CheckWrite(l.st.inputs, path, content); err != nil {
 		return fmt.Errorf("gnosh would not load %s with the change in it, so it was not written: %w", path, err)
 	}
-	return config.WriteFileAtomic(path, content, 0o600)
+	if err := config.WriteFileAtomic(path, content, 0o600); err != nil {
+		return err
+	}
+	// (What gnosh writes it has put in force already.)
+	l.sawOwnWrite(path)
+	return nil
 }
 
 // outsideTree says why a session or sub-agent with the work tree t may not change

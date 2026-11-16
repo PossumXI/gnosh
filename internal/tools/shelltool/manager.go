@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -22,7 +23,9 @@ type Manager struct {
 	shell string  // the shell that runs commands
 
 	// The machines a call may name as its host, and this one as results
-	// write it.
+	// write it. hosts and hostNames are put in place whole (SetHosts) and
+	// never changed in place: a reader takes both under hostsMu.
+	hostsMu   sync.RWMutex
 	hosts     map[string]*Host // the declared hosts by name
 	hostNames []string         // their names, in the order declared
 	local     string           // who and where this machine is: "dev@box"
@@ -104,19 +107,49 @@ func New(opts Options) *Manager {
 	if m.local == "" {
 		m.local = whoAndWhere()
 	}
-	m.hosts = make(map[string]*Host, len(m.opt.Hosts))
-	for _, h := range m.opt.Hosts {
-		// The name of this machine is never a host's, and a name stands
-		// for one machine: the config refuses both, and here the first
-		// declaration of a name is the one that counts.
-		if _, twice := m.hosts[h.Name]; h.Name == "" || h.Name == LocalName || twice {
-			continue
-		}
-		m.hosts[h.Name] = &h
-		m.hostNames = append(m.hostNames, h.Name)
-	}
+	m.hosts, m.hostNames = hostTable(m.opt.Hosts)
 	m.notes = newNotifier(m.opt.OnEnd, &m.wg)
 	return m
+}
+
+// hostTable makes the table of declared hosts. The name of this machine is
+// never a host's, and a name stands for one machine: the config refuses
+// both, and here the first declaration of a name is the one that counts.
+func hostTable(list []Host) (map[string]*Host, []string) {
+	hosts := make(map[string]*Host, len(list))
+	var names []string
+	for _, h := range list {
+		if _, twice := hosts[h.Name]; h.Name == "" || h.Name == LocalName || twice {
+			continue
+		}
+		hosts[h.Name] = &h
+		names = append(names, h.Name)
+	}
+	return hosts, names
+}
+
+// SetHosts puts hosts in place of the machines calls may name, while the
+// manager runs (the settings that declare them changed); a command already
+// running goes on where it is.
+func (m *Manager) SetHosts(hosts []Host) {
+	table, names := hostTable(hosts)
+	m.hostsMu.Lock()
+	m.hosts, m.hostNames = table, names
+	m.hostsMu.Unlock()
+}
+
+// HostNames are the names of the machines calls may name, in the order
+// declared.
+func (m *Manager) HostNames() []string {
+	_, names := m.hostSet()
+	return slices.Clone(names)
+}
+
+// hostSet is the table of declared hosts as it stands.
+func (m *Manager) hostSet() (map[string]*Host, []string) {
+	m.hostsMu.RLock()
+	defer m.hostsMu.RUnlock()
+	return m.hosts, m.hostNames
 }
 
 // PersonsBash returns the Bash tool for a command the person types into the

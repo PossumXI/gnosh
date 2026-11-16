@@ -258,7 +258,7 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 	if person {
 		return nil
 	}
-	if len(m.hosts) > 0 {
+	if hosts, _ := m.hostSet(); len(hosts) > 0 {
 		switch prog := reaches(a.command); prog {
 		case "ssh":
 			return fmt.Errorf("the command runs ssh, and in this session another machine is reached by naming it as %s in the call, never with ssh in a command: that is what lets every result say which machine it came from. The declared hosts are: %s. Give the command for the other machine alone, with %s set to the machine's name. For a machine that is not declared, ask the user to declare it as a host in gnosh's config",
