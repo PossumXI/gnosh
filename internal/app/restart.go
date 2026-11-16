@@ -110,19 +110,27 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 // session for another gnosh to go on with it. It refuses while a turn or
 // work in the background runs, which ending the session would stop.
 func (l *live) goOnArgs(c *SlashContext, name string) ([]string, error) {
-	p := l.p
 	if c.Agent.State().Busy {
 		return nil, fmt.Errorf("a turn is running, and would be stopped: /%s once it has ended, or Esc stops it", name)
 	}
 	if work := l.runningWork(); len(work) > 0 {
 		return nil, fmt.Errorf("this is still running in the background, and would be stopped: %s. /%s once it has ended, or /tasks stop <id> stops it", strings.Join(work, ", "), name)
 	}
-	r := cli.Relaunch{Session: l.ts.ID(), Mode: string(l.engine.Mode()), Effort: l.agent.Model().Level}
+	session := l.ts.ID()
 	if l.inv.ResumeIsFile && !l.inv.ForkSession {
 		// A session opened from its file, which may lie outside this
 		// folder's sessions, is opened from its file again.
-		r.Session = l.ts.Path()
+		session = l.ts.Path()
 	}
+	return l.relaunchFor(session)
+}
+
+// relaunchFor is the command line that opens session with this session's
+// flags as they stand: its permission mode, model, thinking level and work
+// tree.
+func (l *live) relaunchFor(session string) ([]string, error) {
+	p := l.p
+	r := cli.Relaunch{Session: session, Mode: string(l.engine.Mode()), Effort: l.agent.Model().Level}
 	if ref, ok := l.modelRef(); ok {
 		r.Model = ref.String()
 	}

@@ -868,3 +868,10 @@ or kept with the reason said (27).
     gnosh -r opens the session again once it is done. A prompt is
     needed, and it waits while a turn or background work runs, as
     /restart does.
+63. **/fork <prompt> starts a copy of the conversation as a run of its
+    own, and this session goes on.** The copy is /branch's (a new session
+    of the folder, named "<title> (fork)"), started at once as /background
+    starts a run: in a process of its own, with this session's flags as
+    they stand, on the prompt. Claude Code's fork may make itself a work
+    tree; gnosh's works in the same folder, and says so, since a fresh
+    tree would hold none of the changes the conversation remembers making.

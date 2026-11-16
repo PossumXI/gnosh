@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
 // This file is /background (also /bg), as Claude Code has it: the session
@@ -66,4 +68,56 @@ func (l *live) slashBackground(ctx context.Context, c *SlashContext) error {
 	p.restartMu.Unlock()
 	c.Say("The session goes on in the background, on its own, with: %s", oneLine(prompt, 200))
 	return nil
+}
+
+// slashFork is /fork <prompt>, as Claude Code has it: the conversation so
+// far is copied into a new session, which goes on in the background as a
+// run of its own on the prompt, while this session goes on here. The copy
+// works in the same folder.
+func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
+	prompt := strings.TrimSpace(c.Args)
+	switch {
+	case l.p.o.Detach == nil:
+		return errors.New("this gnosh cannot start a session that goes on without a terminal")
+	case prompt == "":
+		return errors.New("say what the copy is to do: /fork <prompt>. It goes on in the background as a run of its own, which asks nobody anything, while this session goes on here")
+	case l.busy(ctx):
+		return errors.New("a turn is running. Wait for it, or stop it, then fork")
+	case !slices.ContainsFunc(l.ts.Entries(), func(e transcript.Entry) bool { return e.Type == transcript.TypeUser }):
+		return errors.New("there is nothing to copy yet: the conversation has not begun")
+	}
+	id, err := l.copySession("fork")
+	if err != nil {
+		return fmt.Errorf("the conversation could not be copied: %v", err)
+	}
+	args, err := l.relaunchFor(id)
+	if err != nil {
+		return fmt.Errorf("the copy %s was made, and the command line to start it could not be (%v): gnosh -r %s opens it", id, err, id)
+	}
+	run := append(args, "--print", "--", prompt)
+	log := filepath.Join(l.crashDir(), id+".background.log")
+	pid, err := l.p.o.Detach(run, log)
+	if err != nil {
+		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
+	}
+	c.Say("A copy of this conversation, %s, goes on in the background (process %d) with: %s", id, pid, oneLine(prompt, 200))
+	c.Say("It works in this same folder, beside this session. gnosh -r %s opens it once it is done; what it prints is in %s.", id, l.tilde(log))
+	return nil
+}
+
+// copySession copies the conversation into a new session of this folder,
+// named after this one with what the copy is for, and returns its id.
+func (l *live) copySession(what string) (string, error) {
+	copied, err := l.store.Branch(l.ts, "")
+	if err != nil {
+		return "", err
+	}
+	if was, _ := l.title(); was != "" {
+		_, err = copied.Append(transcript.TitleEntry(was+" ("+what+")", transcript.SourceAuto))
+	}
+	id := copied.ID()
+	if cerr := copied.Close(); err == nil {
+		err = cerr
+	}
+	return id, err
 }

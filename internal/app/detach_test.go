@@ -54,3 +54,55 @@ func TestBackgroundCommand(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// /fork copies the conversation into a new session and starts it in the
+// background on the prompt, while this session goes on here.
+func TestForkCommand(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."}, apptest.Reply{Text: "Still here."})
+	var got [][]string
+	s := sitWith(t, w, func(o *Options) {
+		o.Detach = func(args []string, log string) (int, error) {
+			got = append(got, args)
+			return 4343, nil
+		}
+	}, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/fork look into it")
+	s.see("there is nothing to copy yet")
+	s.typeLine("say hi")
+	s.see("Hi.")
+	s.see("-- done in ")
+	s.typeLine("/fork look into the flaky test")
+	s.see("goes on in the background (process 4343) with: look into the flaky test")
+	s.see("It works in this same folder, beside this session.")
+	// This session goes on.
+	s.typeLine("are you there?")
+	s.see("Still here.")
+	s.typeLine("/exit")
+	s.exit()
+	if len(w.Sessions()) != 2 {
+		t.Fatalf("%d session files, want the session and its copy", len(w.Sessions()))
+	}
+	if len(got) != 1 {
+		t.Fatalf("started %d runs: %q", len(got), got)
+	}
+	args := got[0]
+	if !slices.Equal(args[len(args)-3:], []string{"--print", "--", "look into the flaky test"}) || !slices.Contains(args, "--permission-mode=acceptEdits") {
+		t.Errorf("the copy's run: %q", args)
+	}
+	resume := ""
+	for _, a := range args {
+		if strings.HasPrefix(a, "--resume=") {
+			resume = strings.TrimPrefix(a, "--resume=")
+		}
+	}
+	var ids []string
+	for _, f := range w.Sessions() {
+		ids = append(ids, strings.TrimSuffix(filepath.Base(f), ".jsonl"))
+	}
+	if resume == "" || !slices.Contains(ids, resume) {
+		t.Errorf("the run resumes %q, not one of the sessions %q", resume, ids)
+	}
+	data, _ := os.ReadFile(filepath.Join(filepath.Dir(w.Sessions()[0]), resume+".jsonl"))
+	has(t, "the copy", string(data), "say hi")
+}
