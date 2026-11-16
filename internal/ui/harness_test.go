@@ -546,6 +546,15 @@ type controls struct {
 	options   []app.ConfigChoice
 	memFiles  []app.MemoryFile
 	servers   []app.MCPChoice
+	levels    []string
+	level     string
+}
+
+// Effort is the model's thinking levels as a test set them.
+func (c *controls) Effort() ([]string, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.levels), c.level
 }
 
 // MCPChoices is the MCP servers a test set.

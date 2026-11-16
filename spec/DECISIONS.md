@@ -720,3 +720,14 @@ or kept with the reason said (27).
     disable it for the session, or enable one that is disabled), which
     runs as the /mcp command; with no server it says how to add one, as
     before.
+52. **Alt+T turns thinking over, Alt+P switches the model, and /effort
+    with nothing after it is a picker,** as Claude Code has them. On the
+    AI boxes Qwen answers fast with thinking off and better with it on,
+    and a key is the quick way between them. Alt+T is the command
+    /effort with the next level: off and on of a model with that switch
+    (one that nothing chose thinks, so the first press turns it off), the
+    next level of a dial, after the last the first; it is kept for later
+    sessions, as /effort keeps it. Alt+P opens the /model picker and
+    leaves what is typed in the box. /effort with nothing after it lists
+    the model's levels and auto, the one in force marked. In Apple's
+    Terminal the Alt keys need Option set to act as Meta.

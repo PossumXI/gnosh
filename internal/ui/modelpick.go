@@ -33,14 +33,20 @@ var modelWords = map[string]bool{"/model": true}
 const modelWait = 15 * time.Second
 
 // chooseModel opens the picker, once the servers have said which models
-// they have.
+// they have. line is what was typed, or "" for Alt+P, which leaves the
+// prompt box and its history as they are.
 func (s *session) chooseModel(line string) {
 	mc, ok := s.c.(modelChooser)
-	if !ok {
+	switch {
+	case !ok && line == "":
+		s.flash("Switching models is not joined to this build.")
+		return
+	case !ok:
 		s.run(line)
 		return
+	case line != "":
+		s.ed.AddHistory(editor.Draft{Text: line})
 	}
-	s.ed.AddHistory(editor.Draft{Text: line})
 	s.flash("Asking the model servers which models they have…")
 	s.host.spawn(func() func() {
 		ctx, cancel := context.WithTimeout(context.Background(), modelWait)

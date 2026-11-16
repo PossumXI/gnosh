@@ -219,6 +219,11 @@ func (s *session) global(k term.Key) bool {
 		s.scrollPanel(-s.panel.Page())
 	case k.Is('o', term.ModCtrl):
 		s.toggleView()
+	case k.Is('t', term.ModAlt):
+		s.toggleThinking()
+	case k.Is('p', term.ModAlt) && s.q == nil:
+		// The model picker, with what is typed left in the box.
+		s.chooseModel("")
 	case k.Is('t', term.ModCtrl):
 		switch {
 		case len(s.tasks) == 0:
@@ -394,6 +399,10 @@ func (s *session) command(d editor.Draft) {
 	}
 	if mcpWords[strings.ToLower(line)] && s.q == nil && s.chooseMCP(line) {
 		// And /mcp (mcppick.go).
+		return
+	}
+	if effortWords[strings.ToLower(line)] && s.q == nil && s.chooseEffort(line) {
+		// And /effort (effortpick.go).
 		return
 	}
 	if configWords[strings.ToLower(line)] && s.q == nil {
@@ -829,6 +838,8 @@ func (s *session) help() {
 		{"Tab", "take a completion; on a folded paste, unfold it"},
 		{"Shift+Tab", "the next permission mode; it is always on the status line"},
 		{"Ctrl+O", "the whole transcript: every thought, call and result"},
+		{"Alt+T", "thinking on or off (or the next level)"},
+		{"Alt+P", "switch the model, keeping what is typed"},
 		{"Ctrl+B, Ctrl+X b", "move the running command to the background"},
 		{"Ctrl+T", "hide or show the task list"},
 		{"Ctrl+G", "edit the prompt in your editor (also Ctrl+X Ctrl+E)"},

@@ -257,6 +257,11 @@ type SessionControls interface {
 	// the picker that /mcp with nothing after it opens; what is done to
 	// one is the command /mcp reconnect, enable or disable and its name.
 	MCPChoices() []MCPChoice
+	// Effort returns the thinking levels of the model in use and the
+	// level it thinks at ("" for its own default), for the picker that
+	// /effort with nothing after it opens and for Alt+T; setting one is
+	// the command /effort and the level.
+	Effort() (levels []string, level string)
 }
 
 // CommandResult is what running a slash command came to.

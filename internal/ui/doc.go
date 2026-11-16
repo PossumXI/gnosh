@@ -169,6 +169,9 @@
 //	                       search reaches it; v opens it in your editor; q, Esc, Ctrl+C or Ctrl+O
 //	                       go back. A question closes it
 //	Ctrl+T                 hide or show the session's task list (cc 3)
+//	Alt+T                  thinking on or off from now on, kept for later sessions: on and off of
+//	                       a model with that switch, the next level of one with a dial (cc 3)
+//	Alt+P                  the model picker, what is typed left in the box (cc 3)
 //	Ctrl+B                 move the running command to the background (cc 3). In the prompt box
 //	                       Ctrl+X b does the same: Ctrl+B is tmux's own key (ui UI-31)
 //
