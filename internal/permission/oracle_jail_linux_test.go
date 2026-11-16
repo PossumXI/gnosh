@@ -740,14 +740,21 @@ func parseTrace(text string, glue bool) []traceCmd {
 		recs[len(recs)-1].raw = strings.TrimSuffix(recs[len(recs)-1].raw, "\n")
 	}
 	var out []traceCmd
-	sawEval := false
+	sawEval, evalRaw := false, ""
 	for _, r := range recs {
 		words := traceWords(r.raw)
 		if len(words) == 0 {
 			continue
 		}
 		if !sawEval && r.level == 1 && words[0] == "eval" {
-			sawEval = true
+			sawEval, evalRaw = true, r.raw
+			continue
+		}
+		if r.level == 1 && r.raw == evalRaw {
+			// The wrapper's own eval again, printed inside a word: dash
+			// traces a word as it is, line breaks and all, and a command
+			// that read the trace as it was written ("grep -R '' ..",
+			// oracle seed 109) hands it a word that holds this line.
 			continue
 		}
 		if r.raw == "command pwd -P" || r.level == 1 && r.raw == ":" {
