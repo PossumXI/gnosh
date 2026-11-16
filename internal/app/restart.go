@@ -9,6 +9,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // This file is /restart (also /update), as Claude Code has it: the
@@ -34,20 +35,8 @@ func (p *program) restartArgs() []string {
 // returns only when that could not be done, with the exit code.
 func (p *program) relaunch(args []string) int {
 	err := p.o.Relaunch(args)
-	words := make([]string, len(args))
-	for i, a := range args {
-		words[i] = shellWord(a)
-	}
-	p.errf("gnosh could not start again (%v). The session is kept: gnosh %s opens it again.", err, strings.Join(words, " "))
+	p.errf("gnosh could not start again (%v). The session is kept: gnosh %s opens it again.", err, shellquote.Words(args))
 	return cli.ExitFailure
-}
-
-// shellWord writes s so that a shell reads it as one word.
-func shellWord(s string) string {
-	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./=:,+@%") == "" {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // newBuild reports whether the program file gnosh started from has been
