@@ -41,6 +41,34 @@ func TestHookAddsContext(t *testing.T) {
 	}
 }
 
+// A PostToolUse hook's updatedToolOutput is what the model reads in place
+// of what the tool returned: a redaction keeps the secret out of the
+// conversation. A replacement gnosh cannot read as text withholds the
+// output rather than show it (where Claude Code shows the original).
+func TestHookReplacesToolOutput(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"printf 'token=sk-%s\\n' SECRET-123"}`}}},
+		apptest.Reply{Text: "Done."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"printf 'token=sk-%s\\n' SECRET-456"}`}}},
+		apptest.Reply{Text: "Done again."})
+	redact := w.Script(w.Home+"/hooks/redact.sh", `cat > /dev/null; echo '{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"stdout": "token=[redacted]", "stderr": "", "interrupted": false, "isImage": false}}}'`)
+	w.Hook("PostToolUse", "Bash", redact)
+	run(t, w, "-y", "-p", "show the token").wantCode(t, 0)
+	got := toolResult(t, w, 1, "c1")
+	has(t, "what the model read", got, "token=[redacted]")
+	hasNot(t, "what the model read", got, "sk-SECRET-123")
+	for _, req := range w.Model.Requests() {
+		hasNot(t, "every request", string(req.Body), "sk-SECRET-123")
+	}
+
+	odd := w.Script(w.Home+"/hooks/odd.sh", `cat > /dev/null; echo '{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"lines": 3}}}'`)
+	w.Hook("PostToolUse", "Bash", odd)
+	run(t, w, "-y", "-c", "-p", "show it again").wantCode(t, 0)
+	got = toolResult(t, w, 3, "c2")
+	has(t, "what the model read", got, "withheld")
+	hasNot(t, "what the model read", got, "sk-SECRET-456")
+}
+
 // A hook that cannot run does not pass: the call it guards is not run.
 func TestHookThatCannotRunFailsClosed(t *testing.T) {
 	w := apptest.NewWorld(t,

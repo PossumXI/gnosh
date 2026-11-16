@@ -842,7 +842,10 @@ built in part (what is missing is said), `[ ]` is not built.
 - [~] `terminalSequence` with its allowlist; `CLAUDE_ENV_FILE`.
       (`CLAUDE_ENV_FILE` is built; a terminal sequence is noted and not
       written.)
-- [ ] `updatedToolOutput`; the 10,000-character cap with file overflow.
+- [~] `updatedToolOutput`; the 10,000-character cap with file overflow.
+      (`updatedToolOutput` and `updatedMCPToolOutput` are built, read as
+      text; one gnosh cannot read withholds the output, DECISIONS 70. The
+      cap with file overflow is not.)
 - [~] `/hooks` browser; hooks in skill and sub-agent frontmatter; `once`.
       (`/hooks` lists them as text; skills' hooks and `once` are built.)
 - [~] Debug-log lines; `hook_*` stream-json events. (Each hook's record

@@ -648,6 +648,10 @@ type ToolDone struct {
 type ToolVerdict struct {
 	// Context is stored after the round's results for the model to read.
 	Context []Part
+	// Replace, when not nil, is what the model reads in place of what the
+	// tool returned (a PostToolUse hook's "updatedToolOutput"). The call
+	// has run all the same.
+	Replace *core.ToolResult
 	// Halt ends the turn once the round's results are stored, and Reason
 	// says why, for the person.
 	Halt   bool

@@ -18,6 +18,7 @@ type expect struct {
 	stop     string
 	system   []string
 	input    string
+	output   string   // the replacement for the tool's output, compacted
 	warnings []string // one part for each warning expected, in order
 	result   Result   // the hook's record; ResultNone when left empty
 	notes    []string // parts the record's notes must contain
@@ -56,6 +57,9 @@ func check(t *testing.T, out Outcome, want expect) {
 	}
 	if string(out.UpdatedInput) != want.input {
 		t.Errorf("UpdatedInput = %s, want %s", out.UpdatedInput, want.input)
+	}
+	if string(out.UpdatedOutput) != want.output {
+		t.Errorf("UpdatedOutput = %s, want %s", out.UpdatedOutput, want.output)
 	}
 	if len(out.Warnings) != len(want.warnings) {
 		t.Errorf("got %d warnings, want %d: %q", len(out.Warnings), len(want.warnings), out.Warnings)
@@ -467,12 +471,15 @@ var answerForms = []struct {
 	{name: "added text", event: PostToolUse,
 		prints: `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "gofmt changed the file"}}`,
 		want:   expect{context: "gofmt changed the file"}},
-	{name: "a replaced tool result, which gnosh does not do", event: PostToolUse,
+	{name: "a replaced tool result", event: PostToolUse,
 		prints: `{"hookSpecificOutput": {"updatedToolOutput": {"stdout": "[redacted]", "stderr": "", "interrupted": false, "isImage": false}}}`,
-		want:   expect{blocked: true, failed: true, reason: `~it gives "updatedToolOutput", to replace what the tool returned, which gnosh does not do yet`, result: ResultCouldNotEvaluate}},
+		want:   expect{output: `{"stdout":"[redacted]","stderr":"","interrupted":false,"isImage":false}`}},
 	{name: "a replaced MCP tool result", event: PostToolUse,
 		prints: `{"hookSpecificOutput": {"updatedMCPToolOutput": "x"}}`,
-		want:   expect{blocked: true, failed: true, reason: `~"updatedMCPToolOutput"`, result: ResultCouldNotEvaluate}},
+		want:   expect{output: `"x"`}},
+	{name: "two different replacements in one answer", event: PostToolUse,
+		prints: `{"hookSpecificOutput": {"updatedToolOutput": "a", "updatedMCPToolOutput": "b"}}`,
+		want:   expect{blocked: true, failed: true, reason: `~only one can stand in for the tool's output`, output: `"a"`, result: ResultCouldNotEvaluate}},
 	{name: "added text", event: PostToolUseFailure,
 		prints: `{"hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": "the test server is on port 8081"}}`,
 		want:   expect{context: "the test server is on port 8081"}},

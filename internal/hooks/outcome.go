@@ -68,6 +68,14 @@ type Outcome struct {
 	// never set on a blocked call.
 	UpdatedInput json.RawMessage
 
+	// UpdatedOutput, when not nil, is what the model is to read in place of
+	// what the tool returned (PostToolUse's "updatedToolOutput", or
+	// "updatedMCPToolOutput"), as the hook wrote it: the caller turns it
+	// into the text the model reads. OutputClash says that two hooks gave
+	// different ones, so that neither can be trusted to stand in.
+	UpdatedOutput json.RawMessage
+	OutputClash   bool
+
 	// AdditionalContext is text the hooks want the model to read, each
 	// hook's in the order configured, a blank line between them. Where it
 	// goes depends on the event: beside the prompt, next to the tool's
@@ -249,6 +257,8 @@ type verdict struct {
 	// watch is the hook's watchPaths, and watchSet says it gave them.
 	watch    []string
 	watchSet bool
+	// output is the hook's replacement for the tool's output.
+	output json.RawMessage
 	// notes says what else there is to know.
 	notes []string
 }
@@ -380,6 +390,12 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 	if len(a.errs) == 0 {
 		v.watch, v.watchSet = a.watch, a.watchSet
 	}
+	if a.output != nil && event == PostToolUse {
+		// (Even from a hook that could not be read in full: a hook that
+		// meant to hide what a tool returned is not ignored for a slip
+		// elsewhere in its answer. The caller decides what to show.)
+		v.output = a.output
+	}
 	reason := clip(a.reason, r.maxText)
 	switch {
 	case !a.halt:
@@ -501,6 +517,14 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		if v.warning != "" {
 			rec.Result = ResultWarning
 			out.SystemMessages = append(out.SystemMessages, v.warning)
+		}
+		if v.output != nil {
+			switch {
+			case out.UpdatedOutput == nil:
+				out.UpdatedOutput = v.output
+			case !bytes.Equal(out.UpdatedOutput, v.output):
+				out.OutputClash = true
+			}
 		}
 		if v.watchSet && v.failure == "" {
 			out.WatchSet = true

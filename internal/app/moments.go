@@ -485,6 +485,7 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 		errs = append(errs, err)
 	}
 	v.Context = append(v.Context, hv.Context...)
+	v.Replace = hv.Replace
 	if hv.Halt && !v.Halt {
 		v.Halt, v.Reason = true, hv.Reason
 	}
@@ -560,6 +561,22 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 		return agent.ToolVerdict{}, err
 	}
 	var v agent.ToolVerdict
+	if out.UpdatedOutput != nil || out.OutputClash {
+		// What the model reads in place of what the tool returned. One
+		// that cannot be read, or two that differ, withhold the output:
+		// a hook that meant to hide part of it (a key, say) must not
+		// have it shown for a slip. (Claude Code shows the original.)
+		r := done.Result
+		text, ok := outputText(out.UpdatedOutput)
+		switch {
+		case out.OutputClash:
+			text = "[The output of this call is withheld: two PostToolUse hooks the user set up each gave one to show in its place, and they differ.]"
+		case !ok:
+			text = "[The output of this call is withheld: a PostToolUse hook the user set up gave one to show in its place that gnosh could not read as text.]"
+		}
+		r.Content = []core.Block{core.Text(text)}
+		v.Replace = &r
+	}
 	if out.Blocked && strings.TrimSpace(out.Reason) != "" {
 		v.Context = append(v.Context, agent.Part{Source: "hook:" + string(event), Text: hookWords(event, done.Call.Name, out.Reason)})
 	}
@@ -577,6 +594,65 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 		}
 	}
 	return v, nil
+}
+
+// outputText reads a PostToolUse hook's replacement for a tool's output
+// as the text the model reads: a string; gnosh's own shape, an object
+// with "text"; Bash's in Claude Code, an object with "stdout" and
+// "stderr"; an object with "content" as a string; or MCP's, content
+// blocks (alone, or as an object's "content"), of which the text ones
+// are taken. Anything else cannot be read.
+func outputText(raw json.RawMessage) (string, bool) {
+	if raw == nil {
+		return "", false
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s, true
+	}
+	blocks := func(raw json.RawMessage) (string, bool) {
+		var bs []struct{ Type, Text string }
+		if json.Unmarshal(raw, &bs) != nil {
+			return "", false
+		}
+		var parts []string
+		for _, b := range bs {
+			if b.Type == "text" {
+				parts = append(parts, b.Text)
+			}
+		}
+		return strings.Join(parts, "\n"), len(parts) > 0 || len(bs) == 0
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(raw, &obj) != nil {
+		return blocks(raw)
+	}
+	str := func(key string) (string, bool) {
+		var v string
+		field, ok := obj[key]
+		return v, ok && json.Unmarshal(field, &v) == nil
+	}
+	if t, ok := str("text"); ok {
+		return t, true
+	}
+	stdout, hasOut := str("stdout")
+	stderr, hasErr := str("stderr")
+	if hasOut || hasErr {
+		var parts []string
+		for _, p := range []string{stdout, stderr} {
+			if p = strings.TrimRight(p, "\n"); p != "" {
+				parts = append(parts, p)
+			}
+		}
+		return strings.Join(parts, "\n"), true
+	}
+	if c, ok := str("content"); ok {
+		return c, true
+	}
+	if c, ok := obj["content"]; ok {
+		return blocks(c)
+	}
+	return "", false
 }
 
 // toolResponse is what a PostToolUse hook is told a tool returned: the

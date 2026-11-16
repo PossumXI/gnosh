@@ -610,6 +610,12 @@ func (a *Agent) exec(stopped, ctx context.Context, turn string, idx int, tool co
 		if ctx.Err() != nil {
 			d.hookErr = nil
 		}
+		if r := d.verdict.Replace; r != nil {
+			// What the model reads, and what is kept, in place of what
+			// the tool returned.
+			r.Content = sayable(r.Content)
+			d.res = *r
+		}
 	}
 
 	if !gone.deliver(func() { out <- d }) {

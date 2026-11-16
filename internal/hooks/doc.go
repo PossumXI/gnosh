@@ -182,7 +182,7 @@
 // The answer is read strictly. A decision word that is not exactly one of
 // those ("Deny", "reject", "defer"), a field of the wrong type, a changed
 // input that is not an object, a field gnosh does not know, and a request
-// gnosh does not carry out (updatedToolOutput, initialUserMessage) each
+// gnosh does not carry out (initialUserMessage) each
 // make it an answer that could not be read, and the message names the
 // field. Requests that are harmless to leave undone (terminalSequence,
 // sessionTitle, watchPaths, reloadSkills) are noted in the hook's Record.

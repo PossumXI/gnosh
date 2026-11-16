@@ -951,3 +951,15 @@ or kept with the reason said (27).
     as CwdChanged's do, and their systemMessage is shown. Matchers are
     Claude Code's narrow kind: only letters, digits, _ and | make exact
     names, so ".envrc" is a pattern, as there.
+70. **A PostToolUse hook may replace what the model reads of a tool's
+    output (updatedToolOutput, updatedMCPToolOutput), as in Claude Code;
+    one gnosh cannot read hides it.** The replacement is read as the text
+    the model reads: a string, an object with "text" (the shape gnosh
+    gives hooks), Claude Code's Bash shape (stdout and stderr), an object
+    whose "content" is a string, or MCP's content blocks. Claude Code
+    ignores a value that does not fit the tool's shape and sends the
+    original; gnosh withholds the output instead, and does the same when
+    two hooks give different replacements, because such a hook is
+    usually there to keep something (a key, say) out of the
+    conversation. The call has run all the same, and the replacement is
+    what the session keeps.

@@ -57,6 +57,10 @@ type answer struct {
 	input json.RawMessage
 	// context is "additionalContext": text for the model.
 	context string
+	// output is "updatedToolOutput" (or "updatedMCPToolOutput"): what the
+	// model is to read in place of what the tool returned, as the hook
+	// wrote it.
+	output json.RawMessage
 	// watch is "watchPaths", the files to watch from now on, and watchSet
 	// says it was given (an empty list clears the list).
 	watch    []string
@@ -221,7 +225,11 @@ func parseAnswer(event Event, info eventInfo, out []byte) answer {
 				case g.key == "decision":
 					behavior, message = a.permissionRequest(g.value)
 				case g.key == "updatedToolOutput", g.key == "updatedMCPToolOutput":
-					a.fail("it gives %s, to replace what the tool returned, which gnosh does not do yet", quote(g.key))
+					if a.output != nil && !bytes.Equal(a.output, compact(g.value)) {
+						a.fail("it gives both \"updatedToolOutput\" and \"updatedMCPToolOutput\", different, and only one can stand in for the tool's output")
+						continue
+					}
+					a.output = compact(g.value)
 				case g.key == "initialUserMessage":
 					a.fail("it gives \"initialUserMessage\", to start the conversation with a message of its own, which gnosh does not do yet")
 				case g.key == "sessionTitle":
