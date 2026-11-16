@@ -276,6 +276,15 @@ type statusInput struct {
 	Thinking    *struct {
 		Enabled bool `json:"enabled"`
 	} `json:"thinking,omitempty"`
+	// Effort is the thinking level of a model that has levels beyond on
+	// and off.
+	Effort *struct {
+		Level string `json:"level"`
+	} `json:"effort,omitempty"`
+	// Agent is the kind of agent the session runs as (--agent).
+	Agent *struct {
+		Name string `json:"name"`
+	} `json:"agent,omitempty"`
 	PermissionMode string `json:"permission_mode"`
 	Vim            *struct {
 		Mode string `json:"mode"`
@@ -328,6 +337,11 @@ func (l *live) statusInput() statusInput {
 	in.OutputStyle.Name = l.styleNow()
 	in.Cost.TotalDurationMS = l.p.now().Sub(l.p.start).Milliseconds()
 	in.PermissionMode = string(l.engine.Mode())
+	if l.asAgent != nil {
+		in.Agent = &struct {
+			Name string `json:"name"`
+		}{Name: l.asAgent.Name}
+	}
 	if mode := l.vimNow(); mode != "" {
 		in.Vim = &struct {
 			Mode string `json:"mode"`
@@ -362,6 +376,11 @@ func (l *live) statusInput() statusInput {
 		in.Thinking = &struct {
 			Enabled bool `json:"enabled"`
 		}{Enabled: lvl != "off"}
+		if lvl != "on" && lvl != "off" {
+			in.Effort = &struct {
+				Level string `json:"level"`
+			}{Level: lvl}
+		}
 	}
 	return in
 }

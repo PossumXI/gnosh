@@ -203,3 +203,40 @@ func TestStatusLineVimMode(t *testing.T) {
 	})
 	r.wantCode(t, 0)
 }
+
+// The status line is told the kind of agent the session runs as, and the
+// thinking level of a model that has levels beyond on and off, as Claude
+// Code's agent.name and effort.level.
+func TestStatusLineAgentAndEffort(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Looked."})
+	runs := w.Home + "/sl-runs"
+	script := w.Script(w.Home+"/bin/sl.sh", "{ cat; echo; } >> "+runs+"\necho status")
+	w.Settings(`{"models": {"local/test-model": {"thinkingLevels": ["low", "high"]}}, "statusLine": {"type": "command", "command": "` + script + `"}}`)
+	s := sit(t, w, "--agent", "Explore", "--effort", "high")
+	s.see("Type a prompt and Enter.")
+	// (The model, with its levels, is settled by the first request.)
+	s.typeLine("look around")
+	s.see("Looked.")
+	var got map[string]any
+	for deadline := time.Now().Add(15 * time.Second); got == nil; {
+		data, _ := os.ReadFile(runs)
+		for _, line := range strings.Split(string(data), "\n") {
+			var in map[string]any
+			if json.Unmarshal([]byte(line), &in) == nil && in["effort"] != nil {
+				got = in
+			}
+		}
+		if got == nil && time.Now().After(deadline) {
+			t.Fatalf("the status line command was never told the effort: %s", data)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if e, _ := got["effort"].(map[string]any); e["level"] != "high" {
+		t.Errorf("the effort it was given: %v", got["effort"])
+	}
+	if a, _ := got["agent"].(map[string]any); a["name"] != "Explore" {
+		t.Errorf("the agent it was given: %v", got["agent"])
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
