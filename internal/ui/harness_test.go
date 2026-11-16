@@ -522,6 +522,7 @@ func (g *rig) box() string { return g.s.ed.Text() }
 // what the interface asks of it and answers from what a test set.
 type controls struct {
 	mu        sync.Mutex
+	vimModes  []string // what SetVimMode was told, in order
 	prompts   []agent.Prompt
 	ids       []string
 	submitErr error
@@ -694,6 +695,13 @@ func (c *controls) Mode() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.mode
+}
+
+// SetVimMode notes the mode of the box's vim keys the session is told.
+func (c *controls) SetVimMode(mode string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.vimModes = append(c.vimModes, mode)
 }
 
 func (c *controls) SetMode(mode string) error {

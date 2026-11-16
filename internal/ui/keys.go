@@ -75,6 +75,25 @@ type historian interface {
 	History() []string
 }
 
+// vimTeller is what a session's controls may also be: told the mode of
+// the box's vim keys, for the status line command (Claude Code's vim.mode).
+type vimTeller interface {
+	SetVimMode(mode string)
+}
+
+// reportVim tells the session the mode of the box's vim keys, when it has
+// changed since it was last told.
+func (s *session) reportVim() {
+	m := s.ed.Vim().String()
+	if m == s.vimSaid {
+		return
+	}
+	s.vimSaid = m
+	if v, ok := s.c.(vimTeller); ok {
+		v.SetVimMode(m)
+	}
+}
+
 // atOnce are the commands that run while a turn runs. Every other command
 // typed meanwhile waits for the session to go idle (spec/cc
 // interactive.md, 2.8).
@@ -323,6 +342,7 @@ func (s *session) box(ev term.Event, k *term.Key) {
 	}
 	s.ed.SetBusy(s.busy || s.cmdRun != "")
 	res := s.ed.Handle(ev)
+	s.reportVim()
 	if res.Truncated {
 		s.flash("The terminal cut that paste short. What arrived is in the box.")
 	}
@@ -585,6 +605,7 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		if mode, ok := configSet(line, "editorMode"); ok && mode != "" && err == nil && res.Name == "config" {
 			// So is the editorMode option.
 			s.ed.SetVim(mode == "vim")
+			s.reportVim()
 		}
 		if res.Quit {
 			s.leave(0, "prompt_input_exit")

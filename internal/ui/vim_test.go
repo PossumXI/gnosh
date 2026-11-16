@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/text"
@@ -33,6 +34,14 @@ func TestVimMode(t *testing.T) {
 	g.keys(`"x" <Esc> "y"`)
 	if got := g.box(); got != "xy" {
 		t.Fatalf("with vim's keys off the box holds %q, want xy", got)
+	}
+	// The session was told each change of mode, once, for the status line
+	// command.
+	g.c.mu.Lock()
+	told := strings.Join(g.c.vimModes, ",")
+	g.c.mu.Unlock()
+	if want := "INSERT,NORMAL,VISUAL,NORMAL,INSERT,NORMAL,INSERT,"; told != want {
+		t.Errorf("the session was told the modes %q, want %q", told, want)
 	}
 }
 

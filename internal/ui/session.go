@@ -261,6 +261,9 @@ type session struct {
 	branch string
 	facts  map[string]string
 	detail bool
+	// vimSaid is the mode of the box's vim keys the session was last told
+	// (reportVim).
+	vimSaid string
 	// custom is what the configured status line command printed, which is
 	// shown in place of gnosh's own status line, set in by customPad.
 	custom    []string

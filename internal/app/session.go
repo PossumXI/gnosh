@@ -177,6 +177,10 @@ type live struct {
 
 	// skillRuns are the skills that went into the conversation, the most
 	// recent last, each with its text as it went in.
+	// vimMode is the mode of the box's vim keys, as the front end last
+	// said it (controls.SetVimMode).
+	vimMu   sync.Mutex
+	vimMode string
 	// styles are the output styles there are, and styleName the one in
 	// force (outputstyle.go).
 	styleMu   sync.Mutex
@@ -1348,6 +1352,12 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 	}
 	return res, err
 }
+
+// SetVimMode tells the session the mode of the box's vim keys ("NORMAL",
+// "INSERT", "VISUAL", "VISUAL LINE", or "" when they are off), for the
+// status line command, which is told it as vim.mode and runs again when
+// it changes, as Claude Code's does.
+func (c *controls) SetVimMode(mode string) { c.cur().setVimMode(mode) }
 
 // clear ends the session with the reason "clear" and opens a new one
 // behind the same controls.

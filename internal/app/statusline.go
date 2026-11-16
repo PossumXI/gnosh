@@ -277,6 +277,9 @@ type statusInput struct {
 		Enabled bool `json:"enabled"`
 	} `json:"thinking,omitempty"`
 	PermissionMode string `json:"permission_mode"`
+	Vim            *struct {
+		Mode string `json:"mode"`
+	} `json:"vim,omitempty"`
 }
 
 // statusTree is the git work tree a --worktree session works in.
@@ -325,6 +328,11 @@ func (l *live) statusInput() statusInput {
 	in.OutputStyle.Name = l.styleNow()
 	in.Cost.TotalDurationMS = l.p.now().Sub(l.p.start).Milliseconds()
 	in.PermissionMode = string(l.engine.Mode())
+	if mode := l.vimNow(); mode != "" {
+		in.Vim = &struct {
+			Mode string `json:"mode"`
+		}{Mode: mode}
+	}
 	if l.agent == nil {
 		return in
 	}
@@ -356,6 +364,25 @@ func (l *live) statusInput() statusInput {
 		}{Enabled: lvl != "off"}
 	}
 	return in
+}
+
+// setVimMode notes the mode of the box's vim keys, and has the status line
+// run again when it changed.
+func (l *live) setVimMode(mode string) {
+	l.vimMu.Lock()
+	changed := l.vimMode != mode
+	l.vimMode = mode
+	l.vimMu.Unlock()
+	if changed {
+		l.statusLine.poke()
+	}
+}
+
+// vimNow is the mode of the box's vim keys, "" when they are off.
+func (l *live) vimNow() string {
+	l.vimMu.Lock()
+	defer l.vimMu.Unlock()
+	return l.vimMode
 }
 
 // statusPoke is the moments the status line runs at, among the events the

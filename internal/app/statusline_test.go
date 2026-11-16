@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"regexp"
@@ -145,4 +146,60 @@ func TestStatusLineWorktree(t *testing.T) {
 	}
 	s.typeLine("/exit")
 	s.exit()
+}
+
+// The front end says the mode of the box's vim keys; the status line
+// command runs again and is told it as vim.mode, and with the keys off it
+// is told nothing of vim, as Claude Code's is.
+func TestStatusLineVimMode(t *testing.T) {
+	w := apptest.NewWorld(t)
+	runs := w.Home + "/sl-runs"
+	script := w.Script(w.Home+"/bin/sl.sh", "{ cat; echo; } >> "+runs+"\necho line")
+	w.Settings(`{"statusLine": {"type": "command", "command": "` + script + `"}}`)
+	last := func() map[string]any {
+		data, _ := os.ReadFile(runs)
+		var obj map[string]any
+		for _, line := range strings.Split(string(data), "\n") {
+			var o map[string]any
+			if json.Unmarshal([]byte(line), &o) == nil {
+				obj = o
+			}
+		}
+		return obj
+	}
+	vimOf := func(obj map[string]any) any {
+		if v, ok := obj["vim"].(map[string]any); ok {
+			return v["mode"]
+		}
+		return nil
+	}
+	waitFor := func(what string, ok func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(15 * time.Second); !ok(); {
+			if time.Now().After(deadline) {
+				data, _ := os.ReadFile(runs)
+				t.Fatalf("%s never happened; the command was given:\n%s", what, data)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		waitFor("the run at the start", func() bool { return last() != nil })
+		if v := vimOf(last()); v != nil {
+			t.Errorf("with vim's keys off the command was told vim.mode %v", v)
+		}
+		teller, ok := c.(interface{ SetVimMode(string) })
+		if !ok {
+			t.Error("the session's controls take no vim mode")
+			c.Quit("prompt_input_exit")
+			return 1
+		}
+		teller.SetVimMode("NORMAL")
+		waitFor("a run told NORMAL", func() bool { return vimOf(last()) == "NORMAL" })
+		teller.SetVimMode("")
+		waitFor("a run told nothing of vim", func() bool { o := last(); return o != nil && vimOf(o) == nil })
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
 }
