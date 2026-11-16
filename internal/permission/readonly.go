@@ -56,6 +56,10 @@ type roSpec struct {
 	// anyArgs: the arguments are only text to the command (echo), so
 	// nothing that looks like a flag needs to be known.
 	anyArgs bool
+	// atFiles: an operand that begins with @ names a file the command
+	// reads more arguments from (binutils' strings @opts), which may name
+	// files of their own, so such an operand asks.
+	atFiles bool
 }
 
 // roTable is the read-only set. Commands with rules of their own (cd,
@@ -84,6 +88,22 @@ var roTable = map[string]roSpec{
 	"echo":  {ops: opsWords, anyArgs: true},
 	"true":  {ops: opsWords, anyArgs: true},
 	"false": {ops: opsWords, anyArgs: true},
+	// sleep only waits. (A long one in the foreground is refused by the
+	// shell tool, whatever the rules say.)
+	"sleep": {ops: opsWords},
+	// strings prints the text in files. GNU's takes more arguments from a
+	// file named after an @ (atFiles); the BSDs' and macOS's do not.
+	"strings": {short: "adfow", valued: "ntesTU", digits: true, atFiles: true,
+		long: "--all --data --print-file-name --bytes= --radix= --encoding= --target= --include-all-whitespace --output-separator= --unicode="},
+	// gofmt prints Go source formatted, its differences (-d) or the files
+	// that differ (-l). -w writes the files and -cpuprofile a profile, and
+	// neither is listed.
+	"gofmt": {short: "ldes", valued: "r"},
+	// ss lists sockets. -K kills them, -D writes what it reads to a file
+	// and -F reads a filter from one; none is listed. Its operands are a
+	// filter (state established, dport = :80).
+	"ss": {short: "hnrapolmeitxuwsSHOZz046bE", valued: "fA", ops: opsWords,
+		long: "--numeric --resolve --all --listening --options --extended --memory --processes --info --tcp --udp --unix --raw --summary --no-header --oneline --ipv4 --ipv6 --packet --threads --cgroup --tos --events --context --contexts --family="},
 	"sort": {short: "rnufbdghiMVRszcCm", valued: "kt", noGlob: true,
 		long: "--reverse --numeric-sort --unique --ignore-case --ignore-leading-blanks --dictionary-order --general-numeric-sort --human-numeric-sort --month-sort --version-sort --stable --zero-terminated --check --check= --merge --key= --field-separator="},
 	"uniq": {short: "cduizD", valued: "fsw", max: 1, long: "--count --repeated --unique --ignore-case --zero-terminated --skip-fields= --skip-chars= --check-chars="},
@@ -182,6 +202,11 @@ func parseArgs(args []word, spec roSpec) parsed {
 			return out
 		}
 		s := w.joined()
+		if spec.atFiles && (strings.HasPrefix(s, "@") || w.glob) {
+			// (A pattern may match a file whose name begins with @.)
+			out.bad = "an argument (" + w.raw + ") may name a file the command reads more arguments from"
+			return out
+		}
 		switch {
 		case rest || spec.anyArgs || s == "-" || !strings.HasPrefix(s, "-") || w.tilde:
 			out.ops = append(out.ops, w)
@@ -343,6 +368,8 @@ func facts(words []word) (f cmdFacts) {
 		gitFacts(&f, args)
 	case "printf":
 		printfFacts(&f, args)
+	case "ps":
+		psFacts(&f, args)
 	case "find":
 		findFacts(&f, args)
 	case "sed":
@@ -1019,6 +1046,12 @@ var gitRead = map[string]roSpec{
 	"rev-parse": {short: "q", ops: opsWords, long: "--show-toplevel --abbrev-ref --short --short= --verify --git-dir --is-inside-work-tree --is-inside-git-dir --show-prefix --show-cdup --is-bare-repository --symbolic-full-name --absolute-git-dir --git-common-dir --quiet --symbolic --all --branches --tags --remotes"},
 	"ls-files":  {short: "cdmoisukztv", valued: "x", noGlob: true, long: "--cached --deleted --modified --others --ignored --stage --unmerged --killed --exclude-standard --full-name --error-unmatch --exclude= --abbrev --abbrev= --directory --no-empty-directory --deduplicate"},
 	"blame":     {short: "lsewMCctfn", valued: "L", noGlob: true, long: "--date= --porcelain --line-porcelain --show-name --show-number --show-email --root --abbrev --abbrev= --color-lines --color-by-age --incremental"},
+	// git grep: -O and --open-files-in-pager start a program, --textconv
+	// runs the filters the repository's settings name, -f reads the
+	// patterns from a file, and --no-index searches outside the
+	// repository. None is listed.
+	"grep": {short: "nliIvwcFEGPhHozqLWpa", valued: "eABCm", patFlags: "e", digits: true, noGlob: true,
+		long: "--cached --untracked --exclude-standard --no-exclude-standard --recurse-submodules --text --no-textconv --ignore-case --word-regexp --invert-match --full-name --extended-regexp --basic-regexp --perl-regexp --fixed-strings --line-number --column --files-with-matches --name-only --files-without-match --null --only-matching --count --color --color= --no-color --break --heading --show-function --function-context --after-context= --before-context= --context= --threads= --max-depth= --max-count= --and --or --not --all-match --quiet"},
 }
 
 // gitReadPairs lists the read-only subcommands git names with two words,
@@ -1036,6 +1069,75 @@ func printfFacts(f *cmdFacts, args []word) {
 	if len(args) > 0 && (!args[0].static() || strings.HasPrefix(args[0].joined(), "-v")) {
 		f.why = "printf -v sets a variable of the shell"
 		return
+	}
+	f.readOnly = true
+}
+
+// The flags of ps that keep it to listing processes, as Linux's procps and
+// macOS's ps read them. Each takes a value on both (psValued), or none on
+// at least one of them (psShort): taken for one with none, its value is
+// read as one more argument, and never passes for less than it is. A value
+// that begins with a dash is read as a flag all the same.
+const (
+	psShort  = "AaCcdefFHhjLlMmNqrSsTvwXxyZ"
+	psValued = "GgOoptUu"
+	// psBSD are the letters of the dashless form (ps aux).
+	psBSD = "aAcCfghHjlLmMnrSsTuvwxXZ"
+)
+
+// psLong are procps's long flags that only list; true marks those that
+// take a value.
+var psLong = map[string]bool{
+	"--forest": false, "--no-headers": false, "--headers": false, "--cumulative": false, "--deselect": false, "--info": false,
+	"--sort": true, "--pid": true, "--ppid": true, "--user": true, "--User": true, "--group": true, "--Group": true,
+	"--format": true, "--cols": true, "--columns": true, "--width": true, "--lines": true, "--rows": true, "--sid": true, "--tty": true,
+}
+
+// psFacts judges ps. It only lists processes, but the dashless e of BSD's
+// form (ps auxe) and macOS's -E add each one's environment, which holds
+// the person's secrets, and those ask, as env does. (On FreeBSD -e is the
+// environment as well; gnosh reads ps as Linux and macOS have it.)
+func psFacts(f *cmdFacts, args []word) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !a.static() || a.glob || a.brace || a.tilde {
+			f.why = "an argument to ps is computed when the command runs, or is a pattern: " + a.raw
+			return
+		}
+		s := a.joined()
+		switch {
+		case strings.HasPrefix(s, "--"):
+			name, _, hasVal := strings.Cut(s, "=")
+			valued, ok := psLong[name]
+			if !ok && s != "--help" && s != "--version" {
+				f.why = "the flag " + name + " of ps is not one known to only list"
+				return
+			}
+			if valued && !hasVal && i+1 < len(args) && !strings.HasPrefix(args[i+1].raw, "-") {
+				i++
+			}
+		case strings.HasPrefix(s, "-") && len(s) > 1:
+			for j := 1; j < len(s); j++ {
+				c := s[j]
+				if strings.IndexByte(psValued, c) >= 0 {
+					if j == len(s)-1 && i+1 < len(args) && !strings.HasPrefix(args[i+1].raw, "-") {
+						i++
+					}
+					break
+				}
+				if strings.IndexByte(psShort, c) < 0 {
+					f.why = "the flag -" + string(c) + " of ps is not one known to only list"
+					return
+				}
+			}
+		case strings.Trim(s, "0123456789,") == "":
+			// A process number, or several.
+		default:
+			if strings.Trim(s, psBSD) != "" {
+				f.why = "ps " + s + " is not a form known to only list"
+				return
+			}
+		}
 	}
 	f.readOnly = true
 }

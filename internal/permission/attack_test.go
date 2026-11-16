@@ -77,6 +77,23 @@ func TestShellAttacks(t *testing.T) {
 		{"${!x} is the variable x names", "", none, "echo ${!x}", Ask},
 		{"a counter in a pattern is a listing", "", none, "echo /etc/*$?", Ask},
 		{"a counter on a line to a file still writes it", "", none, "echo $? > out.txt", Ask},
+		// The read-only programs, with the flags that make them more.
+		{"gofmt -w writes the files", "", none, "gofmt -w a.go", Ask},
+		{"gofmt -cpuprofile writes a profile", "", none, "gofmt -cpuprofile x.prof .", Ask},
+		{"gofmt's flags are Go's: --w is -w", "", none, "gofmt --w a.go", Ask},
+		{"GNU strings reads more arguments from @opts", "", none, "strings @opts", Ask},
+		{"a pattern may match a file named @x", "", none, "strings *", Ask},
+		{"ss -K kills sockets", "", none, "ss -K dst 203.0.113.9", Ask},
+		{"ss -D writes what it reads to a file", "", none, "ss -D out.bin", Ask},
+		{"ps's dashless e adds every process's environment", "", none, "ps auxe", Ask},
+		{"macOS's ps -E adds every process's environment", "", none, "ps -E", Ask},
+		{"a value that begins with a dash is a flag", "", none, "ps -o -E", Ask},
+		{"-C takes no value on macOS, so the word after it is a flag there", "", none, "ps -C -E", Ask},
+		{"git grep -O starts a pager it is given", "", none, "git grep -Ovim foo", Ask},
+		{"git grep --open-files-in-pager starts a program", "", none, "git grep --open-files-in-pager=sh foo", Ask},
+		{"git grep -f reads the patterns from a file", "", none, "git grep -f ~/.ssh/id_rsa", Ask},
+		{"git grep --textconv runs the repository's filters", "", none, "git grep --textconv foo", Ask},
+		{"git grep --no-index searches outside the repository", "", none, "git grep --no-index foo /etc", Ask},
 		{"a no-break space is a blank in some locales", "", attackRealistic, "ls\u00a0-la", Ask},
 		{"a no-break space is a blank in some locales", ModeBypass, attackGuards, "git\u00a0push", Ask},
 		{"a zero-width space cannot be seen", "", attackRealistic, "echo a\u200bb", Ask},
@@ -1358,6 +1375,12 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"ls *.go", "wc -l src/*.go", "echo héllo wörld", "grep -rn 'naïve' .", "echo \"tab\there\"",
 		"git diff HEAD --stat -- notes.txt; echo \"exit: $?\"", // Qwen, box 1
 		"go test ./... > /dev/null 2>&1; echo \"exit=$?\"", "echo $?", "ls; echo \"status $? pid $$ last $! args $#\"",
+		// Read-only programs Qwen ran on box 1 and box 2 that asked (16
+		// November).
+		"strings -n 8 a.go | head", "strings a.go | grep -i version", "gofmt -l .", "gofmt -d a.go", "gofmt -s -d src",
+		"sleep 2 && git status", "sleep 0.5", "ss -tlnp", "ss -tlnp | grep 8080", "ss -s",
+		"ps aux | grep gnodev", "ps -ef", "ps -eo pid,etime,cmd", "ps -p 1234 -o pid,stat,cmd", "ps auxww", "ps --sort=-%mem aux",
+		"git grep -n 'func main'", "git grep -n TODO -- '*.go'", "git grep -l -e foo -e bar src", "git grep -c foo HEAD~1",
 	}
 	fs := fakeFS{files: []string{"/proj/a.go", "/proj/b.go", "/proj/src/c.go", "/proj/src/d.go"}}
 	for _, mode := range []Mode{ModeDefault, ModeAcceptEdits, ModeDontAsk} {

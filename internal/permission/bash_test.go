@@ -380,7 +380,7 @@ func TestBashReadOnly(t *testing.T) {
 		"git diff --output=x", "git diff --ext-diff", "git diff --ext", "git log --output=x",
 		"git diff --no-index a /etc/passwd", "git -c core.pager=sh log", "git -C /tmp status",
 		"git --git-dir=/x status", "git log --show-signature", "git diff -O order", "git status --find-renames=50 --unknown",
-		"git stash", "git config --get x", "git grep foo", "git show --textconv HEAD",
+		"git stash", "git config --get x", "git grep -Ovim foo", "git grep --no-index foo", "git show --textconv HEAD",
 		"git worktree add x", "git worktree remove x", "git worktree prune", "git worktree list x",
 		"git worktree", "git stash list --output=x", "git stash list -p", "git stash pop", "git stash drop",
 		"cd src && git status", "cd /proj/src && git log", "cd .. && git log",
