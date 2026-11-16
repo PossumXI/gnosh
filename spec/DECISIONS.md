@@ -804,6 +804,9 @@ or kept with the reason said (27).
     (cmdSpan, lineState.leave). Nothing else a subshell changes can
     reach the commands after it unasked, since setting a variable or the
     shell's settings makes any line of more than one part ask. Brace
-    groups, loops, if and case still ask. Replaying the 2,180 commands
+    groups (since the next commit) are read straight through, as what
+    runs in the shell itself, unless a redirection follows the group,
+    which is opened before any cd in it; loops, if and case still ask.
+    Replaying the 2,180 commands
     Qwen ran on the boxes, 36 asks were these forms, the commonest
     "(go test ./... 2>&1 || true)" and "(cd dir && ...)".

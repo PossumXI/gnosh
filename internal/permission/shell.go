@@ -747,10 +747,19 @@ func (p *parser) command() {
 		p.simple()
 		return
 	case "{":
+		// A group runs in the shell itself, one command after the other,
+		// as a line does: read straight through, it is what runs. A
+		// redirection after it is opened before any cd in it has run,
+		// and so is not read that way: such a group asks.
 		p.pos++
-		p.sc.compound = true
 		p.body("}")
 		p.expect("}")
+		mark := len(p.sc.cmds)
+		p.trailingRedirs()
+		if len(p.sc.cmds) > mark {
+			p.sc.compound = true
+		}
+		return
 	case "if":
 		p.pos += 2
 		p.sc.compound = true

@@ -89,6 +89,10 @@ func TestShellAttacks(t *testing.T) {
 		{"after nested subshells the line is where it was", "", rules{deny: []string{"Read(./.env)"}}, "( (cd src); cd src; ls ); cat .env", Deny},
 		{"a variable set in a subshell asks", "", none, "(X=/proj/a); cat $X", Ask},
 		{"a removal in a subshell asks", "", none, "(cd src; rm -rf x)", Ask},
+		// A { ...; } group runs in the shell itself: read straight through.
+		{"a group's cd holds for what follows it", "", rules{deny: []string{"Read(./src/.env)"}}, "{ cd src; } && cat .env", Deny},
+		{"a redirection after a group asks", "", none, "{ ls; } > out.txt", Ask},
+		{"a removal in a group asks", "", none, "ls || { rm -rf x; }", Ask},
 		// The read-only programs, with the flags that make them more.
 		{"gofmt -w writes the files", "", none, "gofmt -w a.go", Ask},
 		{"gofmt -cpuprofile writes a profile", "", none, "gofmt -cpuprofile x.prof .", Ask},
@@ -1389,6 +1393,7 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"go test ./... > /dev/null 2>&1; echo \"exit=$?\"", "echo $?", "ls; echo \"status $? pid $$ last $! args $#\"",
 		// Subshells (box 1 and box 2, 16 November).
 		"(go test ./... 2>&1 || true)", "(cd src && ls)", "ls && (cd src; cat c.go)", "(cd src && ls) && cat a.go", "(ls; (cd src && ls))",
+		"go test ./... || { echo failed; }", "{ ls; pwd; }", "{ cd src; } && cat c.go",
 		// Read-only programs Qwen ran on box 1 and box 2 that asked (16
 		// November).
 		"strings -n 8 a.go | head", "strings a.go | grep -i version", "gofmt -l .", "gofmt -d a.go", "gofmt -s -d src",

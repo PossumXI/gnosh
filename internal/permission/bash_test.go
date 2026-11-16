@@ -99,7 +99,8 @@ func TestBashAllowRules(t *testing.T) {
 		// A subshell is the commands in it: each must be covered.
 		{"a subshell of a covered command", "", npm, "(npm run build)", Allow},
 		{"a subshell with a command not covered", "", npm, "(npm run build; make x)", Ask},
-		{"group asks", "", npm, "{ npm run build; }", Ask},
+		{"a group of a covered command", "", npm, "{ npm run build; }", Allow},
+		{"a group with a command not covered", "", npm, "{ npm run build; make x; }", Ask},
 		{"loop asks", "", npm, "for i in 1 2; do npm run build; done", Ask},
 		{"assignment asks, even a harmless one", "", npm, "NODE_ENV=test npm run build", Ask},
 		{"redirect to a file asks", "", npm, "npm run build > out.txt", Ask},
@@ -357,7 +358,7 @@ func TestBashReadOnly(t *testing.T) {
 		"ls; touch x", "ls && touch x", "ls & touch x", "ls\ntouch x", "ls | tee out", "timeout 5 touch x",
 		"echo x > file", "echo x >> file", "ls > out.txt", "ls &> out", "cat a 2> err",
 		// Anything the reader does not follow, or that runs something else.
-		"ls $(touch x)", "ls `touch x`", "(ls; touch x)", "{ ls; }", "ls &", "for f in a; do ls; done",
+		"ls $(touch x)", "ls `touch x`", "(ls; touch x)", "{ ls; touch x; }", "{ ls; } > x", "ls &", "for f in a; do ls; done",
 		"FOO=1 ls", "PATH=/tmp ls", "IFS=x", "LANG=C ls",
 		"\"ls\"", "l\\s", "/bin/ls", "./ls", "$LS",
 		// Flags that are not known to only read.
