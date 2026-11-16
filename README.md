@@ -77,37 +77,34 @@ Built:
   and `"vimInsertModeRemaps": ["jj"]` makes a pair stand for Esc.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
-`/restart` (gnosh starts again in the same session, the newer one once a
-new build is installed, which the session says), `/compact`, `/resume`,
-`/branch`, `/rewind` (the conversation, the files Write
-and Edit changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissions`,
-`/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
-model works; nothing of it is kept), `/recap`, `/color` (this session's prompt mark in a colour of its own, kept
-with the session), `/keybindings` (Claude Code's keybindings.json: a key bound
-to an action, null to take one away, command:<name> to run one), `/cost`, `/tasks`, `/diff`,
-`/export`,
-`/copy`, `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and
-disable), `/skills`, `/reload-skills`, `/hooks`, `/statusline`, `/debug` (debug
-logging on, and the model finds out from gnosh's log what went wrong) and
-`/doctor`, with gnosh's
-own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
-permission modes, Esc stops a turn and Esc twice goes back to an earlier
-prompt, Ctrl+O shows the whole transcript (every thought, call and result)
-on the whole screen, Ctrl+B moves a running command
+`/restart` (gnosh starts again in the same session, the newer one once a new
+build is installed, which the session says), `/compact`, `/resume`, `/branch`,
+`/rewind` (the conversation, the files Write and Edit changed, or both),
+`/model`, `/effort`, `/config`, `/plan`, `/permissions`, `/add-dir`,
+`/status`, `/context`, `/btw` (a side question, also while the model works;
+nothing of it is kept), `/recap`, `/color` (this session's prompt mark in a
+colour of its own, kept with the session), `/keybindings` (Claude Code's
+keybindings.json: a key bound to an action, null to take one away,
+command:<name> to run one), `/cost`, `/tasks`, `/diff`, `/export`, `/copy`,
+`/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and disable),
+`/skills`, `/reload-skills`, `/hooks`, `/statusline`, `/debug` (debug logging
+on, and the model finds out from gnosh's log what went wrong) and `/doctor`,
+with gnosh's own `/mem`, `/goal`, `/loop` and `/deliverables` beside them.
+Shift+Tab goes through the permission modes, Esc stops a turn and Esc twice
+goes back to an earlier prompt, Ctrl+O shows the whole transcript (every
+thought, call and result) on the whole screen, Ctrl+B moves a running command
 to the background, `@path` in a prompt brings that file (or a directory's
-listing) along with it, and a line that begins with `!` is a command of your own.
-With nothing after them, `/model`, `/effort`, `/config`, `/export`, `/memory`,
-`/mcp`, `/permissions` and `/skills` open pickers, as Claude Code's do
-(`/permissions allow`, `ask`, `deny` or `remove` and a rule changes the rules
-at once, and `/skills <name> off` and the like set Claude Code's
-`skillOverrides`);
-Alt+T turns thinking on or off,
-Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents in the
-background.
-`/panel` (or the `sidePanel` option) draws the session on the whole screen
-beside a side panel of the files it changed and its deliverables, with their
-addresses; `/panel` again gives the screen back, with all that was said in
-the scrollback.
+listing) along with it, and a line that begins with `!` is a command of your
+own. With nothing after them, `/model`, `/effort`, `/config`, `/export`,
+`/memory`, `/mcp`, `/permissions` and `/skills` open pickers, as Claude Code's
+do (`/permissions allow`, `ask`, `deny` or `remove` and a rule changes the
+rules at once, and `/skills <name> off` and the like set Claude Code's
+`skillOverrides`); Alt+T turns thinking on or off, Alt+P switches the model,
+and Ctrl+X Ctrl+K twice stops the sub-agents in the background. `/panel` (or
+the `sidePanel` option) draws the session on the whole screen beside a side
+panel of the files it changed and its deliverables, with their addresses;
+`/panel` again gives the screen back, with all that was said in the
+scrollback.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
 `headers`), and a WebSearch tool of gnosh's own (a search engine's MCP
