@@ -133,7 +133,7 @@ func (l *live) makeWorktree(ctx context.Context, cwd, id string) (*worktree, str
 	}
 	start := wt.path
 	if real, err := filepath.EvalSymlinks(cwd); err == nil {
-		if rel, err := filepath.Rel(top, real); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(top, real); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, "../") {
 			if st, err := os.Stat(filepath.Join(wt.path, rel)); err == nil && st.IsDir() {
 				start = filepath.Join(wt.path, rel)
 			}
@@ -231,7 +231,16 @@ func treeHolds(ctx context.Context, environ []string, wt *worktree) ([]string, e
 		return nil, errors.New("how far its branch went could not be told")
 	}
 	var what []string
-	if lines := strings.Count(strings.TrimSpace(status), "\n") + 1; strings.TrimSpace(status) != "" {
+	lines := 0
+	for _, line := range strings.Split(status, "\n") {
+		// "XY path", the first line's blanks trimmed off with the rest of
+		// git's output (runGit); a path that starts with a blank is quoted.
+		_, path, ok := strings.Cut(strings.TrimLeft(line, " "), " ")
+		if ok && !gnoshOwn(wt.path, strings.TrimLeft(path, " ")) {
+			lines++
+		}
+	}
+	if lines > 0 {
 		what = append(what, countWords(lines, "file changed or made and not committed (git's ignored ones among them)", "files changed or made and not committed (git's ignored ones among them)"))
 	}
 	if n > 0 {
@@ -241,6 +250,36 @@ func treeHolds(ctx context.Context, environ []string, wt *worktree) ([]string, e
 		what = append(what, "a HEAD that is no longer the commit it started at")
 	}
 	return what, nil
+}
+
+// gnoshOwn reports whether rel, a path git status gives in the work tree
+// at tree, is only what gnosh itself keeps in a project's data folder
+// (.gnosh): the folder of work trees, the local settings file and its
+// lock, the .gitignore gnosh writes there. A --worktree session's data
+// folder is inside its work tree, and those are not its work. A folder
+// git gives whole counts when all that is in it is gnosh's.
+func gnoshOwn(tree, rel string) bool {
+	rel = strings.TrimSuffix(rel, "/")
+	own := func(rel string) bool {
+		switch rel {
+		case ownDir + "/.gitignore", ownDir + "/settings.local.json", ownDir + "/settings.local.json.lock", ownDir + "/" + worktreesDir:
+			return true
+		}
+		return strings.HasPrefix(rel, ownDir+"/"+worktreesDir+"/")
+	}
+	if rel != ownDir {
+		return own(rel)
+	}
+	entries, err := os.ReadDir(filepath.Join(tree, ownDir))
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !own(ownDir + "/" + e.Name()) {
+			return false
+		}
+	}
+	return true
 }
 
 // fileExists reports whether there is a file or folder at p.

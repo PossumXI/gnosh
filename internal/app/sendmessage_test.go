@@ -124,6 +124,36 @@ func TestSendMessageObeysAgentRules(t *testing.T) {
 	}
 }
 
+// A session that runs as an agent whose tools let it start only some kinds
+// of sub-agent does not take up one of another kind with SendMessage, as
+// it would not start one with Agent.
+func TestSendMessageKeepsToTheAgentsKinds(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/agents/lead.md", "---\nname: lead\ndescription: Leads.\ntools: Read, SendMessage, Agent(helper)\n---\nYou lead.\n")
+	w.Write(w.ConfigDir()+"/agents/helper.md", "---\nname: helper\ndescription: Helps.\n---\nYou help.\n")
+	idRe := regexp.MustCompile(`\[agent id: ([0-9a-f-]+)\]`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		m := idRe.FindStringSubmatch(body)
+		switch {
+		case strings.Contains(body, "You are a sub-agent inside gnosh"):
+			return &apptest.Reply{Text: "There are 3 apples."}
+		case strings.Contains(body, "whose tools let it start only these kinds"):
+			return &apptest.Reply{Text: "Refused."}
+		case m != nil && strings.Contains(body, "more please"):
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "SendMessage", Args: fmt.Sprintf(`{"to":%q,"message":"now count the oranges"}`, m[1])}}}
+		case m != nil:
+			return &apptest.Reply{Text: "Counted."}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"count apples","prompt":"count the apples"}`}}}
+	})
+	run(t, w, "-p", "count").wantCode(t, 0)
+	run(t, w, "-c", "--agent", "lead", "-p", "more please").wantCode(t, 0)
+	if !anyRequestHas(w, "whose tools let it start only these kinds of sub-agent: helper; the sub-agent") {
+		t.Errorf("SendMessage took up a general-purpose sub-agent under an agent that may start only helpers")
+	}
+}
+
 // With Agent switched off there is no SendMessage either: it takes up only
 // what Agent started.
 func TestNoSendMessageWithoutAgent(t *testing.T) {

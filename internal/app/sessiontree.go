@@ -93,7 +93,13 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	env := p.o.Environ
+	// The repository's top folder as git has it, which the work tree
+	// keeps out of: the folder that settles trust may be a lower one (a
+	// .git/config that includes another file is read only that far).
 	top := st.folder.Root
+	if t, err := runGit(ctx, env, st.folder.Start, "rev-parse", "--show-toplevel"); err == nil && t != "" {
+		top = t
+	}
 	root, err := treesFolder(st.cfg.Paths.DataDir)
 	if err != nil {
 		return fail("%v", err)
@@ -136,7 +142,7 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	// The session starts in the folder of the work tree that stands where
 	// the one it was started in stands in the repository.
 	start := t.path
-	if rel, err := filepath.Rel(top, st.folder.Start); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+	if rel, err := filepath.Rel(resolved(top), resolved(st.folder.Start)); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, "../") {
 		if info, err := os.Stat(filepath.Join(t.path, rel)); err == nil && info.IsDir() {
 			start = filepath.Join(t.path, rel)
 		}

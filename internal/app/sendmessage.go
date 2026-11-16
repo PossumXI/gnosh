@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
@@ -28,10 +29,13 @@ import (
 // sendMessageName is the tool's name, as Claude Code's.
 const sendMessageName = "SendMessage"
 
-// The meta keys a sub-agent's session file holds beside its kind.
+// The meta keys of a sub-agent's session file that SendMessage reads.
 const (
-	metaEnded    = "ended"    // how its last run ended: completed, partial, failed, halted, stopped
-	metaWorkTree = "workTree" // the git work tree of its own it worked in
+	metaAgentType = "agentType" // its kind
+	metaEnded     = "ended"     // how its last run ended: completed, partial, failed, halted, stopped
+	metaWorkTree  = "workTree"  // the git work tree of its own it worked in
+	metaModel     = "model"     // the model its Agent call named, when it named one
+	metaEffort    = "effort"    // how hard it thought, when its call or its kind said
 )
 
 // sendMessageTool is SendMessage.
@@ -127,6 +131,9 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 		return refuse("the sub-agent %s was ended for good (by a permission the person refused, a hook, or a tool that said stop), and is not taken up again", to)
 	case !takesMore(def, meta[metaEnded]):
 		return refuse("the sub-agent %s never ended a run that could be taken up", to)
+	case l.agentKinds != nil && !slices.Contains(l.agentKinds, def.Name):
+		// As the Agent tool would not start one of its kind.
+		return refuse("this session runs as the agent %s, whose tools let it start only these kinds of sub-agent: %s; the sub-agent %s is a %s", l.agentName(), strings.Join(l.agentKinds, ", "), to, def.Name)
 	}
 	if why := l.cannotRunAgent(def); why != "" {
 		return refuse("%s", why)
@@ -134,16 +141,18 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 	if why := l.backgroundOff(nil); why != "" {
 		return refuse("it would run in the background, and %s", why)
 	}
-	s, err := l.newSub(l.ctx, l.agent, nil, def, call.ID, "", true, to)
+	// As its Agent call had it: the model it named, and how hard it
+	// thought.
+	if e := meta[metaEffort]; e != "" {
+		def.Effort = e
+	}
+	s, err := l.newSub(l.ctx, l.agent, nil, def, call.ID, meta[metaModel], true, to)
 	if err != nil {
 		return refuse("%v", err)
 	}
 	out := l.startBackground(s, agentInput{Description: firstOf(strings.TrimSpace(in.Summary), "more to do"), Prompt: message})
 	return out, nil
 }
-
-// metaAgentType is the meta key of a sub-agent's kind.
-const metaAgentType = "agentType"
 
 // subagentMeta reads the meta entries of the sub-agent id's session file in
 // dir, the last value of each key; an error says, for the model, why there

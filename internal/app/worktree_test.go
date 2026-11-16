@@ -225,6 +225,45 @@ func TestSubAgentWorktreeInAWorktreeSession(t *testing.T) {
 	}
 }
 
+// What gnosh keeps in a project's data folder is not a work tree's work:
+// the folder of work trees, the local settings file and its lock, the
+// .gitignore gnosh writes; a folder given whole counts when all in it is
+// gnosh's.
+func TestGnoshOwn(t *testing.T) {
+	tree := t.TempDir()
+	for rel, want := range map[string]bool{
+		".gnosh/worktrees/":               true,
+		".gnosh/worktrees/agent-1/x.go":   true,
+		".gnosh/settings.local.json":      true,
+		".gnosh/settings.local.json.lock": true,
+		".gnosh/.gitignore":               true,
+		".gnosh/skills/x/SKILL.md":        false,
+		"main.go":                         false,
+	} {
+		if got := gnoshOwn(tree, rel); got != want {
+			t.Errorf("gnoshOwn(%q) = %v", rel, got)
+		}
+	}
+	os.MkdirAll(filepath.Join(tree, ".gnosh", "worktrees"), 0o755)
+	os.WriteFile(filepath.Join(tree, ".gnosh", "settings.local.json"), []byte("{}"), 0o600)
+	if !gnoshOwn(tree, ".gnosh/") {
+		t.Errorf("a data folder of gnosh's own files alone counted as work")
+	}
+	os.MkdirAll(filepath.Join(tree, ".gnosh", "skills"), 0o755)
+	if gnoshOwn(tree, ".gnosh/") {
+		t.Errorf("a data folder with a skills folder in it was taken for gnosh's alone")
+	}
+}
+
+// An unnamed --worktree session that kept a rule in its local settings
+// file, and changed nothing else, leaves its work tree as it was made: the
+// tree goes at the end.
+func TestWorktreeFlagOwnFilesAreNoWork(t *testing.T) {
+	w := repoWorld(t)
+	r := run(t, w, "--trust-folder", "--worktree", "-p", "/permissions allow Bash(ls *)").wantCode(t, 0)
+	has(t, "stderr", r.err, "was left as it was made, and is removed with its branch")
+}
+
 // checkoutOf sees the checkouts a work tree stays out of through symbolic
 // links and other spellings, and finds the innermost.
 func TestCheckoutOf(t *testing.T) {

@@ -415,12 +415,21 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 			return s, fmt.Errorf("its session file could not be made: %w", err)
 		}
 		s.id = s.ts.ID()
-		if _, err = s.ts.AppendAll(
+		meta := []transcript.Entry{
 			transcript.MetaEntry("subagentOf", l.ts.ID()),
 			transcript.MetaEntry("startedBy", startedBy),
 			transcript.MetaEntry("parentCall", callID),
-			transcript.MetaEntry("agentType", def.Name),
-		); err != nil {
+			transcript.MetaEntry(metaAgentType, def.Name),
+		}
+		// What the call asked for over its kind, for SendMessage to give
+		// it again.
+		if model != "" {
+			meta = append(meta, transcript.MetaEntry(metaModel, model))
+		}
+		if def.Effort != "" {
+			meta = append(meta, transcript.MetaEntry(metaEffort, def.Effort))
+		}
+		if _, err = s.ts.AppendAll(meta...); err != nil {
 			return s, fmt.Errorf("its session file could not be written: %w", err)
 		}
 	}
