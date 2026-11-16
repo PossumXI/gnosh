@@ -361,6 +361,11 @@ type SessionInfo struct {
 	// ShowPast says the session was opened again, and its conversation is
 	// not on the screen: the interface shows where it left off.
 	ShowPast bool
+	// NotifChannel is how a person who seems to be away is told the
+	// session waits (the preferredNotifChannel option): "auto",
+	// "terminal_bell", "iterm2", "iterm2_with_bell", "kitty", "ghostty"
+	// or "notifications_disabled".
+	NotifChannel string
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

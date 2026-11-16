@@ -286,6 +286,7 @@ func TestOptions(t *testing.T) {
     "projectDataDir": ".agent",
     "outputStyle": "Concise",
     "editorMode": "vim",
+    "preferredNotifChannel": "terminal_bell",
     "vimInsertModeRemaps": ["jj", "jk"]
   }
 }`
@@ -326,6 +327,7 @@ func TestOptions(t *testing.T) {
 	check("projectDataDir", o.ProjectDataDir.V, ".agent")
 	check("outputStyle", o.OutputStyle.V, "Concise")
 	check("editorMode", o.EditorMode.V, "vim")
+	check("preferredNotifChannel", o.PreferredNotifChannel.V, "terminal_bell")
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 
 	// The table lists every key exactly once, All reports each, and the

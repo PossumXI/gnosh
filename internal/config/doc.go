@@ -133,6 +133,11 @@
 //	                           style of your own (/output-style)
 //	  editorMode               "normal" or "vim": how the box takes keys
 //	                           (not from a project's file)
+//	  preferredNotifChannel    how a person who seems away is told the
+//	                           session waits: "auto", "terminal_bell",
+//	                           "iterm2", "iterm2_with_bell", "kitty",
+//	                           "ghostty" or "notifications_disabled" (not
+//	                           from a project's file)
 //	  vimInsertModeRemaps      pairs typed in vim's INSERT mode that stand
 //	                           for Esc, as ["jj"] (not from a project's file)
 //

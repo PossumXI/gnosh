@@ -139,6 +139,13 @@ func DesktopNote(kind, text string) string {
 	return ""
 }
 
+// TmuxWrap wraps a sequence for tmux to pass on to the terminal it is
+// shown in (tmux's passthrough, which it takes with allow-passthrough on):
+// every ESC in it doubled, inside DCS tmux; … ST.
+func TmuxWrap(seq string) string {
+	return "\x1bPtmux;" + strings.ReplaceAll(seq, "\x1b", "\x1b\x1b") + "\x1b\\"
+}
+
 // TitlePush and TitlePop keep the terminal's title on its own stack and
 // put it back (XTWINOPS 22 and 23): a program that sets the title pushes
 // the old one first and pops it as it leaves. Terminals without the stack

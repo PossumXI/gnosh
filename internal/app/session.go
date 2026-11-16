@@ -240,6 +240,10 @@ type live struct {
 	// newBuildSaid says the person was told of a newer gnosh installed
 	// (restart.go).
 	newBuildSaid atomic.Bool
+	// notif is the notification channel /config set while the session
+	// runs; "" is the configuration's.
+	notifMu sync.Mutex
+	notif   string
 	// showPast says the session was opened again long enough after it
 	// was last written to that the interface shows where it left off.
 	showPast bool
@@ -1155,28 +1159,29 @@ func (l *live) onPanic(what string, v any, stack []byte) {
 func (l *live) info() SessionInfo {
 	m := l.agent.Model()
 	info := SessionInfo{
-		ID:          l.ts.ID(),
-		Path:        l.ts.Path(),
-		Cwd:         l.cfg.Paths.Cwd,
-		Model:       m.Info.ID,
-		Address:     m.Address,
-		Thinking:    m.Level,
-		Tools:       l.toolNames(),
-		MCPServers:  l.mcpStatus(),
-		Mode:        string(l.engine.Mode()),
-		Commands:    l.slash.names(),
-		CommandList: l.slash.list(),
-		Skills:      append(l.typedSkills(), l.mcpPromptInfos()...),
-		Version:     l.p.o.BuildID,
-		Interactive: l.interactive,
-		SidePanel:   l.cfg.Options.SidePanel.V,
-		Verbose:     l.cfg.Options.Verbose.V,
-		Vim:         l.cfg.Options.EditorMode.V == "vim",
-		OutputStyle: l.styleNow(),
-		Color:       l.sessionColor(),
-		Keybindings: l.keybindingsPath(),
-		ShowPast:    l.showPast,
-		Resume:      "gnosh -r " + l.ts.ID(),
+		ID:           l.ts.ID(),
+		Path:         l.ts.Path(),
+		Cwd:          l.cfg.Paths.Cwd,
+		Model:        m.Info.ID,
+		Address:      m.Address,
+		Thinking:     m.Level,
+		Tools:        l.toolNames(),
+		MCPServers:   l.mcpStatus(),
+		Mode:         string(l.engine.Mode()),
+		Commands:     l.slash.names(),
+		CommandList:  l.slash.list(),
+		Skills:       append(l.typedSkills(), l.mcpPromptInfos()...),
+		Version:      l.p.o.BuildID,
+		Interactive:  l.interactive,
+		SidePanel:    l.cfg.Options.SidePanel.V,
+		Verbose:      l.cfg.Options.Verbose.V,
+		Vim:          l.cfg.Options.EditorMode.V == "vim",
+		OutputStyle:  l.styleNow(),
+		Color:        l.sessionColor(),
+		Keybindings:  l.keybindingsPath(),
+		ShowPast:     l.showPast,
+		NotifChannel: l.notifChannel(),
+		Resume:       "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {
 		info.VimRemaps = append(info.VimRemaps, it.V)
@@ -1712,4 +1717,18 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 		}
 	}
 	return code
+}
+
+// notifChannel is the notification channel in force: what /config set
+// while the session runs, else the configuration's.
+func (l *live) notifChannel() string {
+	l.notifMu.Lock()
+	defer l.notifMu.Unlock()
+	if l.notif != "" {
+		return l.notif
+	}
+	if l.cfg == nil {
+		return "auto"
+	}
+	return firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto")
 }

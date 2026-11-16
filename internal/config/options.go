@@ -84,8 +84,14 @@ type Options struct {
 	// EditorMode is how the box takes keys: "normal", readline's keys, or
 	// "vim". VimInsertModeRemaps are the pairs of characters that, typed
 	// one after the other in vim's INSERT mode, stand for Esc ("jj").
-	EditorMode          Value[string]
-	VimInsertModeRemaps []ListItem
+	EditorMode Value[string]
+	// PreferredNotifChannel is how the interface tells a person who seems
+	// to be away that the session waits for them: "auto" (a desktop note
+	// through a terminal that is known to take one), "terminal_bell",
+	// "iterm2", "iterm2_with_bell", "kitty", "ghostty" or
+	// "notifications_disabled".
+	PreferredNotifChannel Value[string]
+	VimInsertModeRemaps   []ListItem
 }
 
 // ServerOff is the value of an option that names where a server of gnosh's
@@ -240,6 +246,10 @@ var optionDefs = []optionDef{
 		what: "how the box takes keys: \"normal\" (readline's keys) or \"vim\" (vim's NORMAL, INSERT and VISUAL modes); not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"normal", "vim"}, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.EditorMode }},
+	{key: "preferredNotifChannel", kind: oEnum, def: "auto",
+		what: "how a person who seems to be away is told the session waits: \"auto\" (a desktop note where the terminal is known to take one), \"terminal_bell\" (the bell, which reaches a terminal over ssh and through tmux too), \"iterm2\", \"iterm2_with_bell\", \"kitty\" or \"ghostty\" (that terminal's desktop note, for one gnosh cannot see, over ssh), or \"notifications_disabled\"; not from a project's file",
+		from: fromClaudeCode + ": the settings key", enum: []string{"auto", "terminal_bell", "iterm2", "iterm2_with_bell", "kitty", "ghostty", "notifications_disabled"}, ownOnly: true,
+		text: func(o *Options) *Value[string] { return &o.PreferredNotifChannel }},
 	{key: "vimInsertModeRemaps", kind: oNameList, def: "none",
 		what: "pairs of characters that, typed within a second of each other in vim's INSERT mode, stand for Esc, as [\"jj\"]; not from a project's file",
 		from: fromClaudeCode + ": the settings key, as a list, since Esc is the one thing a pair can stand for", ownOnly: true,

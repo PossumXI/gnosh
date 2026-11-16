@@ -42,7 +42,7 @@ type host interface {
 	title(text string) error
 	// desktop raises a desktop notification through the terminal, when it
 	// takes one; it reports whether it does.
-	desktop(text string) bool
+	desktop(channel, text string) bool
 	// openPanel takes the terminal's whole screen for the side panel
 	// (panel.go), for a terminal of cols by rows, and openView for the
 	// transcript view (transcript.go).
@@ -644,7 +644,7 @@ func (s *session) wake() time.Time {
 		// The spinner takes its next step.
 		soon(now.Add(s.th.SpinEvery))
 	}
-	if s.info.NotifyHooks || s.host.desktop("") {
+	if s.info.NotifyHooks || s.host.desktop(s.info.NotifChannel, "") {
 		if q := s.q; q != nil && !q.notified {
 			soon(later(q.opened, s.lastInput).Add(askNotifyAfter))
 		}
@@ -668,7 +668,7 @@ const (
 // pressed, or that a turn ended a while ago and nothing was typed since:
 // the person seems to be away.
 func (s *session) notify(now time.Time) {
-	hooks, desk := s.info.NotifyHooks, s.host.desktop("")
+	hooks, desk := s.info.NotifyHooks, s.host.desktop(s.info.NotifChannel, "")
 	if !hooks && !desk {
 		return
 	}
@@ -677,7 +677,7 @@ func (s *session) notify(now time.Time) {
 			s.c.Notify(kind, title, message)
 		}
 		if desk {
-			s.host.desktop(message)
+			s.host.desktop(s.info.NotifChannel, message)
 		}
 	}
 	if q := s.q; q != nil && !q.notified && !now.Before(later(q.opened, s.lastInput).Add(askNotifyAfter)) {
