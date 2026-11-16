@@ -320,7 +320,7 @@ var genJoiners = []string{
 	"echo %Q | cat | sh", "echo %Q | { cat; } | sh", "echo %Q > t.sh; sh t.sh", "echo %Q | . /dev/stdin", "printf '%s\\n' %Q | bash -s",
 	// What stands after time is a pipeline of any kind.
 	"time coproc %P", "time if true; then %P; fi", "time { %P; }", "time -p (%P)", "time for i in 1; do %P; done", "time [[ x || %P ]]",
-	"time ((%P))", "! time coproc %P", "time -- %P", "time - %P", "time -p -- coproc %P", "time \\\n coproc %P", "time while :; do %P; break; done",
+	"time ((%P))", "! time coproc %P", "time -- %P", "time - %P", "time -p -- coproc %P", "time \\\n coproc %P", "time\\\n coproc %P", "ti\\\nme coproc %P", "time while :; do %P; break; done",
 	// Substitutions in the words of ${...}, and text the shell evaluates later.
 	"%B ${X->(%P)}", "%B ${X:-<(%P)}", "%B ${X+<(%P)}", "%B \"${X->(%P)}\"", "%B ${X:=>(%P)}", "%B ${X:-${Y:-$(%P)}}", "%B ${X:+`%P`}",
 	"test -v ${x}'a[$(%P)]'", "x=${y}'a[$(%P)]'; echo $((x))", "[[ ${x}'a[$(%P)]' -eq 1 ]]", "x=\"a[\\$(%P)]\"; echo $((x))", "test -v \"a[\\$(%P)]\"",

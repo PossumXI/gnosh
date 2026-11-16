@@ -458,6 +458,9 @@ func TestShellAttacks(t *testing.T) {
 		{"the program is xargs, whatever its name turns out to be", ModeBypass, attackGuards, "echo push | $X -I% git % origin", Ask},
 		{"the program is xargs, whatever its name turns out to be", ModeBypass, attackGuards, "$X git <<< 'push origin'", Ask},
 		{"after time stands a whole pipeline, keywords and all", ModeBypass, attackGuards, "time coproc rm x", Deny},
+		// Seed 107: the pair right after time, with no blank before it.
+		{"a backslash-newline after time is taken out first", ModeBypass, attackGuards, "time\\\n coproc r''m x", Deny},
+		{"a backslash-newline inside time is taken out first", ModeBypass, attackGuards, "ti\\\nme coproc rm x", Deny},
 		{"after time stands a whole pipeline, keywords and all", "", rules{allow: []string{"Bash(coproc *)"}}, "time coproc make evil", Ask},
 		{"after time stands a whole pipeline, keywords and all", ModeBypass, attackGuards, "time if true; then rm x; fi", Deny},
 		{"after time stands a whole pipeline, keywords and all", ModeBypass, attackGuards, "time -p { rm x; }", Deny},

@@ -598,11 +598,20 @@ func (p *parser) keywordAfterTime() bool {
 				break
 			}
 		}
+		// The shell takes a backslash-newline pair out before it reads a
+		// word, so "time\<newline> coproc" opens with time as well.
 		j := i
-		for j < len(p.src) && !isWordEnd(p.src[j]) {
+		for j < len(p.src) {
+			if strings.HasPrefix(p.src[j:], "\\\n") {
+				j += 2
+				continue
+			}
+			if isWordEnd(p.src[j]) {
+				break
+			}
 			j++
 		}
-		switch tok := p.src[i:j]; {
+		switch tok := strings.ReplaceAll(p.src[i:j], "\\\n", ""); {
 		case tok == "time":
 			sawTime = true
 		case sawTime && (tok == "-p" || tok == "--" || tok == "!"):
