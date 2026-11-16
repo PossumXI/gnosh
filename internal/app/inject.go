@@ -109,6 +109,15 @@ func (l *live) injectOne(command string) (string, error) {
 		return "", refused(err.Error())
 	}
 	cwd := l.cwd()
+	if l.agent != nil {
+		if t := l.agent.Tree(); t != nil {
+			// A session in a git work tree of its own keeps its skills'
+			// commands there too, as it keeps its own (review, 16 November).
+			if why := l.commandOutsideTree(*t, cwd, command); why != "" {
+				return "", refused(why)
+			}
+		}
+	}
 	if d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action)); d.Behavior != permission.Allow {
 		return "", refused(firstOf(strings.TrimRight(d.Reason, "."), "no rule lets it run") + ". A skill's commands never ask: its allowed-tools can let them run")
 	}

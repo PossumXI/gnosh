@@ -707,6 +707,9 @@ func outsideTree(t core.WorkTree, cwd string, paths []string) string {
 		p = filepath.Clean(p)
 		repo, real := checkoutOf(t, p)
 		if repo == "" {
+			if hardLinked(real) {
+				return hardLinkRefusal(t, p)
+			}
 			continue
 		}
 		same := "Change the same file under your work tree instead."
@@ -717,6 +720,13 @@ func outsideTree(t core.WorkTree, cwd string, paths []string) string {
 			t.Path, checkoutName(t, repo), p, same)
 	}
 	return ""
+}
+
+// hardLinkRefusal says why a session or sub-agent with the work tree t may
+// not write the file p, a hard link: under another name it may be a file
+// of the checkout, which the write would change too.
+func hardLinkRefusal(t core.WorkTree, p string) string {
+	return fmt.Sprintf("You work in a git work tree of your own, at %s, and %s is a hard link: under another name it may be a file of %s, which a write here changes too. Remove the link and write a file of its own there.", t.Path, p, checkoutName(t, resolved(t.Repo)))
 }
 
 // within reports whether the path p is dir or inside it.
@@ -797,6 +807,11 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	if why != "" {
 		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command runs: %s. It could run in %s.%s", t.Path, why, checkoutName(t, resolved(t.Repo)), hint)
 	}
+	if l.engine.LinkAndMore(command) {
+		// What the rest of the line names may lead through the link, which
+		// is not there yet as gnosh reads the line.
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command makes a link and goes on in the same line: what it names after may lead through the link into %s. Make the link in a command of its own first.", t.Path, checkoutName(t, resolved(t.Repo)))
+	}
 	for _, d := range dirs {
 		repo, real := checkoutOf(t, d)
 		if repo == "" {
@@ -814,6 +829,9 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	for _, p := range l.engine.CommandWrites(cwd, command) {
 		repo, real := checkoutOf(t, p)
 		if repo == "" {
+			if hardLinked(real) {
+				return hardLinkRefusal(t, p)
+			}
 			continue
 		}
 		same := "under your work tree"

@@ -72,6 +72,42 @@ func TestWorktreeFlagKeepsToItsTree(t *testing.T) {
 	has(t, "the refusal", toolResult(t, w, 1, "c1"), "The same file in your work tree is "+filepath.Join(w.Dir, ".gnosh", "worktrees", "iso", "notes.txt"))
 }
 
+// A hard link to a file of the checkout, made in the work tree, is no way
+// to write that file, by a command or by Write; nor is a line that makes a
+// link and goes on through it (review, 16 November). Permissions are
+// skipped, so the work tree is all that stands in the way.
+func TestWorktreeFlagLinks(t *testing.T) {
+	w := repoWorld(t)
+	tree := filepath.Join(w.Dir, ".gnosh", "worktrees", "links")
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "ln "+filepath.Join(w.Dir, "main.go")+" hl.go")}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"echo changed > hl.go"}`}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":"changed\n"}`, filepath.Join(tree, "hl.go"))}}})
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, "ln -s "+w.Dir+" r && cd r && touch x")}}})
+	w.Model.Add(apptest.Reply{Text: "Done."})
+	run(t, w, "--trust-folder", "--worktree", "links", "-y", "-p", "go").wantCode(t, 0)
+	has(t, "a write through a hard link", toolResult(t, w, 2, "c2"), "This call did not run", "is a hard link")
+	has(t, "Write through a hard link", toolResult(t, w, 3, "c3"), "This call did not run", "is a hard link")
+	has(t, "a link and more", toolResult(t, w, 4, "c4"), "This call did not run", "makes a link and goes on")
+	if got := w.Read("main.go"); got != "package main\n" {
+		t.Errorf("the checkout's main.go changed: %q", got)
+	}
+	if w.Exists("x") {
+		t.Errorf("a file was made in the checkout through the link")
+	}
+}
+
+// A skill's own commands (!`cmd`) in a session with a work tree of its own
+// keep to the work tree as its tool calls do (review, 16 November).
+func TestWorktreeFlagSkillCommands(t *testing.T) {
+	w := repoWorld(t, apptest.Reply{Text: "Ran."})
+	w.Write(w.ConfigDir()+"/skills/poke/SKILL.md", "---\ndescription: Pokes.\n---\n!`echo poked > "+filepath.Join(w.Dir, "poked.txt")+"`\n")
+	r := run(t, w, "--trust-folder", "--worktree", "skill", "-y", "-p", "/poke").wantCode(t, 1)
+	has(t, "stderr", r.err, "Shell command permission check failed", "You work in a git work tree of your own", "this command writes")
+	if w.Exists("poked.txt") {
+		t.Errorf("the skill's command wrote into the person's checkout")
+	}
+}
+
 // A work tree whose own configuration has a mistake (its commit's, which
 // the checkout has fixed since) starts nothing, says why, and goes when
 // nobody named it.

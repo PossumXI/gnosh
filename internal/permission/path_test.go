@@ -382,20 +382,45 @@ func TestCommandDirs(t *testing.T) {
 		{"/proj", "cd $X && ls", ""},
 		{"/proj", `eval "$CMD"`, ""},
 		{"/proj", "ls 'unclosed", ""},
-		// What sends a cd elsewhere than its words say.
+		// What sends a cd elsewhere than its words say, in every way a
+		// variable is given a value; and, with no cd or ~ in the line,
+		// nothing (review, 16 November).
 		{"/proj", "CDPATH=/repo; cd src && make", ""},
 		{"/proj", "export HOME=/repo; cd && make", ""},
 		{"/proj", "HOME=/repo cd ~ && make", ""},
-		// Programs sent to a folder by a flag, and wrappers that send their
-		// command there.
-		{"/proj", "env -C /repo make", "/proj /repo"},
-		{"/proj", "env --chdir=/repo git commit -am x", "/proj /repo"},
-		{"/proj", "env -C/repo make", "/proj /repo"},
-		{"/proj", "make -C sub all", "/proj /proj/sub"},
-		{"/proj", "tar -xf a.tar -C /repo", "/proj /repo"},
-		{"/proj", "sudo -D /repo ls", "/proj /repo"},
+		{"/proj", "read CDPATH <<< /repo; cd internal && go generate ./...", ""},
+		{"/proj", "printf -v CDPATH /repo; cd internal", ""},
+		{"/proj", ": ${CDPATH:=/repo}; cd internal", ""},
+		{"/proj", `export "CDPATH=/repo"; cd internal`, ""},
+		{"/proj", "read HOME <<< /repo; cd && make", ""},
+		{"/proj", "read HOME <<< /repo; echo x > ~/f", ""},
+		{"/proj", "HOME=$(mktemp -d) go test ./...", "/proj"},
+		{"/proj", "grep -n HOME= .env", "/proj"},
+		// A program a flag of its own sends to another folder, however the
+		// flag is written: gnosh does not follow what it names from there.
+		{"/proj", "env -C /repo make", ""},
+		{"/proj", "env --chdir=/repo git commit -am x", ""},
+		{"/proj", "env -C/repo make", ""},
+		{"/proj", `env "-C" /repo make`, ""},
+		{"/proj", "env --ch=/repo make", ""},
+		{"/proj", "make -C sub all", ""},
+		{"/proj", `make --directory="$HOME/src/app" install`, ""},
+		{"/proj", `make -C"/repo" test`, ""},
+		{"/proj", "make -sC /repo", ""},
+		{"/proj", "make --dir=/repo", ""},
+		{"/proj", "tar -xf a.tar -C /repo", ""},
+		{"/proj", "sudo -D /repo ls", ""},
+		{"/proj", "go -C /repo generate ./...", ""},
 		{"/proj", "env -C \"$D\" make", ""},
+		{"/proj", "make $FLAGS", ""},
+		// Flags that are no such thing stay as they were.
 		{"/proj", "grep -C 3 x f", "/proj"},
+		{"/proj", "env FOO=1 grep -C 3 x f", "/proj"},
+		{"/proj", "env -u FOO make all", "/proj"},
+		{"/proj", "sudo -u root ls", "/proj"},
+		{"/proj", "make -j4 test", "/proj"},
+		{"/proj", "tar -xzf a.tgz", "/proj"},
+		{"/proj", "go test -count=1 ./...", "/proj"},
 	} {
 		dirs, why := e.CommandDirs(c.dir, c.cmd)
 		got, ok := strings.Join(dirs, " "), why == ""
@@ -407,6 +432,26 @@ func TestCommandDirs(t *testing.T) {
 		}
 		if !ok || got != c.want {
 			t.Errorf("CommandDirs(%q, %q) = %q, %v; want %q", c.dir, c.cmd, got, ok, c.want)
+		}
+	}
+}
+
+// LinkAndMore: a line that makes a link and runs anything besides.
+func TestLinkAndMore(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeDefault, rules{}))
+	for cmd, want := range map[string]bool{
+		"ln -s /repo r && cd r && make install": true,
+		"ln /repo/main.go m.go; cp /tmp/x m.go": true,
+		"cp -s /repo/a b && echo x > b":         true,
+		"cp --link /repo/a b; cat b":            true,
+		"ln -s /repo r":                         false,
+		"sudo ln -s /repo r":                    false,
+		"cp a b && cat b":                       false,
+		"make && make test":                     false,
+		"link /repo/a b":                        false,
+	} {
+		if got := e.LinkAndMore(cmd); got != want {
+			t.Errorf("LinkAndMore(%q) = %v, want %v", cmd, got, want)
 		}
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/url"
 	"path"
-	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -199,14 +198,58 @@ func (e *Engine) CommandDirs(dir, command string) (dirs []string, why string) {
 	case v.dirsCapped:
 		return nil, "it goes to more folders than gnosh follows"
 	}
-	if name := cdChanger(v); name != "" {
+	if name := cdChanger(v, command); name != "" {
 		return nil, "it sets " + name + ", which changes where a cd goes"
 	}
-	more, lost := at.flagDirs(v, dirs)
-	if lost {
-		return nil, "a program in it is sent to a folder only known when it runs (" + strings.Join(chdirNames, ", ") + ")"
+	if prog := chdirFlagUse(v); prog != "" {
+		return nil, prog + " in it may run in another folder, which a flag of its own names, and gnosh does not follow what it names from there; cd there first instead"
 	}
-	return unionStrings(dirs, more), ""
+	return dirs, ""
+}
+
+// LinkAndMore reports whether a command line makes a link (ln, link, or a
+// cp that links: -l, -s, --link, --symbolic-link) and runs anything else
+// besides: what the rest names may lead through the link, which is not
+// there yet when gnosh reads the line.
+func (e *Engine) LinkAndMore(command string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	v := e.viewBash(command)
+	links, others := false, 0
+	for _, u := range v.units {
+		ws := u.cmd.words
+		if len(ws) == 0 || !ws[0].static() {
+			others++
+			continue
+		}
+		name := baseName(ws[0].joined())
+		if _, wraps := wrappers[name]; wraps {
+			continue // what it runs is a unit of its own
+		}
+		if makesLink(name, ws) {
+			links = true
+			continue
+		}
+		others++
+	}
+	return links && others > 0
+}
+
+// makesLink reports whether the command, its program name and its words,
+// makes a link.
+func makesLink(name string, ws []word) bool {
+	switch name {
+	case "ln", "link":
+		return true
+	case "cp":
+		for _, w := range ws[1:] {
+			l := w.lit()
+			if l == "--link" || l == "--symbolic-link" || strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "--") && strings.ContainsAny(l, "ls") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // CommandWrites are the files a shell command line names for writing, as
@@ -228,86 +271,115 @@ func (e *Engine) CommandWrites(dir, command string) []string {
 	return req.writes
 }
 
-// cdChanger names a variable the line sets that changes where a cd goes:
-// CDPATH, which a cd to a plain name searches, and HOME, where a cd with
-// no folder and ~ lead. It is "" when the line sets neither.
-func cdChanger(v *bashView) string {
+// cdChanger names a variable the line may set that changes where its cd,
+// or its ~, goes: CDPATH, which a cd to a plain name searches, where the
+// line has a cd or a pushd; HOME, where a cd with no folder and ~ lead,
+// where it has a cd, a pushd or a ~. "" when it sets neither where that
+// matters. text is the line as written.
+func cdChanger(v *bashView, text string) string {
+	cds := false
 	for _, u := range v.units {
-		for _, a := range u.cmd.assigns {
-			if a.name == "CDPATH" || a.name == "HOME" {
-				return a.name
+		if ws := u.cmd.words; len(ws) > 0 && ws[0].static() {
+			if n := baseName(ws[0].joined()); n == "cd" || n == "pushd" {
+				cds = true
 			}
 		}
-		// export HOME=x, declare -x CDPATH=x, env HOME=x sh -c 'cd'.
-		for _, w := range u.cmd.words {
-			for _, name := range []string{"CDPATH", "HOME"} {
-				if strings.HasPrefix(w.raw, name+"=") || strings.HasPrefix(w.raw, name+"+=") {
-					return name
-				}
-			}
+	}
+	tilde := strings.Contains(text, "~")
+	for _, name := range []string{"CDPATH", "HOME"} {
+		if (cds || name == "HOME" && tilde) && setsVar(v, name) {
+			return name
 		}
 	}
 	return ""
 }
 
-// chdirFlags are the programs that run themselves, or the command they
-// are given, in a folder a flag of theirs names, and those flags.
-var chdirFlags = map[string][]string{
-	"env":   {"-C", "--chdir"},
-	"sudo":  {"-D", "--chdir"},
-	"make":  {"-C", "--directory"},
-	"gmake": {"-C", "--directory"},
-	"tar":   {"-C", "--directory"},
-	"ninja": {"-C"},
-}
-
-// chdirNames are chdirFlags' programs, in order, for messages.
-var chdirNames = func() []string {
-	var out []string
-	for name := range chdirFlags {
-		out = append(out, name)
-	}
-	slices.Sort(out)
-	return out
-}()
-
-// flagDirs are the folders the line's commands are sent to by their flags
-// (env -C, make -C ...), read from each folder the line may be in. lost
-// says one of them is only known when the line runs.
-func (e *Engine) flagDirs(v *bashView, dirs []string) (out []string, lost bool) {
-	add := func(w word) {
-		if !w.static() {
-			lost = true
-			return
+// setsVar reports whether the line may give the variable name a value: by
+// an assignment, or by naming it as the variable a command gives a value
+// to (read, printf -v, mapfile, export, declare, unset ...), or in a
+// ${name:=word}. A word that is the name alone counts, whatever runs it.
+func setsVar(v *bashView, name string) bool {
+	for _, u := range v.units {
+		for _, a := range u.cmd.assigns {
+			if a.name == name {
+				return true
+			}
 		}
-		for _, d := range dirs {
-			if abs, ok := cleanAbs(w.value(e.home), d); ok {
-				out = unionStrings(out, []string{abs})
+		for _, w := range u.cmd.words {
+			val := w.raw
+			if w.static() {
+				val = w.value("")
+			}
+			if val == name || val == "-v"+name || strings.HasPrefix(val, name+"=") || strings.HasPrefix(val, name+"+=") ||
+				strings.Contains(w.raw, "${"+name+":=") || strings.Contains(w.raw, "${"+name+"=") {
+				return true
 			}
 		}
 	}
+	return false
+}
+
+// chdirFlags are the programs that run themselves, or the command they are
+// given, in a folder a flag of theirs names: the flag's letter, and its
+// long name, which may be given shortened.
+var chdirFlags = map[string]struct{ short, long string }{
+	"env":   {"C", "chdir"},
+	"sudo":  {"D", "chdir"},
+	"make":  {"C", "directory"},
+	"gmake": {"C", "directory"},
+	"tar":   {"C", "directory"},
+	"ninja": {"C", ""},
+	"go":    {"C", ""},
+}
+
+// chdirFlagUse names a program of the line that may be sent to another
+// folder by a flag of its own, in any of the ways the flag is written
+// (-C dir, -Cdir, -sC dir, --directory=dir, --dir dir, "-C"), or by a word
+// of its whose text is only known when the line runs. A wrapper's own
+// words end where the command it runs begins (env FOO=1 grep -C 3 x reads
+// grep's -C as grep's).
+func chdirFlagUse(v *bashView) string {
 	for _, u := range v.units {
 		ws := u.cmd.words
 		if len(ws) == 0 || !ws[0].static() {
 			continue
 		}
-		flags := chdirFlags[baseName(ws[0].joined())]
-		for i := 1; i < len(ws) && flags != nil; i++ {
-			l := ws[i].raw
-			for _, f := range flags {
-				switch {
-				case l == f && i+1 < len(ws):
-					i++
-					add(ws[i])
-				case strings.HasPrefix(l, f+"=") && strings.HasPrefix(f, "--"):
-					add(litOf(l[len(f)+1:]))
-				case len(f) == 2 && strings.HasPrefix(l, f) && len(l) > 2 && !strings.HasPrefix(l, "--"):
-					add(litOf(l[2:]))
+		name := baseName(ws[0].joined())
+		f, ok := chdirFlags[name]
+		if !ok {
+			continue
+		}
+		spec, wraps := wrappers[name]
+	words:
+		for i := 1; i < len(ws); i++ {
+			w := ws[i]
+			if !w.static() {
+				return name
+			}
+			s := w.value("")
+			switch {
+			case s == "--":
+				break words
+			case strings.HasPrefix(s, "--"):
+				long, _, _ := strings.Cut(s[2:], "=")
+				if f.long != "" && len(long) >= 2 && strings.HasPrefix(f.long, long) {
+					return name
 				}
+			case strings.HasPrefix(s, "-") && len(s) > 1:
+				if strings.Contains(s[1:], f.short) {
+					return name
+				}
+			case wraps && strings.Contains(s, "="):
+				// env and sudo take NAME=value words before the command.
+			case wraps:
+				break words // the command it runs
+			}
+			if wraps && strings.Contains(spec.valued, " "+s+" ") {
+				i++ // the flag's value
 			}
 		}
 	}
-	return out, lost
+	return ""
 }
 
 // unreadable says why a line cannot be read to know what it runs, or "".
