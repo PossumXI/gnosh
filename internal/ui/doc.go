@@ -308,6 +308,11 @@
 //     []app.RewindPoint for the list; going back is the command
 //     /rewind N, whose result says the session's state is to be forgotten
 //     (CommandResult.Reset) and gives the prompt back for the box (Draft).
+//   - /model with nothing after it, the picker: a method
+//     ModelChoices(ctx) []app.ModelChoice; switching is the command
+//     /model provider/model level.
+//   - Ctrl+O, the transcript view: a method Transcript()
+//     []app.TranscriptEntry.
 //   - /resume with nothing after it: a method ResumeChoices()
 //     []app.SessionChoice for the list; opening is /resume and an id.
 //   - /deliverables, which is also /artifacts, and the counts on the

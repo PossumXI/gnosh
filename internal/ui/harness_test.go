@@ -535,6 +535,14 @@ type controls struct {
 	tasks     []app.Task
 	deliv     []app.Deliverable
 	trans     []app.TranscriptEntry
+	models    []app.ModelChoice
+}
+
+// ModelChoices is the models a test set.
+func (c *controls) ModelChoices(context.Context) []app.ModelChoice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.models)
 }
 
 // Transcript is the session's conversation as a test set it.

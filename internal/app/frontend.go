@@ -240,6 +240,11 @@ type SessionControls interface {
 	// with the work of popped steps and what came before a summary, but
 	// not what a rewind cut off.
 	Transcript() []TranscriptEntry
+	// ModelChoices lists the models /model can switch to, the one in use
+	// marked, for the picker that /model with nothing after it opens. It
+	// asks the providers' servers which models they have, within ctx;
+	// switching is the command /model provider/model [level].
+	ModelChoices(ctx context.Context) []ModelChoice
 }
 
 // CommandResult is what running a slash command came to.

@@ -763,6 +763,33 @@ func TestSendAtOnceMovesACommandAside(t *testing.T) {
 	}
 }
 
+// /model with nothing after it opens the picker over the real session:
+// the server's models, the one in use marked; the one picked is switched
+// to, and the next request names it.
+func TestModelPickerWithTheProgram(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "An answer from the other model."})
+	w.Model.SetModels("test-model", "other-model")
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	p.keys(`"/model" <Enter>`)
+	p.has("Which model? The choice is saved", "local/test-model", "in use", "local/other-model", "Keep the model as it is")
+	// Its thinking next, the cursor on what a switch would take ("on").
+	p.keys(`<Down> <Enter>`)
+	p.has("How is local/other-model to think?", "what it would use")
+	p.keys(`<Enter>`)
+	p.has("The model is local/other-model", "thinking on")
+	p.keys(`"which model are you?" <Enter>`)
+	p.has("An answer from the other model.")
+	reqs := w.Model.Requests()
+	if got := reqs[len(reqs)-1].JSON["model"]; got != "other-model" {
+		t.Errorf("the request after the picker names the model %v", got)
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}
+
 // /resume with nothing after it lists the folder's other sessions, and
 // the one picked is opened in place of the session that is open.
 func TestResumeWithTheProgram(t *testing.T) {

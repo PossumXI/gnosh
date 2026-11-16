@@ -683,3 +683,17 @@ or kept with the reason said (27).
     (Claude Code's key, under "options") starts the session with detail
     on; the store of folded thoughts and Ctrl+O's writing them out are
     gone.
+50. **/model with nothing after it is a picker.** Jae, 16 November, on
+    box 1: "the modal doesn't seem to pop up when i type ssh ai and
+    /model". The command printed the models as text; Claude Code's and
+    the earlier gnosh's open a picker. In the interface it is now a
+    list of the models the providers' servers have (asked away from the
+    screen's loop, for fifteen seconds at most), the one in use marked
+    with its window and thinking and the cursor on it. Enter on a model
+    with thinking levels then asks which, the cursor on the level a
+    switch with none would take (the one saved for it, else the default,
+    as the command takes it), so that Enter twice never changes more than
+    the model; Esc keeps the model as it is. What is picked runs as
+    /model provider/model level, which switches and saves as typing it
+    does; /model with a name runs as before, and in print mode and the
+    plain front end /model with nothing still lists the models as text.

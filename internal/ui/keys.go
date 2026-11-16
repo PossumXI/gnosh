@@ -377,6 +377,13 @@ func (s *session) command(d editor.Draft) {
 			return
 		}
 	}
+	if modelWords[strings.ToLower(line)] {
+		if _, ok := s.c.(modelChooser); ok {
+			// With nothing after it, the command is the picker (modelpick.go).
+			s.chooseModel(line)
+			return
+		}
+	}
 	if panelWords[strings.ToLower(line)] {
 		// The side panel is the interface's own, at once, also while a
 		// turn runs.
