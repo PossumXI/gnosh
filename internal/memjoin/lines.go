@@ -239,10 +239,13 @@ func (j *join) beforeRequest(_ context.Context, info agent.RequestInfo) ([]agent
 }
 
 // largeStep returns the line that tells the model, once per todo, that
-// the todo it stands in has grown large: when the conversation has grown
-// by more than half the compaction point since the todo was entered. It
-// comes well before the point itself, so that the model can pop or split
-// the todo while there is room.
+// the todo it stands in has grown large: when more than half of the room
+// that was left below the compaction point as the todo was entered has
+// come in since. It comes well before the point itself, so that the model
+// can pop or split the todo while there is room. (It was half the point
+// itself, which a todo entered past half the point could never reach
+// before the slide: every late todo of a long session, the AI-box peer
+// found.)
 func (j *join) largeStep(info agent.RequestInfo) string {
 	if info.Point <= 0 || (j.s.Config != nil && !j.s.Config.Options.AutoCompactEnabled.V) {
 		return ""
@@ -253,7 +256,8 @@ func (j *join) largeStep(info agent.RequestInfo) string {
 	}
 	top := stack[len(stack)-1]
 	grown := info.Used - top.TotalAtPush
-	if top.UUID == "" || top.TotalAtPush <= 0 || grown <= info.Point/2 {
+	room := info.Point - top.TotalAtPush
+	if top.UUID == "" || top.TotalAtPush <= 0 || room <= 0 || grown <= room/2 {
 		return ""
 	}
 	j.mu.Lock()

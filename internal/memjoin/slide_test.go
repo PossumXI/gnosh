@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
@@ -99,12 +100,16 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 		}
 	}
 
-	// Before the slide the model was sent all four files; after it the
-	// two oldest reads are gone, and the newest are there.
+	// Before the slide the model was sent all four files, and was told
+	// the todo had grown large: more than half of the room left when it
+	// was entered had come in. After the slide the oldest reads are gone
+	// (three of the four: the large-step line is in the todo too, and a
+	// slide takes at least half of what the todo holds), and the newest
+	// is there.
 	before, after := string(reqs[5].Body), string(reqs[6].Body)
-	has(t, "the request before the slide", before, "alpha line 0005", "bravo line 0005", "charlie line 0005")
-	hasNot(t, "the request after the slide", after, "alpha line 0005", "bravo line 0005")
-	has(t, "the request after the slide", after, "charlie line 0005", "delta line 0005")
+	has(t, "the request before the slide", before, "alpha line 0005", "bravo line 0005", "charlie line 0005", "This todo is large")
+	hasNot(t, "the request after the slide", after, "alpha line 0005", "bravo line 0005", "charlie line 0005")
+	has(t, "the request after the slide", after, "delta line 0005")
 	t.Logf("a window of %d tokens, with room made at %d; the request before the slide: about %d tokens; the request after it: about %d tokens", window, point, len(before)/4, len(after)/4)
 	// The slide was made for want of room, and when the fourth read came
 	// in, no sooner: the request before it was under the point, with
@@ -120,7 +125,7 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 
 	// The answer that entered the todo says what went, and why.
 	push := find(reqs[6], "mem.Next()")
-	if got := messagesOf(reqs[6])[push+1].text; !strings.HasSuffix(got, "\n[Then came the work in it, 2 tool calls (Read 2), removed from your context to make room.]") {
+	if got := messagesOf(reqs[6])[push+1].text; !strings.HasSuffix(got, "\n[Then came the work in it, 3 tool calls (Read 3), removed from your context to make room.]") {
 		t.Errorf("the answer that entered the todo does not end with the slide's note:\n%s", got)
 	}
 	samePrefix(t, "the requests before and after the slide", reqs[5], reqs[6], push+1)
@@ -319,4 +324,52 @@ func TestPopKeepsTheSessionUnderThePoint(t *testing.T) {
 			t.Errorf("request %d is about %d tokens, at or over the point at which room is made for a window of %d (%d)", i, n, window, point)
 		}
 	}
+}
+
+// A todo entered late, past half the point, is told it has grown large too:
+// the line counts the room that was left as it was entered, not half the
+// point, which such a todo could never take in before it slid (found by
+// the AI-box peer, 16 November).
+func TestLargeStepLineForALateTodo(t *testing.T) {
+	const todo = "review-files/read-rest"
+	w := newWorld(t,
+		reply(call("c1", "Read", map[string]any{"file_path": "alpha.txt"})),
+		reply(call("c2", "Read", map[string]any{"file_path": "bravo.txt"})),
+		reply(memCall("c3", `mem.Todo("review the files", "read the rest").Push()`)),
+		reply(memCall("c4", `mem.Next()`)),
+		reply(call("c5", "Read", map[string]any{"file_path": "charlie.txt"})),
+		reply(call("c6", "Read", map[string]any{"file_path": "delta.txt"})),
+		reply(call("c7", "Read", map[string]any{"file_path": "alpha.txt", "limit": 3})),
+		says("Read."),
+	)
+	for _, name := range []string{"alpha", "bravo", "charlie", "delta", "echo"} {
+		w.Write(name+".txt", filler(name, 17500))
+	}
+	w.Model.SetWindow(40000)
+	r := w.run("-y", "-p", "review the files")
+	r.wantCode(t, 0)
+	w.script.done()
+	reqs := w.script.requests()
+	if n := strings.Count(string(reqs[len(reqs)-1].Body), "This todo is large"); n != 1 {
+		t.Fatalf("the late todo was told it is large %d times, want once", n)
+	}
+	has(t, "the large-step line", string(reqs[len(reqs)-1].Body), "since you entered `"+todo+"`")
+	hasNot(t, "stderr", r.err, "slid `", "summar")
+	// (Where it entered: past half the point, the line's old trigger.)
+	if push, point := tokensBefore(t, reqs, "read the rest"), pointOf(40000); push*2 <= point {
+		t.Errorf("the todo was entered at about %d tokens, with room made at %d: the test wants it past half", push, point)
+	}
+}
+
+// tokensBefore is about how many tokens the first request that holds what
+// carries.
+func tokensBefore(t *testing.T, reqs []apptest.Request, what string) int {
+	t.Helper()
+	for _, req := range reqs {
+		if strings.Contains(string(req.Body), what) {
+			return len(req.Body) / 4
+		}
+	}
+	t.Fatalf("no request holds %q", what)
+	return 0
 }
