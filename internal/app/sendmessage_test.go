@@ -199,3 +199,29 @@ func anyRequestHas(w *apptest.World, text string) bool {
 	}
 	return false
 }
+
+// /tasks lists the sub-agents of the session that have ended, as Claude
+// Code's does under "Earlier in this session".
+func TestTasksListsEndedSubAgents(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		body := string(r.Body)
+		switch {
+		case strings.Contains(body, "You are a sub-agent inside gnosh"):
+			return &apptest.Reply{Text: "There are 3 apples."}
+		case strings.Contains(body, `"role":"tool"`):
+			return &apptest.Reply{Text: "Counted."}
+		}
+		return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"count apples","prompt":"count the apples"}`}}}
+	})
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("count")
+	s.see("Counted.")
+	s.typeLine("/tasks")
+	s.see("Earlier in this session:")
+	s.see("sub-agent (general-purpose), done: ")
+	s.see("The model can give one more to do")
+	s.typeLine("/exit")
+	s.exit()
+}

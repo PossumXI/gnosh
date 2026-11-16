@@ -101,6 +101,11 @@ func (l *live) slashAddDir(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
+// endedWords says how a sub-agent's last run ended, for /tasks.
+var endedWords = map[string]string{
+	"completed": "done", "partial": "ended part way", "failed": "failed", "halted": "ended for good", "stopped": "stopped",
+}
+
 // slashTasks is /tasks (also /bashes): the commands that run, or ran, in
 // the background in this session, and "/tasks stop <id>" to stop one.
 func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
@@ -130,6 +135,15 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		if b.output != "" {
 			c.Say("     its session file: %s", b.output)
 		}
+	}
+	// The sub-agents of this session that have ended, as Claude Code's
+	// "Earlier in this session": the model can give one more to do.
+	if earlier := l.earlierAgents(ctx); len(earlier) > 0 {
+		c.Say("Earlier in this session:")
+		for _, a := range earlier {
+			c.Say("%s  sub-agent (%s), %s: %s", a.id, a.kind, firstOf(endedWords[a.ended], "ended"), oneLine(firstOf(a.task, "(no task in its file)"), 100))
+		}
+		c.Say("     The model can give one more to do (SendMessage to its id): ask it to.")
 	}
 	// The runs /background and /fork started from this folder, from any
 	// session: they outlive the session that started them.
