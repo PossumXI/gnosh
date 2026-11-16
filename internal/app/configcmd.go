@@ -109,7 +109,7 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 
 // liveOptions are the options a running session can change: /config puts
 // them in force at once.
-var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true}
+var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true}
 
 // applyOption puts what /config set in force in the running session, for
 // an option that can be (liveOptions), and reports whether it was.
@@ -118,19 +118,24 @@ func (l *live) applyOption(key string, raw json.RawMessage) bool {
 		return false
 	}
 	switch key {
-	case "autoCompactEnabled", "debug":
+	case "autoCompactEnabled", "debug", "verbose":
 		var on bool
 		if json.Unmarshal(raw, &on) != nil {
 			return false
 		}
-		if key == "debug" {
+		switch key {
+		case "debug":
 			if l.flog == nil {
 				return false // (a session without a log)
 			}
 			l.flog.debug.Store(on)
-		} else if l.agent != nil {
-			l.agent.SetAutoCompact(on)
+		case "autoCompactEnabled":
+			if l.agent != nil {
+				l.agent.SetAutoCompact(on)
+			}
 		}
+		// (verbose is the interface's to show: it puts what /config set in
+		// force itself, when the command comes back.)
 	case "autoCompactWindow":
 		var n int
 		if json.Unmarshal(raw, &n) != nil || l.agent == nil {

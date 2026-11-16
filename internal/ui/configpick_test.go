@@ -33,11 +33,22 @@ func TestConfigPicker(t *testing.T) {
 	if len(ran()) != 0 {
 		t.Fatalf("Esc ran %q", ran())
 	}
-	// True or false: turned over at once.
+	// True or false: turned over at once, and verbose, the interface's
+	// own, is in force here at once.
 	g.keys(`"/config" <Enter> <Enter>`)
 	if got := ran(); len(got) != 1 || got[0] != "/config verbose=true" {
 		t.Fatalf("the picker ran %q", got)
 	}
+	if !g.s.detail {
+		t.Error("/config verbose=true did not turn detail on")
+	}
+	g.keys(`"/config verbose=false" <Enter>`)
+	if g.s.detail {
+		t.Error("/config verbose=false did not turn detail off")
+	}
+	g.c.mu.Lock()
+	g.c.commands = g.c.commands[:1]
+	g.c.mu.Unlock()
 	// A few words: which, the cursor on the one in force.
 	g.keys(`"/config" <Enter> <Down> <Enter>`)
 	g.liveHas("mode: how it starts?", "as it is now")

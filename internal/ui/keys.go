@@ -456,6 +456,26 @@ func (s *session) run(line string) {
 	})
 }
 
+// verboseSet reads a /config line for the verbose option set true or
+// false, the last time it is named.
+func verboseSet(line string) (on, ok bool) {
+	words := strings.Fields(line)
+	if len(words) == 0 || !strings.EqualFold(words[0], "/config") {
+		return false, false
+	}
+	for _, w := range words[1:] {
+		if v, found := strings.CutPrefix(w, "verbose="); found {
+			switch strings.Trim(v, `"'`) {
+			case "true":
+				on, ok = true, true
+			case "false":
+				on, ok = false, true
+			}
+		}
+	}
+	return on, ok
+}
+
 // ran takes in what a slash command came to.
 func (s *session) ran(line string, res app.CommandResult, err error) {
 	s.cmdRun, s.cmdStop = "", nil
@@ -487,6 +507,11 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		}
 		if err != nil {
 			s.notice(agent.LevelError, err.Error())
+		}
+		if on, ok := verboseSet(line); ok && err == nil && res.Name == "config" {
+			// The verbose option is the interface's own: what /config set
+			// is in force here at once.
+			s.detail = on
 		}
 		if res.Quit {
 			s.leave(0, "prompt_input_exit")
