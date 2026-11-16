@@ -797,3 +797,13 @@ or kept with the reason said (27).
     does, which a folder that is not trusted does not read: the choice
     then holds for the session, and the command says so. A name no style
     has is said at the start, and the default used.
+58. **A subshell is the commands in it.** A line holding ( ... ) used to
+    ask whatever was inside; now each command in it is judged, as Claude
+    Code judges every subcommand, and a cd inside moves the subshell
+    alone: where the line stands is put back when the subshell ends
+    (cmdSpan, lineState.leave). Nothing else a subshell changes can
+    reach the commands after it unasked, since setting a variable or the
+    shell's settings makes any line of more than one part ask. Brace
+    groups, loops, if and case still ask. Replaying the 2,180 commands
+    Qwen ran on the boxes, 36 asks were these forms, the commonest
+    "(go test ./... 2>&1 || true)" and "(cd dir && ...)".

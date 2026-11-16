@@ -395,6 +395,7 @@ func TestSuggestions(t *testing.T) {
 		{"npm test --watch", []string{"Bash(npm test --watch)", "Bash(npm test *)"}},
 		{"npm test", []string{"Bash(npm test)"}},
 		{"make", []string{"Bash(make)"}},
+		{"(make)", []string{"Bash(make)"}}, // a subshell is the commands in it
 		{"pytest -x tests", []string{"Bash(pytest -x tests)", "Bash(pytest *)"}},
 		{"git push origin main", []string{"Bash(git push origin main)", "Bash(git push *)"}},
 		{"git -C /x push", []string{"Bash(git -C /x push)"}}, // never a rule for all of git
@@ -418,7 +419,6 @@ func TestSuggestions(t *testing.T) {
 		{"FOO=1 make", nil},
 		{"make $(echo x)", nil},
 		{"make &", nil},
-		{"(make)", nil},
 		{"make &&", nil},
 		{`"make" x`, nil},
 	}

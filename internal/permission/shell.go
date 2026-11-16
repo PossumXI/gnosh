@@ -133,6 +133,9 @@ type script struct {
 	// what stopped the reader.
 	ok  bool
 	why string
+	// subshells are the ( ... ) of the line, each as the commands inside
+	// it, cmds[from:to]: a cd among them moves only the subshell.
+	subshells []cmdSpan
 	// What the line holds anywhere, nested or not.
 	subst      bool // a command or process substitution
 	subshell   bool // ( ... )
@@ -154,6 +157,9 @@ type script struct {
 	// loops holds every for loop's variable and list.
 	loops []loopVar
 }
+
+// cmdSpan is a run of a script's commands: cmds[from:to].
+type cmdSpan struct{ from, to int }
 
 // maxShellDepth bounds how deeply substitutions and groups may nest before
 // the reader stops and reports the line as one it cannot follow.
@@ -723,7 +729,11 @@ func (p *parser) command() {
 		}
 		p.pos++
 		p.sc.subshell = true
+		from := len(p.sc.cmds)
 		p.inner(nestSubshell, ')')
+		if to := len(p.sc.cmds); to > from && !p.failed {
+			p.sc.subshells = append(p.sc.subshells, cmdSpan{from, to})
+		}
 		p.trailingRedirs()
 		return
 	}

@@ -96,7 +96,9 @@ func TestBashAllowRules(t *testing.T) {
 		{"substitution asks", "", npm, "npm run $(echo build)", Ask},
 		{"backticks ask", "", npm, "npm run `echo build`", Ask},
 		{"process substitution asks", "", npm, "npm run build <(echo x)", Ask},
-		{"subshell asks", "", npm, "(npm run build)", Ask},
+		// A subshell is the commands in it: each must be covered.
+		{"a subshell of a covered command", "", npm, "(npm run build)", Allow},
+		{"a subshell with a command not covered", "", npm, "(npm run build; make x)", Ask},
 		{"group asks", "", npm, "{ npm run build; }", Ask},
 		{"loop asks", "", npm, "for i in 1 2; do npm run build; done", Ask},
 		{"assignment asks, even a harmless one", "", npm, "NODE_ENV=test npm run build", Ask},
@@ -355,7 +357,7 @@ func TestBashReadOnly(t *testing.T) {
 		"ls; touch x", "ls && touch x", "ls & touch x", "ls\ntouch x", "ls | tee out", "timeout 5 touch x",
 		"echo x > file", "echo x >> file", "ls > out.txt", "ls &> out", "cat a 2> err",
 		// Anything the reader does not follow, or that runs something else.
-		"ls $(touch x)", "ls `touch x`", "(ls)", "{ ls; }", "ls &", "for f in a; do ls; done",
+		"ls $(touch x)", "ls `touch x`", "(ls; touch x)", "{ ls; }", "ls &", "for f in a; do ls; done",
 		"FOO=1 ls", "PATH=/tmp ls", "IFS=x", "LANG=C ls",
 		"\"ls\"", "l\\s", "/bin/ls", "./ls", "$LS",
 		// Flags that are not known to only read.
@@ -465,7 +467,7 @@ func TestBashAcceptEdits(t *testing.T) {
 		"sed -i 's/a/b/w /tmp/out' a.txt", "sed -i.bak 's/a/b/' a.txt",
 		// Everything else still asks.
 		"chmod +x a", "ln -s a b", "echo x > a", "npm install", "git commit -m x", "tee a", "dd if=a of=b",
-		"xargs rm", "rm a &", "(rm a)", "rm $(ls)",
+		"xargs rm", "rm a &", "(rm a; curl x)", "rm $(ls)",
 		// Protected paths and dangerous removals.
 		"rm .git/config", "touch .gitconfig", "mkdir .git/hooks", "cp a .vscode/settings.json",
 		"sed -i 's/a/b/' .zshrc", "mv a .envrc", "rm -rf .", "rm -rf /proj", "rm -rf ..", "rm -rf *",

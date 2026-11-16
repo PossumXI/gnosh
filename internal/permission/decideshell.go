@@ -3,6 +3,7 @@ package permission
 import (
 	"errors"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -40,6 +41,21 @@ type lineState struct {
 	// link that was copied or moved in leads wherever it leads.
 	made   []string
 	linked bool
+}
+
+// copyPlace is a copy of where the line stands, for putting it back.
+func (st *lineState) copyPlace() lineState {
+	return lineState{
+		dirs: slices.Clone(st.dirs), pending: slices.Clone(st.pending), sure: st.sure,
+		before: slices.Clone(st.before), moved: st.moved, unknown: st.unknown,
+	}
+}
+
+// leave puts back where the line stood when a subshell began. What the
+// subshell's commands did to the files (made, linked) stays.
+func (st *lineState) leave(was lineState) {
+	st.dirs, st.pending, st.sure = was.dirs, was.pending, was.sure
+	st.before, st.moved, st.unknown = was.before, was.moved, was.unknown
 }
 
 // enter is called before judging c: it settles where the shell is.
@@ -1697,8 +1713,10 @@ func (e *Engine) decideShell(req *request) Decision {
 		return ask("Part of the command is a script gnosh could not read (" + v.opaque + "), so a person decides.")
 	case v.sc.subst:
 		return ask("The command runs another command to build part of itself ($(...), backticks or <(...)), and gnosh asks about every command that does.")
-	case v.sc.subshell || v.sc.compound:
-		return ask("The command holds a subshell, a loop or another compound form, and gnosh asks about those.")
+	case v.sc.compound:
+		// (A subshell is read as the commands in it, with its own
+		// directory: see the spans below.)
+		return ask("The command holds a loop, a group or another compound form, and gnosh asks about those.")
 	case v.sc.background:
 		return ask("The command starts a background job with &, and gnosh asks about those.")
 	case v.sc.exotic:
@@ -1717,7 +1735,25 @@ func (e *Engine) decideShell(req *request) Decision {
 			parts++
 		}
 	}
-	for _, c := range v.sc.cmds {
+	// A subshell's cd moves the subshell alone: where the line stands is
+	// put back as it was when the subshell began, once its last command
+	// is judged. (What else a subshell could change for the commands
+	// after it, a variable or the shell's settings, makes a line of more
+	// than one part ask in any case.)
+	opens, closes := map[int]int{}, map[int]int{}
+	for _, sp := range v.sc.subshells {
+		opens[sp.from]++
+		closes[sp.to]++
+	}
+	var saved []lineState
+	for i, c := range v.sc.cmds {
+		for n := closes[i]; n > 0 && len(saved) > 0; n-- {
+			st.leave(saved[len(saved)-1])
+			saved = saved[:len(saved)-1]
+		}
+		for n := opens[i]; n > 0; n-- {
+			saved = append(saved, st.copyPlace())
+		}
 		st.enter(c)
 		pv := e.judgePart(c, st)
 		if pv.ok && pv.state != "" && parts > 1 {

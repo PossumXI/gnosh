@@ -77,6 +77,18 @@ func TestShellAttacks(t *testing.T) {
 		{"${!x} is the variable x names", "", none, "echo ${!x}", Ask},
 		{"a counter in a pattern is a listing", "", none, "echo /etc/*$?", Ask},
 		{"a counter on a line to a file still writes it", "", none, "echo $? > out.txt", Ask},
+		// A subshell is the commands in it, and its cd moves it alone:
+		// what comes after it stands where the line stood.
+		{"a cd in a subshell moves the commands in it", "", none, "(cd /etc && cat passwd)", Ask},
+		{"a cd before a subshell moves the subshell", "", none, "cd /etc && (cat passwd)", Ask},
+		{"after a subshell the line is where it was", "", none, "(cd src); cat ../x", Ask},
+		{"a subshell's cd does not hold for what follows it", "", none, "(cd src) && cat ../x", Ask},
+		{"nor a nested subshell's", "", none, "( (cd src) && ls ) && cat ../x", Ask},
+		{"a subshell's cd into the folder does not bring the line back into it", "", none, "cd /etc && (cd /proj) && cat passwd", Ask},
+		{"after a subshell the line is where it was, under a deny rule", "", rules{deny: []string{"Read(./.env)"}}, "(cd src) && cat .env", Deny},
+		{"after nested subshells the line is where it was", "", rules{deny: []string{"Read(./.env)"}}, "( (cd src); cd src; ls ); cat .env", Deny},
+		{"a variable set in a subshell asks", "", none, "(X=/proj/a); cat $X", Ask},
+		{"a removal in a subshell asks", "", none, "(cd src; rm -rf x)", Ask},
 		// The read-only programs, with the flags that make them more.
 		{"gofmt -w writes the files", "", none, "gofmt -w a.go", Ask},
 		{"gofmt -cpuprofile writes a profile", "", none, "gofmt -cpuprofile x.prof .", Ask},
@@ -1375,6 +1387,8 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"ls *.go", "wc -l src/*.go", "echo héllo wörld", "grep -rn 'naïve' .", "echo \"tab\there\"",
 		"git diff HEAD --stat -- notes.txt; echo \"exit: $?\"", // Qwen, box 1
 		"go test ./... > /dev/null 2>&1; echo \"exit=$?\"", "echo $?", "ls; echo \"status $? pid $$ last $! args $#\"",
+		// Subshells (box 1 and box 2, 16 November).
+		"(go test ./... 2>&1 || true)", "(cd src && ls)", "ls && (cd src; cat c.go)", "(cd src && ls) && cat a.go", "(ls; (cd src && ls))",
 		// Read-only programs Qwen ran on box 1 and box 2 that asked (16
 		// November).
 		"strings -n 8 a.go | head", "strings a.go | grep -i version", "gofmt -l .", "gofmt -d a.go", "gofmt -s -d src",
