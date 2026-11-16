@@ -49,6 +49,8 @@
 #   wtflag      the same repository, and gnosh started with --worktree demo:
 #               the session adds a line to notes.txt in .gnosh/worktrees/demo,
 #               and the folder's notes.txt stays as it was (acceptEdits)
+#   vim         editorMode vim: a prompt typed in INSERT mode, Esc, x in
+#               NORMAL mode, and Enter sends it from NORMAL mode
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -59,8 +61,10 @@ T=$HOME/newgnosh-test/uicheck-$scenario
 S=gnosh-uicheck-$scenario
 flags=""
 hooks=""
+opts=""
 case "$scenario" in
 basic | mention | config | fork | model | transcript) ;;
+vim) opts='"editorMode": "vim", ' ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel) flags="-y" ;;
@@ -68,7 +72,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim)" >&2
 	exit 2
 	;;
 esac
@@ -97,7 +101,7 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
   "providers": { "qwen": { "type": "llamacpp", "baseUrl": "http://127.0.0.1:8080", "listModels": false } },
   "models": { "qwen/qwen3.8-27b": { "name": "Qwen 3.8 27B", "contextWindow": 262144 } },
   "model": { "id": "qwen/qwen3.8-27b", "thinking": false },
-  "options": { "requestTimeout": 900 },
+  "options": { $opts"requestTimeout": 900 },
   $hooks
   "statusLine": { "type": "command", "command": "$T/config/gnosh/statusline.sh", "padding": 1 }
 }
@@ -185,6 +189,18 @@ worktree)
 wtflag)
 	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
 	done_when() { screen | grep -q "done in"; }
+	;;
+vim)
+	# Typed in INSERT mode, Esc to NORMAL (the status line says so), x takes
+	# the stray last letter, and Enter sends from NORMAL mode; the empty box
+	# is in INSERT mode again.
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is wellX" Escape
+	sleep 1
+	echo "=== after Esc: $(screen | grep -E -o -- "-- (NORMAL|INSERT|VISUAL) --" | tail -1)"
+	tmux send-keys -t "$S" x
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "done in" && screen | grep -q -- "-- INSERT --"; }
 	;;
 monitor)
 	tmux send-keys -t "$S" "Use the Monitor tool to watch this exact command: for i in 1 2 3; do echo tick \$i; sleep 3; done; echo MONITOR-DONE. Then end your turn. When its lines come, say only the last line you were given." Enter
