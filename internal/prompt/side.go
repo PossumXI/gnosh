@@ -3,6 +3,7 @@ package prompt
 import (
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // SummaryWords is the most words a summary is asked to have when the
@@ -102,7 +103,11 @@ type CloseReviewInput struct {
 // work half the time.
 func (s *Set) CloseReview(in CloseReviewInput) SideRequest {
 	var cmds []string
-	for _, c := range in.Commands {
+	keep := keepCommands(in.Commands, in.Result)
+	for i, c := range in.Commands {
+		if !keep[i] {
+			continue
+		}
 		vals := values{"line": oneLine(c.Line, maxQuote)}
 		if c.NotRun {
 			vals.flag("not_run", true)
@@ -111,12 +116,7 @@ func (s *Set) CloseReview(in CloseReviewInput) SideRequest {
 		}
 		cmds = append(cmds, s.fill(textCloseCommand, vals))
 	}
-	var files []string
-	for _, f := range in.Files {
-		if f = oneLine(f, maxName); f != "" {
-			files = append(files, f)
-		}
-	}
+	files, moreFiles := keepFiles(in.Files, in.Result)
 	vals := values{
 		"todo":       oneLine(in.Todo, maxTitle),
 		"thoughts":   lines(in.Thoughts, maxBlock),
@@ -130,10 +130,111 @@ func (s *Set) CloseReview(in CloseReviewInput) SideRequest {
 	for _, name := range []string{"thoughts", "files", "commands", "result", "transcript"} {
 		vals.flag("no_"+name, vals[name] == "")
 	}
+	if n := len(in.Commands) - len(cmds); n > 0 {
+		vals["left_out"] = strconv.Itoa(n)
+	}
+	if moreFiles > 0 {
+		vals["more_files"] = strconv.Itoa(moreFiles)
+	}
 	return SideRequest{
 		System: s.fill(textCloseReview, nil),
 		Prompt: s.fill(textCloseRequest, vals),
 	}
+}
+
+// How much of the commands and files of a todo a review is shown. Every
+// review is a prompt the model server has not seen, read whole before a
+// word comes back, and a todo of a long session may have run hundreds of
+// commands: on Jae's AI box, reviews of such todos took two minutes and
+// more, with the session waiting on each.
+const (
+	reviewCommands     = 40   // the newest commands shown
+	reviewCommandChars = 8000 // and the most characters they take
+	reviewNamed        = 20   // earlier commands shown because the result names them
+	reviewFiles        = 50   // files shown
+)
+
+// keepCommands says which commands a review shows: the newest, as many
+// as fit, where what backs a close usually is (the last test run, the
+// last check), and the earlier ones the result names, so that a result
+// such as "ran the migration first" keeps what it stands on.
+func keepCommands(cmds []Command, result string) []bool {
+	keep := make([]bool, len(cmds))
+	n, size := 0, 0
+	for i := len(cmds) - 1; i >= 0; i-- {
+		l := len(oneLine(cmds[i].Line, maxQuote))
+		if n == reviewCommands || n > 0 && size+l > reviewCommandChars {
+			break
+		}
+		keep[i] = true
+		n++
+		size += l
+	}
+	named := 0
+	for i := len(cmds) - 1; i >= 0 && named < reviewNamed; i-- {
+		if !keep[i] && names(result, cmds[i].Line) {
+			keep[i] = true
+			named++
+		}
+	}
+	return keep
+}
+
+// keepFiles returns the files a review shows, those the result names
+// first, and how many more there are.
+func keepFiles(paths []string, result string) (shown []string, more int) {
+	var named, rest []string
+	for _, p := range paths {
+		p = oneLine(p, maxName)
+		switch {
+		case p == "":
+		case names(result, p):
+			named = append(named, p)
+		default:
+			rest = append(rest, p)
+		}
+	}
+	all := append(named, rest...)
+	if len(all) > reviewFiles {
+		return all[:reviewFiles], len(all) - reviewFiles
+	}
+	return all, 0
+}
+
+// names reports whether text names something in s: a word of s that is
+// not a flag or one of the shell's common words, and is long or holds a
+// path's marks (a test's name, a script, a file), found in text whole, or
+// as the last part of a path.
+func names(text, s string) bool {
+	if text == "" {
+		return false
+	}
+	words := strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || strings.ContainsRune("\"'`|&;<>(){}$=,:", r)
+	})
+	for _, w := range words {
+		w = strings.Trim(w, ".")
+		if strings.HasPrefix(w, "-") || commonWords[w] {
+			continue
+		}
+		candidates := []string{w}
+		if i := strings.LastIndex(w, "/"); i >= 0 {
+			candidates = append(candidates, w[i+1:])
+		}
+		for _, c := range candidates {
+			marked := strings.ContainsAny(c, "./_-0123456789")
+			if (len(c) >= 8 || marked && len(c) >= 4) && strings.Contains(text, c) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// commonWords are words of shell lines that name nothing of the work.
+var commonWords = map[string]bool{
+	"/dev/null": true, "/tmp": true, "2>&1": true, "./...": true, "...": true,
+	"printf": true, "readlink": true, "realpath": true, "basename": true, "dirname": true,
 }
 
 // GoalJudgeInput is what the judge of a goal is shown.

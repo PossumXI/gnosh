@@ -155,7 +155,7 @@ var budgets = map[string]int{
 	textSummary:        220,
 	textCloseReview:    760,
 	textGoalJudge:      490,
-	textCloseRequest:   180,
+	textCloseRequest:   190, // with the counts of what a long todo leaves out
 	textGoalRequest:    80,
 	textNamer:          110,
 	textCoreAnyRole:    60,

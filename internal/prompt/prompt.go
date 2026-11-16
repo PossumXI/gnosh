@@ -256,7 +256,7 @@ func specs() []spec {
 			when: "The instructions of the request that reviews a close, to the small model."},
 		{name: textCloseRequest, kind: KindSide,
 			need: []string{"todo", "thoughts", "ask", "files", "commands", "result", "code", "transcript"},
-			may:  []string{"no_thoughts", "no_files", "no_commands", "no_result", "no_transcript"},
+			may:  []string{"no_thoughts", "no_files", "no_commands", "no_result", "no_transcript", "more_files", "left_out"},
 			when: "What that request shows the reviewer, ending in the question."},
 		{name: textCloseCommand, kind: KindSide, need: []string{"line"}, may: []string{"exit", "not_run"},
 			when: "One command of the reviewer's list, with how it ended."},
