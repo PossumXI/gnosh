@@ -1520,6 +1520,38 @@ func (e *Engine) filled(v *bashView, w word) (string, bool) {
 	return vals[0].text, true
 }
 
+// varBraces returns a command's words as bash and as dash read a word
+// that holds braces and a variable: bash's with the braces taken apart
+// (braceAlts; nil when they cannot be told), and dash's with the braces
+// left as characters, which the variable is then filled in beside. ok is
+// false when no word is such a word.
+func varBraces(ws []word) (bashWords, dashWords []word, ok bool) {
+	bashKnown := true
+	for _, w := range ws {
+		if !braced(w) || w.static() {
+			bashWords = append(bashWords, w)
+			dashWords = append(dashWords, w)
+			continue
+		}
+		ok = true
+		lit := w
+		lit.brace = false
+		dashWords = append(dashWords, lit)
+		if alts, fine := braceAlts(w); fine {
+			bashWords = append(bashWords, alts...)
+		} else {
+			bashKnown = false
+		}
+	}
+	if !ok {
+		return nil, nil, false
+	}
+	if !bashKnown {
+		bashWords = nil
+	}
+	return bashWords, dashWords, true
+}
+
 // braceWords returns the command's words after bash's brace expansion,
 // when some word holds braces that expand. sure is false when a word
 // with braces also has quoted text, whose commas and braces count for
@@ -2669,6 +2701,17 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 			v.setOpaque("braces with quoted text in them make words gnosh cannot tell for sure")
 		}
 		e.addDerived(v, &simpleCmd{words: alt, redirs: c.redirs, sep: c.sep, nest: c.nest}, prev, depth)
+	}
+	// Braces in a word with a variable in it: bash takes the braces apart
+	// before it fills the variable, and dash takes nothing apart, the
+	// braces being characters beside the variable. "f() { mv "$@"{,x};
+	// }; f .git /tmp/g" moves .git either way: bash runs mv .git /tmp/g
+	// .gitx /tmp/gx, and dash mv .git '/tmp/g{,x}'. Each reading is judged.
+	if bashWords, dashWords, ok := varBraces(c.words); ok {
+		if bashWords != nil {
+			e.addDerived(v, &simpleCmd{words: bashWords, redirs: c.redirs, sep: c.sep, nest: c.nest}, prev, depth)
+		}
+		e.addDerived(v, &simpleCmd{words: dashWords, redirs: c.redirs, sep: c.sep, nest: c.nest}, prev, depth)
 	}
 	full, ok := e.progName(c.words[0])
 	if !ok || progIsPattern(c.words[0]) {

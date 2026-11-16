@@ -1207,12 +1207,13 @@ func allLit(w word) bool {
 }
 
 // braceAlts returns the words bash's braces make of a word that also
-// holds variables: "{$F,x}" is $F and x, and the braces are taken apart
-// before any variable is looked at. Only a word written with nothing but
-// names, $name and the braces themselves is taken apart (a quote or a
-// ${...} holds commas and braces that count for nothing).
+// holds variables: "{$F,x}" is $F and x, and "$@"{,x} is "$@" and "$@"x,
+// the braces taken apart before any variable is looked at. Only a word
+// whose braces and commas all stand outside quotes, with no backslash,
+// command, arithmetic or ${...} in it, is taken apart: a quoted or escaped
+// brace, or one inside ${...}, counts for nothing to bash's braces.
 func braceAlts(w word) ([]word, bool) {
-	if !w.brace || w.static() || w.quoted || strings.ContainsAny(w.raw, "'\"\\`(") || strings.Contains(w.raw, "${") {
+	if !w.brace || w.static() || strings.ContainsAny(w.raw, "\\`(") || strings.Contains(w.raw, "${") || bracesQuoted(w.raw) {
 		return nil, false
 	}
 	alts, ok := braceExpand(w.raw)
@@ -1231,6 +1232,27 @@ func braceAlts(w word) ([]word, bool) {
 		out = append(out, part)
 	}
 	return out, len(out) > 0
+}
+
+// bracesQuoted reports whether a brace or a comma stands inside quotes in
+// raw, where it counts for nothing to bash's braces, or a quote is left
+// open.
+func bracesQuoted(raw string) bool {
+	var q byte
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case q != 0 && c == q:
+			q = 0
+		case q != 0:
+			if c == '{' || c == '}' || c == ',' {
+				return true
+			}
+		case c == '\'' || c == '"':
+			q = c
+		}
+	}
+	return q != 0
 }
 
 // isFdTarget reports whether a redirection target is a descriptor number
@@ -1462,13 +1484,13 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		relProg := strings.Contains(prog, "/") && !strings.HasPrefix(prog, "/")
 		if !plan && !((st.moved || st.unknown) && relProg) {
 			if r := e.allowCommand(words, viaXargs); r != nil {
-				e.afterPartIn(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg, inShell)
+				e.afterPartIn(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg && !c.cond, inShell)
 				return partVerdict{ok: true, rule: r, state: state}
 			}
 		}
 		if !viaXargs {
 			if w := e.partRuns(c, f, st, depth, staticInput); w == "" {
-				e.afterPartIn(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg, inShell)
+				e.afterPartIn(f, words, st, depth == 0 && c.sep != sepPipe && c.sep != sepOr && !c.neg && !c.cond, inShell)
 				return partVerdict{ok: true}
 			} else if why == "" {
 				why = w
@@ -1491,7 +1513,7 @@ func (e *Engine) judgePart(c *simpleCmd, st *lineState) partVerdict {
 		}
 		words = inner
 	}
-	e.afterPart(first, c.words, st, c.sep != sepPipe && c.sep != sepOr && !c.neg)
+	e.afterPart(first, c.words, st, c.sep != sepPipe && c.sep != sepOr && !c.neg && !c.cond)
 	pv := partVerdict{why: why}
 	if plainName(c.words[0]) {
 		pv.exact, pv.prefix = e.suggestRules(c, first, st)

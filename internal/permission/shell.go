@@ -94,6 +94,12 @@ type simpleCmd struct {
 	// neg is set when the pipeline the command is part of stands under a
 	// !: what comes after && then runs when the pipeline failed.
 	neg bool
+	// cond is set for a command of a group in braces that may not run at
+	// all while the commands after the group still do, or that runs in a
+	// shell of its own: the group stands after an || or in a pipe. A cd
+	// in it is then no sure move, wherever it stands in the group ("true
+	// || { pwd; cd d; } && c" runs c where the line was).
+	cond bool
 	// timeCut is set for a command that starts with bash's keyword time
 	// when a redirection stands among the words the keyword takes for its
 	// own (-p, --, a second time): it is how many words stood before the
@@ -574,6 +580,7 @@ func (p *parser) pipeline() {
 		p.fail("a shell keyword after time")
 		return
 	}
+	from := len(p.sc.cmds)
 	p.command()
 	for !p.failed {
 		p.blanks()
@@ -581,6 +588,12 @@ func (p *parser) pipeline() {
 		if !strings.HasPrefix(rest, "|") || strings.HasPrefix(rest, "||") {
 			return
 		}
+		// What stands before a | runs in a shell of its own: a cd there,
+		// in a group as well, moves nothing.
+		for _, c := range p.sc.cmds[from:] {
+			c.cond = true
+		}
+		from = len(p.sc.cmds)
 		p.pos++
 		if strings.HasPrefix(rest, "|&") {
 			p.pos++
@@ -764,6 +777,11 @@ func (p *parser) command() {
 		p.body("}")
 		if len(p.sc.cmds) > first && p.sc.cmds[first].sep == sepStart {
 			p.sc.cmds[first].sep = sep
+		}
+		if sep == sepOr || sep == sepPipe {
+			for _, c := range p.sc.cmds[first:] {
+				c.cond = true
+			}
 		}
 		p.expect("}")
 		mark := len(p.sc.cmds)

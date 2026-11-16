@@ -251,6 +251,9 @@ func TestOtherDestroyers(t *testing.T) {
 		// A brace that nothing closes is a character like any, and leaves
 		// the first word alone (oracle seed 117).
 		"f() { mv \"$@\"{; }; f .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{", "f() { rm -rf x{ \"$@\"; }; f .",
+		// Braces beside a variable: bash takes them apart before it fills
+		// the variable in, and dash leaves them as characters.
+		"f() { mv \"$@\"{,x}; }; f .git /tmp/g", "sh -c 'mv \"$@\"{,x}' sh .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{,.bak}",
 		// The program is one of more values than gnosh follows.
 		"for t in a b c d e f g h i j k l m n o p q r; do $t x; done",
 	}

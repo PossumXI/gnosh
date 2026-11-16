@@ -953,6 +953,10 @@ var attackLines = []string{
 	// Oracle seed 117: a cd run as a program fails, and the one in the
 	// braces after || is the shell's own.
 	"stdbuf -o0 cd sub/nope || { cd sub/nope; } && ! diff a.txt ../outside/secret.txt && rm ../a.txt", "env cd sub || { cd sub; } && cat ../outside/secret.txt",
+	// The review of seed 117's fix: every cd of such a group, not only
+	// its first command's, and a group in a pipe.
+	"true || { pwd; cd sub; } && cat ../outside/secret.txt", "echo | { pwd; cd sub; } && cat ../outside/secret.txt",
+	"true || { true && cd sub; } && cat ../outside/secret.txt", "{ cd sub; } | cat && cat ../outside/secret.txt",
 	// A value made of a variable that is set later, or not for sure, or
 	// with a ~ that the shell expands where it is assigned.
 	"w=.e${d}nv d=x; cat $w", "w=.e${d}nv; d=x; cat $w", "false && d=x; w=.e${d}nv; cat $w", "d=x; unset d; w=.e${d}nv; cat $w", "d=x; read d </dev/null; w=.e${d}nv; cat $w",
@@ -975,6 +979,7 @@ var attackLines = []string{
 	"a=(status); a+=(clean -fdx); git \"${a[@]}\"", "set -- clean -fdx; git \"$@\"", "f() { git \"$@\"; }; f status; f diff", "f() { git $1 $2 $3; }; f clean -fdx", "f() { mv $1 $2; }; f /tmp/g .git",
 	"f() { shift; git \"$@\"; }; f x clean -fdx", "f() { mv $1 $2; }; f a.txt b.txt", "a=(-fdx build); git clean \"${a[@]}\"",
 	"f() { mv \"$@\"{; }; f .git /tmp/g", "f() { mv \"$@\"}; }; f .git /tmp/g", "set -- .git /tmp/g; mv x\"$@\"{", // oracle seed 117: a { that nothing closes
+	"f() { mv \"$@\"{,x}; }; f .git /tmp/g", "sh -c 'mv \"$@\"{,x}' sh .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{,.bak}", // braces bash takes apart first, and dash not at all
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
 	// A name that starts with a dash is a flag to the command it is handed to.
