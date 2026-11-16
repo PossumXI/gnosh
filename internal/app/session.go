@@ -609,14 +609,27 @@ func (l *live) openTranscript(ctx context.Context) error {
 	path, id := "", ""
 	switch inv.Conversation {
 	case cli.ConversationContinue:
-		info, ok, err := l.store.Latest(ctx, cwd)
+		list, err := l.store.List(ctx, cwd)
 		if err != nil {
 			return fmt.Errorf("the sessions of this folder could not be listed: %w", err)
 		}
-		if !ok {
+		if len(list) == 0 {
 			return fmt.Errorf("there is no session to continue: none was started in %s (sessions are kept under %s). Start one without -c", cwd, l.store.Dir)
 		}
-		id = info.ID
+		// The newest session that no other gnosh holds open, as Claude
+		// Code's -c passes over a background session that still runs: a
+		// /fork or /background run is newest while it works.
+		id = list[0].ID
+		for i, info := range list {
+			if transcript.InUse(info.Path) {
+				continue
+			}
+			if i > 0 {
+				l.notice(agent.LevelInfo, "session", fmt.Sprintf("The newest session of this folder, %s, is open in another gnosh (a run in the background, perhaps), so -c goes on with %s, the newest one free.", shortID(list[0].ID), shortID(info.ID)))
+			}
+			id = info.ID
+			break
+		}
 	case cli.ConversationResume:
 		switch {
 		case inv.ResumeIsFile:

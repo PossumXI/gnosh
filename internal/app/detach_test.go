@@ -181,3 +181,28 @@ func TestTasksListsRunsInTheBackground(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// -c goes on with the newest session that no other gnosh holds open, as
+// Claude Code's passes over a background session that still runs: a run
+// /background or /fork started is the newest while it works.
+func TestContinuePassesOverASessionOpenElsewhere(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "One."}, apptest.Reply{Text: "Two."})
+	run(t, w, "-p", "first").wantCode(t, 0)
+	run(t, w, "-p", "second").wantCode(t, 0)
+	sessions := w.Sessions()
+	if len(sessions) != 2 {
+		t.Fatalf("%d sessions, want 2", len(sessions))
+	}
+	older := strings.TrimSuffix(filepath.Base(sessions[0]), ".jsonl")
+	newer := strings.TrimSuffix(filepath.Base(sessions[1]), ".jsonl")
+	f, err := os.Open(sessions[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, w, "-c", "-p", "/status").wantCode(t, 0)
+	has(t, "what -c says", r.out+r.err, "The newest session of this folder, "+shortID(newer)+", is open in another gnosh", "-c goes on with "+shortID(older))
+}
