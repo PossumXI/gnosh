@@ -165,7 +165,9 @@
 //	                       thought, call and result, with each reply's time and model (cc 3; ui
 //	                       UI-22). Up, Down, PageUp, PageDown, Home, End and the wheel move it;
 //	                       { and } go between prompts; Ctrl+E shows what is cut, or cuts it
-//	                       again; q, Esc, Ctrl+C or Ctrl+O go back. A question closes it
+//	                       again; [ writes it all into the scrollback, where the terminal's own
+//	                       search reaches it; v opens it in your editor; q, Esc, Ctrl+C or Ctrl+O
+//	                       go back. A question closes it
 //	Ctrl+T                 hide or show the session's task list (cc 3)
 //	Ctrl+B                 move the running command to the background (cc 3). In the prompt box
 //	                       Ctrl+X b does the same: Ctrl+B is tmux's own key (ui UI-31)

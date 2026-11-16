@@ -13,6 +13,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/markdown"
 	"github.com/gnosh-ai/gnosh/internal/term"
+	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
 // The transcript view (Ctrl+O, as Claude Code's): the session's whole
@@ -169,6 +170,10 @@ func (s *session) viewInput(ev term.Event) {
 		case k.Is('e', term.ModCtrl):
 			v.all = !v.all
 			s.refreshView(true)
+		case typedRune(k, '['):
+			s.viewToScrollback()
+		case typedRune(k, 'v'):
+			s.viewInEditor()
 		case typedRune(k, '{'):
 			top := v.p.Top()
 			for i := len(v.prompts) - 1; i >= 0; i-- {
@@ -187,6 +192,42 @@ func (s *session) viewInput(ev term.Event) {
 			}
 		}
 	}
+}
+
+// viewToScrollback closes the view and writes the whole conversation,
+// nothing cut, into the terminal's own scrollback, where the terminal's
+// own search (Cmd+F, tmux's copy mode) reaches it: Claude Code's [.
+func (s *session) viewToScrollback() {
+	tr, ok := s.c.(transcriber)
+	if !ok {
+		return
+	}
+	entries := tr.Transcript()
+	s.closeView()
+	lines, _ := s.transcriptLines(entries, s.cols, true)
+	s.begin(blkText)
+	s.put(lines...)
+	s.flash("The whole transcript is in the scrollback now, where the terminal can search it.")
+}
+
+// viewInEditor closes the view and opens the whole conversation, as plain
+// text, in the person's own editor (VISUAL, EDITOR): Claude Code's v.
+// What is saved there is let go.
+func (s *session) viewInEditor() {
+	tr, ok := s.c.(transcriber)
+	if !ok {
+		return
+	}
+	lines, _ := s.transcriptLines(tr.Transcript(), 100, true)
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(text.Strip(l), " ")
+	}
+	s.closeView()
+	s.frame()
+	if _, err := s.host.edit(strings.Join(lines, "\n") + "\n"); err != nil {
+		s.flash("The transcript could not be opened in an editor: " + err.Error())
+	}
+	s.dirty = true
 }
 
 // typedRune reports whether k is the character r, as a terminal sends it
@@ -211,7 +252,7 @@ func (s *session) viewFrame() {
 	if v.all {
 		toggle = "Ctrl+E cuts long parts"
 	}
-	parts = append(parts, "q goes back", toggle, "{ } between prompts")
+	parts = append(parts, "q goes back", toggle, "{ } between prompts", "[ into the scrollback", "v in your editor")
 	s.keep(v.p.SetLive([]string{fit(s.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols)}, -1, 0))
 }
 

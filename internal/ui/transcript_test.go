@@ -103,6 +103,24 @@ func TestTranscriptView(t *testing.T) {
 		t.Errorf("after the view the terminal shows:\n%s", all)
 	}
 
+	// [ writes the whole of it, nothing cut, into the scrollback, where
+	// the terminal's own search reaches it.
+	g.keys(`<Ctrl+O> "["`)
+	if g.s.view != nil {
+		t.Fatal("[ did not close the view")
+	}
+	all = strings.Join(g.all(), "\n")
+	if !strings.Contains(all, "output line A") || !strings.Contains(all, "output line N") || !strings.Contains(all, "~ the first thought of the session") {
+		t.Errorf("after [ the scrollback lacks the transcript:\n%s", all)
+	}
+	// v hands it to the person's editor, as plain text.
+	var edited string
+	g.editor = func(s string) (string, error) { edited = s; return s, nil }
+	g.keys(`<Ctrl+O> "v"`)
+	if g.s.view != nil || !strings.Contains(edited, "> fix the test") || !strings.Contains(edited, "output line N") || strings.Contains(edited, "\x1b") {
+		t.Errorf("v gave the editor %q", edited)
+	}
+
 	// A question closes it, so that the person sees the question.
 	g.keys(`<Ctrl+O>`)
 	if g.s.view == nil {
