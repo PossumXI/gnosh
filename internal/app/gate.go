@@ -217,6 +217,12 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 		}
 	}
 
+	if l.cfg.Permissions.DenyInsteadOfPrompting.V {
+		// (permissions.denyInsteadOfPrompting, as Claude Code's: what
+		// would ask is refused, and the turn goes on. PermissionRequest
+		// hooks have had their say.)
+		return agent.Decision{Reason: l.unattended(d), Unattended: true}, nil
+	}
 	askCtx := ctx
 	q := l.permissionQuestion(call, action, d)
 	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true}
@@ -471,7 +477,12 @@ func describe(tool core.Tool, call core.ToolCall, env *core.ToolEnv) (act core.A
 // unattended is what the model reads when a call needs a person's yes and
 // nobody is there to give it.
 func (l *live) unattended(d permission.Decision) string {
-	text := "This call did not run: it needs a person's approval, and nobody is here to give it (" + strings.TrimSuffix(d.Reason, ".") +
+	why := strings.TrimSuffix(d.Reason, ".")
+	if l.cfg.Permissions.DenyInsteadOfPrompting.V {
+		return "This call did not run: it needs approval, and the user's settings refuse what would ask instead of asking (permissions.denyInsteadOfPrompting) (" + why +
+			"). Do the work another way if there is one, or say what you could not do. Do not send this call again."
+	}
+	text := "This call did not run: it needs a person's approval, and nobody is here to give it (" + why +
 		"). Do the work another way if there is one, or say what you could not do."
 	if l.inv.PermissionPrompts == "none" {
 		text += " Nobody answers permission questions in this run: do not send this call again."

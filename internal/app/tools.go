@@ -122,12 +122,17 @@ func (l *live) buildTools() error {
 		// where sub-agents may be started at all.
 		all = append(all, &sendMessageTool{l: l})
 	}
-	if l.inv.PermissionPrompts != "none" {
+	deny := l.cfg.Permissions.DenyInsteadOfPrompting.V
+	if l.inv.PermissionPrompts != "none" && !deny {
 		// (With --permission-prompts none nobody answers, and a tool that
 		// asks a person is no tool.)
 		all = append(all, &askTool{l: l})
 	}
-	all = append(all, &enterPlanTool{l: l}, &exitPlanTool{l: l})
+	if !deny {
+		// (permissions.denyInsteadOfPrompting takes the plan tools away
+		// too, as in Claude Code: a plan is approved by a person.)
+		all = append(all, &enterPlanTool{l: l}, &exitPlanTool{l: l})
+	}
 	if len(l.forModel()) > 0 {
 		// The Skill tool is there when there is a skill a model may
 		// load, as the session starts.

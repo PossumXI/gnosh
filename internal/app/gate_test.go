@@ -520,6 +520,32 @@ func TestPermissionPromptsNone(t *testing.T) {
 	hasNot(t, "what the model read with host", toolResult(t, w, 3, "c1"), "do not send this call again")
 }
 
+// permissions.denyInsteadOfPrompting, as Claude Code's: in a session a
+// person attends, a call that would ask is refused instead and the turn
+// goes on; the tools that need a person (AskUserQuestion and the plan
+// tools) are not offered. A project cannot set it.
+func TestDenyInsteadOfPrompting(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Could not."})
+	w.Settings(`{"permissions": {"denyInsteadOfPrompting": true}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("make it")
+	s.see("Could not.")
+	if strings.Contains(s.out.String(), "Allow Bash?") {
+		t.Error("a permission question was put")
+	}
+	body := string(w.Model.Requests()[0].Body)
+	hasNot(t, "the tools offered", body, `"name":"AskUserQuestion"`, `"name":"ExitPlanMode"`, `"name":"EnterPlanMode"`)
+	has(t, "what the model read", toolResult(t, w, 1, "c1"), "permissions.denyInsteadOfPrompting", "Do not send this call again")
+	if w.Exists("made.txt") {
+		t.Errorf("the call ran")
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
+
 // When nobody answers the question gnosh puts even with permissions
 // skipped, the model is told why it was asked, and for a program whose
 // name the line puts together, to write it out.
