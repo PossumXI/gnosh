@@ -431,34 +431,50 @@ func (w word) onlySubst() bool {
 // {a,b} and {1..3}, nested or side by side. It reports false when there
 // would be more than a few hundred of them. Text with no braces that
 // expand comes back as it is.
-func braceExpand(s string) ([]string, bool) {
+func braceExpand(s string) ([]string, bool) { return braceExpandIn(s, false) }
+
+// braceExpandRaw is braceExpand for a word as it was written: a backslash
+// escapes the character after it, and nothing from a ${ to its closing }
+// is taken apart, as bash has it ("${HOME}{,.old}" is ${HOME} and
+// ${HOME}.old, and "${x:-{a,b}}" one word).
+func braceExpandRaw(s string) ([]string, bool) { return braceExpandIn(s, true) }
+
+func braceExpandIn(s string, raw bool) ([]string, bool) {
 	const limit = 512
 	for i := 0; i < len(s); i++ {
-		if s[i] != '{' || i > 0 && s[i-1] == '$' {
+		if raw && s[i] == '\\' {
+			i++
+			continue
+		}
+		if raw && s[i] == '$' && i+1 < len(s) && s[i+1] == '{' {
+			// A ${...}: its braces and commas are the parameter's.
+			if close := closingBrace(s, i+1, raw); close >= 0 {
+				i = close
+				continue
+			}
+			return []string{s}, true
+		}
+		if s[i] != '{' || !raw && i > 0 && s[i-1] == '$' {
 			continue
 		}
 		// The matching }, and the commas at this level.
-		depth, end := 0, -1
-		var commas []int
-		for j := i; j < len(s); j++ {
-			switch s[j] {
-			case '{':
-				depth++
-			case '}':
-				if depth--; depth == 0 {
-					end = j
-				}
-			case ',':
-				if depth == 1 {
-					commas = append(commas, j)
-				}
-			}
-			if end >= 0 {
-				break
-			}
-		}
+		end := closingBrace(s, i, raw)
 		if end < 0 {
-			return []string{s}, true // no closing brace: all of it is text
+			continue // no closing brace: this one is text, and a later one may open
+		}
+		var commas []int
+		depth := 0
+		for j := i; j < end; j++ {
+			switch {
+			case raw && s[j] == '\\':
+				j++
+			case s[j] == '{':
+				depth++
+			case s[j] == '}':
+				depth--
+			case s[j] == ',' && depth == 1:
+				commas = append(commas, j)
+			}
 		}
 		var alts []string
 		if len(commas) > 0 {
@@ -470,13 +486,13 @@ func braceExpand(s string) ([]string, bool) {
 		} else if alts = braceSequence(s[i+1 : end]); alts == nil {
 			continue // {x}: text
 		}
-		rest, ok := braceExpand(s[end+1:])
+		rest, ok := braceExpandIn(s[end+1:], raw)
 		if !ok {
 			return nil, false
 		}
 		var out []string
 		for _, alt := range alts {
-			inner, ok := braceExpand(alt)
+			inner, ok := braceExpandIn(alt, raw)
 			if !ok {
 				return nil, false
 			}
@@ -491,6 +507,25 @@ func braceExpand(s string) ([]string, bool) {
 		return out, true
 	}
 	return []string{s}, true
+}
+
+// closingBrace returns where the } that closes the { at open stands, or -1;
+// with raw, an escaped brace counts for nothing.
+func closingBrace(s string, open int, raw bool) int {
+	depth := 0
+	for j := open; j < len(s); j++ {
+		switch {
+		case raw && s[j] == '\\':
+			j++
+		case s[j] == '{':
+			depth++
+		case s[j] == '}':
+			if depth--; depth == 0 {
+				return j
+			}
+		}
+	}
+	return -1
 }
 
 // braceSequence returns what {a..b} or {a..b..step} stands for, or nil
@@ -965,12 +1000,28 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 	from := p.pos
 	i := p.pos + 2
 	n := i
-	for n < len(p.src) && isNameChar(p.src[n]) {
-		n++
-	}
-	if n == i || !isNameStart(p.src[i]) {
-		p.exoticParam(b, inDouble)
+	switch {
+	case i < len(p.src) && p.src[i] >= '0' && p.src[i] <= '9':
+		// A positional parameter: ${1}, ${10}, and with an operator,
+		// ${1:-x}. It is what $1 is ("f() { mv "${1}" /tmp/g; }; f
+		// .git" moves .git), and was read as unknown (seen in review).
+		for n < len(p.src) && p.src[n] >= '0' && p.src[n] <= '9' {
+			n++
+		}
+	case i+1 < len(p.src) && strings.IndexByte("@*#?$!-", p.src[i]) >= 0 && p.src[i+1] == '}':
+		// ${@}, ${*} and the other special ones, as $@, $* and the rest.
+		p.pos = i + 2
+		b.raw.WriteString(p.src[from:p.pos])
+		b.add(wordPart{kind: partVar, name: p.src[i : i+1], all: p.src[i] == '@' || p.src[i] == '*', bare: !inDouble})
 		return
+	default:
+		for n < len(p.src) && isNameChar(p.src[n]) {
+			n++
+		}
+		if n == i || !isNameStart(p.src[i]) {
+			p.exoticParam(b, inDouble)
+			return
+		}
 	}
 	name := p.src[i:n]
 	if n >= len(p.src) {

@@ -1207,16 +1207,17 @@ func allLit(w word) bool {
 }
 
 // braceAlts returns the words bash's braces make of a word that also
-// holds variables: "{$F,x}" is $F and x, and "$@"{,x} is "$@" and "$@"x,
-// the braces taken apart before any variable is looked at. Only a word
-// whose braces and commas all stand outside quotes, with no backslash,
-// command, arithmetic or ${...} in it, is taken apart: a quoted or escaped
-// brace, or one inside ${...}, counts for nothing to bash's braces.
+// holds variables: "{$F,x}" is $F and x, "$@"{,x} is "$@" and "$@"x, and
+// ${HOME}{,.old} is ${HOME} and ${HOME}.old, the braces taken apart before
+// any variable is looked at. A word whose braces and commas all stand
+// outside quotes, with no command or arithmetic in it, is taken apart as
+// bash reads it as written (braceExpandRaw): an escaped brace, and those
+// of a ${...}, count for nothing.
 func braceAlts(w word) ([]word, bool) {
-	if !w.brace || w.static() || strings.ContainsAny(w.raw, "\\`(") || strings.Contains(w.raw, "${") || bracesQuoted(w.raw) {
+	if !w.brace || w.static() || strings.ContainsAny(w.raw, "`(") || bracesQuoted(w.raw) {
 		return nil, false
 	}
-	alts, ok := braceExpand(w.raw)
+	alts, ok := braceExpandRaw(w.raw)
 	if !ok || len(alts) == 1 && alts[0] == w.raw {
 		return nil, false
 	}
@@ -1242,6 +1243,15 @@ func bracesQuoted(raw string) bool {
 	for i := 0; i < len(raw); i++ {
 		c := raw[i]
 		switch {
+		case c == '\\' && q != '\'':
+			i++ // (escaped, outside quotes or inside double ones)
+		case c == '$' && q != '\'' && i+1 < len(raw) && raw[i+1] == '{':
+			// A ${...}: its braces are the parameter's, quoted or not.
+			close := closingBrace(raw, i+1, true)
+			if close < 0 {
+				return true
+			}
+			i = close
 		case q != 0 && c == q:
 			q = 0
 		case q != 0:

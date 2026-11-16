@@ -254,6 +254,10 @@ func TestOtherDestroyers(t *testing.T) {
 		// Braces beside a variable: bash takes them apart before it fills
 		// the variable in, and dash leaves them as characters.
 		"f() { mv \"$@\"{,x}; }; f .git /tmp/g", "sh -c 'mv \"$@\"{,x}' sh .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{,.bak}",
+		// Braces beside a ${name}, and the positional parameters in braces
+		// (the second review of 16 November).
+		"rm -rf ${HOME}{,.old}", "rm -rf {${HOME},x}", "x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"$1\"{,\\x}; }; f .git",
+		"f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .", "f() { mv \"${1:-x}\" /tmp/g; }; f .git",
 		// The program is one of more values than gnosh follows.
 		"for t in a b c d e f g h i j k l m n o p q r; do $t x; done",
 	}

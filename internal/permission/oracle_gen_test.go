@@ -980,6 +980,7 @@ var attackLines = []string{
 	"f() { shift; git \"$@\"; }; f x clean -fdx", "f() { mv $1 $2; }; f a.txt b.txt", "a=(-fdx build); git clean \"${a[@]}\"",
 	"f() { mv \"$@\"{; }; f .git /tmp/g", "f() { mv \"$@\"}; }; f .git /tmp/g", "set -- .git /tmp/g; mv x\"$@\"{", // oracle seed 117: a { that nothing closes
 	"f() { mv \"$@\"{,x}; }; f .git /tmp/g", "sh -c 'mv \"$@\"{,x}' sh .git /tmp/g", "set -- .git /tmp/g; mv \"$@\"{,.bak}", // braces bash takes apart first, and dash not at all
+	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
 	// A name that starts with a dash is a flag to the command it is handed to.
