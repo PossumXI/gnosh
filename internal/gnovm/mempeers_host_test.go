@@ -373,3 +373,46 @@ func TestJoinPeersNeedsAPlan(t *testing.T) {
 	require.True(t, p.Peer)
 	require.Equal(t, []string{"release", "release/tag-it"}, p.Stack, "joining keeps the stack the record had")
 }
+
+// livePeers clears the peers folder as it reads it: a record of a session
+// in no turn that was last written more than a week ago goes, as do stale
+// leftovers of a write; a fresh record of an idle session stays, and so does
+// an old one whose session is in a turn now.
+func TestLivePeersPrunesStaleRecords(t *testing.T) {
+	t.Parallel()
+	data := t.TempDir()
+	h := newTestMemHost(t, filepath.Join(data, "proj", "mem"))
+	h.data = data
+	old := h.now().Add(-8 * 24 * time.Hour)
+	write := func(p memPeer, at time.Time) string {
+		t.Helper()
+		require.NoError(t, writePeerIn(h.dir, p))
+		path := peerPathIn(h.dir, p.Session)
+		require.NoError(t, os.Chtimes(path, at, at))
+		return path
+	}
+	leftover := func(name string) string {
+		t.Helper()
+		path := filepath.Join(h.dir, "peers", name)
+		require.NoError(t, os.WriteFile(path, []byte("{"), 0o600))
+		require.NoError(t, os.Chtimes(path, old, old))
+		return path
+	}
+	gone := write(memPeer{Session: "gone", Peer: true, Stack: []string{"a"}}, old)
+	idle := write(memPeer{Session: "idle", Peer: true, Stack: []string{"b"}}, h.now().Add(-time.Hour))
+	sub := write(memPeer{Session: "sub", Stack: []string{"c"}}, old)
+	busy := write(memPeer{Session: "busy", Peer: true}, old)
+	tmp, broken := leftover("x.json.tmp"), leftover("broken.json")
+	release := takeTurn(t, data, "busy")
+	defer release()
+
+	require.Equal(t, 1, h.livePeers("me"), "busy is the one at work")
+	for _, path := range []string{gone, sub, tmp, broken} {
+		_, err := os.Stat(path)
+		require.True(t, os.IsNotExist(err), "%s is kept", path)
+	}
+	for _, path := range []string{idle, busy} {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "%s went", path)
+	}
+}

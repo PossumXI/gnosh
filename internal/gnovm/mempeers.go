@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // The host's side of peers, many sessions working one plan in mem at once
@@ -299,29 +300,67 @@ func joinPeers(memdir, session string) {
 // livePeers is how many sessions besides me work this plan now: those whose
 // peers record says they joined it (JoinPeers) and whose turn lock is held.
 // 0 when the host cannot tell (no data directory, or no turn locks to read).
+//
+// It also clears the folder as it reads it: a record of a session that is in
+// no turn and has not written it for peerRecordKeep goes (staleRecord).
 func (h *memHost) livePeers(me string) int {
 	if h.data == "" || !turnLocksKnown {
 		return 0
 	}
-	entries, err := os.ReadDir(filepath.Join(h.dir, "peers"))
+	dir := filepath.Join(h.dir, "peers")
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0
 	}
 	n := 0
 	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+		stale := h.staleRecord(e)
 		if !strings.HasSuffix(e.Name(), ".json") {
+			// (A write that never finished leaves its .tmp behind.)
+			if stale && strings.HasSuffix(e.Name(), ".tmp") {
+				_ = os.Remove(path)
+			}
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(h.dir, "peers", e.Name()))
+		b, err := os.ReadFile(path)
 		var p memPeer
-		if err != nil || json.Unmarshal(b, &p) != nil || !p.Peer || p.Session == "" || p.Session == me {
+		if err != nil || json.Unmarshal(b, &p) != nil || p.Session == "" {
+			if stale && err == nil {
+				_ = os.Remove(path)
+			}
 			continue
 		}
-		if turnHeld(h.data, p.Session) {
+		if !p.Peer && !stale {
+			continue
+		}
+		held := turnHeld(h.data, p.Session)
+		if stale && !held && !turnHeld(h.data, p.Session) {
+			// (Looked at twice: a session takes its turn lock before it
+			// writes its record, so one that holds none writes none.)
+			_ = os.Remove(path)
+			continue
+		}
+		if held && p.Peer && p.Session != me {
 			n++
 		}
 	}
 	return n
+}
+
+// peerRecordKeep is how long the peers record of a session in no turn is
+// kept after it was last written. A session idle between turns still tells
+// the others what it last held through its record; one idle for longer
+// is gone, and its record would only be read again by every agent's Show
+// and Next after it. A session that comes back writes its record anew as
+// its turn begins (JoinPeers) and as its frames move (afterCall).
+const peerRecordKeep = 7 * 24 * time.Hour
+
+// staleRecord reports whether a file in the peers folder was last written
+// longer ago than peerRecordKeep.
+func (h *memHost) staleRecord(e os.DirEntry) bool {
+	info, err := e.Info()
+	return err == nil && h.now().Sub(info.ModTime()) > peerRecordKeep
 }
 
 // peersLine is what an agent's mem.Show() and mem.Next() end with while n
