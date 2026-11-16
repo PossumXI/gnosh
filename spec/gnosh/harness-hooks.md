@@ -53,6 +53,7 @@ added between 2026-10-22 and 2026-10-25, each "as in Claude Code".
 | `InstructionsLoaded` | When a context file is loaded | The load reason | No; it is not waited for. | Top | P2 |
 | `PermissionRequest` | When a permission question is about to be shown | The tool's name | It answers the question in the user's place: allow or deny. | All (unconfirmed for sub-agents) | P2 |
 | `PreModelSwitch` | Before a switch the person asked for (`/model`, its picker) is made | The model switched to, as provider/model or by its own name | Yes: the model stays. `"ask"` puts the switch to the person; in a run, nobody can answer, so it is a refusal. | Top | P2 |
+| `ConfigChange` | When a settings file (the person's gnosh.json, the project's, its local file) changes while the session runs, before the change is taken in | The source: `user_settings`, `project_settings`, `local_settings` | Yes: none of the new settings is taken in, and the person is told. | Top | P2 |
 | `Notification` | On a notification gnosh raises: a permission question that has waited, a finished turn with no reply | The type: `permission_prompt`, `idle_prompt` | No; it is not waited for. | Top | P2 |
 
 ### HOOK-2 Event names are exact, and an unknown one stops startup (P1)
@@ -77,9 +78,11 @@ Claude Code 2.1.310 had 33 events. The 18 gnosh lacks, best fit first:
 4. `PermissionDenied`.
 5. `CwdChanged`, `FileChanged`.
 
-Not gnosh features: `UserPromptExpansion`, `Setup`, `TeammateIdle`,
-`TaskCreated`, `TaskCompleted`, `Elicitation`, `ElicitationResult`,
-`ConfigChange`, `WorktreeCreate`, `WorktreeRemove`, `MessageDisplay`.
+Not gnosh features: `Setup`, `TeammateIdle`, `TaskCreated`,
+`TaskCompleted`, `Elicitation`, `ElicitationResult`, `WorktreeCreate`,
+`WorktreeRemove`, `MessageDisplay`. (`UserPromptExpansion` and
+`ConfigChange` were on this list and are built now: gnosh has typed
+commands that expand, and watches its settings files.)
 
 Also missing from every payload: CC's `transcript_path`. The new gnosh keeps
 sessions as files, so it should be given (P1).

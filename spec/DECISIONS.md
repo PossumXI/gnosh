@@ -911,3 +911,15 @@ or kept with the reason said (27).
     back to it; /effort auto drops --reasoning-effort. A work tree a
     /fork run was started in is kept when the session ends, and /resume
     refuses a session another gnosh writes before it closes this one.
+67. **ConfigChange, as Claude Code's, for the files gnosh watches.**
+    Before each request gnosh looks at its settings files; when one has
+    changed, the ConfigChange hooks run for it, with source
+    (user_settings, project_settings or local_settings) and file_path,
+    before anything is taken in. A block (exit 2, "decision": "block", or
+    a hook that could not check) keeps all the settings the session had,
+    and, unlike Claude Code, which only logs it, the person is told. A
+    file named by --settings has no source in Claude Code and runs no
+    hook. gnosh has no managed settings and does not watch skill files,
+    so policy_settings and skills never fire, and a matcher on them is
+    warned about as fitting nothing. gnosh's own writes (saved approvals,
+    /permissions) are no change, as in Claude Code.

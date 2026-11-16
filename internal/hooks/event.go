@@ -86,6 +86,10 @@ const (
 	// (a skill or a command of the person's), before the model sees it. A
 	// hook can stop the expansion or add text beside it.
 	UserPromptExpansion Event = "UserPromptExpansion"
+	// ConfigChange fires when a settings file changes while the session
+	// runs, before the change is taken in. A block keeps the settings the
+	// session had.
+	ConfigChange Event = "ConfigChange"
 )
 
 // Events returns the events gnosh has, in the order the specification
@@ -96,7 +100,7 @@ func Events() []Event {
 		SessionStart, Stop, SubagentStart, SubagentStop, StopFailure,
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
 		PermissionRequest, Notification, PreModelSwitch, PostModelSwitch,
-		DirectoryAdded, CwdChanged, UserPromptExpansion,
+		DirectoryAdded, CwdChanged, UserPromptExpansion, ConfigChange,
 	}
 }
 
@@ -295,6 +299,15 @@ func describe(e Event) (eventInfo, bool) {
 		}, true
 	case CwdChanged:
 		return eventInfo{class: warns, reads: true}, true
+	case ConfigChange:
+		// (Claude Code's policy_settings and skills are not here: gnosh
+		// has no managed settings and does not watch skill files, so a
+		// matcher on them fits nothing, which is said.)
+		return eventInfo{
+			class: gate, subject: ownValue, what: "the source",
+			values: []string{"user_settings", "project_settings", "local_settings"},
+			reads:  true,
+		}, true
 	case UserPromptExpansion:
 		return eventInfo{
 			class: gate, subject: ownValue, what: "the command's name",
@@ -326,7 +339,7 @@ func timeoutFor(e Event, own time.Duration) time.Duration {
 // Claude Code. A hook configured on one of them would never run.
 func claudeOnly(name string) (canBlock, ok bool) {
 	switch name {
-	case "PostToolBatch", "ConfigChange",
+	case "PostToolBatch",
 		"WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
 		"TeammateIdle", "Elicitation", "ElicitationResult":
 		return true, true

@@ -252,7 +252,7 @@ func TestNewHookRefuses(t *testing.T) {
 	}{
 		{"an event nobody has", Spec{Event: "Stopp", Command: "true"}, []string{`"Stopp" is not a hook event`}},
 		{"an event with underscores", Spec{Event: "pre_tool_use", Command: "true"}, []string{`"pre_tool_use" is not a hook event`, "PreToolUse"}},
-		{"a Claude Code event gnosh does not have", Spec{Event: "ConfigChange", Command: "true"}, []string{"Claude Code hook event that gnosh does not have", "can block"}},
+		{"a Claude Code event gnosh does not have", Spec{Event: "PostToolBatch", Command: "true"}, []string{"Claude Code hook event that gnosh does not have", "can block"}},
 		{"no event", Spec{Command: "true"}, []string{"names no event"}},
 		{"no command", Spec{Event: "Stop"}, []string{"no command to run"}},
 		{"a matcher on Stop", Spec{Event: "Stop", Matcher: "Bash", Command: "true"}, []string{"a Stop hook takes no matcher"}},
@@ -340,7 +340,7 @@ func TestCheckRefusesEventsThatAreNotFired(t *testing.T) {
 }
 
 func TestCanBlock(t *testing.T) {
-	blocking := map[Event]bool{PreToolUse: true, UserPromptSubmit: true, UserPromptExpansion: true, Stop: true, SubagentStop: true, PreModelSwitch: true}
+	blocking := map[Event]bool{PreToolUse: true, UserPromptSubmit: true, UserPromptExpansion: true, Stop: true, SubagentStop: true, PreModelSwitch: true, ConfigChange: true}
 	for _, e := range Events() {
 		if e.CanBlock() != blocking[e] {
 			t.Errorf("%s.CanBlock() = %v, want %v", e, e.CanBlock(), blocking[e])
@@ -349,8 +349,8 @@ func TestCanBlock(t *testing.T) {
 	if Event("stop").CanBlock() {
 		t.Error(`Event("stop").CanBlock() is true for a name that is not an event`)
 	}
-	if n := len(Events()); n != 20 {
-		t.Errorf("Events() has %d events, want 20", n)
+	if n := len(Events()); n != 21 {
+		t.Errorf("Events() has %d events, want 21", n)
 	}
 }
 

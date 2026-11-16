@@ -186,6 +186,8 @@ func input(event Event) Input {
 		in.OldCwd, in.NewCwd = "/project", "/project/sub"
 	case UserPromptExpansion:
 		in.ExpansionType, in.CommandName, in.CommandArgs, in.CommandSource, in.Prompt = "slash_command", "deploy", "staging", "project", "Deploy to staging."
+	case ConfigChange:
+		in.Source, in.FilePath = "project_settings", "/project/gnosh.json"
 	case SubagentStart, SubagentStop:
 		in.AgentID = "agent-1"
 		in.AgentType = "Explore"

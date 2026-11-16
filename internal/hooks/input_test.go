@@ -227,6 +227,11 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			want: with(common(Notification), map[string]any{"message": "the turn finished a minute ago", "notification_type": "idle_prompt"}),
 		},
 		{
+			name: "ConfigChange",
+			in:   Input{Event: ConfigChange, Source: "project_settings", FilePath: "/project/gnosh.json"},
+			want: with(common(ConfigChange), map[string]any{"source": "project_settings", "file_path": "/project/gnosh.json"}),
+		},
+		{
 			name: "PreModelSwitch",
 			in:   Input{Event: PreModelSwitch, FromModel: "local/a", ToModel: "local/b", RequestedModel: "b", Source: "command", ContextTokens: 182340},
 			want: with(common(PreModelSwitch), map[string]any{"from_model": "local/a", "to_model": "local/b", "requested_model": "b", "source": "command", "context_tokens": 182340.0}),
@@ -442,6 +447,7 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 		{"Notification", Input{Event: Notification, NotificationType: "idle_prompt", Message: "idle"},
 			with(always(Notification), "GNOSH_NOTIFICATION_TYPE", "idle_prompt")},
 		{"PreModelSwitch", Input{Event: PreModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PreModelSwitch)},
+		{"ConfigChange", Input{Event: ConfigChange, Source: "user_settings", FilePath: "/home/gnosh.json"}, always(ConfigChange)},
 		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
 		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
 		{"UserPromptExpansion", Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", Prompt: "x"}, always(UserPromptExpansion)},

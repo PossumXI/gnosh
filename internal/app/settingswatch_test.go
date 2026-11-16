@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -37,4 +38,50 @@ func TestSettingsChangeTakenIn(t *testing.T) {
 		t.Errorf("the rm ran past the deny rule added while the session ran")
 	}
 	has(t, "the person's notice", r.err+r.out, "changed: its hosts and its permission rules are in force now")
+}
+
+// A ConfigChange hook runs when a settings file changes while the session
+// runs, told which file: a block keeps the settings the session had, and
+// once it lets a change through the change is in force.
+func TestConfigChangeHook(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write("a.txt", "x\n")
+	w.Write("b.txt", "x\n")
+	log := w.Home + "/hook-log"
+	allow := w.Home + "/allow"
+	gate := w.Script(w.Home+"/hooks/gate.sh", "cat >> "+log+"\necho >> "+log+"\nif [ -e "+allow+" ]; then exit 0; fi\necho 'the settings are frozen' >&2\nexit 2")
+	hooksBlock := `"hooks": {"ConfigChange": [{"matcher": "user_settings", "hooks": [{"type": "command", "command": "` + gate + `"}]}]}`
+	w.Settings(`{` + hooksBlock + `}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		switch n {
+		case 0:
+			w.Settings(`{` + hooksBlock + `, "permissions": {"deny": ["Bash(rm *)"]}}`)
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo first"}`}}}
+		case 1:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"rm -f a.txt"}`}}}
+		case 2:
+			if err := os.WriteFile(allow, nil, 0o600); err != nil {
+				t.Error(err)
+			}
+			w.Settings(`{` + hooksBlock + `, "permissions": {"deny": ["Bash(rm *)", "Bash(curl *)"]}}`)
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"echo second"}`}}}
+		case 3:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: `{"command":"rm -f b.txt"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	r := run(t, w, "-y", "-p", "go").wantCode(t, 0)
+	if w.Exists("a.txt") {
+		t.Errorf("the rm ran under a deny rule whose change a ConfigChange hook blocked")
+	}
+	if !w.Exists("b.txt") {
+		t.Errorf("the rm ran past the deny rule the hook let through")
+	}
+	has(t, "the person's notice", r.err+r.out, "a ConfigChange hook the user set up blocked it: the session keeps the settings it had. the settings are frozen",
+		"changed: its permission rules are in force now")
+	data, _ := os.ReadFile(log)
+	has(t, "what the hook read", string(data), `"hook_event_name":"ConfigChange"`, `"source":"user_settings"`, `"file_path":"`)
+	if n := strings.Count(string(data), `"hook_event_name":"ConfigChange"`); n != 2 {
+		t.Errorf("the hook ran %d times for two changes:\n%s", n, data)
+	}
 }

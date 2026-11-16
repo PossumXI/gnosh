@@ -90,8 +90,9 @@ type Input struct {
 	// Source says, for SessionStart, how the session comes to start:
 	// startup, resume, clear, compact or fork ("source"); SessionStart
 	// matchers are tested against it. For PreModelSwitch and
-	// PostModelSwitch it is what asked for the switch (command), and for
-	// DirectoryAdded what added the
+	// PostModelSwitch it is what asked for the switch (command), for
+	// ConfigChange which settings file changed (user_settings,
+	// project_settings, local_settings), and for DirectoryAdded what added the
 	// directory (slash_command), which DirectoryAdded matchers are tested
 	// against.
 	Source string
@@ -126,6 +127,8 @@ type Input struct {
 	// CompactSummary is the summary, for PostCompact ("compact_summary").
 	CompactSummary string
 
+	// FilePath is also, for ConfigChange, the settings file that changed.
+	//
 	// FilePath, MemoryType, LoadReason, TriggerFilePath and
 	// ParentFilePath describe a context file, for InstructionsLoaded
 	// ("file_path", "memory_type", "load_reason", "trigger_file_path",
@@ -203,6 +206,8 @@ func (in *Input) subject() string {
 		return in.Source
 	case UserPromptExpansion:
 		return in.CommandName
+	case ConfigChange:
+		return in.Source
 	}
 	return ""
 }
@@ -346,6 +351,9 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 	case CwdChanged:
 		m["old_cwd"] = in.OldCwd
 		m["new_cwd"] = in.NewCwd
+	case ConfigChange:
+		m["source"] = in.Source
+		set("file_path", in.FilePath)
 	case UserPromptExpansion:
 		m["expansion_type"] = in.ExpansionType
 		m["command_name"] = in.CommandName

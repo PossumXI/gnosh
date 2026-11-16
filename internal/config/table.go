@@ -253,6 +253,7 @@ var hookEvents = []hookEvent{
 	{"DirectoryAdded", "the source", false},
 	{"CwdChanged", "", false},
 	{"UserPromptExpansion", "the command's name", true},
+	{"ConfigChange", "the source", true},
 }
 
 // HookEventNames returns the names of the hook events gnosh knows, in the

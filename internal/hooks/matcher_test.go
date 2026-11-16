@@ -192,6 +192,7 @@ func TestValueMatchersChooseTheHooks(t *testing.T) {
 	all = append(all, hooks(SubagentStop, "*")...)
 	all = append(all, hooks(PreModelSwitch, "test-model", "local/test-model", "other-model|big")...)
 	all = append(all, hooks(PostModelSwitch, "test-model")...)
+	all = append(all, hooks(ConfigChange, "project_settings|local_settings", "user_settings", "")...)
 	r := newRunner(t, options(t), all...)
 
 	tests := []struct {
@@ -227,6 +228,8 @@ func TestValueMatchersChooseTheHooks(t *testing.T) {
 		{"a switch to another provider's model", func(in *Input) { in.ToModel = "remote/big" }, PreModelSwitch, []string{"other-model|big"}},
 		{"a model with no provider", func(in *Input) { in.ToModel = "test-model" }, PreModelSwitch, []string{"test-model"}},
 		{"after a switch", func(in *Input) { in.ToModel = "remote/test-model" }, PostModelSwitch, []string{"test-model"}},
+		{"the project's settings changed", func(in *Input) { in.Source = "project_settings" }, ConfigChange, []string{"(none)", "project_settings|local_settings"}},
+		{"the person's settings changed", func(in *Input) { in.Source = "user_settings" }, ConfigChange, []string{"(none)", "user_settings"}},
 	}
 	for _, tt := range tests {
 		in := input(tt.ev)

@@ -375,6 +375,15 @@ var answerForms = []struct {
 		want:   expect{blocked: true, failed: true, decision: Deny, reason: "~not something a PreModelSwitch hook can say", result: ResultCouldNotEvaluate}},
 	{name: "plain words are not text for the model", event: PreModelSwitch, prints: "fine by me", want: expect{}},
 
+	// ---- ConfigChange: a block keeps the settings the session had.
+	{name: "block", event: ConfigChange,
+		prints: `{"decision": "block", "reason": "project settings change only with review"}`,
+		want:   expect{blocked: true, reason: "project settings change only with review", result: ResultBlocked}},
+	{name: "plain words are not read", event: ConfigChange, prints: "logged", want: expect{}},
+	{name: "nothing for the model", event: ConfigChange,
+		prints: `{"hookSpecificOutput": {"hookEventName": "ConfigChange", "additionalContext": "x"}}`,
+		want:   expect{blocked: true, failed: true, reason: "~not something a ConfigChange hook can say", result: ResultCouldNotEvaluate}},
+
 	// ---- DirectoryAdded: a message, which goes to the model.
 	{name: "a message", event: DirectoryAdded,
 		prints: `{"systemMessage": "the docs are in docs/"}`,

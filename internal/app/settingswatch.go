@@ -12,6 +12,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/config"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
@@ -125,6 +126,11 @@ func (l *live) settingsChanged(ctx context.Context, info agent.RequestInfo) ([]a
 		names[i] = l.tilde(p)
 	}
 	which := strings.Join(names, " and ")
+	if why, blocked := l.configChange(ctx, changed); blocked {
+		l.flog.logf("settings", "%s changed, and a ConfigChange hook blocked it", which)
+		l.notice(agent.LevelWarning, "settings", fmt.Sprintf("%s changed, and a ConfigChange hook the user set up blocked it: the session keeps the settings it had. %s", which, oneLine(why, 300)))
+		return nil, nil
+	}
 	cfg, problems, err := config.Load(l.st.inputs)
 	if err != nil || cfg == nil {
 		why := "it could not be read"
@@ -137,6 +143,48 @@ func (l *live) settingsChanged(ctx context.Context, info agent.RequestInfo) ([]a
 		return nil, nil
 	}
 	return l.applySettings(cfg, which), nil
+}
+
+// configChange runs the ConfigChange hooks for each settings file that
+// changed, told which it is, and reports whether one blocked the change
+// (and why): then none of the new settings is taken in. A file named by
+// --settings is no source Claude Code has, and runs none.
+func (l *live) configChange(ctx context.Context, changed []string) (string, bool) {
+	if !l.hooks.has(hooks.ConfigChange) {
+		return "", false
+	}
+	var whys []string
+	for _, path := range changed {
+		source := l.settingsSource(path)
+		if source == "" {
+			continue
+		}
+		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.ConfigChange, Source: source, FilePath: path})
+		switch {
+		case err != nil:
+			// (The turn was stopped while they ran: nothing is taken in
+			// unchecked.)
+			whys = append(whys, "The ConfigChange hooks were stopped before they finished.")
+		case out.Blocked:
+			whys = append(whys, firstOf(out.Reason, "It gave no reason."))
+		}
+	}
+	return strings.Join(whys, " "), len(whys) > 0
+}
+
+// settingsSource is Claude Code's name for the settings file at path:
+// user_settings, project_settings or local_settings; "" for another.
+func (l *live) settingsSource(path string) string {
+	p := l.cfg.Paths
+	switch path {
+	case p.UserSettings:
+		return "user_settings"
+	case p.LocalSettings:
+		return "local_settings"
+	case filepath.Join(l.st.inputs.Cwd, "gnosh.json"):
+		return "project_settings"
+	}
+	return ""
 }
 
 // applySettings puts in force what of cfg can be while the session runs:
