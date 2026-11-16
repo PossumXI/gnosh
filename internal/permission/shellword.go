@@ -60,6 +60,11 @@ type wordPart struct {
 	// all marks ${name[@]} and ${name[*]}: every word of an array at
 	// once, each a word of its own where the shell cuts words.
 	all bool
+	// pat is the pattern of ${name%pat} and its kin (% %% # ##) where it
+	// is plain text (hasPat): the text cut off, if the value ends (or
+	// begins) with it.
+	pat    string
+	hasPat bool
 	// arg1 and arg2 are what the forms bash adds are given, where they
 	// are plain text: the text to look for and the text to put in its
 	// place (ops / and //), or where a piece starts and how long it is
@@ -143,6 +148,15 @@ func (p wordPart) of(val, home string) ([]string, bool) {
 		}
 		return []string{val[from:end]}, true
 	case "%", "%%", "#", "##":
+		if p.hasPat {
+			// Plain text to cut off: what the shell leaves is known. (A
+			// pattern of plain text matches only itself, so the shortest
+			// match and the longest are the same.)
+			if p.op[0] == '%' {
+				return []string{strings.TrimSuffix(val, p.pat)}, true
+			}
+			return []string{strings.TrimPrefix(val, p.pat)}, true
+		}
 		if len(val) > 64 {
 			return nil, false
 		}
@@ -1015,6 +1029,14 @@ func (p *parser) braceParam(b *wordBuilder, inDouble bool) {
 			part.alt, part.hasAlt = body.joined(), true
 		}
 		part.body = &body
+	case "%", "%%", "#", "##":
+		// "a=(-a --delete src/ .x); rsync "${a[@]%x}"" is rsync -a
+		// --delete src/ .: a pattern of plain text is cut off as the shell
+		// cuts it, and only a real pattern leaves every beginning (or end)
+		// of the value as what it may be (oracle seed 106).
+		if pat := body.joined(); body.static() && plainPattern(pat) {
+			part.pat, part.hasPat = pat, true
+		}
 	}
 	b.add(part)
 	if body.hasSubst() {
@@ -1114,6 +1136,14 @@ func exoticForm(body string) (name, op, a, b string, all, ok bool) {
 		return name, ":sub", from, length, false, true
 	}
 	return "", "", "", "", false, false
+}
+
+// plainPattern reports whether a pattern of ${name%pattern} and its kin
+// is plain text, which matches only itself: no character that makes a
+// pattern (* ? [ and the parentheses of bash's extended ones), and no ~
+// at its head, which the shell would make a home directory.
+func plainPattern(s string) bool {
+	return !strings.ContainsAny(s, "*?[]()\\") && !strings.HasPrefix(s, "~")
 }
 
 // posixOp returns the operator of a POSIX ${name<op>word} form that s

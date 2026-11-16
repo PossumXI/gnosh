@@ -1650,10 +1650,17 @@ func (e *Engine) filledArgs(v *bashView, ws []word) (alts [][]word, every bool) 
 		if len(all) > 2048 {
 			return nil, false
 		}
-		if ways > maxFilledWays {
-			return [][]word{all}, every
+		// A "--" in it is one way's word, and may be no other way's: read
+		// as the end of the options it would hide the flags after it from
+		// the guards. So the command is read without it as well.
+		alls := [][]word{all}
+		if bare := withoutEndOfOptions(all); len(bare) < len(all) {
+			alls = append(alls, bare)
 		}
-		out = append(out, all)
+		if ways > maxFilledWays {
+			return alls, every
+		}
+		out = append(out, alls...)
 	}
 	each := [][]word{nil}
 	for _, alts := range per {
@@ -1684,6 +1691,18 @@ func (e *Engine) filledArgs(v *bashView, ws []word) (alts [][]word, every bool) 
 		}
 	}
 	return out, every
+}
+
+// withoutEndOfOptions is ws less each word that is "--" and nothing else.
+func withoutEndOfOptions(ws []word) []word {
+	out := make([]word, 0, len(ws))
+	for _, w := range ws {
+		if !w.glob && w.joined() == "--" {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
 }
 
 // maxFilledWays bounds how many commands filledArgs makes of one, one for

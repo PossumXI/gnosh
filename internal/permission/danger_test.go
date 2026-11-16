@@ -162,6 +162,8 @@ func TestOtherDestroyers(t *testing.T) {
 		"a=(-R 000 . -R 000 .); chmod \"${a[@]=}\"", "a=(-R 000 .); chmod \"${a[@]-}\"", "a=(-R 000 .); chmod \"${a[@]:-x}\"", "a=(-R 000 .); chmod ${a[*]:=}",
 		"a=(-R 000 .); chmod \"${a[@]?}\"", "a=(000 .x); chmod -R \"${a[@]%x}\"", "a=(000 .x); chmod -R \"${a[@]/x}\"", "a=(-R 000 .); \"${a[@]:+chmod}\" \"${a[@]}\"",
 		"a=(x); chmod -R 000 \"${a[@]:+.}\"", "a=(mv .git /tmp/g); \"${a[@]-}\"", "a=(CLEAN -FDX); git \"${a[@],,}\"", "chmod -R 000 \"${n[@]:-.}\"",
+		// A pattern of plain text is cut off exactly (seed 106).
+		"a=(-a --delete src/ .x); rsync \"${a[@]%x}\"", "a=(x-a x--delete xsrc/ x.); rsync \"${a[@]#x}\"", "d=.x; rsync -a --delete src/ \"${d%x}\"", "d=./; rm -rf ${d%%/}",
 		// A value made of a variable that was set for another command only.
 		"v=-u *; w=./$v; shred $w", "v=u *;w=.$v;shred $w",
 		// To a plain sh a {name} before a redirection is an argument: the
@@ -290,6 +292,7 @@ func TestOtherDestroyers(t *testing.T) {
 		"files=(a.txt b.txt); mv \"${files[@]}\" /tmp/", "a=(a.txt b.txt); mv \"${a[@]}\" build", "srcs=(a.txt b.txt); mv -t build \"${srcs[@]}\"", "mv .git .git",
 		"a=(755 build); chmod -R \"${a[@]}\"", "a=(-la src); ls \"${a[@]}\"/*.go", "a=(src/ build/); rsync -a --delete \"${a[@]}\"",
 		"a=(755 build); chmod -R \"${a[@]=}\"", "a=(a.txt b.txt); mv \"${a[@]:-x}\" build", "a=(x); chmod -R 755 \"${a[@]:+build}\"", "a=(BUILD); chmod -R 755 \"${a[@],,}\"",
+		"for f in *.txt; do mv \"$f\" \"${f%.txt}.bak\"; done", "a=(-a src/ build/x); rsync --delete \"${a[@]%x}\"",
 		"alias ll='ls -l'\nll src", "hash -r; ls src", "hash -p /usr/local/bin/mytool mytool; mytool build", "a=(make -j4); \"${a[@]}\"", "args=(-la src); ls \"${args[@]}\"", "a=(mv a.txt b.txt); \"${a[@]}\"",
 		"find . -type f | xargs chmod 644", "ls *.log | xargs gzip", "find . -name '*.sh' | xargs chmod +x", "git ls-files | xargs wc -l",
 		"echo $[1+1]; mv build dist", "select x in a b; do mv $x build/; done", "coproc mv a.txt b.txt", "chmod --reference=a.txt b.txt",
