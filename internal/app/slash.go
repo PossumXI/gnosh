@@ -225,6 +225,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "review", Args: "[what to look at]", Summary: "Have the model review the changes on this branch for bugs, changing nothing.", InRun: true, Run: l.slashReview},
 		{Name: "security-review", Args: "[what to look at]", Summary: "Have the model review the changes on this branch for security vulnerabilities, changing nothing.", InRun: true, Run: l.slashSecurityReview},
 		{Name: "init", Summary: "Have the model look through the project and write its GNOSH.md, or improve the one there is.", Run: l.slashInit},
+		{Name: "debug", Args: "[what is wrong]", Summary: "Turn debug logging on for the rest of the session, and have the model find out from gnosh's log what is going wrong.", InRun: true, Run: l.slashDebug},
 		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {
 				// The declared hosts are listed, and reached only when the

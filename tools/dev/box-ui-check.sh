@@ -53,6 +53,10 @@
 #               /security-review should find it
 #   vim         editorMode vim: a prompt typed in INSERT mode, Esc, x in
 #               NORMAL mode, and Enter sends it from NORMAL mode
+#   restart     a copy of the installed gnosh, replaced by rename after the
+#               first turn as an install does it: the next turn's end says a
+#               newer gnosh is installed, /restart starts it in the same
+#               session, and the model still knows the first turn
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -65,7 +69,7 @@ flags=""
 hooks=""
 opts=""
 case "$scenario" in
-basic | mention | config | fork | model | transcript) ;;
+basic | mention | config | fork | model | transcript | restart) ;;
 vim) opts='"editorMode": "vim", ' ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
@@ -75,7 +79,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart)" >&2
 	exit 2
 	;;
 esac
@@ -156,7 +160,13 @@ func Thumb(w http.ResponseWriter, r *http.Request) {
 EOF
 	g add handler.go && g commit -q -m "thumbnails" || exit 1
 fi
-tmux new-session -d -s "$S" -x 110 -y 40 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $HOME/.local/bin/gnosh $flags"
+bin=$HOME/.local/bin/gnosh
+if [ "$scenario" = restart ]; then
+	# A copy of its own, so that "installing" over it touches nothing else.
+	mkdir -p "$T/bin" && cp "$bin" "$T/bin/gnosh" || exit 1
+	bin=$T/bin/gnosh
+fi
+tmux new-session -d -s "$S" -x 110 -y 40 "env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8 $bin $flags"
 sleep 4
 echo "=== before"
 tmux capture-pane -p -t "$S"
@@ -241,6 +251,26 @@ vim)
 monitor)
 	tmux send-keys -t "$S" "Use the Monitor tool to watch this exact command: for i in 1 2 3; do echo tick \$i; sleep 3; done; echo MONITOR-DONE. Then end your turn. When its lines come, say only the last line you were given." Enter
 	done_when() { screen | grep -q "passed on" && screen | grep -q "background command ended" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
+restart)
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "done in" && break
+	done
+	cp "$bin" "$bin.new" && mv "$bin.new" "$bin"
+	tmux send-keys -t "$S" "Reply with exactly the one word ready, and call no tool." Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "A newer gnosh has been installed" && break
+	done
+	echo "=== the newer gnosh said: $(screen | grep -c "A newer gnosh has been installed") time(s)"
+	tmux send-keys -t "$S" "/restart" Enter
+	sleep 8
+	echo "=== after /restart"
+	screen | tail -12
+	tmux send-keys -t "$S" "What were the three words I first asked you to reply with? Answer with only those three words and call no tool." Enter
+	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 3 ] && [ "$(screen | grep -c "done in")" -ge 3 ]; }
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
