@@ -141,6 +141,7 @@ type script struct {
 	subshell   bool // ( ... )
 	cond       bool // an if, a while, an until or a case
 	forLoop    bool // a for loop over a list of words
+	group      bool // a { ...; } group
 	compound   bool // a for loop, a function, (( )) and the other forms not read through
 	background bool // a command followed by &
 	piped      bool // a | anywhere
@@ -754,6 +755,7 @@ func (p *parser) command() {
 		// redirection after it is opened before any cd in it has run,
 		// and so is not read that way: such a group asks.
 		p.pos++
+		p.sc.group = true
 		p.body("}")
 		p.expect("}")
 		mark := len(p.sc.cmds)
