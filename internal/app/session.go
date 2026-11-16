@@ -88,9 +88,13 @@ type live struct {
 	// once its first request has gone out (agentskills.go).
 	preloaded []agent.Part
 	small     *modelUse
+	provMu    sync.Mutex // guards providers
 	providers map[string]*providerUse
-	typeMu    sync.Mutex
-	types     map[string]string // a model's id -> its provider's type
+	// load watches the model server while the session waits on it
+	// (serverload.go).
+	load   loadWatch
+	typeMu sync.Mutex
+	types  map[string]string // a model's id -> its provider's type
 	// modelMu guards large once the session is open, and switchMu makes
 	// /model one switch at a time.
 	modelMu  sync.Mutex
@@ -200,6 +204,11 @@ type live struct {
 	// settings is how the settings files stood when last looked at, for
 	// taking in a change while the session runs (settingswatch.go).
 	settings settingsWatch
+
+	// agentReady is the agent, once the session made it, for code that
+	// runs beside the session's opening (hooks in the background) and so
+	// may not read l.agent while it is written.
+	agentReady atomic.Pointer[agent.Agent]
 
 	// hookChanged holds the ids of the calls of the question tool whose
 	// arguments a PreToolUse hook wrote: only such a call may carry its
@@ -478,7 +487,13 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		small := l.small.model
 		opts.Small = &small
 	}
-	if l.agent, err = agent.New(opts); err != nil {
+	a, err := agent.New(opts)
+	l.agent = a
+	// Published for the code that runs beside the session's opening (a
+	// hook's, in the background): l.agent is written here, as they may
+	// read it (race detector, 16 November).
+	l.agentReady.Store(a)
+	if err != nil {
 		return l, fmt.Errorf("the session could not be put together: %w", err)
 	}
 	if l.asAgent != nil && l.inv.Effort == "" {
@@ -1033,6 +1048,7 @@ func (l *live) deliver(ev any) {
 		l.front.Event(ev)
 	}
 	l.evMu.Unlock()
+	l.loadMoment(ev)
 	l.statusPoke(ev)
 	// A command may have moved to the background, or one there may have
 	// been stopped.

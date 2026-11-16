@@ -457,7 +457,11 @@ func (s *session) activityLine(width int, now time.Time) string {
 			if s.attempt > 1 {
 				what += fmt.Sprintf(" (try %d)", s.attempt)
 			}
-			if s.estimate > 0 {
+			switch {
+			case s.load != "":
+				// The server's own word for the wait (app.ServerLoadEvent).
+				extra = s.load
+			case s.estimate > 0:
 				extra = "about " + tokenCount(s.estimate) + " to read"
 			}
 		case phThinking:

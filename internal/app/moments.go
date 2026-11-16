@@ -94,7 +94,8 @@ func (l *live) showHooks(in hooks.Input, out hooks.Outcome) {
 // next request, an "asyncRewake" hook's exit with 2 wakes the model at
 // once, and one that could not be evaluated is a warning for the person.
 func (l *live) backgroundHook(b hooks.Background) {
-	if l.closing.Load() || l.agent == nil {
+	a := l.agentReady.Load()
+	if l.closing.Load() || a == nil {
 		return
 	}
 	if b.Wake == "" && b.Warning == "" {
@@ -109,10 +110,10 @@ func (l *live) backgroundHook(b hooks.Background) {
 	}
 	lead := "A " + string(b.Event) + " hook the user set up, which ran in the background, "
 	if len(b.Context) > 0 {
-		_ = l.agent.Tell(agent.Note{Source: source, Text: prompt.Wrap(lead + "adds this:\n" + strings.TrimSpace(strings.Join(b.Context, "\n")))})
+		_ = a.Tell(agent.Note{Source: source, Text: prompt.Wrap(lead + "adds this:\n" + strings.TrimSpace(strings.Join(b.Context, "\n")))})
 	}
 	if b.Wake != "" {
-		_ = l.agent.Tell(agent.Note{Source: source, Wake: true, Text: prompt.Wrap(lead + "exited with 2 and says this:\n" + b.Wake),
+		_ = a.Tell(agent.Note{Source: source, Wake: true, Text: prompt.Wrap(lead + "exited with 2 and says this:\n" + b.Wake),
 			Notice: fmt.Sprintf("The %s hook %s, in the background, exited with 2: %s", b.Event, hookWho(b.Record), oneLine(b.Wake, 200))})
 	}
 }
@@ -124,12 +125,13 @@ func (l *live) backgroundHook(b hooks.Background) {
 // end. It is never called from inside the agent's OnEvent, which it would
 // wait for; the bound keeps a mistake from holding anything up for long.
 func (l *live) inOrder() {
-	if l.agent == nil {
+	a := l.agentReady.Load()
+	if a == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_ = l.agent.Drain(ctx)
+	_ = a.Drain(ctx)
 }
 
 // hookWho names a hook by its record: its name, or its command.

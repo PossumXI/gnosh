@@ -64,7 +64,7 @@ func dialOnly(ctx context.Context, raw string) error {
 // first time it is asked for. With several addresses configured, the first
 // that accepts a connection is the one used.
 func (l *live) providerFor(ctx context.Context, id string) (*providerUse, error) {
-	if pu := l.providers[id]; pu != nil {
+	if pu := l.providerUsed(id); pu != nil {
 		return pu, nil
 	}
 	pc, ok := l.cfg.Provider(id)
@@ -120,8 +120,23 @@ func (l *live) providerFor(ctx context.Context, id string) (*providerUse, error)
 		return nil, fmt.Errorf("provider %s cannot be used: %w", id, err)
 	}
 	pu := &providerUse{cfg: pc, endpoint: e, prov: prov}
-	l.providers[id] = pu
+	l.provMu.Lock()
+	if had := l.providers[id]; had != nil {
+		pu = had // made meanwhile, by another call
+	} else {
+		l.providers[id] = pu
+	}
+	l.provMu.Unlock()
 	return pu, nil
+}
+
+// providerUsed is the client of provider id if one was made, or nil. The
+// table is read from more than one goroutine (the server's load is asked
+// for beside the requests).
+func (l *live) providerUsed(id string) *providerUse {
+	l.provMu.Lock()
+	defer l.provMu.Unlock()
+	return l.providers[id]
 }
 
 // providerList names the configured providers for a message.

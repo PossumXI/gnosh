@@ -184,6 +184,28 @@ type ModelLister interface {
 	Models(ctx context.Context) ([]ModelInfo, error)
 }
 
+// ServerLoad is what a model server says of its work at a moment: each of
+// its slots (the requests it can work on side by side), and what is in it.
+type ServerLoad struct {
+	Slots []SlotLoad
+}
+
+// SlotLoad is one slot of a model server.
+type SlotLoad struct {
+	// Busy says a request is in it.
+	Busy bool
+	// Prompt is how many tokens the prompt of that request is, and Read
+	// how many of them the server has read so far, a cache's included.
+	Prompt, Read int
+}
+
+// LoadReporter is a Provider whose server can say how busy it is, for the
+// person waiting on it: a model server on a machine of one's own may be
+// reading a long prompt, or answering someone else.
+type LoadReporter interface {
+	Load(ctx context.Context, model string) (ServerLoad, error)
+}
+
 // TokenCounter is a Provider that can count a request's prompt tokens
 // without running it.
 type TokenCounter interface {

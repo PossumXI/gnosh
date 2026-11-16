@@ -563,7 +563,7 @@ func (l *live) listModelsFor(ctx context.Context, c *SlashContext) error {
 	for _, pc := range usable {
 		ids, note := l.offered(ctx, pc)
 		where := ""
-		if pu := l.providers[pc.ID]; pu != nil {
+		if pu := l.providerUsed(pc.ID); pu != nil {
 			where = " at " + pu.endpoint.Display
 		}
 		c.Say("%s%s:", pc.ID, where)
@@ -648,7 +648,7 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 	// The machines commands run on: this one as results name it, and the
 	// declared hosts.
 	c.Say("machine      %s (%s)", shelltool.LocalName, firstOf(l.p.whoAndWhere(), "its name is not known"))
-	for i, h := range l.cfg.Hosts {
+	for i, h := range l.currentHosts() {
 		label := "hosts"
 		if i > 0 {
 			label = ""

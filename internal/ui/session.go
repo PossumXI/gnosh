@@ -227,9 +227,12 @@ type session struct {
 	hookStatus string
 	// model is the model main requests go to, estimate about how many
 	// tokens the request that is out holds, and attempt which try it is.
+	// load is what the model server says it is doing while the reply has
+	// not begun (app.ServerLoadEvent), or "".
 	model    string
 	estimate int
 	attempt  int
+	load     string
 	// The wait before a failed request is sent again: until when, the
 	// kind of failure, and how many waits there have been since the
 	// provider last answered, the first of them at retrySince.

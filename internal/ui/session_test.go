@@ -178,6 +178,11 @@ func TestActivityLine(t *testing.T) {
 	g.liveHas("about 14k tokens to read", "Esc stops")
 	g.wait(75 * time.Second)
 	one("waiting for qwen3.8-27b to start its reply · 1m 15s")
+	// What the model server says it is doing stands in the estimate's
+	// place (app.ServerLoadEvent).
+	g.ev(&app.ServerLoadEvent{Text: "reading the prompt: 8.1k of 14k tokens"})
+	g.liveHas("reading the prompt: 8.1k of 14k tokens")
+	g.liveLacks("about 14k tokens to read")
 	g.ev(thought("Let me think about this."))
 	one("* qwen3.8-27b is thinking")
 	g.liveHas("~ thinking", "Let me think about this.")

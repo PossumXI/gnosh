@@ -34,6 +34,21 @@ import (
 type settingsWatch struct {
 	mu     sync.Mutex
 	stamps map[string]fileStamp
+	// hosts are the hosts in force since the settings were read again; nil
+	// while they are the ones the session started with.
+	hosts []config.Host
+}
+
+// currentHosts are the hosts in force: the ones the session started with,
+// or those the settings declared since.
+func (l *live) currentHosts() []config.Host {
+	w := &l.settings
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.hosts != nil {
+		return w.hosts
+	}
+	return l.cfg.Hosts
 }
 
 // fileStamp is a file's state, as far as telling a change goes.
@@ -139,6 +154,9 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 		}
 		if !slices.Equal(was, now) {
 			l.shell.SetHosts(hosts)
+			l.settings.mu.Lock()
+			l.settings.hosts = append([]config.Host{}, cfg.Hosts...)
+			l.settings.mu.Unlock()
 			done = append(done, "its hosts")
 			var list []string
 			for _, h := range hosts {

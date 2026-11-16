@@ -474,3 +474,40 @@ func TestLlamaCppCountTokens(t *testing.T) {
 		}
 	})
 }
+
+// Load reads the server's /slots for the model named: whether each slot is
+// busy, how long its prompt is, and how much of it is read, the cache's
+// part with what was worked through. A server that keeps its slots to
+// itself answers with an error.
+func TestLlamaCppLoad(t *testing.T) {
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/slots" {
+			http.Error(w, `{"error":{"code":404,"message":"File Not Found","type":"not_found_error"}}`, 404)
+			return
+		}
+		io.WriteString(w, `[{"id":0,"n_ctx":262144,"is_processing":true,"id_task":7,"n_prompt_tokens":12400,"n_prompt_tokens_processed":5100,"n_prompt_tokens_cache":3000,"params":{}},`+
+			`{"id":1,"n_ctx":262144,"is_processing":false,"id_task":-1,"n_prompt_tokens":0,"n_prompt_tokens_processed":0,"n_prompt_tokens_cache":0,"params":{}}]`)
+	})
+	p := f.provider(TypeLlamaCpp, nil)
+	got, err := p.(core.LoadReporter).Load(context.Background(), "qwen3.8-27b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := core.ServerLoad{Slots: []core.SlotLoad{{Busy: true, Prompt: 12400, Read: 8100}, {}}}
+	if len(got.Slots) != 2 || got.Slots[0] != want.Slots[0] || got.Slots[1] != want.Slots[1] {
+		t.Errorf("Load = %+v, want %+v", got, want)
+	}
+	if reqs := f.requests(); len(reqs) != 1 || reqs[0].Path != "/slots" || reqs[0].Query != "model=qwen3.8-27b" {
+		t.Errorf("requests: %+v", reqs)
+	}
+	f.waitClosed()
+
+	off := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":{"code":501,"message":"This server does not support slots endpoint.","type":"not_supported_error"}}`, 501)
+	})
+	if _, err := off.provider(TypeLlamaCpp, nil).(core.LoadReporter).Load(context.Background(), ""); err == nil {
+		t.Errorf("a server without /slots gave no error")
+	}
+	off.waitClosed()
+}

@@ -69,6 +69,9 @@ func (s *session) handle(ev any) {
 		s.prompt(ev)
 	case *agent.RequestEvent:
 		s.request(ev)
+	case *app.ServerLoadEvent:
+		// What the model server is doing while the reply has not begun.
+		s.load = ev.Text
 	case *agent.ThinkingEvent:
 		s.thinking(ev.Text)
 	case *agent.TextEvent:
@@ -292,6 +295,7 @@ func (s *session) request(ev *agent.RequestEvent) {
 		s.endReply()
 		s.reply = reply{}
 		s.model, s.estimate, s.attempt = ev.Model, ev.Estimate, ev.Attempt
+		s.load = ""
 		s.busy = true
 		s.setPhase(phRequest)
 		s.since = s.now()

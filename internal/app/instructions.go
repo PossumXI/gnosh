@@ -163,7 +163,7 @@ func (l *live) environment() string {
 	// wrote about each. They are named here and not in the system prompt
 	// or in a tool's description, which are the same bytes for every
 	// session whatever is declared.
-	for _, h := range l.cfg.Hosts {
+	for _, h := range l.currentHosts() {
 		e.Hosts = append(e.Hosts, prompt.Host{Name: h.Name, Machine: h.SSH, Description: h.Description})
 	}
 	e.Git = l.gitState()

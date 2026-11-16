@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -95,6 +96,38 @@ func (l *llamaCpp) Models(ctx context.Context) ([]core.ModelInfo, error) {
 	}
 	out[0].ContextWindow = window
 	return out, nil
+}
+
+// Load asks the server how busy it is: its /slots, each with whether a
+// request is in it, how long that request's prompt is, and how much of it
+// has been read (from the cache, or worked through). A server that holds
+// several models answers for the one named; one that runs a single model
+// takes no notice of the name. A server that keeps its slots to itself
+// (--no-slots) answers with an error.
+func (l *llamaCpp) Load(ctx context.Context, model string) (core.ServerLoad, error) {
+	var query url.Values
+	if model != "" {
+		query = url.Values{"model": {model}}
+	}
+	body, err := l.call(ctx, http.MethodGet, l.rootEndpoint("/slots", query), nil)
+	if err != nil {
+		return core.ServerLoad{}, err
+	}
+	var slots []struct {
+		Busy      bool `json:"is_processing"`
+		Prompt    *num `json:"n_prompt_tokens"`
+		Processed *num `json:"n_prompt_tokens_processed"`
+		Cached    *num `json:"n_prompt_tokens_cache"`
+	}
+	if err := json.Unmarshal(body, &slots); err != nil {
+		return core.ServerLoad{}, l.fail(core.ErrBadResponse, "the server's slots cannot be read: %v", err)
+	}
+	var load core.ServerLoad
+	for _, s := range slots {
+		prompt := countOf(s.Prompt)
+		load.Slots = append(load.Slots, core.SlotLoad{Busy: s.Busy, Prompt: prompt, Read: min(countOf(s.Processed)+countOf(s.Cached), prompt)})
+	}
+	return load, nil
 }
 
 // contextSize asks the server's /props for the context size it runs its
