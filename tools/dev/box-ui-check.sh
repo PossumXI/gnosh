@@ -57,6 +57,8 @@
 #               first turn as an install does it: the next turn's end says a
 #               newer gnosh is installed, /restart starts it in the same
 #               session, and the model still knows the first turn
+#   keys        a keybindings.json: Ctrl+K stashes the box and brings it
+#               back, Ctrl+Y runs /cost, and the prompt then goes out
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -69,7 +71,7 @@ flags=""
 hooks=""
 opts=""
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart) ;;
+basic | mention | config | fork | model | transcript | restart | keys) ;;
 vim) opts='"editorMode": "vim", ' ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
@@ -79,7 +81,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys)" >&2
 	exit 2
 	;;
 esac
@@ -114,6 +116,11 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = keys ]; then
+	cat > "$T/config/gnosh/keybindings.json" <<'EOF'
+{"bindings": [{"context": "Chat", "bindings": {"ctrl+k": "chat:stash", "ctrl+y": "command:cost"}}]}
+EOF
+fi
 # The skill only where it is used: it is about notes.txt, and a model
 # asked to change that file in another scenario loads it.
 if [ "$scenario" = fork ]; then
@@ -271,6 +278,19 @@ restart)
 	screen | tail -12
 	tmux send-keys -t "$S" "What were the three words I first asked you to reply with? Answer with only those three words and call no tool." Enter
 	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 3 ] && [ "$(screen | grep -c "done in")" -ge 3 ]; }
+	;;
+keys)
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well"
+	sleep 1
+	tmux send-keys -t "$S" C-k
+	sleep 1
+	echo "=== after Ctrl+K the box holds: $(screen | grep -c "Reply with exactly these three words") line(s) of the prompt"
+	tmux send-keys -t "$S" C-y
+	sleep 2
+	tmux send-keys -t "$S" C-k
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	done_when() { screen | grep -q "Nothing has been asked of a model" && [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "done in"; }
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
