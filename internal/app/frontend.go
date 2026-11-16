@@ -245,6 +245,10 @@ type SessionControls interface {
 	// asks the providers' servers which models they have, within ctx;
 	// switching is the command /model provider/model [level].
 	ModelChoices(ctx context.Context) []ModelChoice
+	// ConfigChoices lists gnosh's options with their values in force, for
+	// the picker that /config with nothing after it opens; changing one is
+	// the command /config key=value.
+	ConfigChoices() []ConfigChoice
 }
 
 // CommandResult is what running a slash command came to.

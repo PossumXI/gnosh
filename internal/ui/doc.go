@@ -310,7 +310,9 @@
 //     []app.RewindPoint for the list; going back is the command
 //     /rewind N, whose result says the session's state is to be forgotten
 //     (CommandResult.Reset) and gives the prompt back for the box (Draft).
-//   - /model with nothing after it, the picker: a method
+//   - /config with nothing after it, the picker: a method ConfigChoices()
+    []app.ConfigChoice; changing one is the command /config key=value.
+  - /model with nothing after it, the picker: a method
 //     ModelChoices(ctx) []app.ModelChoice; switching is the command
 //     /model provider/model level.
 //   - Ctrl+O, the transcript view: a method Transcript()

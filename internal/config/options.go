@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -295,7 +296,19 @@ func optionOps(key string, raw json.RawMessage, s *source) ([]op, error) {
 	return s.ops, nil
 }
 
-// takes says in a few words what values an option takes.
+// choices are the values an option takes, where they are few: true and
+// false, or the words of an option that takes one of a few.
+func (o *optionDef) choices() []string {
+	switch o.kind {
+	case oBool:
+		return []string{"true", "false"}
+	case oEnum:
+		return slices.Clone(o.enum)
+	}
+	return nil
+}
+
+// takes says in a few words what values the option takes.
 func (o *optionDef) takes() string {
 	switch o.kind {
 	case oBool:

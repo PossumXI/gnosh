@@ -384,6 +384,13 @@ func (s *session) command(d editor.Draft) {
 			return
 		}
 	}
+	if configWords[strings.ToLower(line)] && s.q == nil {
+		if _, ok := s.c.(configChooser); ok {
+			// So is /config (configpick.go).
+			s.chooseConfig(line)
+			return
+		}
+	}
 	if panelWords[strings.ToLower(line)] {
 		// The side panel is the interface's own, at once, also while a
 		// turn runs.

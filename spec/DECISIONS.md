@@ -697,3 +697,14 @@ or kept with the reason said (27).
     /model provider/model level, which switches and saves as typing it
     does; /model with a name runs as before, and in print mode and the
     plain front end /model with nothing still lists the models as text.
+51. **/config with nothing after it is a picker too.** After /model (50),
+    the next bare command that chooses something: Claude Code's /config
+    opens its settings. gnosh's lists its options in a menu, each with its
+    value and where that comes from. Enter on an option that is true or
+    false turns it over, one that takes one of a few words asks which
+    (the cursor on the one in force), and any other asks for its value
+    (the one set, to begin with; nothing typed takes back what /config
+    set). The change runs as /config key=value, quoted where it holds a
+    blank, which keeps it for every project as typing it does; a list is
+    left to gnosh.json. /config with a key, print mode and the plain
+    front end are as they were.

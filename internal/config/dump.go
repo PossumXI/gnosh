@@ -214,6 +214,9 @@ type OptionValue struct {
 	What, Default, Takes string
 	// List is an option that holds a list, which /config does not change.
 	List bool
+	// Choices are the values the option takes, where they are few: true
+	// and false, or the words of one that takes one of a few words.
+	Choices []string
 	// JSON is the value in force as a config file would hold it, for an
 	// option that holds one value and is set; nil otherwise.
 	JSON json.RawMessage
@@ -225,7 +228,7 @@ func (o *Options) All() []OptionValue {
 	out := make([]OptionValue, 0, len(optionDefs))
 	for i := range optionDefs {
 		d := &optionDefs[i]
-		v := OptionValue{Key: d.key, What: d.what, Default: d.def, Takes: d.takes(), List: d.list != nil}
+		v := OptionValue{Key: d.key, What: d.what, Default: d.def, Takes: d.takes(), List: d.list != nil, Choices: d.choices()}
 		switch {
 		case d.truth != nil:
 			x := d.truth(o)

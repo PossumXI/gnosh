@@ -536,6 +536,14 @@ type controls struct {
 	deliv     []app.Deliverable
 	trans     []app.TranscriptEntry
 	models    []app.ModelChoice
+	options   []app.ConfigChoice
+}
+
+// ConfigChoices is the options a test set.
+func (c *controls) ConfigChoices() []app.ConfigChoice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.options)
 }
 
 // ModelChoices is the models a test set.
