@@ -849,7 +849,9 @@ or kept with the reason said (27).
     bound to an action is taken as the key gnosh already knows that action
     by, and goes to the handler that takes that key; null takes a key
     away; command:<name> runs /<name>. The contexts are Global, Chat (Task
-    too) and Transcript, with 21 actions. Chords, the other contexts and
+    too) and Transcript, with 21 actions, and chords of two keys: the
+    first is held up to 3 s for the second, and goes through as itself
+    when the pair is no chord of the person's. The other contexts and
     keys that always do what they do (Ctrl+C, Ctrl+D) are said and left
     out. While a question is open no key is changed, so an answer is given
     with the keys the question shows. The file is looked at again at most

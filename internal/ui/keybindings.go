@@ -21,11 +21,12 @@ import (
 // This file is Claude Code's keybindings.json, for the parts of the
 // interface gnosh has. A key the file binds to an action is taken as the
 // key gnosh knows that action by, null takes a key away, and
-// command:<name> runs the slash command /<name>. The contexts are Global,
-// Chat (with Task, whose one action gnosh takes in the box) and Transcript;
-// while a question is open no key is changed, so that an answer is always
-// given with the keys the question shows. The file is read again when it
-// changes, and what in it cannot be used is said once.
+// command:<name> runs the slash command /<name>, and a chord of two keys
+// waits for its second. The contexts are Global, Chat (with Task, whose one
+// action gnosh takes in the box) and Transcript; while a question is open
+// no key is changed, so that an answer is always given with the keys the
+// question shows. The file is read again when it changes, and what in it
+// cannot be used is said once.
 
 // keyAction is an action of Claude Code's keybindings that gnosh carries
 // out: the keys gnosh's own handling knows it by, one key or Ctrl+X and a
@@ -73,10 +74,15 @@ var keyContexts = map[string]string{"Global": "Global", "Chat": "Chat", "Task": 
 var reservedKeys = []term.Key{ctrlKey('c'), ctrlKey('d'), ctrlKey('m'), ctrlKey('['), ctrlKey('i'), ctrlKey('h')}
 
 // keyBindings is what keybindings.json says, by context and key: the action
-// a key does, "" for a key taken away.
+// a key does, "" for a key taken away; and the same for chords, two keys
+// one after the other.
 type keyBindings struct {
-	byCtx map[string]map[term.Key]string
+	byCtx  map[string]map[term.Key]string
+	chords map[string]map[[2]term.Key]string
 }
+
+// chordWait is how long the second key of a chord may be waited for.
+const chordWait = 3 * time.Second
 
 // keyFile is the file as it was last read.
 type keyFile struct {
@@ -160,7 +166,7 @@ func parseStroke(s string) (term.Key, error) {
 // parseKeyBindings reads keybindings.json. What cannot be used is left out
 // and said in problems; the rest is in force.
 func parseKeyBindings(data []byte) (keyBindings, []string) {
-	b := keyBindings{byCtx: map[string]map[term.Key]string{}}
+	b := keyBindings{byCtx: map[string]map[term.Key]string{}, chords: map[string]map[[2]term.Key]string{}}
 	var file struct {
 		Bindings []struct {
 			Context  string                     `json:"context"`
@@ -179,6 +185,7 @@ func parseKeyBindings(data []byte) (keyBindings, []string) {
 		}
 		if b.byCtx[ctx] == nil {
 			b.byCtx[ctx] = map[term.Key]string{}
+			b.chords[ctx] = map[[2]term.Key]string{}
 		}
 		keys := make([]string, 0, len(block.Bindings))
 		for k := range block.Bindings {
@@ -194,17 +201,25 @@ func parseKeyBindings(data []byte) (keyBindings, []string) {
 					continue
 				}
 			}
-			if strings.Contains(strings.TrimSpace(stroke), " ") {
-				problems = append(problems, fmt.Sprintf("%s: %q is a chord, and gnosh takes single keys only", block.Context, stroke))
+			strokes := strings.Fields(stroke)
+			if len(strokes) == 0 || len(strokes) > 2 {
+				problems = append(problems, fmt.Sprintf("%s: %q: a binding is one key, or a chord of two", block.Context, stroke))
 				continue
 			}
-			k, err := parseStroke(strings.TrimSpace(stroke))
-			if err != nil {
-				problems = append(problems, fmt.Sprintf("%s: %q: %v", block.Context, stroke, err))
-				continue
+			var keys [2]term.Key
+			bad := ""
+			for i, st := range strokes {
+				k, err := parseStroke(st)
+				switch {
+				case err != nil:
+					bad = fmt.Sprintf("%s: %q: %v", block.Context, stroke, err)
+				case slices.Contains(reservedKeys, k):
+					bad = fmt.Sprintf("%s: %s cannot be bound: %s always does what it does", block.Context, stroke, st)
+				}
+				keys[i] = k
 			}
-			if slices.Contains(reservedKeys, k) {
-				problems = append(problems, fmt.Sprintf("%s: %s cannot be bound: it always does what it does", block.Context, stroke))
+			if bad != "" {
+				problems = append(problems, bad)
 				continue
 			}
 			if name, ok := strings.CutPrefix(action, "command:"); ok {
@@ -216,7 +231,11 @@ func parseKeyBindings(data []byte) (keyBindings, []string) {
 				problems = append(problems, fmt.Sprintf("%s: %s: %q is not an action gnosh carries out", block.Context, stroke, action))
 				continue
 			}
-			b.byCtx[ctx][k] = action
+			if len(strokes) == 2 {
+				b.chords[ctx][keys] = action
+			} else {
+				b.byCtx[ctx][keys[0]] = action
+			}
 		}
 	}
 	return b, problems
@@ -270,6 +289,7 @@ func (s *session) rebound(k term.Key) bool {
 	}
 	s.keysNow()
 	if s.keys == nil || len(s.keys.b.byCtx) == 0 {
+		s.keyHeld = nil
 		return false
 	}
 	ctx := "Chat"
@@ -277,13 +297,65 @@ func (s *session) rebound(k term.Key) bool {
 		ctx = "Transcript"
 	}
 	c := canonKey(k)
-	action, ok := s.keys.b.byCtx[ctx][c]
+	b := s.keys.b
+	if held := s.keyHeld; held != nil {
+		// The second key of a chord.
+		s.keyHeld = nil
+		pair := [2]term.Key{canonKey(*held), c}
+		if action, ok := b.chords[ctx][pair]; ok {
+			s.doKeyAction(action)
+			return true
+		}
+		if action, ok := b.chords["Global"][pair]; ok {
+			s.doKeyAction(action)
+			return true
+		}
+		// No chord of the person's: the first key goes where it would
+		// have gone, and this one after it.
+		s.passKey(*held)
+	} else {
+		for _, cx := range []string{ctx, "Global"} {
+			for pair := range b.chords[cx] {
+				if pair[0] == c {
+					held := k
+					s.keyHeld, s.keyHeldAt = &held, s.now()
+					s.flash(k.String() + " … (the next key ends the chord)")
+					return true
+				}
+			}
+		}
+	}
+	action, ok := b.byCtx[ctx][c]
 	if !ok {
-		action, ok = s.keys.b.byCtx["Global"][c]
+		action, ok = b.byCtx["Global"][c]
 	}
 	if !ok {
 		return false
 	}
+	s.doKeyAction(action)
+	return true
+}
+
+// passKey hands a key on past the bindings, to where it is taken.
+func (s *session) passKey(k term.Key) {
+	if s.view != nil {
+		s.viewInput(k)
+	} else {
+		s.typedOrMouse(k)
+	}
+}
+
+// chordTimedOut drops the first key of a chord whose second did not come
+// in time.
+func (s *session) chordTimedOut() {
+	if s.keyHeld != nil && s.now().Sub(s.keyHeldAt) >= chordWait {
+		s.keyHeld = nil
+		s.flash("The chord was not finished in time, so it does nothing.")
+	}
+}
+
+// doKeyAction carries out an action of the keybindings: "" does nothing.
+func (s *session) doKeyAction(action string) {
 	switch name, command := strings.CutPrefix(action, "command:"); {
 	case action == "":
 		// Taken away.
@@ -293,15 +365,10 @@ func (s *session) rebound(k term.Key) bool {
 		}
 	default:
 		for _, key := range keyActions[action] {
-			if s.view != nil {
-				s.viewInput(key)
-			} else {
-				s.typedOrMouse(key)
-			}
+			s.passKey(key)
 		}
 	}
 	s.dirty = true
-	return true
 }
 
 // keybindingsWords are the line that opens the keybindings file.

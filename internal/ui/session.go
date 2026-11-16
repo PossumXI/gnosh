@@ -205,6 +205,10 @@ type session struct {
 	// keys is the keybindings file as it was last read (keybindings.go),
 	// nil before the first key.
 	keys *keyFile
+	// keyHeld is the first key of a chord of the keybindings, held for
+	// the second since keyHeldAt.
+	keyHeld   *term.Key
+	keyHeldAt time.Time
 	// chord says Ctrl+X was pressed and the key after it is awaited.
 	chord bool
 	// stopArmed is when Ctrl+X Ctrl+K was pressed once, waiting for the
@@ -580,6 +584,7 @@ func (s *session) relayout(cols int) {
 // is still busy, so that the screen never says it is when it is not.
 func (s *session) tick() {
 	now := s.now()
+	s.chordTimedOut()
 	if s.q != nil && s.q.guarded && !now.Before(s.q.quiet) {
 		s.q.guarded = false
 		s.dirty = true

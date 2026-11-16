@@ -58,7 +58,7 @@ func TestParseKeyBindings(t *testing.T) {
 	b, problems := parseKeyBindings([]byte(`{
 		"bindings": [
 			{"context": "Chat", "bindings": {"ctrl+e": "chat:externalEditor", "ctrl+s": null, "ctrl+y": "command:compact",
-				"ctrl+q": "chat:nope", "ctrl+c": "chat:stash", "ctl+k": "chat:stash", "ctrl+k ctrl+s": "chat:stash", "ctrl+w": 3}},
+				"ctrl+q": "chat:nope", "ctrl+c": "chat:stash", "ctl+k": "chat:stash", "ctrl+k ctrl+s": "chat:stash", "a b c": "chat:stash", "ctrl+w": 3}},
 			{"context": "Task", "bindings": {"ctrl+f": "task:background"}},
 			{"context": "Settings", "bindings": {"x": "select:accept"}}
 		]}`))
@@ -72,8 +72,11 @@ func TestParseKeyBindings(t *testing.T) {
 	if len(chat) != 4 {
 		t.Errorf("%d bindings in force in Chat, want 4: %v", len(chat), chat)
 	}
+	if b.chords["Chat"][[2]term.Key{ctrlKey('k'), ctrlKey('s')}] != "chat:stash" {
+		t.Errorf("the chords in force: %v", b.chords["Chat"])
+	}
 	all := strings.Join(problems, "\n")
-	for _, want := range []string{`"chat:nope" is not an action gnosh carries out`, "ctrl+c cannot be bound", `"ctl" is no modifier`, "is a chord", "ctrl+w is neither an action's name nor null", `the context "Settings" is not one gnosh takes keys for`} {
+	for _, want := range []string{`"chat:nope" is not an action gnosh carries out`, "ctrl+c cannot be bound", `"ctl" is no modifier`, "a binding is one key, or a chord of two", "ctrl+w is neither an action's name nor null", `the context "Settings" is not one gnosh takes keys for`} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the problems do not say %q:\n%s", want, all)
 		}
@@ -130,5 +133,34 @@ func TestKeyBindingsInTheBox(t *testing.T) {
 	g.wait(2 * time.Second).keys(`<Ctrl+A> <Ctrl+K>`)
 	if got := g.box(); got != "" {
 		t.Fatalf("without the file Ctrl+K left %q", got)
+	}
+}
+
+// A chord of the person's waits for its second key: the pair does the
+// action, another key lets the first one through, and a chord left
+// unfinished does nothing.
+func TestKeyBindingChords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := os.WriteFile(path, []byte(`{"bindings": [{"context": "Chat", "bindings": {"ctrl+k ctrl+s": "command:compact"}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) {
+		c.info.Keybindings = path
+		c.info.Commands = append(c.info.Commands, "compact")
+	})
+	g.keys(`<Ctrl+K> <Ctrl+S>`)
+	if !slices.Contains(g.c.commands, "/compact") {
+		t.Fatalf("Ctrl+K Ctrl+S ran %q", g.c.commands)
+	}
+	g.keys(`"abc" <Ctrl+A> <Ctrl+K> "z"`)
+	if got := g.box(); got != "z" {
+		t.Fatalf("Ctrl+K then z left %q in the box, want z (Ctrl+K cut the line, then z was typed)", got)
+	}
+	g.keys(`<Ctrl+K>`).wait(4 * time.Second).keys(`<Ctrl+S>`)
+	if got := g.box(); got != "" {
+		t.Fatalf("Ctrl+S after a chord left unfinished did not stash: %q", got)
+	}
+	if n := strings.Count(strings.Join(g.c.commands, " "), "/compact"); n != 1 {
+		t.Fatalf("/compact ran %d times", n)
 	}
 }
