@@ -247,11 +247,14 @@ type statusInput struct {
 		DisplayName string `json:"display_name"`
 	} `json:"model"`
 	Workspace struct {
-		CurrentDir  string   `json:"current_dir"`
-		ProjectDir  string   `json:"project_dir"`
-		AddedDirs   []string `json:"added_dirs"`
-		GitWorktree string   `json:"git_worktree,omitempty"`
+		CurrentDir  string      `json:"current_dir"`
+		ProjectDir  string      `json:"project_dir"`
+		AddedDirs   []string    `json:"added_dirs"`
+		GitWorktree string      `json:"git_worktree,omitempty"`
+		Repo        *statusRepo `json:"repo,omitempty"`
 	} `json:"workspace"`
+	// PromptID is the id of the last prompt the person sent.
+	PromptID    string      `json:"prompt_id,omitempty"`
 	Worktree    *statusTree `json:"worktree,omitempty"`
 	Version     string      `json:"version"`
 	OutputStyle struct {
@@ -289,6 +292,14 @@ type statusInput struct {
 	Vim            *struct {
 		Mode string `json:"mode"`
 	} `json:"vim,omitempty"`
+}
+
+// statusRepo is the repository the project is, as its origin remote names
+// it: "github.com", "gnosh-ai", "gnosh".
+type statusRepo struct {
+	Host  string `json:"host"`
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
 }
 
 // statusTree is the git work tree a --worktree session works in.
@@ -333,6 +344,10 @@ func (l *live) statusInput() statusInput {
 		in.Workspace.GitWorktree = t.name
 		in.Worktree = &statusTree{Name: t.name, Path: t.path, Branch: t.branch, OriginalCwd: t.from, OriginalBranch: t.fromBranch}
 	}
+	if host, owner, name, ok := originRepo(l.cfg.Paths.ProjectRoot); ok {
+		in.Workspace.Repo = &statusRepo{Host: host, Owner: owner, Name: name}
+	}
+	in.PromptID = l.lastPrompt()
 	in.Version = firstOf(l.p.o.BuildID, "devel")
 	in.OutputStyle.Name = l.styleNow()
 	in.Cost.TotalDurationMS = l.p.now().Sub(l.p.start).Milliseconds()
@@ -407,10 +422,24 @@ func (l *live) vimNow() string {
 // statusPoke is the moments the status line runs at, among the events the
 // front end is told of.
 func (l *live) statusPoke(ev any) {
-	switch ev.(type) {
+	switch ev := ev.(type) {
 	case *agent.ReplyEvent, *agent.RoomEvent, *agent.SummaryEvent, *agent.TurnEndEvent:
 		l.statusLine.poke()
+	case *agent.PromptEvent:
+		if !ev.Prompt.Hidden {
+			l.promptMu.Lock()
+			l.promptID = ev.ID
+			l.promptMu.Unlock()
+			l.statusLine.poke()
+		}
 	}
+}
+
+// lastPrompt is the id of the last prompt the person sent, "" before one.
+func (l *live) lastPrompt() string {
+	l.promptMu.Lock()
+	defer l.promptMu.Unlock()
+	return l.promptID
 }
 
 // slashStatusLine is /statusline: the model writes a status line command

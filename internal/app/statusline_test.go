@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -120,6 +121,14 @@ func TestStatusLineWorktree(t *testing.T) {
 	runs := w.Home + "/sl-runs"
 	script := w.Script(w.Home+"/bin/sl.sh", "{ cat; echo; } >> "+runs+"\necho status")
 	w.Settings(`{"statusLine": {"type": "command", "command": "` + script + `"}}`)
+	// The repository's origin, read from its own config through the work
+	// tree's .git file.
+	f, err := os.OpenFile(w.Dir+"/.git/config", os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprint(f, "[remote \"origin\"]\n\turl = git@github.com:gnosh-ai/gnosh.git\n")
+	f.Close()
 	s := sit(t, w, "--trust-folder", "--worktree", "feat")
 	s.see("Type a prompt and Enter.")
 	var got map[string]any
@@ -143,6 +152,11 @@ func TestStatusLineWorktree(t *testing.T) {
 	}
 	if ws, _ := got["workspace"].(map[string]any); ws["git_worktree"] != "feat" || ws["current_dir"] != tree {
 		t.Errorf("the workspace it was given: %v", got["workspace"])
+	}
+	if ws, _ := got["workspace"].(map[string]any); ws != nil {
+		if repo, _ := ws["repo"].(map[string]any); repo["host"] != "github.com" || repo["owner"] != "gnosh-ai" || repo["name"] != "gnosh" {
+			t.Errorf("the repo it was given: %v", ws["repo"])
+		}
 	}
 	s.typeLine("/exit")
 	s.exit()
@@ -236,6 +250,9 @@ func TestStatusLineAgentAndEffort(t *testing.T) {
 	}
 	if a, _ := got["agent"].(map[string]any); a["name"] != "Explore" {
 		t.Errorf("the agent it was given: %v", got["agent"])
+	}
+	if id, _ := got["prompt_id"].(string); id == "" {
+		t.Errorf("no prompt_id after a prompt: %v", got)
 	}
 	s.typeLine("/exit")
 	s.exit()

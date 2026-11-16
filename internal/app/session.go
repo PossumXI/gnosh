@@ -240,6 +240,10 @@ type live struct {
 	// newBuildSaid says the person was told of a newer gnosh installed
 	// (restart.go).
 	newBuildSaid atomic.Bool
+	// promptID is the id of the last prompt the person sent, for the
+	// status line.
+	promptMu sync.Mutex
+	promptID string
 	// color is the colour of the session's prompt mark (colorcmd.go),
 	// read from its file once (colorRead).
 	colorMu   sync.Mutex
