@@ -398,6 +398,35 @@ func TestNoBackground(t *testing.T) {
 	}
 }
 
+// Asked to go to the background before its command has started (the
+// person saw the call first), a command goes there as it starts.
+func TestMoveToBackgroundBeforeItStarts(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	env := newEnv(t)
+	forget := m.expect("early-call")
+	if !m.Background("early-call") {
+		t.Fatal("Background did not take the call about to start")
+	}
+	input := mustJSON(t, args{argCommand: `echo started; sleep 300`, argTimeout: 600_000})
+	res, err := toolNamed(t, m, BashName).Run(t.Context(), core.ToolCall{ID: "early-call", Name: BashName, Input: input}, env)
+	forget()
+	if err != nil {
+		t.Fatal(err)
+	}
+	headline, _, _ := parts(res)
+	id, _ := res.Meta[metaTaskID].(string)
+	if res.IsError || id == "" || !strings.HasPrefix(headline, "moved to the background as "+id+" at the person's request") {
+		t.Fatalf("headline = %q, Meta %v", headline, res.Meta)
+	}
+	if _, err := m.Stop(t.Context(), id); err != nil {
+		t.Error(err)
+	}
+	if m.Background("early-call") {
+		t.Error("Background found the call after it returned")
+	}
+}
+
 func TestMoveToBackgroundOnRequest(t *testing.T) {
 	t.Parallel()
 	m := newManager(t, Options{})

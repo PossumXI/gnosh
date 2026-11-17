@@ -56,6 +56,9 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	if env == nil || !filepath.IsAbs(env.Cwd) {
 		return core.ToolResult{}, errors.New("shelltool: the tool was given no working directory to run the command in")
 	}
+	if !a.background && a.host == nil && call.ID != "" {
+		defer m.expect(call.ID)()
+	}
 	if ctx.Err() != nil {
 		return core.ErrorResult("The command was not started: the call was cancelled first."), nil
 	}

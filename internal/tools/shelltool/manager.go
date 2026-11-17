@@ -57,6 +57,7 @@ type Manager struct {
 	tasks     map[string]*job     // background commands by id; ended ones stay
 	order     []string            // the ids in tasks, oldest first
 	calls     map[string]*job     // foreground commands by the id of the call that waits for them
+	pending   map[string]bool     // calls about to start a foreground command, by id: true once asked to go to the background as it starts
 	kept      []keptFile          // output files of finished foreground commands, oldest first
 	keptBytes int64               // how much disk those files take
 
@@ -95,6 +96,7 @@ func New(opts Options) *Manager {
 		lingering:    make(map[*job][]procInfo),
 		tasks:        make(map[string]*job),
 		calls:        make(map[string]*job),
+		pending:      make(map[string]bool),
 	}
 	m.shell = m.opt.Shell
 	if m.shell == "" {
@@ -210,12 +212,19 @@ func (m *Manager) Stop(ctx context.Context, id string) (Task, error) {
 // Background moves the foreground command that the tool call callID is
 // waiting for to the background, where it keeps running; the call returns
 // at once with the command's task id. It is for the person's own controls.
-// It reports whether there was such a command to ask. A command on another
-// machine is not one: it runs for as long as its call holds the connection,
-// and stays in the foreground.
+// It reports whether there was such a command to ask. A call whose command
+// is about to start goes to the background as it starts: the person sees
+// the call before its command is running, and asking then is not asking
+// too early. A command on another machine is not one: it runs for as long
+// as its call holds the connection, and stays in the foreground.
 func (m *Manager) Background(callID string) bool {
 	m.mu.Lock()
 	j := m.calls[callID]
+	if _, waiting := m.pending[callID]; j == nil && waiting && !m.opt.NoBackground {
+		m.pending[callID] = true
+		m.mu.Unlock()
+		return true
+	}
 	m.mu.Unlock()
 	if j == nil || j.host != nil || m.opt.NoBackground {
 		return false
@@ -225,6 +234,23 @@ func (m *Manager) Background(callID string) bool {
 	default:
 	}
 	return true
+}
+
+// expect notes that the call callID is about to start a foreground
+// command here, so that Background can be asked for it before it starts;
+// the function it returns forgets the call. (A request made before expect
+// is kept.)
+func (m *Manager) expect(callID string) (forget func()) {
+	m.mu.Lock()
+	if _, ok := m.pending[callID]; !ok {
+		m.pending[callID] = false
+	}
+	m.mu.Unlock()
+	return func() {
+		m.mu.Lock()
+		delete(m.pending, callID)
+		m.mu.Unlock()
+	}
 }
 
 // Close stops every command the manager started and is still running,
@@ -381,6 +407,13 @@ func (m *Manager) admit(j *job, background bool, callID string) (name string, er
 	} else if callID != "" {
 		j.callID = callID
 		m.calls[callID] = j
+		if m.pending[callID] && j.host == nil {
+			// Asked to go to the background before it started.
+			select {
+			case j.move <- struct{}{}:
+			default:
+			}
+		}
 	}
 	m.running[j] = struct{}{}
 	return name, nil
