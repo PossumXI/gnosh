@@ -58,6 +58,25 @@ func TestContextAndRename(t *testing.T) {
 	has(t, "what the model was sent on resuming by name", string(reqs[len(reqs)-1].Body), "why is the test flaky?", "go on")
 }
 
+// Words that are no id and no name find the session whose name or first
+// prompt has them all, in any case, among every session of the folder (as
+// Claude Code's /resume search); words more than one session has name
+// those, and words none has say so.
+func TestResumeByWords(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "One."}, apptest.Reply{Text: "Two."}, apptest.Reply{Text: "Three."})
+	run(t, w, "-p", "fix the flaky timer test").wantCode(t, 0)
+	run(t, w, "-p", "write the release notes for the timer").wantCode(t, 0)
+	run(t, w, "-p", "something else entirely").wantCode(t, 0)
+	w.Model.Add(apptest.Reply{Text: "Back to the flaky one."})
+	run(t, w, "-r", "FLAKY timer", "-p", "go on").wantCode(t, 0)
+	reqs := w.Model.Requests()
+	has(t, "resumed by words", string(reqs[len(reqs)-1].Body), "fix the flaky timer test", "go on")
+	r := run(t, w, "-r", "timer", "-p", "go on").wantCode(t, 1)
+	has(t, "words two sessions have", r.err, `2 sessions have "timer" in their name or first prompt`, "Resume one by its id")
+	r = run(t, w, "-r", "no such words", "-p", "go on").wantCode(t, 1)
+	has(t, "words no session has", r.err, "nor those words in its name or first prompt")
+}
+
 // /resume lists the folder's other sessions and opens one in place of the
 // session that is open, which is kept.
 func TestResumeInsideASession(t *testing.T) {

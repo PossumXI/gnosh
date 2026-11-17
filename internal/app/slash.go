@@ -215,7 +215,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
 		{Name: "keybindings", Summary: "Your keyboard shortcuts file, as Claude Code's keybindings.json: typed alone in the full interface, it opens in your editor.", InRun: true, Run: l.slashKeybindings},
 		{Name: "color", Args: "[" + strings.Join(PromptColors, "|") + "|default]", Summary: "Give this session's prompt mark a colour, to tell it from other sessions; with none named, one at random. It is kept with the session.", InRun: true, Run: l.slashColor},
-		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
+		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id, name or words]", Summary: "Open another session of this folder in place of this one, which is kept. Words find the session whose name or first prompt has them.", Run: l.slashResume},
 		{Name: "fork", Args: "<prompt>", Summary: "Copy the conversation into a new session that works on the prompt in the background, as a run of its own, while this one goes on here.", Run: l.slashFork},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},

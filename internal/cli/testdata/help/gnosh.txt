@@ -36,7 +36,8 @@ Which conversation
       working folder, which is --cwd now. So a single word right after -c is
       refused: write -C before a one-word prompt.)
   -r, --resume [session]
-      Resume a session by its ID or its name, or from a transcript file given
+      Resume a session by its ID or its name, or by words in its name or first
+      prompt when one session alone has them, or from a transcript file given
       as an absolute path ending in .jsonl. With nothing after it, show the
       sessions to pick from; in print mode a session must be named. The
       argument after -r is always taken as the session, never as the prompt.

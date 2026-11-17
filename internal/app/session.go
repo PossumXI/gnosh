@@ -734,7 +734,7 @@ func (l *live) findSession(ctx context.Context, word string) (string, error) {
 	}
 	switch len(matches) {
 	case 0:
-		return "", fmt.Errorf("no session has the id or the name %q (sessions are kept under %s), so nothing was started", word, l.store.Dir)
+		return searchSessions(list, word, l.store.Dir)
 	case 1:
 		return matches[0].ID, nil
 	}
@@ -743,6 +743,45 @@ func (l *live) findSession(ctx context.Context, word string) (string, error) {
 		lines = append(lines, fmt.Sprintf("  %s  (last written %s)", m.ID, m.Modified.Local().Format("2006-01-02 15:04")))
 	}
 	return "", fmt.Errorf("%d sessions are named %q. Resume one by its id:\n%s", len(matches), word, strings.Join(lines, "\n"))
+}
+
+// searchShown is how many sessions a search that found more than one
+// names.
+const searchShown = 10
+
+// searchSessions finds the session whose name or first prompt holds every
+// one of the words, in any case, among all the folder's sessions (list,
+// the one written to last first), not only the ones a list shows: the id
+// when one does, and otherwise an error that names the ones that do, or
+// says none does. dir is where the sessions are kept.
+func searchSessions(list []transcript.Info, words, dir string) (string, error) {
+	terms := strings.Fields(strings.ToLower(words))
+	var hits []transcript.Info
+	for _, info := range list {
+		text := strings.ToLower(info.Title + "\n" + info.FirstPrompt)
+		all := len(terms) > 0
+		for _, t := range terms {
+			all = all && strings.Contains(text, t)
+		}
+		if all {
+			hits = append(hits, info)
+		}
+	}
+	switch len(hits) {
+	case 0:
+		return "", fmt.Errorf("no session has the id or the name %q, nor those words in its name or first prompt (sessions are kept under %s), so nothing was started", words, dir)
+	case 1:
+		return hits[0].ID, nil
+	}
+	var lines []string
+	for i, h := range hits {
+		if i == searchShown {
+			lines = append(lines, fmt.Sprintf("  and %d more", len(hits)-searchShown))
+			break
+		}
+		lines = append(lines, fmt.Sprintf("  %s  %s  %s", h.ID[:min(8, len(h.ID))], h.Modified.Local().Format("2006-01-02 15:04"), oneLine(firstOf(h.Title, h.FirstPrompt), 80)))
+	}
+	return "", fmt.Errorf("%d sessions have %q in their name or first prompt, the one written to last first. Resume one by its id:\n%s", len(hits), words, strings.Join(lines, "\n"))
 }
 
 // pickSession shows the folder's sessions to pick from, for -r with

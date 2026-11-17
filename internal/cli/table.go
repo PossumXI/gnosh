@@ -107,7 +107,7 @@ func Default() *Table {
 		help:       "Continue the most recent session of this project. (-c used to take the working folder, which is --cwd now. So a single word right after -c is refused: write -C before a one-word prompt.)",
 		refuseNext: wordAfterC})
 	resume := t.add(&flag{names: "-r --resume", kind: kindOptional, arg: "session", group: groupConversation, pri: 0,
-		help: "Resume a session by its ID or its name, or from a transcript file given as an absolute path ending in .jsonl. With nothing after it, show the sessions to pick from; in print mode a session must be named. The argument after -r is always taken as the session, never as the prompt.",
+		help: "Resume a session by its ID or its name, or by words in its name or first prompt when one session alone has them, or from a transcript file given as an absolute path ending in .jsonl. With nothing after it, show the sessions to pick from; in print mode a session must be named. The argument after -r is always taken as the session, never as the prompt.",
 		set:  func(i *Invocation, v flagValue) { i.Resume = v.text }})
 	sessionID := t.add(&flag{names: "--session-id", kind: kindText, arg: "uuid", group: groupConversation, pri: 0,
 		help:  "Give the new conversation this ID, which must be a UUID. It is for a new conversation only: not with -c, -r or --fork-session.",

@@ -241,7 +241,7 @@ func (l *live) slashResume(ctx context.Context, c *SlashContext) error {
 		for i, ch := range choices {
 			c.Say("  %d. %s  %s  %s", i+1, ch.ID[:min(8, len(ch.ID))], ch.Modified.Local().Format("2006-01-02 15:04"), oneLine(ch.Title, 80))
 		}
-		c.Say("/resume N opens one in place of this session, which is kept. An id or a name works too.")
+		c.Say("/resume N opens one in place of this session, which is kept. An id or a name works too, and so do words from a session's name or first prompt, which finds it among all of them.")
 		return nil
 	}
 	if l.busy(ctx) {
