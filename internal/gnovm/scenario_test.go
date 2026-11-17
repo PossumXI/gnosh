@@ -610,16 +610,6 @@ func writeScenarioConfig(t *testing.T, path, reasoning string) {
 	}
 }
 
-func copyIfThere(t *testing.T, from, to string) {
-	b, err := os.ReadFile(from)
-	if err != nil {
-		return
-	}
-	if err := os.WriteFile(to, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // parseStream reads gnosh run's stream-json output: the session id, each
 // tool call with its result, and the final answer.
 func parseStream(r io.Reader) turnResult {
