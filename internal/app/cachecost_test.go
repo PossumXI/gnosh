@@ -24,6 +24,10 @@ func TestCostSaysTheCache(t *testing.T) {
 	s.see("Two.")
 	s.typeLine("the third prompt")
 	s.see("Three.")
+	// (A request's counts are kept as its turn ends, after its words are
+	// on the screen: /cost typed between the two, on a loaded machine,
+	// told of two requests, 16 November's CI of a7a1c6a.)
+	s.see("-- done in ")
 	s.typeLine("/cost")
 	s.see("  cache    32% of what was read came from the model server's cache; 1 request read again about")
 	s.typeLine("/exit")
