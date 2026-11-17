@@ -800,7 +800,9 @@ func fillTargets(f *cmdFacts, args []word) {
 				inPlace = true
 			}
 		}
-		if !hasE && len(ops) > 0 && !ops[0].glob && !ops[0].brace {
+		// (A script computed outside quotes is the script and then files,
+		// as grep's pattern is: mayBecomeWords.)
+		if !hasE && len(ops) > 0 && !ops[0].glob && !ops[0].brace && !mayBecomeWords(ops[0]) {
 			ops = ops[1:]
 		}
 		if inPlace {
