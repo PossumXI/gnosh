@@ -224,7 +224,7 @@ func failHintFor(kind string) string {
 	case "authentication_failed":
 		return "The model's server refused gnosh's key: /doctor says more, /model picks another model"
 	case "invalid_request":
-		return `The server refused the request: /doctor says more, /model picks another model`
+		return `The server refused the request: /rewind edits the prompt, /doctor says more, /model picks another`
 	case "server_error":
 		return `Send "go on" to try again; /doctor checks the model's server, /model picks another`
 	}
