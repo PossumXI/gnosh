@@ -448,7 +448,9 @@ if [ "$scenario" = config ]; then
 fi
 if [ "$scenario" = cd ]; then
 	echo "=== here.txt in lib: $(cat "$T/lib/here.txt" 2>/dev/null || echo none); in work: $(cat "$T/work/here.txt" 2>/dev/null || echo none)"
-	echo "=== the session files: $(cd "$T/data/gnosh/projects" && ls -d */*.jsonl 2>/dev/null | tr '\n' ' ')"
+	# (The projects' folders begin with a dash: ls is told where its
+	# options end.)
+	echo "=== the session files: $(cd "$T/data/gnosh/projects" && ls -d -- */*.jsonl 2>/dev/null | tr '\n' ' ')"
 fi
 if [ "$scenario" = worktree ]; then
 	echo "=== notes.txt here: $(tr '\n' ' ' < "$T/work/notes.txt")"
