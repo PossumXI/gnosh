@@ -2,6 +2,8 @@ package shelltool
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -30,10 +32,16 @@ type Manager struct {
 	hostNames []string         // their names, in the order declared
 	local     string           // who and where this machine is: "dev@box"
 
-	// The two ways the manager touches other processes. They are fields so
+	// The ways the manager touches other processes. They are fields so
 	// that a test can stand in for them.
 	signal func(pid int, sig syscall.Signal) error
 	procs  func(sid int) ([]procInfo, error)
+	envHas func(pid int, entry string) (bool, error)
+
+	// mark is the value of MarkVar in every command's environment, which
+	// the processes they start inherit: one that carries it is this
+	// manager's to stop, wherever its session's id has gone since.
+	mark string
 
 	notes *notifier // tells Options.OnEnd about background commands that ended
 
@@ -68,6 +76,34 @@ type Manager struct {
 	closeErr  error
 }
 
+// MarkVar is the variable every command is given, set to a value of its
+// session's own: what a command leaves running is known by it when the
+// session ends (stop.go, sweep).
+const MarkVar = "GNOSH_SHELL_ID"
+
+// newMark makes a manager's mark: 16 random bytes, in hex.
+func newMark() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
+// markEntry is the manager's mark as an entry of an environment.
+func (m *Manager) markEntry() string { return MarkVar + "=" + m.mark }
+
+// marked keeps the processes of ps whose environment holds the manager's
+// mark: what a command of this session started, and what that started in
+// turn, unless one began its program with an environment of its own.
+func (m *Manager) marked(ps []procInfo) []procInfo {
+	var out []procInfo
+	for _, p := range ps {
+		if ok, err := m.envHas(p.pid, m.markEntry()); err == nil && ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // keptFile is the output file of a finished foreground command.
 type keptFile struct {
 	path string
@@ -91,6 +127,8 @@ func New(opts Options) *Manager {
 		opt:    opts.withDefaults(),
 		signal: syscall.Kill,
 		procs:  sessionProcs,
+		envHas: procEnvHas,
+		mark:   newMark(),
 
 		maxLingering: defaultMaxLingering,
 		running:      make(map[*job]struct{}),
@@ -238,10 +276,31 @@ func (m *Manager) Background(callID string) bool {
 	return true
 }
 
+// BackgroundSoon is Background for a call the caller knows is a call of
+// this manager's Bash tool in flight, which may not have reached the
+// manager yet: the person sees it while its permission is checked and its
+// PreToolUse hooks run. Its command goes to the background as it starts,
+// and one that runs already goes now. A request for a call that never
+// runs (refused, or stopped first) stays on the books until the session
+// ends: a few bytes.
+func (m *Manager) BackgroundSoon(callID string) bool {
+	m.mu.Lock()
+	if j := m.calls[callID]; j == nil {
+		ok := callID != "" && !m.opt.NoBackground && !m.closed
+		if ok {
+			m.pending[callID] = true
+		}
+		m.mu.Unlock()
+		return ok
+	}
+	m.mu.Unlock()
+	return m.Background(callID)
+}
+
 // expect notes that the call callID is about to start a foreground
 // command here, so that Background can be asked for it before it starts;
-// the function it returns forgets the call. (A request made before expect
-// is kept.)
+// the function it returns forgets the call. (A request made before expect,
+// by BackgroundSoon, is kept.)
 func (m *Manager) expect(callID string) (forget func()) {
 	m.mu.Lock()
 	if _, ok := m.pending[callID]; !ok {
@@ -499,8 +558,10 @@ func (m *Manager) linger(j *job, left []procInfo) bool {
 
 // keepDetached records that the ended command whose session is sid left
 // processes running there that let go of its output, so that Close stops
-// them. It reports false when the manager is already closing.
+// them. Sessions on the books whose processes have all ended are forgotten
+// first. It reports false when the manager is already closing.
 func (m *Manager) keepDetached(sid int, left []procInfo) bool {
+	m.pruneDetached()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -510,12 +571,49 @@ func (m *Manager) keepDetached(sid int, left []procInfo) bool {
 	return true
 }
 
-// settle is called when a command's output has closed for good: nothing of
-// it is left behind that the manager need remember.
+// pruneDetached forgets the sessions on the books (detached) in which no
+// process is left. The sessions are looked at without the lock held; one
+// put on the books again meanwhile, under the same id, is kept.
+func (m *Manager) pruneDetached() {
+	m.mu.Lock()
+	books := make(map[int][]procInfo, len(m.detached))
+	for sid, procs := range m.detached {
+		books[sid] = procs
+	}
+	m.mu.Unlock()
+	for sid, then := range books {
+		if now, err := m.procs(sid); err != nil || len(now) > 0 {
+			continue
+		}
+		m.mu.Lock()
+		if cur, ok := m.detached[sid]; ok && len(cur) > 0 && len(then) > 0 && cur[0] == then[0] {
+			delete(m.detached, sid)
+		}
+		m.mu.Unlock()
+	}
+}
+
+// settle is called when a command's output has closed for good. A command
+// whose leftovers held it open (lingering) is taken off that list; when
+// processes are still in its session, what held the output let go of it
+// and runs on, and it goes on the books as what let go of the output as
+// the command ended does (keepDetached), so that Close stops it all the
+// same.
 func (m *Manager) settle(j *job) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	_, held := m.lingering[j]
 	delete(m.lingering, j)
+	closing := m.closed
+	m.mu.Unlock()
+	if !held || closing {
+		return
+	}
+	if now, err := m.procs(j.pid); err == nil && len(now) > 0 {
+		j.letGo.Store(true)
+		if !m.keepDetached(j.pid, now) {
+			m.sweep(j.pid, now) // (the manager is closing)
+		}
+	}
 }
 
 // release takes a command that has ended off the list of running ones. It

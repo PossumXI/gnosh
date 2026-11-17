@@ -214,8 +214,10 @@ type SessionControls interface {
 	// waiting for to the background, where it keeps running, and reports
 	// whether there was such a command. The call returns at once with the
 	// command's task id. It works for a call of the model's and for a
-	// command started with Shell.
-	Background(callID string) bool
+	// command started with Shell. tool is the call's tool: a Bash call
+	// whose command has not started yet (its permission is checked, its
+	// PreToolUse hooks run) goes to the background as it starts.
+	Background(callID, tool string) bool
 	// History returns the prompts the person sent from this folder, in
 	// earlier sessions and in this one, the oldest first: what Up and a
 	// search of the history reach. It reads the folder's most recent

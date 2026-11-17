@@ -1634,10 +1634,17 @@ func (c *controls) StopBackgroundAgents() int {
 	return n
 }
 
-// Background moves the command a tool call waits for to the background.
-func (c *controls) Background(callID string) bool {
+// Background moves the command a tool call waits for to the background;
+// a Bash call's command that has not started yet goes there as it starts.
+func (c *controls) Background(callID, tool string) bool {
 	l := c.cur()
-	return l.shell != nil && callID != "" && l.shell.Background(callID)
+	switch {
+	case l.shell == nil || callID == "":
+		return false
+	case tool == shelltool.BashName:
+		return l.shell.BackgroundSoon(callID)
+	}
+	return l.shell.Background(callID)
 }
 
 // Withdraw takes one of the person's queued prompts off the queue.

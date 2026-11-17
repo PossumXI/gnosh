@@ -306,7 +306,7 @@
 //     the session's first prompt, from app.FrontendInfo's field Prompt.
 //   - shell lines ("!"): a method Shell(command string) error.
 //   - Ctrl+B, and the part of Ctrl+Enter that moves commands aside: a
-//     method Background(callID string) bool.
+//     method Background(callID, tool string) bool.
 //   - the prompts of earlier sessions in the history: a method
 //     History() []string (oldest first). Without it, Up and Ctrl+R reach
 //     this session's prompts only.

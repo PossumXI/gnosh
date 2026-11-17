@@ -137,7 +137,7 @@ func TestShellLineOfThePersonsOwn(t *testing.T) {
 			return 1
 		}
 		start := find(f, "the long command's start", func(e *agent.ToolStartEvent) bool { return strings.Contains(string(e.Input), "sleep 30") })
-		if !c.Background(start.CallID) {
+		if !c.Background(start.CallID, start.Name) {
 			t.Error("the running command could not be moved to the background")
 		}
 		end := find(f, "the long command's call to return", func(e *agent.ToolEndEvent) bool { return e.CallID == start.CallID })
@@ -152,7 +152,7 @@ func TestShellLineOfThePersonsOwn(t *testing.T) {
 			}
 			time.Sleep(5 * time.Millisecond)
 		}
-		if c.Background("no-such-call") {
+		if c.Background("no-such-call", "Read") {
 			t.Error("Background found a command for a call that is not there")
 		}
 		_ = c.Wait(ctx)

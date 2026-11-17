@@ -35,9 +35,11 @@ type sheller interface {
 }
 
 // backgrounder is what a session's controls may also be: able to move the
-// running command of a tool call to the background, as Ctrl+B asks.
+// running command of a tool call to the background, as Ctrl+B asks. tool
+// is the call's tool, which the screen knows from the moment the call
+// starts: a command call may not have reached its command yet.
 type backgrounder interface {
-	Background(callID string) bool
+	Background(callID, tool string) bool
 }
 
 // withdrawer is what a session's controls may also be: able to take one
@@ -845,7 +847,7 @@ func (s *session) background() {
 	}
 	moved := 0
 	for _, c := range s.calls {
-		if c.started && b.Background(c.id) {
+		if c.started && b.Background(c.id, c.name) {
 			moved++
 		}
 	}
@@ -1167,7 +1169,7 @@ func (s *session) sendNow() {
 	b, movable := s.c.(backgrounder)
 	for _, c := range s.calls {
 		switch {
-		case c.started && movable && b.Background(c.id):
+		case c.started && movable && b.Background(c.id, c.name):
 			moved++
 		default:
 			blocked++

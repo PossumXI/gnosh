@@ -166,6 +166,11 @@
 //	PWD=<working directory> so the shell's idea of where it is, is right
 //	OLDPWD                  removed: it would be the harness's, not the session's
 //
+// Last of all comes GNOSH_SHELL_ID (MarkVar), set to 32 hex digits made at
+// random for the session, which nothing else may set: the processes a
+// command starts inherit it, and by it gnosh knows them as its own when
+// the session ends.
+//
 // # What carries over
 //
 // Only the working directory. When the shell exits, by reaching the end,
@@ -234,8 +239,12 @@
 // That process is not killed. What it prints from then on is still read,
 // so that it is never blocked on a full pipe or killed by a closed one,
 // and goes to the command's output file. It is stopped when the manager is
-// closed, but only if it can be shown to be the same process: its group's
-// id may by then belong to something else. Listening costs a goroutine and
+// closed, but only if it can be shown to be the command's: its group's id
+// may by then belong to something else. A process seen as the command
+// ended that is still there, the same one, shows the whole session is
+// still the command's; otherwise only processes carrying the session's
+// GNOSH_SHELL_ID in their environment are (on Linux: macOS shows no
+// process another's environment). Listening costs a goroutine and
 // two open files for each such command, so at most 32 are listened to at
 // once; what a further command leaves behind is stopped at once, and that
 // command's result says so.
@@ -244,9 +253,14 @@
 // server started so) does not hold the call up either: the command ends
 // cleanly. It is still in the command's session, and the result says it
 // was left running; it is stopped when the manager is closed, as one that
-// holds the output is, if it can be shown to be the same process. One
-// that started a session of its own (setsid) is left alone, at Close
-// too: that is the way to keep a process past the session.
+// holds the output is, if it can be shown to be the command's. So is a
+// server a launcher started that has ended since (the launcher seen at the
+// end is gone, the server carries the mark; on Linux), and one that held the output
+// at the end and let go of it later (the task then says it runs on).
+// Sessions on the books whose processes have all ended are forgotten as
+// new ones come. One that started a session of its own (setsid) is left
+// alone, at Close too: that is the way to keep a process past the
+// session.
 //
 // # Output
 //

@@ -763,6 +763,40 @@ func TestSendAtOnceMovesACommandAside(t *testing.T) {
 	}
 }
 
+// The same while a PreToolUse hook still runs: the screen shows the call
+// before its command has started, and sending at once then moves the
+// command aside as it starts, rather than stopping the turn.
+func TestSendAtOnceWhileAHookRuns(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 300"}`}}},
+		apptest.Reply{Text: "I read what you sent, and the command goes on."},
+	)
+	w.Allow("Bash(sleep *)")
+	w.Hook("PreToolUse", "Bash", "sleep 2")
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	p.keys(`"wait a while" <Enter>`)
+	p.has("sleep 300")
+	p.keys(`"and tell me when" <Enter>`)
+	p.has("and tell me when")
+	p.keys(`<Ctrl+X> <Ctrl+S>`)
+	p.has("I read what you sent, and the command goes on.", "1 in the background")
+	if text := p.ft.text(); strings.Contains(text, "stopped by you") || strings.Contains(text, "stopped before it ran") {
+		t.Errorf("the turn was stopped:\n%s", text)
+	}
+	reqs := w.Model.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the model was sent %d requests, want 2", len(reqs))
+	}
+	if sent := string(reqs[1].Body); !strings.Contains(sent, "and tell me when") || !strings.Contains(sent, "moved to the background") {
+		t.Errorf("in the same turn the model was sent:\n%s", sent)
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}
+
 // /model with nothing after it opens the picker over the real session:
 // the server's models, the one in use marked; the one picked is switched
 // to, and the next request names it.

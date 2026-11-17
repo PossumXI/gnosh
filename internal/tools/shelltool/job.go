@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -122,6 +123,10 @@ type job struct {
 	sink atomic.Pointer[progressSink] // where live output goes while a call is listening
 	mon  *watcher                     // a Monitor's command: what passes its lines on; nil for any other
 
+	// letGo says that what the command left holding its output let go of
+	// it later and runs on, kept on the books to be stopped at Close.
+	letGo atomic.Bool
+
 	// intake is held while a piece of output is read from the pipe and
 	// taken in, so that whoever else holds it knows that none is on its way.
 	intake sync.Mutex
@@ -225,7 +230,8 @@ func (j *job) launch(dir, name string) error {
 		j.out.where = " on this machine"
 	}
 	cmd.Dir = j.dir
-	cmd.Env = commandEnv(m.opt.Environ(), j.dir, m.opt.Env)
+	// The mark goes last, where the settings' own env cannot take it out.
+	cmd.Env = commandEnv(m.opt.Environ(), j.dir, append(slices.Clip(m.opt.Env), m.markEntry()))
 	cmd.Stdin = nil // the null device
 	// A session of its own: the shell leads a new process group, which is
 	// what gets signalled, and has no terminal, so nothing in it can stop

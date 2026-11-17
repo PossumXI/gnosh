@@ -134,6 +134,8 @@ func (j *job) how(e *ending) string {
 		switch groups, _ := describeGroups(e.left); {
 		case e.swept:
 			text += "; it left a process running, which was stopped"
+		case closed(j.pumped) && j.letGo.Load():
+			text += "; the process it left running let go of its output since, and runs on: it will be stopped when the session ends"
 		case closed(j.pumped):
 			text += "; the process it left running has ended since"
 		case groups != "":
