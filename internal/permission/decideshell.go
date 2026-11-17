@@ -947,6 +947,9 @@ func (e *Engine) shellPaths(req *request) {
 		for _, w := range f.lands {
 			add(w, &writes)
 		}
+		if trees, copies := treeOps(u.cmd.words); len(trees)+len(copies) > 0 {
+			e.treeGuards(trees, copies, dirs, req, &writes)
+		}
 		// A file written onto a flag, in a word that is not all written
 		// out: "awk -f${X:-.env}", "sort -o$X.env", "tool --config=${X:-.env}".
 		// The flag is read as it is when no variable in it is set, and a

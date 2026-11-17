@@ -296,7 +296,13 @@
 // flag that the table of read-only commands does not know (diff
 // --from-file=.env). A command handed a list of the files it reads (tar
 // -T, rsync --files-from, cpio -o, zip -@, --files0-from) names files
-// nobody sees ahead of time.
+// nobody sees ahead of time. A folder changed with all that is in it (rm
+// -r, chmod -R, mv, a copy into it with cp -r or rsync -r) changes a file
+// that a rule names inside it, by its path written out, when the file is
+// there (a copy: when it brings a file of that name along); a rule that
+// names files inside it by a pattern makes the command one that cannot be
+// checked. A rule that may match at any depth (a bare name) is not looked
+// for inside such a folder.
 //
 // What the line gives its variables is followed along the roads a line
 // plainly takes: an assignment, or several (each value counts); an

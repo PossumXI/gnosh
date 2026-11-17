@@ -522,6 +522,14 @@ func TestShellAttacks(t *testing.T) {
 		{"cpio -i", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cpio -i < x.cpio", Ask},
 		{"patch", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "patch -p1 < x.patch", Ask},
 		{"git apply", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "git apply x.patch", Ask},
+		// A folder changed with all that is in it changes a file a rule
+		// names inside it.
+		{"rm -r takes away what a rule names inside", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/secret.txt)"}}, "rm -rf x", Deny},
+		{"chmod -R changes it", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/secret.txt)"}}, "chmod -R 777 x", Deny},
+		{"mv takes it away", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/secret.txt)"}}, "mv x /tmp/y", Deny},
+		{"cp -r brings a file of its name over it", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/secret.txt)"}}, "cp -r y/. x", Deny},
+		{"a pattern inside the folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/keys/*.pem)"}}, "rm -rf x", Ask},
+		{"~/.aws inside a home folder removed", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(~/.aws/credentials)"}}, "rm -r ~/.aws", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
@@ -1988,6 +1996,29 @@ func TestQuotedComputedPattern(t *testing.T) {
 	for _, cmd := range []string{`grep "$X" a.txt`, `grep -e "$(cat pat)" a.txt`, `rg "$X" src`, `sed "$X" a.txt`} {
 		if d := bash(e, cmd); d.Behavior != Allow {
 			t.Errorf("%s: got %s (%s), want allow", cmd, d.Behavior, d.Reason)
+		}
+	}
+}
+
+// TestWhatAFolderHolds: a folder changed with all that is in it is held
+// to a rule that names a file inside it only when that file is there,
+// and a copy only when it brings a file of that name along.
+func TestWhatAFolderHolds(t *testing.T) {
+	fs := fakeFS{files: []string{"/proj/x", "/proj/x/secret.txt", "/proj/y", "/proj/y/a.txt", "/proj/z", "/proj/z/secret.txt", "/proj/build", "/proj/build/out.o"}}
+	o := testOptions(ModeDefault, rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/secret.txt)", "Edit(./build/keep/*.pem)"}})
+	o.Resolve, o.Glob = fs.resolve, fs.glob
+	e := mustEngine(t, o)
+	for cmd, want := range map[string]Behavior{
+		"rm -rf x":       Deny,  // secret.txt is there
+		"chmod -R 700 x": Deny,  //
+		"rm -rf build":   Allow, // build/keep is not there, so neither is a .pem in it
+		"rm -rf y":       Allow, // nothing a rule names
+		"cp -r y/. x":    Allow, // y holds no secret.txt to bring over x's
+		"cp -r z/. x":    Deny,  // z's secret.txt lands on x's
+		"rm x/other.txt": Allow,
+	} {
+		if d := bash(e, cmd); d.Behavior != want {
+			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
 		}
 	}
 }
