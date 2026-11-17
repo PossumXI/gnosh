@@ -110,13 +110,13 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 		// the person's.
 		res, _, err := s.l.typedSkill(word, args, line)
 		if res.Handled {
-			s.l.flog.logf("turn", "the skill /%s was typed (%d bytes of arguments): %v", word, len(args), err)
+			s.l.flog.logf("turn", "the skill /%s was typed (%d bytes of arguments)%s", word, len(args), failedWith(err))
 			return res, err
 		}
 		// Or a prompt of a connected MCP server.
 		res, _, err = s.l.typedMCPPrompt(word, args, line)
 		if res.Handled {
-			s.l.flog.logf("turn", "the MCP prompt /%s was typed (%d bytes of arguments): %v", word, len(args), err)
+			s.l.flog.logf("turn", "the MCP prompt /%s was typed (%d bytes of arguments)%s", word, len(args), failedWith(err))
 		}
 		return res, err
 	}
@@ -162,7 +162,7 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 	// (/cd ends the session only once it has moved it: saying where the
 	// session is, or that it is there already, ends nothing.)
 	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart" || cmd.Name == "background" || cmd.Name == "cd" && s.l.p.restartArgs() != nil)
-	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments): %v", cmd.Name, len(args), err)
+	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments)%s", cmd.Name, len(args), failedWith(err))
 	// A command may have changed what the status line is told: the
 	// session's name (/rename), the model, its thinking, the style.
 	s.l.statusLine.poke()

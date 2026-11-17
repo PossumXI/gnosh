@@ -216,14 +216,14 @@ func (g *fileLog) event(ev any) {
 	case *agent.DriverEvent:
 		g.logf("turn", "the check %s holds the turn open (%d in a row, checkpoint %v): %s", ev.Name, ev.Streak, ev.Checkpoint, ev.Objection)
 	case *agent.SummaryEvent:
-		g.logf("context", "summary %s (%s): %d tokens before, %d after, error %v", ev.Phase, ev.Trigger, ev.PreTokens, ev.PostTokens, ev.Err)
+		g.logf("context", "summary %s (%s): %d tokens before, %d after%s", ev.Phase, ev.Trigger, ev.PreTokens, ev.PostTokens, failedWith(ev.Err))
 	case *agent.RoomEvent:
 		g.logf("context", "about %d tokens slid out of the view: %s", ev.Freed, ev.Notice)
 	case *agent.ContextEvent:
 		g.debugf("context", "about %d of %d tokens (room is made at %d)", ev.Context.Used, ev.Context.Window, ev.Context.Point)
 	case *agent.SideEvent:
-		g.logf("model", "side request (%s) to %s/%s took %s: prompt %d (cached %d), written %d, error %v", ev.Purpose, ev.Provider, ev.Model, ev.Duration.Round(time.Millisecond),
-			ev.Usage.PromptTokens(), ev.Usage.CacheReadTokens, ev.Usage.OutputTokens, ev.Err)
+		g.logf("model", "side request (%s) to %s/%s took %s: prompt %d (cached %d), written %d%s", ev.Purpose, ev.Provider, ev.Model, ev.Duration.Round(time.Millisecond),
+			ev.Usage.PromptTokens(), ev.Usage.CacheReadTokens, ev.Usage.OutputTokens, failedWith(ev.Err))
 	case *agent.LoopEvent:
 		g.logf("turn", "/loop on %v after %d turns: %s", ev.On, ev.Turns, ev.Why)
 	case *agent.PromptReturnedEvent:
@@ -241,6 +241,16 @@ func (g *fileLog) event(ev any) {
 	case *CapEvent:
 		g.logf("turn", "the run reached its %d turns (--max-turns) and is stopped there", ev.Turns)
 	}
+}
+
+// failedWith is ", failed: <err>" for a log line, or nothing when err is
+// nil: a line that says "error <nil>" each time a thing went right is one
+// more to pass over when looking for what went wrong.
+func failedWith(err error) string {
+	if err == nil {
+		return ""
+	}
+	return ", failed: " + err.Error()
 }
 
 // crashFile is where a fatal error of the Go runtime, and a panic gnosh
