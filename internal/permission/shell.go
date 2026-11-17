@@ -128,6 +128,9 @@ type simpleCmd struct {
 	// aliased are the aliases this command was read through (useAlias):
 	// a name is taken for its alias once.
 	aliased []string
+	// flagCd marks a cd read from a program's own flag (env -C, git -C):
+	// the program goes to that folder, and the shell never is in it.
+	flagCd bool
 }
 
 // script is everything read from one command line.

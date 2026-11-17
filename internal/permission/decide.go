@@ -194,7 +194,9 @@ func (e *Engine) CommandDirs(dir, command string) (dirs []string, why string) {
 	if why := unreadable(v); why != "" {
 		return nil, why
 	}
-	dirs, unknown := at.lineDirsKnown(v)
+	// (Where the shell is: a folder a program's own flag sends it to is
+	// judged below, and git's by GitPlaces.)
+	dirs, unknown := at.dirsOf(v, false)
 	switch {
 	case unknown:
 		return nil, "a cd in it goes to a place only known when it runs"
@@ -376,6 +378,91 @@ func gitChdirs(args []word) (out []word) {
 		}
 	}
 	return out
+}
+
+// gitRuns are the commands that git settings a line gives make git run:
+// the value of git's own -c, or one that git config writes, for a key
+// whose value is a command ("git -c core.sshCommand='rm -rf ~' fetch"),
+// and an alias's: what follows the ! of one that starts with ! is a shell
+// command ("git -c alias.z='!rm -rf ~' z"), and any other is a git
+// command ("git -c alias.p=push p" pushes).
+func gitRuns(args []word) (out []string) {
+	setting := func(w word) {
+		if !w.static() {
+			return
+		}
+		key, val, ok := strings.Cut(w.joined(), "=")
+		switch k := strings.ToLower(key); {
+		case !ok || val == "":
+		case strings.HasPrefix(k, "alias.") && strings.HasPrefix(val, "!"):
+			out = append(out, val[1:])
+		case strings.HasPrefix(k, "alias."):
+			out = append(out, "git "+val)
+		case gitCommandKey(k):
+			out = append(out, strings.TrimLeft(val, "!| "))
+		}
+	}
+	i := 0
+own:
+	for ; i < len(args); i++ {
+		switch l := args[i].joined(); {
+		case !args[i].static():
+			return out
+		case l == "-c":
+			if i+1 < len(args) {
+				i++
+				setting(args[i])
+			}
+		case l == "-C" || l == "--git-dir" || l == "--work-tree" || l == "--namespace" || l == "--config-env" || l == "--attr-source":
+			i++
+		case strings.HasPrefix(l, "-"):
+		default:
+			break own // the subcommand
+		}
+	}
+	if i >= len(args) || args[i].joined() != "config" {
+		return out
+	}
+	// git config [options] key value, and git config set key value: the
+	// first two words that are no options.
+	var words []word
+	rest := args[i+1:]
+	for j := 0; j < len(rest); j++ {
+		switch l := rest[j].joined(); {
+		case l == "set" && len(words) == 0:
+		case l == "-f" || l == "--file" || l == "--blob" || l == "--default" || l == "--comment" || l == "--value" || l == "--type":
+			j++ // its value
+		case strings.HasPrefix(l, "-"):
+		default:
+			words = append(words, rest[j])
+		}
+	}
+	if len(words) >= 2 && words[0].static() {
+		w := litOf(words[0].joined() + "=" + words[1].joined())
+		if words[1].static() {
+			setting(w)
+		}
+	}
+	return out
+}
+
+// gitCommandKey reports whether the value of git's setting k (in lower
+// case) is a command git runs, or a program.
+func gitCommandKey(k string) bool {
+	switch k {
+	case "core.pager", "core.editor", "core.sshcommand", "core.askpass", "core.fsmonitor", "core.gitproxy", "diff.external",
+		"sequence.editor", "interactive.difffilter", "uploadpack.packobjectshook", "web.browser":
+		return true
+	}
+	if strings.HasPrefix(k, "pager.") {
+		return true // the pager of one subcommand
+	}
+	for _, end := range []string{".command", ".textconv", ".driver", ".clean", ".smudge", ".process", ".cmd", ".program", ".helper", ".receivepack", ".uploadpack"} {
+		if strings.HasSuffix(k, end) {
+			return true
+		}
+	}
+	return false
 }
 
 // chdirValues are the folders the program name, given args, may be sent

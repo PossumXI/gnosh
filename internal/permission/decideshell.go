@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"cmp"
 	"errors"
 	"path"
 	"slices"
@@ -210,8 +211,21 @@ func (e *Engine) lineDirs(v *bashView) (dirs []string) {
 }
 
 func (e *Engine) lineDirsKnown(v *bashView) (dirs []string, unknown bool) {
+	return e.dirsOf(v, true)
+}
+
+// dirsOf is lineDirsKnown; withFlags counts the folders programs go to by
+// flags of their own (env -C, git -C), where the shell itself never is.
+func (e *Engine) dirsOf(v *bashView, withFlags bool) (dirs []string, unknown bool) {
 	dirs = []string{e.cur}
-	for _, u := range v.units {
+	// In the order the line runs them: a cd found inside a command ("command
+	// cd sub", eval 'cd sub') where that command stands (oracle seed 137).
+	units := slices.Clone(v.units)
+	slices.SortStableFunc(units, func(a, b *unit) int { return cmp.Compare(a.origin, b.origin) })
+	for _, u := range units {
+		if u.cmd.flagCd && !withFlags {
+			continue
+		}
 		ws := u.cmd.words
 		if len(ws) == 0 || !ws[0].static() {
 			continue

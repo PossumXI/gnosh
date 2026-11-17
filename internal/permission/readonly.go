@@ -534,6 +534,7 @@ func namedFiles(name string, args []word) []word {
 				part.tilde = a.eqTilde && strings.HasPrefix(val, "~")
 				out = append(out, part)
 			}
+			out = append(out, gluedValues(a)...)
 			continue
 		}
 		out = append(out, a)
@@ -685,6 +686,23 @@ func mentioned(name string, args []word) []word {
 		if !strings.HasPrefix(l, "-") || a.tilde {
 			out = append(out, a)
 		}
+		out = append(out, gluedValues(a)...)
+	}
+	return out
+}
+
+// gluedValues are what may stand glued to a cluster of short flags as the
+// value of one of them, a file a flag takes among them ("curl -K.env",
+// "xargs -a.env", "curl -vK.env"): each text after one of its letters. A
+// word with an = in it is left to the = (whose value is taken whole).
+func gluedValues(a word) []word {
+	l := a.joined()
+	if !a.static() || len(l) < 3 || l[0] != '-' || l[1] == '-' || strings.Contains(l, "=") {
+		return nil
+	}
+	out := make([]word, 0, len(l)-2)
+	for i := 2; i < len(l); i++ {
+		out = append(out, partOf(a, l[i:]))
 	}
 	return out
 }

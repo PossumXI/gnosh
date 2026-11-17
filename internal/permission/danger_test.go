@@ -51,6 +51,7 @@ func TestDangerousRemovals(t *testing.T) {
 		// put in the shell's history.
 		"env --chdir=/ rm -rf usr", "env -C / rm -rf etc", "env -iC/ rm -rf usr", "env --ch=/ rm -rf usr", "sudo -D / rm -rf usr",
 		"env -C ~ rm -rf .", "env -C \"$D\" rm -rf .", "set -o history\nhistory -s 'rm -rf ~'\nfc -s",
+		"git -c alias.z='!rm -rf ~' z", "git -c core.sshCommand='rm -rf ~' fetch", "export PAGER='rm -rf ~'; git -p log",
 	}
 	for _, cmd := range dangerous {
 		d := bash(e, cmd)
@@ -68,7 +69,7 @@ func TestDangerousRemovals(t *testing.T) {
 		"rm -rf /data/extra/sub", "rm -rf /data/extra/sub/*", "rmdir empty",
 		"rm -rf \"${DIR:?}\"/*", "rm -rf \"${DIR:?must be set}/\"", "rm -rf $DIR", "rm -rf \"$DIR/build\"", "rm -rf $BUILD/out",
 		"rm \"$(pwd)/a.txt\"", "rm $(ls *.tmp)", "D=x; rm -rf \"$D\"", "echo rm -rf /", "echo 'rm -rf /'", "grep -r 'rm -rf /' .",
-		"ls /", "rm -- -rf", "git rm -r --cached .", "rm -rf =old", "rm -rf =x/build", "env -C build rm -rf out", "history -s ls",
+		"ls /", "rm -- -rf", "git rm -r --cached .", "rm -rf =old", "rm -rf =x/build", "env -C build rm -rf out", "history -s ls", "git -c core.pager=less log", "git -c alias.st=status st", "git config core.editor vim",
 		// Forms the reader follows are judged on what they remove.
 		"[[ -d build ]] && rm -rf build", "rm -rf \"${dirs[@]}\"", "for ((i=0;i<3;i++)); do rm -f tmp$i; done",
 		"(( n > 0 )) && rm -rf build",

@@ -23,6 +23,11 @@ type unit struct {
 	cmd *simpleCmd
 	// derived is set for commands found inside another command.
 	derived bool
+	// origin is the place among the line's own commands of the one the
+	// command is, or was found inside: where it runs, in the order of the
+	// line (the cd that "command cd sub" runs comes before a cd written
+	// after it).
+	origin int
 	// texts caches denyTexts for the command.
 	texts []string
 }
@@ -33,6 +38,9 @@ type bashView struct {
 	sc   *script
 	// units are every command to check against deny and ask rules.
 	units []*unit
+	// origin is the place of the line's own command being read, which the
+	// units found inside it are given (unit.origin).
+	origin int
 	// opaque is not empty when something will run that could not be read:
 	// a program name computed at run time, a script built by eval. It
 	// says what.
@@ -251,14 +259,17 @@ func (e *Engine) readBash(text string, before *bashView) *bashView {
 	v.grew = false
 	// The line's own commands always count; what is dug out of them is
 	// bounded.
-	for _, c := range v.sc.cmds {
-		v.units = append(v.units, &unit{cmd: c})
+	for i, c := range v.sc.cmds {
+		v.units = append(v.units, &unit{cmd: c, origin: i})
 	}
 	var prev *simpleCmd
-	for _, c := range v.sc.cmds {
+	for i, c := range v.sc.cmds {
+		v.origin = i
 		e.derive(v, c, prev, 0)
 		prev = c
 	}
+	v.origin = len(v.sc.cmds) // what is found after the line's own commands
+
 	// A shell with no (( )) runs its text as commands.
 	for _, a := range v.sc.arith {
 		e.addScript(v, a, nestSubshell, 0, scriptArith)
@@ -2361,6 +2372,14 @@ func (e *Engine) commandVar(v *bashView, w word, nest nesting, depth int) {
 			}
 		}
 		return
+	case "BASH_ENV":
+		// The file bash runs before anything else, as by source:
+		// "BASH_ENV=e.sh bash -c true" runs e.sh, and BASH_ENV=.env reads
+		// .env. It is read as that.
+		if file, ok := afterPrefix(w, name+"="); ok && file.raw != "" {
+			e.addDerived(v, &simpleCmd{words: []word{litOf("."), file}, nest: nest}, nil, depth)
+		}
+		return
 	}
 	if !commandVars[name] || !w.static() {
 		return
@@ -2467,7 +2486,7 @@ func (e *Engine) addDerived(v *bashView, c *simpleCmd, prev *simpleCmd, depth in
 		}
 		return
 	}
-	v.units = append(v.units, &unit{cmd: c, derived: true})
+	v.units = append(v.units, &unit{cmd: c, derived: true, origin: v.origin})
 	e.noteVars(v, c, noPlace)
 	e.derive(v, c, prev, depth+1)
 }
@@ -2704,7 +2723,7 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 			e.addDerived(v, &simpleCmd{words: piece, nest: nest}, nil, depth)
 		}
 		if len(alt) > 0 && len(v.units) < maxUnits+len(v.sc.cmds) {
-			v.units = append(v.units, &unit{cmd: &simpleCmd{redirs: alt, nest: nest}, derived: true})
+			v.units = append(v.units, &unit{cmd: &simpleCmd{redirs: alt, nest: nest}, derived: true, origin: v.origin})
 		}
 		c.pieces, c.altRedirs = pieces, alt
 	}
@@ -2886,9 +2905,12 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 	dirs := chdirValues(name, args)
 	if name == "git" {
 		dirs = gitChdirs(args)
+		for _, text := range gitRuns(args) {
+			e.addScript(v, text, nest, depth, scriptMaybe)
+		}
 	}
 	for _, dir := range dirs {
-		e.addDerived(v, &simpleCmd{words: []word{litOf("cd"), dir}, nest: nest}, prev, depth)
+		e.addDerived(v, &simpleCmd{words: []word{litOf("cd"), dir}, nest: nest, flagCd: true}, prev, depth)
 	}
 
 	isScript := true
@@ -3130,6 +3152,11 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 		for _, a := range args {
 			if l := a.joined(); strings.Contains(l, "$(") || strings.Contains(l, "`") {
 				e.addScript(v, l, nest, depth, scriptOperand)
+			}
+			if declares[name] {
+				// export PAGER='rm x' sets what git runs as its pager, as
+				// PAGER='rm x' git does.
+				e.commandVar(v, a, nest, depth)
 			}
 		}
 	case name == "trap":
