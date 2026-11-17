@@ -53,7 +53,8 @@
 #               (acceptEdits)
 #   wtflag      the same repository, and gnosh started with --worktree demo:
 #               the session adds a line to notes.txt in .gnosh/worktrees/demo,
-#               and the folder's notes.txt stays as it was (acceptEdits)
+#               and the folder's notes.txt stays as it was (acceptEdits); the
+#               ignored .env that .worktreeinclude names is copied there
 #   secreview   a branch that adds a handler with a shell injection:
 #               /security-review should find it
 #   vim         editorMode vim: a prompt typed in INSERT mode, Esc, x in
@@ -167,6 +168,12 @@ cd "$T/work" || exit 1
 if [ "$scenario" = worktree ] || [ "$scenario" = wtflag ]; then
 	git init -q && git -c user.name=check -c user.email=check@example.com add notes.txt &&
 		git -c user.name=check -c user.email=check@example.com commit -q -m notes || exit 1
+fi
+if [ "$scenario" = wtflag ]; then
+	# What a checkout lacks, which .worktreeinclude has copied in.
+	printf '.env\n' > .gitignore && printf '.env\n' > .worktreeinclude && printf 'TOKEN=kz-check\n' > .env &&
+		git -c user.name=check -c user.email=check@example.com add .gitignore .worktreeinclude &&
+		git -c user.name=check -c user.email=check@example.com commit -q -m include || exit 1
 fi
 if [ "$scenario" = secreview ]; then
 	# A branch that adds a handler putting a query parameter into a shell
@@ -478,6 +485,7 @@ fi
 if [ "$scenario" = wtflag ]; then
 	echo "=== notes.txt here: $(tr '\n' ' ' < "$T/work/notes.txt")"
 	echo "=== notes.txt in the work tree: $(tr '\n' ' ' < "$T/work/.gnosh/worktrees/demo/notes.txt" 2>/dev/null || echo none)"
+	echo "=== .env in the work tree: $(cat "$T/work/.gnosh/worktrees/demo/.env" 2>/dev/null || echo none)"
 	echo "=== branches: $(git -C "$T/work" branch --list | tr '\n' ' ')"
 fi
 if [ "$scenario" = plan ]; then
