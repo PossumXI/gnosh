@@ -352,6 +352,7 @@ func facts(words []word) (f cmdFacts) {
 		if !f.readOnly && !f.fsEdit {
 			f.reads = moreWords(f.reads, namedFiles(f.name, args))
 			f.reads = moreWords(f.reads, mentioned(f.name, args))
+			f.writes = moreWords(f.writes, outputs(f.name, args))
 		}
 	}()
 	// A program reached by a path is not the one the table describes.
@@ -793,6 +794,16 @@ func fillTargets(f *cmdFacts, args []word) {
 		f.writes = outFlag("-o", "--output")
 	case "git":
 		f.writes = outFlag("--output")
+		// git archive -o writes the archive, and git format-patch -o the
+		// patches into a folder of that name.
+		for _, a := range args {
+			if a.static() && !strings.HasPrefix(a.joined(), "-") {
+				if sub := a.joined(); sub == "archive" || sub == "format-patch" {
+					f.writes = moreWords(f.writes, outFlag("-o", "--output-directory"))
+				}
+				break
+			}
+		}
 	case "cat", "head", "tail", "less", "more", "nl", "bat", "batcat", "wc", "cut", "tac", "strings", "xxd", "hexdump", "od", "base64", "source", ".",
 		"vim", "vi", "nvim", "nano", "emacs", "view", "open", "xdg-open", "code", "jq", "yq", "cmp", "comm", "paste", "join", "column", "rev", "fold", "fmt",
 		"md5sum", "sha1sum", "sha256sum", "sha512sum", "shasum", "cksum", "md5", "b2sum", "zcat", "bzcat", "xzcat", "zstdcat", "pbcopy":
@@ -2114,4 +2125,115 @@ func hiddenWrites(words []word) string {
 		}
 	}
 	return ""
+}
+
+// outputs are the files a command is told to write, for a program this
+// package knows nothing about: the value of a flag that names its output,
+// as most programs spell it (-o file, -ofile, --output=file, --out file,
+// -out file), the archive tar makes or adds to (-cf x.tar, cf x.tar) and
+// zip's, and sqlite3's database.
+func outputs(name string, args []word) []word {
+	name = progKey(name)
+	if _, ok := roTable[name]; ok || wordsOnly[name] {
+		return nil
+	}
+	var out []word
+	var ops []word
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		l := a.lit()
+		if !a.static() || !strings.HasPrefix(l, "-") || l == "-" || a.tilde {
+			ops = append(ops, a)
+			continue
+		}
+		flag, val, eq := strings.Cut(l, "=")
+		switch {
+		case flag == "-o" || flag == "--output" || flag == "--out" || flag == "-out" || flag == "--outfile" || flag == "--output-file" || flag == "-output":
+			if eq {
+				out = append(out, partOf(a, val))
+			} else if i+1 < len(args) {
+				i++
+				out = append(out, args[i])
+			}
+		case strings.HasPrefix(l, "-o") && len(l) > 2 && !eq && !strings.HasPrefix(l, "--"):
+			out = append(out, partOf(a, l[2:])) // -ofile, as cc takes it
+		}
+	}
+	switch name {
+	case "tar", "bsdtar":
+		if f := tarArchive(args); f != nil {
+			out = append(out, *f)
+		}
+	case "zip":
+		if len(ops) > 0 && ops[0].static() {
+			out = append(out, ops[0], partOf(ops[0], ops[0].joined()+".zip"))
+		}
+	case "sqlite3":
+		if len(ops) > 0 {
+			out = append(out, ops[0])
+		}
+	}
+	return out
+}
+
+// tarArchive is the archive tar makes or adds to (c, r, u, A), named by
+// -f, --file or the f of its letters written with no dash; nil when tar
+// only reads or unpacks one, or the archive is not named.
+func tarArchive(args []word) *word {
+	makes := false
+	for i, a := range args {
+		if !a.static() {
+			continue
+		}
+		l := a.joined()
+		switch {
+		case longFlag(l, "--create", len("--cr")) || longFlag(l, "--append", len("--ap")) || longFlag(l, "--update", len("--up")) || longFlag(l, "--concatenate", len("--conc")) || longFlag(l, "--catenate", len("--cat")):
+			makes = true
+		case len(l) > 1 && l[0] == '-' && l[1] != '-' && strings.ContainsAny(l[1:], "cruA"):
+			makes = true
+		case i == 0 && !strings.HasPrefix(l, "-") && strings.ContainsAny(l, "cruA"):
+			makes = true
+		}
+	}
+	if !makes {
+		return nil
+	}
+	for i, a := range args {
+		if !a.static() {
+			continue
+		}
+		l := a.joined()
+		switch {
+		case longFlag(l, "--file", len("--file")) && strings.Contains(l, "="):
+			_, v, _ := strings.Cut(l, "=")
+			w := partOf(a, v)
+			return &w
+		case l == "--file" || l == "-f":
+			if i+1 < len(args) {
+				return &args[i+1]
+			}
+		case len(l) > 1 && l[0] == '-' && l[1] != '-' && strings.Contains(l[1:], "f"):
+			// -czf x.tar: f takes the rest of the cluster, or the next word.
+			if j := strings.IndexByte(l, 'f'); j+1 < len(l) {
+				w := partOf(a, l[j+1:])
+				return &w
+			}
+			if i+1 < len(args) {
+				return &args[i+1]
+			}
+		case i == 0 && !strings.HasPrefix(l, "-") && strings.Contains(l, "f"):
+			// The old way: the letters' values follow in their order; the
+			// archive is the f's.
+			n := 0
+			for _, c := range l[:strings.IndexByte(l, 'f')] {
+				if strings.ContainsRune("bCgKLNTVX", c) {
+					n++ // a letter before f that also takes a word
+				}
+			}
+			if 1+n < len(args) {
+				return &args[1+n]
+			}
+		}
+	}
+	return nil
 }

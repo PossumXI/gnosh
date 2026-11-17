@@ -302,7 +302,9 @@
 // there (a copy: when it brings a file of that name along); a rule that
 // names files inside it by a pattern makes the command one that cannot be
 // checked. A rule that may match at any depth (a bare name) is not looked
-// for inside such a folder.
+// for inside such a folder. A program this package knows nothing about
+// writes the file its output flag names (-o, -ofile, --output, -out), tar
+// the archive it makes, zip its archive and sqlite3 its database.
 //
 // What the line gives its variables is followed along the roads a line
 // plainly takes: an assignment, or several (each value counts); an

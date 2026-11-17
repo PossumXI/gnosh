@@ -530,6 +530,17 @@ func TestShellAttacks(t *testing.T) {
 		{"cp -r brings a file of its name over it", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/secret.txt)"}}, "cp -r y/. x", Deny},
 		{"a pattern inside the folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./x/keys/*.pem)"}}, "rm -rf x", Ask},
 		{"~/.aws inside a home folder removed", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(~/.aws/credentials)"}}, "rm -r ~/.aws", Deny},
+		// A program this package knows nothing about writes the file its
+		// output flag names.
+		{"go build -o", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "go build -o .env .", Deny},
+		{"cc -ofile", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "gcc -o.env main.c", Deny},
+		{"openssl -out", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "openssl rand -out .env 16", Deny},
+		{"gpg -o", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "gpg -o .env -d x.gpg", Deny},
+		{"tar -cf makes the archive", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "tar -cf .env src", Deny},
+		{"tar czf, the old way", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "tar czf .env src", Deny},
+		{"zip's archive", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "zip -r .env src", Deny},
+		{"sqlite3's database", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "sqlite3 .env 'create table t(x)'", Deny},
+		{"git archive -o", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "git archive -o .env HEAD", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
