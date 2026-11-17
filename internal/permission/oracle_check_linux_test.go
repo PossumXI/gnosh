@@ -584,6 +584,14 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 				// the top that is not one of the usual ones ("$OUT/build")
 				// is not a target the engine claims to stop.
 				if abs, ok := cleanAbs(a, rc.cwd); ok && abs != "/" && path.Dir(abs) == "/" && !topLevelNames[path.Base(abs)] && !lc.writes(a) {
+					// It may be the value of the option before it ("-t
+					// /tmpv"), which goes with it: left alone, the option
+					// would take the next word for its value instead, and
+					// the command judged would not be the one that ran
+					// (oracle seed 127).
+					if n := len(ws); n > 1 && strings.HasPrefix(ws[n-1].lit(), "-") && ws[n-1].lit() != "--" {
+						ws = ws[:n-1]
+					}
 					continue
 				}
 				ws = append(ws, litOf(a))
