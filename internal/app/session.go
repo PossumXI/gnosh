@@ -734,6 +734,11 @@ func (l *live) findSession(ctx context.Context, word string) (string, error) {
 	}
 	switch len(matches) {
 	case 0:
+		if l.ts != nil {
+			// /resume: the open session is not one to open.
+			open := l.ts.ID()
+			list = slices.DeleteFunc(slices.Clone(list), func(info transcript.Info) bool { return info.ID == open })
+		}
 		return searchSessions(list, word, l.store.Dir)
 	case 1:
 		return matches[0].ID, nil
