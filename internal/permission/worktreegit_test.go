@@ -138,3 +138,19 @@ func TestSharedGitChange(t *testing.T) {
 		}
 	}
 }
+
+// SharedGitChange reads any line without failing, however its git words
+// are run together or cut short.
+func FuzzSharedGitChange(f *testing.F) {
+	for _, s := range []string{
+		"git branch -vD x", "git -c alias.x=y x", "git fetch --depth 1 o a:b",
+		"git config -f x a b", "git push --repo=. x", "git-update-ref a",
+		"git checkout -B", "git switch --force-create", "git worktree add -", "git tag -", "git -c",
+	} {
+		f.Add(s)
+	}
+	e := mustEngine(f, testOptions(ModeDefault, rules{}))
+	f.Fuzz(func(t *testing.T, line string) {
+		e.SharedGitChange(line)
+	})
+}

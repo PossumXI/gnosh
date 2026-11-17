@@ -19,6 +19,7 @@
 #	ssh ai-remote bash -s -- panel < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- suggest < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- invisible < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- failhint < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -69,6 +70,9 @@
 #               guess at the next prompt is in the box, and Tab takes it
 #   invisible   a prompt with a zero-width space in it goes without it, and
 #               the screen says so
+#   failhint    the model's server is a closed port: the turn fails after
+#               gnosh's tries, and the empty prompt box says what to try
+#               next (no model)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -80,10 +84,12 @@ S=gnosh-uicheck-$scenario
 flags=""
 hooks=""
 opts=""
+base=http://127.0.0.1:8080
 case "$scenario" in
 basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
+failhint) base=http://127.0.0.1:9 ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
@@ -92,7 +98,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint)" >&2
 	exit 2
 	;;
 esac
@@ -118,7 +124,7 @@ EOF
 chmod 755 "$T/config/gnosh/wake.sh"
 cat > "$T/config/gnosh/gnosh.json" <<EOF
 {
-  "providers": { "qwen": { "type": "llamacpp", "baseUrl": "http://127.0.0.1:8080", "listModels": false } },
+  "providers": { "qwen": { "type": "llamacpp", "baseUrl": "$base", "listModels": false } },
   "models": { "qwen/qwen3.8-27b": { "name": "Qwen 3.8 27B", "contextWindow": 262144 } },
   "model": { "id": "qwen/qwen3.8-27b", "thinking": false },
   "options": { $opts"requestTimeout": 900 },
@@ -328,6 +334,10 @@ invisible)
 	tmux send-keys -t "$S" -l "$(printf 'Reply with exactly these three words: all is we\342\200\213ll')"
 	tmux send-keys -t "$S" Enter
 	done_when() { screen | grep -q "Took out 1 invisible character" && screen | grep -q "done in"; }
+	;;
+failhint)
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
+	done_when() { screen | grep -q 'to try again'; }
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
