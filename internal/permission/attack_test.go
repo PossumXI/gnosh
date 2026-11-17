@@ -2032,4 +2032,22 @@ func TestWhatAFolderHolds(t *testing.T) {
 			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
 		}
 	}
+	// A name that matches at any depth is looked for two folders down.
+	fs = fakeFS{files: []string{"/proj/w", "/proj/w/.env", "/proj/u", "/proj/u/app", "/proj/u/app/cfg", "/proj/u/app/cfg/.env",
+		"/proj/v", "/proj/v/a", "/proj/v/a/b", "/proj/v/a/b/c", "/proj/v/a/b/c/.env", "/proj/t", "/proj/t/a.txt"}}
+	o = testOptions(ModeDefault, rules{allow: []string{"Bash"}, deny: []string{"Edit(.env)"}})
+	o.Resolve, o.Glob = fs.resolve, fs.glob
+	e = mustEngine(t, o)
+	for cmd, want := range map[string]Behavior{
+		"rm -rf w":     Deny,  // w/.env
+		"rm -rf u":     Deny,  // u/app/cfg/.env, two folders down
+		"rm -rf v":     Allow, // v/a/b/c/.env is deeper than gnosh looks
+		"rm -rf t":     Allow,
+		"cp -r w/. t":  Deny, // w's .env lands on t/.env
+		"chmod -R 0 u": Deny,
+	} {
+		if d := bash(e, cmd); d.Behavior != want {
+			t.Errorf("%q under Edit(.env): got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)
+		}
+	}
 }

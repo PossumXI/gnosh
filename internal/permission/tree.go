@@ -11,8 +11,10 @@ import "strings"
 // name along. A rule that names files inside the folder by a pattern
 // (Edit(./x/keys/*.pem)) makes the command one that cannot be checked
 // against the rules, when the pattern's own folder is there. A rule that
-// may match at any depth (a bare name: Edit(.env)) is not looked for
-// inside the folder, which would mean listing all that is in it.
+// matches at any depth (a bare name: Edit(.env)) is looked for in the
+// folder and as deep as shallowDepth folders below it (x/.env,
+// x/app/.env, x/app/cfg/.env): a search of all that is in it would mean
+// listing every file there.
 
 // treeCopy is where the contents of a folder a command copies or moves
 // may land: from is the folder, and each of into one place they may land
@@ -103,6 +105,29 @@ func treeOps(words []word) (trees []word, copies []treeCopy) {
 	return trees, copies
 }
 
+// shallowDepth is how many folders below a folder a command changes with
+// all that is in it a name that matches at any depth is looked for.
+const shallowDepth = 2
+
+// anyDepth splits a pattern that matches its tail at any depth below its
+// start (Edit(.env) is <working directory>/**/.env): the start, and the
+// tail, which is written out. ok is false for any other pattern.
+func (p pathPattern) anyDepth() (start, tail string, ok bool) {
+	n := 0
+	for n < len(p.segs) && p.segs[n] != "**" && !hasPathMagic(p.segs[n]) {
+		n++
+	}
+	if n+1 >= len(p.segs) || p.segs[n] != "**" {
+		return "", "", false
+	}
+	for _, s := range p.segs[n+1:] {
+		if s == "**" || hasPathMagic(s) {
+			return "", "", false
+		}
+	}
+	return "/" + strings.Join(p.segs[:n], "/"), strings.Join(p.segs[n+1:], "/"), true
+}
+
 // literal is the pattern's path as far as it is written out: its
 // segments before the first that is a pattern. whole says that is all
 // of it.
@@ -139,6 +164,21 @@ func (e *Engine) treeGuards(trees []word, copies []treeCopy, dirs []string, req 
 	// all that is in it; from is the folder a copy brings it from.
 	hit := func(root, from string) {
 		for _, c := range guards {
+			if start, tail, ok := c.path.anyDepth(); ok && inside(start, root) {
+				// Looked for in what the command changes: the folder, or
+				// for a copy the folder it brings, as it lands there.
+				in := root
+				if from != "" {
+					in = from
+				}
+				for d := 0; d <= shallowDepth; d++ {
+					ms, _ := e.expandGlob(in + strings.Repeat("/*", d) + "/" + tail)
+					for _, m := range ms {
+						*writes = append(*writes, root+m[len(in):])
+					}
+				}
+				continue
+			}
 			lit, whole := c.path.literal()
 			if lit == root || !inside(root, lit) || hasPathMagic(lit) {
 				continue // (one that names the folder itself is held to it already)
