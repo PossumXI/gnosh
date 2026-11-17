@@ -991,6 +991,7 @@ var attackLines = []string{
 	"alias zz=$'1rm'\nzz x x",                                             // oracle seed 131: dash reads $'1rm' as $1rm, rm where $1 is empty
 	"sh -c $'1rm x'\ntrap $'1rm y' EXIT",                                  // after seed 131: sh -c and a trap read dash's $ again too
 	"X+=1 grep --ignore-case --text `git status` @HOME@",                  // oracle seed 134: a computed pattern outside quotes is the pattern and files
+	"w=false'*/..'; r\\m -R ='*/..'; r=\\m -R $w",                         // oracle seed 135: a word that starts with = is text to bash and sh
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",

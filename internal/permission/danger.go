@@ -1008,7 +1008,13 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 	s := val.String()
 	switch {
 	case w.eqHead:
-		return ""
+		// zsh puts the path of a program in place of "=name"; bash and sh,
+		// which run the line, keep the word as it is written, and "=x/.."
+		// is the working directory when there is a directory "=x" (oracle
+		// seed 135). The word is judged as that text.
+		lit := w
+		lit.eqHead = false
+		return e.targetDanger(lit, dirs, fromSubst, recursive)
 	case w.tilde && w.static():
 		s = w.value(e.home)
 	case w.tilde && allLit(w) && s != "~+" && !strings.HasPrefix(s, "~+/") && func() bool { _, ok := dirTilde(w); return ok }():

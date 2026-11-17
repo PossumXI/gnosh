@@ -43,6 +43,9 @@ func TestDangerousRemovals(t *testing.T) {
 		// A program's name with a variable in it, read with the variable
 		// unset (oracle seed 126).
 		"rmdir${X[1]} . -n", "rmdir${X} .", "r${Y}m -rf /", "rm${X[1]} -rf ~",
+		// A word that starts with = is only zsh's way of naming a program:
+		// to bash and sh it is text (oracle seed 135).
+		"rm -rf =x/..", "rm -R ='*/..'", "rm -rf =/..", "rm -rf =/../..", "w=false'*/..'; r\\m -R ='*/..'",
 	}
 	for _, cmd := range dangerous {
 		d := bash(e, cmd)
@@ -60,7 +63,7 @@ func TestDangerousRemovals(t *testing.T) {
 		"rm -rf /data/extra/sub", "rm -rf /data/extra/sub/*", "rmdir empty",
 		"rm -rf \"${DIR:?}\"/*", "rm -rf \"${DIR:?must be set}/\"", "rm -rf $DIR", "rm -rf \"$DIR/build\"", "rm -rf $BUILD/out",
 		"rm \"$(pwd)/a.txt\"", "rm $(ls *.tmp)", "D=x; rm -rf \"$D\"", "echo rm -rf /", "echo 'rm -rf /'", "grep -r 'rm -rf /' .",
-		"ls /", "rm -- -rf", "git rm -r --cached .",
+		"ls /", "rm -- -rf", "git rm -r --cached .", "rm -rf =old", "rm -rf =x/build",
 		// Forms the reader follows are judged on what they remove.
 		"[[ -d build ]] && rm -rf build", "rm -rf \"${dirs[@]}\"", "for ((i=0;i<3;i++)); do rm -f tmp$i; done",
 		"(( n > 0 )) && rm -rf build",
