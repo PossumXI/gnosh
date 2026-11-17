@@ -148,6 +148,12 @@ type cmdFacts struct {
 	fsEdit bool
 	// reads and writes are the operands the command reads and changes.
 	reads, writes []word
+	// lands are the names a copy (cp, mv, ln, install, rsync, scp) gets
+	// in its place where the place is a folder: each source's last name
+	// there ("cp x/.env ." writes ./.env). They are held to the Read and
+	// Edit rules and the protected paths; where the copy lands for the
+	// working directories, cpLands says.
+	lands []word
 	// rewrites are files the command may put back as they are (see
 	// sedFacts): nothing in them changes, but a link among them would be
 	// replaced by a copy of what it leads to.
@@ -791,7 +797,11 @@ func fillTargets(f *cmdFacts, args []word) {
 		"vim", "vi", "nvim", "nano", "emacs", "view", "open", "xdg-open", "code", "jq", "yq", "cmp", "comm", "paste", "join", "column", "rev", "fold", "fmt",
 		"md5sum", "sha1sum", "sha256sum", "sha512sum", "shasum", "cksum", "md5", "b2sum", "zcat", "bzcat", "xzcat", "zstdcat", "pbcopy":
 		f.reads = ops
-	case "gzip", "gunzip", "bzip2", "bunzip2", "xz", "unxz", "zstd", "unzstd", "mkfifo", "mknod", "chgrp", "chflags":
+	case "gzip", "gunzip", "bzip2", "bunzip2", "xz", "unxz", "zstd", "unzstd":
+		// What it makes is the file's name with its suffix put on or taken
+		// off: "gunzip .env.gz" writes .env.
+		f.writes = append(ops, packedNames(ops)...)
+	case "mkfifo", "mknod", "chgrp", "chflags":
 		f.writes = ops
 	case "perl", "ruby":
 		// -i edits in place the files named after the script.
@@ -808,12 +818,11 @@ func fillTargets(f *cmdFacts, args []word) {
 	case "tee", "touch", "mkdir", "rm", "rmdir", "truncate", "shred", "unlink", "chmod", "chown":
 		f.writes = ops
 	case "mv":
-		f.writes = ops
+		// mv takes its sources away, and writes them where it puts them.
+		sources, writes, lands := copiedInto("mv", args)
+		f.writes, f.lands = append(sources, writes...), lands
 	case "cp", "ln", "install", "rsync", "scp":
-		if len(ops) > 0 {
-			f.reads = ops[:len(ops)-1]
-			f.writes = ops[len(ops)-1:]
-		}
+		f.reads, f.writes, f.lands = copiedInto(progKey(f.name), args)
 	case "sed":
 		// The script is the first operand unless -e or -f gave one.
 		hasE := false
@@ -1849,5 +1858,260 @@ func fsFacts(f *cmdFacts, args []word) {
 		f.reads, f.writes = ops[:len(ops)-1:len(ops)-1], ops[len(ops)-1:]
 	}
 	f.writes = append(f.writes[:len(f.writes):len(f.writes)], late...)
+	if f.name == "cp" || f.name == "mv" {
+		_, _, f.lands = copiedInto(f.name, args)
+	}
 	f.fsEdit = true
+}
+
+// listFlag names the flag by which a command is handed a list of the
+// files it reads, in a file or on its standard input: tar -T list, rsync
+// --files-from=list, sort --files0-from=list, cpio -o, zip -@. The files
+// are named in the list, which is only read when the line runs. "" when
+// it has none.
+func listFlag(words []word) string {
+	if len(words) == 0 || !words[0].static() {
+		return ""
+	}
+	name := progKey(baseName(words[0].joined()))
+	// long reports whether l is the long flag full, or a start of it that
+	// getopt takes for it (at least min letters).
+	long := func(l, full string, min int) bool {
+		l, _, _ = strings.Cut(l, "=")
+		return len(l) >= min && strings.HasPrefix(full, l)
+	}
+	for i, a := range words[1:] {
+		if !a.static() {
+			continue
+		}
+		l := a.joined()
+		short := len(l) > 1 && l[0] == '-' && l[1] != '-'
+		switch name {
+		case "tar":
+			// (tar's old way: its first word, with no dash, is letters.)
+			if long(l, "--files-from", len("--files")) || short && strings.Contains(l[1:], "T") || i == 0 && !strings.HasPrefix(l, "-") && strings.Contains(l, "T") {
+				return "tar " + l
+			}
+		case "rsync":
+			if long(l, "--files-from", len("--files")) {
+				return "rsync " + l
+			}
+		case "sort", "du", "wc":
+			if long(l, "--files0-from", len("--fil")) {
+				return name + " " + l
+			}
+		case "cpio":
+			if long(l, "--create", len("--cr")) || long(l, "--pass-through", len("--pa")) || short && strings.ContainsAny(l[1:], "op") {
+				return "cpio " + l
+			}
+		case "zip":
+			if short && strings.Contains(l[1:], "@") {
+				return "zip " + l
+			}
+		}
+	}
+	return ""
+}
+
+// copiedInto reads the operands of cp, mv, ln, install, rsync and scp:
+// the sources, what is written (the place: the last operand, or the
+// folder -t or --target-directory names to cp, mv, ln and install), and
+// what lands there where the place is a folder: each source's name in it
+// ("cp x/.env ." writes ./.env; a source's pattern stays a pattern there:
+// "cp x/.e* ." writes what .e* matches in the folder). install -d makes
+// every folder it is given.
+func copiedInto(name string, args []word) (sources, writes, lands []word) {
+	var ops, dirs []word
+	makesDirs := false
+	rest := false
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		l := w.lit()
+		value := func(attached string, has bool) {
+			switch {
+			case has:
+				dirs = append(dirs, partOf(w, attached))
+			case i+1 < len(args):
+				i++
+				dirs = append(dirs, args[i])
+			}
+		}
+		switch {
+		case rest || !w.static() || !strings.HasPrefix(l, "-") || l == "-" || w.tilde:
+			ops = append(ops, w)
+		case l == "--":
+			rest = true
+		case name == "rsync" || name == "scp":
+			// (Their letters are other things: rsync's -t keeps times.)
+		case strings.HasPrefix(l, "--"):
+			flag, val, eq := strings.Cut(l, "=")
+			switch {
+			case longFlag(flag, "--target-directory", 3):
+				value(val, eq)
+			case longFlag(flag, "--suffix", 4) && !eq:
+				i++ // the suffix
+			case name == "install" && longFlag(flag, "--directory", 4):
+				makesDirs = true
+			}
+		default:
+			for j := 1; j < len(l); j++ {
+				switch l[j] {
+				case 't':
+					value(l[j+1:], j+1 < len(l))
+				case 'S':
+					if j+1 == len(l) {
+						i++ // the suffix
+					}
+				case 'd':
+					makesDirs = makesDirs || name == "install"
+					continue
+				default:
+					continue
+				}
+				break
+			}
+		}
+	}
+	switch {
+	case makesDirs:
+		return nil, ops, nil
+	case len(dirs) > 0:
+		sources = ops
+	case len(ops) > 0:
+		sources, dirs = ops[:len(ops)-1], ops[len(ops)-1:]
+	}
+	writes = append(writes, dirs...)
+	for _, dir := range dirs {
+		if !dir.static() {
+			continue // (a place only known when the line runs is a doubt already)
+		}
+		for _, src := range sources {
+			if into, ok := placedIn(dir, src, name == "scp" || name == "rsync"); ok {
+				lands = append(lands, into)
+			}
+		}
+	}
+	return sources, writes, lands
+}
+
+// placedIn is the name the source src gets in the folder dir: dir, a
+// slash, and what follows the last slash written in src, which may be
+// only known when the line runs ("cp $f build/" writes build/$f, and "cp
+// $D/.env ." ./.env). ok is false where src names what is in a folder (x/,
+// x/.), which is not one name. A scp or rsync source's host (host:path)
+// is no part of the name.
+func placedIn(dir, src word, remote bool) (word, bool) {
+	at := strings.TrimRight(dir.joined(), "/") + "/"
+	if src.static() {
+		text := src.joined()
+		if host, p, ok := strings.Cut(text, ":"); remote && ok && !strings.Contains(host, "/") {
+			text = p
+		}
+		base := path.Base(text)
+		if text == "" || strings.HasSuffix(text, "/") || base == "." || base == ".." || base == "/" {
+			return word{}, false
+		}
+		into := partOf(dir, at+base)
+		into.tilde = dir.tilde
+		into.glob = src.glob && hasPathMagic(base) || dir.glob && hasPathMagic(at)
+		return into, true
+	}
+	k, tail := -1, ""
+	for i := len(src.parts) - 1; i >= 0; i-- {
+		if p := src.parts[i]; p.kind == partLit && strings.Contains(p.lit, "/") {
+			k, tail = i, p.lit[strings.LastIndexByte(p.lit, '/')+1:]
+			break
+		}
+	}
+	into := src
+	into.parts = append([]wordPart{{lit: at + tail}}, src.parts[k+1:]...)
+	into.raw = at + src.raw[strings.LastIndexByte(src.raw, '/')+1:]
+	into.tilde = dir.tilde
+	return into, true
+}
+
+// packedSuffixes are the suffixes gzip and its kin put on what they pack.
+var packedSuffixes = []string{".gz", ".bz2", ".xz", ".zst", ".tgz", ".tbz2", ".txz", ".z", ".Z"}
+
+// packedNames are the names a packer or an unpacker makes of the files it
+// is given: each with a packer's suffix taken off, or ".gz" and its kin
+// put on.
+func packedNames(ops []word) []word {
+	var out []word
+	for _, w := range ops {
+		if !w.static() {
+			continue
+		}
+		l := w.joined()
+		for _, suf := range packedSuffixes {
+			if trimmed, ok := strings.CutSuffix(l, suf); ok && trimmed != "" {
+				out = append(out, partOf(w, trimmed))
+			}
+			out = append(out, partOf(w, l+suf))
+		}
+	}
+	return out
+}
+
+// hiddenWrites says why a command writes files whose names are not on the
+// line: an archive it unpacks (tar -x, unzip, cpio -i) or a patch it
+// applies (patch, git apply, git am) names them. "" when it writes none
+// such.
+func hiddenWrites(words []word) string {
+	if len(words) == 0 || !words[0].static() {
+		return ""
+	}
+	name := progKey(baseName(words[0].joined()))
+	args := words[1:]
+	has := func(test func(l string, i int) bool) bool {
+		for i, a := range args {
+			if a.static() && test(a.joined(), i) {
+				return true
+			}
+		}
+		return false
+	}
+	short := func(l string, letters string) bool {
+		return len(l) > 1 && l[0] == '-' && l[1] != '-' && strings.ContainsAny(l[1:], letters)
+	}
+	switch name {
+	case "tar", "bsdtar":
+		if has(func(l string, i int) bool {
+			return short(l, "x") || longFlag(l, "--extract", len("--extr")) || l == "--get" || i == 0 && !strings.HasPrefix(l, "-") && strings.Contains(l, "x")
+		}) {
+			return "tar unpacks the files its archive names"
+		}
+	case "unzip":
+		// (-l, -v, -t and -Z list or test it; -p writes to the output.)
+		if !has(func(l string, _ int) bool { return short(l, "lvtpZ") }) {
+			return "unzip unpacks the files its archive names"
+		}
+	case "cpio":
+		if has(func(l string, _ int) bool { return short(l, "i") || longFlag(l, "--extract", len("--extr")) }) {
+			return "cpio -i unpacks the files its archive names"
+		}
+	case "patch":
+		if !has(func(l string, _ int) bool { return strings.HasPrefix(l, "--dry") }) {
+			return "patch writes the files its patch names"
+		}
+	case "git":
+		for i, a := range args {
+			if !a.static() || strings.HasPrefix(a.joined(), "-") {
+				continue
+			}
+			switch a.joined() {
+			case "apply":
+				for _, b := range args[i+1:] {
+					if l := b.lit(); l == "--check" || l == "--stat" || l == "--numstat" || l == "--summary" {
+						return ""
+					}
+				}
+				return "git apply writes the files its patch names"
+			case "am":
+				return "git am writes the files its patches name"
+			}
+			return "" // another subcommand
+		}
+	}
+	return ""
 }

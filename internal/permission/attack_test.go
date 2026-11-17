@@ -492,6 +492,36 @@ func TestShellAttacks(t *testing.T) {
 		{"command -p cd, then cd ..", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "command -p cd sub/deep || ls .. && ! cd .. || head -1 ../.env", Deny},
 		{"eval's cd, then cd ..", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "eval 'cd sub/deep' && cd .. && head -1 ../.env", Deny},
 		{"builtin cd, then cd ..", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "builtin cd sub/deep; cd ..; cat ../.env", Deny},
+		// A list of the files a command reads, in a file or on its standard
+		// input, is only read when the line runs.
+		{"tar -T reads what a list names", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "tar -cf /tmp/x.tar -T list.txt", Ask},
+		{"so does tar --files-from", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "tar -cf /tmp/x.tar --files-from=list.txt", Ask},
+		{"and tar's old letters", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "tar cfT /tmp/x.tar list.txt", Ask},
+		{"rsync --files-from", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "rsync -a --files-from=list.txt . /tmp/x", Ask},
+		{"cpio -o", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "cpio -o < list.txt > /tmp/x.cpio", Ask},
+		{"zip -@", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "zip -@ /tmp/x.zip < list.txt", Ask},
+		{"sort --files0-from", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "sort --files0-from=list.txt", Ask},
+		{"wc --files0-from on its input", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "wc --files0-from=- < list.txt", Ask},
+		// A copy into a folder writes each source's name there.
+		{"cp into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cp x/.env .", Deny},
+		{"cp into a folder with a slash", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cp x/.env ./", Deny},
+		{"mv into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "mv x/.env .", Deny},
+		{"cp -t names the folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cp -t . x/.env", Deny},
+		{"mv --target-directory= names it", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "mv --target-directory=. x/.env", Deny},
+		{"install into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "install x/.env .", Deny},
+		{"ln -s into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "ln -sf x/.env .", Deny},
+		{"rsync into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "rsync x/.env .", Deny},
+		{"scp into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "scp host:.env .", Deny},
+		{"a pattern copied into a folder", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cp x/.e* .", Ask},
+		{"gunzip makes the name without its suffix", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "gunzip .env.gz", Deny},
+		{"a source only known when the line runs", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "D=x; cp $D/.env .", Deny},
+		// An archive or a patch names the files it writes.
+		{"tar -x", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "tar -xf x.tar", Ask},
+		{"tar x", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "tar xf x.tar", Ask},
+		{"unzip", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "unzip -o x.zip", Ask},
+		{"cpio -i", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cpio -i < x.cpio", Ask},
+		{"patch", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "patch -p1 < x.patch", Ask},
+		{"git apply", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "git apply x.patch", Ask},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
@@ -1456,7 +1486,10 @@ func TestPatternValuesWithText(t *testing.T) {
 		{rules{deny: []string{"Edit(b.txt)"}}, "cp a.txt b.txt -[n]", Deny},
 		{rules{deny: []string{"Edit(b.txt)"}}, "f=-n; cp a.txt b.txt $f", Deny},
 		{rules{deny: []string{"Edit(*.txt)"}}, "for f in * .*; do cp a.txt \"$f\"x; done", Deny},
-		{rules{deny: []string{"Edit(b.txt)"}}, "for f in *.txt; do cp $f build/; done", Allow},
+		{rules{deny: []string{"Edit(./b.txt)"}}, "for f in *.txt; do cp $f build/; done", Allow},
+		// (A bare name matches at any depth: the copy of b.txt lands on
+		// build/b.txt.)
+		{rules{deny: []string{"Edit(b.txt)"}}, "for f in *.txt; do cp $f build/; done", Deny},
 		{rules{deny: []string{"Edit(b.txt)"}}, "for f in *; do wc -l $f; done", Allow},
 	} {
 		o := testOptions(ModeBypass, c.r)

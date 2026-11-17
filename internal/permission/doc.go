@@ -188,8 +188,14 @@
 // program hash -p or BASH_CMDS names (with the words that follow the
 // name where the line uses it: "hash -p /bin/rm ls; ls -rf x" is rm -rf
 // x), a command in a variable that some
-// program runs (PAGER, GIT_EXTERNAL_DIFF), and a $(...) inside quoted
-// text, which the shell may yet evaluate: x='a[$(cmd)]'; echo $((x)),
+// program runs (PAGER, GIT_EXTERNAL_DIFF), set before it or by export or
+// declare, the file BASH_ENV names (as by source), what history -s puts
+// in the shell's history (fc runs it again), the command a git setting
+// given with git -c or written by git config runs (core.pager,
+// core.sshCommand, diff.external and their kin) and a git alias (git -c
+// alias.z='!rm x' z runs rm; git -c alias.p=push p pushes), and a
+// $(...) inside quoted text, which the shell may yet evaluate:
+// x='a[$(cmd)]'; echo $((x)),
 // and the word after >&, which bash expands twice (ls >&'$(cmd)').
 // Each is matched as written, with quotes removed, without its directory
 // (/bin/rm is rm), whatever the case of the program's name (RM is rm,
@@ -279,6 +285,18 @@
 //
 // A word counts as quoted only when every variable and every command
 // substitution in it stands inside the quotes.
+//
+// A program that a flag of its own sends to another folder works there
+// (env -C, sudo -D, tar -C, make -C, go -C, and git's own -C, each of
+// which goes on from the one before): each such folder is one the line
+// may be in, as a cd makes it, so "env -C sub cat ../.env" reads .env. A
+// cd found inside a command (command cd, builtin cd, eval 'cd x') counts
+// where that command stands in the line. A file glued to a short flag is
+// a name too (curl -K.env), and so is the value after the = of a long
+// flag that the table of read-only commands does not know (diff
+// --from-file=.env). A command handed a list of the files it reads (tar
+// -T, rsync --files-from, cpio -o, zip -@, --files0-from) names files
+// nobody sees ahead of time.
 //
 // What the line gives its variables is followed along the roads a line
 // plainly takes: an assignment, or several (each value counts); an

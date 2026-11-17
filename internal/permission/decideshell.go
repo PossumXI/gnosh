@@ -909,6 +909,12 @@ func (e *Engine) shellPaths(req *request) {
 		if !u.derived {
 			at = v.place(u.cmd)
 		}
+		if flag := listFlag(u.cmd.words); flag != "" && req.pathOpaque == "" {
+			req.pathOpaque = "it reads the files a list names (" + flag + "), and the list is only read when it runs"
+		}
+		if why := hiddenWrites(u.cmd.words); why != "" && req.pathOpaque == "" {
+			req.pathOpaque = why + ", which are only known when it runs"
+		}
 		if len(u.cmd.words) > 0 {
 			w0 := u.cmd.words[0]
 			if _, known := e.progName(w0); !known || progIsPattern(w0) {
@@ -936,6 +942,9 @@ func (e *Engine) shellPaths(req *request) {
 			add(w, &reads)
 		}
 		for _, w := range f.writes {
+			add(w, &writes)
+		}
+		for _, w := range f.lands {
 			add(w, &writes)
 		}
 		// A file written onto a flag, in a word that is not all written
