@@ -147,7 +147,7 @@ func (l *live) makeWorktree(ctx context.Context, cwd, id string) (*worktree, str
 	}
 	copied, err := copyIncluded(ctx, l.p.o.Environ, wt)
 	if len(copied) > 0 {
-		l.flog.logf("turn", "the work tree %s has copies of %s, as %s names them", wt.path, strings.Join(copied, ", "), includeFile)
+		l.flog.logf("turn", "the work tree %s has copies of %s, as %s names them", wt.path, fewOf(copied, 20), includeFile)
 	}
 	if err != nil {
 		l.notice(agent.LevelWarning, "worktree", err.Error())
@@ -260,7 +260,7 @@ func addTree(ctx context.Context, environ []string, wt *worktree, newBranch bool
 // elsewhere. Nothing means it is as it was made. An error says what could
 // not be told.
 func treeHolds(ctx context.Context, environ []string, wt *worktree) ([]string, error) {
-	status, err := runGit(ctx, environ, wt.path, "status", "--porcelain", "--ignored", "--untracked-files=all")
+	status, err := gitWith(ctx, environ, wt.path, "", "status", "--porcelain", "-z", "--ignored", "--untracked-files=all")
 	if err != nil {
 		return nil, fmt.Errorf("whether anything was changed there could not be told (%v)", err)
 	}
@@ -271,20 +271,40 @@ func treeHolds(ctx context.Context, environ []string, wt *worktree) ([]string, e
 		return nil, errors.New("how far its branch went could not be told")
 	}
 	var what []string
+	// Each entry is "XY path", whatever the path holds (-z); a renamed or
+	// copied file's is followed by the name it had. An ignored file that is
+	// a copy of the repository's, as .worktreeinclude's copies are while
+	// untouched, is no work; those are looked at only when nothing else is
+	// work, and only until one is not such a copy.
 	lines := 0
-	for _, line := range strings.Split(status, "\n") {
-		// "XY path", the first line's blanks trimmed off with the rest of
-		// git's output (runGit); a path that starts with a blank is quoted.
-		// An ignored file that is a copy of the repository's, as
-		// .worktreeinclude's copies are while untouched, is no work.
-		_, path, ok := strings.Cut(strings.TrimLeft(line, " "), " ")
-		path = strings.TrimLeft(path, " ")
-		if ok && !gnoshOwn(wt.path, path) && !(strings.HasPrefix(line, "!! ") && copiedAsIs(wt, path)) {
+	var ignored []string
+	entries := strings.Split(status, "\x00")
+	for i := 0; i < len(entries); i++ {
+		e := entries[i]
+		if len(e) < 4 || e[2] != ' ' {
+			continue
+		}
+		xy, path := e[:2], e[3:]
+		if xy[0] == 'R' || xy[0] == 'C' {
+			i++
+		}
+		switch {
+		case gnoshOwn(wt.path, path):
+		case xy == "!!":
+			ignored = append(ignored, path)
+		default:
 			lines++
 		}
 	}
 	if lines > 0 {
-		what = append(what, countWords(lines, "file changed or made and not committed (git's ignored ones among them)", "files changed or made and not committed (git's ignored ones among them)"))
+		what = append(what, countWords(lines, "file changed or made and not committed", "files changed or made and not committed"))
+	} else {
+		for _, path := range ignored {
+			if !copiedAsIs(ctx, wt, path) {
+				what = append(what, "at least 1 file git ignores, changed or made there")
+				break
+			}
+		}
 	}
 	if n > 0 {
 		what = append(what, countWords(n, "commit", "commits"))

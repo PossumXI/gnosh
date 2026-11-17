@@ -423,6 +423,8 @@ func TestWorktreeInclude(t *testing.T) {
 	gitIn(t, w.Dir, "commit", "-q", "-m", "ignore")
 	w.Write(".env", "TOKEN=kz-1\n")
 	w.Write("sub/x.local", "local\n")
+	w.Write("my sp.local", "spaced\n") // git status quotes such names without -z
+	w.Write("caf\u00e9.local", "accent\n")
 	w.Write("conf/a.json", "{}\n")
 	w.Write("build/out", "built\n") // ignored, not named
 	w.Write("notes.txt", "mine\n")  // named, not ignored
@@ -440,7 +442,7 @@ func TestWorktreeInclude(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.Sort(copied)
-	if want := []string{".env", "conf/a.json", "sub/x.local"}; !slices.Equal(copied, want) {
+	if want := []string{".env", "caf\u00e9.local", "conf/a.json", "my sp.local", "sub/x.local"}; !slices.Equal(copied, want) {
 		t.Errorf("copied %q, want %q", copied, want)
 	}
 	if data, err := os.ReadFile(filepath.Join(wt.path, ".env")); err != nil || string(data) != "TOKEN=kz-1\n" {
@@ -500,5 +502,20 @@ func TestWorktreeInclude(t *testing.T) {
 	}
 	if fileExists(filepath.Join(outside, ".env")) {
 		t.Errorf("a copy was written out of the work tree")
+	}
+
+	// Deeper down, no folder is made out of the work tree either before
+	// the copy is refused.
+	w.Write("cfg/deep/er/.env", "TOKEN=kz-4\n")
+	deeper := &worktree{repo: w.Dir, path: filepath.Join(trees, "deeper"), branch: "worktree-deeper", base: linked.base}
+	if err := addTree(t.Context(), env, deeper, true); err != nil {
+		t.Fatal(err)
+	}
+	copied, err = copyIncluded(t.Context(), env, deeper)
+	if err == nil || !strings.Contains(err.Error(), "cfg/deep/er/.env (its folder in the work tree leads out of it)") || slices.Contains(copied, "cfg/deep/er/.env") {
+		t.Errorf("through a link out, deeper: copied %q, %v", copied, err)
+	}
+	if fileExists(filepath.Join(outside, "deep")) {
+		t.Errorf("a folder was made out of the work tree")
 	}
 }

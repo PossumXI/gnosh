@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,7 +29,8 @@ const includeFile = ".worktreeinclude"
 // files of its repository that .worktreeinclude names and git ignores,
 // and returns those it copied. A file the work tree has already is left as
 // it is, and so is one whose place in the work tree leads out of it (by a
-// link the checkout holds). The error says what could not be copied.
+// link the checkout holds). The error says what could not be copied, and
+// that the copying stopped when ctx ended first.
 func copyIncluded(ctx context.Context, environ []string, wt *worktree) ([]string, error) {
 	list := filepath.Join(wt.repo, includeFile)
 	if info, err := os.Stat(list); err != nil || !info.Mode().IsRegular() {
@@ -57,6 +59,10 @@ func copyIncluded(ctx context.Context, environ []string, wt *worktree) ([]string
 	}
 	var copied, failed []string
 	for _, rel := range strings.Split(ignored, "\x00") {
+		if ctx.Err() != nil {
+			failed = append(failed, "the rest (the copying was stopped)")
+			break
+		}
 		if rel == "" || !filepath.IsLocal(rel) {
 			continue
 		}
@@ -64,31 +70,43 @@ func copyIncluded(ctx context.Context, environ []string, wt *worktree) ([]string
 		if fileExists(dst) {
 			continue
 		}
-		if err := copyInto(filepath.Join(wt.repo, rel), dst, tree); err != nil {
+		if err := copyInto(filepath.Join(wt.repo, rel), wt.path, rel, tree); err != nil {
 			failed = append(failed, rel+" ("+err.Error()+")")
 			continue
 		}
 		copied = append(copied, rel)
 	}
 	if len(failed) > 0 {
-		return copied, fmt.Errorf("of the files %s names, these could not be copied into the work tree: %s", includeFile, strings.Join(failed, ", "))
+		return copied, fmt.Errorf("of the files %s names, these could not be copied into the work tree: %s", includeFile, fewOf(failed, 8))
 	}
 	return copied, nil
 }
 
-// copyInto copies the file or link src to dst, whose folders are made as
-// needed, and only inside the folder tree (its real path).
-func copyInto(src, dst, tree string) error {
+// fewOf joins names for a line: the first n, and how many more there are.
+func fewOf(names []string, n int) string {
+	if len(names) <= n {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:n], ", "), len(names)-n)
+}
+
+// copyInto copies the file or link src to rel in the work tree at root,
+// whose real path is tree: its folders are made as needed, one at a time,
+// each only where it stays inside the tree. A file that is not what it was
+// as it was looked at (a link put in its place since) is not copied, and
+// a copy that fails part way is taken away again.
+func copyInto(src, root, rel, tree string) error {
 	info, err := os.Lstat(src)
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(dst)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	dst := filepath.Join(root, rel)
+	dir, err := makeDirsIn(root, filepath.Dir(rel), tree)
+	if err != nil {
 		return err
 	}
-	if real, err := filepath.EvalSymlinks(dir); err != nil || real != tree && !strings.HasPrefix(real, tree+string(filepath.Separator)) {
-		return errors.New("its folder in the work tree leads out of it")
+	if !inTree(dir, tree) {
+		return errLeadsOut
 	}
 	switch {
 	case info.Mode()&os.ModeSymlink != 0:
@@ -105,33 +123,92 @@ func copyInto(src, dst, tree string) error {
 		return err
 	}
 	defer in.Close()
+	if now, err := in.Stat(); err != nil || !now.Mode().IsRegular() || !os.SameFile(info, now) {
+		return errors.New("it changed as it was being copied")
+	}
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
 	if err != nil {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
+		os.Remove(dst)
 		return err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		os.Remove(dst)
+		return err
+	}
+	return nil
+}
+
+// errLeadsOut is the refusal of a copy whose folder in the work tree is,
+// by a link, somewhere else.
+var errLeadsOut = errors.New("its folder in the work tree leads out of it")
+
+// makeDirsIn makes the folder rel (a local path, "." for root itself)
+// under root, one folder at a time from root down. Each that is there
+// already must be a folder whose real path is inside tree, the real path
+// of root, before anything is made in it: a link the checkout holds, which
+// leads out of the tree, is never followed to make a folder. It returns
+// the folder.
+func makeDirsIn(root, rel, tree string) (string, error) {
+	cur := root
+	if rel == "." {
+		return cur, nil
+	}
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		cur = filepath.Join(cur, part)
+		info, err := os.Lstat(cur)
+		if errors.Is(err, fs.ErrNotExist) {
+			if err := os.Mkdir(cur, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
+				return "", err
+			}
+			info, err = os.Lstat(cur)
+		}
+		switch {
+		case err != nil:
+			return "", err
+		case info.Mode()&os.ModeSymlink != 0:
+			if !inTree(cur, tree) {
+				return "", errLeadsOut
+			}
+			if real, err := os.Stat(cur); err != nil || !real.IsDir() {
+				return "", errors.New("a link to no folder stands where its folder would be")
+			}
+		case !info.IsDir():
+			return "", errors.New("a file stands where its folder would be")
+		}
+	}
+	return cur, nil
+}
+
+// inTree reports whether p's real path is tree, a real path, or inside it.
+func inTree(p, tree string) bool {
+	real, err := filepath.EvalSymlinks(p)
+	return err == nil && (real == tree || strings.HasPrefix(real, tree+string(filepath.Separator)))
 }
 
 // copiedAsIs reports whether what stands at rel in the work tree wt, a
 // path git status gives as ignored, is a copy of what stands there in the
 // repository's own folder: a file of the same bytes, a link to the same
 // place, a folder of nothing else. Taking it away with the work tree loses
-// nothing.
-func copiedAsIs(wt *worktree, rel string) bool {
+// nothing. When ctx ends first it says no, which keeps the tree.
+func copiedAsIs(ctx context.Context, wt *worktree, rel string) bool {
 	rel = strings.TrimSuffix(rel, "/")
 	if rel == "" || !filepath.IsLocal(rel) {
 		return false
 	}
-	return sameFiles(filepath.Join(wt.path, rel), filepath.Join(wt.repo, rel))
+	return sameFiles(ctx, filepath.Join(wt.path, rel), filepath.Join(wt.repo, rel))
 }
 
 // sameFiles reports whether a is what b is: the same bytes, the same link,
-// or a folder each of whose entries is the same as b's of that name.
-func sameFiles(a, b string) bool {
+// or a folder each of whose entries is the same as b's of that name. Once
+// ctx has ended it says no.
+func sameFiles(ctx context.Context, a, b string) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	ai, err := os.Lstat(a)
 	if err != nil {
 		return false
@@ -151,7 +228,7 @@ func sameFiles(a, b string) bool {
 			return false
 		}
 		for _, e := range entries {
-			if !sameFiles(filepath.Join(a, e.Name()), filepath.Join(b, e.Name())) {
+			if !sameFiles(ctx, filepath.Join(a, e.Name()), filepath.Join(b, e.Name())) {
 				return false
 			}
 		}

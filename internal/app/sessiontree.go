@@ -178,7 +178,7 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 		how = "opened again, on the branch " + t.branch
 	}
 	if len(t.included) > 0 {
-		how += ", with copies of " + strings.Join(t.included, ", ") + " (" + includeFile + ")"
+		how += ", with copies of " + fewOf(t.included, 5) + " (" + includeFile + ")"
 	}
 	fmt.Fprintf(p.stderr, "gnosh works in the git work tree %s, %s.\n", t.path, how)
 	return cli.ExitOK
