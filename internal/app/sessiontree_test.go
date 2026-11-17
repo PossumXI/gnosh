@@ -233,3 +233,24 @@ func TestWorktreeFlagCommandsStay(t *testing.T) {
 		t.Errorf("a copy from the checkout into the work tree was held to the work tree: %q", got)
 	}
 }
+
+// A --worktree session's new work tree gets the copies .worktreeinclude
+// names, and says so; left as it was made, copies and all, it goes at the
+// end.
+func TestWorktreeFlagInclude(t *testing.T) {
+	w := repoWorld(t, apptest.Reply{Text: "Nothing to do."})
+	w.Write(".gitignore", ".env\n")
+	w.Write(".worktreeinclude", ".env\n")
+	gitIn(t, w.Dir, "add", ".gitignore", ".worktreeinclude")
+	gitIn(t, w.Dir, "commit", "-q", "-m", "ignore")
+	w.Write(".env", "TOKEN=kz-1\n")
+	r := run(t, w, "--trust-folder", "--worktree", "-p", "look").wantCode(t, 0)
+	m := regexp.MustCompile(`work tree (\S+), made, on the branch worktree-\S+ at \S+, with copies of \.env \(\.worktreeinclude\)`).FindStringSubmatch(r.err)
+	if m == nil {
+		t.Fatalf("no copies were said:\n%s", r.err)
+	}
+	has(t, "stderr", r.err, "the work tree "+m[1]+" was left as it was made, and is removed with its branch")
+	if fileExists(m[1]) {
+		t.Errorf("the work tree %s is left", m[1])
+	}
+}

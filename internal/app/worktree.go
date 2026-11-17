@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/agent"
 )
 
 // This file is a sub-agent's own git work tree (isolation: worktree,
@@ -59,12 +61,22 @@ func (l *live) git(ctx context.Context, dir string, args ...string) (string, err
 // runGit is live.git for code that has no session yet: git in dir, in
 // the environment environ, as live.git runs it.
 func runGit(ctx context.Context, environ []string, dir string, args ...string) (string, error) {
+	out, err := gitWith(ctx, environ, dir, "", args...)
+	return strings.TrimSpace(out), err
+}
+
+// gitWith is runGit with stdin as git's input, and what git printed as it
+// printed it. An exit with nothing on stderr is git's *exec.ExitError.
+func gitWith(ctx context.Context, environ []string, dir, stdin string, args ...string) (string, error) {
 	base := []string{"--no-pager", "-c", "core.fsmonitor=false", "-C", dir}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
 	env := slices.DeleteFunc(slices.Clone(environ), func(kv string) bool {
 		return slices.ContainsFunc(gitEnvDrop, func(p string) bool { return strings.HasPrefix(kv, p) })
 	})
 	cmd.Env = append(env, "GIT_PAGER=cat", "PAGER=cat", "GIT_TERMINAL_PROMPT=0")
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	// A hook git runs (post-checkout, on worktree add) may leave a program
 	// behind that holds git's output open: once git itself has ended, or
 	// been stopped, what it printed is not waited for longer than this.
@@ -85,7 +97,7 @@ func runGit(ctx context.Context, environ []string, dir string, args ...string) (
 		}
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	return string(out), nil
 }
 
 // treeName is the name a sub-agent's work tree and branch take: the random
@@ -132,6 +144,13 @@ func (l *live) makeWorktree(ctx context.Context, cwd, id string) (*worktree, str
 	}
 	if err := addTree(ctx, l.p.o.Environ, wt, true); err != nil {
 		return nil, "", err
+	}
+	copied, err := copyIncluded(ctx, l.p.o.Environ, wt)
+	if len(copied) > 0 {
+		l.flog.logf("turn", "the work tree %s has copies of %s, as %s names them", wt.path, strings.Join(copied, ", "), includeFile)
+	}
+	if err != nil {
+		l.notice(agent.LevelWarning, "worktree", err.Error())
 	}
 	if err := l.engine.AddDir(wt.path); err != nil {
 		l.flog.logf("turn", "the work tree %s could not be made a working directory: %v", wt.path, err)
@@ -256,8 +275,11 @@ func treeHolds(ctx context.Context, environ []string, wt *worktree) ([]string, e
 	for _, line := range strings.Split(status, "\n") {
 		// "XY path", the first line's blanks trimmed off with the rest of
 		// git's output (runGit); a path that starts with a blank is quoted.
+		// An ignored file that is a copy of the repository's, as
+		// .worktreeinclude's copies are while untouched, is no work.
 		_, path, ok := strings.Cut(strings.TrimLeft(line, " "), " ")
-		if ok && !gnoshOwn(wt.path, strings.TrimLeft(path, " ")) {
+		path = strings.TrimLeft(path, " ")
+		if ok && !gnoshOwn(wt.path, path) && !(strings.HasPrefix(line, "!! ") && copiedAsIs(wt, path)) {
 			lines++
 		}
 	}

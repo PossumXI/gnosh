@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -407,5 +408,97 @@ func TestAddTreeLeavesAnothersAlone(t *testing.T) {
 	}
 	if fileExists(late.path) {
 		t.Errorf("the failed attempt left its folder: %s", late.path)
+	}
+}
+
+// .worktreeinclude: a new work tree gets copies of the files it names that
+// git ignores, each in its place: not an ignored file it does not name,
+// not one it names that git does not ignore. Untouched, the copies are no
+// work of the tree's; changed, one is.
+func TestWorktreeInclude(t *testing.T) {
+	w := repoWorld(t)
+	w.Write(".gitignore", ".env\n*.local\nbuild/\nconf/\n")
+	w.Write(".worktreeinclude", "# what a checkout lacks\n.env\n*.local\nnotes.txt\nconf/\n")
+	gitIn(t, w.Dir, "add", ".gitignore", ".worktreeinclude")
+	gitIn(t, w.Dir, "commit", "-q", "-m", "ignore")
+	w.Write(".env", "TOKEN=kz-1\n")
+	w.Write("sub/x.local", "local\n")
+	w.Write("conf/a.json", "{}\n")
+	w.Write("build/out", "built\n") // ignored, not named
+	w.Write("notes.txt", "mine\n")  // named, not ignored
+	env := []string{"HOME=" + w.Dir, "PATH=" + os.Getenv("PATH"), "GIT_CONFIG_NOSYSTEM=1"}
+	trees := filepath.Join(w.Root, "trees")
+	if err := os.MkdirAll(trees, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wt := &worktree{repo: w.Dir, path: filepath.Join(trees, "inc"), branch: "worktree-inc", base: gitIn(t, w.Dir, "rev-parse", "HEAD")}
+	if err := addTree(t.Context(), env, wt, true); err != nil {
+		t.Fatal(err)
+	}
+	copied, err := copyIncluded(t.Context(), env, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(copied)
+	if want := []string{".env", "conf/a.json", "sub/x.local"}; !slices.Equal(copied, want) {
+		t.Errorf("copied %q, want %q", copied, want)
+	}
+	if data, err := os.ReadFile(filepath.Join(wt.path, ".env")); err != nil || string(data) != "TOKEN=kz-1\n" {
+		t.Errorf("the work tree's .env: %q, %v", data, err)
+	}
+	for _, rel := range []string{"build/out", "notes.txt"} {
+		if fileExists(filepath.Join(wt.path, rel)) {
+			t.Errorf("%s was copied", rel)
+		}
+	}
+	if what, err := treeHolds(t.Context(), env, wt); err != nil || len(what) != 0 {
+		t.Errorf("a work tree that holds only the copies holds %q, %v", what, err)
+	}
+	if err := os.WriteFile(filepath.Join(wt.path, "conf", "a.json"), []byte("{\"changed\": true}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if what, err := treeHolds(t.Context(), env, wt); err != nil || len(what) != 1 || !strings.Contains(what[0], "1 file") {
+		t.Errorf("a changed copy is no work: %q, %v", what, err)
+	}
+
+	// Without the file, nothing is copied.
+	if err := os.Remove(filepath.Join(w.Dir, includeFile)); err != nil {
+		t.Fatal(err)
+	}
+	other := &worktree{repo: w.Dir, path: filepath.Join(trees, "plain"), branch: "worktree-plain", base: wt.base}
+	if err := addTree(t.Context(), env, other, true); err != nil {
+		t.Fatal(err)
+	}
+	if copied, err := copyIncluded(t.Context(), env, other); err != nil || len(copied) != 0 {
+		t.Errorf("with no %s: copied %q, %v", includeFile, copied, err)
+	}
+
+	// A place in the work tree that a link of its checkout leads out of
+	// gets no copy: the commit has cfg as a link out, the person's folder
+	// a folder cfg with a .env in it.
+	w.Write(includeFile, ".env\n")
+	outside := filepath.Join(w.Root, "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(w.Dir, "cfg")); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, w.Dir, "add", "cfg")
+	gitIn(t, w.Dir, "commit", "-q", "-m", "link")
+	if err := os.Remove(filepath.Join(w.Dir, "cfg")); err != nil {
+		t.Fatal(err)
+	}
+	w.Write("cfg/.env", "TOKEN=kz-3\n")
+	linked := &worktree{repo: w.Dir, path: filepath.Join(trees, "linked"), branch: "worktree-linked", base: gitIn(t, w.Dir, "rev-parse", "HEAD")}
+	if err := addTree(t.Context(), env, linked, true); err != nil {
+		t.Fatal(err)
+	}
+	copied, err = copyIncluded(t.Context(), env, linked)
+	if err == nil || !strings.Contains(err.Error(), "cfg/.env (its folder in the work tree leads out of it)") || slices.Contains(copied, "cfg/.env") {
+		t.Errorf("through a link out: copied %q, %v", copied, err)
+	}
+	if fileExists(filepath.Join(outside, ".env")) {
+		t.Errorf("a copy was written out of the work tree")
 	}
 }

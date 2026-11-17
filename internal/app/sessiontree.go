@@ -46,6 +46,8 @@ type sessionTree struct {
 	// from is the folder the session was started in, and fromBranch the
 	// branch checked out there ("" when none could be read).
 	from, fromBranch string
+	// included are the files copied in as .worktreeinclude names them.
+	included []string
 }
 
 // treeNameRe is what a work tree's name may be: a folder's name and a
@@ -136,6 +138,11 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 		if err := addTree(ctx, env, &t.worktree, branchErr != nil); err != nil {
 			return fail("%v", err)
 		}
+		copied, err := copyIncluded(ctx, env, &t.worktree)
+		t.included = copied
+		if err != nil {
+			fmt.Fprintf(p.stderr, "gnosh: %v\n", err)
+		}
 		if branchErr == nil {
 			if head, err := runGit(ctx, env, t.path, "rev-parse", "HEAD"); err == nil {
 				t.base = head
@@ -169,6 +176,9 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	how := "made, on the branch " + t.branch + " at " + shortCommit(t.base)
 	if t.reused {
 		how = "opened again, on the branch " + t.branch
+	}
+	if len(t.included) > 0 {
+		how += ", with copies of " + strings.Join(t.included, ", ") + " (" + includeFile + ")"
 	}
 	fmt.Fprintf(p.stderr, "gnosh works in the git work tree %s, %s.\n", t.path, how)
 	return cli.ExitOK

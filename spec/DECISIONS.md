@@ -645,8 +645,8 @@ or kept with the reason said (27).
     The session's records are kept under the work tree's folder, so
     `gnosh --worktree <name> -c` goes on where it left off. The status
     line command is given Claude Code's worktree field and
-    workspace.git_worktree. Not built: .worktreeinclude, a pull
-    request's head (#123), and worktree.baseRef.
+    workspace.git_worktree. Not built: a pull request's head (#123) and
+    worktree.baseRef. (.worktreeinclude is built: 79.)
 48. **SendMessage gives a sub-agent that ended more to do,** as Claude
     Code's (spec/cc/subagents.md 9). The sub-agent's own session file is
     opened again as its history. It runs in the background under the
@@ -1133,3 +1133,18 @@ or kept with the reason said (27).
     /skills, but a hook names a program to run, so the browser does not
     add one. With no hook in force, and in a run, /hooks still says in
     text what it said before.
+
+79. **A new work tree gets copies of what .worktreeinclude names, as
+    Claude Code's does.** A checkout has none of what git ignores, such
+    as a .env or a local settings file. A repository's .worktreeinclude
+    (in .gitignore's syntax, at its top) names the files of the person's
+    folder that a new work tree gets a copy of, a --worktree session's or
+    a sub-agent's: those it names that git ignores, each in its place,
+    found by git itself (ls-files with the file as its exclude list, then
+    check-ignore). A file the tree has already is left alone, a link is
+    copied as a link, and no copy goes where a link in the tree's own
+    checkout would carry it out of the tree. A copy left as it was is no
+    work of the tree's: one whose only difference from the person's
+    folder is such copies is removed at its end like any other left as
+    made. The session's first line names the copies; a sub-agent's are in
+    the log; what could not be copied is said.
