@@ -527,6 +527,15 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 				writes = append(writes, abs)
 			}
 		}
+		// A copy lands under its place by the source's name where the
+		// place is a folder, as it is in the jail after the run.
+		for _, w := range f.lands {
+			if abs, ok := cleanAbs(w.joined(), rc.cwd); ok {
+				if st, err := os.Stat(path.Dir(abs)); err == nil && st.IsDir() {
+					writes = append(writes, abs)
+				}
+			}
+		}
 		if j.treeFile(rc.fd[0]) {
 			reads = append(reads, rc.fd[0])
 		}
