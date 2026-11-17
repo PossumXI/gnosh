@@ -119,6 +119,9 @@ func TestOtherDestroyers(t *testing.T) {
 		// time; and in a line that holds one, a process substitution is
 		// still a command's output (oracle seed 128).
 		"mv $\"x\" <(env) link-dir/file >& all.txt", "mv $\"x\" /tmp", "chmod -R 000 $\"x\"",
+		// In dash an alias given $'1rm' is $1rm, which is rm (oracle seed
+		// 131).
+		"alias zz=$'1rm'\nzz -rf ~",
 		// A variable inside a name right under the root leaves that name
 		// where it is empty (oracle seed 105): /tmp-a, /tmp:--rf.
 		"mv /tmp$X-a /tmp", "mv /tmp$X:--rf /tmp", "mv $X:--rf x} /tmp$X:--rf x} /tmp", "mv /tm${X}p /x",

@@ -2120,6 +2120,32 @@ func (e *Engine) giveArgs(v *bashView, ws []word, zero bool) {
 	}
 }
 
+// dashReading is how dash reads words that hold a $'...', a form dash does
+// not have: the $ stays a $, and what follows it is a string in single
+// quotes, with no escapes read ("$'1rm'" is $1rm). It is the words joined
+// by blanks, as eval and alias take them; differs reports that a word
+// reads otherwise than in bash, and ok is false when how dash reads one
+// cannot be worked out.
+func dashReading(ws []word) (text string, differs, ok bool) {
+	out := make([]string, len(ws))
+	for i, w := range ws {
+		out[i] = w.joined()
+		if !strings.Contains(w.raw, "$'") {
+			continue
+		}
+		// A $ written \$ is a $ that stays one, as dash reads $': the
+		// word is read again in bash's terms with every $' so written.
+		sub := parseScript(": " + strings.ReplaceAll(w.raw, "$'", "\\$'"))
+		if !sub.ok || len(sub.cmds) != 1 || len(sub.cmds[0].words) != 2 {
+			return "", true, false
+		}
+		if d := sub.cmds[0].words[1].joined(); d != out[i] {
+			out[i], differs = d, true
+		}
+	}
+	return strings.Join(out, " "), differs, true
+}
+
 // useAlias reads a command whose first word is an alias the line made as
 // what a shell that expands aliases runs: the last command of what the
 // alias stands for, with the command's other words after it. dash
@@ -2928,6 +2954,15 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 		}
 		if allKnown(args) {
 			e.addScript(v, strings.Join(litsOf(args), " "), nest, depth, scriptText)
+			// dash reads a $'...' as a $ and a quoted string, and eval
+			// reads the $ again: "eval $'1rm x'" runs $1rm there, which
+			// is rm when nothing is in $1 (oracle seed 131).
+			switch dash, differs, ok := dashReading(args); {
+			case !ok:
+				v.setOpaque("eval is given a $'...', which dash reads as a $ and a quoted string, and gnosh cannot read it so")
+			case differs:
+				e.addScript(v, dash, nest, depth, scriptText)
+			}
 		} else {
 			v.setOpaque("eval runs text that is computed when the command runs")
 			e.addScript(v, maybeText(args), nest, depth, scriptMaybe)
@@ -2943,7 +2978,23 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 				v.setOpaque("an alias is given text computed when the command runs")
 				text, how = e.unsetValue(a), scriptMaybe
 			}
-			if alias, val, ok := strings.Cut(text, "="); ok {
+			texts := []string{text}
+			dash, differs, ok := dashReading([]word{a})
+			if !ok {
+				v.setOpaque("an alias is given a $'...', which dash reads as a $ and a quoted string, and gnosh cannot read it so")
+			}
+			if differs && ok {
+				// dash has no $'...': "alias zz=$'1rm'" is an alias for the
+				// text $1rm there, whose $1 is read where the alias is
+				// used, and is nothing then: zz x is rm x (oracle seed
+				// 131). The alias may stand for either.
+				texts = append(texts, dash)
+			}
+			for _, text := range texts {
+				alias, val, ok := strings.Cut(text, "=")
+				if !ok {
+					continue
+				}
 				// The words that follow the alias where it is used are the
 				// last words of what it stands for: "alias g=git" and then
 				// "g push origin" is git push origin. Where the line itself

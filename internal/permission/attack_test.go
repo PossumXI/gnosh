@@ -440,6 +440,10 @@ func TestShellAttacks(t *testing.T) {
 		{"hash -p makes ls run git, with the words that follow it", ModeBypass, attackGuards, "hash -p /usr/bin/git ls; ls push origin", Deny},
 		{"BASH_CMDS makes ls run git, with the words that follow it", ModeBypass, attackGuards, "BASH_CMDS[ls]=/usr/bin/git; ls push origin", Deny},
 		{"the alias is rm where the variable in it is not set", ModeBypass, attackGuards, "alias zz=${x}rm\nzz -rf y", Deny},
+		// dash has no $'...': the $ stays, and is read again where the
+		// alias or the eval text is (oracle seed 131).
+		{"dash reads $'1rm' as $1rm, which is rm where $1 is empty", ModeBypass, attackGuards, "alias zz=$'1rm'\nzz x x", Deny},
+		{"so does eval", ModeBypass, attackGuards, "eval $'1rm x'", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
