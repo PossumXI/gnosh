@@ -130,8 +130,16 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 			parts = append(parts, agent.Part{Source: mentionSource("failed", raw), Text: l.texts.Mention(prompt.MentionFailed, raw, core.TextOf(res.Content))})
 		default:
 			// (What the file holds is not the person's word: gnosh's own
-			// tags in it are broken, as in what Read returns to a call.)
-			parts = append(parts, agent.Part{Source: mentionSource("file", raw), Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Untrusted(core.TextOf(res.Content))})
+			// tags in it are broken, as in what Read returns to a call.) A
+			// picture Read returns goes along as the picture: "what is in
+			// @shot.png?" shows the model the image, as a call of Read would.
+			var images []core.Block
+			for _, b := range res.Content {
+				if b.Type == core.BlockImage {
+					images = append(images, b)
+				}
+			}
+			parts = append(parts, agent.Part{Source: mentionSource("file", raw), Text: l.texts.Mention(prompt.MentionFile, raw, "") + "\n" + prompt.Untrusted(core.TextOf(res.Content)), Images: images})
 			// The instruction files of the file's folders come with it, as
 			// they would after a Read.
 			parts = append(parts, l.lateInstructions(ctx, agent.ToolDone{Call: call, Tool: read, Result: res})...)

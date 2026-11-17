@@ -447,6 +447,9 @@ type Part struct {
 	Source string
 	// Text is what the model reads.
 	Text string
+	// Images go with Text, as image blocks: a picture an @ mention of the
+	// prompt brought. (Only a prompt's lines carry them.)
+	Images []core.Block
 	// Before puts a prompt's part ahead of the prompt's own text. It is
 	// for what belongs at the very start of a conversation, such as the
 	// working directory and the date.

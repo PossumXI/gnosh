@@ -475,7 +475,7 @@ func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, fo
 			if strings.TrimSpace(p.Text) == "" {
 				return // no message may hold a blank block
 			}
-			entries = append(entries, Entry{Kind: EntryNote, Turn: t.id, Source: p.Source, Prompt: s.id, Blocks: []core.Block{core.Text(p.Text)}})
+			entries = append(entries, Entry{Kind: EntryNote, Turn: t.id, Source: p.Source, Prompt: s.id, Blocks: append([]core.Block{core.Text(p.Text)}, p.Images...)})
 			sentParts = append(sentParts, p)
 		}
 		for _, p := range parts {
