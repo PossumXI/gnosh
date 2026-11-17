@@ -115,6 +115,10 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv /home /x", "sudo mv /etc /x", "mv ${HOME} /tmp/h", "d=.git; mv $d /tmp", "mv ../proj /tmp", "mv \"$X\"/* /tmp", "mv $X/ /tmp",
 		"mv -T /tmp/new ~", "mv --no-target-directory /tmp/new .git", "for d in .git src; do mv $d /tmp/; done", "mv \"$(pwd)\" /tmp/x",
 		"mv ~/.local/share/gnosh /tmp", "mv ~/.config /tmp", "mv .gi* /tmp", "mv {.git,x} /tmp",
+		// A $"..." is a catalog's translation, which nobody knows ahead of
+		// time; and in a line that holds one, a process substitution is
+		// still a command's output (oracle seed 128).
+		"mv $\"x\" <(env) link-dir/file >& all.txt", "mv $\"x\" /tmp", "chmod -R 000 $\"x\"",
 		// A variable inside a name right under the root leaves that name
 		// where it is empty (oracle seed 105): /tmp-a, /tmp:--rf.
 		"mv /tmp$X-a /tmp", "mv /tmp$X:--rf /tmp", "mv $X:--rf x} /tmp$X:--rf x} /tmp", "mv /tm${X}p /x",

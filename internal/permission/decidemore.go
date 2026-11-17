@@ -235,19 +235,34 @@ func dangerWhat(why string) string {
 
 // shellReadings gives the line as the shells read what gnosh's reader
 // stops at: every backslash at the end of a line joined to the next line,
-// as bash and dash do outside single quotes ("$a -\<newline>a" is $a -a),
+// as bash and dash do outside single quotes ("$a -\<newline>a" is $a -a);
+// every $"..." as what bash makes of it, a message catalog's translation
+// of the text, which nobody can know ahead of time and so stands, whole,
+// as the output of a command ("$(:)", judged as any word a command makes);
 // and then each descriptor of more than one digit read both ways (see
-// fdReadings). It gives nothing for a line that has neither. (The joins
-// are made in the text as it is written, quoted or not: what this gives
-// is only ever judged for danger, never let go.)
+// fdReadings). It gives nothing for a line that has none of them. (The
+// changes are made in the text as it is written, quoted or not: what this
+// gives is only ever judged for danger, never let go.)
 func shellReadings(line string) []string {
 	var out []string
 	if strings.Contains(line, "\\\n") {
 		line = strings.ReplaceAll(line, "\\\n", "")
 		out = append(out, line)
 	}
+	if strings.Contains(line, "$\"") {
+		// (Oracle seed 128: "mv $\"x\" <(env) d" was cut into crude pieces
+		// in which <(env) was the plain word env, and went unasked with
+		// permissions skipped.)
+		line = translated.ReplaceAllString(line, `"$$(:)"`)
+		// (One that is never closed is read from the $ on.)
+		line = strings.ReplaceAll(line, "$\"", "\"$(:)")
+		out = append(out, line)
+	}
 	return append(out, fdReadings(line)...)
 }
+
+// translated finds a $"..." string.
+var translated = regexp.MustCompile(`\$"(?:[^"\\]|\\.)*"`)
 
 // manyDigitFD finds a redirection whose descriptor is written with more
 // than one digit, with what stands before it.
