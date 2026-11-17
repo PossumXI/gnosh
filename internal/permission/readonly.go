@@ -111,8 +111,10 @@ var roTable = map[string]roSpec{
 	// attached, and is left out: "od -w file" must not lose its file.)
 	"od": {short: "abcdfilosvx", valued: "AjNSt",
 		long: "--address-radix= --skip-bytes= --read-bytes= --strings --strings= --format= --output-duplicates --width= --endian= --traditional"},
+	// (hexdump's --format-file is left out: the file it names is read, and
+	// only the -f spelling of it is followed as one.)
 	"hexdump": {short: "bcCdovx", valued: "ens", pathFlags: "f",
-		long: "--one-byte-octal --one-byte-char --canonical --two-bytes-decimal --two-bytes-octal --two-bytes-hex --format= --format-file= --length= --skip= --no-squeezing --color --color="},
+		long: "--one-byte-octal --one-byte-char --canonical --two-bytes-decimal --two-bytes-octal --two-bytes-hex --format= --length= --skip= --no-squeezing --color --color="},
 	"cut":      {short: "sz", valued: "dfcb", long: "--delimiter= --fields= --characters= --bytes= --only-delimited --complement --output-delimiter= --zero-terminated"},
 	"tr":       {short: "dscCt", ops: opsWords, long: "--delete --squeeze-repeats --complement --truncate-set1"},
 	"basename": {short: "az", valued: "s", ops: opsWords, long: "--multiple --suffix= --zero"},
@@ -509,8 +511,10 @@ func moreWords(ws, more []word) []word {
 
 // namedFiles returns the arguments of a command of the read-only table
 // that may name files, when the command could not be judged in full:
-// every argument that is not a flag, and for a command that takes a
-// pattern first, every one after it.
+// every argument that is not a flag, what stands after the = of a long
+// flag (one the table does not know may take a file: "diff
+// --from-file=.env", "wc --files0-from=.env"), and for a command that
+// takes a pattern first, every one after it.
 func namedFiles(name string, args []word) []word {
 	name = progKey(name)
 	spec, ok := roTable[name]
@@ -525,6 +529,11 @@ func namedFiles(name string, args []word) []word {
 	var out []word
 	for _, a := range args {
 		if a.static() && strings.HasPrefix(a.joined(), "-") && !a.tilde {
+			if name, val, ok := strings.Cut(a.joined(), "="); ok && val != "" && strings.HasPrefix(name, "--") {
+				part := partOf(a, val)
+				part.tilde = a.eqTilde && strings.HasPrefix(val, "~")
+				out = append(out, part)
+			}
 			continue
 		}
 		out = append(out, a)

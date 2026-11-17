@@ -451,6 +451,14 @@ func TestShellAttacks(t *testing.T) {
 		{"a computed pattern may also be files the Read rules hold", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "grep `git status` a.txt", Ask},
 		{"so may a computed -e", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "grep -e $X a.txt", Ask},
 		{"and sed's script", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "sed `git status` a.txt", Ask},
+		// A long flag the read-only table does not know may name a file
+		// after its =.
+		{"diff reads the file after --from-file=", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "diff --from-file=.env a.txt", Deny},
+		{"wc reads the file after --files0-from=", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "wc --files0-from=.env", Deny},
+		{"sort reads the file after --files0-from=", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "sort --files0-from=.env", Deny},
+		{"hexdump reads its --format-file", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "hexdump --format-file=.env a.txt", Deny},
+		{"hexdump reads its --format-file", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "hexdump --format-file .env a.txt", Deny},
+		{"hexdump reads its --format-file", "", none, "hexdump --format-file=.env a.txt", Ask},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
