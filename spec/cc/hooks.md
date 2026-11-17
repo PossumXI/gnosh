@@ -847,7 +847,8 @@ built in part (what is missing is said), `[ ]` is not built.
       text; one gnosh cannot read withholds the output, DECISIONS 70. The
       cap with file overflow is not.)
 - [~] `/hooks` browser; hooks in skill and sub-agent frontmatter; `once`.
-      (`/hooks` lists them as text; skills' hooks and `once` are built.)
+      (`/hooks` is a read-only browser, DECISIONS 78; skills' hooks and
+      `once` are built.)
 - [~] Debug-log lines; `hook_*` stream-json events. (Each hook's record
       is in the log; no stream-json events.)
 - [x] Hooks held until workspace trust in interactive sessions.

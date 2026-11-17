@@ -322,6 +322,9 @@
 //   - /mcp with nothing after it, the picker: a method MCPChoices()
 //     []app.MCPChoice; what is done to a server is the command /mcp
 //     reconnect, disable or enable and its name.
+//   - /hooks with nothing after it, a read-only browser: a method
+//     HookChoices() ([]app.HookChoice, string), the hooks in force and a
+//     note on those that are not.
 //   - /memory with nothing after it, the picker: a method MemoryFiles()
 //     []app.MemoryFile; the one picked opens in the editor (host.editFile).
 //   - /model with nothing after it, the picker: a method

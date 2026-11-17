@@ -1121,3 +1121,15 @@ or kept with the reason said (27).
     what it held for the session stays with the folder it left. /cd
     waits while a turn or background work runs, is not for a run, and
     does not leave a session's own work tree.
+
+78. **/hooks is a browser that changes nothing, as Claude Code's is.**
+    Bare /hooks lists the moments that hooks run at, with each moment's
+    hook (or how many it has) and a note on any hooks that are configured
+    but not in force. Enter on a moment lists its hooks, each with the
+    file it is written in. Enter on a hook shows all of it: what it runs,
+    what it matches, its if filter, its timeout, how it runs, and its file.
+    Back goes up a level and Esc closes the browser. A hook is changed in
+    its settings file: gnosh writes JSON settings for /permissions and
+    /skills, but a hook names a program to run, so the browser does not
+    add one. With no hook in force, and in a run, /hooks still says in
+    text what it said before.

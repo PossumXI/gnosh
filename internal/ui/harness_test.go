@@ -548,6 +548,8 @@ type controls struct {
 	options   []app.ConfigChoice
 	memFiles  []app.MemoryFile
 	servers   []app.MCPChoice
+	hooks     []app.HookChoice
+	hooksNote string
 	rules     []app.PermissionRule
 	skills    []app.SkillChoice
 	levels    []string
@@ -578,6 +580,13 @@ func (c *controls) MCPChoices() []app.MCPChoice {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.servers)
+}
+
+// HookChoices is the hooks a test set, and its note.
+func (c *controls) HookChoices() ([]app.HookChoice, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.hooks), c.hooksNote
 }
 
 // SkillChoices is the skills a test set.

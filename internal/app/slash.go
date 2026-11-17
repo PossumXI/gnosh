@@ -1027,8 +1027,8 @@ func (l *live) slashHooks(ctx context.Context, c *SlashContext) error {
 	if n == 0 {
 		c.Say("No hook is in force in this session.")
 	}
-	if held := len(l.cfg.AllHooks) - n; held > 0 && l.cfg.HooksOff == "" && !l.cfg.Switches.SafeMode.V {
-		c.Say("%d more are configured and not in force (a folder that is not trusted, or an event this build does not fire); gnosh doctor says which.", held)
+	if note := l.hooksHeld(n); note != "" {
+		c.Say("%s", note)
 	}
 	return nil
 }

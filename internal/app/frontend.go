@@ -265,6 +265,10 @@ type SessionControls interface {
 	// the picker that /mcp with nothing after it opens; what is done to
 	// one is the command /mcp reconnect, enable or disable and its name.
 	MCPChoices() []MCPChoice
+	// HookChoices lists the hooks in force, for the read-only browser that
+	// /hooks with nothing after it opens, and a note on those configured
+	// and not in force.
+	HookChoices() ([]HookChoice, string)
 	// PermissionRules returns the permission mode and the rules in force,
 	// for the picker that /permissions with nothing after it opens;
 	// adding and taking out a rule are the commands /permissions allow,
