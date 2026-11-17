@@ -984,14 +984,16 @@ var attackLines = []string{
 	"source $* ${X} <(echo rm -rf x)", "source ${X} <(git status)", ". $NOPE <(echo cat .env)", // oracle seed 122: words that vanish before the file
 	"ls 1>&\"\\$($--'rm' x)\"", "Y='$(rm x)'; ls >&\"$Y\"", "X=rm; ls >&\"\\$($X x)\"", // oracle seed 124: bash expands a computed word after >& twice
 	"rmdir${X[1]} . -n", "rmdir${X} .", "r${Y}m -rf .", // oracle seed 126: a program's name read with its variable unset
-	"mv -t /tmpv${x} -t /tmp mp clean -fdx",                               // oracle seed 127: a false alarm, the check dropped -t's value and not -t
-	"mv $\"x\" <(env) link-dir/file >& all.txt",                           // oracle seed 128: in a line with a $"...", the crude pieces made <(env) the word env
-	"cd nope </dev/null\n(cd sub/deep) && cat sneaky.txt && ! cd link-in", // oracle seed 129: the cd pending before a subshell came back after it as done
-	"cat `. .env \"$(set)\"`",                                             // oracle seed 130: a false alarm, the trace lost the . whose argument spans lines
-	"alias zz=$'1rm'\nzz x x",                                             // oracle seed 131: dash reads $'1rm' as $1rm, rm where $1 is empty
-	"sh -c $'1rm x'\ntrap $'1rm y' EXIT",                                  // after seed 131: sh -c and a trap read dash's $ again too
-	"X+=1 grep --ignore-case --text `git status` @HOME@",                  // oracle seed 134: a computed pattern outside quotes is the pattern and files
-	"w=false'*/..'; r\\m -R ='*/..'; r=\\m -R $w",                         // oracle seed 135: a word that starts with = is text to bash and sh
+	"mv -t /tmpv${x} -t /tmp mp clean -fdx",                                        // oracle seed 127: a false alarm, the check dropped -t's value and not -t
+	"mv $\"x\" <(env) link-dir/file >& all.txt",                                    // oracle seed 128: in a line with a $"...", the crude pieces made <(env) the word env
+	"cd nope </dev/null\n(cd sub/deep) && cat sneaky.txt && ! cd link-in",          // oracle seed 129: the cd pending before a subshell came back after it as done
+	"cat `. .env \"$(set)\"`",                                                      // oracle seed 130: a false alarm, the trace lost the . whose argument spans lines
+	"alias zz=$'1rm'\nzz x x",                                                      // oracle seed 131: dash reads $'1rm' as $1rm, rm where $1 is empty
+	"sh -c $'1rm x'\ntrap $'1rm y' EXIT",                                           // after seed 131: sh -c and a trap read dash's $ again too
+	"X+=1 grep --ignore-case --text `git status` @HOME@",                           // oracle seed 134: a computed pattern outside quotes is the pattern and files
+	"w=false'*/..'; r\\m -R ='*/..'; r=\\m -R $w",                                  // oracle seed 135: a word that starts with = is text to bash and sh
+	"env --chdir=/ rm -rf usr", "env -C sub cat ../.env", "env -iCsub cat ../.env", // after seed 135: a flag of the program's own sends it to another folder
+	"set -o history\nhistory -s 'rm x'\nfc -s", "set -o history; history -s cat .env\nfc -e true", // and fc runs again what history -s put there
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",

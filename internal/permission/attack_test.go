@@ -459,6 +459,14 @@ func TestShellAttacks(t *testing.T) {
 		{"hexdump reads its --format-file", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "hexdump --format-file=.env a.txt", Deny},
 		{"hexdump reads its --format-file", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "hexdump --format-file .env a.txt", Deny},
 		{"hexdump reads its --format-file", "", none, "hexdump --format-file=.env a.txt", Ask},
+		// What a program sent to another folder by a flag of its own names
+		// is read from there; so is what tar is handed after -C.
+		{"env -C sub reads ../.env, which is .env", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "env -C sub cat ../.env", Deny},
+		{"env --chdir sub reads ../.env, which is .env", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "env --chdir sub cat ../.env", Deny},
+		{"tar -C ~ reads ~/.ssh", "", rules{allow: []string{"Bash"}, deny: []string{"Read(~/.ssh/**)"}}, "tar -C ~ -cf /tmp/x.tar .ssh", Deny},
+		{"tar's old letters take -C too", "", rules{allow: []string{"Bash"}, deny: []string{"Read(~/.ssh/**)"}}, "tar cfC /tmp/x.tar ~ .ssh", Deny},
+		{"a folder only known when the line runs", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "env -C \"$D\" cat .env", Ask},
+		{"fc runs again what history -s put there", "", rules{allow: []string{"Bash"}, deny: []string{"Bash(rm *)"}}, "set -o history\nhistory -s 'rm x'\nfc -s", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},

@@ -337,53 +337,78 @@ var chdirFlags = map[string]struct{ short, long string }{
 }
 
 // chdirFlagUse names a program of the line that may be sent to another
-// folder by a flag of its own, in any of the ways the flag is written
-// (-C dir, -Cdir, -sC dir, --directory=dir, --dir dir, "-C"), or by a word
-// of its whose text is only known when the line runs. A wrapper's own
-// words end where the command it runs begins (env FOO=1 grep -C 3 x reads
-// grep's -C as grep's).
+// folder by a flag of its own (chdirValues).
 func chdirFlagUse(v *bashView) string {
 	for _, u := range v.units {
 		ws := u.cmd.words
 		if len(ws) == 0 || !ws[0].static() {
 			continue
 		}
-		name := baseName(ws[0].joined())
-		f, ok := chdirFlags[name]
-		if !ok {
-			continue
-		}
-		spec, wraps := wrappers[name]
-	words:
-		for i := 1; i < len(ws); i++ {
-			w := ws[i]
-			if !w.static() {
-				return name
-			}
-			s := w.value("")
-			switch {
-			case s == "--":
-				break words
-			case strings.HasPrefix(s, "--"):
-				long, _, _ := strings.Cut(s[2:], "=")
-				if f.long != "" && len(long) >= 2 && strings.HasPrefix(f.long, long) {
-					return name
-				}
-			case strings.HasPrefix(s, "-") && len(s) > 1:
-				if strings.Contains(s[1:], f.short) {
-					return name
-				}
-			case wraps && strings.Contains(s, "="):
-				// env and sudo take NAME=value words before the command.
-			case wraps:
-				break words // the command it runs
-			}
-			if wraps && strings.Contains(spec.valued, " "+s+" ") {
-				i++ // the flag's value
-			}
+		if name := progKey(baseName(ws[0].joined())); len(chdirValues(name, ws[1:])) > 0 {
+			return name
 		}
 	}
 	return ""
+}
+
+// chdirValues are the folders the program name, given args, may be sent
+// to by a flag of its own (chdirFlags), in any of the ways the flag is
+// written (-C dir, -Cdir, -sC dir, --directory=dir, --dir dir), and each
+// of its words whose text is only known when the line runs, which may be
+// that flag or its folder. A wrapper's own words end where the command it
+// runs begins (env FOO=1 grep -C 3 x leaves grep's -C to grep). tar's old
+// way of writing its letters with no dash, one of them C, takes the folder
+// from the words after them, any of which may be it.
+func chdirValues(name string, args []word) (out []word) {
+	f, ok := chdirFlags[name]
+	if !ok {
+		return nil
+	}
+	spec, wraps := wrappers[name]
+	if name == "tar" && len(args) > 0 && args[0].static() && !strings.HasPrefix(args[0].value(""), "-") && strings.Contains(args[0].value(""), f.short) {
+		return args[1:]
+	}
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		if !w.static() {
+			out = append(out, w)
+			continue
+		}
+		s := w.value("")
+		value := func(attached string, has bool) {
+			switch {
+			case has:
+				out = append(out, partOf(w, attached))
+			case i+1 < len(args):
+				i++
+				out = append(out, args[i])
+			}
+		}
+		switch {
+		case s == "--":
+			return out
+		case strings.HasPrefix(s, "--"):
+			long, val, eq := strings.Cut(s[2:], "=")
+			if f.long != "" && len(long) >= 2 && strings.HasPrefix(f.long, long) {
+				value(val, eq)
+				continue
+			}
+		case strings.HasPrefix(s, "-") && len(s) > 1:
+			if j := strings.Index(s[1:], f.short); j >= 0 {
+				rest := s[2+j:]
+				value(rest, rest != "")
+				continue
+			}
+		case wraps && strings.Contains(s, "="):
+			// env and sudo take NAME=value words before the command.
+		case wraps:
+			return out // the command it runs
+		}
+		if wraps && strings.Contains(spec.valued, " "+s+" ") {
+			i++ // the flag's value
+		}
+	}
+	return out
 }
 
 // unreadable says why a line cannot be read to know what it runs, or "".

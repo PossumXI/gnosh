@@ -2875,6 +2875,15 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 	// xargs, where the file system takes no notice of case.
 	name := progKey(baseName(full))
 	args := c.words[1:]
+	// A program that a flag of its own sends to another folder (env -C,
+	// sudo -D, tar -C, make -C, go -C) works there: each folder it may be
+	// sent to is read as a cd the line may take, so that the words it is
+	// handed are judged from there too ("env --chdir=/ rm -rf usr" removes
+	// /usr). A folder only known when the line runs is a place nobody
+	// knows, as after cd "$X".
+	for _, dir := range chdirValues(name, args) {
+		e.addDerived(v, &simpleCmd{words: []word{litOf("cd"), dir}, nest: nest}, prev, depth)
+	}
 
 	isScript := true
 	switch {
@@ -2961,6 +2970,23 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 		} else {
 			v.setOpaque("eval runs text that is computed when the command runs")
 			e.addScript(v, maybeText(args), nest, depth, scriptMaybe)
+		}
+	case name == "history":
+		// What history -s puts in the shell's history runs when fc runs it
+		// again: "set -o history; history -s 'rm -rf ~'; fc -s" runs rm
+		// -rf ~ in bash -c. It is read as text that may run. (What history
+		// -r reads from a file is the file's, as a sourced file is.)
+		for i, a := range args {
+			if a.lit() != "-s" {
+				continue
+			}
+			if rest := args[i+1:]; allKnown(rest) {
+				e.addScript(v, strings.Join(litsOf(rest), " "), nest, depth, scriptMaybe)
+			} else {
+				v.setOpaque("history -s is given text computed when the command runs, which fc may run")
+				e.addScript(v, maybeText(rest), nest, depth, scriptMaybe)
+			}
+			break
 		}
 	case name == "alias":
 		// What an alias stands for runs wherever its name is written

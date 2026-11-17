@@ -46,6 +46,11 @@ func TestDangerousRemovals(t *testing.T) {
 		// A word that starts with = is only zsh's way of naming a program:
 		// to bash and sh it is text (oracle seed 135).
 		"rm -rf =x/..", "rm -R ='*/..'", "rm -rf =/..", "rm -rf =/../..", "w=false'*/..'; r\\m -R ='*/..'",
+		// A program that a flag of its own sends to another folder runs
+		// there, and so does a command fc runs again from what history -s
+		// put in the shell's history.
+		"env --chdir=/ rm -rf usr", "env -C / rm -rf etc", "env -iC/ rm -rf usr", "env --ch=/ rm -rf usr", "sudo -D / rm -rf usr",
+		"env -C ~ rm -rf .", "env -C \"$D\" rm -rf .", "set -o history\nhistory -s 'rm -rf ~'\nfc -s",
 	}
 	for _, cmd := range dangerous {
 		d := bash(e, cmd)
@@ -63,7 +68,7 @@ func TestDangerousRemovals(t *testing.T) {
 		"rm -rf /data/extra/sub", "rm -rf /data/extra/sub/*", "rmdir empty",
 		"rm -rf \"${DIR:?}\"/*", "rm -rf \"${DIR:?must be set}/\"", "rm -rf $DIR", "rm -rf \"$DIR/build\"", "rm -rf $BUILD/out",
 		"rm \"$(pwd)/a.txt\"", "rm $(ls *.tmp)", "D=x; rm -rf \"$D\"", "echo rm -rf /", "echo 'rm -rf /'", "grep -r 'rm -rf /' .",
-		"ls /", "rm -- -rf", "git rm -r --cached .", "rm -rf =old", "rm -rf =x/build",
+		"ls /", "rm -- -rf", "git rm -r --cached .", "rm -rf =old", "rm -rf =x/build", "env -C build rm -rf out", "history -s ls",
 		// Forms the reader follows are judged on what they remove.
 		"[[ -d build ]] && rm -rf build", "rm -rf \"${dirs[@]}\"", "for ((i=0;i<3;i++)); do rm -f tmp$i; done",
 		"(( n > 0 )) && rm -rf build",
