@@ -109,6 +109,18 @@ func (e *Engine) removalDanger(v *bashView, c *simpleCmd, dirs []string, fromSub
 			return why
 		}
 	}
+	// A program's name with a variable in it is also read as it is when
+	// that variable is not set: "rmdir${X} . -n" is rmdir . -n, and
+	// "rm${X[1]} -rf ." rm -rf . (oracle seed 126).
+	if w0 := c.words[0]; !w0.static() {
+		if lit := w0.joined(); lit != "" && strings.TrimSpace(lit) == lit {
+			ac := *c
+			ac.words = append([]word{litOf(lit)}, c.words[1:]...)
+			if why := e.removalDanger(v, &ac, dirs, fromSubst); why != "" {
+				return why
+			}
+		}
+	}
 	full, ok := e.progName(c.words[0])
 	name := progKey(baseName(full))
 	if !ok || progIsPattern(c.words[0]) {

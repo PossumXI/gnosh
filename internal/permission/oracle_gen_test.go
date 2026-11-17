@@ -983,6 +983,7 @@ var attackLines = []string{
 	"~'' ..", "cat ~''/.ssh/id_rsa", "rm -rf ~''", "cat ~'/x'", // oracle seed 121: a quote after the ~ leaves it a ~
 	"source $* ${X} <(echo rm -rf x)", "source ${X} <(git status)", ". $NOPE <(echo cat .env)", // oracle seed 122: words that vanish before the file
 	"ls 1>&\"\\$($--'rm' x)\"", "Y='$(rm x)'; ls >&\"$Y\"", "X=rm; ls >&\"\\$($X x)\"", // oracle seed 124: bash expands a computed word after >& twice
+	"rmdir${X[1]} . -n", "rmdir${X} .", "r${Y}m -rf .", // oracle seed 126: a program's name read with its variable unset
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",

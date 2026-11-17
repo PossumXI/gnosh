@@ -40,6 +40,9 @@ func TestDangerousRemovals(t *testing.T) {
 		"ls && rm -rf / || true", "find . -exec rm -rf / \\;", "/bin/rm -rf /", "nohup rm -rf ~ &",
 		// A removal in a line the reader cannot follow is not ruled out.
 		"rm -rf $x &&", "select f in a b; do rm -rf $f; done", "rm -rf ${x:-\"}\"}", "echo 'x; rm -rf y",
+		// A program's name with a variable in it, read with the variable
+		// unset (oracle seed 126).
+		"rmdir${X[1]} . -n", "rmdir${X} .", "r${Y}m -rf /", "rm${X[1]} -rf ~",
 	}
 	for _, cmd := range dangerous {
 		d := bash(e, cmd)
