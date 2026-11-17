@@ -65,3 +65,38 @@ func TestCompleteAgent(t *testing.T) {
 		t.Errorf("controls that cannot name kinds: %+v", got)
 	}
 }
+
+// What is typed after /cd and /add-dir is a folder, slash or no slash:
+// only folders are offered for it, from the folder the session is in.
+func TestCompleteFolder(t *testing.T) {
+	s := &session{cwd: "/proj", home: "/home/u", listDir: func(dir string) []fileEntry {
+		switch dir {
+		case "/proj":
+			return []fileEntry{{name: "docs", dir: true}, {name: "doctor.go"}, {name: "src", dir: true}}
+		case "/home/u":
+			return []fileEntry{{name: "code", dir: true}, {name: "notes.txt"}}
+		}
+		return nil
+	}}
+	labels := func(text string) string {
+		var out []string
+		for _, c := range s.complete(text, len(text)) {
+			out = append(out, c.Text)
+		}
+		return strings.Join(out, " ")
+	}
+	for text, want := range map[string]string{
+		"/cd do":       "docs/",
+		"/cd ":         "docs/ src/",
+		"/add-dir s":   "src/",
+		"/cd ~/":       "~/code/",
+		"/cd docs x":   "",
+		"/cdx do":      "",
+		"tell me do":   "",
+		"look at src/": "",
+	} {
+		if got := labels(text); got != want {
+			t.Errorf("%q: offered %q, want %q", text, got, want)
+		}
+	}
+}

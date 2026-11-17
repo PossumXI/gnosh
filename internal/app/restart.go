@@ -45,7 +45,8 @@ const RestartedEnv = "GNOSH_RESTARTED"
 // relaunch starts gnosh again with args, in place of this process. It
 // returns only when that could not be done, with the exit code.
 func (p *program) relaunch(args []string) int {
-	err := p.o.Relaunch(args, append(slices.Clone(p.o.Environ), RestartedEnv+"="+firstOf(buildinfo.BuildID, "1")))
+	env := append(slices.Clone(p.o.Environ), RestartedEnv+"="+firstOf(buildinfo.BuildID, "1"))
+	err := p.o.Relaunch(args, append(env, p.movingEnv()...))
 	p.errf("gnosh could not start again (%v). The session is kept: gnosh %s opens it again.", err, shellquote.Words(args))
 	return cli.ExitFailure
 }
@@ -117,10 +118,11 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 }
 
 // goOnArgs is the command line that opens this session again, with its
-// flags as they stand, for a command (restart, background) that ends the
-// session for another gnosh to go on with it. It refuses while a turn or
-// work in the background runs, which ending the session would stop.
-func (l *live) goOnArgs(c *SlashContext, name string) ([]string, error) {
+// flags as they stand, for a command (restart, background, cd) that ends
+// the session for another gnosh to go on with it; adjust, when given,
+// changes what it is made from. It refuses while a turn or work in the
+// background runs, which ending the session would stop.
+func (l *live) goOnArgs(c *SlashContext, name string, adjust ...func(*cli.Relaunch)) ([]string, error) {
 	if c.Agent.State().Busy {
 		return nil, fmt.Errorf("a turn is running, and would be stopped: /%s once it has ended, or Esc stops it", name)
 	}
@@ -139,15 +141,26 @@ func (l *live) goOnArgs(c *SlashContext, name string) ([]string, error) {
 		// folder's sessions, is opened from its file again.
 		session = l.ts.Path()
 	}
-	return l.relaunchFor(session, fresh)
+	return l.relaunchFor(session, fresh, adjust...)
 }
 
 // relaunchFor is the command line that opens session with this session's
 // flags as they stand: its permission mode, model, thinking level and work
-// tree. fresh says the session has no file yet.
-func (l *live) relaunchFor(session string, fresh bool) ([]string, error) {
+// tree, and the folders /add-dir added that are still there. fresh says
+// the session has no file yet.
+func (l *live) relaunchFor(session string, fresh bool, adjust ...func(*cli.Relaunch)) ([]string, error) {
 	p := l.p
 	r := cli.Relaunch{Session: session, Fresh: fresh, Mode: string(l.engine.Mode()), Effort: firstOf(l.agent.Model().Level, cli.EffortDefault)}
+	for _, d := range l.addedDirs {
+		// (A folder gone since would stop the new start: --add-dir takes
+		// folders that are there.)
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			r.AddDirs = append(r.AddDirs, d)
+		}
+	}
+	for _, f := range adjust {
+		f(&r)
+	}
 	if ref, ok := l.modelRef(); ok && (l.inv.Model != "" || l.modelPicked) {
 		// The model the command line named, or the one picked as the
 		// session started, which is kept nowhere; one from the settings,

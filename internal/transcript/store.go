@@ -357,9 +357,18 @@ func (st *Store) Branch(from *Session, atUUID string) (*Session, error) {
 	if src == "" {
 		src = from.id
 	}
+	// The branch is one of the sessions of the folder the session is
+	// listed with: the one it was started in, or the one /cd last moved it
+	// to. (Not the folder its shell was in at that entry: a branch stamped
+	// with a folder below the project's would be listed nowhere.)
 	start := from.start
 	if start == "" {
 		start = entries[at].Cwd
+	}
+	for _, e := range entries {
+		if e.Type == TypeMeta && e.Key == MovedKey && filepath.IsAbs(e.Value) {
+			start = filepath.Clean(e.Value)
+		}
 	}
 	s := &Session{
 		st:        st,
@@ -373,7 +382,7 @@ func (st *Store) Branch(from *Session, atUUID string) (*Session, error) {
 	if filepath.IsAbs(start) {
 		s.path = filepath.Join(st.ProjectDir(start), id+".jsonl")
 	}
-	if _, err := s.Append(Entry{Type: TypeBranch, FromSession: src, FromUUID: entries[at].UUID}); err != nil {
+	if _, err := s.Append(Entry{Type: TypeBranch, FromSession: src, FromUUID: entries[at].UUID, Cwd: start}); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -384,7 +393,8 @@ type Info struct {
 	// ID is the session's id and Path its file.
 	ID   string
 	Path string
-	// Cwd is the working directory the session was started in.
+	// Cwd is the working directory the session was started in, or the
+	// one /cd last moved it to (Session.Move).
 	Cwd string
 	// Title is the session's name: the last one the person gave, or else
 	// the last generated one, or empty.
@@ -408,8 +418,8 @@ type Info struct {
 }
 
 // List describes the sessions that were started in the working directory
-// cwd, the one written to most recently first. Sessions that hold no
-// entries are left out.
+// cwd, or moved there, the one written to most recently first. Sessions
+// that hold no entries are left out.
 func (st *Store) List(ctx context.Context, cwd string) ([]Info, error) {
 	cwd = filepath.Clean(cwd)
 	dir := st.ProjectDir(cwd)
@@ -465,6 +475,8 @@ type liteEntry struct {
 	Source      Source    `json:"source"`
 	Title       string    `json:"title"`
 	FromSession string    `json:"fromSession"`
+	Key         string    `json:"key"`
+	Value       string    `json:"value"`
 }
 
 // scanInfo reads the session file at path once and describes it. Lines
@@ -509,6 +521,9 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 		t, terr := time.Parse(time.RFC3339Nano, le.Timestamp)
 		if terr == nil {
 			last = t.UTC()
+		}
+		if le.Type == TypeMeta && le.Key == MovedKey && filepath.IsAbs(le.Value) {
+			info.Cwd = filepath.Clean(le.Value)
 		}
 		if info.Entries == 1 {
 			info.Cwd = le.Cwd

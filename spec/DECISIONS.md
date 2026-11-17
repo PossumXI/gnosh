@@ -1097,3 +1097,27 @@ or kept with the reason said (27).
     sandbox of the operating system. Claude Code holds only sub-agents
     to this; gnosh holds a --worktree session to it too, as it holds one
     to its tree's files.
+77. **/cd moves a session to another folder by starting gnosh again
+    there.** Claude Code's /cd keeps the conversation and applies the
+    new folder's project settings, permission rules, hooks, MCP
+    servers, skills, agents and instruction files as it moves. gnosh
+    already does all of that one way, as it starts in a folder, so /cd
+    starts gnosh again there, as /restart does (--cwd names the folder,
+    --resume the session, and /add-dir's folders go along as --add-dir).
+    Before anything moves: the Cd rules are checked (Claude Code's: a
+    bare deny switches /cd off, a deny keeps it out of the folders it
+    covers, as typed, by way of each link and as resolved, and any allow
+    rule makes a list of the only folders it may go to; patterns are
+    matched against the whole path, * one segment, ** any number; there
+    are no ask rules); a folder not trusted is asked about in the
+    session, and a no leaves the session where it is; and the folder's
+    configuration is read, so that the new start does not stop on a
+    mistake in it. Then the session's file goes with the new folder's
+    sessions (a meta entry "moved" records the folder, which the list
+    of a folder's sessions goes by), its own folder (its commands'
+    output files, its sub-agents) goes along, and the gnosh started
+    there tells the model where it now works and runs the CwdChanged
+    hooks. mem is a project's, so it is the new folder's from then on:
+    what it held for the session stays with the folder it left. /cd
+    waits while a turn or background work runs, is not for a run, and
+    does not leave a session's own work tree.

@@ -25,6 +25,15 @@ type Relaunch struct {
 	Effort string
 	// Tree is the name of the --worktree work tree the session is in.
 	Tree string
+	// AddDirs are the working directories /add-dir added while the
+	// session ran: the new start is given them as --add-dir.
+	AddDirs []string
+	// Cwd is the folder /cd moved the session to, which --cwd names in
+	// place of the command line's. --trust-folder was about the folder
+	// the session left and goes, unless TrustFolder gives it again: the
+	// new folder was trusted for the session only, which no record keeps.
+	Cwd         string
+	TrustFolder bool
 }
 
 // EffortDefault is Relaunch.Effort for a session whose thinking level is
@@ -37,7 +46,8 @@ const EffortDefault = "auto"
 // --session-id, --fork-session, -n), which --resume=<session> replaces,
 // and with the prompt words left out, since the session has sent them.
 // The permission mode, the model and the thinking level are the session's
-// as they are now, and a work tree whose name was made up is named. A
+// as they are now, a work tree whose name was made up is named, and the
+// folders /add-dir added, and the one /cd moved the session to, go too. A
 // session that started skipping permissions (-y, or --permission-mode
 // bypassPermissions) and has since left that mode can go back to it.
 func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
@@ -79,11 +89,22 @@ func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
 		case name == "--worktree" && r.Tree != "":
 			out = append(out, name+"="+r.Tree)
 			continue
+		case (name == "--cwd" || name == "--trust-folder") && r.Cwd != "":
+			continue
 		}
 		out = append(out, o.spelled()...)
 	}
 	if r.Model != "" && !model {
 		out = append(out, "--model="+r.Model)
+	}
+	for _, d := range r.AddDirs {
+		out = append(out, "--add-dir="+d)
+	}
+	if r.Cwd != "" {
+		out = append(out, "--cwd="+r.Cwd)
+		if r.TrustFolder {
+			out = append(out, "--trust-folder")
+		}
 	}
 	switch {
 	case r.Mode == ModeBypassPermissions || r.Mode == "" && yolo:

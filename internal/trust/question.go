@@ -125,6 +125,39 @@ func (q Question) String() string {
 	return b.String()
 }
 
+// Facts is the question as String says it, but with no blank lines and
+// without the start's choices: for a question put in the middle of a
+// session (/cd), whose choices are its own.
+func (q Question) Facts() string {
+	var b strings.Builder
+	b.WriteString("Do you trust the files in this folder?\n  " + q.Folder + "\n")
+	b.WriteString("Its own settings are not in force.")
+	if len(q.Files) > 0 {
+		b.WriteString(" If you say yes, these files would be read:\n")
+		for _, file := range q.Files {
+			b.WriteString("  - " + file + "\n")
+		}
+		b.WriteString("They would add:\n")
+	} else {
+		b.WriteString(" If you say yes, they would add:\n")
+	}
+	for _, w := range q.Would {
+		b.WriteString("  - " + w + "\n")
+	}
+	if len(q.Risks) > 0 {
+		b.WriteString("What could go wrong, if whoever wrote them meant harm:\n")
+		for _, r := range q.Risks {
+			b.WriteString("  - " + r + "\n")
+		}
+	}
+	if q.SessionOnly {
+		b.WriteString("A yes lasts for this session: this folder is never recorded as trusted.")
+	} else {
+		b.WriteString("A yes is recorded, and gnosh trust --forget undoes it.")
+	}
+	return b.String()
+}
+
 // Report is what gnosh trust prints after trusting a folder: what its
 // settings now do, what could go wrong, and how to undo it.
 func Report(f Folder, held []Holding) string {

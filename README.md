@@ -133,7 +133,9 @@ copy of the conversation works on the prompt in the background while this
 session goes on), `/compact`, `/resume` (by number, id, name, or words from
 a session's name or first prompt), `/branch`, `/rewind` (the
 conversation, the files Write and Edit changed, or both), `/model`, `/effort`,
-`/config`, `/plan`, `/permissions`, `/add-dir`, `/status`, `/context`, `/btw`
+`/config`, `/plan`, `/permissions`, `/add-dir`, `/cd` (the session moves to
+another folder and goes on there, with that folder's settings, instructions
+and skills; Cd rules say where it may go), `/status`, `/context`, `/btw`
 (a side question, also while the model works; nothing of it is kept),
 `/recap`, `/color` (this session's prompt mark in a colour of its own, kept
 with the session), `/keybindings` (Claude Code's keybindings.json: a key bound

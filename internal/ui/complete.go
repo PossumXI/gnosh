@@ -42,6 +42,11 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 	}
 	start := strings.LastIndexAny(before, " \t\n") + 1
 	word := before[start:]
+	if folderCommand(before) {
+		// /cd and /add-dir take a folder: what is typed after them is
+		// one, slash or no slash, and only folders are offered.
+		return s.completeFolder(word, start)
+	}
 	switch {
 	case strings.HasPrefix(word, "@"):
 		return append(s.completeFile(word[1:], start, "@"), s.completeAgent(word[1:], start)...)
@@ -49,6 +54,18 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 		return s.completeFile(word, start, "")
 	}
 	return nil
+}
+
+// folderCommand reports whether the line so far is a command that takes a
+// folder (/cd, /add-dir) with its first argument begun.
+func folderCommand(before string) bool {
+	name, rest, ok := strings.Cut(before, " ")
+	return ok && (name == "/cd" || name == "/add-dir") && !strings.ContainsAny(strings.TrimLeft(rest, " "), " \t\n")
+}
+
+// completeFolder is completeFile with only the folders.
+func (s *session) completeFolder(partial string, start int) []editor.Candidate {
+	return s.completePath(partial, start, "", true)
 }
 
 // agentLister is what a session's controls may also be: able to name the
@@ -109,6 +126,11 @@ func (s *session) completeCommand(typed string) []editor.Candidate {
 // far whose names begin with its last part. sigil is what stands before
 // the path in the box ("@"), and start where the word begins.
 func (s *session) completeFile(partial string, start int, sigil string) []editor.Candidate {
+	return s.completePath(partial, start, sigil, false)
+}
+
+// completePath is completeFile, or with folders completeFolder.
+func (s *session) completePath(partial string, start int, sigil string, folders bool) []editor.Candidate {
 	if s.listDir == nil {
 		return nil
 	}
@@ -134,6 +156,8 @@ func (s *session) completeFile(partial string, start int, sigil string) []editor
 	lower := strings.ToLower(base)
 	for _, e := range s.listDir(dir) {
 		switch {
+		case folders && !e.dir:
+			continue
 		case !strings.HasPrefix(strings.ToLower(e.name), lower):
 			continue
 		case strings.HasPrefix(e.name, ".") && !strings.HasPrefix(base, "."):

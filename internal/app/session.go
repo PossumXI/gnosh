@@ -70,6 +70,9 @@ type live struct {
 	own       []core.Tool // gnosh's own tools that are offered, without the Agent tool
 	toolStore *sync.Map
 	roots     []string
+	// addedDirs are the folders /add-dir added, which a new start of the
+	// session (/restart, /cd) is given as --add-dir.
+	addedDirs []string
 	agent     *agent.Agent
 	facts     *Session
 	contribs  []joined
@@ -571,8 +574,10 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.startStatusLine()
 	l.watchFiles(l.ctx)
 	l.startInitialPrompt()
-	// A session /restart opened in a newer build says what changed.
+	// A session /restart opened in a newer build says what changed, and
+	// one /cd moved is told where it is now.
 	l.whatsNew()
+	l.movedHere()
 	return l, nil
 }
 
@@ -588,6 +593,8 @@ func (l *live) openTranscript(ctx context.Context) error {
 			return fmt.Errorf("the session %s could not be opened again: %w", l.reopen, err)
 		}
 		l.ts = ts
+		// What is written from here on is written in this folder.
+		l.ts.SetCwd(cwd)
 		// (/resume opens a session whose conversation is not on the
 		// screen; a rewind's and a branch's is.)
 		l.showPast = l.source == "resume"
@@ -693,6 +700,10 @@ func (l *live) openTranscript(ctx context.Context) error {
 		ts, l.source = copied, "fork"
 	}
 	l.ts = ts
+	// What is written from here on is written in this folder, which may
+	// not be the one the session's last entry was (another folder's
+	// session opened by its id, a shell that had moved, or /cd).
+	l.ts.SetCwd(cwd)
 	// (Not for a gnosh /restart started: the session it opens is on the
 	// screen already.)
 	l.showPast = l.source == "resume" && !l.p.restarted

@@ -90,6 +90,7 @@ func (l *live) slashAddDir(ctx context.Context, c *SlashContext) error {
 		return err
 	}
 	l.roots = append(slices.Clone(l.roots), dir)
+	l.addedDirs = append(l.addedDirs, dir)
 	l.agent.SetRoots(l.roots)
 	l.flog.logf("permission", "a working directory was added for the rest of the session: %s", dir)
 	// The model is told with the next request, so that it knows it may work

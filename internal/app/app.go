@@ -139,13 +139,19 @@ type program struct {
 	// restartedFrom is the BuildID of the gnosh that /restart came from,
 	// when it said (whatsNew).
 	restartedFrom string
-	started       os.FileInfo
-	restartMu     sync.Mutex
-	restart       []string
+	// movedFrom is the folder the session left, in a gnosh /cd started
+	// (MovedEnv).
+	movedFrom string
+	started   os.FileInfo
+	restartMu sync.Mutex
+	restart   []string
 	// detached is what /background asked to go on with, once the session
 	// is closed, instead of a restart: the run's log, its prompt and the
 	// session it resumes.
 	detached *detachPlan
+	// moving is the folder /cd moves the session from, for the gnosh it
+	// starts.
+	moving string
 }
 
 // lockedWriter lets several goroutines write whole lines to one stream.
@@ -228,6 +234,14 @@ func newProgram(o Options) *program {
 		}
 		delete(p.env, RestartedEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, RestartedEnv+"=") })
+	}
+	if from, ok := p.env[MovedEnv]; ok {
+		// /cd's word, as /restart's is.
+		if p.restarted && filepath.IsAbs(from) {
+			p.movedFrom = filepath.Clean(from)
+		}
+		delete(p.env, MovedEnv)
+		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, MovedEnv+"=") })
 	}
 	if o.Executable != "" {
 		p.started, _ = os.Stat(o.Executable)

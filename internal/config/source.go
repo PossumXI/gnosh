@@ -283,6 +283,11 @@ func checkRule(which, text string, tools []string) string {
 		}
 		return fmt.Sprintf("no tool's name matches %s. The tools are: %s", show(name), list(tools))
 	}
+	if name == "Cd" {
+		// Cd rules are about /cd, the person's own command, which is no
+		// tool (the permission engine reads their patterns).
+		return ""
+	}
 	if !slices.Contains(tools, name) {
 		hint := ""
 		for _, t := range tools {

@@ -76,7 +76,7 @@ is gnosh's priority.
 | `/output-style [style]` | — | List or switch output styles. | P2 |
 | `/config [key=value ...]` | — | Open settings; `key=value` sets one option without the menu. | P1 |
 | `/add-dir <path>` | — | Add a working directory for this session (with path completion). | P1 |
-| `/cd <path>` | — | Move the session to another working directory, keeping the conversation; applies the new directory's project settings, skills and memory files. | P2 |
+| `/cd <path>` | — | Move the session to another working directory, keeping the conversation; applies the new directory's project settings, skills and memory files. | P2 (built: gnosh starts again in the folder, DECISIONS 77) |
 
 ### Extension points
 

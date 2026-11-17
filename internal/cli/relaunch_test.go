@@ -44,6 +44,14 @@ func TestRelaunchArgs(t *testing.T) {
 		{`-m qwen/a -m qwen/c`, Relaunch{Session: id, Model: "qwen/b"}, []string{"--model=qwen/b", "--resume=" + id}},
 		// /effort auto since --effort high: the flag goes.
 		{`--effort high -c`, Relaunch{Session: id, Effort: EffortDefault}, []string{"--resume=" + id}},
+		// Folders /add-dir added go along, after the command line's own.
+		{`--add-dir ../x -c`, Relaunch{Session: id, AddDirs: []string{"/srv/a", "/srv/b c"}},
+			[]string{"--add-dir=../x", "--add-dir=/srv/a", "--add-dir=/srv/b c", "--resume=" + id}},
+		// /cd: --cwd names the new folder; --trust-folder, about the old
+		// one, goes, or is given again when the new folder was trusted for
+		// the session only.
+		{`--cwd /work/app --trust-folder -c`, Relaunch{Session: id, Cwd: "/work/lib"}, []string{"--cwd=/work/lib", "--resume=" + id}},
+		{`--trust-folder -c`, Relaunch{Session: id, Cwd: "/home/u", TrustFolder: true}, []string{"--cwd=/home/u", "--trust-folder", "--resume=" + id}},
 	}
 	for _, c := range cases {
 		args := words(t, "gnosh "+c.line)
@@ -88,6 +96,10 @@ func TestRelaunchArgs(t *testing.T) {
 		}
 		if c.r.Tree != "" {
 			before.WorktreeName = c.r.Tree
+		}
+		before.AddDirs = append(before.AddDirs, c.r.AddDirs...)
+		if c.r.Cwd != "" {
+			before.Cwd, before.TrustFolder = c.r.Cwd, c.r.TrustFolder
 		}
 		if !reflect.DeepEqual(before, after) {
 			t.Errorf("%s: the relaunch reads otherwise:\n got %+v\nwant %+v", c.line, after, before)

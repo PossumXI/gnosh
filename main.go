@@ -60,6 +60,7 @@ func main() {
 	// see it.
 	environ := os.Environ()
 	_ = os.Unsetenv(app.RestartedEnv)
+	_ = os.Unsetenv(app.MovedEnv)
 	os.Exit(app.Main(context.Background(), app.Options{
 		Args:             os.Args[1:],
 		Stdin:            os.Stdin,

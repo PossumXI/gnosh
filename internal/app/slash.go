@@ -159,7 +159,9 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 		err = cmd.Run(ctx, c)
 	}()
 	res.Text = strings.TrimRight(out.String(), "\n")
-	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart" || cmd.Name == "background")
+	// (/cd ends the session only once it has moved it: saying where the
+	// session is, or that it is there already, ends nothing.)
+	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart" || cmd.Name == "background" || cmd.Name == "cd" && s.l.p.restartArgs() != nil)
 	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments): %v", cmd.Name, len(args), err)
 	// A command may have changed what the status line is told: the
 	// session's name (/rename), the model, its thinking, the style.
@@ -221,6 +223,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
 		{Name: "add-dir", Args: "<directory>", Summary: "Add a working directory for the rest of this session. With nothing after it, lists them.", Run: l.slashAddDir},
+		{Name: "cd", Args: "<folder>", Summary: "Move this session to another folder, keeping the conversation: from then on that folder's own settings, instructions and skills are in force, and gnosh -c there goes on with it.", Run: l.slashCd},
 		{Name: "panel", Aliases: []string{"sidebar"}, Summary: "Show or hide the side panel: the files this session changed and its deliverables, beside the conversation, on the whole screen.",
 			Run: func(context.Context, *SlashContext) error {
 				return errors.New("the side panel is the interactive interface's own; /panel does nothing here")
