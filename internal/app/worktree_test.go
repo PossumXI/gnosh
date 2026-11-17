@@ -358,3 +358,54 @@ func TestSessionInAKeptWorktree(t *testing.T) {
 		t.Errorf("the write in the kept work tree: %q, %v", got, err)
 	}
 }
+
+// addTree makes its work tree's folder itself, so that two starts of one
+// name at once make one work tree: the second leaves the first's folder
+// and branch alone, where it used to take them away as its own leftovers.
+// A failed attempt takes away only the branch it made, not one of that
+// name that points elsewhere.
+func TestAddTreeLeavesAnothersAlone(t *testing.T) {
+	w := repoWorld(t)
+	gitIn(t, w.Dir, "commit", "-q", "--allow-empty", "-m", "second")
+	first := gitIn(t, w.Dir, "rev-parse", "HEAD~1")
+	second := gitIn(t, w.Dir, "rev-parse", "HEAD")
+	env := []string{"HOME=" + w.Dir, "PATH=" + os.Getenv("PATH"), "GIT_CONFIG_NOSYSTEM=1"}
+	trees := filepath.Join(w.Root, "trees")
+	if err := os.MkdirAll(trees, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first start made the folder, and works in it.
+	taken := &worktree{repo: w.Dir, path: filepath.Join(trees, "same"), branch: "worktree-same", base: second}
+	if err := addTree(t.Context(), env, taken, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(taken.path, "work.txt"), []byte("the first start's work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	again := *taken
+	err := addTree(t.Context(), env, &again, true)
+	if err == nil || !strings.Contains(err.Error(), "made by another start at the same moment") {
+		t.Errorf("a second start of the same name: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(taken.path, "work.txt")); err != nil || string(data) != "the first start's work\n" {
+		t.Errorf("the first start's work tree was touched: %q, %v", data, err)
+	}
+	if got := gitIn(t, w.Dir, "rev-parse", "--verify", "--quiet", "refs/heads/worktree-same"); got != second {
+		t.Errorf("the first start's branch is at %q", got)
+	}
+
+	// A branch of the name made since the start looked, at another commit:
+	// git refuses -b, and the branch stays.
+	gitIn(t, w.Dir, "branch", "worktree-late", first)
+	late := &worktree{repo: w.Dir, path: filepath.Join(trees, "late"), branch: "worktree-late", base: second}
+	if err := addTree(t.Context(), env, late, true); err == nil {
+		t.Fatal("git made a branch that was there")
+	}
+	if got := gitIn(t, w.Dir, "rev-parse", "--verify", "--quiet", "refs/heads/worktree-late"); got != first {
+		t.Errorf("someone else's branch was taken away or moved: %q", got)
+	}
+	if fileExists(late.path) {
+		t.Errorf("the failed attempt left its folder: %s", late.path)
+	}
+}

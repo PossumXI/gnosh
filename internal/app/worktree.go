@@ -199,8 +199,21 @@ func treesFolder(dataDir string) (string, error) {
 // addTree adds the work tree wt to its repository: on a new branch at its
 // base when newBranch is set, else on its branch as it stands. What a
 // failed attempt left behind (a branch git made, part of the folder) is
-// taken away.
+// taken away, and only that.
+//
+// The folder is made first, by this gnosh alone (os.Mkdir fails when it is
+// there), and git makes the work tree in it, which git does in an empty
+// folder. So two starts of one name at once (gnosh --worktree same, twice)
+// make one work tree, and the one that comes second leaves the other's
+// alone: it used to run git into the same folder, fail, and take away, as
+// its own leftovers, the folder and the branch the first had just made.
 func addTree(ctx context.Context, environ []string, wt *worktree, newBranch bool) error {
+	if err := os.Mkdir(wt.path, 0o755); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%s was made by another start at the same moment: start again to open it, or name another", wt.path)
+		}
+		return fmt.Errorf("the folder for the work tree could not be made: %v", err)
+	}
 	args := []string{"worktree", "add", "--quiet", wt.path, wt.branch}
 	if newBranch {
 		args = []string{"worktree", "add", "--quiet", "-b", wt.branch, wt.path, wt.base}
@@ -212,7 +225,10 @@ func addTree(ctx context.Context, environ []string, wt *worktree, newBranch bool
 		_ = os.RemoveAll(wt.path)
 		_, _ = runGit(clean, environ, wt.repo, "worktree", "prune")
 		if newBranch {
-			_, _ = runGit(clean, environ, wt.repo, "branch", "-D", wt.branch)
+			// The branch this attempt made, which points at the base; one
+			// of that name that points elsewhere is someone else's (made
+			// since the start looked), and stays.
+			_, _ = runGit(clean, environ, wt.repo, "update-ref", "-d", "refs/heads/"+wt.branch, wt.base)
 		}
 		return fmt.Errorf("git could not make the work tree: %v", err)
 	}
