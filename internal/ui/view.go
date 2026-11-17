@@ -205,8 +205,30 @@ func (s *session) placeholder() string {
 		return "Type to queue another prompt; Up takes the queue back"
 	case s.busy:
 		return "Type to queue a prompt; Esc stops the turn"
+	case s.failHint != "":
+		return s.failHint
 	}
 	return "Ask for something, or ? for the keys"
+}
+
+// failHintFor is what the empty prompt box says after a turn failed in the
+// way kind names (agent.TurnResult.ErrorKind): what to try next, as
+// Claude Code 2.1.326 says it. The conversation keeps the prompt, so
+// "go on" is all a second try needs.
+func failHintFor(kind string) string {
+	switch kind {
+	case "rate_limit", "overloaded":
+		return `The model's server is busy: wait a little, then send "go on" to try again`
+	case "context_too_long":
+		return `Too long for the model: /compact makes room, then send "go on"`
+	case "authentication_failed":
+		return "The model's server refused gnosh's key: /doctor says more, /model picks another model"
+	case "invalid_request":
+		return `The server refused the request: /doctor says more, /model picks another model`
+	case "server_error":
+		return `Send "go on" to try again; /doctor checks the model's server, /model picks another`
+	}
+	return `Send "go on" to try again; /debug looks into what went wrong`
 }
 
 // streamLines is what is still being written: the answer's lines that may

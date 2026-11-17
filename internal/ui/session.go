@@ -280,6 +280,9 @@ type session struct {
 	// suggestion is the person's likely next prompt, shown in the empty
 	// box until they type (promptSuggestionEnabled).
 	suggestion string
+	// failHint is what to try next after a turn failed, shown in the empty
+	// box until the person sends something (failHintFor).
+	failHint string
 	// color is the colour of the prompt mark the session asked for
 	// (/color), "" for the theme's own.
 	color  string

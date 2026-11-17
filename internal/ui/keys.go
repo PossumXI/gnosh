@@ -374,6 +374,7 @@ func (s *session) box(ev term.Event, k *term.Key) {
 		if !s.cleanToSend(&d, res.Mode) {
 			break
 		}
+		s.failHint = ""
 		switch res.Mode {
 		case editor.ModeShell:
 			s.shell(d)

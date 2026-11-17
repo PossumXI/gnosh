@@ -619,6 +619,7 @@ func (s *session) turnEnd(res agent.TurnResult) {
 	s.reply = reply{}
 	s.stopping = false
 	s.retries, s.retryKind = 0, ""
+	s.failHint = ""
 
 	th := &s.th
 	var stats []string
@@ -657,6 +658,7 @@ func (s *session) turnEnd(res agent.TurnResult) {
 			words = res.Err.Error()
 		}
 		s.notice(agent.LevelError, firstNonEmpty(words, "The turn failed, and nothing said why."))
+		s.failHint = failHintFor(res.ErrorKind)
 	}
 	s.setPhase(phWorking)
 	s.refresh()
