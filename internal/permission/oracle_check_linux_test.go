@@ -970,6 +970,20 @@ func (lc *lineCheck) runsFile() bool {
 				return true
 			}
 		}
+		// A login shell (sh -l, bash --login) runs the profile files first:
+		// programs of their own, as a sourced file is (oracle seed 142:
+		// "command -p sh -la" ran /etc/profile's id -u).
+		if len(ws) > 1 && ws[0].static() && lineShells[baseName(ws[0].lit())] {
+			for _, a := range ws[1:] {
+				l := a.lit()
+				if !a.static() || !strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "+") {
+					break
+				}
+				if l == "--login" || !strings.HasPrefix(l, "--") && strings.HasPrefix(l, "-") && strings.Contains(l[1:], "l") {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }

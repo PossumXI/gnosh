@@ -492,7 +492,8 @@
 //     program. BASH_ENV, ENV, exported functions, SHELLOPTS, BASHOPTS,
 //     POSIXLY_CORRECT, CDPATH and GLOBIGNORE in the environment of the
 //     person who started gnosh are that person's own doing; the engine
-//     cannot see them. zsh has not been held against this package.
+//     cannot see them. Nor does it read the profile files a login shell
+//     runs (sh -l): like a file sourced, they are programs of their own. zsh has not been held against this package.
 //
 // # Protected paths and dangerous removals
 //
