@@ -75,6 +75,13 @@ type historian interface {
 	History() []string
 }
 
+// resizeTeller is what a session's controls may also be: told that the
+// terminal's size changed, for the status line command, which is told the
+// size.
+type resizeTeller interface {
+	Resized()
+}
+
 // vimTeller is what a session's controls may also be: told the mode of
 // the box's vim keys, for the status line command (Claude Code's vim.mode).
 type vimTeller interface {

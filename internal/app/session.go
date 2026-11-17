@@ -1433,6 +1433,15 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 // it changes, as Claude Code's does.
 func (c *controls) SetVimMode(mode string) { c.cur().setVimMode(mode) }
 
+// Resized tells the session the terminal has a new size: the status line
+// command, told it as COLUMNS and LINES, runs again (Claude Code 2.1.326
+// stopped keeping a width that was).
+func (c *controls) Resized() {
+	if l := c.cur(); l != nil {
+		l.statusLine.poke()
+	}
+}
+
 // clear ends the session with the reason "clear" and opens a new one
 // behind the same controls.
 func (c *controls) clear(ctx context.Context) error {

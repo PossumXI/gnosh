@@ -560,6 +560,9 @@ func (s *session) resize(cols, rows int) {
 		return
 	}
 	s.termCols, s.rows = cols, rows
+	if r, ok := s.c.(resizeTeller); ok {
+		r.Resized()
+	}
 	if s.view != nil {
 		// The view is laid out again for the new size; what the session
 		// says meanwhile is laid out for the scrollback's.

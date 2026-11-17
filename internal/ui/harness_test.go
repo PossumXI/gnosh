@@ -523,6 +523,7 @@ func (g *rig) box() string { return g.s.ed.Text() }
 type controls struct {
 	mu        sync.Mutex
 	vimModes  []string // what SetVimMode was told, in order
+	resized   int      // how often Resized was called
 	prompts   []agent.Prompt
 	ids       []string
 	submitErr error
@@ -698,6 +699,12 @@ func (c *controls) Mode() string {
 }
 
 // SetVimMode notes the mode of the box's vim keys the session is told.
+func (c *controls) Resized() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.resized++
+}
+
 func (c *controls) SetVimMode(mode string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

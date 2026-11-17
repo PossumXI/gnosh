@@ -161,6 +161,9 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 	res.Text = strings.TrimRight(out.String(), "\n")
 	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart" || cmd.Name == "background")
 	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments): %v", cmd.Name, len(args), err)
+	// A command may have changed what the status line is told: the
+	// session's name (/rename), the model, its thinking, the style.
+	s.l.statusLine.poke()
 	return res, err
 }
 
