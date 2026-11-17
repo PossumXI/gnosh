@@ -181,14 +181,13 @@ func (p *provider) endedEarly(last []byte) *core.ProviderError {
 // open sends req and returns the exchange of an answer that has begun.
 // A server that refuses the images in a request (imagesRefused) is sent
 // the request again at once without them, and from then on is never sent
-// one: each image is a line of text that says it was left out. Without
-// that, a picture a tool read would fail every later request of the
-// session in the same way, since the conversation keeps it.
+// one: each image is a line of text that says it was left out. One that
+// could not read an image (imageUnreadable) is sent it again without the
+// images it may not have read (images.go). Without that, a picture a tool
+// read would fail every later request of the session in the same way,
+// since the conversation keeps it.
 func (p *provider) open(ctx context.Context, w wire, req *core.Request) (*exchange, error) {
-	send := req
-	if p.LeavesOutImages(req.Model) {
-		send = withoutImages(req)
-	}
+	send := p.prepared(req)
 	for {
 		body, err := w.encode(send)
 		if err != nil {
@@ -199,15 +198,15 @@ func (p *provider) open(ctx context.Context, w wire, req *core.Request) (*exchan
 			return nil, err
 		}
 		if x.ok() {
+			p.took(send)
 			return x, nil
 		}
 		err = x.statusError()
 		x.close()
-		if send == req && hasImages(req) && imagesRefused(err) {
-			p.noImages.Store(req.Model, true)
-			send = withoutImages(req)
-			continue
+		next, again := p.afterImageError(req, send, err)
+		if !again {
+			return nil, err
 		}
-		return nil, err
+		send = next
 	}
 }

@@ -209,6 +209,10 @@ type provider struct {
 	// them as a line saying it was left out (images.go). A server that
 	// serves several models may have the eyes for one and not another.
 	noImages sync.Map
+	// taken holds the images (imageKey) of requests the server answered,
+	// and unreadable those it could not read, which are sent as a line
+	// saying so from then on (images.go).
+	taken, unreadable sync.Map
 }
 
 // newProvider checks a Config and makes the provider it describes, with

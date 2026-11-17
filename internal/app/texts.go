@@ -97,7 +97,7 @@ const markEscape = `\` + `u200b`
 // that made text harmless on its way to the model are taken out of every
 // string the model wrote, so that the tool acts on the text as it was.
 func cleanInput(call core.ToolCall) json.RawMessage {
-	out, ok := rewriteJSONStrings(call.Input, prompt.Undefuse, func(raw []byte) bool {
+	out, ok := prompt.RewriteJSONStrings(call.Input, prompt.Undefuse, func(raw []byte) bool {
 		return bytes.Contains(raw, []byte(prompt.Mark)) || containsFold(raw, markEscape)
 	})
 	if !ok {
@@ -178,9 +178,7 @@ func defuseBlocks(blocks []core.Block, own bool) {
 				b.Text = prompt.Defuse(b.Text)
 			}
 		case core.BlockToolUse:
-			if out, ok := rewriteJSONStrings(b.Input, prompt.Defuse, func(raw []byte) bool {
-				return bytes.IndexByte(raw, '<') >= 0 || containsFold(raw, `<`)
-			}); ok {
+			if out, ok := prompt.RewriteJSONStrings(b.Input, prompt.Defuse, prompt.MayHoldControl); ok {
 				b.Input = out
 			}
 		case core.BlockToolResult:
@@ -193,110 +191,4 @@ func defuseBlocks(blocks []core.Block, own bool) {
 // and plain.
 func containsFold(raw []byte, s string) bool {
 	return bytes.Contains(bytes.ToLower(raw), []byte(strings.ToLower(s)))
-}
-
-// rewriteJSONStrings returns raw, one JSON value, with f applied to every
-// string in it, keys included. The value is written again token by token,
-// so that an object that names a key twice still names it twice: the
-// loop's own check for that comes afterwards and must see it. needed is
-// asked first whether raw can hold anything f would change; when it says
-// no, or raw cannot be read, ok is false and raw is to be used as it is.
-func rewriteJSONStrings(raw json.RawMessage, f func(string) string, needed func([]byte) bool) (json.RawMessage, bool) {
-	if len(raw) == 0 || !needed(raw) {
-		return nil, false
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	var out bytes.Buffer
-	enc := json.NewEncoder(&out)
-	enc.SetEscapeHTML(false)
-	str := func(s string) error {
-		if err := enc.Encode(s); err != nil {
-			return err
-		}
-		out.Truncate(out.Len() - 1) // the line break Encode adds
-		return nil
-	}
-	type frame struct {
-		object bool
-		n      int  // how many members or items have been started
-		key    bool // the next string is a key
-	}
-	var stack []*frame
-	// value is called before a value is written: it writes the comma that
-	// parts the items of a list, and notes that an object's next string
-	// is a key again.
-	value := func() {
-		if len(stack) == 0 {
-			return
-		}
-		top := stack[len(stack)-1]
-		if top.object {
-			top.key = true
-			return
-		}
-		if top.n > 0 {
-			out.WriteByte(',')
-		}
-		top.n++
-	}
-	changed := false
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			break
-		}
-		switch v := tok.(type) {
-		case json.Delim:
-			switch v {
-			case '{', '[':
-				value()
-				out.WriteByte(byte(v))
-				stack = append(stack, &frame{object: v == '{', key: v == '{'})
-			default:
-				if len(stack) == 0 {
-					return nil, false
-				}
-				stack = stack[:len(stack)-1]
-				out.WriteByte(byte(v))
-			}
-		case string:
-			s := f(v)
-			changed = changed || s != v
-			if n := len(stack); n > 0 && stack[n-1].object && stack[n-1].key {
-				top := stack[n-1]
-				if top.n > 0 {
-					out.WriteByte(',')
-				}
-				top.n++
-				top.key = false
-				if err := str(s); err != nil {
-					return nil, false
-				}
-				out.WriteByte(':')
-				continue
-			}
-			value()
-			if err := str(s); err != nil {
-				return nil, false
-			}
-		case json.Number:
-			value()
-			out.WriteString(v.String())
-		case bool:
-			value()
-			if v {
-				out.WriteString("true")
-			} else {
-				out.WriteString("false")
-			}
-		case nil:
-			value()
-			out.WriteString("null")
-		}
-	}
-	if len(stack) != 0 || !changed || !json.Valid(out.Bytes()) {
-		return nil, false
-	}
-	return out.Bytes(), true
 }

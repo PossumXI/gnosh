@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -119,6 +120,89 @@ func TestWithoutImages(t *testing.T) {
 	plain := &core.Request{Messages: []core.Message{core.UserText("hi")}}
 	if withoutImages(plain) != plain {
 		t.Errorf("a request with no image was copied")
+	}
+}
+
+// llamaUnreadable is what a llama.cpp server with its vision part answers
+// a request holding an image it could not read (a WebP, a broken file).
+const llamaUnreadable = `{"error":{"code":400,"message":"Failed to load image or audio file","type":"invalid_request_error"}}`
+
+// A server that takes images but could not read one is sent the request
+// again without the images it had not taken before, each a line that says
+// it could not read it; the pictures it took before still go, and the one
+// it could not read is left out from then on.
+func TestAnImageTheServerCouldNotReadIsLeftOut(t *testing.T) {
+	bad := []byte("RIFF\x1a\x00\x00\x00WEBPVP8L")
+	badText := []byte(base64.StdEncoding.EncodeToString(bad))
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		if bytes.Contains(f.last().Body, badText) {
+			answering(400, nil, llamaUnreadable)(f, w, r)
+			return
+		}
+		f.play(w, r, okStream)
+	})
+	p := f.provider(TypeLlamaCpp, nil)
+	wantOK(t, drain(p.Stream(context.Background(), readAPicture())))
+
+	withBoth := func() *core.Request {
+		req := readAPicture()
+		req.Messages = append(req.Messages, core.Message{Role: core.RoleUser, Blocks: []core.Block{
+			core.Text("and this one"), {Type: core.BlockImage, MediaType: "image/webp", Data: bad},
+		}})
+		return req
+	}
+	req := withBoth()
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	reqs := f.requests()
+	if len(reqs) != 3 {
+		t.Fatalf("%d requests, want the first picture's, the refused one and the one without the WebP", len(reqs))
+	}
+	last := reqs[2].Body
+	if bytes.Contains(last, badText) || bytes.Count(last, []byte(`"type":"image_url"`)) != 1 {
+		t.Errorf("the request sent again should hold the PNG and not the WebP:\n%s", last)
+	}
+	if !bytes.Contains(last, []byte("could not read it")) || bytes.Contains(last, []byte("cannot take images")) {
+		t.Errorf("the request sent again does not say the server could not read the WebP:\n%s", last)
+	}
+	if req.Messages[3].Blocks[1].Type != core.BlockImage {
+		t.Errorf("the conversation lost its picture")
+	}
+	if p.(core.ImageDropper).LeavesOutImages("m") {
+		t.Errorf("a server that could not read one image is not one that takes none")
+	}
+	// From then on the WebP is left out from the start, and the PNG goes.
+	wantOK(t, drain(p.Stream(context.Background(), withBoth())))
+	if reqs := f.requests(); len(reqs) != 4 || bytes.Contains(reqs[3].Body, badText) || !bytes.Contains(reqs[3].Body, []byte("image_url")) {
+		t.Errorf("after it: %d requests, the last with the WebP %v", len(reqs), len(reqs) == 4 && bytes.Contains(reqs[3].Body, badText))
+	}
+}
+
+// A server that says it could not read an image of a request whose images
+// it has all taken before has them all left out, and the tries end.
+func TestUnreadableImagesItTookBeforeAreAllLeftOut(t *testing.T) {
+	answered := 0
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		if answered > 0 && bytes.Contains(f.last().Body, []byte("image_url")) {
+			answering(400, nil, llamaUnreadable)(f, w, r)
+			return
+		}
+		answered++
+		f.play(w, r, okStream)
+	})
+	p := f.provider(TypeLlamaCpp, nil)
+	wantOK(t, drain(p.Stream(context.Background(), readAPicture())))
+	wantOK(t, drain(p.Stream(context.Background(), readAPicture())))
+	reqs := f.requests()
+	if len(reqs) != 3 || bytes.Contains(reqs[2].Body, []byte("image_url")) {
+		t.Errorf("%d requests, the last with an image: want 3, the last with none", len(reqs))
+	}
+
+	// One that fails every request with an image ends its tries too.
+	g := newFake(t, refusingImages(400, llamaUnreadable))
+	q := g.provider(TypeLlamaCpp, nil)
+	wantOK(t, drain(q.Stream(context.Background(), readAPicture())))
+	if n := len(g.requests()); n != 2 {
+		t.Errorf("%d requests, want 2", n)
 	}
 }
 

@@ -6,10 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"regexp"
-	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
 // llamaCpp is a chat-completions provider that talks to llama.cpp's own
@@ -178,17 +177,20 @@ func (l *llamaCpp) CountTokens(ctx context.Context, req *core.Request) (int, err
 	if req == nil {
 		return 0, l.fail(core.ErrInvalidRequest, "there is no request to count")
 	}
-	if l.LeavesOutImages(req.Model) {
-		req = withoutImages(req)
+	send := l.prepared(req)
+	for {
+		n, err := l.countTokens(ctx, send)
+		if err == nil {
+			return n, nil
+		}
+		// A server that takes no images, or could not read one, has the
+		// request counted, and from now on sent, without them (images.go).
+		next, again := l.afterImageError(req, send, err)
+		if !again {
+			return n, err
+		}
+		send = next
 	}
-	n, err := l.countTokens(ctx, req)
-	if err != nil && hasImages(req) && imagesRefused(err) {
-		// The server takes no images: counted, and from now on sent,
-		// without them (images.go).
-		l.noImages.Store(req.Model, true)
-		return l.countTokens(ctx, withoutImages(req))
-	}
-	return n, err
 }
 
 // countTokens is CountTokens for the request as it is.
@@ -254,42 +256,36 @@ func (l *llamaCpp) countTokens(ctx context.Context, req *core.Request) (int, err
 	return len(tokens.Tokens), nil
 }
 
-// controlText is what a llama.cpp server reads as control text wherever
-// it stands in a prompt, quoted text included: a special token written as
-// <|name|> (ChatML's <|im_end|>, Qwen's <|vision_start|>), and, on a
-// server with a projector (--mmproj), the marker it puts where an image
-// goes, <__media with a suffix the server makes up as it starts. Quoted in
-// a message (a file a tool read, a page it fetched) the first ends the
-// message or starts another, and the second makes the server refuse the
-// whole request ("number of media markers in text exceeds number of
-// bitmaps").
-var controlText = regexp.MustCompile(`<(\|[A-Za-z0-9_.:-]+\||__media)`)
-
-// breakControl puts a zero-width space after the "<" of each control text
-// in s, which the server then reads as plain text and a model reads past.
-// What only looks like one is left as it is: Haskell's <|>, F#'s <|.
-func breakControl(s string) string {
-	if !strings.Contains(s, "<") {
-		return s
-	}
-	return controlText.ReplaceAllString(s, "<\u200b$1")
-}
-
-// breakControlIn breaks the control text in everything of body that the
-// server puts into the prompt as text: every message's content, thinking
-// and tool calls' arguments, and the tools' descriptions (an MCP server
-// writes those).
+// breakControlIn makes harmless the control text in everything of body
+// that the server puts into the prompt: every message's content, thinking
+// and tool calls' arguments, and the tools' descriptions and parameters,
+// every string of their schemas, keys included (an MCP server writes
+// those). A llama.cpp server reads control text wherever it stands in a
+// prompt, quoted text included: a special token (ChatML's <|im_end|>,
+// Qwen's <|vision_start|>, a template's <tool_call>, <think> or
+// <｜User｜>), and on a server with a projector (--mmproj), the marker it
+// puts where an image goes, <__media with a suffix it makes up as it
+// starts. Quoted in a message (a file a tool read, a page it fetched) the
+// first ends the message or starts another, and the second makes the
+// server refuse the whole request ("number of media markers in text
+// exceeds number of bitmaps"). What makes it harmless is prompt.Defuse,
+// the one the loop puts on what tools return: a zero-width space after the
+// "<", which the server then reads as plain text and a model reads past.
+// Arguments the model writes back with one are cleaned of it before any
+// tool runs. What gnosh puts in the system prompt (the person's
+// instruction files among it) and in tools' specs reaches the server only
+// this way.
 func breakControlIn(body obj) {
 	msgs, _ := body["messages"].([]obj)
 	for _, m := range msgs {
 		for _, k := range []string{"content", "reasoning_content"} {
 			switch c := m[k].(type) {
 			case string:
-				m[k] = breakControl(c)
+				m[k] = prompt.Defuse(c)
 			case []obj:
 				for _, part := range c {
 					if t, ok := part["text"].(string); ok {
-						part["text"] = breakControl(t)
+						part["text"] = prompt.Defuse(t)
 					}
 				}
 			}
@@ -298,17 +294,32 @@ func breakControlIn(body obj) {
 		for _, call := range calls {
 			if fn, ok := call["function"].(obj); ok {
 				if a, ok := fn["arguments"].(string); ok {
-					fn["arguments"] = breakControl(a)
+					fn["arguments"] = defuseJSONText(a)
 				}
 			}
 		}
 	}
 	tools, _ := body["tools"].([]obj)
 	for _, t := range tools {
-		if fn, ok := t["function"].(obj); ok {
-			if d, ok := fn["description"].(string); ok {
-				fn["description"] = breakControl(d)
-			}
+		fn, ok := t["function"].(obj)
+		if !ok {
+			continue
+		}
+		if d, ok := fn["description"].(string); ok {
+			fn["description"] = prompt.Defuse(d)
+		}
+		if s, ok := fn["parameters"].(json.RawMessage); ok {
+			fn["parameters"] = json.RawMessage(defuseJSONText(string(s)))
 		}
 	}
+}
+
+// defuseJSONText is prompt.Defuse for JSON text: every string in it, keys
+// included, read with its escapes, so that a "<" written as \u003c is
+// seen too. Text that is not JSON is defused as it stands.
+func defuseJSONText(s string) string {
+	if out, ok := prompt.RewriteJSONStrings(json.RawMessage(s), prompt.Defuse, prompt.MayHoldControl); ok {
+		return string(out)
+	}
+	return prompt.Defuse(s)
 }
