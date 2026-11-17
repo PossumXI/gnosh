@@ -351,6 +351,33 @@ func chdirFlagUse(v *bashView) string {
 	return ""
 }
 
+// gitChdirs are the folders git's own -C words name, before its
+// subcommand, in their order (each goes on from the one before it: git -C
+// a -C b works in a/b), and any word of git's own that is only known when
+// the line runs, which may be one. After the subcommand a -C is the
+// subcommand's (git log -C finds copies).
+func gitChdirs(args []word) (out []word) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !a.static() {
+			return append(out, a)
+		}
+		switch l := a.joined(); {
+		case l == "-C":
+			if i+1 < len(args) {
+				i++
+				out = append(out, args[i])
+			}
+		case l == "-c" || l == "--git-dir" || l == "--work-tree" || l == "--namespace" || l == "--config-env" || l == "--attr-source":
+			i++ // its value
+		case strings.HasPrefix(l, "-"):
+		default:
+			return out // the subcommand
+		}
+	}
+	return out
+}
+
 // chdirValues are the folders the program name, given args, may be sent
 // to by a flag of its own (chdirFlags), in any of the ways the flag is
 // written (-C dir, -Cdir, -sC dir, --directory=dir, --dir dir), and each

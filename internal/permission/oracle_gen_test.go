@@ -994,6 +994,7 @@ var attackLines = []string{
 	"w=false'*/..'; r\\m -R ='*/..'; r=\\m -R $w",                                  // oracle seed 135: a word that starts with = is text to bash and sh
 	"env --chdir=/ rm -rf usr", "env -C sub cat ../.env", "env -iCsub cat ../.env", // after seed 135: a flag of the program's own sends it to another folder
 	"set -o history\nhistory -s 'rm x'\nfc -s", "set -o history; history -s cat .env\nfc -e true", // and fc runs again what history -s put there
+	"git -C sub diff --no-index ../.env /dev/null", "git -C sub -C .. hash-object .env", // and git works where its own -C words lead
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",

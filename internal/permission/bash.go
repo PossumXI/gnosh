@@ -2881,7 +2881,13 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 	// handed are judged from there too ("env --chdir=/ rm -rf usr" removes
 	// /usr). A folder only known when the line runs is a place nobody
 	// knows, as after cd "$X".
-	for _, dir := range chdirValues(name, args) {
+	// So does git with its own -C: "git -C sub diff --no-index ../.env
+	// /dev/null" prints the .env beside sub.
+	dirs := chdirValues(name, args)
+	if name == "git" {
+		dirs = gitChdirs(args)
+	}
+	for _, dir := range dirs {
 		e.addDerived(v, &simpleCmd{words: []word{litOf("cd"), dir}, nest: nest}, prev, depth)
 	}
 
