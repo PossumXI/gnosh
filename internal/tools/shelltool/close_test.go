@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -500,4 +501,38 @@ func TestCancelWhileStopToolWaits(t *testing.T) {
 		t.Errorf("result = %q", text)
 	}
 	allGone(t, pids)
+}
+
+// A process a command left running that let go of its output (a server
+// started with its output sent to a file) is said in the result and
+// stopped when the manager closes; one in a session of its own (setsid)
+// is left alone.
+func TestLetGoIsStoppedAtClose(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "linux" {
+		t.Skip("the test starts its own session with setsid(1)")
+	}
+	m := newManager(t, Options{})
+	env := newEnv(t)
+	res := bash(t, m, env, `sleep 300 >/dev/null 2>&1 & echo "server=$!"`)
+	server := pidsIn(printed(res))["server"]
+	if server == 0 || !hasNote(res, "left a process running that let go of its output") || !hasNote(res, "stopped when the session ends") {
+		t.Fatalf("the result does not say what was left running:\n%s", core.TextOf(res.Content))
+	}
+	res = bash(t, m, env, `setsid sleep 300 >/dev/null 2>&1 & echo "kept=$!"`)
+	kept := pidsIn(printed(res))["kept"]
+	t.Cleanup(func() { syscall.Kill(kept, syscall.SIGKILL) })
+	time.Sleep(200 * time.Millisecond) // (setsid execs sleep in its own session)
+	if !alive(server) || !alive(kept) {
+		t.Fatalf("before Close: server alive %v, kept alive %v", alive(server), alive(kept))
+	}
+	if err := m.Close(); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+	if alive(server) {
+		t.Errorf("the process left running is still there after Close")
+	}
+	if !alive(kept) {
+		t.Errorf("the process in a session of its own was stopped")
+	}
 }

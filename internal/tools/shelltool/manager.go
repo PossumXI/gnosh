@@ -54,6 +54,7 @@ type Manager struct {
 	bgRunning int                 // how many background commands have not ended
 	running   map[*job]struct{}   // commands whose end is not final yet
 	lingering map[*job][]procInfo // ended commands whose output is still held open, with the processes they left
+	detached  map[int][]procInfo  // sessions of ended commands where something that let go of their output runs on, with those processes
 	tasks     map[string]*job     // background commands by id; ended ones stay
 	order     []string            // the ids in tasks, oldest first
 	calls     map[string]*job     // foreground commands by the id of the call that waits for them
@@ -94,6 +95,7 @@ func New(opts Options) *Manager {
 		maxLingering: defaultMaxLingering,
 		running:      make(map[*job]struct{}),
 		lingering:    make(map[*job][]procInfo),
+		detached:     make(map[int][]procInfo),
 		tasks:        make(map[string]*job),
 		calls:        make(map[string]*job),
 		pending:      make(map[string]bool),
@@ -308,12 +310,15 @@ func (m *Manager) close() error {
 		}
 	}
 
-	// What finished commands left behind, still holding their output.
+	// What finished commands left behind, still holding their output, and
+	// what they left that let go of it.
 	m.mu.Lock()
 	left := make(map[*job][]procInfo, len(m.lingering))
 	for j, procs := range m.lingering {
 		left[j] = procs
 	}
+	detached := m.detached
+	m.detached = make(map[int][]procInfo)
 	m.mu.Unlock()
 	var sweeps sync.WaitGroup
 	for j, procs := range left {
@@ -322,6 +327,9 @@ func (m *Manager) close() error {
 			j.pipe.Close()
 			waitFor(j.pumped, m.opt.PipeGrace+time.Second)
 		})
+	}
+	for sid, procs := range detached {
+		sweeps.Go(func() { m.sweep(sid, procs) })
 	}
 	sweeps.Wait()
 
@@ -486,6 +494,19 @@ func (m *Manager) linger(j *job, left []procInfo) bool {
 		// to deal with.
 		m.lingering[j] = left
 	}
+	return true
+}
+
+// keepDetached records that the ended command whose session is sid left
+// processes running there that let go of its output, so that Close stops
+// them. It reports false when the manager is already closing.
+func (m *Manager) keepDetached(sid int, left []procInfo) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return false
+	}
+	m.detached[sid] = left
 	return true
 }
 

@@ -240,9 +240,13 @@
 // once; what a further command leaves behind is stopped at once, and that
 // command's result says so.
 //
-// A process that let go of the command's output (cmd >log 2>&1 &) is
-// nothing to the manager: the command ends cleanly and the process is left
-// alone, at Close too.
+// A process that let go of the command's output (cmd >log 2>&1 &, a
+// server started so) does not hold the call up either: the command ends
+// cleanly. It is still in the command's session, and the result says it
+// was left running; it is stopped when the manager is closed, as one that
+// holds the output is, if it can be shown to be the same process. One
+// that started a session of its own (setsid) is left alone, at Close
+// too: that is the way to keep a process past the session.
 //
 // # Output
 //

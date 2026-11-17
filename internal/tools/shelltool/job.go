@@ -83,6 +83,7 @@ type ending struct {
 	alive    []procInfo     // processes that were still alive after SIGKILL
 	held     bool           // a process the command left behind still holds its output open
 	left     []procInfo     // those processes, as far as they could be found
+	detached []procInfo     // what the command left running in its session that let go of its output (cmd >log 2>&1 &)
 	escaped  bool           // after the command was stopped, a process outside its session still held its output open
 	swept    bool           // what the command left behind was stopped at once instead of being left running
 	unread   bool           // the last of the output had not been read when the command's end was recorded
@@ -479,6 +480,19 @@ func (j *job) finish(why endReason, limit time.Duration) {
 	}
 	e.at = m.opt.Now()
 
+	if why == endExited && !e.held {
+		// What the command left running that let go of its output (cmd
+		// >log 2>&1 &, a server started so) is still in its session: it is
+		// kept on the books and stopped when the session ends, as what
+		// holds the output is. One that started a session of its own
+		// (setsid) is not in it, and is left alone.
+		if left, err := m.procs(j.pid); err == nil && len(left) > 0 {
+			e.detached = left
+			if !m.keepDetached(j.pid, left) {
+				m.sweep(j.pid, left) // (the manager is closing)
+			}
+		}
+	}
 	if e.held && !m.linger(j, e.left) {
 		// The manager is closing, or is already listening to as many
 		// processes left behind as it will: this one is stopped here and

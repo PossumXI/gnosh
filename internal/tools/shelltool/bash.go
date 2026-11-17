@@ -240,6 +240,15 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 			meta[metaLeftRunning] = pgids
 		}
 	}
+	if groups, pgids := describeGroups(e.detached); groups != "" {
+		targets := make([]string, len(pgids))
+		for i, pgid := range pgids {
+			targets[i] = fmt.Sprintf("-%d", pgid)
+		}
+		notes = append(notes, fmt.Sprintf("the command ended and left a process running that let go of its output: %s. It will be stopped when the session ends; one started with setsid is left running. To stop it now: kill -- %s",
+			groups, strings.Join(targets, " ")))
+		meta[metaLeftRunning] = pgids
+	}
 	if e.unread && !e.held && !e.escaped {
 		notes = append(notes, "the last of the output had not been read when this was written; this machine is very slow just now, or the disk the output file is on has stopped taking it")
 	}
