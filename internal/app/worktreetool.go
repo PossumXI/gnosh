@@ -59,6 +59,10 @@ type treeMove struct {
 	Name    string `json:"name,omitempty"`
 	Branch  string `json:"branch,omitempty"`
 	Removed bool   `json:"removed,omitempty"`
+	// Carried says nothing moved: a session in a tree EnterWorktree moved
+	// it into starts again there (/restart), and the tree stays one
+	// ExitWorktree may take it back from. Nothing is said of it.
+	Carried bool `json:"carried,omitempty"`
 }
 
 // readTreeMove reads TreeMoveEnv's value; what cannot be read is no move.
@@ -277,6 +281,11 @@ func (l *live) moveFor(dir, move string, adjust func(*cli.Relaunch)) error {
 func (l *live) treeMoved() {
 	m := l.p.treeMove
 	if m.Entered == "" && m.Left == "" || l.ts == nil || l.agent == nil {
+		return
+	}
+	// Once: a session /clear begins later in this gnosh moved nowhere.
+	l.p.treeMove = treeMove{}
+	if m.Carried {
 		return
 	}
 	var text string

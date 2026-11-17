@@ -305,6 +305,8 @@ func (l *live) movedHere() {
 	if from == "" || l.ts == nil {
 		return
 	}
+	// Once: a session /clear begins later in this gnosh moved nowhere.
+	l.p.movedFrom = ""
 	to := l.cfg.Paths.Cwd
 	_ = l.agent.Tell(agent.Note{Source: "cd",
 		Text: prompt.Wrap(fmt.Sprintf("The user moved this session with /cd from %s to %s. The working directory is %s now: commands run there, relative paths start there, and the project's instructions, settings, skills and hooks are that folder's. mem is that folder's project memory: what mem held for this session in %s stays with that folder.", from, to, to, from))})

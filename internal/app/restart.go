@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -108,6 +109,12 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 	p := l.p
 	p.restartMu.Lock()
 	p.restart = args
+	if t := l.st.tree; t != nil && t.entered {
+		// A tree EnterWorktree moved the session into stays one in the
+		// new start: ExitWorktree may take the session back out.
+		move, _ := json.Marshal(treeMove{Entered: t.path, Named: t.named, Carried: true})
+		p.treeMoving = string(move)
+	}
 	p.restartMu.Unlock()
 	if p.newBuild() {
 		c.Say("gnosh starts again, the newer one, in this session.")

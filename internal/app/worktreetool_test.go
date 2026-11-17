@@ -67,22 +67,41 @@ func TestEnterAndExitWorktree(t *testing.T) {
 		o.Environ = append(slices.Clone(o.Environ), envs[0][len(envs[0])-2:]...)
 	}, started[0]...)
 	s.see("In the tree now.")
+	// A /restart there carries the tree over, quietly: nothing moved.
+	s.typeLine("/restart")
+	s.see("gnosh starts again, in this session.")
+	s.exit()
+	if len(started) != 2 || !slices.Contains(started[1], "--worktree=feat") ||
+		!slices.ContainsFunc(envs[1], func(kv string) bool {
+			return strings.HasPrefix(kv, TreeMoveEnv+"=") && strings.Contains(kv, `"carried":true`)
+		}) {
+		t.Fatalf("/restart in the tree started gnosh again with %q, %q", started[1:], envs[1:])
+	}
+	asked := len(w.Model.Requests())
+	s = sitWith(t, w, func(o *Options) {
+		relaunch(o)
+		o.Environ = append(slices.Clone(o.Environ), envs[1][len(envs[1])-2:]...)
+	}, started[1]...)
+	s.see("Type a prompt and Enter.")
 	s.typeLine("leave it")
 	s.see("The session goes back to")
 	s.exit()
 	reqs := w.Model.Requests()
 	has(t, "the request after the move", string(reqs[1].Body), "The session works in the git work tree", "on the branch worktree-feat", "Go on with the task")
+	if len(reqs) != asked+1 || strings.Contains(string(reqs[asked].Body), "Go on with the task where you left off.\"}],\"role\":\"user\"}]") {
+		t.Errorf("after /restart the model was asked %d times, want once, for the prompt typed", len(reqs)-asked)
+	}
 	if fileExists(tree) {
 		t.Errorf("the tree left as it was made is still there")
 	}
-	if len(started) != 2 || slices.ContainsFunc(started[1], func(a string) bool { return strings.HasPrefix(a, "--worktree") }) {
+	if len(started) != 3 || slices.ContainsFunc(started[2], func(a string) bool { return strings.HasPrefix(a, "--worktree") }) {
 		t.Fatalf("after ExitWorktree, gnosh started again with %q", started)
 	}
 
 	// The gnosh that starts then goes on in the checkout.
 	s = sitWith(t, w, func(o *Options) {
-		o.Environ = append(slices.Clone(o.Environ), envs[1][len(envs[1])-2:]...)
-	}, started[1]...)
+		o.Environ = append(slices.Clone(o.Environ), envs[2][len(envs[2])-2:]...)
+	}, started[2]...)
 	s.see("Back in the checkout.")
 	s.typeLine("/exit")
 	s.exit()
