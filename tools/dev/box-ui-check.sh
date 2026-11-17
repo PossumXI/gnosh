@@ -342,7 +342,9 @@ cd)
 	echo "=== after /cd"
 	screen | grep -v '^ *$' | tail -8
 	tmux send-keys -t "$S" "In one line: which folder are you working in now, and what is the codeword of this project? Then write the word moved into a file named here.txt in the working directory." Enter
-	done_when() { [ -s "$T/lib/here.txt" ] && screen | grep -q PERSIMMON && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	# (The first turn's end has scrolled out of the 80 lines screen reads
+	# by then: the turn in lib is the one whose end follows the codeword.)
+	done_when() { [ -s "$T/lib/here.txt" ] && screen | grep -A4 PERSIMMON | grep -q "done in"; }
 	;;
 bgsession)
 	# The pane stays when gnosh ends, so that what it says last is seen.
