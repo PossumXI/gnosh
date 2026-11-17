@@ -21,6 +21,7 @@
 #	ssh ai-remote bash -s -- invisible < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- failhint < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- cache < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- hooks < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -77,6 +78,8 @@
 #   cache       three short turns, then /cost: how much of what was read
 #               came from the model server's prompt cache, and any request
 #               that read again what the one before it had sent
+#   hooks       /hooks browses the hooks in force: the moments, a moment's
+#               hooks, one hook in full; Esc closes it (no model)
 #   cd          a turn, then /cd to a folder of its own whose settings wait
 #               for trust (said yes to) and whose GNOSH.md holds a codeword:
 #               gnosh starts again there, and the model is asked where it
@@ -106,8 +109,9 @@ background | btw | monitor | panel | cd) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
+hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -221,6 +225,16 @@ background)
 mention)
 	tmux send-keys -t "$S" "What is the second line of @notes.txt? Answer with that one word and call no tool." Enter
 	done_when() { screen | grep -q "@notes.txt read" && screen | grep -q "done in"; }
+	;;
+hooks)
+	# The browser: the moments, PreToolUse's hooks, the hook in full.
+	tmux send-keys -t "$S" "/hooks" Enter
+	sleep 2
+	screen | grep -q "The hooks in force" || echo "box-ui-check: no browser"
+	tmux send-keys -t "$S" Enter
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	done_when() { screen | grep -q "A PreToolUse hook." && screen | grep -q "Only if: Bash(rm \*)" && screen | grep -q "From: "; }
 	;;
 config)
 	# Bare /config opens the picker of the options; Esc closes it.
