@@ -948,8 +948,18 @@ func realShellFile(words []string) bool {
 // always show the command that did.
 func (lc *lineCheck) runsFile() bool {
 	for _, u := range lc.view.units {
-		if len(u.cmd.words) > 1 && allStatic(u.cmd.words) && realShellFile(litsOf(u.cmd.words)) {
+		ws := u.cmd.words
+		if len(ws) > 1 && allStatic(ws) && realShellFile(litsOf(ws)) {
 			return true
+		}
+		// A file sourced, as the engine read it (". .env", "source x"): its
+		// commands are a program of their own, as sourcesFile has it from
+		// the trace. The trace can lose the command when an argument after
+		// the file spans lines (". .env \"$(set)\"", oracle seed 130).
+		if len(ws) > 1 && ws[0].static() && ws[1].static() && (ws[0].lit() == "." || ws[0].lit() == "source") {
+			if f := ws[1].lit(); f != "/dev/stdin" && !strings.HasPrefix(f, "/dev/fd/") && !strings.HasPrefix(f, "/proc/self/fd/") {
+				return true
+			}
 		}
 	}
 	return false

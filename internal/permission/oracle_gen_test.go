@@ -987,6 +987,7 @@ var attackLines = []string{
 	"mv -t /tmpv${x} -t /tmp mp clean -fdx",                               // oracle seed 127: a false alarm, the check dropped -t's value and not -t
 	"mv $\"x\" <(env) link-dir/file >& all.txt",                           // oracle seed 128: in a line with a $"...", the crude pieces made <(env) the word env
 	"cd nope </dev/null\n(cd sub/deep) && cat sneaky.txt && ! cd link-in", // oracle seed 129: the cd pending before a subshell came back after it as done
+	"cat `. .env \"$(set)\"`",                                             // oracle seed 130: a false alarm, the trace lost the . whose argument spans lines
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
