@@ -779,6 +779,11 @@ func (e *Engine) shellPaths(req *request) {
 				}
 			}
 		}
+		if into == &writes && !w.static() && req.writeOpaque == "" && !e.closedWord(v, w, at) {
+			// Whatever is made of the text the line computes, the file
+			// written cannot be told.
+			req.writeOpaque = "it writes to a file named by text computed when it runs (" + w.raw + ")"
+		}
 		abs, pattern, ok := e.absAll(w, dirs)
 		switch {
 		case !ok:

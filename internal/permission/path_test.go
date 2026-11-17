@@ -472,12 +472,33 @@ func TestCommandWrites(t *testing.T) {
 		{"cat /repo/a.go", ""},
 		{"echo hi > /dev/null", ""},
 	} {
-		got := e.CommandWrites("/proj", c.cmd)
+		got, _ := e.CommandWrites("/proj", c.cmd)
 		switch {
 		case c.want == "" && len(got) > 0:
 			t.Errorf("CommandWrites(%q) = %q, want none", c.cmd, got)
 		case c.want != "" && !slices.Contains(got, c.want):
 			t.Errorf("CommandWrites(%q) = %q, want %s among them", c.cmd, got, c.want)
+		}
+	}
+}
+
+// CommandWrites says when a file a line writes is named by text computed
+// when it runs, which no path can stand for; a file read so, or a target
+// the line itself gives its value, is not one (review, 17 November: a
+// write to "$(git rev-parse --git-common-dir)/config" was read as /config).
+func TestCommandWritesUnknown(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeDefault, rules{}))
+	for cmd, want := range map[string]bool{
+		`printf x >> "$(git rev-parse --git-common-dir)/config"`: true,
+		`echo x > "$OUT"`:             true,
+		`cp a.txt "$DEST"`:            true,
+		`cat "$F" > out.txt`:          false,
+		`f=out.txt; echo x > "$f"`:    false,
+		`echo x > /tmp/known.txt`:     false,
+		`grep -r "$PAT" . > hits.txt`: false,
+	} {
+		if _, why := e.CommandWrites("/proj", cmd); (why != "") != want {
+			t.Errorf("CommandWrites(%q): unknown %q, want unknown %v", cmd, why, want)
 		}
 	}
 }

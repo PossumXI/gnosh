@@ -1045,23 +1045,37 @@ or kept with the reason said (27).
 76. **git in a session's own work tree leaves alone what the work tree
     shares with its checkout, as Claude Code 2.1.326 has it for its
     sub-agents.** A work tree shares its branches, tags and other refs,
-    its git settings and its list of work trees with the checkout it was
-    made from. git keeps a branch another work tree has out from
-    checkout, switch, branch -f and a fetch into it, but not from
-    update-ref, symbolic-ref, branch -m, a push into the repository
-    itself or --ignore-other-worktrees, and a setting such as
-    core.fsmonitor or core.hooksPath runs a command in the checkout. So
-    in a work tree gnosh refuses, whatever the permission mode:
-    update-ref; symbolic-ref that sets or deletes; branch -f, -d, -D, -m,
-    -M, -c and -C; checkout -B, switch -C and --ignore-other-worktrees;
-    worktree remove, move and prune, and add with -B or -f; a push into a
-    folder on this machine; a fetch or pull whose refspec writes a ref
-    outside refs/remotes/; rebase --update-refs; config writes other than
-    --global and --system; remote add, rename, remove, set-url and the
-    like; replace; stash clear; tag -d and -f; reflog expire and delete;
-    filter-branch and filter-repo; and aliases given by -c or the
-    GIT_CONFIG_ variables (permission.Engine.SharedGitChange). Making a
-    new branch, switching to one no work tree has out, and commits on the
-    tree's own branch go on as before. Claude Code holds only sub-agents
-    to this; gnosh holds a --worktree session to it too, as it holds one
-    to its tree's files.
+    its git settings and hooks, and its list of work trees with the
+    checkout it was made from. git keeps a branch another work tree has
+    out from checkout and branch -f, and from little else; a setting such
+    as core.fsmonitor, core.hooksPath or an alias runs a command in the
+    checkout. A first version refused a list of known-bad forms, and an
+    independent review (17 November) moved the checkout's branch on real
+    git with about twenty lines it let through: subcommands not on the
+    list, -c settings, --global, the person's own aliases, git's
+    --exec-like options, the environment. So it is an allowlist now
+    (permission.Engine.SharedGitChange). In a work tree, whatever the
+    permission mode, git may: read (the read-only table, or a reading
+    subcommand with no flag that writes a file or starts a program); and
+    run add, commit, reset, restore, rm, mv, checkout, switch, merge,
+    rebase, cherry-pick, revert, stash push and apply, fetch, pull, a push
+    to a remote, branch and tag to make one, clean and apply, each with
+    the flags gnosh knows it by, spelled out whole. Anything else is
+    refused: other subcommands and aliases, -c settings other than a
+    short list (user.*, color.*, ...), git's options before the
+    subcommand other than -C and a few, GIT_ variables other than a short
+    list, HOME, XDG_CONFIG_HOME and PATH where git runs, an editor or
+    pager that is not true, : or cat, a word only known when the line
+    runs where git would take it for an option (put -- before it), a
+    refspec that writes outside refs/remotes/, a push into a folder on
+    this machine, rebase given a second branch, a merge strategy git does
+    not have, stash pop, drop and clear, and on a Mac a new branch with
+    capital letters (on a disk that does not tell case apart, MAIN is
+    main). A git run pointed only outside the work tree and the
+    checkouts (git -C /tmp/other) is no concern of the check, and a file
+    a command writes by a computed name is refused in a work tree as one
+    gnosh cannot tell. What the text cannot show stays out of reach: a
+    git copied under another name, a remote of the person's whose
+    address is the checkout. Claude Code holds only sub-agents to this;
+    gnosh holds a --worktree session to it too, as it holds one to its
+    tree's files.

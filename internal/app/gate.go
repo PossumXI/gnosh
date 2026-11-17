@@ -859,7 +859,11 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	// Nor does it write into the checkout by the files it names: a
 	// redirection's target, cp's last word, sed -i's files and the like,
 	// as far as they can be told.
-	for _, p := range l.engine.CommandWrites(cwd, command) {
+	writes, unknown := l.engine.CommandWrites(cwd, command)
+	if unknown != "" {
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and gnosh cannot tell where this command writes: %s. It could be in %s. Write the file's path out.", t.Path, unknown, checkoutName(t, resolved(t.Repo)))
+	}
+	for _, p := range writes {
 		repo, real := checkoutOf(t, p)
 		if repo == "" {
 			if hardLinked(real) {
@@ -887,7 +891,13 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 	// Nor does its git change what the work tree shares with the checkout:
 	// the branches and other refs, the git settings, the list of work
 	// trees (Claude Code 2.1.326 refuses the like for its sub-agents).
-	if what := l.engine.SharedGitChange(command); what != "" {
+	shared := func(p string) bool {
+		if repo, _ := checkoutOf(t, p); repo != "" {
+			return true
+		}
+		return within(permission.PathKey(resolved(p)), permission.PathKey(resolved(t.Path)))
+	}
+	if what := l.engine.SharedGitChange(cwd, command, shared); what != "" {
 		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command may change what your work tree shares with %s: %s. The branches, tags, git settings and list of work trees are the same in both. Make your changes as commits on your own branch, and leave other branches, tags and settings to the person.", t.Path, checkoutName(t, resolved(t.Repo)), what)
 	}
 	return ""

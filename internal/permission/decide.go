@@ -108,6 +108,9 @@ type request struct {
 	reads, writes []string
 	// unresolved is set when a path's links could not be followed.
 	unresolved bool
+	// writeOpaque is not empty when a command names a file to write by
+	// text computed when it runs, which cannot be told: it says how.
+	writeOpaque string
 	// pathOpaque is not empty when a command names a file in a way that
 	// cannot be held against the Read and Edit rules. It says how.
 	pathOpaque string
@@ -255,10 +258,11 @@ func makesLink(name string, ws []word) bool {
 // CommandWrites are the files a shell command line names for writing, as
 // absolute paths, for a shell started in dir: a redirection's target,
 // cp's and mv's last word, sed -i's files and the like, and each with its
-// links followed where the engine follows them. Only what can be told is
-// there: a file named by text computed when the line runs, or written by
-// a program on its own account, is not.
-func (e *Engine) CommandWrites(dir, command string) []string {
+// links followed where the engine follows them. A file written by a
+// program on its own account is not there. unknown says why a file it
+// names for writing cannot be told, by text computed when the line runs
+// ("> "$(git rev-parse --git-common-dir)/config""); "" when none is.
+func (e *Engine) CommandWrites(dir, command string) (writes []string, unknown string) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	at := *e
@@ -268,7 +272,7 @@ func (e *Engine) CommandWrites(dir, command string) []string {
 	req := &request{canon: toolBash}
 	req.view = at.viewBash(command)
 	at.shellPaths(req)
-	return req.writes
+	return req.writes, req.writeOpaque
 }
 
 // cdChanger names a variable the line may set that changes where its cd,
@@ -485,7 +489,17 @@ func (e *Engine) GitPlaces(dir, command string) (places []string, why string) {
 			ok = false
 			continue
 		}
-		if len(c.words) == 0 || path.Base(c.words[0].joined()) != "git" {
+		if len(c.words) == 0 {
+			continue
+		}
+		if c.words[0].glob || c.words[0].brace {
+			// "/usr/bin/gi[t] -C /repo": a pattern may name git.
+			ok = false
+			continue
+		}
+		if progKey(baseName(c.words[0].joined())) != "git" {
+			// (By its key: on a disk that does not tell case apart, GIT
+			// runs git.)
 			continue
 		}
 		args := c.words[1:]

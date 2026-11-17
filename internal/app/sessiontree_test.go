@@ -115,9 +115,9 @@ func TestWorktreeFlagSharedGit(t *testing.T) {
 	}
 	w.Model.Add(apptest.Reply{Text: "Done."})
 	run(t, w, "--trust-folder", "--worktree", "shared", "-y", "-p", "go").wantCode(t, 0)
-	has(t, "update-ref", toolResult(t, w, 1, "c1"), "This call did not run", "may change what your work tree shares with the person's checkout", "git update-ref writes a branch or another ref by name")
-	has(t, "a setting", toolResult(t, w, 2, "c2"), "This call did not run", "git config writes the repository's git settings")
-	has(t, "a rename", toolResult(t, w, 3, "c3"), "This call did not run", "git branch -m")
+	has(t, "update-ref", toolResult(t, w, 1, "c1"), "This call did not run", "may change what your work tree shares with the person's checkout", "git update-ref is not one gnosh lets run in a work tree of your own")
+	has(t, "a setting", toolResult(t, w, 2, "c2"), "This call did not run", "git config is not one gnosh lets run in a work tree of your own")
+	has(t, "a rename", toolResult(t, w, 3, "c3"), "This call did not run", "git branch: its option -m is not one")
 	has(t, "a push into itself", toolResult(t, w, 4, "c4"), "This call did not run", "git push into .")
 	if got := toolResult(t, w, 5, "c5"); strings.Contains(got, "did not run") || !strings.Contains(got, "worktree-shared") {
 		t.Errorf("git that keeps to the work tree: %q", got)
