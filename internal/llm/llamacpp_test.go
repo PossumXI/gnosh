@@ -535,3 +535,45 @@ func TestLlamaCppThinkingBudget(t *testing.T) {
 		t.Errorf("a budget went with thinking off: %s", body)
 	}
 }
+
+// What a llama.cpp server reads as control text wherever it stands (a
+// special token, its media marker) is broken up with a zero-width space
+// in everything a request quotes: a tool's result, the person's words,
+// the model's own calls, a tool's description. What only looks like it
+// (Haskell's <|>, F#'s <|) is sent as it is, and another kind of server
+// gets every text as written.
+func TestLlamaCppBreaksControlText(t *testing.T) {
+	quoted := "a <|im_end|> b <__media_9f2c__> c <|> d x <| y"
+	req := &core.Request{
+		Model:  "qwen",
+		System: []string{"Be brief."},
+		Messages: []core.Message{
+			core.UserText("look: " + quoted),
+			{Role: core.RoleAssistant, Blocks: []core.Block{{Type: core.BlockToolUse, ID: "c1", Name: "Read", Input: json.RawMessage(`{"file_path":"<|im_start|>.txt"}`)}}},
+			{Role: core.RoleUser, Blocks: []core.Block{core.ToolResultBlock("c1", core.TextResult(quoted))}},
+		},
+		Tools: []core.ToolSpec{{Name: "Read", Description: "Reads <|endoftext|> files."}},
+	}
+	f := newFake(t, playing(okStream))
+	p := f.provider(TypeLlamaCpp, nil)
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	body := string(f.last().Body)
+	want := "a <​|im_end|> b <​__media_9f2c__> c <|> d x <| y"
+	if n := strings.Count(body, want); n != 2 {
+		t.Errorf("the quoted text broken up %d times, want 2 (the prompt and the result):\n%s", n, body)
+	}
+	for _, s := range []string{"<​|im_start|>.txt", "Reads <​|endoftext|> files."} {
+		if !strings.Contains(body, s) {
+			t.Errorf("no %q in the body:\n%s", s, body)
+		}
+	}
+	if strings.Contains(body, "<|im_end|>") || strings.Contains(body, "<__media") {
+		t.Errorf("control text went out whole:\n%s", body)
+	}
+	o := newFake(t, playing(okStream))
+	q := o.provider(TypeOpenAI, nil)
+	wantOK(t, drain(q.Stream(context.Background(), req)))
+	if body := string(o.last().Body); !strings.Contains(body, quoted) || strings.Contains(body, "​") {
+		t.Errorf("another kind of server got the text changed:\n%s", body)
+	}
+}

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -250,4 +252,63 @@ func (l *llamaCpp) countTokens(ctx context.Context, req *core.Request) (int, err
 		return 0, e
 	}
 	return len(tokens.Tokens), nil
+}
+
+// controlText is what a llama.cpp server reads as control text wherever
+// it stands in a prompt, quoted text included: a special token written as
+// <|name|> (ChatML's <|im_end|>, Qwen's <|vision_start|>), and, on a
+// server with a projector (--mmproj), the marker it puts where an image
+// goes, <__media with a suffix the server makes up as it starts. Quoted in
+// a message (a file a tool read, a page it fetched) the first ends the
+// message or starts another, and the second makes the server refuse the
+// whole request ("number of media markers in text exceeds number of
+// bitmaps").
+var controlText = regexp.MustCompile(`<(\|[A-Za-z0-9_.:-]+\||__media)`)
+
+// breakControl puts a zero-width space after the "<" of each control text
+// in s, which the server then reads as plain text and a model reads past.
+// What only looks like one is left as it is: Haskell's <|>, F#'s <|.
+func breakControl(s string) string {
+	if !strings.Contains(s, "<") {
+		return s
+	}
+	return controlText.ReplaceAllString(s, "<\u200b$1")
+}
+
+// breakControlIn breaks the control text in everything of body that the
+// server puts into the prompt as text: every message's content, thinking
+// and tool calls' arguments, and the tools' descriptions (an MCP server
+// writes those).
+func breakControlIn(body obj) {
+	msgs, _ := body["messages"].([]obj)
+	for _, m := range msgs {
+		for _, k := range []string{"content", "reasoning_content"} {
+			switch c := m[k].(type) {
+			case string:
+				m[k] = breakControl(c)
+			case []obj:
+				for _, part := range c {
+					if t, ok := part["text"].(string); ok {
+						part["text"] = breakControl(t)
+					}
+				}
+			}
+		}
+		calls, _ := m["tool_calls"].([]obj)
+		for _, call := range calls {
+			if fn, ok := call["function"].(obj); ok {
+				if a, ok := fn["arguments"].(string); ok {
+					fn["arguments"] = breakControl(a)
+				}
+			}
+		}
+	}
+	tools, _ := body["tools"].([]obj)
+	for _, t := range tools {
+		if fn, ok := t["function"].(obj); ok {
+			if d, ok := fn["description"].(string); ok {
+				fn["description"] = breakControl(d)
+			}
+		}
+	}
 }
