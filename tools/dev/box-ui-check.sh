@@ -112,11 +112,12 @@ agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel | cd | leftover) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
+entertree) flags="--trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -169,7 +170,7 @@ Count the lines of the file notes.txt in the working directory. Report the count
 EOF
 fi
 cd "$T/work" || exit 1
-if [ "$scenario" = worktree ] || [ "$scenario" = wtflag ]; then
+if [ "$scenario" = worktree ] || [ "$scenario" = wtflag ] || [ "$scenario" = entertree ]; then
 	git init -q && git -c user.name=check -c user.email=check@example.com add notes.txt &&
 		git -c user.name=check -c user.email=check@example.com commit -q -m notes || exit 1
 fi
@@ -299,6 +300,19 @@ worktree)
 wtflag)
 	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
 	done_when() { screen | grep -q "done in"; }
+	;;
+entertree)
+	# EnterWorktree: gnosh starts again in the tree, in this pane, and the
+	# model goes on there by itself; ExitWorktree takes it back.
+	tmux send-keys -t "$S" "Work in a worktree named demo. Once you are in it, run pwd and tell me the directory." Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		[ -d "$T/work/.gnosh/worktrees/demo" ] && screen | grep -q "worktrees/demo" && screen | grep -q "done in" && break
+	done
+	echo "=== in the tree"
+	screen | grep -v '^ *$' | tail -16
+	tmux send-keys -t "$S" "Leave the worktree and remove it." Enter
+	done_when() { [ ! -d "$T/work/.gnosh/worktrees/demo" ] && [ "$(screen | grep -c "done in")" -ge 1 ] && screen | grep -q "goes back to"; }
 	;;
 secreview)
 	tmux send-keys -t "$S" "/security-review" Enter
@@ -496,6 +510,11 @@ if [ "$scenario" = worktree ]; then
 	for d in "$T"/work/.gnosh/worktrees/agent-*; do
 		[ -d "$d" ] && echo "=== notes.txt in $d: $(tr '\n' ' ' < "$d/notes.txt")"
 	done
+fi
+if [ "$scenario" = entertree ]; then
+	echo "=== work trees: $(git -C "$T/work" worktree list | tr '\n' ';')"
+	echo "=== branches: $(git -C "$T/work" branch --list | tr '\n' ' ')"
+	echo "=== the session files: $(cd "$T/data/gnosh/projects" && ls -d -- */*.jsonl 2>/dev/null | tr '\n' ' ')"
 fi
 if [ "$scenario" = wtflag ]; then
 	echo "=== notes.txt here: $(tr '\n' ' ' < "$T/work/notes.txt")"

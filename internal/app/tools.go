@@ -133,6 +133,17 @@ func (l *live) buildTools() error {
 		// too, as in Claude Code: a plan is approved by a person.)
 		all = append(all, &enterPlanTool{l: l}, &exitPlanTool{l: l})
 	}
+	if l.interactive && l.p.o.Relaunch != nil {
+		// Moving the session into a work tree of its own, and back: a
+		// session somebody attends, in a gnosh that can start itself
+		// again (worktreetool.go).
+		switch {
+		case l.st.tree == nil && l.st.folder.Repo && !l.st.folder.Worktree && l.st.trusted:
+			all = append(all, &enterTreeTool{l: l})
+		case l.st.tree != nil && l.st.tree.entered:
+			all = append(all, &exitTreeTool{l: l})
+		}
+	}
 	if len(l.forModel()) > 0 {
 		// The Skill tool is there when there is a skill a model may
 		// load, as the session starts.

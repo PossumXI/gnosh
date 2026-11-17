@@ -142,6 +142,9 @@ type program struct {
 	// movedFrom is the folder the session left, in a gnosh /cd started
 	// (MovedEnv).
 	movedFrom string
+	// treeMove is what EnterWorktree or ExitWorktree did, in the gnosh
+	// they started (TreeMoveEnv).
+	treeMove  treeMove
 	started   os.FileInfo
 	restartMu sync.Mutex
 	restart   []string
@@ -150,8 +153,9 @@ type program struct {
 	// session it resumes.
 	detached *detachPlan
 	// moving is the folder /cd moves the session from, for the gnosh it
-	// starts.
-	moving string
+	// starts, and treeMoving what EnterWorktree or ExitWorktree did, for
+	// the one they start (TreeMoveEnv, as JSON).
+	moving, treeMoving string
 }
 
 // lockedWriter lets several goroutines write whole lines to one stream.
@@ -242,6 +246,14 @@ func newProgram(o Options) *program {
 		}
 		delete(p.env, MovedEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, MovedEnv+"=") })
+	}
+	if move, ok := p.env[TreeMoveEnv]; ok {
+		// EnterWorktree's and ExitWorktree's word, as /cd's is.
+		if p.restarted {
+			p.treeMove = readTreeMove(move)
+		}
+		delete(p.env, TreeMoveEnv)
+		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, TreeMoveEnv+"=") })
 	}
 	if o.Executable != "" {
 		p.started, _ = os.Stat(o.Executable)

@@ -282,15 +282,19 @@ func (l *live) moveSession(dir string) error {
 	return nil
 }
 
-// movingEnv is what the gnosh /cd starts is told: the folder the session
-// left.
+// movingEnv is what the gnosh /cd starts is told, the folder the session
+// left, and the one EnterWorktree or ExitWorktree starts, what moved.
 func (p *program) movingEnv() []string {
 	p.restartMu.Lock()
 	defer p.restartMu.Unlock()
-	if p.moving == "" {
-		return nil
+	var env []string
+	if p.moving != "" {
+		env = append(env, MovedEnv+"="+p.moving)
 	}
-	return []string{MovedEnv + "=" + p.moving}
+	if p.treeMoving != "" {
+		env = append(env, TreeMoveEnv+"="+p.treeMoving)
+	}
+	return env
 }
 
 // movedHere tells the model, in a session /cd moved, that it now works in

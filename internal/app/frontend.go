@@ -445,6 +445,15 @@ type CommandInfo struct {
 	InRun bool
 }
 
+// RestartEvent says the session closes for gnosh to start again at once
+// and go on with it elsewhere: a tool moved it (EnterWorktree,
+// ExitWorktree), and its turn has ended. A front end ends Run as it does
+// after /restart, with Why, a line for the person, said first; the new
+// start says itself where the session is.
+type RestartEvent struct {
+	Why string
+}
+
 // StatusEvent says that named facts for a status line have changed: see
 // SessionControls.Status for the names. A fact with an empty value is taken off.
 type StatusEvent struct {

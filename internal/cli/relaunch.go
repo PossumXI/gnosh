@@ -23,8 +23,12 @@ type Relaunch struct {
 	// (the model's own default, as /effort auto sets) leaves the flag out,
 	// so that the new start takes what the session saved.
 	Effort string
-	// Tree is the name of the --worktree work tree the session is in.
-	Tree string
+	// Tree is the name of the --worktree work tree the session is in, or
+	// that EnterWorktree moves it into: --worktree names it, added when
+	// the command line had none. LeaveTree takes --worktree away: the
+	// session goes back out of its work tree (ExitWorktree).
+	Tree      string
+	LeaveTree bool
 	// AddDirs are the working directories /add-dir added while the
 	// session ran: the new start is given them as --add-dir.
 	AddDirs []string
@@ -62,7 +66,7 @@ func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
 		return nil, fmt.Errorf("the command line did not open a session")
 	}
 	var out []string
-	yolo, skipped, within, model := false, false, false, false
+	yolo, skipped, within, model, tree := false, false, false, false, false
 	for _, o := range p.occs {
 		switch name := o.f.main(); {
 		case o.f.id == idContinue || o.f.id == idResume || o.f.id == idSessionID || o.f.id == idFork || name == "--name":
@@ -86,8 +90,13 @@ func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
 		case name == "--reasoning-effort" && r.Effort != "":
 			out = append(out, name+"="+r.Effort)
 			continue
+		case name == "--worktree" && r.LeaveTree:
+			continue
 		case name == "--worktree" && r.Tree != "":
-			out = append(out, name+"="+r.Tree)
+			if !tree {
+				out = append(out, name+"="+r.Tree)
+			}
+			tree = true
 			continue
 		case (name == "--cwd" || name == "--trust-folder") && r.Cwd != "":
 			continue
@@ -96,6 +105,9 @@ func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
 	}
 	if r.Model != "" && !model {
 		out = append(out, "--model="+r.Model)
+	}
+	if r.Tree != "" && !tree && !r.LeaveTree {
+		out = append(out, "--worktree="+r.Tree)
 	}
 	for _, d := range r.AddDirs {
 		out = append(out, "--add-dir="+d)

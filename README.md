@@ -72,7 +72,9 @@ Built:
   tree of its own. Its edits and commands are refused in your checkout,
   and its git may not change what the two share: your branches, tags and
   git settings. A new work tree gets copies of the ignored files your
-  `.worktreeinclude` names (a `.env`, say).
+  `.worktreeinclude` names (a `.env`, say). Asked to work in a worktree,
+  the model moves a running session into one with `EnterWorktree`, and
+  back with `ExitWorktree` (keep or remove).
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.

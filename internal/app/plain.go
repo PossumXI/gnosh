@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -90,6 +91,9 @@ type plain struct {
 	ask  *time.Timer
 
 	wake chan struct{}
+	// restarting says a tool moved the session (RestartEvent): the loop
+	// closes it, and gnosh starts again where it moved.
+	restarting atomic.Bool
 }
 
 // lineReader hands out the lines of a stream, one at a time, to whoever
@@ -569,6 +573,10 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 		}
 	}()
 	for {
+		if f.restarting.Load() {
+			c.Quit("other")
+			return f.leave(c, cli.ExitOK)
+		}
 		if ending && !c.State().Busy {
 			// Everything that was under way has ended, and nobody can
 			// type more.
@@ -1181,6 +1189,13 @@ func (f *plain) Event(ev any) {
 		}
 	case *TasksEvent:
 		f.printTasks(ev.Tasks)
+	case *RestartEvent:
+		f.say("%s", visible(ev.Why))
+		f.restarting.Store(true)
+		select {
+		case f.wake <- struct{}{}:
+		default:
+		}
 	case *agent.TurnEndEvent:
 		f.stopWaiting()
 		how := "done"

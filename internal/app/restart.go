@@ -158,6 +158,9 @@ func (l *live) relaunchFor(session string, fresh bool, adjust ...func(*cli.Relau
 			r.AddDirs = append(r.AddDirs, d)
 		}
 	}
+	if t := l.st.tree; t != nil {
+		r.Tree = t.name
+	}
 	for _, f := range adjust {
 		f(&r)
 	}
@@ -166,9 +169,6 @@ func (l *live) relaunchFor(session string, fresh bool, adjust ...func(*cli.Relau
 		// session started, which is kept nowhere; one from the settings,
 		// or saved by /model, the new start finds there itself.
 		r.Model = ref.String()
-	}
-	if t := l.st.tree; t != nil {
-		r.Tree = t.name
 	}
 	args, err := p.table.RelaunchArgs(p.o.Args, r)
 	if err != nil {

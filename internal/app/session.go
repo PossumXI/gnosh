@@ -253,6 +253,10 @@ type live struct {
 	// newBuildSaid says the person was told of a newer gnosh installed
 	// (restart.go).
 	newBuildSaid atomic.Bool
+	// restartWhy, set by a tool that moved the session (EnterWorktree,
+	// ExitWorktree), is what the front end is told when the turn has
+	// ended: the session closes for gnosh to start again (RestartEvent).
+	restartWhy atomic.Pointer[string]
 	// notif is the notification channel /config set while the session
 	// runs; "" is the configuration's.
 	notifMu sync.Mutex
@@ -578,6 +582,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	// one /cd moved is told where it is now.
 	l.whatsNew()
 	l.movedHere()
+	l.treeMoved()
 	return l, nil
 }
 
@@ -1177,6 +1182,13 @@ func (l *live) deliver(ev any) {
 		l.front.Event(ev)
 	}
 	l.evMu.Unlock()
+	if _, ok := ev.(*agent.TurnEndEvent); ok {
+		// A tool moved the session: with its turn over, the front end
+		// closes it, and the program starts again where it moved.
+		if why := l.restartWhy.Swap(nil); why != nil && l.p.restartArgs() != nil {
+			l.deliver(&RestartEvent{Why: *why})
+		}
+	}
 	l.loadMoment(ev)
 	l.statusPoke(ev)
 	// A command may have moved to the background, or one there may have

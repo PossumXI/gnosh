@@ -52,6 +52,10 @@ func TestRelaunchArgs(t *testing.T) {
 		// the session only.
 		{`--cwd /work/app --trust-folder -c`, Relaunch{Session: id, Cwd: "/work/lib"}, []string{"--cwd=/work/lib", "--resume=" + id}},
 		{`--trust-folder -c`, Relaunch{Session: id, Cwd: "/home/u", TrustFolder: true}, []string{"--cwd=/home/u", "--trust-folder", "--resume=" + id}},
+		// EnterWorktree: a session started without --worktree gets it;
+		// ExitWorktree: one in a work tree goes back out.
+		{`-c`, Relaunch{Session: id, Tree: "calm-otter"}, []string{"--worktree=calm-otter", "--resume=" + id}},
+		{`--worktree=calm-otter -c`, Relaunch{Session: id, LeaveTree: true}, []string{"--resume=" + id}},
 	}
 	for _, c := range cases {
 		args := words(t, "gnosh "+c.line)
@@ -95,7 +99,10 @@ func TestRelaunchArgs(t *testing.T) {
 			before.Effort = c.r.Effort
 		}
 		if c.r.Tree != "" {
-			before.WorktreeName = c.r.Tree
+			before.Worktree, before.WorktreeName = true, c.r.Tree
+		}
+		if c.r.LeaveTree {
+			before.Worktree, before.WorktreeName = false, ""
 		}
 		before.AddDirs = append(before.AddDirs, c.r.AddDirs...)
 		if c.r.Cwd != "" {

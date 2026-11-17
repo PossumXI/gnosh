@@ -1148,3 +1148,28 @@ or kept with the reason said (27).
     folder is such copies is removed at its end like any other left as
     made. The session's first line names the copies; a sub-agent's are in
     the log; what could not be copied is said.
+
+80. **EnterWorktree and ExitWorktree move a running session into a work
+    tree of its own and back, as Claude Code's tools do, by starting
+    gnosh again.** Asked to work in a worktree, the model calls
+    EnterWorktree, with a name or without one (a name is then made up).
+    gnosh makes the tree as --worktree does, from the commit checked out
+    on the branch worktree-<name>, or opens one of that name again. The
+    session's file goes with the tree's sessions, and gnosh starts again
+    with --worktree <name> and --resume, as /cd moves a session (77): the
+    tree's settings, instructions and the gate that keeps edits in it
+    are then in force by the one way gnosh has of taking them in. The
+    call ends the turn; the gnosh that starts is told what moved
+    (GNOSH_TREE_MOVE) and goes on with the task in a turn of its own.
+    ExitWorktree goes back to the folder the session started in, with
+    keep (the tree and its branch stay) or remove (both go). A tree that
+    holds work is removed only with discard_changes, which the model is
+    told to ask the person about. A tree EnterWorktree made and nobody
+    named goes at the session's end when it was left as made, as an
+    unnamed --worktree tree does. The tools are an interactive
+    session's, in a trusted repository, in a gnosh that can start itself
+    again; neither asks first, as Claude Code's do not for a new tree.
+    They refuse while work runs in the background or the person's
+    prompts wait, which the restart would lose. Unlike Claude Code's, a
+    tree is named, never given as a path: a work tree made with git
+    worktree add is worked in by starting gnosh there.
