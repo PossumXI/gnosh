@@ -1071,11 +1071,29 @@ or kept with the reason said (27).
     this machine, rebase given a second branch, a merge strategy git does
     not have, stash pop, drop and clear, and on a Mac a new branch with
     capital letters (on a disk that does not tell case apart, MAIN is
-    main). A git run pointed only outside the work tree and the
-    checkouts (git -C /tmp/other) is no concern of the check, and a file
-    a command writes by a computed name is refused in a work tree as one
-    gnosh cannot tell. What the text cannot show stays out of reach: a
-    git copied under another name, a remote of the person's whose
-    address is the checkout. Claude Code holds only sub-agents to this;
-    gnosh holds a --worktree session to it too, as it holds one to its
-    tree's files.
+    main). A file a command writes by a computed name is refused in a
+    work tree as one gnosh cannot tell.
+    A second review (17 November) found the next layer: the text says
+    where git runs, not which repository it opens, and a .git file can
+    name the checkout's. So git in a work tree runs only against the
+    work tree's own repository, which gnosh tells from the disk at the
+    moment of the call (app treegit.go: the first .git above each folder
+    git runs in, a .git file followed to the folder it names); git -C to
+    another repository, --git-dir and --work-tree are refused; and no
+    command, Write or Edit may change a .git file or folder in a work
+    tree. Also: variables set every way bash has (a VAR=value word of
+    env, sudo or time, read, printf -v, a nameref, a for loop's
+    variable, ${VAR:=x}); push only to a remote the repository has, by
+    its name, or to an address, and -u only for HEAD; fetch without
+    --filter and --depth, which write files the checkout shares; on a
+    Mac, no capital letters in a branch or tag switched to or made;
+    grep's -O inside a cluster and starts of long flags (--open); and
+    patterns with a quoted part. Reading commands take a quoted word
+    computed when the line runs ("$(git merge-base HEAD main)"). What
+    the text and the disk cannot show stays out of reach: a git copied
+    under another name, a script or a program that runs git, a remote of
+    the person's whose address is the checkout, and the one-line forms
+    that make a .git and use it at once. Real isolation would take a
+    sandbox of the operating system. Claude Code holds only sub-agents
+    to this; gnosh holds a --worktree session to it too, as it holds one
+    to its tree's files.

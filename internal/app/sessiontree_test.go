@@ -104,24 +104,43 @@ func TestWorktreeFlagLinks(t *testing.T) {
 func TestWorktreeFlagSharedGit(t *testing.T) {
 	w := repoWorld(t)
 	before := gitIn(t, w.Dir, "rev-parse", "main")
-	for i, cmd := range []string{
+	// A folder outside the work tree whose .git file names the checkout's
+	// git folder: git there opens the checkout's repository (review, 17
+	// November).
+	elsewhere := t.TempDir()
+	if err := os.WriteFile(filepath.Join(elsewhere, ".git"), []byte("gitdir: "+filepath.Join(w.Dir, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tree := filepath.Join(w.Dir, ".gnosh", "worktrees", "shared")
+	cmds := []string{
 		"git update-ref refs/heads/main HEAD",
 		"git config core.fsmonitor 'touch fsmonitor-ran'",
 		"git branch -m main trunk",
 		"git push . HEAD:main",
 		"git branch --show-current && git config --get-regexp '^core\\.'",
-	} {
+		"git -C " + elsewhere + " update-ref refs/heads/main HEAD",
+		"printf 'gitdir: " + filepath.Join(w.Dir, ".git") + "\\n' > .git",
+		"git status --short && git log --oneline -1",
+	}
+	for i, cmd := range cmds {
 		w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: fmt.Sprintf("c%d", i+1), Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, cmd)}}})
 	}
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: "c9", Name: "Write", Args: fmt.Sprintf(`{"file_path":%q,"content":"gitdir: %s\n"}`, filepath.Join(tree, ".git"), filepath.Join(w.Dir, ".git"))}}})
 	w.Model.Add(apptest.Reply{Text: "Done."})
 	run(t, w, "--trust-folder", "--worktree", "shared", "-y", "-p", "go").wantCode(t, 0)
 	has(t, "update-ref", toolResult(t, w, 1, "c1"), "This call did not run", "may change what your work tree shares with the person's checkout", "git update-ref is not one gnosh lets run in a work tree of your own")
 	has(t, "a setting", toolResult(t, w, 2, "c2"), "This call did not run", "git config is not one gnosh lets run in a work tree of your own")
 	has(t, "a rename", toolResult(t, w, 3, "c3"), "This call did not run", "git branch: its option -m is not one")
-	has(t, "a push into itself", toolResult(t, w, 4, "c4"), "This call did not run", "git push into .")
+	has(t, "a push into itself", toolResult(t, w, 4, "c4"), "This call did not run", "git push to . may push into a repository on this machine")
 	if got := toolResult(t, w, 5, "c5"); strings.Contains(got, "did not run") || !strings.Contains(got, "worktree-shared") {
 		t.Errorf("git that keeps to the work tree: %q", got)
 	}
+	has(t, "a .git file that names the checkout's", toolResult(t, w, 6, "c6"), "This call did not run", "would open the repository at", "not your work tree's own")
+	has(t, "a write of the work tree's .git", toolResult(t, w, 7, "c7"), "This call did not run", "is a .git file or folder")
+	if got := toolResult(t, w, 8, "c8"); strings.Contains(got, "did not run") {
+		t.Errorf("reading git in the work tree: %q", got)
+	}
+	has(t, "Write to the work tree's .git", toolResult(t, w, 9, "c9"), "This call did not run", "is a .git file or folder")
 	if after := gitIn(t, w.Dir, "rev-parse", "main"); after != before {
 		t.Errorf("the checkout's branch moved: %s, then %s", before, after)
 	}
