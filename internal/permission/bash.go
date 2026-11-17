@@ -3400,6 +3400,18 @@ func (e *Engine) couldBeShell(w word) bool {
 			return true
 		}
 	}
+	// So may a name that names a program by the process that runs it or
+	// by a number (magicProg): /proc/self$x/exe and /proc/$$/exe are the
+	// shell that reads the line (oracle seed 141), /dev/fd/$n a file
+	// opened earlier.
+	for _, magic := range [][]tok{
+		appendLit(appendHole(appendLit(appendHole(nil), "/proc/")), "/exe"),
+		appendHole(appendLit(appendHole(nil), "/dev/fd/")),
+	} {
+		if couldMatch(head, magic) {
+			return true
+		}
+	}
 	// source and . read a script too, when their file is /dev/stdin.
 	return couldMatch(head, appendLit(nil, "source")) || couldMatch(head, appendLit(nil, "."))
 }

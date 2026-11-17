@@ -52,6 +52,7 @@ func TestDangerousRemovals(t *testing.T) {
 		"env --chdir=/ rm -rf usr", "env -C / rm -rf etc", "env -iC/ rm -rf usr", "env --ch=/ rm -rf usr", "sudo -D / rm -rf usr",
 		"env -C ~ rm -rf .", "env -C \"$D\" rm -rf .", "set -o history\nhistory -s 'rm -rf ~'\nfc -s",
 		"git -c alias.z='!rm -rf ~' z", "git -c core.sshCommand='rm -rf ~' fetch", "export PAGER='rm -rf ~'; git -p log",
+		"echo 'rm -rf ~' | /proc/$$/exe", "echo 'rm -rf ~' | /proc/self$x/exe",
 	}
 	for _, cmd := range dangerous {
 		d := bash(e, cmd)

