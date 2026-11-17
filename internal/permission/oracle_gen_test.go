@@ -984,8 +984,9 @@ var attackLines = []string{
 	"source $* ${X} <(echo rm -rf x)", "source ${X} <(git status)", ". $NOPE <(echo cat .env)", // oracle seed 122: words that vanish before the file
 	"ls 1>&\"\\$($--'rm' x)\"", "Y='$(rm x)'; ls >&\"$Y\"", "X=rm; ls >&\"\\$($X x)\"", // oracle seed 124: bash expands a computed word after >& twice
 	"rmdir${X[1]} . -n", "rmdir${X} .", "r${Y}m -rf .", // oracle seed 126: a program's name read with its variable unset
-	"mv -t /tmpv${x} -t /tmp mp clean -fdx",     // oracle seed 127: a false alarm, the check dropped -t's value and not -t
-	"mv $\"x\" <(env) link-dir/file >& all.txt", // oracle seed 128: in a line with a $"...", the crude pieces made <(env) the word env
+	"mv -t /tmpv${x} -t /tmp mp clean -fdx",                               // oracle seed 127: a false alarm, the check dropped -t's value and not -t
+	"mv $\"x\" <(env) link-dir/file >& all.txt",                           // oracle seed 128: in a line with a $"...", the crude pieces made <(env) the word env
+	"cd nope </dev/null\n(cd sub/deep) && cat sneaky.txt && ! cd link-in", // oracle seed 129: the cd pending before a subshell came back after it as done
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",

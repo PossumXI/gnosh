@@ -87,6 +87,11 @@ func TestShellAttacks(t *testing.T) {
 		{"a subshell's cd into the folder does not bring the line back into it", "", none, "cd /etc && (cd /proj) && cat passwd", Ask},
 		{"after a subshell the line is where it was, under a deny rule", "", rules{deny: []string{"Read(./.env)"}}, "(cd src) && cat .env", Deny},
 		{"after nested subshells the line is where it was", "", rules{deny: []string{"Read(./.env)"}}, "( (cd src); cd src; ls ); cat .env", Deny},
+		// A cd before a subshell may fail: the && after the subshell is
+		// the subshell's, not the cd's (oracle seed 129).
+		{"a cd that may fail before a subshell is no more done after it", "", none, "cd nope\n(cd src) && cat ../x", Ask},
+		{"nor under a deny rule", "", rules{deny: []string{"Read(./.env)"}}, "cd sub\n(cd src) && cat .env", Deny},
+		{"a cd that went before the subshell still holds after it", "", rules{deny: []string{"Read(./sub/.env)"}}, "cd sub && (cd src) && cat .env", Deny},
 		{"a variable set in a subshell asks", "", none, "(X=/proj/a); cat $X", Ask},
 		{"a removal in a subshell asks", "", none, "(cd src; rm -rf x)", Ask},
 		// A { ...; } group runs in the shell itself: read straight through.

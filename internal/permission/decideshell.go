@@ -1914,10 +1914,18 @@ func (e *Engine) decideShell(req *request) Decision {
 			st.leave(saved[len(saved)-1])
 			saved = saved[:len(saved)-1]
 		}
+		// Where the shell is is settled first, and that is what a
+		// subshell starting here starts from and what is put back after
+		// it. Kept before it was settled, a cd still pending before the
+		// subshell came back after it as if it had just run: in "cd nope
+		// <newline> (cd sub) && cat x", the && then read as cd nope's
+		// success, and cat was judged in nope alone, where the shell,
+		// cd nope having failed, was where the line began (oracle seed
+		// 129).
+		st.enter(c)
 		for n := opens[i]; n > 0; n-- {
 			saved = append(saved, st.copyPlace())
 		}
-		st.enter(c)
 		pv := e.judgeLooped(v, i, c, st)
 		if pv.ok && pv.state != "" && parts > 1 {
 			whys = append(whys, pv.state+" changes the shell that runs the rest of the line, so the rest cannot be judged ahead of time")
