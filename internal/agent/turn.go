@@ -723,13 +723,14 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 	// Every way a turn can end is visible.
 	switch res.Reason {
 	case EndFailed:
-		a.notice(LevelError, "loop", strings.TrimSpace("The turn failed. "+res.Detail))
+		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelError, Source: "loop", Text: strings.TrimSpace("The turn failed. " + res.Detail)})
 	case EndHalted:
-		a.notice(LevelWarning, firstNonEmpty(res.Driver, "loop"), "The turn was ended: "+firstNonEmpty(res.Detail, "no reason was given")+".")
+		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelWarning, Source: firstNonEmpty(res.Driver, "loop"),
+			Text: "The turn was ended: " + firstNonEmpty(res.Detail, "no reason was given") + "."})
 	case EndModelStopped:
-		a.notice(LevelWarning, "driver:"+res.Driver, fmt.Sprintf(
+		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelWarning, Source: "driver:" + res.Driver, Text: fmt.Sprintf(
 			"The model chose to stop. Its reason: %s\nWhat held the turn open: %s",
-			firstNonEmpty(strings.TrimSpace(res.Detail), "(it gave none)"), firstNonEmpty(res.Objection, "(nothing was recorded)")))
+			firstNonEmpty(strings.TrimSpace(res.Detail), "(it gave none)"), firstNonEmpty(res.Objection, "(nothing was recorded)"))})
 	}
 
 	a.emit(&TurnEndEvent{Result: res})

@@ -500,6 +500,10 @@ type NoticeEvent struct {
 	// the line.
 	Source string
 	Text   string
+	// TurnEnd marks the notice that says how a turn ended, in the words
+	// of the TurnEndEvent that comes right after it: a front end that
+	// shows that event itself leaves the notice out.
+	TurnEnd bool
 }
 
 // NoteEvent says a note of the harness's own was put in front of the

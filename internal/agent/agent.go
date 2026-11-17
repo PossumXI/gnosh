@@ -530,10 +530,17 @@ func (a *Agent) Notice(level Level, source, text string) {
 }
 
 func (a *Agent) notice(level Level, source, text string) {
+	a.noticeAs(&NoticeEvent{Level: level, Source: source, Text: text})
+}
+
+// noticeAs is notice, for the event as it is given (a turn's end marks
+// its own: NoticeEvent.TurnEnd).
+func (a *Agent) noticeAs(ev *NoticeEvent) {
+	level, source, text := ev.Level, ev.Source, ev.Text
 	if text == "" {
 		return
 	}
-	a.emit(&NoticeEvent{Level: level, Source: source, Text: text})
+	a.emit(ev)
 	turn, _ := a.turnNow.Load().(string)
 	// The person has been shown the line; what is left is to keep it in
 	// the log. A notice may be raised by code that the log itself is

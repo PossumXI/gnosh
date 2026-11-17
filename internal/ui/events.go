@@ -115,6 +115,10 @@ func (s *session) handle(ev any) {
 	case *agent.AnswerEvent:
 		s.answered(ev)
 	case *agent.NoticeEvent:
+		if ev.TurnEnd {
+			// turnEnd says how the turn ended, with its times, right after.
+			break
+		}
 		s.notice(ev.Level, ev.Text)
 	case *agent.NoteEvent:
 		if ev.Note.Notice != "" {

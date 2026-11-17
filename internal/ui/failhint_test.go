@@ -37,3 +37,17 @@ func TestFailedTurnHint(t *testing.T) {
 		t.Errorf("no hint to make room:\n%s", g.region())
 	}
 }
+
+// A failed turn is said once: the agent's notice of the turn's end gives
+// way to the turn's end, which says it with its times (box 2, 16
+// November: both were on the screen). Any other notice still shows.
+func TestFailedTurnSaidOnce(t *testing.T) {
+	g := newRig(t, 100, 30, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	detail := "qwen (qwen3.8-27b) at http://203.0.113.7:9/v1 is not running: it has not answered once in 1m30s"
+	g.ev(&agent.NoticeEvent{TurnEnd: true, Level: agent.LevelError, Source: "loop", Text: "The turn failed. " + detail},
+		&agent.TurnEndEvent{Result: agent.TurnResult{Reason: agent.EndFailed, ErrorKind: "server_error", Detail: detail, Err: errors.New(detail)}}, idle())
+	g.once(detail)
+	g.ev(&agent.NoticeEvent{Level: agent.LevelWarning, Source: "loop", Text: "popped x: about 44K tokens out of the model's context"})
+	g.once("popped x: about 44K tokens")
+}
