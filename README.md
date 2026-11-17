@@ -67,6 +67,11 @@ Built:
   `gnosh ssh` (ssh that puts what the far side copies on this machine's
   clipboard: see below), and `--worktree` (a session in a git work tree of
   its own, as Claude Code's).
+- **Work trees that keep apart**, as Claude Code's: a sub-agent given
+  `isolation: worktree`, or a `--worktree` session, works in a git work
+  tree of its own. Its edits and commands are refused in your checkout,
+  and its git may not change what the two share: your branches, tags and
+  git settings.
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.
@@ -125,7 +130,8 @@ In a session, Claude Code's commands work as there: `/help`, `/clear`,
 build is installed, which the session says), `/background` (the session goes
 on without the terminal, as a run of its own on the prompt given), `/fork` (a
 copy of the conversation works on the prompt in the background while this
-session goes on), `/compact`, `/resume`, `/branch`, `/rewind` (the
+session goes on), `/compact`, `/resume` (by number, id, name, or words from
+a session's name or first prompt), `/branch`, `/rewind` (the
 conversation, the files Write and Edit changed, or both), `/model`, `/effort`,
 `/config`, `/plan`, `/permissions`, `/add-dir`, `/status`, `/context`, `/btw`
 (a side question, also while the model works; nothing of it is kept),

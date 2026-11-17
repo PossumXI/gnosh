@@ -20,6 +20,7 @@
 #	ssh ai-remote bash -s -- suggest < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- invisible < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- failhint < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- cache < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -73,6 +74,9 @@
 #   failhint    the model's server is a closed port: the turn fails after
 #               gnosh's tries, and the empty prompt box says what to try
 #               next (no model)
+#   cache       three short turns, then /cost: how much of what was read
+#               came from the model server's prompt cache, and any request
+#               that read again what the one before it had sent
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -86,7 +90,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 failhint) base=http://127.0.0.1:9 ;;
@@ -98,7 +102,7 @@ worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache)" >&2
 	exit 2
 	;;
 esac
@@ -338,6 +342,17 @@ invisible)
 failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
+	;;
+cache)
+	for w in one two three; do
+		tmux send-keys -t "$S" "Reply with exactly the one word $w, and call no tool." Enter
+		for i in $(seq 1 120); do
+			sleep 1
+			[ "$(screen | grep -c "done in")" -ge "$(case $w in one) echo 1;; two) echo 2;; three) echo 3;; esac)" ] && break
+		done
+	done
+	tmux send-keys -t "$S" "/cost" Enter
+	done_when() { screen | grep -q "cache    \|written  "; }
 	;;
 hookwake)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
