@@ -77,6 +77,11 @@
 #   cache       three short turns, then /cost: how much of what was read
 #               came from the model server's prompt cache, and any request
 #               that read again what the one before it had sent
+#   cd          a turn, then /cd to a folder of its own whose settings wait
+#               for trust (said yes to) and whose GNOSH.md holds a codeword:
+#               gnosh starts again there, and the model is asked where it
+#               is, for the codeword, and to write here.txt (permissions
+#               skipped)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -97,12 +102,12 @@ failhint) base=http://127.0.0.1:9 ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
-background | btw | monitor | panel) flags="-y" ;;
+background | btw | monitor | panel | cd) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, agent, fork, monitor, worktree, wtflag, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -305,6 +310,40 @@ restart)
 	tmux send-keys -t "$S" "What were the three words I first asked you to reply with? Answer with only those three words and call no tool." Enter
 	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 3 ] && [ "$(screen | grep -c "done in")" -ge 3 ]; }
 	;;
+cd)
+	mkdir -p "$T/lib"
+	echo 'In this project the codeword is PERSIMMON. Say it when asked for the codeword.' > "$T/lib/GNOSH.md"
+	echo '{ "permissions": { "allow": ["Bash(ls *)"] } }' > "$T/lib/gnosh.json"
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "done in" && break
+	done
+	tmux send-keys -t "$S" "/cd ../lib" Enter
+	for i in $(seq 1 30); do
+		sleep 1
+		screen | grep -q "Trust .*/lib?" && break
+	done
+	echo "=== the trust question"
+	screen | grep -v '^ *$' | tail -14
+	# (A question takes no key in its first moments: keys typed before it
+	# was seen are not its answer.)
+	sleep 2
+	tmux send-keys -t "$S" Down
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	# (The prompt waits for the gnosh that starts in lib: typed while the
+	# question is up, its letters would move the question's choice.)
+	for i in $(seq 1 60); do
+		sleep 1
+		screen | grep -q "folder .*/lib" && break
+	done
+	sleep 2
+	echo "=== after /cd"
+	screen | grep -v '^ *$' | tail -8
+	tmux send-keys -t "$S" "In one line: which folder are you working in now, and what is the codeword of this project? Then write the word moved into a file named here.txt in the working directory." Enter
+	done_when() { [ -s "$T/lib/here.txt" ] && screen | grep -q PERSIMMON && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
 bgsession)
 	# The pane stays when gnosh ends, so that what it says last is seen.
 	tmux set-option -t "$S" remain-on-exit on >/dev/null
@@ -406,6 +445,10 @@ if [ "$scenario" = suggest ]; then
 fi
 if [ "$scenario" = config ]; then
 	echo "=== state file: $(tr -d '\n' < "$T/data/gnosh/state.json" 2>/dev/null || echo none)"
+fi
+if [ "$scenario" = cd ]; then
+	echo "=== here.txt in lib: $(cat "$T/lib/here.txt" 2>/dev/null || echo none); in work: $(cat "$T/work/here.txt" 2>/dev/null || echo none)"
+	echo "=== the session files: $(cd "$T/data/gnosh/projects" && ls -d */*.jsonl 2>/dev/null | tr '\n' ' ')"
 fi
 if [ "$scenario" = worktree ]; then
 	echo "=== notes.txt here: $(tr '\n' ' ' < "$T/work/notes.txt")"

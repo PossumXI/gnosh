@@ -170,8 +170,15 @@ func (s *session) completePath(partial string, start int, sigil string, folders 
 		if e.dir {
 			name += "/"
 		}
+		if folders && e.name == base {
+			// The folder typed in full is a candidate as it was typed, and
+			// first: an exact name wins, so Enter runs the command (/cd
+			// ../lib) and does not take ../lib/ in its place, while Tab
+			// goes on to ../lib/ and into the folder.
+			out = append([]editor.Candidate{{Text: sigil + dirPart + base, Start: start, Label: base}}, out...)
+		}
 		out = append(out, editor.Candidate{Text: sigil + dirPart + name, Start: start, Label: name})
-		if len(out) == maxCandidates {
+		if len(out) >= maxCandidates {
 			break
 		}
 	}

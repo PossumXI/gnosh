@@ -67,7 +67,9 @@ func TestCompleteAgent(t *testing.T) {
 }
 
 // What is typed after /cd and /add-dir is a folder, slash or no slash:
-// only folders are offered for it, from the folder the session is in.
+// only folders are offered for it, from the folder the session is in. A
+// folder typed in full is offered as typed first, so that Enter runs the
+// command with it rather than taking the name with a slash.
 func TestCompleteFolder(t *testing.T) {
 	s := &session{cwd: "/proj", home: "/home/u", listDir: func(dir string) []fileEntry {
 		switch dir {
@@ -87,6 +89,7 @@ func TestCompleteFolder(t *testing.T) {
 	}
 	for text, want := range map[string]string{
 		"/cd do":       "docs/",
+		"/cd docs":     "docs docs/",
 		"/cd ":         "docs/ src/",
 		"/add-dir s":   "src/",
 		"/cd ~/":       "~/code/",
