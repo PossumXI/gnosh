@@ -155,7 +155,7 @@ func (g *lineGen) simple(depth int) string {
 		prog = "git"
 	}
 	if g.chance(0.04) {
-		prog = g.one([]string{"@BIN@/p0/rm", "@BIN@/p0/ls", "./x", "\"ls\"", "l\\s", "'rm'", "$X", "$(echo rm)", "{rm,x}", "r?", "=ls", "~/x", "\\rm", "r''m", "$'rm'", "$'\\x72m'"})
+		prog = g.one([]string{"@BIN@/p0/rm", "@BIN@/p0/ls", "./x", "\"ls\"", "l\\s", "'rm'", "$X", "$(echo rm)", "{rm,x}", "r?", "=ls", "~/x", "\\rm", "r''m", "$'rm'", "$'\\x72m'", "$'1rm'", "$'@rm'", "$'*rm'"})
 	}
 	parts = append(parts, prog)
 	if prog == "git" {
