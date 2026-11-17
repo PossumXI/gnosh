@@ -12,6 +12,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/config"
+	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -786,6 +787,13 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		}
 		c.Say("skills       %s", firstOf(strings.Join(names, ", "), "none; /skills says where they go"))
 	}
+	for i, line := range l.switchedOff(m) {
+		label := "off"
+		if i > 0 {
+			label = ""
+		}
+		c.Say("%-12s %s", label, line)
+	}
 	for _, j := range l.contribs {
 		if j.f.Name != "" {
 			c.Say("feature      %s", j.f.Name)
@@ -796,6 +804,35 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 	c.Say("The configuration in force, each setting with where it came from:")
 	c.Say("%s", strings.TrimRight(l.cfg.String(), "\n"))
 	return nil
+}
+
+// switchedOff are the features of gnosh that are off in this session, each
+// with what switched it off and what turns it on, for /status (Claude Code
+// 2.1.326 has a row of the features its provider or variables turned off).
+func (l *live) switchedOff(m agent.Model) []string {
+	var off []string
+	if strings.TrimSpace(l.cfg.Options.WebSearchURL.V) == "" {
+		off = append(off, "WebSearch, until webSearchUrl names a SearXNG server")
+	}
+	if strings.TrimSpace(l.cfg.Options.MemEmbeddingsURL.V) == "" {
+		off = append(off, "mem's search by meaning, until memEmbeddingsUrl names an embedding server: it matches words")
+	}
+	if !l.suggestOn.Load() {
+		off = append(off, "prompt suggestions, until promptSuggestionEnabled is on")
+	}
+	if d, ok := m.Provider.(core.ImageDropper); ok && d.LeavesOutImages(m.Info.ID) {
+		off = append(off, "images: the model's server cannot take them, so each is sent as a line saying it was left out")
+	}
+	if !l.cfg.Options.AutoCompactEnabled.V {
+		off = append(off, "automatic summaries, until autoCompactEnabled is on: /compact makes one by hand")
+	}
+	if l.cfg.HooksOff != "" {
+		off = append(off, "hooks ("+l.cfg.HooksOff+")")
+	}
+	if l.cfg.StatusLineOff != "" {
+		off = append(off, "the status line ("+l.cfg.StatusLineOff+")")
+	}
+	return off
 }
 
 // slashPermissions is /permissions: the mode, the folders and every rule,
