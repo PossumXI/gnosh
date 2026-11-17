@@ -121,7 +121,7 @@ func TestOtherDestroyers(t *testing.T) {
 		"mv $\"x\" <(env) link-dir/file >& all.txt", "mv $\"x\" /tmp", "chmod -R 000 $\"x\"",
 		// In dash an alias given $'1rm' is $1rm, which is rm (oracle seed
 		// 131).
-		"alias zz=$'1rm'\nzz -rf ~",
+		"alias zz=$'1rm'\nzz -rf ~", "sh -c $'1rm -rf ~'", "trap $'1rm -rf ~' EXIT",
 		// A variable inside a name right under the root leaves that name
 		// where it is empty (oracle seed 105): /tmp-a, /tmp:--rf.
 		"mv /tmp$X-a /tmp", "mv /tmp$X:--rf /tmp", "mv $X:--rf x} /tmp$X:--rf x} /tmp", "mv /tm${X}p /x",
@@ -281,6 +281,9 @@ func TestOtherDestroyers(t *testing.T) {
 		}
 	}
 	ordinary := []string{
+		// $'...' as models write it: dash's reading of it holds nothing
+		// that destroys.
+		"grep -c $'\\t' a.txt", "rm $'old file.txt'", "printf $'%s\\n' a b", "IFS=$'\\n'; for f in a b; do echo $f; done",
 		"mv a.txt b.txt", "mv build/out dist/", "mv *.log logs/", "mv src/a.go src/b.go", "mv x ~/", "mv x .", "mv -t build a.txt b.txt",
 		"mv \"$tmp\" out.txt", "mv \"$f\" \"$f.bak\"", "mv vendor/x/.git /tmp/g", "mv -T /tmp/new build", "mv -f a b", "mv src/* dst/",
 		"mv $tmp $dest", "mv -n a.txt ~/Documents/", "mv {a.txt,b.txt}", "mv logs/*.log", "chmod -R {755,build}",

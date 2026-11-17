@@ -444,6 +444,8 @@ func TestShellAttacks(t *testing.T) {
 		// alias or the eval text is (oracle seed 131).
 		{"dash reads $'1rm' as $1rm, which is rm where $1 is empty", ModeBypass, attackGuards, "alias zz=$'1rm'\nzz x x", Deny},
 		{"so does eval", ModeBypass, attackGuards, "eval $'1rm x'", Deny},
+		{"and sh -c", ModeBypass, attackGuards, "sh -c $'1rm x'", Deny},
+		{"and a trap", ModeBypass, attackGuards, "trap $'1rm x' EXIT", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},

@@ -989,6 +989,7 @@ var attackLines = []string{
 	"cd nope </dev/null\n(cd sub/deep) && cat sneaky.txt && ! cd link-in", // oracle seed 129: the cd pending before a subshell came back after it as done
 	"cat `. .env \"$(set)\"`",                                             // oracle seed 130: a false alarm, the trace lost the . whose argument spans lines
 	"alias zz=$'1rm'\nzz x x",                                             // oracle seed 131: dash reads $'1rm' as $1rm, rm where $1 is empty
+	"sh -c $'1rm x'\ntrap $'1rm y' EXIT",                                  // after seed 131: sh -c and a trap read dash's $ again too
 	"x=.git; mv ${x}{,.bak}", "f() { mv \"${1}\"{,x}; }; f .git", "f() { mv \"${1}\" /tmp/g; }; f .git", "set -- .git; mv \"${1}\" /tmp/g", "f() { rm -rf \"${@}\"; }; f .",
 	// A pattern in one of the line's values, beside a variable nobody set.
 	"d=.; w=$d* && rm -rf $X$w", "w='*'; rm -rf $X$w", "w='.e*'; cat $X$w", "w='*.o'; rm -f \"$DIR\"/$w",
