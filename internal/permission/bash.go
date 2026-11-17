@@ -2654,7 +2654,13 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 		// the first expansion leaves of such a word is read as text the
 		// shell evaluates; any other target that holds the text of a
 		// substitution is read as one that may be.
-		if l := r.target.joined(); r.op == ">&" && !isFdTarget(r.target) && strings.ContainsAny(l, "$`<>") {
+		if r.op == ">&" && !isFdTarget(r.target) && !r.target.static() {
+			// What the first expansion of a computed word leaves is not
+			// known, and it may be the text of a substitution that the
+			// second runs: Y='$(rm x)'; ls >&"$Y" (oracle seed 124).
+			v.setOpaque("bash expands the word after >& a second time, and what a word computed when the line runs leaves of it may run a command")
+			e.scanWord(v, r.target, nest, depth)
+		} else if l := r.target.joined(); r.op == ">&" && !isFdTarget(r.target) && strings.ContainsAny(l, "$`<>") {
 			e.addWordText(v, l, nest, depth)
 		} else {
 			e.scanWord(v, r.target, nest, depth)

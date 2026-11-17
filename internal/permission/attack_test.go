@@ -570,6 +570,11 @@ func TestShellAttacks(t *testing.T) {
 		{"bash expands the word after >& twice", ModeBypass, attackGuards, "ls >&'$(rm x)'", Deny},
 		{"bash expands the word after >& twice", ModeBypass, attackGuards, "ls 1>&\"\\$(rm x)\"", Deny},
 		{"bash expands the word after >& twice", ModeBypass, attackGuards, ">&'`rm x`'", Deny},
+		// A computed word is expanded twice too, and what the first
+		// expansion leaves is not known (oracle seed 124, $- in it).
+		{"bash expands a computed word after >& twice", ModeBypass, attackGuards, "Y='$(rm x)'; ls >&\"$Y\"", Ask},
+		{"bash expands a computed word after >& twice", ModeBypass, attackGuards, "X=rm; ls 1>&\"\\$($X x)\"", Ask},
+		{"bash expands a computed word after >& twice", ModeBypass, attackGuards, "ls -la\nEOF\n src 1>&\"\\$($--'rm' x)\"", Ask},
 		{"bash expands the word after >& twice", ModeBypass, attackGuards, "ls >&\\$\\(rm\\ x\\)", Deny},
 		{"bash expands the word after >& twice: the ~ is the home directory", ModeBypass, attackGuards, "echo x >&'~/.ssh/authorized_keys'", Deny},
 		{"env -S takes its string for more arguments of its own", ModeBypass, attackGuards, "env -S '-i rm x'", Deny},
