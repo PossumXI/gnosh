@@ -435,7 +435,14 @@ func facts(words []word) (f cmdFacts) {
 					f.why = "a file name pattern stands where " + f.name + "'s own pattern goes"
 					return f
 				}
-				ops = ops[1:]
+				// A computed word outside quotes is cut into words at its
+				// blanks: the first is the pattern and the others are
+				// files the command reads ("grep `git status` x" read the
+				// .env git status named; oracle seed 134). Such a word is
+				// held as a file too.
+				if !mayBecomeWords(ops[0]) {
+					ops = ops[1:]
+				}
 			}
 		}
 		if spec.max > 0 && len(ops) > spec.max {
@@ -569,8 +576,11 @@ func patternFiles(name string, args []word) []word {
 				out = append(out, args[i])
 			case flag == "--regexp" || flag == "--source" || flag == "--file":
 				sawPat = true
-				if !has {
+				if !has && i+1 < len(args) {
 					i++ // the pattern is the next word
+					if mayBecomeWords(args[i]) {
+						out = append(out, args[i])
+					}
 				}
 			}
 		default:
@@ -590,7 +600,9 @@ func patternFiles(name string, args []word) []word {
 				case j+1 < len(s):
 				case i+1 < len(args):
 					i++
-					if c == 'f' {
+					if c == 'f' || mayBecomeWords(args[i]) {
+						// (A pattern computed outside quotes may be the
+						// pattern and then files.)
 						out = append(out, args[i])
 					}
 				}
@@ -598,12 +610,20 @@ func patternFiles(name string, args []word) []word {
 			}
 		}
 	}
-	// (A first operand that is a file name pattern or braces is several
-	// words to the shell, and all but the first of those are files.)
-	if !sawPat && len(out) > 0 && !out[0].glob && !out[0].brace {
+	// (A first operand that is a file name pattern or braces, or a word
+	// computed outside quotes, is several words to the shell, and all but
+	// the first of those are files.)
+	if !sawPat && len(out) > 0 && !out[0].glob && !out[0].brace && !mayBecomeWords(out[0]) {
 		out = out[1:]
 	}
 	return out
+}
+
+// mayBecomeWords reports whether the shell may cut the word into several:
+// what a variable or a command substitution outside quotes stands for is
+// cut at its blanks.
+func mayBecomeWords(w word) bool {
+	return !w.static() && !w.quoted
 }
 
 // wordsOnly are the builtins and programs whose arguments are words and

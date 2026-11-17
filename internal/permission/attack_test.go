@@ -446,6 +446,10 @@ func TestShellAttacks(t *testing.T) {
 		{"so does eval", ModeBypass, attackGuards, "eval $'1rm x'", Deny},
 		{"and sh -c", ModeBypass, attackGuards, "sh -c $'1rm x'", Deny},
 		{"and a trap", ModeBypass, attackGuards, "trap $'1rm x' EXIT", Deny},
+		// A computed word outside quotes where grep's pattern goes is cut
+		// into the pattern and files grep reads (oracle seed 134).
+		{"a computed pattern may also be files the Read rules hold", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "grep `git status` a.txt", Ask},
+		{"so may a computed -e", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "grep -e $X a.txt", Ask},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(git push origin); \"${a[@]}\"", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(rm -rf x); ${a[@]}", Deny},
 		{"every word of the array is a word of the command", ModeBypass, attackGuards, "a=(cat .env); ${a[*]}", Deny},
@@ -1896,6 +1900,19 @@ func TestFetchHosts(t *testing.T) {
 	for _, rule := range []string{"WebFetch(domain:ex\u00e4mple.com)", "WebFetch(domain:08.1.1.1)", "WebFetch(domain:a b)", "WebFetch(domain:[::1)"} {
 		if _, err := New(testOptions(ModeDefault, rules{deny: []string{rule}})); err == nil {
 			t.Errorf("%s: accepted", rule)
+		}
+	}
+}
+
+// A pattern computed inside quotes is one word, the pattern alone: with
+// grep allowed, grep "$X" a.txt reads a.txt and nothing a deny rule holds,
+// where the same pattern outside quotes may also be files (oracle seed
+// 134, TestShellAttacks).
+func TestQuotedComputedPattern(t *testing.T) {
+	e := engine(t, ModeDefault, rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}})
+	for _, cmd := range []string{`grep "$X" a.txt`, `grep -e "$(cat pat)" a.txt`, `rg "$X" src`} {
+		if d := bash(e, cmd); d.Behavior != Allow {
+			t.Errorf("%s: got %s (%s), want allow", cmd, d.Behavior, d.Reason)
 		}
 	}
 }
