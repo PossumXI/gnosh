@@ -294,6 +294,7 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 		var long *tooLongError
 		switch {
 		case err == nil:
+			a.cacheSeen(fr.req, rep.usage, a.clock.Now())
 		case errors.Is(err, errStopped):
 			if serr := a.storePartial(t, rep, fr.su.model, core.StopCancelled); serr != nil {
 				return nil, failedOutcome(serr)

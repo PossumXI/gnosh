@@ -251,6 +251,7 @@ type Agent struct {
 	state      State
 	running    []RunningCall
 	totals     Totals
+	cachePrev  cachePrint // the last main request, for Totals.Cache
 	context    ContextStatus
 
 	// The rest belongs to the session's goroutine alone.

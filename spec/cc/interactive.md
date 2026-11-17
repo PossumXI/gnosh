@@ -328,7 +328,8 @@ JSON on stdin (fields gnosh provides in **bold**):
 | **`context_window.*`** | From the most recent model response. `used_percentage` counts input tokens only (input + cache write + cache read) against `context_window_size`. `current_usage` is `null` before the first response and right after a compaction; the percentages may be `null` early. |
 | **`output_style.name`** | |
 | `prompt_id`, `effort`, `thinking`, `vim`, `agent`, `worktree`, `workspace.git_worktree`, `workspace.repo` | Present only when applicable. |
-| `rate_limits`, `prompt_cache`, `fast_mode`, `pr` | Anthropic account, cache and PR-badge data: not adopted. |
+| `prompt_cache` | Adopted 2026-11-17 in the fields gnosh can tell from the providers' cache counts (llama.cpp's cache_n, cached_tokens): `warm`, `caching_observed`, `requests`, `misses`, `expected_rebuilds`, `hit_ratio`, `cache_write_tokens`, `miss_recache_tokens`, `last_miss_at`. A model server of the person's own has no cache lifetime, so `ttl`, `expires_at` and the miss causes are left out. `/cost` says the same in words. |
+| `rate_limits`, `fast_mode`, `pr` | Anthropic account and PR-badge data: not adopted. |
 
 With or without a custom status line, the footer always shows the current
 permission mode.
@@ -429,7 +430,7 @@ unless marked.
 - The task checklist as a todo-tool view (Ctrl+T shows the `mem` plan
   instead).
 - The `#` memory shortcut.
-- `rate_limits`, `prompt_cache`, `fast_mode`, `pr` in the status-line JSON.
+- `rate_limits`, `fast_mode`, `pr` in the status-line JSON (`prompt_cache` is adopted).
 
 ## Unverified (docs silent)
 

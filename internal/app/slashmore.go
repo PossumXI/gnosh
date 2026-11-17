@@ -220,6 +220,9 @@ func (l *live) slashCost(ctx context.Context, c *SlashContext) error {
 	c.Say("This session: %s to its model, %s of waiting on it.", requests(u.Requests), roundTime(u.APITime))
 	c.Say("  read     %s tokens (%s fresh, %s from the cache)", tokenCount(m.PromptTokens()), tokenCount(m.InputTokens+m.CacheWriteTokens), tokenCount(m.CacheReadTokens))
 	c.Say("  written  %s tokens", tokenCount(m.OutputTokens))
+	if line := cacheLine(u); line != "" {
+		c.Say("  cache    %s", line)
+	}
 	if len(u.ByModel) > 0 {
 		c.Say("Every request made for it, by model (summaries, side jobs and sub-agents included):")
 		ids := make([]string, 0, len(u.ByModel))
@@ -239,6 +242,28 @@ func (l *live) slashCost(ctx context.Context, c *SlashContext) error {
 		c.Say("The context now holds about %s of %s tokens (%d%%).", tokenCount(cs.Used), tokenCount(cs.Window), cs.Used*100/cs.Window)
 	}
 	return nil
+}
+
+// cacheLine says how the model server's prompt cache served the main
+// requests (Claude Code's "Prompt cache (main)" line of /usage), or ""
+// when the server never said: the share of what was read that came from
+// it, the requests that read again what the request before had sent the
+// same way, and those that began anew.
+func cacheLine(u agent.Totals) string {
+	c := u.Cache
+	all := u.Main.PromptTokens()
+	if !c.Observed || all == 0 {
+		return ""
+	}
+	line := fmt.Sprintf("%d%% of what was read came from the model server's cache", u.Main.CacheReadTokens*100/all)
+	if c.Misses > 0 {
+		line += fmt.Sprintf("; %s read again about %s tokens it could have kept from the request before, the last at %s (another request took the cache's place, the server started again, or the model's template wrote earlier turns anew)",
+			requests(c.Misses), tokenCount(c.MissTokens), c.LastMiss.Local().Format("15:04"))
+	}
+	if c.Rebuilds > 0 {
+		line += fmt.Sprintf("; %s began anew after the conversation's start changed (a summary, a slide, mem putting a frame away, a rewind)", requests(c.Rebuilds))
+	}
+	return line
 }
 
 // requests counts requests in words: "1 request", "3 requests".

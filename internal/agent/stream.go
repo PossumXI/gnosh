@@ -741,6 +741,8 @@ type Totals struct {
 	// Side counts the side requests alone, so that what the small jobs
 	// cost a model server can be watched.
 	Side SideTotals
+	// Cache is how the prompt cache served the main requests.
+	Cache CacheTotals
 }
 
 // ModelTotals is what one model has cost a session.

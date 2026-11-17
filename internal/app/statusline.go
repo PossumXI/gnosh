@@ -292,6 +292,25 @@ type statusInput struct {
 	Vim            *struct {
 		Mode string `json:"mode"`
 	} `json:"vim,omitempty"`
+	// PromptCache is how the model server's prompt cache served the main
+	// requests, from the first reply on.
+	PromptCache *statusCache `json:"prompt_cache,omitempty"`
+}
+
+// statusCache is Claude Code's prompt_cache object, in the fields gnosh
+// can tell (agent.CacheTotals): a model server of the person's own has no
+// cache lifetime, so ttl and expires_at are left out, as is why a miss
+// was one.
+type statusCache struct {
+	Warm             bool     `json:"warm"`
+	CachingObserved  bool     `json:"caching_observed"`
+	Requests         int      `json:"requests"`
+	Misses           int      `json:"misses"`
+	ExpectedRebuilds int      `json:"expected_rebuilds"`
+	HitRatio         *float64 `json:"hit_ratio"`
+	CacheWriteTokens int      `json:"cache_write_tokens"`
+	MissRecache      int      `json:"miss_recache_tokens"`
+	LastMissAt       *int64   `json:"last_miss_at"`
 }
 
 // statusRepo is the repository the project is, as its origin remote names
@@ -386,6 +405,18 @@ func (l *live) statusInput() statusInput {
 		last := u.Last
 		in.ContextWindow.CurrentUsage = &statusTokens{InputTokens: last.InputTokens, OutputTokens: last.OutputTokens,
 			CacheCreationInputTokens: last.CacheWriteTokens, CacheReadInputTokens: last.CacheReadTokens}
+		c := u.Cache
+		pc := &statusCache{Warm: c.Warm, CachingObserved: c.Observed, Requests: u.Requests, Misses: c.Misses,
+			ExpectedRebuilds: c.Rebuilds, CacheWriteTokens: u.Main.CacheWriteTokens, MissRecache: c.MissTokens}
+		if all := u.Main.PromptTokens(); all > 0 {
+			r := float64(u.Main.CacheReadTokens) / float64(all)
+			pc.HitRatio = &r
+		}
+		if !c.LastMiss.IsZero() {
+			at := c.LastMiss.Unix()
+			pc.LastMissAt = &at
+		}
+		in.PromptCache = pc
 	}
 	if lvl := l.agent.Model().Level; lvl != "" {
 		in.Thinking = &struct {
