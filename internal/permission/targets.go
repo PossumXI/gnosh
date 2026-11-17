@@ -312,7 +312,7 @@ func fillTargets(f *cmdFacts, args []word) {
 		// The first operand is the pattern or the program, unless a flag
 		// gave that, or it is a file name pattern or braces.
 		f.reads = patternFiles(f.name, args)
-	case "tee", "touch", "mkdir", "rm", "rmdir", "truncate", "shred", "unlink", "chmod", "chown":
+	case "tee", "sponge", "touch", "mkdir", "rm", "rmdir", "truncate", "shred", "unlink", "chmod", "chown":
 		f.writes = ops
 	case "mv":
 		// mv takes its sources away, and writes them where it puts them.

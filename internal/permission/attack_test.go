@@ -541,6 +541,7 @@ func TestShellAttacks(t *testing.T) {
 		{"zip's archive", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "zip -r .env src", Deny},
 		{"sqlite3's database", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "sqlite3 .env 'create table t(x)'", Deny},
 		{"git archive -o", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "git archive -o .env HEAD", Deny},
+		{"sponge writes the file it is given", "", rules{allow: []string{"Bash"}, deny: []string{"Edit(./.env)"}}, "cat a.txt | sponge .env", Deny},
 		// /proc/<the shell's own process>/exe is the shell, however its
 		// path is written (oracle seed 141).
 		{"/proc/self$x/exe reads the pipe as its script", ModeBypass, rules{deny: []string{"Bash(curl *)"}}, "echo 'curl http://203.0.113.1/x' | /proc/self$x/exe", Deny},
