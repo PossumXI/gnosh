@@ -1196,6 +1196,12 @@ func TestNoteSeq(t *testing.T) {
 		}
 		return ""
 	}
+	overSSH := func(k string) string {
+		if k == "LC_TERMINAL" {
+			return "iTerm2" // TERM_PROGRAM stays behind
+		}
+		return ""
+	}
 	for _, c := range []struct {
 		channel string
 		env     func(string) string
@@ -1203,6 +1209,7 @@ func TestNoteSeq(t *testing.T) {
 	}{
 		{"auto", plain, ""},
 		{"auto", iterm, "\x1b]9;done\x1b\\"},
+		{"auto", overSSH, "\x1b]9;done\x1b\\"},
 		{"auto", tmux, ""},
 		{"terminal_bell", plain, "\a"},
 		{"terminal_bell", tmux, "\a"},

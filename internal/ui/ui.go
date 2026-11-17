@@ -636,7 +636,7 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	s := newSession(config{
 		theme: u.th, profile: u.profile(), light: u.caps.LightBackground, themed: u.o.Theme == nil,
 		metrics: u.m, now: u.now, controls: c, renderer: u.r, host: u,
-		cols: cols, rows: rows, home: u.env("HOME"), selectKey: selectKey(u.env("TERM_PROGRAM")),
+		cols: cols, rows: rows, home: u.env("HOME"), selectKey: selectKey(termProgram(u.env)),
 		branch: gitBranch, files: listDir,
 	})
 	u.s = s
@@ -1027,8 +1027,8 @@ func noteSeq(channel, text string, env func(string) string) string {
 			return ""
 		case env("KITTY_WINDOW_ID") != "" || env("TERM") == "xterm-kitty":
 			kind = "osc99"
-		case env("TERM_PROGRAM") == "iTerm.app" || env("TERM_PROGRAM") == "WezTerm" ||
-			env("TERM_PROGRAM") == "ghostty" || env("TERM") == "xterm-ghostty":
+		case termProgram(env) == "iTerm.app" || termProgram(env) == "WezTerm" ||
+			termProgram(env) == "ghostty" || env("TERM") == "xterm-ghostty":
 			kind = "osc9"
 		default:
 			return ""
@@ -1042,6 +1042,20 @@ func noteSeq(channel, text string, env func(string) string) string {
 		seq += term.Bell
 	}
 	return seq
+}
+
+// termProgram is the terminal's name as it sets TERM_PROGRAM; or, where
+// that is not passed on (ssh), iTerm2's as it names itself in LC_TERMINAL,
+// which ssh passes on with the locale's variables by default (Claude Code
+// 2.1.326 reaches iTerm2 over ssh so).
+func termProgram(env func(string) string) string {
+	if p := env("TERM_PROGRAM"); p != "" {
+		return p
+	}
+	if env("LC_TERMINAL") == "iTerm2" {
+		return "iTerm.app"
+	}
+	return ""
 }
 
 // copy puts text on the person's clipboard through the terminal (OSC 52):
