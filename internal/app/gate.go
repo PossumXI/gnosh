@@ -884,6 +884,12 @@ func (l *live) commandOutsideTree(t core.WorkTree, cwd, command string) string {
 			return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command points git at %s, in %s. Run git in your work tree, without -C, --git-dir, --work-tree or GIT_DIR: the work tree is a checkout of its own.", t.Path, p, checkoutName(t, repo))
 		}
 	}
+	// Nor does its git change what the work tree shares with the checkout:
+	// the branches and other refs, the git settings, the list of work
+	// trees (Claude Code 2.1.326 refuses the like for its sub-agents).
+	if what := l.engine.SharedGitChange(command); what != "" {
+		return fmt.Sprintf("You work in a git work tree of your own, at %s, and this command may change what your work tree shares with %s: %s. The branches, tags, git settings and list of work trees are the same in both. Make your changes as commits on your own branch, and leave other branches, tags and settings to the person.", t.Path, checkoutName(t, resolved(t.Repo)), what)
+	}
 	return ""
 }
 

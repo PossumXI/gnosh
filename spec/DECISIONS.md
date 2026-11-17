@@ -1042,3 +1042,26 @@ or kept with the reason said (27).
     pipe or a file gets the reply as it is: it is data there, and the
     reader decides what to do with it.
 
+76. **git in a session's own work tree leaves alone what the work tree
+    shares with its checkout, as Claude Code 2.1.326 has it for its
+    sub-agents.** A work tree shares its branches, tags and other refs,
+    its git settings and its list of work trees with the checkout it was
+    made from. git keeps a branch another work tree has out from
+    checkout, switch, branch -f and a fetch into it, but not from
+    update-ref, symbolic-ref, branch -m, a push into the repository
+    itself or --ignore-other-worktrees, and a setting such as
+    core.fsmonitor or core.hooksPath runs a command in the checkout. So
+    in a work tree gnosh refuses, whatever the permission mode:
+    update-ref; symbolic-ref that sets or deletes; branch -f, -d, -D, -m,
+    -M, -c and -C; checkout -B, switch -C and --ignore-other-worktrees;
+    worktree remove, move and prune, and add with -B or -f; a push into a
+    folder on this machine; a fetch or pull whose refspec writes a ref
+    outside refs/remotes/; rebase --update-refs; config writes other than
+    --global and --system; remote add, rename, remove, set-url and the
+    like; replace; stash clear; tag -d and -f; reflog expire and delete;
+    filter-branch and filter-repo; and aliases given by -c or the
+    GIT_CONFIG_ variables (permission.Engine.SharedGitChange). Making a
+    new branch, switching to one no work tree has out, and commits on the
+    tree's own branch go on as before. Claude Code holds only sub-agents
+    to this; gnosh holds a --worktree session to it too, as it holds one
+    to its tree's files.

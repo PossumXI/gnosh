@@ -96,6 +96,43 @@ func TestWorktreeFlagLinks(t *testing.T) {
 	}
 }
 
+// git in a session's own work tree may not change what the work tree
+// shares with the person's checkout: the branches by name, the git
+// settings, a push into the repository itself. git that keeps to the work
+// tree runs. Permissions are skipped, so the work tree is all that stands
+// in the way (Claude Code 2.1.326 refuses the like for its sub-agents).
+func TestWorktreeFlagSharedGit(t *testing.T) {
+	w := repoWorld(t)
+	before := gitIn(t, w.Dir, "rev-parse", "main")
+	for i, cmd := range []string{
+		"git update-ref refs/heads/main HEAD",
+		"git config core.fsmonitor 'touch fsmonitor-ran'",
+		"git branch -m main trunk",
+		"git push . HEAD:main",
+		"git branch --show-current && git config --get-regexp '^core\\.'",
+	} {
+		w.Model.Add(apptest.Reply{Calls: []apptest.Call{{ID: fmt.Sprintf("c%d", i+1), Name: "Bash", Args: fmt.Sprintf(`{"command":%q}`, cmd)}}})
+	}
+	w.Model.Add(apptest.Reply{Text: "Done."})
+	run(t, w, "--trust-folder", "--worktree", "shared", "-y", "-p", "go").wantCode(t, 0)
+	has(t, "update-ref", toolResult(t, w, 1, "c1"), "This call did not run", "may change what your work tree shares with the person's checkout", "git update-ref writes a branch or another ref by name")
+	has(t, "a setting", toolResult(t, w, 2, "c2"), "This call did not run", "git config writes the repository's git settings")
+	has(t, "a rename", toolResult(t, w, 3, "c3"), "This call did not run", "git branch -m")
+	has(t, "a push into itself", toolResult(t, w, 4, "c4"), "This call did not run", "git push into .")
+	if got := toolResult(t, w, 5, "c5"); strings.Contains(got, "did not run") || !strings.Contains(got, "worktree-shared") {
+		t.Errorf("git that keeps to the work tree: %q", got)
+	}
+	if after := gitIn(t, w.Dir, "rev-parse", "main"); after != before {
+		t.Errorf("the checkout's branch moved: %s, then %s", before, after)
+	}
+	if got := w.Read(".git/config"); strings.Contains(got, "fsmonitor") {
+		t.Errorf("a setting went into the checkout's git settings:\n%s", got)
+	}
+	if branch := gitIn(t, w.Dir, "branch", "--show-current"); branch != "main" {
+		t.Errorf("the checkout's branch is %q, want main", branch)
+	}
+}
+
 // A skill's own commands (!`cmd`) in a session with a work tree of its own
 // keep to the work tree as its tool calls do (review, 16 November).
 func TestWorktreeFlagSkillCommands(t *testing.T) {
