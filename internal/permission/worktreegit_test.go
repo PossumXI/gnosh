@@ -18,8 +18,12 @@ var testTree = TreeGit{
 		}
 		return "git run in " + dir + " would open another repository than your work tree's own"
 	},
-	Remote: func(name string) bool { return name == "origin" || name == "fork" || name == "up" },
+	Remote:  func(name string) bool { return name == "origin" || name == "fork" || name == "up" },
+	Stashes: func() bool { return false },
 }
+
+// personStashes is testTree with a stash of the person's in the list.
+var personStashes = TreeGit{Repo: testTree.Repo, Remote: testTree.Remote, Stashes: func() bool { return true }}
 
 // SharedGitChange: in a work tree of its own, git may read, or change the
 // work tree's own branch, index and files in ways gnosh knows, in the work
@@ -66,8 +70,7 @@ func TestSharedGitChange(t *testing.T) {
 		"git tag -d v1",
 		"git tag -f v1",
 		"git stash clear",
-		"git stash drop",
-		"git stash pop",
+		"git stash drop stash@{1}",
 		"echo clear | xargs git stash",
 		// The list of work trees.
 		"git worktree remove ../x",
@@ -130,7 +133,7 @@ func TestSharedGitChange(t *testing.T) {
 		"git grep --open='git branch -D release;:' c",
 		"git log --output=/proj/.git/config",
 		"git log --out=/proj/.git/config",
-		"git diff $(git merge-base HEAD main)",
+		"git diff $(cat refs.txt)",
 		// Settings, hooks and aliases.
 		"git config core.fsmonitor x",
 		"git config --global alias.zz update-ref",
@@ -292,11 +295,28 @@ func TestSharedGitChange(t *testing.T) {
 		"git reflog show main",
 		"grep -r GIT_CONFIG_PARAMETERS . && git status",
 		"echo $HOME && git status",
+		// Seen in the AI boxes' sessions (the replay of 17 November).
+		"[ -d .git ] && git status --short",
+		"git grep -n quokka $(git rev-list --all)",
+		"git diff $(git merge-base HEAD main)",
+		"git stash && go test ./... 2>&1; git stash pop",
+		"git stash drop",
 		"echo update-ref",
 		"$G update-ref refs/heads/main HEAD", // a name only known when it runs: GitPlaces's to refuse
 	} {
 		if got := e.SharedGitChange(treeDir, cmd, testTree); got != "" {
 			t.Errorf("SharedGitChange(%q) = %q, want nothing", cmd, got)
+		}
+	}
+}
+
+// With a stash of the person's in the list, which the checkout keeps too,
+// a stash popped or dropped may be theirs.
+func TestSharedGitChangeStashes(t *testing.T) {
+	e := mustEngine(t, testOptions(ModeDefault, rules{}))
+	for _, cmd := range []string{"git stash pop", "git stash drop", "git stash && go test ./...; git stash pop"} {
+		if got := e.SharedGitChange(treeDir, cmd, personStashes); got == "" {
+			t.Errorf("SharedGitChange(%q) with the person's stashes = nothing, want why not", cmd)
 		}
 	}
 }

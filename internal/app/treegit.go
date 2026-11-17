@@ -96,7 +96,38 @@ func treeGit(t core.WorkTree) permission.TreeGit {
 		Remote: func(name string) bool {
 			return ownWhy == "" && hasRemote(own, name)
 		},
+		Stashes: func() bool {
+			return ownWhy != "" || hasStashes(own)
+		},
 	}
+}
+
+// commonDir is the folder of a repository a work tree's git folder shares
+// with the others (its file commondir names it), or gitdir itself.
+func commonDir(gitdir string) string {
+	if data, err := os.ReadFile(filepath.Join(gitdir, "commondir")); err == nil {
+		c := strings.TrimSpace(string(data))
+		if !filepath.IsAbs(c) {
+			c = filepath.Join(gitdir, c)
+		}
+		return filepath.Clean(c)
+	}
+	return gitdir
+}
+
+// hasStashes reports whether the repository whose work tree's git folder
+// is gitdir keeps any stash: refs/stash, loose or packed. What cannot be
+// read counts as one.
+func hasStashes(gitdir string) bool {
+	common := commonDir(gitdir)
+	if _, err := os.Stat(filepath.Join(common, "refs", "stash")); err == nil || !os.IsNotExist(err) {
+		return true
+	}
+	data, err := os.ReadFile(filepath.Join(common, "packed-refs"))
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	return strings.Contains(string(data), " refs/stash\n")
 }
 
 // remoteSection matches the first line of a remote's section in git's
@@ -107,15 +138,7 @@ var remoteSection = regexp.MustCompile(`^\s*\[\s*remote\s+"([^"]*)"\s*\]`)
 // gitdir has a remote named name: in the settings of its common folder
 // (a work tree's git folder names that folder in its file commondir).
 func hasRemote(gitdir, name string) bool {
-	common := gitdir
-	if data, err := os.ReadFile(filepath.Join(gitdir, "commondir")); err == nil {
-		c := strings.TrimSpace(string(data))
-		if !filepath.IsAbs(c) {
-			c = filepath.Join(gitdir, c)
-		}
-		common = filepath.Clean(c)
-	}
-	f, err := os.Open(filepath.Join(common, "config"))
+	f, err := os.Open(filepath.Join(commonDir(gitdir), "config"))
 	if err != nil {
 		return false
 	}

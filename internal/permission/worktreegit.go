@@ -37,6 +37,11 @@ type TreeGit struct {
 	// Remote reports whether the work tree's repository has a remote of
 	// the name. Nil knows none.
 	Remote func(name string) bool
+	// Stashes reports whether the list of stashes, which the checkout
+	// keeps too, holds any: with none, a stash popped or dropped can only
+	// be the line's own ("git stash && go test; git stash pop"). Nil says
+	// it does.
+	Stashes func() bool
 }
 
 // SharedGitChange says why git, as the command line runs it, may change
@@ -64,7 +69,7 @@ func (e *Engine) SharedGitChange(dir, command string, tree TreeGit) string {
 		if len(ws) == 0 || !ws[0].static() {
 			continue // a name only known when it runs: GitPlaces refuses those
 		}
-		if ws[0].glob || ws[0].brace {
+		if (ws[0].glob || ws[0].brace) && ws[0].raw != "[" && ws[0].raw != "[[" {
 			return "the program " + ws[0].raw + " is named by a pattern, which may make it git, and gnosh cannot tell what it would change"
 		}
 		name := progKey(baseName(ws[0].joined()))
@@ -326,6 +331,9 @@ words:
 		return "git " + sub + ": " + why
 	}
 	spec, ok := gitTreeWrites[sub]
+	if !ok && sub == "config" {
+		return "git config writes the repository's git settings, which the checkout reads too, and in a work tree of your own git leaves them alone: for a commit's author, give git -c user.name=... -c user.email=... commit, or commit --author"
+	}
 	if !ok {
 		return "git " + sub + " is not one gnosh lets run in a work tree of your own, where git may only read or change your own branch, index and files (add, commit, reset, restore, rm, mv, checkout, switch, merge, rebase, cherry-pick, revert, stash push and apply, fetch, pull, push to a remote, branch and tag to make one, clean, apply, bisect, format-patch); an alias may stand for any command, so write the command out"
 	}
@@ -379,6 +387,11 @@ var gitReads = map[string]bool{
 // --open-files-in-pager).
 var readDanger = []string{"--output", "--output-directory", "--open-files-in-pager", "--ext-diff", "--textconv", "--exec", "--upload-pack", "--receive-pack"}
 
+// commitsOnly finds a command substitution of the git commands that print
+// commits and nothing else, which no option can begin: $(git rev-list
+// --all), $(git merge-base HEAD main). Unquoted, its words are commits.
+var commitsOnly = regexp.MustCompile(`^\$\(git (rev-list|rev-parse|merge-base)( [-A-Za-z0-9_./~^@{}:=]+)*\)$`)
+
 // readsOnly says why the words of a reading subcommand may write a file or
 // start a program, or "": a flag of readDanger, or a start of one; git
 // grep's -O, also among other letters (-nO); an unquoted word only known
@@ -387,7 +400,7 @@ var readDanger = []string{"--output", "--output-directory", "--open-files-in-pag
 func readsOnly(sub string, rest []word) string {
 	for _, w := range rest {
 		if !w.static() {
-			if !w.quoted {
+			if !w.quoted && !commitsOnly.MatchString(w.raw) {
 				return "an unquoted word only known when the line runs (" + w.raw + ") may become several words, options among them: quote it"
 			}
 			continue
@@ -591,15 +604,21 @@ var gitTreeWrites = map[string]treeWrite{
 		check: knownStrategy},
 	"stash": {args: roSpec{noGlob: true, short: "uakqSp", valued: "m",
 		long: "--include-untracked --no-include-untracked --all --keep-index --no-keep-index --quiet --staged --index --message= --pathspec-from-file="},
-		check: func(_ string, p treeParsed, _ TreeGit) string {
+		check: func(_ string, p treeParsed, tree TreeGit) string {
 			if len(p.ops) == 0 {
 				return ""
 			}
 			switch p.ops[0].lit() {
 			case "push", "save", "apply":
 				return ""
+			case "pop", "drop":
+				// With no stash of the person's, the one taken is the
+				// line's own; one named by its place may be anyone's.
+				if len(p.ops) == 1 && tree.Stashes != nil && !tree.Stashes() {
+					return ""
+				}
 			}
-			return "git stash " + p.ops[0].raw + " changes the list of stashes, which the checkout keeps too: git stash apply takes one back and leaves the list as it is"
+			return "git stash " + p.ops[0].raw + " changes the list of stashes, which the checkout keeps too, and it holds stashes now: git stash apply takes one back and leaves the list as it is"
 		}},
 	"fetch": {args: roSpec{noGlob: true, short: "pqv46k", valued: "jo",
 		long: "--all --prune --quiet --verbose --tags --no-tags --dry-run --multiple --no-recurse-submodules --recurse-submodules --recurse-submodules= --progress --no-progress --ipv4 --ipv6 --atomic --no-write-fetch-head --write-fetch-head --auto-maintenance --no-auto-maintenance --auto-gc --no-auto-gc --keep --show-forced-updates --no-show-forced-updates --jobs= --negotiation-tip= --server-option="},
