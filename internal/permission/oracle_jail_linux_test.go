@@ -114,6 +114,10 @@ type jail struct {
 	// rawEnv, when not nil, is the environment shells are started with,
 	// in place of the one the shell tool's builder makes (see env).
 	rawEnv []string
+	// fileLines holds every line of the files the jail starts with
+	// (notes.md's "rm -rf x is only text here" among them): a command
+	// whose whole text is one, in a run that sourced a file, came from it.
+	fileLines map[string]bool
 }
 
 // fileMeta is what a snapshot keeps of one file.
@@ -241,7 +245,13 @@ func (j *jail) writeTemplate() error {
 		"outside/dir/file":          tokOutDir + "\n",
 		"outside/dir/sub/deeper.md": "deeper\n",
 	}
+	j.fileLines = make(map[string]bool)
 	for rel, body := range files {
+		for _, line := range strings.Split(body, "\n") {
+			if strings.TrimSpace(line) != "" {
+				j.fileLines[line] = true
+			}
+		}
 		p := filepath.Join(t, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err

@@ -489,7 +489,12 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 		if rc.fuzzy || rc.by == 0 || sourced && rc.path == "" {
 			continue // started by a program no rule reads, or read from a file that was sourced
 		}
-		if sourced && rc.by == 2 {
+		if sourced && (rc.by == 2 || j.fileLines[rc.text()]) {
+			// A line of a file that was sourced: started by the shell,
+			// or under a wrapper when the subshell that sourced it was
+			// started for one of its arguments ("nice pwd <(source
+			// notes.md)": the subshell's parent became nice). Oracle
+			// seed 144.
 			continue
 		}
 		texts := []string{rc.text()}

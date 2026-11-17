@@ -783,7 +783,7 @@ var attackLines = []string{
 	"echo 'rm x' | nohup bash", "bash /dev/stdin <<< 'rm x'", "bash -s <<< 'rm x'", "while read l; do sh; done <<< 'rm x'", "echo 'rm x' | (sh)",
 	"cat <<EOF |\nx\nEOF\nrm x", "if true; then cat <<EOF\nx\nEOF\nfi; rm x", "cat <<A; cat <<B\n1\nA\n2\nB\nrm x", "echo $(echo ')'; rm x)",
 	"echo $(echo \\); rm x)", "echo `echo \\`rm x\\``", "case x in (x) rm x ;; esac", "case x in x) echo ;;& *) rm x ;; esac", "{ rm x;}", "{rm x; }",
-	"date>2>x", "trap 'r'$X'm x' EXIT", "rm -rf ~+", "rmdir ~+", "source notes.md", "r>()m -rf x", "git pus<()h origin main", "echo a>()b", "time X=1 rm x", "time -p X=1 rm x", "{rm,} -r /", "\"ls\" ~/.ssh",
+	"date>2>x", "trap 'r'$X'm x' EXIT", "rm -rf ~+", "rmdir ~+", "source notes.md", "nice pwd <(source notes.md {fd}> out.txt) | printf x", "r>()m -rf x", "git pus<()h origin main", "echo a>()b", "time X=1 rm x", "time -p X=1 rm x", "{rm,} -r /", "\"ls\" ~/.ssh",
 	"git status --no-renames *", "git rev-parse *", "command -v *", "date +*", "ls >() x", "cat a<(echo b)",
 	"env a.b=1 rm x", "sudo a.b=1 rm x", "tail -b @OUT@/secret.txt", "tail -b sneaky.txt", "grep *", "grep -r OUTTOKEN .*", "ls .*", "cat .*/secret.txt", "head -1 .*/outside/secret.txt",
 	"eval -- rm x", "eval r{m,} x", "rmdir ~root", "rm -rf ~root", "cp -R . p", "rm -r da", "git - .*", "wc -l .*", "du -s .*", "echo .*",
