@@ -43,6 +43,14 @@ const questionKind = "question"
 // be answered in the person's own words.
 type QuestionForm struct {
 	Questions []FormQuestion
+	// Lead stands above the questions: who asks and why, when that is not
+	// the model (an MCP server's message).
+	Lead string
+	// EscCancels says Esc answers the form as cancelled, with the Choice
+	// "cancel", and the turn goes on: the asker is told and decides what
+	// follows, as an MCP server is. Esc on the model's own questions stops
+	// the turn.
+	EscCancels bool
 }
 
 // FormQuestion is one question of a QuestionForm.

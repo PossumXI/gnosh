@@ -63,8 +63,10 @@ type question struct {
 	keys []string
 	// labels are what each option of a Select says, for the record.
 	labels []string
-	// form holds the questions of a Form, for the answer.
-	form []menu.Question
+	// form holds the questions of a Form, for the answer, and escCancels
+	// says Esc answers it as cancelled (app.QuestionForm.EscCancels).
+	form       []menu.Question
+	escCancels bool
 	// secret says the answer must be shown nowhere.
 	secret bool
 	// opened is when the question was first drawn, and quiet the moment
@@ -138,7 +140,9 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 		qs.ui = menu.NewSecret(menu.SecretOptions{Title: title, Body: body(), Theme: th.Menu, Metrics: m})
 	case q.Kind == "question" && formOf(q.Data) != nil:
 		qs.form = formOf(q.Data)
-		qs.ui = menu.NewForm(menu.FormOptions{Questions: qs.form, Theme: th.Menu, Metrics: m})
+		data, _ := q.Data.(app.QuestionForm)
+		qs.escCancels = data.EscCancels
+		qs.ui = menu.NewForm(menu.FormOptions{Questions: qs.form, Lead: data.Lead, Theme: th.Menu, Metrics: m})
 	case len(q.Choices) == 0:
 		qs.ui = menu.NewInput(menu.InputOptions{Title: title, Body: body(), Theme: th.Menu, Metrics: m})
 	default:
@@ -208,7 +212,7 @@ func (qs *question) rebuild(th *Theme, m text.Metrics, width int) {
 // How a question ended on the screen.
 const (
 	endAnswered = iota // an answer was chosen or typed
-	endRefused         // Esc on a question that takes no for an answer
+	endRefused         // Esc on a question that takes no (or cancel) for an answer
 	endLeft            // Esc on any other question: nothing was answered
 )
 
@@ -216,6 +220,9 @@ const (
 // the words that stand in the scrollback as the record of it.
 func (qs *question) answer(res menu.Result) (ans agent.Answer, record string, how int) {
 	if res.Cancelled {
+		if qs.escCancels {
+			return agent.Answer{Choice: "cancel"}, "cancelled", endRefused
+		}
 		for _, k := range qs.keys {
 			if k == "no" {
 				return agent.Answer{Choice: "no"}, "No", endRefused

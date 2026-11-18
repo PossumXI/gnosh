@@ -41,7 +41,8 @@ Built:
   declared hosts over ssh, and MCP servers, those gnosh starts itself and
   those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
   `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
-  tools are `mcp__<server>__<tool>`).
+  tools are `mcp__<server>__<tool>`, and a server may ask you for a few
+  values in the middle of a call, Claude Code's elicitation).
 - **Permissions:** modes, plan mode included (the model presents its plan
   with ExitPlanMode and you approve it), and rules.
 - **Hooks:** command hooks in the shell and exec forms, in the background
@@ -52,9 +53,9 @@ Built:
   events: the tool and prompt events, Stop and SubagentStop, the session
   and summary events, PreModelSwitch and PostModelSwitch, ConfigChange,
   PostToolBatch, CwdChanged, DirectoryAdded and FileChanged among them.
-  Not yet: WorktreeCreate, WorktreeRemove and MessageDisplay; Setup,
-  PermissionDenied, TaskCreated, TaskCompleted, TeammateIdle and the
-  Elicitation events belong to things gnosh does not have.
+  Not yet: WorktreeCreate, WorktreeRemove, MessageDisplay, Elicitation
+  and ElicitationResult; Setup, PermissionDenied, TaskCreated,
+  TaskCompleted and TeammateIdle belong to things gnosh does not have.
 - **What the model is given:** instruction files, skills (with
   allowed-tools and disallowed-tools, effort, `context: fork` in a
   sub-agent, paths, hooks of their own, and commands run before the model

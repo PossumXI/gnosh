@@ -570,3 +570,42 @@ func TestSessionEndNeedsAMessage(t *testing.T) {
 		t.Errorf("SessionEnd ran for a session that never had a message")
 	}
 }
+
+// TurnContext is the running turn's context, which stopping the turn
+// ends, and nil when no turn runs.
+func TestTurnContext(t *testing.T) {
+	reached := make(chan context.Context, 1)
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{tool("Bash", func(ctx context.Context, _ core.ToolCall, _ *core.ToolEnv) (core.ToolResult, error) {
+			reached <- FromContext(ctx).TurnContext()
+			<-ctx.Done()
+			return core.ErrorResult("stopped"), nil
+		})}
+	})
+	if r.a.TurnContext() != nil {
+		t.Fatal("a turn context with no turn running")
+	}
+	r.model.push(use(tc("b", "Bash", `{}`)))
+	if _, err := r.a.Submit(Prompt{Text: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	var turn context.Context
+	select {
+	case turn = <-reached:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the tool did not run")
+	}
+	if turn == nil || turn.Err() != nil {
+		t.Fatalf("the turn's context while it runs: %v", turn)
+	}
+	r.a.Interrupt()
+	select {
+	case <-turn.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("stopping the turn did not end its context")
+	}
+	r.idle()
+	if r.a.TurnContext() != nil {
+		t.Error("a turn context after the turn")
+	}
+}

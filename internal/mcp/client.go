@@ -81,6 +81,11 @@ type Options struct {
 	// Auth, for a server reached at a URL, gives its requests the
 	// person's sign-in to it (auth.go); nil sends none.
 	Auth *Authorizer
+	// OnElicit asks the person what a server asks for in the middle of a
+	// call (elicit.go), and returns their answer; it may wait as long as
+	// they take. With it set the client declares the elicitation
+	// capability; nil declares none, and a server's request is refused.
+	OnElicit func(ctx context.Context, e Elicitation) (ElicitResult, error)
 	// OnHandshake, when set, is told what the server said of itself as
 	// soon as the handshake is done, before any notification of the
 	// server's is taken: what a channel is goes in front of its first
@@ -227,6 +232,42 @@ type Client struct {
 	// and relay that it takes permission questions too
 	// (Info.ChannelPermission), for the goroutine that reads it.
 	channel, relay atomic.Bool
+	// serving holds the requests of the server's that are being answered,
+	// by their ids: the server may take one back (notifications/cancelled),
+	// and the connection's end takes them all back. (An elicitation waits
+	// for the person.)
+	serving map[string]*served
+}
+
+// served is a request of the server's that is being answered.
+type served struct{ cancel context.CancelFunc }
+
+// serve notes that the server's request with the id is being answered,
+// and gives the context its answer is made in, which ends when the server
+// takes the request back or the connection ends; done forgets it. It is
+// called before the next message is read, so that a request taken back
+// at once is found.
+func (c *Client) serve(id json.RawMessage) (ctx context.Context, done func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s, key := &served{cancel: cancel}, idKey(id)
+	c.mu.Lock()
+	if c.closed || c.err != nil {
+		cancel()
+	} else {
+		if c.serving == nil {
+			c.serving = map[string]*served{}
+		}
+		c.serving[key] = s
+	}
+	c.mu.Unlock()
+	return ctx, func() {
+		c.mu.Lock()
+		if c.serving[key] == s {
+			delete(c.serving, key)
+		}
+		c.mu.Unlock()
+		cancel()
+	}
 }
 
 // transport carries messages to a server and brings its own back, which
@@ -282,9 +323,13 @@ func (c *Client) handshake(ctx context.Context) error {
 	opt := c.opt
 	hctx, cancel := context.WithTimeout(ctx, opt.StartTimeout)
 	defer cancel()
+	caps := map[string]any{"roots": map[string]any{"listChanged": false}}
+	if opt.OnElicit != nil {
+		caps["elicitation"] = map[string]any{}
+	}
 	raw, err := c.request(hctx, "initialize", map[string]any{
 		"protocolVersion": ProtocolVersion,
-		"capabilities":    map[string]any{"roots": map[string]any{"listChanged": false}},
+		"capabilities":    caps,
 		"clientInfo":      map[string]any{"name": opt.ClientName, "version": opt.ClientVersion},
 	})
 	if err != nil {
@@ -583,7 +628,11 @@ func (c *Client) send(m message) error {
 func (c *Client) dispatch(m message) {
 	switch {
 	case m.Method != "" && len(m.ID) > 0:
-		go c.answer(m)
+		ctx, done := c.serve(m.ID)
+		go func() {
+			defer done()
+			c.answer(ctx, m)
+		}()
 	case m.Method != "":
 		c.notified(m)
 	case len(m.ID) > 0:
@@ -615,10 +664,15 @@ func (c *Client) lost(err error) {
 		close(ch)
 		delete(c.pending, id)
 	}
+	for id, s := range c.serving {
+		s.cancel()
+		delete(c.serving, id)
+	}
 }
 
-// answer answers a request the server made of the client.
-func (c *Client) answer(m message) {
+// answer answers a request the server made of the client, unless the
+// server takes it back (ctx ends) first.
+func (c *Client) answer(ctx context.Context, m message) {
 	reply := message{JSONRPC: "2.0", ID: m.ID}
 	switch m.Method {
 	case "ping":
@@ -629,8 +683,18 @@ func (c *Client) answer(m message) {
 			roots = append(roots, map[string]string{"uri": "file://" + r, "name": r})
 		}
 		reply.Result = mustJSON(map[string]any{"roots": roots})
+	case "elicitation/create":
+		if c.opt.OnElicit == nil {
+			reply.Error = &RPCError{Code: -32601, Message: "gnosh does not answer " + m.Method + " here: nobody is there to ask"}
+			break
+		}
+		reply = c.elicited(ctx, m)
 	default:
 		reply.Error = &RPCError{Code: -32601, Message: "gnosh does not answer " + m.Method}
+	}
+	if ctx.Err() != nil {
+		// Taken back, or the connection ended: nothing is sent.
+		return
 	}
 	_ = c.send(reply)
 }
@@ -638,6 +702,20 @@ func (c *Client) answer(m message) {
 // notified takes a notification from the server.
 func (c *Client) notified(m message) {
 	switch m.Method {
+	case "notifications/cancelled":
+		// The server takes back a request it made: it is answered no more.
+		var p struct {
+			RequestID json.RawMessage `json:"requestId"`
+		}
+		if json.Unmarshal(m.Params, &p) != nil || len(p.RequestID) == 0 {
+			return
+		}
+		c.mu.Lock()
+		s := c.serving[idKey(p.RequestID)]
+		c.mu.Unlock()
+		if s != nil {
+			s.cancel()
+		}
 	case "notifications/tools/list_changed":
 		c.mu.Lock()
 		c.changed = true

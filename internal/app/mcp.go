@@ -190,6 +190,10 @@ func (l *live) connectMCP(s *mcpServer) {
 		}
 	}
 	opt.Auth = l.mcpAuthorizer(s)
+	if l.interactive {
+		// (A run has nobody to ask, and declares no elicitation.)
+		opt.OnElicit = l.mcpElicit(s.cfg.Name)
+	}
 	client, err := mcpConnect(ctx, s.cfg, l.cfg.Paths.ProjectRoot, l.p.o.Environ, l.roots, opt)
 	if na, ok := errNeedsAuth(err); ok {
 		l.mcpNeedsAuth(s, gen, na)

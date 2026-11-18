@@ -1269,3 +1269,27 @@ func TestPushNotification(t *testing.T) {
 		t.Fatalf("after half a minute away: %q, hooks told %q", said, g.c.notified)
 	}
 }
+
+// A form an MCP server puts shows the server's message above its
+// questions, and Esc on it answers "cancel" and leaves the turn running:
+// the server is told and decides what follows.
+func TestServerFormEscCancels(t *testing.T) {
+	g := newRig(t, 80, 30, text.NoColor)
+	g.keys(`"deploy it" <Enter>`).start()
+	data := app.QuestionForm{Lead: "The MCP server deploy asks: Where should it go?", EscCancels: true, Questions: []app.FormQuestion{
+		{Question: "Region", Header: "region", Options: []app.FormOption{{Label: "US East"}, {Label: "EU West"}}},
+	}}
+	g.ev(&agent.QuestionEvent{Question: agent.Question{ID: "q1", Kind: "question", Title: "The MCP server deploy asks for something", Data: data}})
+	g.liveHas("The MCP server deploy asks: Where should it go?", "Region", "EU West")
+	g.wait(time.Second)
+	g.keys(`<Esc>`)
+	if len(g.c.answers) != 1 || g.c.answers[0].ans.Choice != "cancel" {
+		t.Fatalf("Esc answered %+v", g.c.answers)
+	}
+	g.c.mu.Lock()
+	stops := g.c.stops
+	g.c.mu.Unlock()
+	if stops != 0 {
+		t.Errorf("Esc on a server's form stopped the turn")
+	}
+}

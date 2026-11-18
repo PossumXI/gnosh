@@ -222,7 +222,7 @@ func (a *Agent) beginTurnLocked(subs []*submission) (*turn, context.Context) {
 		cancel:  cancel,
 		drv:     make([]driverState, len(a.opts.Drivers)),
 	}
-	a.cur = &operation{cancel: cancel, turn: t}
+	a.cur = &operation{cancel: cancel, turn: t, ctx: ctx}
 	a.state.Turn = t.id
 	a.state.Round = 0
 	return t, ctx

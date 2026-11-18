@@ -1117,7 +1117,11 @@ func (f *plain) Event(ev any) {
 			f.form = &plainForm{form: form, answers: map[string]string{}}
 			f.fresh()
 			fmt.Fprintln(f.out)
-			fmt.Fprintln(f.out, "? "+visible(q.Title))
+			head := q.Title
+			if form.Lead != "" {
+				head = form.Lead
+			}
+			fmt.Fprintln(f.out, "? "+visible(head))
 			f.printFormQuestion()
 		} else {
 			f.printQuestion(q)

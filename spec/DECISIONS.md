@@ -1384,3 +1384,23 @@ or kept with the reason said (27).
     could not run, which blocks where a hook can block, as a failed
     command does. Not built: agent hooks ("type": "agent").
 
+90. **MCP elicitation, as Claude Code's.** An MCP server may ask the
+    person for a few values in the middle of a call (elicitation/create:
+    a message and a flat schema of string, number, integer, boolean and
+    enum fields). gnosh declares the capability only in a session someone
+    attends; in a run it is not declared, and a request is refused. The
+    request is put as a form like the model's own questions: the server's
+    message on top, under the server's name, then one question for each
+    field (a boolean is Yes or No, an enum offers its values by their
+    enumNames, anything else is typed in); a request with no fields asks
+    whether to go on. The answers are held to each field's type, bounds,
+    length and format (email, uri, date, date-time); one that does not fit
+    is said and asked again, twice at most, and then the request is
+    declined. Esc on the form answers cancel and the turn goes on, since
+    the server decides what follows (Esc on the model's own questions
+    stops the turn). Stopping the turn while the form is up takes it back
+    and answers cancel; a server that takes its request back
+    (notifications/cancelled), or a connection that ends, withdraws it and
+    is sent nothing. A server's form goes to the person only, never to a
+    channel. Not built: later MCP versions' URL mode, field defaults
+    filled in, and the Elicitation and ElicitationResult hooks.
