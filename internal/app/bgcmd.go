@@ -103,7 +103,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	}
 	writeRunPID(log, pid)
 	short := runShort(id)
-	fmt.Fprintf(p.stdout, "gnosh: backgrounded · %s · process %d\n", id, pid)
+	fmt.Fprintf(p.stdout, "%s%s · process %d\n", bgStarted, id, pid)
 	hints := [][2]string{
 		{"gnosh agents", "lists the sessions in the background"},
 		{"gnosh logs " + short, "what it prints (-f follows it)"},
@@ -316,15 +316,19 @@ func runState(r backgroundRun) string {
 
 // agentsCommand is gnosh agents, as Claude Code has claude agents: the
 // sessions in the background (gnosh --bg, /background, /fork) of every
-// folder, or, with --cwd, of that folder and the folders under it. Claude
-// Code's opens a view to work in; gnosh's prints the list, the working
-// ones first: those done in the last week follow, or with --all every one
-// whose log is kept. --json prints them as JSON, the working ones only
-// unless --all is given too, as Claude Code's does.
+// folder, or, with --cwd, of that folder and the folders under it. On a
+// terminal it opens the agent view to work in (agentview.go), as Claude
+// Code's does. Elsewhere it prints the list, the working ones first: those
+// done in the last week follow, or with --all every one whose log is
+// kept. --json prints them as JSON, the working ones only unless --all is
+// given too, as Claude Code's does.
 func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 	st, code := p.prepared(ctx, inv)
 	if st == nil {
 		return code
+	}
+	if !inv.JSON && p.o.AgentView != nil {
+		return p.agentView(st, inv)
 	}
 	now := p.now()
 	since := now.Add(-runsKept)

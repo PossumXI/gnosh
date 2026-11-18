@@ -104,14 +104,8 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			chosen.typed, implied)
 	}
 
-	// Permissions: -y is a permission mode, so it cannot sit beside another.
-	if y := p.given(idYolo); y != nil {
-		if m := p.given(idMode); m != nil && inv.PermissionMode != ModeBypassPermissions {
-			return fail(ErrConflict, y.typed,
-				"%s skips every permission question and %s %s starts in another mode, so nothing was started. Keep one of them.",
-				y.typed, m.typed, inv.PermissionMode)
-		}
-		inv.PermissionMode = ModeBypassPermissions
+	if err := finishYolo(inv, p); err != nil {
+		return err
 	}
 
 	// Flags that only print mode acts on (a session sent off with --bg
@@ -226,4 +220,21 @@ func (t *Table) find(words []string) (*command, *Error) {
 		c = sub
 	}
 	return c, nil
+}
+
+// finishYolo settles -y, which is a permission mode, so it cannot sit
+// beside another: for gnosh, and for gnosh agents, whose view gives it to
+// the runs it starts.
+func finishYolo(inv *Invocation, p *parsed) *Error {
+	y := p.given(idYolo)
+	if y == nil {
+		return nil
+	}
+	if m := p.given(idMode); m != nil && inv.PermissionMode != ModeBypassPermissions {
+		return &Error{Kind: ErrConflict, Typed: y.typed, Message: fmt.Sprintf(
+			"%s skips every permission question and %s %s starts in another mode, so nothing was started. Keep one of them.",
+			y.typed, m.typed, inv.PermissionMode)}
+	}
+	inv.PermissionMode = ModeBypassPermissions
+	return nil
 }

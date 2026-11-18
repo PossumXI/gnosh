@@ -363,6 +363,11 @@ func hex4(input []byte, at int) (rune, bool) {
 // complete, and nil while they are still being written; raw is then what
 // has arrived of them.
 func (s *session) headOf(name string, raw []byte, action *core.Action) head {
+	return callHead(s.cwd, s.home, name, raw, action)
+}
+
+// callHead is headOf for a call made in the folder cwd.
+func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 	args := argsOf(raw)
 	get := func(key string) string {
 		if args != nil {
@@ -371,7 +376,7 @@ func (s *session) headOf(name string, raw []byte, action *core.Action) head {
 		v, _ := partialString(raw, key)
 		return v
 	}
-	path := func(key string) string { return showPath(s.cwd, s.home, get(key)) }
+	path := func(key string) string { return showPath(cwd, home, get(key)) }
 	h := head{name: name}
 	switch name {
 	case "Bash":
@@ -410,7 +415,7 @@ func (s *session) headOf(name string, raw []byte, action *core.Action) head {
 			h.arg += " in files named " + oneLine(g)
 		}
 		if p := get("path"); p != "" {
-			h.arg += " under " + showPath(s.cwd, s.home, p)
+			h.arg += " under " + showPath(cwd, home, p)
 		}
 	case "gnovm_run":
 		if vm := get("name"); vm != "" && vm != "mem" && vm != "scratch" {

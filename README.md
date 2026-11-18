@@ -34,8 +34,11 @@ Built:
   `/fork`), or start that way from a shell (`gnosh --bg "fix the flaky
   test"`, as Claude Code's `claude --bg`); `/tasks` lists the sessions
   sent off from the folder, running or with the last line each printed,
-  `gnosh agents` those of every folder (`--json`, `--all`, `--cwd`),
-  `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  `gnosh agents` those of every folder (`--json`, `--all`, `--cwd`): on a
+  terminal, a live view of them, as Claude Code's agent view, in which
+  Space peeks at one, Enter watches a working one's conversation or opens
+  one that is over, Ctrl+X stops one, and a prompt typed at the bottom
+  starts another; `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small

@@ -86,6 +86,11 @@ type Options struct {
 	// session in place of the plain one that reads lines. It is where a
 	// full interface is attached.
 	Interactive func(FrontendInfo) Frontend
+	// AgentView, when not nil, is the agent view gnosh agents opens on a
+	// terminal (agentview.go): it runs until the person leaves it, and
+	// returns the exit code. Nil means there is no terminal to draw it on,
+	// and gnosh agents prints the list.
+	AgentView func(AgentViewInfo) int
 
 	// OpenTerminal, when not nil, opens the terminal the process is
 	// attached to for reading, whatever standard input is: it is how a

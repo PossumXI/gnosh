@@ -174,7 +174,13 @@ func (p *Panel) Commit(lines ...string) error {
 func (p *Panel) SetLines(lines ...string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	top := p.topLocked()
+	p.setLinesLocked(lines, p.topLocked())
+	return p.paintLocked()
+}
+
+// setLinesLocked is SetLines but for the drawing: top is the row that
+// was at the view's top.
+func (p *Panel) setLinesLocked(lines []string, top int) {
 	p.hist, p.since = p.hist[:0], p.since[:0]
 	for _, l := range lines {
 		for _, part := range strings.Split(l, "\n") {
@@ -189,6 +195,22 @@ func (p *Panel) SetLines(lines ...string) error {
 	if p.back > 0 {
 		p.back = min(max(len(p.hist)-p.viewRows()-top, 0), p.maxBack())
 	}
+}
+
+// SetView is SetLines and SetLive at once, drawn once: a view that lays
+// out the whole screen on every frame (the agent view) draws no frame
+// that is half the old one.
+func (p *Panel) SetView(lines, live []string, cursorRow, cursorCol int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	top := p.topLocked()
+	p.live = p.live[:0]
+	for _, l := range live {
+		p.live = append(p.live, p.left.prepare(l))
+	}
+	p.wantShown = cursorRow >= 0
+	p.wantRow, p.wantCol = max(cursorRow, 0), max(cursorCol, 0)
+	p.setLinesLocked(lines, top)
 	return p.paintLocked()
 }
 

@@ -21,8 +21,9 @@ Commands
                           yet.)
   prompt <command>        Read gnosh's own words to the model, and make any of
                           them yours. (Not built yet.)
-  agents                  List the sessions that run in the background, and
-                          those that ran. (Not built yet.)
+  agents                  The sessions that run in the background, and those
+                          that ran: a view of them on a terminal. (Not built
+                          yet.)
   logs [session]          Print the end of the project's log, or follow it.
                           (Not built yet.)
   stop <session>          Stop a session that runs in the background. (Not

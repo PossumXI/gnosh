@@ -413,9 +413,10 @@ func Default() *Table {
 		about:   "With no name, every text. A file that is there is kept unless --force is given. An exported text changes nothing until its words are changed: its first line marks it as gnosh's own, and is never sent."})
 
 	t.command(root, &command{name: "agents", cmd: CmdAgents, pri: 1,
-		flags:   []*flag{agentsJSON, agentsAll, cwd, help},
-		summary: "List the sessions that run in the background, and those that ran.",
-		about:   "The sessions gnosh --bg, /background and /fork started, from every folder (with --cwd, from that folder and the folders in it): the working ones first, then those done in the last week. Each is named by the start of its ID, which gnosh logs, gnosh stop and gnosh -r take."})
+		flags:   []*flag{agentsJSON, agentsAll, cwd, yolo, mode, model, effort, help},
+		finish:  func(inv *Invocation, p *parsed, _ Env) *Error { return finishYolo(inv, p) },
+		summary: "The sessions that run in the background, and those that ran: a view of them on a terminal.",
+		about:   "The sessions gnosh --bg, /background and /fork started, from every folder (with --cwd, from that folder and the folders in it): the working ones first, then those done in the last week. On a terminal it is a view to work in, as Claude Code's agent view: Space peeks at a run, Enter watches a working one or opens one that is over, Ctrl+X stops one, a prompt typed at the bottom starts one, and ? lists the keys; -y, --permission-mode, --model and --effort go to the runs it starts. Elsewhere, and with --json, it prints the list, each run named by the start of its ID, which gnosh logs, gnosh stop and gnosh -r take."})
 
 	t.command(root, &command{name: "logs", cmd: CmdLogs, pri: 1, maxArgs: 1, argsUsage: "[session]",
 		flags:   []*flag{logsFollow, logsTail, cwd, help},

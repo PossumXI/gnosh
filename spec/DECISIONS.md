@@ -1833,3 +1833,28 @@ or kept with the reason said (27).
     second call in the same round is refused without moving the run.
     stop true does not end the turn: the model may say what came of the
     loop.
+
+115. **gnosh agents on a terminal is Claude Code's agent view.** Claude
+    Code's `claude agents` opens a view to work in
+    (code.claude.com/docs/en/agent-view, read 18 November 2026); gnosh's
+    printed a list (108). Now, on a terminal and without --json, it takes
+    the whole screen: the runs grouped as Working and Completed, each
+    with its name, what it does now (the call it makes, read from the
+    end of its session's file, or "thinking" while the model has the
+    turn) or the last line it printed, and its age, frozen at its end for
+    one that is over; a box at the bottom starts a run on a prompt (gnosh
+    --bg run as a child, in the view's folder; under four characters is
+    "Too short", as Claude Code's), and n:, s: and o: in it filter the
+    list. Space peeks (the prompt, the last steps or the answer), Enter
+    watches a working run's conversation as the transcript view lays it
+    out, growing as the file does, or opens one that is over with gnosh
+    -r, the view giving the terminal up and taking it back after; Ctrl+X
+    stops a working run, and twice within two seconds takes one that is
+    over off the list (its log goes, its session stays). Off a terminal,
+    and with --json, the list is printed as before. Left out, because
+    gnosh's runs are -p runs and not live sessions: attaching to a working
+    run's prompt (it is watched instead), replies sent from a peek, the
+    Needs input group (a run asks nobody), pins and the idle-process
+    reaping they guard against, PR labels, grouping by folder, and the
+    `<` key that backgrounds a session into the view (/background does
+    that).

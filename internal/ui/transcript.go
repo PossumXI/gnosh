@@ -293,14 +293,18 @@ func (s *session) viewTail(width int) []string {
 
 // viewThought lays out reasoning, its blank lines left out.
 func (s *session) viewThought(words string, width int) []string {
-	th := &s.th
+	return thoughtLines(&s.th, s.m, words, width)
+}
+
+// thoughtLines is viewThought in the look th.
+func thoughtLines(th *Theme, m text.Metrics, words string, width int) []string {
 	var out []string
 	lead := th.Quiet.Render(th.ThinkMark) + " "
 	for _, l := range safeLines(words) {
 		if strings.TrimSpace(l) == "" {
 			continue
 		}
-		out = append(out, wrap(s.m, th.Thinking.Render(l), width, lead, "  ")...)
+		out = append(out, wrap(m, th.Thinking.Render(l), width, lead, "  ")...)
 		lead = "  "
 	}
 	return out
@@ -309,7 +313,11 @@ func (s *session) viewThought(words string, width int) []string {
 // transcriptLines lays entries out at width: their lines, and the rows
 // the person's prompts start at. With all, nothing is cut.
 func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all bool) (lines []string, prompts []int) {
-	th := &s.th
+	return layTranscript(&s.th, s.m, entries, width, all)
+}
+
+// layTranscript is transcriptLines in the look th.
+func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, width int, all bool) (lines []string, prompts []int) {
 	width = max(width, 10)
 	// Each call is shown with its result, which comes in the entry after
 	// the reply that made the call.
@@ -336,7 +344,7 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 			if prose && strings.TrimSpace(l) == "" {
 				continue
 			}
-			out = append(out, wrap(s.m, style(l), width, lead, rest)...)
+			out = append(out, wrap(m, style(l), width, lead, rest)...)
 			lead = rest
 		}
 		return out
@@ -351,7 +359,7 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 		return append(rows[:viewPart:viewPart], quiet(fmt.Sprintf("    … %s: Ctrl+E shows all", count(len(rows)-viewPart, "more line", "more lines"))))
 	}
 	call := func(b core.Block) {
-		add(wrap(s.m, th.Tool.Render(th.ToolMark)+" "+th.ToolName.Render(oneLine(b.Name)), width, "", "  ")...)
+		add(wrap(m, th.Tool.Render(th.ToolMark)+" "+th.ToolName.Render(oneLine(b.Name)), width, "", "  ")...)
 		add(part(rowsOf(viewJSON(b.Input), quiet, "    ", "    ", false))...)
 		r, ok := results[b.ID]
 		if !ok {
@@ -382,7 +390,7 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 				add(mark + quiet(when))
 				continue
 			}
-			add(rowsOf(texts[0], plain, mark, strings.Repeat(" ", s.m.Width(th.PromptMark)), false)...)
+			add(rowsOf(texts[0], plain, mark, strings.Repeat(" ", m.Width(th.PromptMark)), false)...)
 			// The rest came with the prompt: what gnosh and the hooks added.
 			for _, t := range texts[1:] {
 				add(part(rowsOf(unwrapped(t), quiet, "  + ", "    ", false))...)
@@ -392,13 +400,13 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 			if e.Model != "" {
 				head += th.Sep + e.Model
 			}
-			add(quiet(fit(s.m, "─ "+head+" ─", width)))
+			add(quiet(fit(m, "─ "+head+" ─", width)))
 			for _, b := range e.Message.Blocks {
 				switch b.Type {
 				case core.BlockThinking:
-					add(s.viewThought(b.Text, width)...)
+					add(thoughtLines(th, m, b.Text, width)...)
 				case core.BlockText:
-					md := markdown.New(markdown.Options{Width: width, Profile: th.Profile, Theme: th.Markdown, Metrics: s.m})
+					md := markdown.New(markdown.Options{Width: width, Profile: th.Profile, Theme: th.Markdown, Metrics: m})
 					add(append(md.Write(b.Text), md.Close()...)...)
 				case core.BlockToolUse:
 					call(b)
@@ -443,7 +451,7 @@ func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all 
 			case "pop":
 				add(rowsOf(e.Frame+" done: "+e.Text, quiet, "⇤ step ", "  ", true)...)
 			default:
-				add(quiet(fit(s.m, "⋯ older work slid out of what the model is sent", width)))
+				add(quiet(fit(m, "⋯ older work slid out of what the model is sent", width)))
 			}
 		}
 	}

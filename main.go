@@ -77,6 +77,7 @@ func main() {
 		// or TERM says the terminal is dumb) this is nil, and an
 		// interactive session is the plain one that reads lines.
 		Interactive:  ui.New(ui.Options{In: os.Stdin, Out: os.Stdout, Getenv: os.Getenv}),
+		AgentView:    ui.NewAgentView(ui.Options{In: os.Stdin, Out: os.Stdout, Getenv: os.Getenv}),
 		OpenTerminal: func() (io.ReadCloser, error) { return os.Open("/dev/tty") },
 		Signals:      signals,
 		Exit:         os.Exit,

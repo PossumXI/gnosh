@@ -235,13 +235,19 @@ const (
 // backgroundRun is a run in the background that gnosh --bg, /background or
 // /fork started: the session it goes on with, its prompt and name, its log, the
 // folder it works in, the session's file, when it started, whether it
-// still runs or was stopped, and the last line it printed.
+// still runs or was stopped, the last line it printed, and the last
+// runOutputKept lines that were not empty.
 type backgroundRun struct {
 	session, prompt, name, log, cwd, file string
 	started                               time.Time
 	running, stopped                      bool
 	last                                  string
+	output                                []string
 }
+
+// runOutputKept is how many of the last lines a run printed readRunLog
+// keeps: what the agent view shows of a run that is over.
+const runOutputKept = 40
 
 // runsShown is how many runs in the background /tasks lists, the newest
 // first, and runsKept how old a run's log may be to be among them, and
@@ -373,13 +379,18 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			if terr == nil {
 				if p, ok := strings.CutPrefix(after, "the session "+id+" goes on in the background with: "); ok {
 					r.prompt, r.name, r.last, r.file, r.cwd, r.stopped, r.started = p, "", "", "", "", false, t
+					r.output = r.output[:0]
 					head = true
 					continue
 				}
 			}
 		}
-		if line = strings.TrimSpace(line); line != "" {
-			r.last = line
+		if strings.TrimSpace(line) != "" {
+			r.last = strings.TrimSpace(line)
+			if len(r.output) == runOutputKept {
+				r.output = append(r.output[:0], r.output[1:]...)
+			}
+			r.output = append(r.output, strings.TrimRight(line, " \t\r"))
 		}
 	}
 	return r

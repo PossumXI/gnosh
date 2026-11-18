@@ -1,0 +1,1151 @@
+package ui
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/term"
+	"github.com/gnosh-ai/gnosh/internal/text"
+	"github.com/gnosh-ai/gnosh/internal/ui/editor"
+)
+
+// The agent view: gnosh agents on a terminal, as claude agents opens
+// Claude Code's (code.claude.com/docs/en/agent-view, read 18 November
+// 2026). On the whole screen are the runs in the background, the working
+// ones and then those that are over, each with what it is doing or what
+// it answered, and under them a box in which a prompt starts a new one.
+// Space peeks at the run chosen; Enter watches a working run's
+// conversation as it grows, or opens one that is over (gnosh -r, and the
+// view comes back when that session is left); Ctrl+X stops a working
+// run, and twice takes one that is over off the list. What it shows and
+// does it asks of app.AgentSource (app/agentview.go).
+//
+//	The list has the keys
+//	Up, Down, PgUp, PgDn,        choose a run
+//	Home, End, the wheel
+//	Space                        (empty box) peek at the run chosen, or stop
+//	Enter, Right                 (empty box) watch the run, or open it once it is over
+//	Enter                        (a prompt in the box) start a run on it, in the folder of the view
+//	n:<text> s:<state> o:<text>  in the box: list only the runs whose name or prompt, state, or
+//	                             answer has it; Enter then opens the run chosen
+//	Ctrl+X                       stop the run; on one that is over, twice: take it off the list
+//	?                            (empty box) the keys
+//	Esc                          stop peeking, empty the box, or leave
+//	Ctrl+C                       empty the box; twice: leave
+//	Ctrl+L                       draw the screen again
+//	Ctrl+Z                       suspend gnosh; fg brings it back
+//
+//	A run is watched
+//	Up, Down, PgUp, PgDn,        scroll
+//	Home, End, the wheel
+//	Esc, Left, q, Ctrl+C         back to the list
+//	Ctrl+X                       stop it
+//	Enter                        open it, once it is over
+
+// How often the view looks again, and how long what it says lasts.
+const (
+	// agentLook is how often the list is read again, and watchLook how
+	// often the conversation of the run watched is.
+	agentLook = time.Second
+	watchLook = 300 * time.Millisecond
+	// agentPair is how soon the second Ctrl+X or Ctrl+C must follow the
+	// first, and agentSaid how long a line that says what came of a key
+	// stays.
+	agentPair = 2 * time.Second
+	agentSaid = 6 * time.Second
+	// minDispatch is the shortest prompt that starts a run: shorter is
+	// taken for a slip of the keys, as Claude Code's "Too short" does.
+	minDispatch = 4
+	// peekRows is how many lines peeking shows of what a run did.
+	peekRows = 8
+)
+
+// NewAgentView makes the agent view of gnosh agents (app.Options's
+// AgentView), or returns nil where there is no terminal to draw it on, as
+// New does.
+func NewAgentView(o Options) func(app.AgentViewInfo) int {
+	if o.Open == nil {
+		if !term.IsTerminal(o.In) || !term.IsTerminal(o.Out) {
+			return nil
+		}
+		if o.Getenv != nil && strings.EqualFold(o.Getenv("TERM"), "dumb") {
+			return nil
+		}
+	}
+	return func(info app.AgentViewInfo) int { return runAgentView(o, info) }
+}
+
+// agentView is what the view shows, and what it does with a key: a value
+// with no terminal behind it, which the loop in runAgentView feeds and
+// draws (and the tests drive).
+type agentView struct {
+	th   Theme
+	m    text.Metrics
+	now  func() time.Time
+	info app.AgentViewInfo
+	src  app.AgentSource
+	// async runs work away from the loop; what it returns is done on the
+	// loop afterwards.
+	async func(work func() func(*agentView))
+
+	runs []app.AgentRun
+	// doing is what each working run is doing, from the end of its
+	// conversation, its last step last; status says it in one line.
+	doing  map[string][]string
+	status map[string]string
+	looked time.Time
+	// sel is the id of the run chosen, and at its place in the list
+	// shown, for when it is gone from the list.
+	sel string
+	at  int
+	// top is the first run of the list shown, when the list is longer
+	// than the screen.
+	top int
+
+	peek, help bool
+	box        *editor.Editor
+	// said is a line that says what came of a key, until saidUntil.
+	said      string
+	saidUntil time.Time
+	// armed is the key waiting for its second press ("x <id>", or "c"),
+	// until armedUntil.
+	armed      string
+	armedUntil time.Time
+	// stopping are the runs asked to stop, and starting how many runs are
+	// being started.
+	stopping map[string]bool
+	starting int
+
+	watch *watching
+	// open is the run whose session is to be opened (gnosh -r), and
+	// suspend says the person pressed Ctrl+Z: the loop does both.
+	open    string
+	suspend bool
+	quit    bool
+	clear   bool
+}
+
+// watching is the run whose conversation is on the screen, laid out, and
+// the scrolling asked for that the loop is to do: rows and pages back (or
+// forward, when less than zero), to the start, to the end.
+type watching struct {
+	id          string
+	lines       []string
+	shown       int
+	width       int
+	looked      time.Time
+	rows, pages int
+	start, end  bool
+}
+
+func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.AgentViewInfo) *agentView {
+	v := &agentView{th: th, m: m, now: now, info: info, src: info.Source,
+		doing: map[string][]string{}, status: map[string]string{}, stopping: map[string]bool{}}
+	v.async = func(work func() func(*agentView)) { work()(v) }
+	v.box = editor.New(editor.Options{
+		Theme:       th.Editor,
+		Metrics:     m,
+		Plain:       true,
+		MaxHeight:   4,
+		Now:         now,
+		Placeholder: "a prompt starts a run in the background · n: s: o: filter the list",
+	})
+	return v
+}
+
+// refresh reads the list again, and what each working run is doing.
+func (v *agentView) refresh() {
+	v.looked = v.now()
+	v.runs = v.src.Runs()
+	// The working ones first, whatever order the source keeps.
+	slices.SortStableFunc(v.runs, func(a, b app.AgentRun) int {
+		return cmp.Compare(boolInt(a.State != "working"), boolInt(b.State != "working"))
+	})
+	doing, status := map[string][]string{}, map[string]string{}
+	for _, r := range v.runs {
+		if r.State != "working" {
+			delete(v.stopping, r.ID)
+			continue
+		}
+		doing[r.ID], status[r.ID] = v.activity(r, v.src.Conversation(r.ID))
+	}
+	v.doing, v.status = doing, status
+	v.keepChoice()
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// keepChoice keeps the run chosen chosen: when it is no longer listed, the
+// one now in its place is.
+func (v *agentView) keepChoice() {
+	shown := v.shown()
+	if len(shown) == 0 {
+		v.sel, v.at = "", 0
+		return
+	}
+	for i, r := range shown {
+		if r.ID == v.sel {
+			v.at = i
+			return
+		}
+	}
+	v.at = min(max(v.at, 0), len(shown)-1)
+	v.sel = shown[v.at].ID
+}
+
+// activity is what a working run's conversation says it did last, a line a
+// step, and what it is doing now, in one line.
+func (v *agentView) activity(r app.AgentRun, entries []app.TranscriptEntry) (lines []string, now string) {
+	if len(entries) > 4*peekRows {
+		entries = entries[len(entries)-4*peekRows:]
+	}
+	waiting := false // the model has the turn: it was sent a prompt or results
+	for _, e := range entries {
+		switch e.Kind {
+		case "prompt":
+			// (Its first prompt is said above what it did.)
+			if texts := blockTexts(e.Message); len(texts) > 0 && !e.Hidden && strings.TrimSpace(texts[0]) != strings.TrimSpace(r.Prompt) {
+				lines = append(lines, v.th.PromptMark+firstOf(texts[0]))
+			}
+			waiting = true
+		case "results":
+			for _, b := range e.Message.Blocks {
+				if b.Type == core.BlockToolResult && b.IsError {
+					lines = append(lines, v.th.FailMark+" "+firstOf(resultText(b)))
+				}
+			}
+			waiting = true
+		case "reply":
+			for _, b := range e.Message.Blocks {
+				switch b.Type {
+				case core.BlockText:
+					if l := firstOf(b.Text); l != "" {
+						lines = append(lines, l)
+					}
+				case core.BlockToolUse:
+					lines = append(lines, v.th.ToolMark+" "+callLine(callHead(r.Cwd, v.info.Home, b.Name, b.Input, nil)))
+				}
+			}
+			waiting = false
+		case "summary":
+			lines = append(lines, "(the conversation so far was summed up)")
+		}
+	}
+	if len(lines) > peekRows {
+		lines = lines[len(lines)-peekRows:]
+	}
+	switch {
+	case waiting && len(entries) > 0:
+		now = "thinking"
+	case len(lines) > 0:
+		now = strings.TrimPrefix(lines[len(lines)-1], v.th.ToolMark+" ")
+	default:
+		now = "starting"
+	}
+	return lines, now
+}
+
+// firstOf is the first line of outside text that is not blank, safe to
+// draw.
+func firstOf(s string) string {
+	l, _ := firstLine(s)
+	return l
+}
+
+// callLine is a call in one line: the command behind "$", or the tool
+// and what it is about.
+func callLine(h head) string {
+	switch {
+	case h.shell:
+		if h.host != "" {
+			return h.host + " $ " + h.arg
+		}
+		return "$ " + h.arg
+	case h.code:
+		for _, l := range h.body {
+			if strings.TrimSpace(l) != "" {
+				return strings.TrimSpace(h.name+" "+h.arg) + ": " + strings.TrimSpace(l)
+			}
+		}
+	}
+	return strings.TrimSpace(h.name + " " + h.arg)
+}
+
+// filter is what the box says to list, when what is in it is a filter:
+// words that begin with n:, s: or o:.
+type filter struct{ names, states, outputs []string }
+
+// boxFilter reads the box as a filter.
+func (v *agentView) boxFilter() (filter, bool) {
+	var f filter
+	words := strings.Fields(v.box.Text())
+	if len(words) == 0 {
+		return f, false
+	}
+	for _, w := range words {
+		key, val, ok := strings.Cut(w, ":")
+		if !ok || len(key) != 1 {
+			return filter{}, false
+		}
+		val = strings.ToLower(val)
+		switch key {
+		case "n":
+			f.names = append(f.names, val)
+		case "s":
+			f.states = append(f.states, val)
+		case "o":
+			f.outputs = append(f.outputs, val)
+		default:
+			return filter{}, false
+		}
+	}
+	return f, true
+}
+
+// passes reports whether the filter lists r.
+func (f filter) passes(r app.AgentRun) bool {
+	has := func(s, part string) bool { return strings.Contains(strings.ToLower(s), part) }
+	for _, n := range f.names {
+		if !has(r.Name, n) && !has(r.Prompt, n) && !strings.HasPrefix(r.ID, n) {
+			return false
+		}
+	}
+	for _, s := range f.states {
+		// s:blocked is Claude Code's for what waits on the person: a run
+		// in the background here never does.
+		if !strings.HasPrefix(r.State, s) && !(s == "completed" && r.State != "working") {
+			return false
+		}
+	}
+	for _, o := range f.outputs {
+		if o != "" && !has(strings.Join(r.Output, "\n"), o) || o == "" && len(r.Output) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// shown are the runs listed, as the filter in the box leaves them.
+func (v *agentView) shown() []app.AgentRun {
+	f, ok := v.boxFilter()
+	if !ok {
+		return v.runs
+	}
+	var out []app.AgentRun
+	for _, r := range v.runs {
+		if f.passes(r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// chosen is the run chosen, if any.
+func (v *agentView) chosen() (app.AgentRun, bool) {
+	for _, r := range v.shown() {
+		if r.ID == v.sel {
+			return r, true
+		}
+	}
+	return app.AgentRun{}, false
+}
+
+// name is what a run is called on the screen: its name, or the start of
+// its id.
+func runName(r app.AgentRun) string {
+	if r.Name != "" {
+		return oneLine(r.Name)
+	}
+	return r.Short
+}
+
+// say shows a line that says what came of a key, for a while.
+func (v *agentView) say(format string, args ...any) {
+	v.said, v.saidUntil = fmt.Sprintf(format, args...), v.now().Add(agentSaid)
+}
+
+// tick looks again when it is time, and lets lines and keys that waited
+// too long go.
+func (v *agentView) tick() {
+	now := v.now()
+	if now.Sub(v.looked) >= agentLook {
+		v.refresh()
+	}
+	if v.watch != nil && now.Sub(v.watch.looked) >= watchLook {
+		v.layWatch(false)
+	}
+	if v.said != "" && now.After(v.saidUntil) {
+		v.said = ""
+	}
+	if v.armed != "" && now.After(v.armedUntil) {
+		v.armed = ""
+	}
+}
+
+// input takes in one thing the terminal reported.
+func (v *agentView) input(ev term.Event) {
+	if v.watch != nil {
+		v.watchInput(ev)
+		return
+	}
+	switch ev := ev.(type) {
+	case term.Key:
+		v.key(ev)
+	case term.Paste:
+		v.box.Handle(ev)
+		v.keepChoice()
+	case term.Mouse:
+		switch ev.Action {
+		case term.MouseWheelUp:
+			v.move(-1)
+		case term.MouseWheelDown:
+			v.move(1)
+		}
+	}
+}
+
+// move chooses the run n places down the list (up, for a negative n).
+func (v *agentView) move(n int) {
+	shown := v.shown()
+	if len(shown) == 0 {
+		return
+	}
+	v.at = min(max(v.at+n, 0), len(shown)-1)
+	v.sel = shown[v.at].ID
+}
+
+// key takes in a key while the list is on the screen.
+func (v *agentView) key(k term.Key) {
+	empty := strings.TrimSpace(v.box.Text()) == ""
+	page := 10
+	if k.Is('c', term.ModCtrl) {
+		switch {
+		case !empty:
+			v.box.Reset()
+			v.keepChoice()
+		case v.armed == "c":
+			v.quit = true
+		default:
+			v.armed, v.armedUntil = "c", v.now().Add(agentPair)
+			v.say("Ctrl+C again leaves the view; the runs go on.")
+		}
+		return
+	}
+	if v.armed == "c" {
+		v.armed = ""
+	}
+	switch {
+	case k.IsKey(term.KeyUp, 0):
+		v.move(-1)
+	case k.IsKey(term.KeyDown, 0):
+		v.move(1)
+	case k.IsKey(term.KeyPageUp, 0):
+		v.move(-page)
+	case k.IsKey(term.KeyPageDown, 0):
+		v.move(page)
+	case k.IsKey(term.KeyHome, 0):
+		v.move(-1 << 30)
+	case k.IsKey(term.KeyEnd, 0):
+		v.move(1 << 30)
+	case k.IsKey(term.KeyEscape, 0):
+		switch {
+		case v.help:
+			v.help = false
+		case v.peek:
+			v.peek = false
+		case !empty:
+			v.box.Reset()
+			v.keepChoice()
+		default:
+			v.quit = true
+		}
+	case k.Is('l', term.ModCtrl):
+		v.clear = true
+	case k.Is('z', term.ModCtrl):
+		v.suspend = true
+	case k.Is('x', term.ModCtrl):
+		v.stopOrForget()
+	case empty && typedRune(k, ' '):
+		v.peek, v.help = !v.peek, false
+	case empty && typedRune(k, '?'):
+		v.help = !v.help
+	case k.IsKey(term.KeyEnter, 0), empty && k.IsKey(term.KeyRight, 0):
+		v.enter()
+	default:
+		if v.box.Handle(k).Changed {
+			// What was said of the last key gives way to the keys of
+			// what is being typed.
+			v.said = ""
+		}
+		v.keepChoice()
+	}
+}
+
+// enter is Enter: start a run on what is in the box, or with the box empty
+// (or a filter in it), watch or open the run chosen.
+func (v *agentView) enter() {
+	prompt := strings.TrimSpace(v.box.Text())
+	if _, isFilter := v.boxFilter(); prompt != "" && !isFilter {
+		v.dispatch(prompt)
+		return
+	}
+	r, ok := v.chosen()
+	if !ok {
+		if prompt == "" {
+			v.say("There is no run to open: type a prompt and Enter to start one.")
+		}
+		return
+	}
+	if r.State == "working" {
+		v.watch = &watching{id: r.ID, end: true}
+		return
+	}
+	v.open = r.ID
+}
+
+// dispatch starts a run on the prompt.
+func (v *agentView) dispatch(prompt string) {
+	if len([]rune(prompt)) < minDispatch {
+		v.say("Too short: a prompt of %d characters or more starts a run.", minDispatch)
+		return
+	}
+	v.box.Reset()
+	v.starting++
+	v.say("Starting a run in %s …", v.folder())
+	src := v.src
+	v.async(func() func(*agentView) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		id, err := src.Dispatch(ctx, prompt)
+		return func(v *agentView) {
+			v.starting--
+			if err != nil {
+				v.say("The run was not started: %v.", err)
+				return
+			}
+			v.refresh()
+			v.sel = id
+			v.keepChoice()
+			v.say("Started %s: Enter watches it.", runShortOf(id))
+		}
+	})
+}
+
+// runShortOf is the start of a session's id that names its run, as the
+// app's list gives it.
+func runShortOf(id string) string {
+	if len(id) > 13 && id[8] == '-' {
+		return id[:13]
+	}
+	return id
+}
+
+// folder is where a run started from the view works, the short way.
+func (v *agentView) folder() string {
+	return showPath("", v.info.Home, v.info.Cwd)
+}
+
+// stopOrForget is Ctrl+X: a working run is asked to stop; one that is
+// over is taken off the list at the second press.
+func (v *agentView) stopOrForget() {
+	r, ok := v.chosen()
+	if !ok {
+		return
+	}
+	name := runName(r)
+	if r.State == "working" {
+		if v.stopping[r.ID] {
+			v.say("%s was asked to stop, and ends what it was doing first.", name)
+			return
+		}
+		v.stop(r)
+		return
+	}
+	if v.armed == "x "+r.ID {
+		v.armed = ""
+		if err := v.src.Forget(r.ID); err != nil {
+			v.say("%s was not taken off the list: %v.", name, err)
+			return
+		}
+		v.refresh()
+		v.say("%s is off the list. Its session is kept: gnosh -r %s opens it.", name, r.Short)
+		return
+	}
+	v.armed, v.armedUntil = "x "+r.ID, v.now().Add(agentPair)
+	v.say("Ctrl+X again takes %s off the list; its session is kept.", name)
+}
+
+// stop asks a working run to stop, away from the loop.
+func (v *agentView) stop(r app.AgentRun) {
+	v.stopping[r.ID] = true
+	name := runName(r)
+	v.say("%s was asked to stop; it ends what it was doing first.", name)
+	src := v.src
+	v.async(func() func(*agentView) {
+		said, err := src.Stop(context.Background(), r.ID)
+		return func(v *agentView) {
+			v.refresh()
+			if err != nil {
+				delete(v.stopping, r.ID)
+				v.say("%s: %v.", name, err)
+				return
+			}
+			said = strings.ReplaceAll(said, r.ID, r.Short)
+			v.say("%s", strings.TrimSuffix(strings.Replace(said, "the session "+r.Short, name, 1), "."))
+		}
+	})
+}
+
+// layWatch lays out the conversation of the run watched again, when it
+// has more in it or force says to.
+func (v *agentView) layWatch(force bool) {
+	w := v.watch
+	w.looked = v.now()
+	entries := v.src.Conversation(w.id)
+	if !force && len(entries) == w.shown {
+		return
+	}
+	w.shown = len(entries)
+	w.lines, _ = layTranscript(&v.th, v.m, entries, max(w.width, 20), false)
+	if len(w.lines) == 0 {
+		w.lines = []string{v.th.Quiet.Render("(nothing in its conversation yet)")}
+	}
+}
+
+// watchInput takes in what the terminal reported while a run is watched.
+func (v *agentView) watchInput(ev term.Event) {
+	w := v.watch
+	switch ev := ev.(type) {
+	case term.Mouse:
+		switch ev.Action {
+		case term.MouseWheelUp:
+			w.rows += 3
+		case term.MouseWheelDown:
+			w.rows -= 3
+		}
+	case term.Key:
+		k := ev
+		switch {
+		case typedRune(k, 'q'), k.IsKey(term.KeyEscape, 0), k.IsKey(term.KeyLeft, 0), k.Is('c', term.ModCtrl):
+			v.watch = nil
+		case k.IsKey(term.KeyUp, 0):
+			w.rows++
+		case k.IsKey(term.KeyDown, 0):
+			w.rows--
+		case k.IsKey(term.KeyPageUp, 0):
+			w.pages++
+		case k.IsKey(term.KeyPageDown, 0):
+			w.pages--
+		case k.IsKey(term.KeyHome, 0):
+			w.start, w.end = true, false
+		case k.IsKey(term.KeyEnd, 0):
+			w.start, w.end = false, true
+		case k.Is('x', term.ModCtrl):
+			if r, ok := v.byID(w.id); ok && r.State == "working" && !v.stopping[r.ID] {
+				v.stop(r)
+			}
+		case k.IsKey(term.KeyEnter, 0):
+			if r, ok := v.byID(w.id); ok && r.State != "working" {
+				v.watch, v.open = nil, r.ID
+			}
+		case k.Is('l', term.ModCtrl):
+			v.clear = true
+		case k.Is('z', term.ModCtrl):
+			v.suspend = true
+		}
+	}
+}
+
+// byID is the run of the session id, as last listed.
+func (v *agentView) byID(id string) (app.AgentRun, bool) {
+	for _, r := range v.runs {
+		if r.ID == id {
+			return r, true
+		}
+	}
+	return app.AgentRun{}, false
+}
+
+// age is how long a run has run: until now, or until it was over.
+func (v *agentView) age(r app.AgentRun) string {
+	end := v.now()
+	if r.State != "working" && !r.Ended.IsZero() {
+		end = r.Ended
+	}
+	return shortAge(end.Sub(r.Started))
+}
+
+// shortAge is a time in the fewest characters: "12s", "4m", "3h", "2d".
+func shortAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", max(int(d.Seconds()), 0))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
+
+// statusOf is a run's line in the list: what it is doing, or how it ended.
+func (v *agentView) statusOf(r app.AgentRun) string {
+	last := ""
+	if len(r.Output) > 0 {
+		last = oneLine(r.Output[len(r.Output)-1])
+	}
+	switch {
+	case r.State == "working" && v.stopping[r.ID]:
+		return "stopping …"
+	case r.State == "working":
+		return firstNonEmpty(v.status[r.ID], "starting")
+	case r.State == "stopped":
+		return strings.TrimSuffix("stopped"+v.th.Sep+last, v.th.Sep)
+	}
+	return firstNonEmpty(last, "(it printed nothing)")
+}
+
+// render lays the view out for a screen cols by rows: the rows from the
+// top (body, exactly as many as there is room for above live), and the
+// rows at the bottom, with the cursor's place among them.
+func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int) {
+	if v.watch != nil {
+		return v.renderWatch(cols)
+	}
+	th := &v.th
+	width := max(cols, 10)
+	view := v.box.Render(width)
+	live = append(live, view.Lines...)
+	crow, ccol = view.CursorRow, view.CursorCol
+	live = append(live, fit(v.m, v.hintLine(), width))
+	room := max(rows-len(live), 1)
+
+	shown := v.shown()
+	working := 0
+	for _, r := range v.runs {
+		if r.State == "working" {
+			working++
+		}
+	}
+	title := th.Wordmark.Render("gnosh agents") + th.Quiet.Render(th.Sep+count(working, "working", "working")+th.Sep+count(len(v.runs)-working, "completed", "completed"))
+	if v.info.Scoped {
+		title += th.Quiet.Render(th.Sep + "in " + v.folder())
+	}
+	if v.starting > 0 {
+		title += th.Quiet.Render(th.Sep + count(v.starting, "starting", "starting"))
+	}
+	body = append(body, fit(v.m, title, width))
+
+	// What goes under the list: peeking, or the keys.
+	var under []string
+	switch {
+	case v.help:
+		under = v.helpLines(width)
+	case v.peek:
+		if r, ok := v.chosen(); ok {
+			under = v.peekLines(r, width)
+		}
+	}
+	listRoom := max(room-len(body)-len(under), 1)
+
+	var list []string
+	selRow := -1
+	if len(shown) == 0 {
+		switch _, isFilter := v.boxFilter(); {
+		case isFilter:
+			list = append(list, th.Quiet.Render("No run is like that."))
+		case v.info.Scoped:
+			list = append(list, th.Quiet.Render("No session runs in the background from "+v.folder()+": type a prompt below and Enter to start one."))
+		default:
+			list = append(list, th.Quiet.Render("No session runs in the background: type a prompt below and Enter to start one."))
+		}
+	}
+	nameW := 0
+	for _, r := range shown {
+		nameW = max(nameW, v.m.Width(runName(r)))
+	}
+	nameW = min(nameW, 24)
+	group := ""
+	for _, r := range shown {
+		g := "Completed"
+		if r.State == "working" {
+			g = "Working"
+		}
+		if g != group {
+			group = g
+			list = append(list, th.Quiet.Render(g))
+		}
+		if r.ID == v.sel {
+			selRow = len(list)
+		}
+		list = append(list, v.runRow(r, r.ID == v.sel, nameW, width))
+	}
+	// The rows shown keep the chosen run in sight.
+	if len(list) > listRoom {
+		if selRow >= 0 {
+			if selRow < v.top {
+				v.top = max(selRow-1, 0)
+			}
+			if selRow >= v.top+listRoom {
+				v.top = selRow - listRoom + 1
+			}
+		}
+		v.top = min(max(v.top, 0), len(list)-listRoom)
+		list = list[v.top : v.top+listRoom]
+	} else {
+		v.top = 0
+	}
+	body = append(body, list...)
+	body = append(body, under...)
+	if len(body) > room {
+		body = body[:room]
+	}
+	for len(body) < room {
+		body = append(body, "")
+	}
+	return body, live, crow, ccol
+}
+
+// runRow is a run's row in the list: the pointer when it is the one
+// chosen, its mark, its name, what it is doing or answered, and its age at
+// the right.
+func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string {
+	th := &v.th
+	pointer := strings.Repeat(" ", v.m.Width(th.Menu.Pointer)+1)
+	if chosen {
+		pointer = th.Menu.PointerStyle.Render(th.Menu.Pointer) + " "
+	}
+	mark := th.Quiet.Render("∙")
+	if r.State == "working" {
+		mark = th.Busy.Render("✽")
+	}
+	name := runName(r)
+	if w := v.m.Width(name); w > nameW {
+		name = v.m.Truncate(name, nameW, "…")
+	}
+	name += strings.Repeat(" ", max(nameW-v.m.Width(name), 0))
+	if chosen {
+		name = th.Menu.Selected.Render(name)
+	}
+	age := v.age(r)
+	lead := pointer + mark + " " + name + "  "
+	room := width - v.m.VisibleWidth(lead) - v.m.Width(age) - 2
+	status := v.statusOf(r)
+	if room < 8 {
+		return fit(v.m, lead+status, width)
+	}
+	if v.m.Width(status) > room {
+		status = v.m.Truncate(status, room, "…")
+	}
+	gap := strings.Repeat(" ", max(width-v.m.VisibleWidth(lead)-v.m.Width(status)-v.m.Width(age), 1))
+	return lead + status + gap + th.Quiet.Render(age)
+}
+
+// peekLines are what peeking shows of a run: its prompt, then what it did
+// last or what it answered.
+func (v *agentView) peekLines(r app.AgentRun, width int) []string {
+	th := &v.th
+	state := r.State
+	if r.State == "working" && v.stopping[r.ID] {
+		state = "stopping"
+	}
+	head := "─ " + runName(r) + th.Sep + state + " " + v.age(r) + th.Sep + firstNonEmpty(r.Folder, "(folder not known)") + " ─"
+	out := []string{th.Quiet.Render(fit(v.m, head, width))}
+	if p := strings.TrimSpace(r.Prompt); p != "" {
+		rows := wrap(v.m, oneLine(p), width, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", v.m.Width(th.PromptMark)))
+		if len(rows) > 2 {
+			rows = append(rows[:1], fit(v.m, rows[1], width-1)+"…")
+		}
+		out = append(out, rows...)
+	}
+	var lines []string
+	if r.State == "working" {
+		lines = v.doing[r.ID]
+		if len(lines) == 0 {
+			lines = []string{th.Quiet.Render("(nothing in its conversation yet)")}
+		}
+	} else {
+		lines = r.Output
+		if len(lines) > peekRows {
+			lines = lines[len(lines)-peekRows:]
+		}
+		if len(lines) == 0 {
+			lines = []string{th.Quiet.Render("(it printed nothing)")}
+		}
+	}
+	for _, l := range lines {
+		out = append(out, fit(v.m, "  "+safeLine(l), width))
+	}
+	return out
+}
+
+// helpLines are the keys of the list.
+func (v *agentView) helpLines(width int) []string {
+	keys := [][2]string{
+		{"↑ ↓ PgUp PgDn Home End", "choose a run"},
+		{"Space", "peek at it, or stop peeking"},
+		{"Enter, →", "watch a working run as it goes; open one that is over (gnosh -r)"},
+		{"a prompt and Enter", "start a run on it in " + v.folder()},
+		{"n:<text> s:<state> o:<text>", "list only the runs whose name or prompt, state, or answer has it"},
+		{"Ctrl+X", "stop a working run; twice, take one that is over off the list"},
+		{"Esc", "stop peeking, empty the box, or leave; the runs go on"},
+	}
+	kw := 0
+	for _, k := range keys {
+		kw = max(kw, v.m.Width(k[0]))
+	}
+	out := []string{v.th.Quiet.Render(fit(v.m, "─ keys ─", width))}
+	for _, k := range keys {
+		out = append(out, fit(v.m, "  "+k[0]+strings.Repeat(" ", kw-v.m.Width(k[0]))+"  "+v.th.Quiet.Render(k[1]), width))
+	}
+	return out
+}
+
+// hintLine is the last row: what came of a key, or the keys that matter
+// now.
+func (v *agentView) hintLine() string {
+	th := &v.th
+	if v.said != "" {
+		return th.Hint.Render(oneLine(v.said))
+	}
+	text := strings.TrimSpace(v.box.Text())
+	_, isFilter := v.boxFilter()
+	var parts []string
+	switch {
+	case isFilter:
+		parts = []string{"Enter opens the run chosen", "Esc empties the box"}
+	case text != "":
+		start := "Enter starts a run in " + v.folder()
+		if len(v.info.Flags) > 0 {
+			start += " with " + strings.Join(v.info.Flags, " ")
+		}
+		parts = []string{start, "Esc empties the box"}
+	default:
+		parts = []string{"↑↓ choose", "Space peeks"}
+		if r, ok := v.chosen(); ok && r.State == "working" {
+			parts = append(parts, "Enter watches", "Ctrl+X stops")
+		} else if ok {
+			parts = append(parts, "Enter opens", "Ctrl+X twice takes it off")
+		}
+		parts = append(parts, "? keys", "Esc leaves")
+	}
+	return th.Quiet.Render(strings.Join(parts, th.Sep))
+}
+
+// renderWatch lays out a run that is watched: its conversation, and a row
+// that says whose it is and how it stands.
+func (v *agentView) renderWatch(cols int) (body, live []string, crow, ccol int) {
+	w := v.watch
+	th := &v.th
+	if w.width != cols {
+		w.width = cols
+		v.layWatch(true)
+	}
+	parts := []string{"watching"}
+	r, ok := v.byID(w.id)
+	if ok {
+		state := r.State
+		if state == "working" && v.stopping[r.ID] {
+			state = "stopping"
+		}
+		parts = []string{"watching " + runName(r), state + " " + v.age(r)}
+		if r.State == "working" {
+			parts = append(parts, "Ctrl+X stops it")
+		} else {
+			parts = append(parts, "Enter opens it")
+		}
+	}
+	parts = append(parts, "Esc goes back")
+	if v.said != "" {
+		parts = []string{oneLine(v.said)}
+	}
+	return w.lines, []string{fit(v.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols)}, -1, 0
+}
+
+// runAgentView runs the agent view until the person leaves it, and returns
+// the exit code.
+func runAgentView(o Options, info app.AgentViewInfo) (code int) {
+	env := o.Getenv
+	if env == nil {
+		env = func(string) string { return "" }
+	}
+	now := o.Now
+	if now == nil {
+		now = time.Now
+	}
+	u := &UI{o: o, env: env}
+	profile := u.profile()
+	th := DefaultTheme(profile)
+	if o.Theme != nil {
+		th = *o.Theme
+	}
+	var m text.Metrics
+	sigs := make(chan os.Signal, 1)
+	hooks := TerminalHooks{OnTerminate: func(sig os.Signal) {
+		select {
+		case sigs <- sig:
+		default:
+		}
+	}}
+	var t Terminal
+	var err error
+	if o.Open != nil {
+		t, err = o.Open(hooks)
+	} else {
+		t, err = openTerminal(o.In, o.Out, hooks)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gnosh: the agent view could not take the terminal: %v\n", err)
+		return 1
+	}
+	defer t.Close()
+	defer t.RestoreOnPanic()
+	events := t.Events()
+	caps, ahead, _ := term.Probe(context.Background(), t, events, 0)
+	if caps.LightBackground && o.Theme == nil {
+		th = NewTheme(profile, DefaultPalette(profile).OnLight(profile))
+	}
+	modes := term.Modes{BracketedPaste: caps.Answered, KittyKeyboard: caps.KittyKeyboard}
+	_ = t.SetModes(modes)
+	size := func() (int, int) {
+		cols, rows, err := t.Size()
+		if err != nil || cols < 1 || rows < 1 {
+			return 80, 24
+		}
+		return cols, rows
+	}
+	cols, rows := size()
+	p, err := term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gnosh: the agent view could not take the screen: %v\n", err)
+		return 1
+	}
+	defer func() { _, _ = p.Close() }()
+
+	v := newAgentView(th, m, now, info)
+	results := make(chan func(*agentView), 16)
+	v.async = func(work func() func(*agentView)) {
+		go func() {
+			defer t.RestoreOnPanic()
+			results <- work()
+		}()
+	}
+	v.refresh()
+	watched := ""
+	// drawn is what the screen's rows from the top show: a long
+	// conversation watched is laid into the screen again only when it
+	// changed.
+	var drawn []string
+	draw := func() {
+		cols, rows := p.Size()
+		body, live, crow, ccol := v.render(cols, rows)
+		w := v.watch
+		switch {
+		case w == nil && watched != "":
+			watched, drawn = "", nil
+			p.Scroll(-1 << 30)
+		case w != nil && watched != w.id:
+			watched, w.end, drawn = w.id, true, nil
+		}
+		if drawn != nil && slices.Equal(body, drawn) {
+			_ = p.SetLive(live, crow, ccol)
+		} else {
+			drawn = body
+			_ = p.SetView(body, live, crow, ccol)
+		}
+		if w == nil {
+			return
+		}
+		if w.start {
+			p.ScrollTo(0)
+		}
+		if n := w.rows + w.pages*p.Page(); n != 0 {
+			p.Scroll(n)
+		}
+		if w.end {
+			p.Scroll(-1 << 30)
+		}
+		w.rows, w.pages, w.start, w.end = 0, 0, false, false
+	}
+	for _, ev := range ahead {
+		v.input(ev)
+	}
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	var err2 error
+	for !v.quit {
+		if v.clear {
+			v.clear = false
+			_ = p.Clear()
+		}
+		draw()
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				return 0
+			}
+			switch ev := ev.(type) {
+			case term.Resize:
+				_ = p.Resize(ev.Cols, ev.Rows)
+				drawn = nil
+			case term.Resume:
+				_ = t.SetModes(modes)
+				_ = p.Clear()
+			default:
+				v.input(ev)
+			}
+		case f := <-results:
+			f(v)
+		case <-tick.C:
+			v.tick()
+		case sig := <-sigs:
+			if s, ok := sig.(syscall.Signal); ok {
+				return 128 + int(s)
+			}
+			return 1
+		}
+		if v.suspend {
+			v.suspend = false
+			_, _ = p.Close()
+			if err := t.Suspend(); err != nil {
+				v.say("gnosh could not be suspended: %v.", err)
+			}
+			cols, rows = size()
+			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
+				return 1
+			}
+			watched, drawn = "", nil
+		}
+		if v.open != "" {
+			id := v.open
+			v.open = ""
+			_, _ = p.Close()
+			_ = t.Release()
+			err := info.Source.Open(id)
+			_ = t.Resume()
+			cols, rows = size()
+			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
+				return 1
+			}
+			watched, drawn = "", nil
+			if err != nil {
+				v.say("gnosh -r %s: %v.", runShortOf(id), err)
+			}
+			v.refresh()
+		}
+	}
+	return 0
+}
