@@ -1610,3 +1610,13 @@ or kept with the reason said (27).
     does not read focus (tmux drops it unless told), and counts from the
     last key alone. The plain session asks line by line and has no
     timer.
+
+103. **A command of several lines, as the permission question shows it.**
+    The prompt mark ($) stands on the command's first line only, and the
+    lines after it are set under the command: a here-document's body and
+    a continued line are part of one command, and a mark on each made
+    them read as commands of their own. Tabs stay tabs, which the
+    interface sets out as spaces (they were escaped as \x09, which made
+    Go code in a here-document hard to read); every other control
+    character is still escaped. Found in a box check, where Qwen asked to
+    run a Go program it wrote in a here-document.

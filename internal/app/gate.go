@@ -490,6 +490,16 @@ func (l *live) unattended(d permission.Decision) string {
 	return text
 }
 
+// escapeKeepingTabs is trust.Escape for a line of a command, whose tabs
+// stay tabs.
+func escapeKeepingTabs(line string) string {
+	parts := strings.Split(line, "\t")
+	for i, p := range parts {
+		parts[i] = trust.Escape(p)
+	}
+	return strings.Join(parts, "\t")
+}
+
 // permissionQuestion writes the question about one call: exactly what
 // would run, why gnosh asks, and the answers there are. What the model and
 // the files it read brought is shown escaped, never as terminal control
@@ -507,8 +517,17 @@ func (l *live) permissionQuestion(call core.ToolCall, action core.Action, d perm
 	}
 	switch {
 	case action.Command != "":
-		for _, line := range strings.Split(action.Command, "\n") {
-			b.WriteString("  $ " + trust.Escape(line) + "\n")
+		// The command as it is written: the prompt mark on its first line
+		// and the lines after it under the command, as a here-document's
+		// body or a long line's continuation is part of it; tabs stay tabs
+		// (the interface sets them out as spaces), and every other control
+		// character is escaped.
+		for i, line := range strings.Split(action.Command, "\n") {
+			lead := "  $ "
+			if i > 0 {
+				lead = "    "
+			}
+			b.WriteString(lead + escapeKeepingTabs(line) + "\n")
 		}
 	case len(action.Paths) > 0:
 		for i, p := range action.Paths {

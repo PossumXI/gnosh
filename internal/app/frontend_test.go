@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -377,4 +378,30 @@ func TestShowPastOnResume(t *testing.T) {
 	r := run(t, w, "-c", "-p", "-y", "run it")
 	r.wantCode(t, 0)
 	has(t, "a command run in a session opened with -c", toolResult(t, w, len(w.Model.Requests())-1, "c1"), "restarted=unset")
+}
+
+// A command of several lines is asked about as it is written: the prompt
+// mark on its first line, the rest under it (a here-document's body is
+// part of the command, not commands of its own), tabs as tabs, and every
+// other control character escaped.
+func TestPermissionQuestionShowsAManyLineCommand(t *testing.T) {
+	cmd := "cat > a.go <<'EOF'\npackage a\n\nfunc F() {\n\treturn\n}\nEOF\necho \x1b[2Jdone"
+	args, _ := json.Marshal(map[string]string{"command": cmd})
+	w := apptest.NewWorld(t, apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: string(args)}}}, apptest.Reply{Text: "Left it."})
+	var q agent.Question
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		if _, err := c.Submit(agent.Prompt{Text: "write it"}); err != nil {
+			return 1
+		}
+		q = find(f, "the question", func(e *agent.QuestionEvent) bool { return true }).Question
+		if err := c.Answer(q.ID, agent.Answer{Choice: "no", Text: "not now"}); err != nil {
+			t.Errorf("Answer: %v", err)
+		}
+		_ = c.Wait(ctx)
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	has(t, "the question", q.Text, "  $ cat > a.go <<'EOF'\n    package a\n    \n    func F() {\n    \treturn\n    }\n    EOF\n    echo \\x1b[2Jdone\n")
+	hasNot(t, "the question", q.Text, "$ package", `\x09`, "\x1b")
 }
