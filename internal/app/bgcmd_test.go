@@ -228,3 +228,73 @@ func TestBackgroundLeavesTheWorkTreeToTheRun(t *testing.T) {
 	}
 	hasNot(t, "what is said", r.out+r.err, "work tree")
 }
+
+// A session sent to the background from two folders has a log in each:
+// the list tells it once, by the run that works, and gnosh stop and gnosh
+// logs find that run's log by any start of the session's id.
+func TestRunLoggedFromTwoFolders(t *testing.T) {
+	root := t.TempDir()
+	const id = "01a1ee90-0000-7000-8000-000000000001"
+	a, b := filepath.Join(root, "a"), filepath.Join(root, "b")
+	for _, dir := range []string{a, b} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path, text string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The first run, from a, is done; the second, from b, works.
+	write(filepath.Join(a, id+".background.log"), "gnosh: 2026-11-18T10:00:00Z the session "+id+" goes on in the background with: first\ngnosh: its folder is /a\ndone\n")
+	write(filepath.Join(a, id+".background.pid"), "4242\n")
+	write(filepath.Join(b, id+".background.log"), "gnosh: 2026-11-18T09:00:00Z the session "+id+" goes on in the background with: second\ngnosh: its folder is /b\nworking\n")
+	proc := exec.Command("sh", "-c", "sleep 30", id)
+	if err := proc.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { proc.Process.Kill(); proc.Wait() })
+	write(filepath.Join(b, id+".background.pid"), strconv.Itoa(proc.Process.Pid)+"\n")
+
+	runs := runsIn([]string{a, b}, time.Time{})
+	if len(runs) != 1 || runs[0].prompt != "second" || !runs[0].running || runs[0].cwd != "/b" {
+		t.Fatalf("runs: %+v", runs)
+	}
+	for _, word := range []string{id, id[:13], id[:4]} {
+		if got, log, err := findRun([]string{a, b}, word); err != nil || got != id || filepath.Dir(log) != b {
+			t.Errorf("findRun(%q) = %q, %q, %v", word, got, log, err)
+		}
+	}
+	// Once neither works, the newer run is told.
+	proc.Process.Kill()
+	proc.Wait()
+	runs = runsIn([]string{a, b}, time.Time{})
+	if len(runs) != 1 || runs[0].prompt != "first" || runs[0].running {
+		t.Fatalf("runs once neither works: %+v", runs)
+	}
+}
+
+// Whatever a run's log holds, reading it ends, and gnosh's own lines are
+// taken only from where gnosh writes them.
+func FuzzReadRunLog(f *testing.F) {
+	const id = "01a1ee90-0000-7000-8000-000000000001"
+	for _, s := range []string{
+		"gnosh: 2026-11-18T10:00:00Z the session " + id + " goes on in the background with: x\ngnosh: its folder is /a\ngnosh: its session file is /a/s.jsonl\nout\n",
+		"gnosh: 2026-11-18T10:00:00Z the run was stopped; what it did so far is kept.\n",
+		"  gnosh: its folder is /x\n", "gnosh: \n", "\n\n\x00",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		path := filepath.Join(t.TempDir(), id+".background.log")
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		r := readRunLog(path, id, time.Time{})
+		if r.cwd != "" && !strings.Contains(text, " the session "+id+" goes on in the background with: ") {
+			t.Fatalf("a folder %q was read from a log with no first line of gnosh's", r.cwd)
+		}
+	})
+}

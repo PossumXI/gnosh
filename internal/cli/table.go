@@ -425,7 +425,7 @@ func Default() *Table {
 	t.command(root, &command{name: "stop", aliases: []string{"kill"}, cmd: CmdStop, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<session>",
 		flags:   []*flag{cwd, help},
 		summary: "Stop a session that runs in the background.",
-		about:   "The session is a run that gnosh --bg, /background or /fork started, named by its ID or the start of one (gnosh agents lists them). It is stopped as Esc stops a turn, and what it did so far is kept: gnosh -r opens it."})
+		about:   "The session is a run that gnosh --bg, /background or /fork started, named by its ID or the start of one (gnosh agents lists them). It is stopped as Esc stops a turn, and given a minute to end in good order before it is made to; what it did so far is kept: gnosh -r opens it."})
 
 	t.command(root, &command{name: "dirs", cmd: CmdDirs, pri: 1,
 		flags:   []*flag{cwd, help},

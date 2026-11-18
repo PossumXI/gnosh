@@ -157,6 +157,17 @@ what was only found (`13d2c49`); and a todo whose start kept sliding out
 while the model read its files again, so a slide now names the files its
 rounds edited (`70a55ce`).
 
+Asked of the earlier gnosh on 19 October 2026 (`spec/gnosh/harness-cli.md`,
+CLI-12), and built in this one on 18 November 2026:
+
+> how do i inspect or edit the context window for each prompt using crush?
+
+Set: `gnosh prompt show`, `path` and `export` (`spec/DECISIONS.md` item 109).
+Claude's part: what fills the window, tool by tool, stays `/context all`
+rather than the spec's `gnosh prompt tools` and `context`, and a text printed
+alone goes to standard output, with what it is on standard error, so that it
+can be kept in a file.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
