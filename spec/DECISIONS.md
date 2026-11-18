@@ -1859,6 +1859,61 @@ or kept with the reason said (27).
     `<` key that backgrounds a session into the view (/background does
     that).
 
+116. **The working mark is a fall, and says how deep a thought is (UI-50;
+    Jae, 18 November 2026).** He asked for "something like the yellow ->
+    deep in thought thing" of Claude Code's working line, "except keep
+    it multi colored sparkly ... start with more boring bland even
+    colors first ... movement like dropping rightward, as if
+    accelerating to the right, like gravity goes sideways, and when
+    'deep in thought', more things drop faster with higher
+    acceleration" (AUTHORSHIP.md has it whole). The comet of 14 November
+    gives way to it (`internal/ui/fall.go`).
+    - The mark is a strip of ten cells. A drop (the comet's marks: a
+      head and up to three tail marks) starts at the left edge nearly
+      at rest and is pulled to the right at a steady rate, so that it
+      crosses each cell sooner than the one before; its tail is one
+      cell, and one more for every seventh of a second's travel. The
+      strip is never empty.
+    - How it falls follows the one thing the session knows of a thought:
+      how long the reasoning that is arriving has gone on without a
+      break. Up to five seconds, and whenever the model is not thinking
+      (waiting, writing, running tools), the fall is calm: one drop at a
+      time, a pull of 5 cells a second each second (a crossing takes
+      1.8 s), and every mark only 15% of the way from the palette's grey
+      to its own colour, none bold. From five seconds to forty it
+      deepens evenly, the colour ahead of the rest (half way to deep the
+      marks have four fifths of their colour); at forty it is deep:
+      three drops at a time, a pull of 30 (a crossing takes 0.75 s),
+      every mark in its own colour (the blue-green, the purple, the hot
+      pink and the gold that every fade of gnosh's runs through, a
+      drop's head in one and its tail in the next ones), the heads bold,
+      and about three heads in ten flashing toward white at any moment.
+      More than three drops at once was tried and filled the strip, so
+      that nothing in it was seen to move. A frame is 110 ms while calm
+      and 60 ms when deep. When the thought ends the fall is calm again
+      within a second and a half.
+    - The line's words change with it, since nothing is said by a mark
+      alone (UI-52 keeps them one colour): "is thinking", and from forty
+      seconds "is deep in thought". Those three words are his, from the
+      prompt; none of the other program's other labels, its colours or
+      its timings are used, and the figures above are gnosh's own
+      (spec/cc/interactive.md, "Deliberately not adopted").
+    - With 256 colours each colour is the nearest the terminal has, so
+      the calm fall is in plain greys and the colours come in a few
+      steps; with sixteen a bland mark is faint in the terminal's own
+      colour until about thirteen seconds into a thought, and from there
+      in the terminal's colours; with no colour, and while a question
+      waits, the plain mark stands still, as before.
+    - It is gnosh's own drawing: marks moved by a rule of motion, and
+      not the earlier program's animation. Nothing in it is soft
+      (UI-51): a tail is whole marks, each in one plain colour.
+    - The session that wrote it had, on 12 November, read how the other
+      program makes its line, to answer a question of his about that
+      program. PROVENANCE.md's rule for a builder who has seen another
+      implementation was followed: the fall was designed from his words
+      above and from how a thing falls, and shares with that line the
+      idea he asked for and nothing of how it is made.
+
 117. **A run tells the model what its end stops, once.** gnosh stops, as
     a session ends, what its commands left running (946cfaa, after the
     servers a test harness's runs had left on box 1 for two weeks), and

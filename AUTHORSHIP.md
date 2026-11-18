@@ -168,6 +168,24 @@ rather than the spec's `gnosh prompt tools` and `context`, and a text printed
 alone goes to standard output, with what it is on standard error, so that it
 can be kept in a file.
 
+18 November 2026, to another of Claude's sessions, days after he had
+noticed that Claude Code's working line turns yellow and says "deep in
+thought" when its model thinks for long:
+
+> do something like the yellow -> deep in thought thing except keep it multi colored sparkly as crush/gnosh was, except this means start with more boring bland even colors first. in terms of direction of movement i think we do movement like dropping rightward, as if accelerating to the right, like gravity goes sideways, and when "deep in thought", more things drop faster with higher acceleration.
+
+Set: the working mark says how long the model has been in one thought; it
+starts in bland, even colours and becomes many-coloured and sparkling; its
+marks drop to the right as if gravity ran sideways; in a deep thought more
+of them drop, faster, under a stronger pull; and the words "deep in
+thought" (`spec/DECISIONS.md` item 116). Claude's part: the figures (a
+thought deepens from five seconds on and is deep at forty; one drop at a
+time under a pull of 5 cells a second each second while calm, three at a
+time under a pull of 30 when deep; colour comes before the rest), the tail
+that stretches with a drop's speed, the glints, the grey the colours start
+near, and that the fall is drawn and timed from his words and not from how
+the other program's line or the earlier program's animation is made.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

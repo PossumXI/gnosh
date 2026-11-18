@@ -89,10 +89,24 @@
 // has to read), the model is thinking, is writing, is writing a call;
 // running a command, by its own words, or several tools, by their names;
 // waiting for the person; waiting so many seconds to try a failed request
-// again; writing a summary; stopping. Its mark moves while gnosh works: a
-// small comet of sparkle marks in the palette's colours, one step about
-// every tenth of a second (Jae, 14 November 2026: "i don't like that
-// there's no spinner now"). With no colour, and while a question waits for
+// again; writing a summary; stopping. Its mark moves while gnosh works
+// (Jae, 14 November 2026: "i don't like that there's no spinner now"): it
+// is a fall (fall.go), sparkle marks that drop to the right across ten
+// cells as if gravity ran sideways, each starting nearly at rest and
+// gathering speed all the way, its tail stretching as it goes. The fall
+// says how long the model has been in one thought. At first, and whenever
+// the model is not thinking, one drop at a time falls slowly, in colours
+// so near one grey that they are hardly colours. From five seconds of one
+// unbroken thought on it deepens: first more of each mark's own colour,
+// then more drops under a stronger pull, until at forty seconds the strip
+// is a shower of the blue-green, the purple, the hot pink and the gold,
+// three drops at a time with glints among them, and the line's words are
+// "is deep in thought". When the thought is over the fall grows calm
+// again within a second and a half. (Jae, 18
+// November 2026: "start with more boring bland even colors first ...
+// dropping rightward, as if accelerating to the right, like gravity goes
+// sideways, and when 'deep in thought', more things drop faster with
+// higher acceleration".) With no colour, and while a question waits for
 // the person, the mark stands still.
 // It is there only while the session is busy: there is never a "working"
 // line with nothing in flight, and should the event that says the session
@@ -280,7 +294,7 @@
 // box, the questions, Markdown and diffs inside it, all made from one
 // Palette. The default is gnosh's own: prose and output in the terminal's
 // own colour, purple for the marks gnosh draws itself, the blue-green of
-// gnosh.ai for the prompt mark, the pointer and the head of the spinner,
+// gnosh.ai for the prompt mark, the pointer and the working mark,
 // hot pink as the one accent on what is chosen, grey for what is not the
 // text itself, and nothing filled in, blurred or dimmed into a background.
 // The text colours are middle tones that read on a dark and on a light

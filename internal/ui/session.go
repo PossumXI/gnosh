@@ -264,6 +264,9 @@ type session struct {
 	busy  bool
 	ph    phase
 	since time.Time
+	// fall is the working mark's drops, as they stood when the mark was
+	// last drawn (fall.go).
+	fall fall
 	// heard is when the session last reported anything.
 	heard time.Time
 	// stopping says the person stopped the turn and its end has not
@@ -705,9 +708,10 @@ func (s *session) wake() time.Time {
 	if s.busy || s.cmdRun != "" || s.q != nil || s.ed.Hint() != editor.HintNone {
 		soon(now.Add(time.Second).Truncate(time.Second))
 	}
-	if (s.busy || s.cmdRun != "") && s.q == nil && len(s.th.Spinner) > 0 && s.th.SpinEvery > 0 {
-		// The spinner takes its next step.
-		soon(now.Add(s.th.SpinEvery))
+	if (s.busy || s.cmdRun != "") && s.q == nil && s.th.Fall.moves() {
+		// The drops of the working mark fall on: the deeper the thought,
+		// the sooner the next step.
+		soon(now.Add(s.th.Fall.every(s.fall.depth)))
 	}
 	if s.info.NotifyHooks || s.host.desktop(s.info.NotifChannel, "") {
 		if q := s.q; q != nil && !q.notified {

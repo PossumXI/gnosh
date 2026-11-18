@@ -499,6 +499,10 @@ func (s *session) activityLine(width int, now time.Time) string {
 			}
 		case phThinking:
 			what, brief = model+" is thinking", "thinking"
+			if s.thinkingFor(now) >= deepAfter {
+				// The words say what the working mark shows.
+				what, brief = model+" is deep in thought", "deep in thought"
+			}
 		case phWriting:
 			what, brief = model+" is writing", "writing"
 			if s.reply.chars > 0 {
@@ -559,28 +563,28 @@ func (s *session) activityLine(width int, now time.Time) string {
 }
 
 // busyMark draws the mark that leads the activity line, and says how wide
-// it is. While gnosh works and there is colour, it is the spinner: a comet
-// of sparkle marks crossing its few cells, the head in the lightest colour
-// and the tail fading behind it, one step every SpinEvery of the clock.
-// With no colour, and while a question waits for the person, it is
-// BusyMark, standing still: a line that waits for someone does not move.
+// it is. While gnosh works and there is colour, it is the fall (fall.go):
+// sparkle marks dropping to the right across a few cells, calm and nearly
+// grey at first, and more of them, faster and in more colour the longer
+// the model has been in one thought. With no colour, and while a question
+// waits for the person, it is BusyMark, standing still: a line that waits
+// for someone does not move.
 func (s *session) busyMark(now time.Time) (string, int) {
 	th := &s.th
-	n := len(th.Spinner)
-	if n == 0 || len(th.SpinnerStyles) < n || th.SpinnerCells < 1 || th.SpinEvery <= 0 || s.q != nil {
+	if !th.Fall.moves() || s.q != nil {
 		return th.Busy.Render(th.BusyMark), s.m.Width(th.BusyMark)
 	}
-	steps := int64(th.SpinnerCells + n - 1)
-	head := int((now.UnixNano() / int64(th.SpinEvery)) % steps)
-	var b strings.Builder
-	for cell := range th.SpinnerCells {
-		if d := head - cell; d >= 0 && d < n {
-			b.WriteString(th.SpinnerStyles[d].Render(th.Spinner[d]))
-		} else {
-			b.WriteByte(' ')
-		}
+	s.fall.step(&th.Fall, now, depthOf(s.thinkingFor(now)))
+	return s.fall.draw(&th.Fall), th.Fall.Cells
+}
+
+// thinkingFor is how long the thought that is arriving now has lasted, or
+// nothing when the model is not thinking.
+func (s *session) thinkingFor(now time.Time) time.Duration {
+	if !s.busy || s.ph != phThinking || !s.reply.thinking {
+		return 0
 	}
-	return b.String(), th.SpinnerCells
+	return max(now.Sub(s.reply.thinkSince), 0)
 }
 
 // said is what the session itself says it is waiting for, in its own
