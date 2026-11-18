@@ -190,7 +190,13 @@ func TestSignIn(t *testing.T) {
 	if err != nil || as.Issuer != fa.srv.URL+"/as" || scopes != "read" {
 		t.Fatalf("Discover: %+v, %q, %v", as, scopes, err)
 	}
-	redirect, back, stop, err := Listen(0)
+	var f *Flow
+	redirect, back, stop, err := Listen(0, func() string {
+		if f == nil {
+			return ""
+		}
+		return f.State()
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +208,7 @@ func TestSignIn(t *testing.T) {
 	if err != nil || id == "" || secret != "" {
 		t.Fatalf("Register: %q, %q, %v", id, secret, err)
 	}
-	f := NewFlow(as, id, "", redirect, scopes, fa.srv.URL+"/mcp")
+	f = NewFlow(as, id, "", redirect, scopes, fa.srv.URL+"/mcp")
 	u, _ := url.Parse(f.URL())
 	if q := u.Query(); q.Get("code_challenge_method") != "S256" || q.Get("resource") != fa.srv.URL+"/mcp" || q.Get("scope") != "read" || q.Get("state") == "" {
 		t.Errorf("the sign-in address: %s", f.URL())
@@ -264,7 +270,8 @@ func TestFinishChecks(t *testing.T) {
 	}{
 		{url.Values{"code": {"x"}, "state": {"another"}}, "state differs"},
 		{url.Values{"code": {"x"}, "state": {f.state}, "iss": {"https://evil.example.com"}}, "issuer https://evil.example.com"},
-		{url.Values{"error": {"access_denied"}, "error_description": {"the person said no"}}, "access_denied: the person said no"},
+		{url.Values{"error": {"access_denied"}, "error_description": {"the person said no\x1b[2J"}, "state": {f.state}}, "access_denied: the person said no?[2J"},
+		{url.Values{"error": {"access_denied"}}, "state differs"},
 		{url.Values{"state": {f.state}}, "holds no code"},
 	} {
 		if _, err := f.Finish(ctx, nil, c.back); err == nil || !strings.Contains(err.Error(), c.want) {
@@ -449,4 +456,186 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// Only https, or this machine, carries a sign-in: discovery, the token
+// endpoint and the token itself.
+func TestSecure(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"https://auth.example.com/token": true, "http://127.0.0.1:8080/x": true, "http://localhost/x": true, "http://[::1]:9/x": true,
+		"http://auth.example.com/token": false, "ftp://example.com": false, "https:///nohost": false,
+	} {
+		if Secure(addr) != want {
+			t.Errorf("Secure(%s) = %v, want %v", addr, !want, want)
+		}
+	}
+	if _, _, err := Discover(context.Background(), nil, "http://far.example.com/mcp", "", OAuth{}); err == nil || !strings.Contains(err.Error(), "plain http") {
+		t.Errorf("a server over plain http: %v", err)
+	}
+	a := &Authorizer{Logins: &LoginStore{Path: filepath.Join(t.TempDir(), "l.json")}, Server: "http://far.example.com/mcp"}
+	_ = a.Logins.Put(Login{Server: a.Server, Token: Token{AccessToken: "t"}})
+	if got := a.token(); got != "" {
+		t.Errorf("a token was given to a server over plain http: %q", got)
+	}
+}
+
+// A token request follows no redirect: a 307 would carry the code or the
+// refresh token on to an address nobody checked.
+func TestTokenRequestFollowsNoRedirect(t *testing.T) {
+	hit := false
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer elsewhere.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+"/token", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	_, err := Refresh(context.Background(), srv.Client(), Login{Server: srv.URL + "/mcp", TokenEndpoint: srv.URL + "/token", ClientID: "c", Token: Token{RefreshToken: "r"}})
+	if err == nil || hit {
+		t.Errorf("a token request that was redirected: %v, the other address reached: %v", err, hit)
+	}
+}
+
+// The redirect address takes only the answer that carries the sign-in's
+// state; anything else is turned away and ends nothing.
+func TestListenChecksTheState(t *testing.T) {
+	redirect, back, stop, err := Listen(0, func() string { return "the-state" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	for _, q := range []string{"error=x", "code=c&state=other", "state=the-state"} {
+		resp, err := http.Get(redirect + "?" + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("?%s was taken: %s", q, resp.Status)
+		}
+	}
+	select {
+	case v := <-back:
+		t.Fatalf("an answer that was turned away came through: %v", v)
+	default:
+	}
+	resp, err := http.Get(redirect + "?code=c&state=the-state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	select {
+	case v := <-back:
+		if v.Get("code") != "c" {
+			t.Errorf("the answer taken: %v", v)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the right answer did not come through")
+	}
+}
+
+// A refresh that fails on the way keeps the sign-in; only invalid_grant
+// forgets it. A 403 renews and forgets nothing. Two processes renewing the
+// same refused token at once refresh it once between them.
+func TestRenew(t *testing.T) {
+	var mu sync.Mutex
+	status, refreshes := http.StatusInternalServerError, 0
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		refreshes++
+		switch status {
+		case http.StatusOK:
+			time.Sleep(50 * time.Millisecond)
+			writeJSON(w, map[string]any{"access_token": fmt.Sprintf("fresh-%d", refreshes), "token_type": "Bearer"})
+		case http.StatusBadRequest:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":"invalid_grant"}`)
+		default:
+			w.WriteHeader(status)
+		}
+	}))
+	defer tokenSrv.Close()
+	path := filepath.Join(t.TempDir(), "logins.json")
+	server := "https://far.example.com/mcp"
+	put := func() {
+		t.Helper()
+		if err := (&LoginStore{Path: path}).Put(Login{Server: server, TokenEndpoint: tokenSrv.URL + "/token", ClientID: "c", Token: Token{AccessToken: "old", RefreshToken: "r"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put()
+	a := &Authorizer{Logins: &LoginStore{Path: path}, Server: server, HTTP: tokenSrv.Client()}
+	if a.renew(context.Background(), "old") {
+		t.Errorf("a failed refresh gave a token to try")
+	}
+	if l, ok := a.Logins.Get(server); !ok || l.AccessToken != "old" || l.RefreshToken != "r" {
+		t.Errorf("a refresh that failed on the way forgot the sign-in: %+v %v", l, ok)
+	}
+	mu.Lock()
+	status = http.StatusBadRequest
+	mu.Unlock()
+	a.renew(context.Background(), "old")
+	if _, ok := a.Logins.Get(server); ok {
+		t.Errorf("invalid_grant kept the sign-in")
+	}
+
+	put()
+	mu.Lock()
+	status, refreshes = http.StatusOK, 0
+	mu.Unlock()
+	var wg sync.WaitGroup
+	for range 2 {
+		b := &Authorizer{Logins: &LoginStore{Path: path}, Server: server, HTTP: tokenSrv.Client()}
+		wg.Go(func() {
+			if !b.renew(context.Background(), "old") {
+				t.Errorf("a renewal found nothing to try")
+			}
+		})
+	}
+	wg.Wait()
+	if refreshes != 1 {
+		t.Errorf("two processes refreshed the same token %d times, want once", refreshes)
+	}
+}
+
+// A file of sign-ins that cannot be read is set aside, and the store
+// starts empty.
+func TestLoginStoreSetsADamagedFileAside(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "logins.json")
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &LoginStore{Path: path}
+	if err := s.Put(Login{Server: "https://a.example/mcp", Token: Token{AccessToken: "t"}}); err != nil {
+		t.Fatalf("a damaged file stopped a sign-in: %v", err)
+	}
+	if _, ok := s.Get("https://a.example/mcp"); !ok {
+		t.Errorf("the sign-in was not kept")
+	}
+	aside, _ := filepath.Glob(path + ".unreadable-*")
+	if len(aside) != 1 {
+		t.Errorf("the damaged file was not set aside: %v", aside)
+	}
+}
+
+// A 403 is a sign-in that is not enough (a scope missing, a firewall): the
+// server wants a sign-in, and nothing is renewed or forgotten.
+func TestForbiddenRenewsNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope", scope="admin"`)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	store := &LoginStore{Path: filepath.Join(t.TempDir(), "logins.json")}
+	_ = store.Put(Login{Server: srv.URL + "/mcp", TokenEndpoint: srv.URL + "/token", ClientID: "c", Token: Token{AccessToken: "kept", RefreshToken: "r"}})
+	_, err := StartHTTP(context.Background(), "far", srv.URL+"/mcp", nil, Options{Auth: &Authorizer{Logins: store, Server: srv.URL + "/mcp", HTTP: srv.Client()}})
+	var na *NeedsAuth
+	if !errors.As(err, &na) || na.Status != http.StatusForbidden || !strings.Contains(na.WWWAuthenticate, "insufficient_scope") {
+		t.Errorf("a 403: %v", err)
+	}
+	if l, ok := store.Get(srv.URL + "/mcp"); !ok || l.AccessToken != "kept" {
+		t.Errorf("a 403 forgot the sign-in: %+v %v", l, ok)
+	}
 }

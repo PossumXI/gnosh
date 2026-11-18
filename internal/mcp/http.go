@@ -91,13 +91,16 @@ func (t *httpTransport) send(ctx context.Context, m message) error {
 		if err != nil {
 			return err
 		}
-		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && t.auth != nil {
-			// The server wants a sign-in, or a better one: the token is
-			// renewed once, and otherwise the person signs in (/mcp).
+		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && !hasHeader(t.headers, "Authorization") {
+			// The server wants a sign-in, or a better one: a refused token
+			// (401) is renewed once, and otherwise the person signs in
+			// (/mcp). A 403 (a scope missing, a firewall) renews and
+			// forgets nothing. With an Authorization header configured, a
+			// refusal is the configured credential's, and a plain failure.
 			www := resp.Header.Get("WWW-Authenticate")
 			resp.Body.Close()
 			done()
-			if !renewed && token != "" && t.auth.renew(ctx, token) {
+			if resp.StatusCode == http.StatusUnauthorized && !renewed && token != "" && t.auth != nil && t.auth.renew(ctx, token) {
 				continue
 			}
 			return &NeedsAuth{Status: resp.StatusCode, WWWAuthenticate: www}

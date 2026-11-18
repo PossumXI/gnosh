@@ -184,12 +184,16 @@ func TestHTTPFailures(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// A server that refuses the handshake says why.
+	// A server that refuses the handshake wants a sign-in, unless the
+	// configured Authorization header is what it refused: then it says why.
 	f := &fakeHTTP{statusOf: map[string]int{"initialize": http.StatusUnauthorized}}
 	srv := httptest.NewServer(f)
 	defer srv.Close()
-	if _, err := StartHTTP(ctx, "x", srv.URL, nil, Options{}); err == nil || !strings.Contains(err.Error(), "401 Unauthorized: nope") {
+	if _, err := StartHTTP(ctx, "x", srv.URL, nil, Options{}); !errors.Is(err, ErrNeedsAuth) {
 		t.Errorf("a refused handshake: %v", err)
+	}
+	if _, err := StartHTTP(ctx, "x", srv.URL, map[string]string{"Authorization": "Bearer k"}, Options{}); err == nil || errors.Is(err, ErrNeedsAuth) || !strings.Contains(err.Error(), "401 Unauthorized: nope") {
+		t.Errorf("a refused handshake with a configured Authorization header: %v", err)
 	}
 
 	// Nobody there.

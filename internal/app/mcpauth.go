@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -68,7 +69,15 @@ func startSignIn(ctx context.Context, cfg mcp.Config, www string, store *mcp.Log
 		// (So that the token can be refreshed without another sign-in.)
 		scopes = strings.TrimSpace(scopes + " offline_access")
 	}
-	redirect, back, stop, err := mcp.Listen(cfg.OAuth.CallbackPort)
+	// (The listener takes only the answer that carries the flow's state,
+	// and the flow is made once the redirect address is known.)
+	var flow atomic.Pointer[mcp.Flow]
+	redirect, back, stop, err := mcp.Listen(cfg.OAuth.CallbackPort, func() string {
+		if f := flow.Load(); f != nil {
+			return f.State()
+		}
+		return ""
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +90,9 @@ func startSignIn(ctx context.Context, cfg mcp.Config, www string, store *mcp.Log
 		stop()
 		return nil, fmt.Errorf("the sign-in to %s could not start: %w", cfg.Name, err)
 	}
-	return &signIn{flow: mcp.NewFlow(as, clientID, secret, redirect, scopes, cfg.URL), back: back, stop: stop}, nil
+	f := mcp.NewFlow(as, clientID, secret, redirect, scopes, cfg.URL)
+	flow.Store(f)
+	return &signIn{flow: f, back: back, stop: stop}, nil
 }
 
 // finishSignIn trades what the browser came back with for a token, and

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -121,26 +122,34 @@ const maxOAuthBody = 1 << 20
 // server's metadata and the scopes the resource says it takes (RFC 9728's
 // scopes_supported, or the scope its WWW-Authenticate named).
 func Discover(ctx context.Context, hc *http.Client, serverURL, wwwAuthenticate string, cfg OAuth) (AuthServer, string, error) {
+	if !Secure(serverURL) {
+		return AuthServer{}, "", fmt.Errorf("the server is reached over plain http at %s, so gnosh signs in to it nowhere: its sign-in and its token would cross the network in the clear", plain(siteOf(serverURL)))
+	}
+	params := authParams(wwwAuthenticate)
+	// The scope the server asked for in its challenge comes first.
+	scopes := params["scope"]
 	if cfg.AuthServerMetadataURL != "" {
-		u, err := url.Parse(cfg.AuthServerMetadataURL)
-		if err != nil || u.Scheme != "https" {
-			return AuthServer{}, "", fmt.Errorf("oauth.authServerMetadataUrl %q is not an https address", cfg.AuthServerMetadataURL)
+		if !strings.HasPrefix(cfg.AuthServerMetadataURL, "https://") {
+			return AuthServer{}, "", fmt.Errorf("oauth.authServerMetadataUrl %q is not an https address", plain(cfg.AuthServerMetadataURL))
 		}
 		var as AuthServer
 		if err := getJSON(ctx, hc, cfg.AuthServerMetadataURL, &as); err != nil {
-			return AuthServer{}, "", fmt.Errorf("the authorization server's metadata at %s could not be read: %w", cfg.AuthServerMetadataURL, err)
+			return AuthServer{}, "", fmt.Errorf("the authorization server's metadata at %s could not be read: %w", plain(cfg.AuthServerMetadataURL), err)
 		}
 		if err := as.check(""); err != nil {
 			return AuthServer{}, "", err
 		}
-		return as, strings.Join(as.ScopesSupported, " "), nil
+		if scopes == "" {
+			// (As Claude Code takes them from a metadata address it was
+			// given.)
+			scopes = strings.Join(as.ScopesSupported, " ")
+		}
+		return as, scopes, nil
 	}
-	params := authParams(wwwAuthenticate)
-	scopes := params["scope"]
 	// The protected resource's metadata names its authorization server.
 	var issuers []string
 	var candidates []string
-	if rm := params["resource_metadata"]; rm != "" {
+	if rm := params["resource_metadata"]; rm != "" && Secure(rm) {
 		candidates = append(candidates, rm)
 	}
 	candidates = append(candidates, wellKnown(serverURL, "oauth-protected-resource", true)...)
@@ -150,9 +159,16 @@ func Discover(ctx context.Context, hc *http.Client, serverURL, wwwAuthenticate s
 			ScopesSupported      []string `json:"scopes_supported"`
 		}
 		if getJSON(ctx, hc, c, &prm) == nil && len(prm.AuthorizationServers) > 0 {
-			issuers = prm.AuthorizationServers
+			for _, is := range prm.AuthorizationServers {
+				if Secure(is) {
+					issuers = append(issuers, is)
+				}
+			}
 			if scopes == "" {
 				scopes = strings.Join(prm.ScopesSupported, " ")
+			}
+			if len(issuers) == 0 {
+				return AuthServer{}, "", errors.New("the server names no authorization server reached over https")
 			}
 			break
 		}
@@ -162,7 +178,7 @@ func Discover(ctx context.Context, hc *http.Client, serverURL, wwwAuthenticate s
 		// authorization server.
 		u, err := url.Parse(serverURL)
 		if err != nil {
-			return AuthServer{}, "", fmt.Errorf("the server's address %q cannot be read", serverURL)
+			return AuthServer{}, "", fmt.Errorf("the server's address %q cannot be read", plain(serverURL))
 		}
 		issuers = []string{u.Scheme + "://" + u.Host}
 	}
@@ -188,34 +204,46 @@ func Discover(ctx context.Context, hc *http.Client, serverURL, wwwAuthenticate s
 }
 
 // check holds an authorization server's metadata to what a sign-in needs:
-// its endpoints, its issuer (when one was expected), PKCE with S256 when it
-// says which methods it takes, and a token endpoint credentials may go to.
+// its endpoints, all reached over https or on this machine, its issuer
+// (when one was expected), and PKCE with S256 when it says which methods
+// it takes.
 func (as AuthServer) check(issuer string) error {
 	switch {
 	case as.AuthorizationEndpoint == "" || as.TokenEndpoint == "":
 		return errors.New("the authorization server's metadata names no authorization or no token endpoint")
 	case issuer != "" && as.Issuer != "" && strings.TrimSuffix(as.Issuer, "/") != strings.TrimSuffix(issuer, "/"):
-		return fmt.Errorf("the authorization server's metadata names the issuer %s, not %s", as.Issuer, issuer)
+		return fmt.Errorf("the authorization server's metadata names the issuer %s, not %s", plain(as.Issuer), plain(issuer))
 	case len(as.CodeChallengeMethods) > 0 && !contains(as.CodeChallengeMethods, "S256"):
 		return errors.New("the authorization server does not take PKCE with S256")
 	}
-	if err := credentialsMayGo(as.TokenEndpoint); err != nil {
-		return err
+	for _, e := range []string{as.TokenEndpoint, as.AuthorizationEndpoint} {
+		if err := credentialsMayGo(e); err != nil {
+			return err
+		}
 	}
-	if u, err := url.Parse(as.AuthorizationEndpoint); err != nil || (u.Scheme != "https" && u.Scheme != "http") {
-		return fmt.Errorf("the authorization endpoint %q is not a web address", as.AuthorizationEndpoint)
+	if as.RegistrationEndpoint != "" {
+		if err := credentialsMayGo(as.RegistrationEndpoint); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// credentialsMayGo says why a sign-in's credentials may not be sent to the
-// endpoint, or nil: they go over https, or to this machine.
+// Secure reports whether an address is one a sign-in may use: https, or
+// plain http to this machine.
+func Secure(address string) bool {
+	return credentialsMayGo(address) == nil
+}
+
+// credentialsMayGo says why a sign-in's credentials, or the person's
+// browser, may not be sent to the endpoint, or nil: they go over https,
+// or to this machine.
 func credentialsMayGo(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return fmt.Errorf("the token endpoint %q cannot be read", endpoint)
+		return fmt.Errorf("the endpoint %q cannot be read", plain(endpoint))
 	}
-	if u.Scheme == "https" {
+	if u.Scheme == "https" && u.Host != "" {
 		return nil
 	}
 	if u.Scheme == "http" {
@@ -224,7 +252,23 @@ func credentialsMayGo(endpoint string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("the token endpoint %s is not served over https, so no credential is sent to it", endpoint)
+	return fmt.Errorf("the endpoint %s is not served over https, so no sign-in goes through it", plain(endpoint))
+}
+
+// plain makes text a server gave fit to be shown: control characters
+// (an escape, which a terminal would act on) written as "?", and cut at
+// 300 characters.
+func plain(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return '?'
+		}
+		return r
+	}, strings.ToValidUTF8(s, "?"))
+	if r := []rune(s); len(r) > 300 {
+		s = string(r[:300]) + "…"
+	}
+	return s
 }
 
 // wellKnown is the addresses of a well-known document for a resource or an
@@ -351,6 +395,9 @@ type Flow struct {
 	state    string
 }
 
+// State is the sign-in's state, which the browser's answer must carry.
+func (f *Flow) State() string { return f.state }
+
 // NewFlow makes a sign-in, with a PKCE verifier and a state of its own.
 func NewFlow(as AuthServer, clientID, clientSecret, redirectURI, scopes, resource string) *Flow {
 	return &Flow{AS: as, ClientID: clientID, ClientSecret: clientSecret, RedirectURI: redirectURI, Scopes: scopes, Resource: resource,
@@ -385,18 +432,18 @@ func (f *Flow) URL() string {
 // redirect address (as the listener got them, or from the address the
 // person pasted), and trades the code in it for a token.
 func (f *Flow) Finish(ctx context.Context, hc *http.Client, back url.Values) (Token, error) {
+	if back.Get("state") != f.state {
+		return Token{}, errors.New("the address the browser came back with is not this sign-in's (its state differs): start the sign-in again")
+	}
 	if e := back.Get("error"); e != "" {
 		why := e
 		if d := back.Get("error_description"); d != "" {
 			why += ": " + d
 		}
-		return Token{}, fmt.Errorf("the sign-in was refused (%s)", why)
-	}
-	if back.Get("state") != f.state {
-		return Token{}, errors.New("the address the browser came back with is not this sign-in's (its state differs): start the sign-in again")
+		return Token{}, fmt.Errorf("the sign-in was refused (%s)", plain(why))
 	}
 	if iss := back.Get("iss"); iss != "" && f.AS.Issuer != "" && strings.TrimSuffix(iss, "/") != strings.TrimSuffix(f.AS.Issuer, "/") {
-		return Token{}, fmt.Errorf("the sign-in came back from the issuer %s, not %s", iss, f.AS.Issuer)
+		return Token{}, fmt.Errorf("the sign-in came back from the issuer %s, not %s", plain(iss), plain(f.AS.Issuer))
 	}
 	code := back.Get("code")
 	if code == "" {
@@ -485,13 +532,13 @@ func tokenRequest(ctx context.Context, hc *http.Client, endpoint, clientID, secr
 		return Token{}, fmt.Errorf("the token endpoint refused: %w", err)
 	}
 	if out.Error != "" {
-		return Token{}, fmt.Errorf("the token endpoint refused (%s %s)", out.Error, out.Description)
+		return Token{}, fmt.Errorf("the token endpoint refused: %w", &OAuthError{Code: out.Error, Description: out.Description})
 	}
 	if out.AccessToken == "" {
 		return Token{}, errors.New("the token endpoint gave no access token")
 	}
 	if out.TokenType != "" && !strings.EqualFold(out.TokenType, "bearer") {
-		return Token{}, fmt.Errorf("the token endpoint gave a %s token, and gnosh sends bearer tokens alone", out.TokenType)
+		return Token{}, fmt.Errorf("the token endpoint gave a %s token, and gnosh sends bearer tokens alone", plain(out.TokenType))
 	}
 	t := Token{AccessToken: out.AccessToken, RefreshToken: out.RefreshToken, TokenType: "Bearer", Scope: out.Scope}
 	if secs, err := strconv.ParseInt(out.ExpiresIn.String(), 10, 64); err == nil && secs > 0 {
@@ -503,8 +550,13 @@ func tokenRequest(ctx context.Context, hc *http.Client, endpoint, clientID, secr
 // Listen opens the redirect address's listener on this machine: port 0
 // takes any free one. It returns the redirect address,
 // http://localhost:PORT/callback, a channel that gets the parameters the
-// browser comes back with (once), and how to close it.
-func Listen(port int) (redirectURI string, back <-chan url.Values, stop func(), err error) {
+// browser comes back with, and how to close it. Only an answer that
+// carries the state state returns is taken, once: anything else that
+// reaches the address (another program on this machine, a page that
+// found the port) is turned away and ends nothing. The same port on ::1
+// is listened on too, where a browser takes localhost to be; when another
+// program holds it there, the sign-in does not start.
+func Listen(port int, state func() string) (redirectURI string, back <-chan url.Values, stop func(), err error) {
 	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("the sign-in's redirect address could not be opened on port %d: %w", port, err)
@@ -515,8 +567,9 @@ func Listen(port int) (redirectURI string, back <-chan url.Values, stop func(), 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("code") == "" && q.Get("error") == "" {
-			http.Error(w, "This is gnosh's sign-in address; it was reached without a sign-in's answer.", http.StatusBadRequest)
+		want := state()
+		if want == "" || q.Get("state") != want || q.Get("code") == "" && q.Get("error") == "" {
+			http.Error(w, "This is gnosh's sign-in address, and this is not the answer of the sign-in it waits for.", http.StatusBadRequest)
 			return
 		}
 		once.Do(func() { got <- q })
@@ -530,23 +583,31 @@ func Listen(port int) (redirectURI string, back <-chan url.Values, stop func(), 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	servers := []*http.Server{srv}
 	go srv.Serve(ln)
-	// The browser may take localhost to be ::1: the same port there too,
-	// when it is free.
-	if ln6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port))); err == nil {
-		srv6 := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-		servers = append(servers, srv6)
-		go srv6.Serve(ln6)
-	}
 	stop = func() {
 		for _, s := range servers {
 			s.Close()
 		}
 	}
+	ln6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port)))
+	switch {
+	case err == nil:
+		srv6 := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		servers = append(servers, srv6)
+		go srv6.Serve(ln6)
+	case errors.Is(err, syscall.EADDRINUSE):
+		stop()
+		return "", nil, nil, fmt.Errorf("another program holds port %d on ::1, where a browser may take localhost to be, so the sign-in's answer could go to it: choose another oauth.callbackPort", port)
+	}
+	// (No ::1 on this machine: localhost is 127.0.0.1 alone.)
 	return "http://localhost:" + strconv.Itoa(port) + "/callback", got, stop, nil
 }
 
-// getJSON reads a JSON document.
+// getJSON reads a JSON document. A redirect is followed only to an
+// address a sign-in may use (Secure), and five times at most.
 func getJSON(ctx context.Context, hc *http.Client, address string, v any) error {
+	if !Secure(address) {
+		return fmt.Errorf("%s is not reached over https", plain(siteOf(address)))
+	}
 	ctx, cancel := context.WithTimeout(ctx, oauthTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
@@ -557,13 +618,46 @@ func getJSON(ctx context.Context, hc *http.Client, address string, v any) error 
 	return doJSON(hc, req, v)
 }
 
+// OAuthError is what an authorization server said when it refused: its
+// error code ("invalid_grant") and description.
+type OAuthError struct {
+	Code, Description string
+}
+
+func (e *OAuthError) Error() string {
+	if e.Description != "" {
+		return plain(e.Code + ": " + e.Description)
+	}
+	return plain(e.Code)
+}
+
+// IsInvalidGrant reports whether err is an authorization server's
+// invalid_grant: the code or the refresh token sent is no good, for good.
+func IsInvalidGrant(err error) bool {
+	var oe *OAuthError
+	return errors.As(err, &oe) && oe.Code == "invalid_grant"
+}
+
 // doJSON makes a request and reads its JSON answer; an answer that is not
 // a success is an error, with the OAuth error it gives when it gives one.
+// A POST, which carries a code, a verifier or a refresh token, follows no
+// redirect: a 307 would send its body on, to an address nobody checked. A
+// GET follows one only to an address a sign-in may use.
 func doJSON(hc *http.Client, req *http.Request, v any) error {
 	if hc == nil {
 		hc = http.DefaultClient
 	}
-	resp, err := hc.Do(req)
+	c := *hc
+	c.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if req.Method != http.MethodGet {
+			return http.ErrUseLastResponse
+		}
+		if len(via) >= 5 || !Secure(next.URL.String()) {
+			return fmt.Errorf("the answer sent the request on to %s, which is not reached over https", plain(siteOf(next.URL.String())))
+		}
+		return nil
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		return err
 	}
@@ -578,10 +672,7 @@ func doJSON(hc *http.Client, req *http.Request, v any) error {
 			Description string `json:"error_description"`
 		}
 		if json.Unmarshal(body, &oe) == nil && oe.Error != "" {
-			if oe.Description != "" {
-				return fmt.Errorf("%s (%s: %s)", resp.Status, oe.Error, oe.Description)
-			}
-			return fmt.Errorf("%s (%s)", resp.Status, oe.Error)
+			return fmt.Errorf("%s (%w)", resp.Status, &OAuthError{Code: oe.Error, Description: oe.Description})
 		}
 		return errors.New(resp.Status)
 	}

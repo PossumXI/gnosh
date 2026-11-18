@@ -1344,7 +1344,16 @@ or kept with the reason said (27).
     asked for when the server offers it. /mcp logout <name> forgets the
     sign-in without revoking it at the server; the /mcp picker offers
     both. A browser is opened only at a desktop, not over ssh, and only
-    for a web address. From a shell, gnosh mcp login <name> does the
+    for a web address. Everything a sign-in sends goes over https or to
+    this machine: a server, its metadata (every redirect of it), its
+    authorization server and endpoints; a token is never sent to a
+    server over plain http elsewhere; token and registration requests
+    follow no redirect. The redirect address takes only the answer that
+    carries the sign-in's state, and the sign-in does not start when
+    another program holds its port on ::1. A refused token (401) is
+    refreshed under a lock other gnosh processes take too, after the
+    file is read again; only invalid_grant forgets the tokens, and a 403
+    renews nothing. From a shell, gnosh mcp login <name> does the
     same (it waits for the browser, or for the address pasted on a line;
     --no-browser opens none), gnosh mcp logout <name> forgets, and gnosh
     mcp list and get use the sign-ins and name a server that wants one.
