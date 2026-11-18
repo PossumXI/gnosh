@@ -643,7 +643,12 @@ func (m *Manager) keepDetached(sid int, left []procInfo) bool {
 
 // pruneDetached forgets the sessions on the books (detached) in which no
 // process is left. The sessions are looked at without the lock held; one
-// put on the books again meanwhile, under the same id, is kept.
+// put on the books again meanwhile, under the same id, is kept. A session
+// must look empty twice, pruneRecheck apart: a look at a session is not one
+// moment, and a process that started a last one and ended while it was
+// looked at can make it look empty. (A clean-copy CI saw it: a launcher's
+// shell started its server and ended as the session was looked at, the
+// session was forgotten, and Close left the server running.)
 func (m *Manager) pruneDetached() {
 	m.mu.Lock()
 	books := make(map[int][]procInfo, len(m.detached))
@@ -651,7 +656,18 @@ func (m *Manager) pruneDetached() {
 		books[sid] = procs
 	}
 	m.mu.Unlock()
+	empty := make(map[int][]procInfo)
 	for sid, then := range books {
+		if now, err := m.procs(sid); err != nil || len(now) > 0 {
+			continue
+		}
+		empty[sid] = then
+	}
+	if len(empty) == 0 {
+		return
+	}
+	time.Sleep(pruneRecheck)
+	for sid, then := range empty {
 		if now, err := m.procs(sid); err != nil || len(now) > 0 {
 			continue
 		}
@@ -662,6 +678,10 @@ func (m *Manager) pruneDetached() {
 		m.mu.Unlock()
 	}
 }
+
+// pruneRecheck is how long pruneDetached waits before it looks again at a
+// session that looked empty.
+const pruneRecheck = 50 * time.Millisecond
 
 // settle is called when a command's output has closed for good. A command
 // whose leftovers held it open (lingering) is taken off that list; when

@@ -648,6 +648,48 @@ func TestLeftoversThatEndedAreForgotten(t *testing.T) {
 	}
 }
 
+// A session on the books that looks empty once, as a look at it caught a
+// process that started a last one and ended, is not forgotten: it must
+// look empty twice, so that Close still stops what it left running.
+func TestBooksKeepASessionThatLookedEmptyOnce(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	server := []procInfo{{pid: 5002, pgid: 5002, start: 7, image: "server"}}
+	var mu sync.Mutex
+	looks := 0
+	m.procs = func(sid int) ([]procInfo, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if sid != 5000 {
+			return nil, nil
+		}
+		looks++
+		if looks == 1 {
+			return nil, nil // the launcher ended, its server not seen yet
+		}
+		return server, nil
+	}
+	m.mu.Lock()
+	m.detached[5000] = []procInfo{{pid: 5001, pgid: 5000, start: 3, image: "launcher"}}
+	m.mu.Unlock()
+	m.pruneDetached()
+	m.mu.Lock()
+	_, kept := m.detached[5000]
+	m.mu.Unlock()
+	if !kept {
+		t.Fatal("a session that looked empty once was forgotten, and Close would leave its server running")
+	}
+	// One that stays empty is forgotten.
+	m.procs = func(int) ([]procInfo, error) { return nil, nil }
+	m.pruneDetached()
+	m.mu.Lock()
+	_, kept = m.detached[5000]
+	m.mu.Unlock()
+	if kept {
+		t.Error("a session that stayed empty was kept")
+	}
+}
+
 // When nothing seen as a command ended is left in its session, the
 // session's id may belong to something else by then: only the processes
 // that carry the manager's mark are signalled.
