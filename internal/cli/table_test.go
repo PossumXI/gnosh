@@ -209,6 +209,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh session list --json", "gnosh session show --json", "gnosh session last --json", "gnosh session rename --json",
 		"gnosh mem", "gnosh logs", "gnosh logs -f", "gnosh logs --follow", "gnosh logs -t", "gnosh logs --tail", "gnosh dirs",
 		"gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove", "gnosh mcp ls", "gnosh mcp rm",
+		"gnosh mcp login", "gnosh mcp login --no-browser", "gnosh mcp logout",
 		"gnosh mcp add -s", "gnosh mcp add --scope", "gnosh mcp add -t", "gnosh mcp add --transport",
 		"gnosh mcp add -e", "gnosh mcp add --env", "gnosh mcp add -H", "gnosh mcp add --header", "gnosh mcp remove -s",
 		"gnosh --mcp-config", "gnosh --strict-mcp-config",
@@ -223,7 +224,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh server", "gnosh login", "gnosh logout", "gnosh update-providers", "gnosh schema",
 		"gnosh -H", "gnosh --host", "gnosh --from-pr", "gnosh --betas",
 		"gnosh --plugin-dir", "gnosh --plugin-url", "gnosh --prompt-suggestions", "gnosh --file",
-		"gnosh auth", "gnosh install", "gnosh plugin", "gnosh mcp serve", "gnosh mcp login",
+		"gnosh auth", "gnosh install", "gnosh plugin", "gnosh mcp serve",
 		// What spec/DECISIONS.md item 26 took off: print mode is -p, a
 		// session is named with --resume, and there is no other data folder.
 		"gnosh run", "gnosh r", "gnosh -q", "gnosh --quiet", "gnosh -s", "gnosh --session", "gnosh -D", "gnosh --data-dir",

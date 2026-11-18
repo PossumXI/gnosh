@@ -297,7 +297,7 @@ var built = []string{
 	"--debug", "--debug-file", "--verbose",
 	"--output-format=json", "--output-format=stream-json", "--input-format=stream-json", "--replay-user-messages", "--json-schema",
 	"--permission-prompts", "--permission-prompts=host", "--permission-prompts=none",
-	"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove",
+	"mcp add", "mcp add-json", "mcp get", "mcp list", "mcp remove", "mcp login", "mcp logout", "mcp --no-browser",
 	"mcp --scope", "mcp --scope=local", "mcp --scope=user", "mcp --scope=project",
 	"mcp --transport", "mcp --transport=stdio", "mcp --transport=http",
 	"mcp --env", "mcp --header",
@@ -384,7 +384,7 @@ func (p *program) run(ctx context.Context) int {
 		return p.modelsCommand(ctx, inv)
 	case cli.CmdSessionList, cli.CmdSessionShow, cli.CmdSessionLast, cli.CmdSessionRename:
 		return p.sessionsCommand(ctx, inv)
-	case cli.CmdMCPAdd, cli.CmdMCPAddJSON, cli.CmdMCPGet, cli.CmdMCPList, cli.CmdMCPRemove:
+	case cli.CmdMCPAdd, cli.CmdMCPAddJSON, cli.CmdMCPGet, cli.CmdMCPList, cli.CmdMCPRemove, cli.CmdMCPLogin, cli.CmdMCPLogout:
 		return p.mcpCommand(ctx, inv)
 	case cli.CmdSSH:
 		// main runs gnosh ssh before anything is read; it comes here only

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
@@ -171,4 +173,69 @@ func TestMCPSignIn(t *testing.T) {
 	s.see("far: connected")
 	s.typeLine("/exit")
 	s.exit()
+}
+
+// gnosh mcp login, from a shell: it says where to sign in, and ends when
+// the browser comes back to this machine, or when the address the browser
+// tried to go to is pasted on a line; gnosh mcp list then finds the server
+// connected, and gnosh mcp logout forgets the sign-in.
+func TestMCPLoginFromAShell(t *testing.T) {
+	ss := newSignInServer(t)
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"far": {"type": "http", "url": "`+ss.srv.URL+`/mcp"}}}`)
+	if r := run(t, w, "mcp", "list"); !strings.Contains(r.out, "far: ") || !strings.Contains(r.out, "wants a sign-in: gnosh mcp login far") {
+		t.Errorf("gnosh mcp list before the sign-in:\n%s%s", r.out, r.err)
+	}
+	// login runs while the test plays the browser and the person.
+	login := func(paste bool) {
+		t.Helper()
+		o := testOptions(w, "mcp", "login", "far", "--no-browser")
+		var out, errb safeBuffer
+		in, typed := io.Pipe()
+		o.Stdout, o.Stderr, o.Stdin = &out, &errb, in
+		done := make(chan int, 1)
+		go func() { done <- Main(context.Background(), o) }()
+		var address string
+		for deadline := time.Now().Add(20 * time.Second); address == ""; time.Sleep(10 * time.Millisecond) {
+			if m := signInAddress.FindStringSubmatch(out.String()); m != nil {
+				address = m[1]
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("gnosh mcp login said no address:\n%s%s", out.String(), errb.String())
+			}
+		}
+		if paste {
+			noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+			resp, err := noFollow.Get(address)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			fmt.Fprintln(typed, resp.Header.Get("Location"))
+		} else if resp, err := http.Get(address); err == nil {
+			resp.Body.Close()
+		} else {
+			t.Fatal(err)
+		}
+		select {
+		case code := <-done:
+			if code != 0 || !strings.Contains(out.String(), "Signed in to far: connected") {
+				t.Errorf("gnosh mcp login ended %d:\n%s%s", code, out.String(), errb.String())
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatalf("gnosh mcp login did not end:\n%s%s", out.String(), errb.String())
+		}
+		typed.Close()
+	}
+	login(false)
+	if r := run(t, w, "mcp", "get", "far"); !strings.Contains(r.out, "sign-in: kept") || !strings.Contains(r.out, "status: connected") {
+		t.Errorf("gnosh mcp get after the sign-in:\n%s%s", r.out, r.err)
+	}
+	if r := run(t, w, "mcp", "logout", "far"); !strings.Contains(r.out, "The sign-in to far is forgotten") {
+		t.Errorf("gnosh mcp logout:\n%s%s", r.out, r.err)
+	}
+	login(true)
+	if r := run(t, w, "mcp", "list"); !strings.Contains(r.out, "connected (far 1)") {
+		t.Errorf("gnosh mcp list after signing in by a pasted address:\n%s%s", r.out, r.err)
+	}
 }

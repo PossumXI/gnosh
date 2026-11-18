@@ -308,6 +308,9 @@ func Default() *Table {
 		choices: []choice{{name: "local"}, {name: "user"}, {name: "project"}},
 		help:    "Where the server is kept: local (this project, for you alone: the default for add), user (every project of yours) or project (the project's .mcp.json, which goes with it).",
 		set:     func(i *Invocation, v flagValue) { i.MCPScope = v.text }})
+	mcpNoBrowser := t.add(&flag{names: "--no-browser", id: "mcp --no-browser", pri: 1,
+		help: "Open no browser: only say the address to sign in at.",
+		set:  func(i *Invocation, _ flagValue) { i.NoBrowser = true }})
 	mcpTransport := t.add(&flag{names: "-t --transport", id: "mcp --transport", kind: kindText, arg: "transport", pri: 1,
 		choices: []choice{{name: "stdio"}, {name: "http"},
 			{name: "sse", refuse: "the sse transport is not one gnosh speaks: a server reached at a URL is spoken to over http (Streamable HTTP), which servers that once spoke SSE speak now too"}},
@@ -425,6 +428,15 @@ func Default() *Table {
 		flags:   []*flag{mcpScope, cwd, help},
 		summary: "Remove a server.",
 		about:   "When the name is kept in more than one place, -s says which."})
+	t.command(mcp, &command{name: "login", cmd: CmdMCPLogin, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<name>",
+		flags:   []*flag{mcpNoBrowser, cwd, help},
+		summary: "Sign in to a server at a URL that wants it.",
+		about: "gnosh says the address to sign in at, and opens a browser there when it runs at a desktop (not over ssh, and never with --no-browser). " +
+			"When the browser cannot come back to this machine, paste the address it tried to open, and Enter. The sign-in is kept for every session."})
+	t.command(mcp, &command{name: "logout", cmd: CmdMCPLogout, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<name>",
+		flags:   []*flag{cwd, help},
+		summary: "Forget the sign-in to a server at a URL.",
+		about:   "The authorization server is not told: the token it gave may still work until it runs out."})
 
 	t.command(root, &command{name: "help", cmd: CmdHelp, pri: 0, maxArgs: -1, argsUsage: "[command]",
 		flags: []*flag{help}, finish: finishHelp, afterAnything: true,

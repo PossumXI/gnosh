@@ -36,11 +36,68 @@ import (
 // mcpLoginWait is how long a sign-in waits for the browser.
 const mcpLoginWait = 10 * time.Minute
 
-// mcpFlow is a sign-in under way, by server name.
-type mcpFlow struct {
+// signIn is one sign-in under way: the flow, the redirect address's
+// listener and what it hears, for the session (/mcp login) and for a
+// shell (gnosh mcp login) alike.
+type signIn struct {
 	flow *mcp.Flow
+	back <-chan url.Values
 	stop func()
-	at   time.Time
+}
+
+// mcpFlow is a sign-in the session has under way, by server name.
+type mcpFlow struct {
+	*signIn
+	at time.Time
+}
+
+// startSignIn finds the server's authorization server (www is what its
+// 401 said, or ""), registers gnosh with it when the entry names no
+// oauth.clientId, opens the redirect address on this machine, and makes
+// the flow; offline_access is asked for when the server offers it.
+func startSignIn(ctx context.Context, cfg mcp.Config, www string, store *mcp.LoginStore) (*signIn, error) {
+	hc := &http.Client{Timeout: 30 * time.Second}
+	as, scopes, err := mcp.Discover(ctx, hc, cfg.URL, www, cfg.OAuth)
+	if err != nil {
+		return nil, fmt.Errorf("the sign-in to %s could not start: %w", cfg.Name, err)
+	}
+	if cfg.OAuth.Scopes != "" {
+		scopes = cfg.OAuth.Scopes
+	}
+	if containsWord(as.ScopesSupported, "offline_access") && !containsWord(strings.Fields(scopes), "offline_access") {
+		// (So that the token can be refreshed without another sign-in.)
+		scopes = strings.TrimSpace(scopes + " offline_access")
+	}
+	redirect, back, stop, err := mcp.Listen(cfg.OAuth.CallbackPort)
+	if err != nil {
+		return nil, err
+	}
+	clientID, secret := cfg.OAuth.ClientID, ""
+	if clientID != "" {
+		if kept, ok := store.Get(cfg.URL); ok && kept.ClientID == clientID {
+			secret = kept.ClientSecret
+		}
+	} else if clientID, secret, err = mcp.Register(ctx, hc, as, redirect); err != nil {
+		stop()
+		return nil, fmt.Errorf("the sign-in to %s could not start: %w", cfg.Name, err)
+	}
+	return &signIn{flow: mcp.NewFlow(as, clientID, secret, redirect, scopes, cfg.URL), back: back, stop: stop}, nil
+}
+
+// finishSignIn trades what the browser came back with for a token, and
+// keeps it.
+func finishSignIn(ctx context.Context, cfg mcp.Config, si *signIn, back url.Values, store *mcp.LoginStore) error {
+	si.stop()
+	tok, err := si.flow.Finish(ctx, &http.Client{Timeout: 30 * time.Second}, back)
+	if err != nil {
+		return fmt.Errorf("the sign-in to %s did not go through: %w", cfg.Name, err)
+	}
+	login := mcp.Login{Server: cfg.URL, Issuer: si.flow.AS.Issuer, TokenEndpoint: si.flow.AS.TokenEndpoint,
+		ClientID: si.flow.ClientID, ClientSecret: si.flow.ClientSecret, Token: tok}
+	if err := store.Put(login); err != nil {
+		return fmt.Errorf("the sign-in to %s could not be kept: %w", cfg.Name, err)
+	}
+	return nil
 }
 
 // mcpLogins is where the sign-ins are kept. (It takes no lock of the
@@ -77,7 +134,7 @@ func (l *live) mcpNeedsAuth(s *mcpServer, gen int, na *mcp.NeedsAuth) {
 		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s wants you to sign in: /mcp login %s starts it.", s.cfg.Name, s.cfg.Name))
 		return
 	}
-	l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s wants a sign-in, which a run cannot make: sign in from an interactive session first (/mcp login %s).", s.cfg.Name, s.cfg.Name))
+	l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s wants a sign-in, which a run cannot make: sign in first, with gnosh mcp login %s from a shell or /mcp login %s in a session.", s.cfg.Name, s.cfg.Name, s.cfg.Name))
 }
 
 // mcpLogin is /mcp login <name> [address].
@@ -87,9 +144,8 @@ func (l *live) mcpLogin(ctx context.Context, c *SlashContext, s *mcpServer, rest
 		return fmt.Errorf("the MCP server %s is started by gnosh, not reached at a URL: it has no sign-in", name)
 	}
 	if !l.interactive {
-		return fmt.Errorf("a run cannot sign in to %s: sign in from an interactive session first", name)
+		return fmt.Errorf("a run cannot sign in to %s: sign in from an interactive session first, or with gnosh mcp login %s", name, name)
 	}
-	hc := &http.Client{Timeout: 30 * time.Second}
 	if len(rest) > 0 {
 		// The address the browser tried to go to, pasted.
 		back, err := mcp.Callback(strings.Join(rest, " "))
@@ -107,31 +163,11 @@ func (l *live) mcpLogin(ctx context.Context, c *SlashContext, s *mcpServer, rest
 	l.mcp.mu.Lock()
 	www := s.www
 	l.mcp.mu.Unlock()
-	as, scopes, err := mcp.Discover(ctx, hc, s.cfg.URL, www, s.cfg.OAuth)
-	if err != nil {
-		return fmt.Errorf("the sign-in to %s could not start: %w", name, err)
-	}
-	if s.cfg.OAuth.Scopes != "" {
-		scopes = s.cfg.OAuth.Scopes
-	}
-	if containsWord(as.ScopesSupported, "offline_access") && !containsWord(strings.Fields(scopes), "offline_access") {
-		// (So that the token can be refreshed without another sign-in.)
-		scopes = strings.TrimSpace(scopes + " offline_access")
-	}
-	redirect, back, stop, err := mcp.Listen(s.cfg.OAuth.CallbackPort)
+	si, err := startSignIn(ctx, s.cfg, www, l.mcpLogins())
 	if err != nil {
 		return err
 	}
-	clientID, secret := s.cfg.OAuth.ClientID, ""
-	if clientID != "" {
-		if kept, ok := l.mcpLogins().Get(s.cfg.URL); ok && kept.ClientID == clientID {
-			secret = kept.ClientSecret
-		}
-	} else if clientID, secret, err = mcp.Register(ctx, hc, as, redirect); err != nil {
-		stop()
-		return fmt.Errorf("the sign-in to %s could not start: %w", name, err)
-	}
-	f := &mcpFlow{flow: mcp.NewFlow(as, clientID, secret, redirect, scopes, s.cfg.URL), stop: stop, at: l.p.now()}
+	f := &mcpFlow{signIn: si, at: l.p.now()}
 	l.mcp.mu.Lock()
 	if l.mcp.flows == nil {
 		l.mcp.flows = map[string]*mcpFlow{}
@@ -151,7 +187,7 @@ func (l *live) mcpLogin(ctx context.Context, c *SlashContext, s *mcpServer, rest
 	// The browser's answer, when it reaches this machine.
 	go func() {
 		select {
-		case got := <-back:
+		case got := <-f.back:
 			if err := l.mcpFinish(l.ctx, func(format string, args ...any) {
 				l.notice(agent.LevelInfo, "mcp", fmt.Sprintf(format, args...))
 			}, s, f, got); err != nil {
@@ -180,15 +216,8 @@ func (l *live) mcpFinish(ctx context.Context, say func(string, ...any), s *mcpSe
 	if !current {
 		return fmt.Errorf("the sign-in to %s has ended already", name)
 	}
-	f.stop()
-	tok, err := f.flow.Finish(ctx, &http.Client{Timeout: 30 * time.Second}, back)
-	if err != nil {
-		return fmt.Errorf("the sign-in to %s did not go through: %w", name, err)
-	}
-	login := mcp.Login{Server: s.cfg.URL, Issuer: f.flow.AS.Issuer, TokenEndpoint: f.flow.AS.TokenEndpoint,
-		ClientID: f.flow.ClientID, ClientSecret: f.flow.ClientSecret, Token: tok}
-	if err := l.mcpLogins().Put(login); err != nil {
-		return fmt.Errorf("the sign-in to %s could not be kept: %w", name, err)
+	if err := finishSignIn(ctx, s.cfg, f.signIn, back, l.mcpLogins()); err != nil {
+		return err
 	}
 	l.flog.logf("mcp", "signed in to the MCP server %s", name)
 	l.mcpReconnect(s)

@@ -1344,7 +1344,11 @@ or kept with the reason said (27).
     asked for when the server offers it. /mcp logout <name> forgets the
     sign-in without revoking it at the server; the /mcp picker offers
     both. A browser is opened only at a desktop, not over ssh, and only
-    for a web address. Not built: the client ID metadata document
-    (CIMD), a client secret given when the server is added (a confidential
-    client registered by hand), and gnosh mcp login from a shell.
+    for a web address. From a shell, gnosh mcp login <name> does the
+    same (it waits for the browser, or for the address pasted on a line;
+    --no-browser opens none), gnosh mcp logout <name> forgets, and gnosh
+    mcp list and get use the sign-ins and name a server that wants one.
+    Not built: the client ID metadata document (CIMD), and a client
+    secret given when the server is added (a confidential client
+    registered by hand).
 

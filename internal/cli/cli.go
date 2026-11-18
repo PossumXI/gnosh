@@ -64,6 +64,10 @@ const (
 	CmdMCPGet     Command = "mcp get"
 	CmdMCPList    Command = "mcp list"
 	CmdMCPRemove  Command = "mcp remove"
+	// CmdMCPLogin and CmdMCPLogout sign in to a server reached at a URL,
+	// and forget the sign-in; Invocation.Args holds its name.
+	CmdMCPLogin  Command = "mcp login"
+	CmdMCPLogout Command = "mcp logout"
 )
 
 // Conversation says which conversation a session command works in.
@@ -274,8 +278,11 @@ type Invocation struct {
 	// as they were typed.
 	MCPScope     string
 	MCPTransport string
-	MCPEnv       []string
-	MCPHeaders   []string
+	// NoBrowser says gnosh mcp login opens no browser, and only says the
+	// address to sign in at.
+	NoBrowser  bool
+	MCPEnv     []string
+	MCPHeaders []string
 	// MCPConfigs are the MCP servers a session is given on its command line
 	// (--mcp-config): files, or the JSON itself, each in the shape of
 	// .mcp.json. StrictMCPConfig says to use those alone.
