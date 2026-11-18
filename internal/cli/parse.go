@@ -432,6 +432,11 @@ func (p *parsed) unknownCommand(word string) *Error {
 		msg += fmt.Sprintf(" Did you mean %s?", near)
 	}
 	e.Message = msg + fmt.Sprintf(" Its commands are %s.", oneOf(names, "and"))
+	if c.parent != nil && c.parent.parent == nil {
+		// (A command first on the line: the words may have been a prompt
+		// that begins with its name.)
+		e.Message += " " + asPrompt(p.name+" "+word)
+	}
 	return e
 }
 

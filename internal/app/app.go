@@ -285,6 +285,7 @@ var built = []string{
 	"dirs", "agents", "agents --json", "agents --all", "logs", "logs --tail", "logs --follow", "stop", "--bg", "models", "ssh", "--worktree",
 	"session list", "session show", "session last", "session rename",
 	"session --json",
+	"prompt show", "prompt path", "prompt export", "prompt export --force",
 	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",
 	"--reasoning-effort", "--small-model",
 	"--permission-mode",
@@ -381,6 +382,8 @@ func (p *program) run(ctx context.Context) int {
 		return p.sessionCommand(ctx, inv)
 	case cli.CmdDirs:
 		return p.dirsCommand(ctx, inv)
+	case cli.CmdPromptShow, cli.CmdPromptPath, cli.CmdPromptExport:
+		return p.promptCommand(ctx, inv)
 	case cli.CmdAgents:
 		return p.agentsCommand(ctx, inv)
 	case cli.CmdLogs:

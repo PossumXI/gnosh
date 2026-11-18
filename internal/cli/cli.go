@@ -46,6 +46,13 @@ const (
 	// CmdMem reads the project's mem; Invocation.Args holds the words after
 	// `mem`, for mem itself to read.
 	CmdMem Command = "mem"
+	// CmdPromptShow and the two after it are `gnosh prompt ...`: gnosh's
+	// texts to the model listed or printed, the folder of the person's own,
+	// and gnosh's written there to edit (Invocation.Force writes over a
+	// file that is there).
+	CmdPromptShow   Command = "prompt show"
+	CmdPromptPath   Command = "prompt path"
+	CmdPromptExport Command = "prompt export"
 	// CmdAgents lists the sessions in the background, of every folder or
 	// of Invocation.Cwd's.
 	CmdAgents Command = "agents"
@@ -271,6 +278,8 @@ type Invocation struct {
 	// All belongs to `agents`: also every session in the background that
 	// is done, not only those of the last week.
 	All bool
+	// Force belongs to `prompt export`: write over a file that is there.
+	Force bool
 	// Hosts belongs to `doctor`: also try each declared host, which reaches
 	// out to other machines.
 	Hosts bool

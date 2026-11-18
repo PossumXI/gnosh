@@ -18,7 +18,9 @@ func TestHarnessSpecExamples(t *testing.T) {
 		// The opening paragraph.
 		{line: `gnosh`, want: inter(Invocation{})},
 		{line: `gnosh "fix the build"`, want: inter(Invocation{Prompt: "fix the build"})},
-		{line: `gnosh "prompt"`, want: inter(Invocation{Prompt: "prompt"})},
+		// (The spec's "prompt" stands for any prompt; the one word prompt
+		// alone is gnosh prompt now, and goes after -- or -p as a prompt.)
+		{line: `gnosh "the prompt"`, want: inter(Invocation{Prompt: "the prompt"})},
 		{line: `gnosh -p "prompt"`, want: pr(Invocation{Prompt: "prompt"})},
 		{line: `gnosh -- "prompt"`, want: inter(Invocation{Prompt: "prompt"})},
 		{line: `gnosh -y`, want: inter(Invocation{PermissionMode: skip})},

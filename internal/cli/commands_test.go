@@ -222,8 +222,10 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		{line: `gnosh session delete abc`, kind: ErrUnknownCommand, say: []string{"delete is not a command of gnosh session", "Its commands are list, show, last and rename."}},
 		{line: `gnosh session rm abc`, kind: ErrUnknownCommand, say: []string{"rm is not a command of gnosh session"}},
 		{line: `gnosh session web`, kind: ErrUnknownCommand, say: []string{"web is not a command of gnosh session"}},
-		{line: `gnosh prompt show`, want: inter(Invocation{Prompt: "prompt show"})},
-		{line: `gnosh "prompt"`, want: inter(Invocation{Prompt: "prompt"})},
+		{line: `gnosh prompt tools`, kind: ErrUnknownCommand, say: []string{"tools is not a command of gnosh prompt", "Its commands are show, path and export. If \"prompt tools\" is a prompt, put -- before it."}},
+		{line: `gnosh prompt context`, kind: ErrUnknownCommand, say: []string{"context is not a command of gnosh prompt"}},
+		{line: `gnosh "prompt"`, kind: ErrUsage, say: []string{"gnosh prompt needs one of its commands after it", "If prompt is a prompt, put -- before it."}},
+		{line: `gnosh -- prompt show`, want: inter(Invocation{Prompt: "prompt show"})},
 		// (gnosh ssh is built: main runs it before the table is read, and
 		// the table has it for help.)
 		{line: `gnosh ssh box.example.com`, want: Invocation{Command: CmdSSH, Args: []string{"box.example.com"}}},
@@ -242,8 +244,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 	for _, gone := range []string{
 		"run", "--quiet", "--session", "--data-dir",
 		"session delete", "session web", "session web --port",
-		"prompt show", "prompt path", "prompt export", "prompt tools", "prompt context",
-		"prompt export --force", "prompt tools --json", "prompt tools --export",
+		"prompt tools", "prompt context", "prompt tools --json", "prompt tools --export",
 		"projects", "projects --json", "stats", "stats --all", "stats --crawl-dir",
 	} {
 		if have[gone] {

@@ -302,6 +302,9 @@ func Default() *Table {
 	sessionJSON := t.add(&flag{names: "--json", id: "session --json", pri: 1,
 		help: "Print JSON instead of text.",
 		set:  func(i *Invocation, _ flagValue) { i.JSON = true }})
+	promptForce := t.add(&flag{names: "--force", id: "prompt export --force", pri: 1,
+		help: "Write over a file of that name that is there already.",
+		set:  func(i *Invocation, _ flagValue) { i.Force = true }})
 	agentsJSON := t.add(&flag{names: "--json", id: "agents --json", pri: 1,
 		help: "Print JSON instead of text: the working sessions, and with --all the others too.",
 		set:  func(i *Invocation, _ flagValue) { i.JSON = true }})
@@ -392,6 +395,22 @@ func Default() *Table {
 		flags:   []*flag{cwd, help},
 		summary: "Read the project's mem, without a model.",
 		about:   "The words after mem go to mem as they are: show, find and log read it. What changes mem is done with /mem inside a session."})
+
+	prm := t.command(root, &command{name: "prompt", needSub: true, pri: 1,
+		argsUsage: "<command>", flags: []*flag{help},
+		summary: "Read gnosh's own words to the model, and make any of them yours.",
+		about:   "These start no model. A file of yours in the folder gnosh prompt path names stands in for gnosh's text of its name in every session from then on. What fills the model's window, each tool's share with it, is /context all (in a session, or gnosh -p '/context all')."})
+	t.command(prm, &command{name: "show", cmd: CmdPromptShow, pri: 1, maxArgs: 1, argsUsage: "[name]",
+		flags:   []*flag{help},
+		summary: "List gnosh's texts to the model, or print one as it is sent.",
+		about:   "The list says where each text goes and how large it is, and which are yours. With a name, the text in force is printed, and what it is, when it is sent and where it came from are said on standard error, so that the text alone can be kept in a file."})
+	t.command(prm, &command{name: "path", cmd: CmdPromptPath, pri: 1,
+		flags:   []*flag{help},
+		summary: "Print the folder your own texts go in."})
+	t.command(prm, &command{name: "export", cmd: CmdPromptExport, pri: 1, maxArgs: -1, argsUsage: "[name...]",
+		flags:   []*flag{promptForce, help},
+		summary: "Write gnosh's own texts into the folder yours go in, to edit them.",
+		about:   "With no name, every text. A file that is there is kept unless --force is given. An exported text changes nothing until its words are changed: its first line marks it as gnosh's own, and is never sent."})
 
 	t.command(root, &command{name: "agents", cmd: CmdAgents, pri: 1,
 		flags:   []*flag{agentsJSON, agentsAll, cwd, help},

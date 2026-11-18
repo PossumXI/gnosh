@@ -115,6 +115,12 @@ Built:
   of what is there, fewer parts, less work, the right place), the code
   doing what it did. All run in `gnosh -p` too; in a Gno project the
   security review holds Gno code against the Gno guides.
+- **gnosh's own words to the model, yours to read and change:** `gnosh
+  prompt show` lists every text gnosh sends (where it goes and about how
+  many tokens), `gnosh prompt show <name>` prints one as it is sent, and
+  `gnosh prompt export <name>` writes it into `~/.config/gnosh/prompts/`
+  (`gnosh prompt path`), where your edited copy stands in for it in every
+  new session. What fills the window, tool by tool, is `/context all`.
 - **Output styles**, as Claude Code's: `/output-style Concise` (or
   Proactive, Explanatory, Learning) changes how the model replies from the
   next message on, kept in the project's local settings. A style of your

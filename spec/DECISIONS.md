@@ -1696,3 +1696,25 @@ or kept with the reason said (27).
     any folder, as the names gnosh agents prints are of any folder;
     /tasks stop still reaches only this folder's. gnosh logs prints the
     last 1000 lines, as its help and the spec say (it printed 100).
+
+109. **gnosh prompt show, path and export (CLI-12).** Jae asked how to
+    read and change what each prompt sends; internal/prompt already held
+    every text as a file, with Load (a session reads the person's
+    replacements from the config's prompts folder at its start) and
+    Export, but nothing on the command line reached them. gnosh prompt
+    show lists the texts, where each goes (the system prompt, a line on
+    the person's side, inside a tool's result, a small request of
+    gnosh's own), about how many tokens it is, and which are the
+    person's; with a name it prints the text in force on standard
+    output, and what it is, when it is sent and what it must keep on
+    standard error, so the text alone can be kept in a file. A folder
+    whose files cannot stand in is refused with Load's words, as a
+    session refuses it. gnosh prompt path prints the folder; gnosh
+    prompt export writes gnosh's texts there (all of them, or those
+    named; each name checked before anything is written), keeping a
+    file that is there unless --force. The spec's tools and context
+    subcommands are not built: /context all says the same in a session
+    or in gnosh -p. "prompt" is now a command word, so a one-word prompt
+    "prompt" goes after -- (or -p), and a word after gnosh prompt that is
+    none of its commands says so; the parser now says, for any command
+    first on the line, that words meant as a prompt go after --.

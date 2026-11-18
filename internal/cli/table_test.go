@@ -214,6 +214,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		"gnosh mcp add -e", "gnosh mcp add --env", "gnosh mcp add -H", "gnosh mcp add --header", "gnosh mcp remove -s",
 		"gnosh --mcp-config", "gnosh --strict-mcp-config",
 		"gnosh help", "gnosh version", "gnosh --allow-dangerously-skip-permissions",
+		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export",
 	} {
 		if !have[want] {
 			t.Errorf("the table has no %s", want)
@@ -231,7 +232,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 		// What the specs name and nothing builds yet.
 
 		"gnosh session delete", "gnosh session rm", "gnosh session web",
-		"gnosh prompt show", "gnosh prompt path", "gnosh prompt export", "gnosh prompt tools", "gnosh prompt context",
+		"gnosh prompt tools", "gnosh prompt context",
 		"gnosh projects", "gnosh stats",
 	} {
 		if have[gone] {
