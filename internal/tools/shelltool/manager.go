@@ -355,6 +355,45 @@ func (m *Manager) LeftRunning() []string {
 	return out
 }
 
+// StopLeftRunning stops what finished commands left running, as Close
+// does at the end, and returns what LeftRunning said of it: a run about to
+// end stops them before it tells the model, so that one started again to
+// outlive the run (with setsid) finds its port and its files free. The
+// manager goes on.
+func (m *Manager) StopLeftRunning() []string {
+	left := m.LeftRunning()
+	m.stopLeft(false)
+	return left
+}
+
+// stopLeft stops what finished commands left behind, still holding their
+// output, and what they left that let go of it; closing, it also closes
+// their output and waits for what was read of it.
+func (m *Manager) stopLeft(closing bool) {
+	m.mu.Lock()
+	left := make(map[*job][]procInfo, len(m.lingering))
+	for j, procs := range m.lingering {
+		left[j] = procs
+	}
+	detached := m.detached
+	m.detached = make(map[int][]procInfo)
+	m.mu.Unlock()
+	var sweeps sync.WaitGroup
+	for j, procs := range left {
+		sweeps.Go(func() {
+			m.sweep(j.pid, procs)
+			if closing {
+				j.pipe.Close()
+				waitFor(j.pumped, m.opt.PipeGrace+time.Second)
+			}
+		})
+	}
+	for sid, procs := range detached {
+		sweeps.Go(func() { m.sweep(sid, procs) })
+	}
+	sweeps.Wait()
+}
+
 // Close stops every command the manager started and is still running,
 // foreground and background, with everything those commands started; kills
 // what a finished command left behind if that still holds the command's
@@ -410,29 +449,7 @@ func (m *Manager) close() error {
 		}
 	}
 
-	// What finished commands left behind, still holding their output, and
-	// what they left that let go of it.
-	m.mu.Lock()
-	left := make(map[*job][]procInfo, len(m.lingering))
-	for j, procs := range m.lingering {
-		left[j] = procs
-	}
-	detached := m.detached
-	m.detached = make(map[int][]procInfo)
-	m.mu.Unlock()
-	var sweeps sync.WaitGroup
-	for j, procs := range left {
-		sweeps.Go(func() {
-			m.sweep(j.pid, procs)
-			j.pipe.Close()
-			waitFor(j.pumped, m.opt.PipeGrace+time.Second)
-		})
-	}
-	for sid, procs := range detached {
-		sweeps.Go(func() { m.sweep(sid, procs) })
-	}
-	sweeps.Wait()
-
+	m.stopLeft(true)
 	m.notes.close()
 
 	// Every goroutine should be done by now. One that is not is waiting on

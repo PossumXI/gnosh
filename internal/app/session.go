@@ -1670,19 +1670,26 @@ func (c *controls) LeftRunning() []string {
 	return l.shell.LeftRunning()
 }
 
-// TellLeftRunning hands the model, as a run is about to end, what its
-// commands left running, which the end stops: a note that wakes it, so
-// that a server the task needs can be kept with setsid. It reports
-// whether the note went to the model.
+// TellLeftRunning stops, as a run is about to end, what its commands left
+// running, which the end would stop, and hands the model what that was: a
+// note that wakes it, so that a server the task needs is started again
+// with setsid. They are stopped first, so that the one started again finds
+// its port free (a copy started beside the old one could not take it, the
+// old one would answer the check, and the end would then stop it: two
+// FrontierHarness tasks were lost so). It reports whether the note went to
+// the model.
 func (c *controls) TellLeftRunning(left []string) bool {
 	l := c.cur()
 	if l.agent == nil || l.closing.Load() {
 		return false
 	}
+	if l.shell != nil {
+		l.shell.StopLeftRunning()
+	}
 	return l.agent.Tell(agent.Note{
 		Text:   l.texts.PrintLeftovers(strings.Join(left, ", ")),
 		Source: "print-leftovers",
-		Notice: "The run is about to end, and stops what its commands left running: " + strings.Join(left, ", ") + ". The model is told once, to keep what the task needs with setsid.",
+		Notice: "The run is about to end, and stopped what its commands left running: " + strings.Join(left, ", ") + ". The model is told once, to start again with setsid what the task needs.",
 		Wake:   true,
 	}) == nil
 }

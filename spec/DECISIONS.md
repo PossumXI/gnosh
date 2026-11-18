@@ -2166,3 +2166,17 @@ or kept with the reason said (27).
     rows of its text, its numbered answers): a number answers it, and
     words with Enter answer no, with them, as in the peek (answerWords,
     shared). The peek still shows the whole text.
+
+135. **A run stops what its commands left running before it tells the
+    model.** DECISIONS 117's note told the model, as a run was about to
+    end, that what its commands left running would be stopped, and to
+    start what the task needs again with setsid. But the old copy still
+    ran: a server started again beside it could not take its port, the
+    check the model made reached the old one, and the run's end stopped
+    that one, so no server was left. (The FrontierHarness peer's second
+    lost task, pypi-server, on a build before 117: `nohup python3 ... &`,
+    started again the same way after an edit, checked on its port, done,
+    and stopped at exit; Pi kept it and passed.) Now the run stops them
+    first (shelltool Manager.StopLeftRunning, the sweep Close makes) and
+    tells the model they were stopped; one it starts again with setsid
+    finds the port free and outlives the run.

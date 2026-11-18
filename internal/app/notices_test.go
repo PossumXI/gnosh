@@ -104,13 +104,18 @@ func TestRunTellsWhatItsEndStops(t *testing.T) {
 	w := apptest.NewWorld(t,
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"nohup sleep 300 > server.log 2>&1 & echo $! > server.pid"}`}}},
 		apptest.Reply{Text: "Done."},
-		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"setsid nohup sleep 301 > kept.log 2>&1 < /dev/null & echo $! > kept.pid"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"if kill -0 $(cat server.pid) 2>/dev/null; then echo running > before.txt; else echo stopped > before.txt; fi; setsid nohup sleep 301 > kept.log 2>&1 < /dev/null & echo $! > kept.pid"}`}}},
 		apptest.Reply{Text: "Kept the server."})
 	r := run(t, w, "-y", "-p", "start the server").wantCode(t, 0)
 	if r.out != "Done.\n\nKept the server.\n" {
 		t.Errorf("the run printed %q", r.out)
 	}
-	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) is about to end, and what your commands left running is stopped with it: process group", "(sleep)", "setsid nohup <command>")
+	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) is about to end, and what your commands left running was stopped: process group", "(sleep)", "setsid nohup <command>")
+	// (Stopped before the model's turn: a server started again finds its
+	// port free.)
+	if data, _ := os.ReadFile(filepath.Join(w.Dir, "before.txt")); strings.TrimSpace(string(data)) != "stopped" {
+		t.Errorf("as the model was told, the process it left was %q", strings.TrimSpace(string(data)))
+	}
 	pidOf := func(name string) int {
 		t.Helper()
 		data, err := os.ReadFile(filepath.Join(w.Dir, name))
