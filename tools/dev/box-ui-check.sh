@@ -103,7 +103,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 failhint) base=http://127.0.0.1:9 ;;
@@ -117,7 +117,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -313,6 +313,12 @@ cron)
 	screen | grep -v '^ *$' | tail -14
 	tmux send-keys -t "$S" "Cancel the scheduled tick task." Enter
 	done_when() { [ "$(screen | grep -c "done in")" -ge 4 ] && screen | grep -q "CronDelete"; }
+	;;
+selfloop)
+	# /loop <prompt> with no interval: the model schedules each next run
+	# (ScheduleWakeup) and stops the loop when told the task is done.
+	tmux send-keys -t "$S" "/loop Reply with exactly one word, tock, then schedule the next run in one minute. On the third run, end the loop instead." Enter
+	done_when() { screen | grep -q "self-paced /loop is over"; }
 	;;
 entertree)
 	# EnterWorktree: gnosh starts again in the tree, in this pane, and the
