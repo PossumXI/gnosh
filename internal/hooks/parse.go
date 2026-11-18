@@ -210,14 +210,15 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 	case !hasType:
 		p.fail(place, "the hook has no \"type\". gnosh runs command hooks: \"type\": \"command\".")
 		return
-	case kind != "command" && kind != "http" && kind != "mcp_tool":
-		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks, http hooks and mcp_tool hooks only, so this hook would not run as written.", quote(kind))
+	case kind != "command" && kind != "http" && kind != "mcp_tool" && kind != "prompt":
+		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks, http hooks, mcp_tool hooks and prompt hooks only, so this hook would not run as written.", quote(kind))
 		return
 	}
 	// The fields of one type are a mistake on another.
 	only := map[string]string{"command": "command", "args": "command", "async": "command", "asyncRewake": "command", "shell": "command",
 		"url": "http", "headers": "http", "allowedEnvVars": "http",
-		"server": "mcp_tool", "tool": "mcp_tool", "input": "mcp_tool"}
+		"server": "mcp_tool", "tool": "mcp_tool", "input": "mcp_tool",
+		"prompt": "prompt", "model": "prompt", "continueOnBlock": "prompt"}
 	for _, f := range fields {
 		if want, ok := only[f.key]; ok && want != kind && !isNull(f.value) {
 			p.fail(place, "the hook has %s, which a hook of \"type\": %s does not take.", quote(f.key), quote(kind))
@@ -310,6 +311,19 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 				break
 			}
 			h.Input = append(json.RawMessage(nil), f.value...)
+		case "prompt":
+			if h.Prompt, ok = asString(f.value); !ok || strings.TrimSpace(h.Prompt) == "" {
+				p.fail(place, "\"prompt\" is the rule or the condition the model judges, as a string; this one is %s.", kindOf(f.value))
+				badCommand = true
+			}
+		case "model":
+			if h.Model, ok = asString(f.value); !ok {
+				p.fail(place, "\"model\" must be a string; this one is %s.", kindOf(f.value))
+			}
+		case "continueOnBlock":
+			if h.ContinueOnBlock, ok = asBool(f.value); !ok {
+				p.fail(place, "\"continueOnBlock\" must be true or false; this one is %s.", kindOf(f.value))
+			}
 		case "url":
 			if h.URL, ok = asString(f.value); !ok || h.URL == "" {
 				p.fail(place, "\"url\" is the address the event is sent to, as a string; this one is %s.", kindOf(f.value))
@@ -339,6 +353,10 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 		default:
 			p.fail(place, "the hook has %s, which gnosh does not know. A command hook has \"type\", \"command\" and \"timeout\".", quote(f.key))
 		}
+	}
+	if kind == "prompt" && h.Prompt == "" && !badCommand {
+		p.fail(place, "the prompt hook has no \"prompt\": the rule or the condition the model judges.")
+		badCommand = true
 	}
 	if kind == "http" && h.URL == "" && !badCommand {
 		p.fail(place, "the http hook has no \"url\" to send the event to.")

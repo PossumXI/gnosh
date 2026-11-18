@@ -547,16 +547,19 @@ func hooksConfig(cfg *config.Config) (hooks.Config, []hooks.Problem) {
 
 			StatusMessage: h.StatusMessage,
 
-			URL:            h.URL,
-			Headers:        h.Headers,
-			AllowedEnvVars: h.AllowedEnvVars,
-			Server:         h.Server,
-			Tool:           h.Tool,
-			Input:          h.Input,
-			Timeout:        h.Timeout,
-			Source:         h.Origin.String(),
-			Global:         h.Scope == "user",
-			If:             h.If,
+			URL:             h.URL,
+			Headers:         h.Headers,
+			AllowedEnvVars:  h.AllowedEnvVars,
+			Server:          h.Server,
+			Tool:            h.Tool,
+			Input:           h.Input,
+			Prompt:          h.Prompt,
+			Model:           h.Model,
+			ContinueOnBlock: h.ContinueOnBlock,
+			Timeout:         h.Timeout,
+			Source:          h.Origin.String(),
+			Global:          h.Scope == "user",
+			If:              h.If,
 		})
 		if err != nil {
 			var ce *hooks.ConfigError

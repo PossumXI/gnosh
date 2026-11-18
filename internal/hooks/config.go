@@ -96,6 +96,18 @@ type Hook struct {
 	// is read as a command hook's stdout is (Options.MCP calls it).
 	Server, Tool string
 	Input        json.RawMessage
+
+	// Prompt, when it is set, makes the hook a question to the model
+	// (Claude Code's "type": "prompt"): a rule or a condition, in which
+	// $ARGUMENTS stands for the event as JSON (with no $ARGUMENTS the
+	// event follows it), answered with {"ok": ..., "reason": ...}
+	// (prompthook.go). Model names the model it would ask, which gnosh
+	// does not pick per hook: it asks the model the session asks its own
+	// side questions. ContinueOnBlock makes an "ok": false on PreToolUse
+	// and PostToolUse a reason for the model rather than the turn's end.
+	Prompt          string
+	Model           string
+	ContinueOnBlock bool
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -113,6 +125,9 @@ func (h Hook) label() string {
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
 		return "POST " + h.URL
+	}
+	if h.Prompt != "" {
+		return "prompt: " + shorten(h.Prompt, 80)
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool
@@ -160,6 +175,10 @@ type Spec struct {
 	// Server, Tool and Input make an MCP tool hook (see Hook).
 	Server, Tool string
 	Input        json.RawMessage
+	// Prompt, Model and ContinueOnBlock make a prompt hook (see Hook).
+	Prompt          string
+	Model           string
+	ContinueOnBlock bool
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -182,15 +201,18 @@ func NewHook(s Spec) (Hook, error) {
 
 		StatusMessage: s.StatusMessage,
 
-		URL:            s.URL,
-		Headers:        s.Headers,
-		AllowedEnvVars: s.AllowedEnvVars,
-		Server:         s.Server,
-		Tool:           s.Tool,
-		Input:          s.Input,
-		Source:         s.Source,
-		Global:         s.Global,
-		If:             strings.TrimSpace(s.If),
+		URL:             s.URL,
+		Headers:         s.Headers,
+		AllowedEnvVars:  s.AllowedEnvVars,
+		Server:          s.Server,
+		Tool:            s.Tool,
+		Input:           s.Input,
+		Prompt:          s.Prompt,
+		Model:           s.Model,
+		ContinueOnBlock: s.ContinueOnBlock,
+		Source:          s.Source,
+		Global:          s.Global,
+		If:              strings.TrimSpace(s.If),
 	}
 	if msgs := hookProblems(h); len(msgs) > 0 {
 		problems := make([]Problem, len(msgs))
@@ -244,6 +266,13 @@ func hookProblems(h Hook) []string {
 		msgs = append(msgs, eventProblem(string(h.Event)))
 	}
 	switch {
+	case h.Prompt != "":
+		if h.Command != "" || h.Args != nil || h.URL != "" || h.Server != "" || h.Tool != "" || h.Async || h.AsyncRewake {
+			msgs = append(msgs, "the hook is both a prompt and a command, an address or an MCP tool; it is one of them.")
+		}
+		if known && !promptEvents[h.Event] {
+			msgs = append(msgs, fmt.Sprintf("a prompt hook runs on PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop, UserPromptSubmit, UserPromptExpansion and PermissionRequest, as in Claude Code; %s runs command, http and mcp_tool hooks.", h.Event))
+		}
 	case h.Server != "" || h.Tool != "":
 		if h.Server == "" || h.Tool == "" {
 			msgs = append(msgs, "an mcp_tool hook names both the \"server\" and the \"tool\" it calls.")

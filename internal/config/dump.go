@@ -277,16 +277,19 @@ func jsonOf(v any) json.RawMessage {
 // runner that reads that shape. Timeouts are in seconds.
 func (c *Config) HooksJSON() []byte {
 	type handler struct {
-		Type           string            `json:"type"`
-		Command        string            `json:"command,omitempty"`
-		Args           *[]string         `json:"args,omitempty"`
-		URL            string            `json:"url,omitempty"`
-		Headers        map[string]string `json:"headers,omitempty"`
-		AllowedEnvVars []string          `json:"allowedEnvVars,omitempty"`
-		Server         string            `json:"server,omitempty"`
-		Tool           string            `json:"tool,omitempty"`
-		Input          json.RawMessage   `json:"input,omitempty"`
-		Timeout        float64           `json:"timeout,omitempty"`
+		Type            string            `json:"type"`
+		Command         string            `json:"command,omitempty"`
+		Args            *[]string         `json:"args,omitempty"`
+		URL             string            `json:"url,omitempty"`
+		Headers         map[string]string `json:"headers,omitempty"`
+		AllowedEnvVars  []string          `json:"allowedEnvVars,omitempty"`
+		Server          string            `json:"server,omitempty"`
+		Tool            string            `json:"tool,omitempty"`
+		Input           json.RawMessage   `json:"input,omitempty"`
+		Prompt          string            `json:"prompt,omitempty"`
+		Model           string            `json:"model,omitempty"`
+		ContinueOnBlock bool              `json:"continueOnBlock,omitempty"`
+		Timeout         float64           `json:"timeout,omitempty"`
 	}
 	type group struct {
 		Matcher string    `json:"matcher,omitempty"`
@@ -300,6 +303,9 @@ func (c *Config) HooksJSON() []byte {
 		}
 		if h.Server != "" {
 			hd = handler{Type: "mcp_tool", Server: h.Server, Tool: h.Tool, Input: h.Input, Timeout: h.Timeout.Seconds()}
+		}
+		if h.Prompt != "" {
+			hd = handler{Type: "prompt", Prompt: h.Prompt, Model: h.Model, ContinueOnBlock: h.ContinueOnBlock, Timeout: h.Timeout.Seconds()}
 		}
 		if h.Args != nil {
 			// (An empty list is still the exec form.)

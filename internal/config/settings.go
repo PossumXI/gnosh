@@ -191,14 +191,14 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		how, known := hookFields[m.key]
 		switch {
 		case !known:
-			bad(m.line, "%s is not a field of a hook handler that gnosh knows, so the hook might not run as it was written. gnosh reads \"type\", \"command\", \"args\", \"timeout\" and \"if\".", showName(m.key))
+			bad(m.line, "%s is not a field of a hook handler that gnosh knows, so the hook might not run as it was written. gnosh reads \"type\", \"command\", \"args\", \"timeout\" and \"if\" (and the fields of http, mcp_tool and prompt hooks).", showName(m.key))
 		case m.key == "type":
 			if m.val.kind != jString {
 				bad(m.line, "a hook's \"type\" is a string, and here it is %s.", m.val.kind.word())
 				break
 			}
-			if typ = m.val.str; typ != "command" && typ != "http" && typ != "mcp_tool" {
-				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\", \"http\" and \"mcp_tool\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
+			if typ = m.val.str; typ != "command" && typ != "http" && typ != "mcp_tool" && typ != "prompt" {
+				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\", \"http\", \"mcp_tool\" and \"prompt\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
 			}
 		case m.key == "command":
 			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
@@ -266,6 +266,24 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 				break
 			}
 			h.Input = m.val.marshal()
+		case m.key == "prompt":
+			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
+				bad(m.line, "a prompt hook's \"prompt\" is the rule or the condition the model judges, as a string that is not empty.")
+				break
+			}
+			h.Prompt = m.val.str
+		case m.key == "model":
+			if m.val.kind != jString {
+				bad(m.line, "a prompt hook's \"model\" is a string, and here it is %s.", m.val.kind.word())
+				break
+			}
+			h.Model = m.val.str
+		case m.key == "continueOnBlock":
+			if m.val.kind != jBool {
+				bad(m.line, "a prompt hook's \"continueOnBlock\" is true or false, and here it is %s.", m.val.kind.word())
+				break
+			}
+			h.ContinueOnBlock = m.val.b
 		case m.key == "statusMessage":
 			if m.val.kind != jString {
 				bad(m.line, "a hook's \"statusMessage\" is the text shown while it runs, as a string, and here it is %s.", m.val.kind.word())
@@ -328,6 +346,12 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		bad(n.line, "this command hook has a \"url\", \"headers\" or \"allowedEnvVars\", which only an http hook takes. Write \"type\": \"http\" for one.")
 	case typ == "command" && h.Command == "":
 		bad(n.line, "this hook handler has no \"command\", so it would run nothing.")
+	case typ == "prompt" && h.Prompt == "":
+		bad(n.line, "this prompt hook has no \"prompt\": the rule or the condition the model judges.")
+	case typ == "prompt" && (h.Command != "" || h.Args != nil || h.URL != "" || h.Async || h.AsyncRewake):
+		bad(n.line, "this prompt hook has fields of a command hook or an http hook, which it does not take.")
+	case typ != "prompt" && (h.Prompt != "" || h.Model != "" || h.ContinueOnBlock):
+		bad(n.line, "this hook has \"prompt\", \"model\" or \"continueOnBlock\", which only a prompt hook takes. Write \"type\": \"prompt\" for one.")
 	}
 	if !good {
 		return

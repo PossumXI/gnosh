@@ -45,7 +45,9 @@ Built:
 - **Permissions:** modes, plan mode included (the model presents its plan
   with ExitPlanMode and you approve it), and rules.
 - **Hooks:** command hooks in the shell and exec forms, in the background
-  too, http hooks and mcp_tool hooks, with Claude Code's `if` filters (one
+  too, http hooks, mcp_tool hooks and prompt hooks (a rule or a condition
+  the model judges, `{"ok": false, "reason": ...}` blocking as a command
+  hook's answer would), with Claude Code's `if` filters (one
   permission rule each) and their status messages, on 23 of Claude Code's
   events: the tool and prompt events, Stop and SubagentStop, the session
   and summary events, PreModelSwitch and PostModelSwitch, ConfigChange,

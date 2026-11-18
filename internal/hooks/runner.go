@@ -111,6 +111,11 @@ type Options struct {
 	// and returns the text it answered with, and whether the tool said it
 	// failed. Nil: such a hook could not run.
 	MCP func(ctx context.Context, server, tool string, input json.RawMessage) (text string, failed bool, err error)
+
+	// Prompt asks the model a prompt hook's question (prompthook.go) and
+	// returns its answer; model is the hook's own "model", which the
+	// caller may not honor. Nil: such a hook could not run.
+	Prompt func(ctx context.Context, model, text string) (string, error)
 }
 
 const (
@@ -418,6 +423,14 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 			}
 			if h.Server != "" {
 				procs[i] = r.callMCP(ctx, h.Hook, stdin, timeoutFor(h.Event, h.Timeout))
+				return
+			}
+			if h.Prompt != "" {
+				limit := h.Timeout
+				if limit <= 0 {
+					limit = promptTimeoutDefault
+				}
+				procs[i] = r.askModel(ctx, h.Hook, stdin, limit)
 				return
 			}
 			procs[i] = r.exec(ctx, h.Hook, stdin, env, dir, timeoutFor(h.Event, h.Timeout))

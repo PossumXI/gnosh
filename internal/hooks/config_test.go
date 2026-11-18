@@ -128,8 +128,7 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"an mcp_tool hook with neither", hook(`"type": "mcp_tool"`), []string{`the mcp_tool hook names no "server" and no "tool"`}},
 		{"an mcp_tool hook whose input is not an object", hook(`"type": "mcp_tool", "server": "s", "tool": "t", "input": [1]`), []string{`"input" is a JSON object`}},
 		{"a command hook with a server", hook(`"type": "command", "command": "x", "server": "s"`), []string{`"server", which a hook of "type": "command" does not take`}},
-		{"a prompt hook", hook(`"type": "prompt", "prompt": "is it done?"`), []string{`"type": "prompt"`, "command hooks, http hooks and mcp_tool hooks only"}},
-		{"an agent hook", hook(`"type": "agent", "prompt": "is it done?"`), []string{`"type": "agent"`, "command hooks, http hooks and mcp_tool hooks only"}},
+		{"an agent hook", hook(`"type": "agent", "prompt": "is it done?"`), []string{`"type": "agent"`, "command hooks, http hooks, mcp_tool hooks and prompt hooks only"}},
 
 		{"an if filter that is not a string", hook(`"type": "command", "command": "true", "if": ["Bash(rm *)"]`), []string{`"if" is one permission rule`, "this one is a list"}},
 		{"an empty if filter", hook(`"type": "command", "command": "true", "if": " "`), []string{`"if" is empty`, `leave "if" out`}},
@@ -199,7 +198,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	  "PreToolUse": [
 	    { "matcher": "Bash", "hooks": [
 	        { "type": "command", "command": "./ok.sh" },
-	        { "type": "prompt", "prompt": "is it safe?" },
+	        { "type": "agent", "prompt": "is it safe?" },
 	        { "type": "command", "command": "./filtered.sh", "if": 7, "timeout": -1 } ] } ],
 	  "stop": [ { "hooks": [ { "type": "command", "command": "./tests.sh" } ] } ],
 	  "PermissionRequest": [ { "hooks": [ { "type": "command", "command": "./answer.sh" } ] } ]
@@ -210,7 +209,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	}
 	text := err.Error()
 	contains(t, "the error", text,
-		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "prompt"`,
+		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "agent"`,
 		`gnosh.json: PreToolUse group 1, hook 3: "if" is one permission rule`,
 		`gnosh.json: PreToolUse group 1, hook 3: the timeout "-1" cannot be used`,
 		`gnosh.json: "stop" is not a hook event`,
@@ -225,7 +224,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	// PermissionRequest hooks.
 	fires := []Event{PreToolUse, Stop}
 	all := problemsText(Check(cfg, Options{Fires: fires}))
-	contains(t, "Check", all, `"type": "prompt"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
+	contains(t, "Check", all, `"type": "agent"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
 }
 
 func TestNewHook(t *testing.T) {
@@ -524,7 +523,7 @@ func TestMergeCarriesProblemsAlong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./ok.sh"}, {"type": "prompt", "prompt": "done?"}]}], "WorktreeCreate": []}`), "b.json")
+	bad, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./ok.sh"}, {"type": "agent", "prompt": "done?"}]}], "WorktreeCreate": []}`), "b.json")
 	if err == nil {
 		t.Fatal("the second block was accepted")
 	}
@@ -536,7 +535,7 @@ func TestMergeCarriesProblemsAlong(t *testing.T) {
 	if len(problems) != 2 {
 		t.Fatalf("got %d problems, want 2:\n%s", len(problems), problemsText(problems))
 	}
-	contains(t, "the problems", problemsText(problems), `b.json: Stop group 1, hook 2: the hook has "type": "prompt"`, `b.json: "WorktreeCreate"`)
+	contains(t, "the problems", problemsText(problems), `b.json: Stop group 1, hook 2: the hook has "type": "agent"`, `b.json: "WorktreeCreate"`)
 	_, err = NewRunner(all, Options{Fires: Events(), ProjectDir: "/project"})
 	var ce *ConfigError
 	if !errors.As(err, &ce) || len(ce.Problems) != 2 {

@@ -339,6 +339,12 @@ type Hook struct {
 	// connected MCP server (mcp_tool), with Input as its arguments.
 	Server, Tool string
 	Input        json.RawMessage
+	// Prompt makes the hook a prompt hook: a rule or a condition the model
+	// judges ($ARGUMENTS is the event); Model is the model it names, and
+	// ContinueOnBlock its continueOnBlock (hooks/prompthook.go).
+	Prompt          string
+	Model           string
+	ContinueOnBlock bool
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event
@@ -361,6 +367,9 @@ func (h Hook) CommandLine() string {
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool
+	}
+	if h.Prompt != "" {
+		return "prompt: " + h.Prompt
 	}
 	if h.Args == nil {
 		return h.Command

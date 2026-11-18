@@ -316,6 +316,10 @@ var hookFields = map[string]string{
 	"server":         "",
 	"tool":           "",
 	"input":          "",
+	// The fields of a prompt hook.
+	"prompt":          "",
+	"model":           "",
+	"continueOnBlock": "",
 }
 
 // hookFieldSame is the one value each "same" field may have.

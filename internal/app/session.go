@@ -431,6 +431,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	ho := st.hookOptions(l.cfg)
 	ho.Background = l.backgroundHook
 	ho.MCP = l.mcpHookCall
+	ho.Prompt = l.promptHookAsk
 	for _, c := range l.contribs {
 		if c.c.Hooks != nil {
 			fires := ho.Fires

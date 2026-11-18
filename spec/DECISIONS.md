@@ -1352,3 +1352,26 @@ or kept with the reason said (27).
     secret given when the server is added (a confidential client
     registered by hand).
 
+89. **Prompt hooks, as Claude Code's.** A hook of "type": "prompt" is a
+    rule about what to block or allow, or a condition that must hold,
+    which the model judges: $ARGUMENTS in it stands for the event's input
+    as JSON (without it, the input follows the prompt), and the model
+    answers {"ok": true} or {"ok": false, "reason": "..."}, with
+    "impossible": true when a condition can never be met. The answer is
+    turned into what a command hook would have printed on the event, and
+    read as that is: on Stop and SubagentStop the reason becomes the next
+    instruction (unless impossible); on PreToolUse the call is refused
+    and the turn ends (with continueOnBlock the reason goes to the model
+    as the call's error); on PostToolUse the turn ends (or the reason goes
+    to the model); on PostToolBatch, UserPromptSubmit and
+    UserPromptExpansion it blocks; on PostToolUseFailure the reason goes
+    beside the error; on PermissionRequest it decides nothing. Prompt
+    hooks run on those nine events only, as in Claude Code. The question
+    goes to the model the session asks its own side questions, at
+    temperature zero, with gnosh's instructions for a judge; a hook's
+    "model" is read and not honored (gnosh does not pick a model per
+    hook). The timeout is 30 seconds unless the hook sets one. A model
+    that does not answer in time, or not with that JSON, is a hook that
+    could not run, which blocks where a hook can block, as a failed
+    command does. Not built: agent hooks ("type": "agent").
+
