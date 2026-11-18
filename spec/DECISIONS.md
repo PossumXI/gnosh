@@ -1872,3 +1872,22 @@ or kept with the reason said (27).
     to start one again with setsid if the task needs it. A run that left
     nothing running is not told, and that turn's failing does not fail
     the run.
+
+118. **A run in the background waits on its permission questions for the
+    agent view.** Claude Code's background sessions stop under Needs input
+    and are answered from the agent view; gnosh's runs refused every call
+    that asks, so a run started from the view without -y could do little.
+    Now gnosh --bg, /background and /fork hand the run, in its
+    environment (GNOSH_RUN_ASKS, taken out before anything is started),
+    the base of its log's name; the agent loop puts a permission question
+    to the run's front end even with nobody attending (agent.Options.Relay,
+    permission questions only: a key's password, the model's own questions
+    and an MCP server's still have nobody to ask), and the run writes it to
+    <base>.ask with a random token and waits, with no clock, for
+    <base>.answer. The view lists such a run under Needs input (state
+    "blocked" in gnosh agents --json, as Claude Code's), shows the
+    question with its answers numbered, and writes the answer with the
+    token; a number answers, and words with Enter answer no with them,
+    which the model reads. An answer without the token is not heard, so a
+    model that wrote the file itself would not be either, and the token is
+    in no file the model was shown. gnosh stop still ends such a run.

@@ -57,6 +57,10 @@ type printer struct {
 	mu sync.Mutex
 	c  Controls
 
+	// asking are the permission questions put to the agent view (a run in
+	// the background, runasks.go), each with what ends its wait.
+	asking map[string]context.CancelFunc
+
 	// The state of text output.
 	buf       strings.Builder // the text of the reply being written
 	inMessage bool            // something of the reply has been written out
@@ -359,6 +363,14 @@ func (f *printer) stoppedBySignal(c Controls, id string, sig os.Signal, st agent
 	}
 	f.encode(obj)
 	f.finished = true
+	// A question still put to the agent view goes with the run.
+	for id, cancel := range f.asking {
+		cancel()
+		delete(f.asking, id)
+	}
+	if f.p.runAsks != "" {
+		_ = os.Remove(f.p.runAsks + ".ask")
+	}
 	return code
 }
 
@@ -382,6 +394,25 @@ func (f *printer) Event(ev any) {
 		return
 	}
 	switch ev := ev.(type) {
+	case *agent.QuestionEvent:
+		// Only a run whose questions the agent view answers is put any
+		// (agent.Options.Relay): it writes the question down and waits.
+		if f.p.runAsks == "" || f.c == nil {
+			return
+		}
+		if f.asking == nil {
+			f.asking = map[string]context.CancelFunc{}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		f.asking[ev.Question.ID] = cancel
+		q, c := ev.Question, f.c
+		f.stderr("waiting for an answer in gnosh agents: %s", oneLine(firstOf(q.Title, q.Kind), 200))
+		go relayAsk(ctx, f.p.runAsks, q, f.p.now, func(a agent.Answer) error { return c.Answer(q.ID, a) })
+	case *agent.AnswerEvent:
+		if cancel := f.asking[ev.ID]; cancel != nil {
+			cancel()
+			delete(f.asking, ev.ID)
+		}
 	case *agent.TurnStartEvent:
 		f.init()
 		if f.starts != nil && ev.Agent == "" {

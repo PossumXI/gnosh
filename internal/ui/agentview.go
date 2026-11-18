@@ -165,13 +165,12 @@ func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.Agent
 func (v *agentView) refresh() {
 	v.looked = v.now()
 	v.runs = v.src.Runs()
-	// The working ones first, whatever order the source keeps.
-	slices.SortStableFunc(v.runs, func(a, b app.AgentRun) int {
-		return cmp.Compare(boolInt(a.State != "working"), boolInt(b.State != "working"))
-	})
+	// Those that wait on the person first, then the working ones,
+	// whatever order the source keeps.
+	slices.SortStableFunc(v.runs, func(a, b app.AgentRun) int { return cmp.Compare(rank(a), rank(b)) })
 	doing, status := map[string][]string{}, map[string]string{}
 	for _, r := range v.runs {
-		if r.State != "working" {
+		if !running(r) {
 			delete(v.stopping, r.ID)
 			continue
 		}
@@ -181,12 +180,21 @@ func (v *agentView) refresh() {
 	v.keepChoice()
 }
 
-func boolInt(b bool) int {
-	if b {
+// rank is where a run's group stands in the list: Needs input, Working,
+// Completed.
+func rank(r app.AgentRun) int {
+	switch {
+	case r.State == "blocked":
+		return 0
+	case running(r):
 		return 1
 	}
-	return 0
+	return 2
 }
+
+// running reports whether a run's process works: one that waits on a
+// question works too.
+func running(r app.AgentRun) bool { return r.State == "working" || r.State == "blocked" }
 
 // keepChoice keeps the run chosen chosen: when it is no longer listed, the
 // one now in its place is.
@@ -326,7 +334,7 @@ func (f filter) passes(r app.AgentRun) bool {
 	for _, s := range f.states {
 		// s:blocked is Claude Code's for what waits on the person: a run
 		// in the background here never does.
-		if !strings.HasPrefix(r.State, s) && !(s == "completed" && r.State != "working") {
+		if !strings.HasPrefix(r.State, s) && !(s == "completed" && !running(r)) {
 			return false
 		}
 	}
@@ -478,6 +486,19 @@ func (v *agentView) key(k term.Key) {
 		v.suspend = true
 	case k.Is('x', term.ModCtrl):
 		v.stopOrForget()
+	case empty && v.answering() && k.Code == term.KeyRune && k.Rune >= '1' && k.Rune <= '9' && k.Mod&^term.ModShift == 0:
+		r, _ := v.chosen()
+		if i := int(k.Rune - '1'); i < len(r.Question.Choices) {
+			v.answer(r, r.Question.Choices[i], "")
+		}
+	case !empty && v.answering() && k.IsKey(term.KeyEnter, 0):
+		r, _ := v.chosen()
+		for _, c := range r.Question.Choices {
+			if c.Key == "no" {
+				v.answer(r, c, strings.TrimSpace(v.box.Text()))
+				v.box.Reset()
+			}
+		}
 	case empty && typedRune(k, ' '):
 		v.peek, v.help = !v.peek, false
 	case empty && typedRune(k, '?'):
@@ -509,11 +530,40 @@ func (v *agentView) enter() {
 		}
 		return
 	}
-	if r.State == "working" {
+	switch {
+	case r.Question != nil:
+		// What it asks is shown, to be answered.
+		v.peek, v.help = true, false
+		return
+	case running(r):
 		v.watch = &watching{id: r.ID, end: true}
 		return
 	}
 	v.open = r.ID
+}
+
+// answering reports whether the question of the run chosen is on the
+// screen to be answered: peeking at a run that waits on one.
+func (v *agentView) answering() bool {
+	r, ok := v.chosen()
+	return ok && v.peek && !v.help && r.Question != nil && len(r.Question.Choices) > 0
+}
+
+// answer answers the question run r waits on with choice c, and words
+// that go with it.
+func (v *agentView) answer(r app.AgentRun, c app.QuestionChoice, text string) {
+	if err := v.src.Answer(r.ID, r.Question.ID, c.Key, text); err != nil {
+		v.say("%s was not answered: %v.", runName(r), err)
+		v.refresh()
+		return
+	}
+	said := oneLine(c.Label)
+	if text != "" {
+		said = "No, with your words"
+	}
+	v.peek = false
+	v.refresh()
+	v.say("Answered %s: %s.", runName(r), strings.TrimSuffix(said, "."))
 }
 
 // dispatch starts a run on the prompt.
@@ -566,7 +616,7 @@ func (v *agentView) stopOrForget() {
 		return
 	}
 	name := runName(r)
-	if r.State == "working" {
+	if running(r) {
 		if v.stopping[r.ID] {
 			v.say("%s was asked to stop, and ends what it was doing first.", name)
 			return
@@ -654,11 +704,11 @@ func (v *agentView) watchInput(ev term.Event) {
 		case k.IsKey(term.KeyEnd, 0):
 			w.start, w.end = false, true
 		case k.Is('x', term.ModCtrl):
-			if r, ok := v.byID(w.id); ok && r.State == "working" && !v.stopping[r.ID] {
+			if r, ok := v.byID(w.id); ok && running(r) && !v.stopping[r.ID] {
 				v.stop(r)
 			}
 		case k.IsKey(term.KeyEnter, 0):
-			if r, ok := v.byID(w.id); ok && r.State != "working" {
+			if r, ok := v.byID(w.id); ok && !running(r) {
 				v.watch, v.open = nil, r.ID
 			}
 		case k.Is('l', term.ModCtrl):
@@ -682,7 +732,7 @@ func (v *agentView) byID(id string) (app.AgentRun, bool) {
 // age is how long a run has run: until now, or until it was over.
 func (v *agentView) age(r app.AgentRun) string {
 	end := v.now()
-	if r.State != "working" && !r.Ended.IsZero() {
+	if !running(r) && !r.Ended.IsZero() {
 		end = r.Ended
 	}
 	return shortAge(end.Sub(r.Started))
@@ -708,9 +758,11 @@ func (v *agentView) statusOf(r app.AgentRun) string {
 		last = oneLine(r.Output[len(r.Output)-1])
 	}
 	switch {
-	case r.State == "working" && v.stopping[r.ID]:
+	case running(r) && v.stopping[r.ID]:
 		return "stopping …"
-	case r.State == "working":
+	case r.Question != nil:
+		return strings.TrimSpace(oneLine(r.Question.Title) + " " + firstOf(r.Question.Text))
+	case running(r):
 		return firstNonEmpty(v.status[r.ID], "starting")
 	case r.State == "stopped":
 		return strings.TrimSuffix("stopped"+v.th.Sep+last, v.th.Sep)
@@ -734,13 +786,20 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	room := max(rows-len(live), 1)
 
 	shown := v.shown()
-	working := 0
+	asking, working := 0, 0
 	for _, r := range v.runs {
-		if r.State == "working" {
+		switch {
+		case r.State == "blocked":
+			asking++
+		case running(r):
 			working++
 		}
 	}
-	title := th.Wordmark.Render("gnosh agents") + th.Quiet.Render(th.Sep+count(working, "working", "working")+th.Sep+count(len(v.runs)-working, "completed", "completed"))
+	counts := count(working, "working", "working") + th.Sep + count(len(v.runs)-working-asking, "completed", "completed")
+	if asking > 0 {
+		counts = count(asking, "needs input", "need input") + th.Sep + counts
+	}
+	title := th.Wordmark.Render("gnosh agents") + th.Quiet.Render(th.Sep+counts)
 	if v.info.Scoped {
 		title += th.Quiet.Render(th.Sep + "in " + v.folder())
 	}
@@ -781,7 +840,10 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	group := ""
 	for _, r := range shown {
 		g := "Completed"
-		if r.State == "working" {
+		switch {
+		case r.State == "blocked":
+			g = "Needs input"
+		case running(r):
 			g = "Working"
 		}
 		if g != group {
@@ -829,7 +891,10 @@ func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string
 		pointer = th.Menu.PointerStyle.Render(th.Menu.Pointer) + " "
 	}
 	mark := th.Quiet.Render("∙")
-	if r.State == "working" {
+	switch {
+	case r.State == "blocked":
+		mark = th.Ask.Render(th.AskMark)
+	case running(r):
 		mark = th.Busy.Render("✽")
 	}
 	name := runName(r)
@@ -858,11 +923,14 @@ func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string
 // last or what it answered.
 func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 	th := &v.th
-	state := r.State
-	if r.State == "working" && v.stopping[r.ID] {
-		state = "stopping"
+	state := r.State + " " + v.age(r)
+	switch {
+	case running(r) && v.stopping[r.ID]:
+		state = "stopping " + v.age(r)
+	case r.Question != nil:
+		state = "needs input" + th.Sep + "waiting " + shortAge(v.now().Sub(r.Question.Since))
 	}
-	head := "─ " + runName(r) + th.Sep + state + " " + v.age(r) + th.Sep + firstNonEmpty(r.Folder, "(folder not known)") + " ─"
+	head := "─ " + runName(r) + th.Sep + state + th.Sep + firstNonEmpty(r.Folder, "(folder not known)") + " ─"
 	out := []string{th.Quiet.Render(fit(v.m, head, width))}
 	if p := strings.TrimSpace(r.Prompt); p != "" {
 		rows := wrap(v.m, oneLine(p), width, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", v.m.Width(th.PromptMark)))
@@ -871,8 +939,23 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 		}
 		out = append(out, rows...)
 	}
+	if q := r.Question; q != nil {
+		// What it asks, and the answers, numbered for the keys.
+		out = append(out, fit(v.m, th.Ask.Render(th.AskMark)+" "+oneLine(q.Title), width))
+		text := safeLines(q.Text)
+		if len(text) > 2*peekRows {
+			text = append(text[:2*peekRows:2*peekRows], th.Quiet.Render(fmt.Sprintf("  … %s", count(len(safeLines(q.Text))-2*peekRows, "more line", "more lines"))))
+		}
+		for _, l := range text {
+			out = append(out, fit(v.m, "  "+l, width))
+		}
+		for i, c := range q.Choices {
+			out = append(out, fit(v.m, fmt.Sprintf("  %d. %s", i+1, oneLine(c.Label)), width))
+		}
+		return out
+	}
 	var lines []string
-	if r.State == "working" {
+	if running(r) {
 		lines = v.doing[r.ID]
 		if len(lines) == 0 {
 			lines = []string{th.Quiet.Render("(nothing in its conversation yet)")}
@@ -933,11 +1016,18 @@ func (v *agentView) hintLine() string {
 			start += " with " + strings.Join(v.info.Flags, " ")
 		}
 		parts = []string{start, "Esc empties the box"}
+	case v.answering():
+		r, _ := v.chosen()
+		parts = []string{fmt.Sprintf("1-%d answers", len(r.Question.Choices)), "words and Enter: no, with them", "Esc closes"}
 	default:
 		parts = []string{"↑↓ choose", "Space peeks"}
-		if r, ok := v.chosen(); ok && r.State == "working" {
+		r, ok := v.chosen()
+		switch {
+		case ok && r.Question != nil:
+			parts = append(parts, "Enter answers", "Ctrl+X stops")
+		case ok && running(r):
 			parts = append(parts, "Enter watches", "Ctrl+X stops")
-		} else if ok {
+		case ok:
 			parts = append(parts, "Enter opens", "Ctrl+X twice takes it off")
 		}
 		parts = append(parts, "? keys", "Esc leaves")
@@ -958,11 +1048,11 @@ func (v *agentView) renderWatch(cols int) (body, live []string, crow, ccol int) 
 	r, ok := v.byID(w.id)
 	if ok {
 		state := r.State
-		if state == "working" && v.stopping[r.ID] {
+		if running(r) && v.stopping[r.ID] {
 			state = "stopping"
 		}
 		parts = []string{"watching " + runName(r), state + " " + v.age(r)}
-		if r.State == "working" {
+		if running(r) {
 			parts = append(parts, "Ctrl+X stops it")
 		} else {
 			parts = append(parts, "Enter opens it")

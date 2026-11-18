@@ -44,15 +44,34 @@ type AgentSource interface {
 	// this terminal, and returns when the person leaves it. The view has
 	// given the terminal up meanwhile.
 	Open(id string) error
+	// Answer answers the question a run waits on (AgentRun.Question):
+	// question is its ID, choice the key of the answer chosen, and text
+	// words that go with it ("no" with words lets the model carry on).
+	Answer(id, question, choice, text string) error
 }
+
+// AgentQuestion is a permission question a run in the background waits on
+// for a person to answer in the agent view (runasks.go).
+type AgentQuestion struct {
+	ID, Title, Text string
+	Choices         []QuestionChoice
+	Since           time.Time
+}
+
+// QuestionChoice is an answer a question offers: Key is what is answered,
+// Label what the person reads.
+type QuestionChoice struct{ Key, Label string }
 
 // AgentRun is a run in the background as the agent view lists it.
 type AgentRun struct {
 	// ID is its session's id, Short the start of it that names the run
 	// (runShort), and Name the name it was given, or "".
 	ID, Short, Name string
-	// State is "working", "done" or "stopped".
+	// State is "working", "blocked" (a question waits: Question), "done"
+	// or "stopped".
 	State string
+	// Question is the permission question a blocked run waits on.
+	Question *AgentQuestion
 	// Cwd is the folder it works in, and Folder the same with ~ for the
 	// home folder.
 	Cwd, Folder string
@@ -136,6 +155,12 @@ func (s *runSource) Runs() []AgentRun {
 		listed[r.session] = r
 		a := AgentRun{ID: r.session, Short: runShort(r.session), Name: r.name, State: runState(r),
 			Cwd: r.cwd, Folder: homeTilde(s.home, r.cwd), Prompt: r.prompt, Output: r.output, Started: r.started}
+		if q := r.asking; q != nil {
+			a.Question = &AgentQuestion{ID: q.ID, Title: q.Title, Text: q.Text, Since: q.Since}
+			for _, c := range q.Choices {
+				a.Question.Choices = append(a.Question.Choices, QuestionChoice{Key: c.Key, Label: c.Label})
+			}
+		}
 		if r.running {
 			working = append(working, a)
 			continue
@@ -237,6 +262,14 @@ func (s *runSource) Stop(ctx context.Context, id string) (string, error) {
 		return said, err
 	}
 	return awaitStop(ctx, s.p.now, id, r.log, proc)
+}
+
+func (s *runSource) Answer(id, question, choice, text string) error {
+	r, err := s.run(id)
+	if err != nil {
+		return err
+	}
+	return answerAsk(r.log, question, choice, text)
 }
 
 func (s *runSource) Forget(id string) error {

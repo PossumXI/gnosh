@@ -29,7 +29,16 @@ type fakeRuns struct {
 	stopped     []string
 	forgotten   []string
 	opened      []string
+	answered    []string
 	now         func() time.Time
+}
+
+func (f *fakeRuns) Answer(id, question, choice, text string) error {
+	f.mu.Lock()
+	f.answered = append(f.answered, id+" "+question+" "+choice+" "+text)
+	f.mu.Unlock()
+	f.set(id, func(r *app.AgentRun) { r.State, r.Question = "working", nil })
+	return nil
 }
 
 func (f *fakeRuns) Runs() []app.AgentRun {
@@ -461,5 +470,61 @@ func TestAgentViewOnATerminal(t *testing.T) {
 	defer ft.mu.Unlock()
 	if ft.closed != 1 {
 		t.Errorf("the terminal was closed %d times", ft.closed)
+	}
+}
+
+// A run that waits on a permission question comes first, under Needs
+// input, with the question on its row; Enter shows it whole with its
+// answers numbered, a number answers it, and words with Enter answer no
+// with them, which the model reads.
+func TestAgentViewNeedsInput(t *testing.T) {
+	g := newAgentRig(t)
+	const runAsk = "01a1eea5-5555-7000-8000-000000000005"
+	question := func() *app.AgentQuestion {
+		return &app.AgentQuestion{ID: "q7", Title: "Allow Bash?", Text: "  $ rm -rf build\nWhy gnosh asks: it removes files.",
+			Since: g.clk.Now().Add(-3 * time.Minute), Choices: []app.QuestionChoice{
+				{Key: "yes", Label: "Yes, this once"},
+				{Key: "always:0", Label: "Yes, and don't ask again this session for Bash(rm:*)"},
+				{Key: "no", Label: "No (alone it stops the turn; with words after it, the model reads them and carries on)"},
+			}}
+	}
+	g.src.runs = append(g.src.runs, app.AgentRun{ID: runAsk, Short: runAsk[:13], State: "blocked", Cwd: "/home/jae/src/app", Folder: "~/src/app",
+		Prompt: "clean the build", Started: g.clk.Now().Add(-5 * time.Minute), Question: question()})
+	g.v.sel = ""
+	g.v.refresh()
+	body, live := g.screen()
+	if body[0] != "gnosh agents · 1 needs input · 2 working · 2 completed" || body[1] != "Needs input" ||
+		!strings.HasPrefix(body[2], "> ? 01a1eea5-5555  Allow Bash? $ rm -rf build") || body[3] != "Working" {
+		t.Fatalf("the list:\n%s", strings.Join(body, "\n"))
+	}
+	if live[len(live)-1] != "↑↓ choose · Space peeks · Enter answers · Ctrl+X stops · ? keys · Esc leaves" {
+		t.Errorf("the keys line: %q", live[len(live)-1])
+	}
+	g.keys("<Enter>")
+	body, live = g.screen()
+	all := strings.Join(body, "\n")
+	for _, want := range []string{"─ 01a1eea5-5555 · needs input · waiting 3m · ~/src/app ─", "> clean the build", "? Allow Bash?",
+		"    $ rm -rf build", "  Why gnosh asks: it removes files.", "  1. Yes, this once", "  3. No (alone it stops the turn"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("the question does not show %q:\n%s", want, all)
+		}
+	}
+	if live[len(live)-1] != "1-3 answers · words and Enter: no, with them · Esc closes" || g.v.watch != nil {
+		t.Errorf("the keys line while answering: %q", live[len(live)-1])
+	}
+	g.keys(`"1"`)
+	if !slices.Equal(g.src.answered, []string{runAsk + " q7 yes "}) {
+		t.Fatalf("1 answered %q", g.src.answered)
+	}
+	if body, live = g.screen(); live[len(live)-1] != "Answered 01a1eea5-5555: Yes, this once." || !strings.HasPrefix(body[0], "gnosh agents · 3 working") {
+		t.Errorf("after the answer:\n%s\n%s", strings.Join(body, "\n"), live[len(live)-1])
+	}
+	// Words and Enter: no, with them.
+	g.src.set(runAsk, func(r *app.AgentRun) { r.State, r.Question = "blocked", question() })
+	g.v.refresh()
+	g.v.sel = runAsk
+	g.keys(`<Enter> "use git clean instead" <Enter>`)
+	if len(g.src.answered) != 2 || g.src.answered[1] != runAsk+" q7 no use git clean instead" || len(g.src.dispatched) != 0 {
+		t.Errorf("words and Enter answered %q and started %q", g.src.answered, g.src.dispatched)
 	}
 }

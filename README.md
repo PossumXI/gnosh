@@ -37,8 +37,9 @@ Built:
   `gnosh agents` those of every folder (`--json`, `--all`, `--cwd`): on a
   terminal, a live view of them, as Claude Code's agent view, in which
   Space peeks at one, Enter watches a working one's conversation or opens
-  one that is over, Ctrl+X stops one, and a prompt typed at the bottom
-  starts another; `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  one that is over, Ctrl+X stops one, a prompt typed at the bottom starts
+  another, and a run that waits on a permission question is listed under
+  Needs input, to be answered with a number; `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small

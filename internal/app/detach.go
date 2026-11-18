@@ -24,8 +24,8 @@ import (
 // starts again in it as a run of its own (gnosh -p, resumed, with the
 // session's flags as they stand) in a process that outlives this one, on
 // the prompt given; once the run is done, gnosh -r opens the session again
-// to read and go on. A run has nobody to ask, so what would ask is
-// refused, as in any run; the run's output goes to a file beside the
+// to read and go on. The run's permission questions wait for an answer in
+// gnosh agents (runasks.go); its output goes to a file beside the
 // session's.
 
 // detachPlan is what /background goes on with once the session is closed.
@@ -48,7 +48,7 @@ func (p *program) detachedPlan() *detachPlan {
 func (p *program) detach(args []string, d *detachPlan) int {
 	run := append(append(args, "--print", "--"), d.prompt)
 	p.logHead(d.log, d.session, d.name, d.cwd, d.path, d.prompt)
-	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), d.log)
+	pid, err := p.o.Detach(run, runEnv(p.o.Environ, d.log), d.log)
 	if err != nil {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
 		return cli.ExitFailure
@@ -65,7 +65,7 @@ func (l *live) slashBackground(ctx context.Context, c *SlashContext) error {
 	case l.p.o.Detach == nil:
 		return errors.New("this gnosh cannot go on without its terminal")
 	case prompt == "":
-		return errors.New("say what the session is to do on its own: /background <prompt>. It goes on as a run of its own, which asks nobody anything, and gnosh -r opens it again once that is done")
+		return errors.New("say what the session is to do on its own: /background <prompt>. It goes on as a run of its own, whose questions wait for you in gnosh agents, and gnosh -r opens it again once that is done")
 	}
 	args, err := l.goOnArgs(c, "background")
 	if err != nil {
@@ -96,7 +96,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	case l.p.o.Detach == nil:
 		return errors.New("this gnosh cannot start a session that goes on without a terminal")
 	case prompt == "":
-		return errors.New("say what the copy is to do: /fork <prompt>. It goes on in the background as a run of its own, which asks nobody anything, while this session goes on here")
+		return errors.New("say what the copy is to do: /fork <prompt>. It goes on in the background as a run of its own, whose questions wait for you in gnosh agents, while this session goes on here")
 	case l.busy(ctx):
 		return errors.New("a turn is running. Wait for it, or stop it, then fork")
 	case !slices.ContainsFunc(l.ts.Entries(), func(e transcript.Entry) bool { return e.Type == transcript.TypeUser }):
@@ -121,7 +121,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 		name += " (fork)" // (as copySession names the copy)
 	}
 	l.p.logHead(log, id, name, l.cfg.Paths.Cwd, path, prompt)
-	pid, err := l.p.o.Detach(run, slices.Clone(l.p.o.Environ), log)
+	pid, err := l.p.o.Detach(run, runEnv(l.p.o.Environ, log), log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}
@@ -243,6 +243,9 @@ type backgroundRun struct {
 	running, stopped                      bool
 	last                                  string
 	output                                []string
+	// asking is the permission question a working run waits on for the
+	// agent view to answer (runasks.go), if any.
+	asking *runAsk
 }
 
 // runOutputKept is how many of the last lines a run printed readRunLog
@@ -291,6 +294,9 @@ func runsIn(dirs []string, since time.Time) []backgroundRun {
 			r.session = id
 			r.file = firstOf(r.file, filepath.Join(dir, id+".jsonl"))
 			r.running = runAlive(id, p, r.file)
+			if r.running {
+				r.asking = readAsk(p)
+			}
 			if r.cwd == "" {
 				r.cwd = sessionFolder(r.file)
 			}

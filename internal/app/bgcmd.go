@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -96,7 +95,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		file = "" // (under the work tree's folder, which the run makes)
 	}
 	p.logHead(log, id, inv.Name, st.cfg.Paths.Cwd, file, prompt)
-	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), log)
+	pid, err := p.o.Detach(run, runEnv(p.o.Environ, log), log)
 	if err != nil {
 		p.errf("the session could not be started in the background (%v).", err)
 		return cli.ExitFailure
@@ -302,10 +301,13 @@ func runPID(log string) int {
 }
 
 // runState is how a run stands, in the words Claude Code's list has for
-// it: working while it holds its session, then stopped when gnosh stop
-// stopped it, or else done.
+// it: working while it holds its session (blocked while a question waits
+// for the agent view), then stopped when gnosh stop stopped it, or else
+// done.
 func runState(r backgroundRun) string {
 	switch {
+	case r.running && r.asking != nil:
+		return "blocked"
 	case r.running:
 		return "working"
 	case r.stopped:
@@ -363,6 +365,9 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 		for _, r := range runs {
 			w := row{ID: r.session, Kind: "background", Cwd: r.cwd, StartedAt: r.started.UTC(), State: runState(r),
 				Status: oneLine(r.last, 400), Name: r.name, Prompt: r.prompt, Log: r.log}
+			if r.asking != nil {
+				w.Status = oneLine(r.asking.Title, 400)
+			}
 			if pid := runPID(r.log); r.running && pid != 0 && runIsFor(pid, r.session) {
 				w.PID = pid
 			}

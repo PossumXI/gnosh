@@ -135,6 +135,11 @@ type program struct {
 	lastMu   sync.Mutex
 	lastStop func()
 
+	// runAsks is the base of the files the permission questions of this
+	// run in the background go through to the agent view (runasks.go), or
+	// "" when there is nobody to ask.
+	runAsks string
+
 	// started is the program file as gnosh started from it (nil when it
 	// is not known), and restart the command line /restart asked to start
 	// again with, once the session is closed. restarted says this gnosh is
@@ -243,6 +248,15 @@ func newProgram(o Options) *program {
 		}
 		delete(p.env, RestartedEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, RestartedEnv+"=") })
+	}
+	if base, ok := p.env[AsksEnv]; ok {
+		// The word of the gnosh that started this run in the background
+		// (runasks.go), as /restart's is.
+		if filepath.IsAbs(base) {
+			p.runAsks = filepath.Clean(base)
+		}
+		delete(p.env, AsksEnv)
+		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, AsksEnv+"=") })
 	}
 	if from, ok := p.env[MovedEnv]; ok {
 		// /cd's word, as /restart's is.

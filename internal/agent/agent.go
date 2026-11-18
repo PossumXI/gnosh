@@ -51,6 +51,10 @@ type Options struct {
 	// Interactive says a person is there to answer questions. Without it
 	// every question is answered with ErrNobodyToAsk at once.
 	Interactive bool
+	// Relay says permission questions go to the front end even so: a run
+	// in the background, whose questions a person answers from the agent
+	// view (app's runasks.go). Other questions still have nobody to ask.
+	Relay bool
 	// StartSource is how the session came to be, for the SessionStart
 	// moment: "startup", "resume", "clear", "fork".
 	StartSource string
@@ -922,7 +926,7 @@ func (a *Agent) ask(ctx context.Context, q Question, who Meta) (Answer, error) {
 	if a.parent != nil {
 		return a.parent.ask(ctx, q, who)
 	}
-	if !a.opts.Interactive {
+	if !a.opts.Interactive && !(a.opts.Relay && q.Kind == "permission") {
 		return Answer{}, ErrNobodyToAsk
 	}
 	q.ID = a.newID()
