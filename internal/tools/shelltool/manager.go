@@ -597,22 +597,34 @@ func (m *Manager) pruneDetached() {
 // whose leftovers held it open (lingering) is taken off that list; when
 // processes are still in its session, what held the output let go of it
 // and runs on, and it goes on the books as what let go of the output as
-// the command ended does (keepDetached), so that Close stops it all the
-// same.
+// the command ended does (detached), so that Close stops it all the same.
+// It goes on those books in the same moment it leaves the list, so that a
+// Close at any point finds it on one of them; a Close that came first
+// leaves it to be stopped here.
 func (m *Manager) settle(j *job) {
 	m.mu.Lock()
 	_, held := m.lingering[j]
-	delete(m.lingering, j)
-	closing := m.closed
-	m.mu.Unlock()
-	if !held || closing {
+	if !held || m.closed {
+		delete(m.lingering, j)
+		m.mu.Unlock()
 		return
 	}
-	if now, err := m.procs(j.pid); err == nil && len(now) > 0 {
+	m.mu.Unlock()
+	now, err := m.procs(j.pid)
+	left := err == nil && len(now) > 0
+	m.mu.Lock()
+	delete(m.lingering, j)
+	closing := m.closed
+	if left && !closing {
+		m.detached[j.pid] = now
 		j.letGo.Store(true)
-		if !m.keepDetached(j.pid, now) {
-			m.sweep(j.pid, now) // (the manager is closing)
-		}
+	}
+	m.mu.Unlock()
+	switch {
+	case left && closing:
+		m.sweep(j.pid, now) // (the manager is closing)
+	case left:
+		m.pruneDetached()
 	}
 }
 
