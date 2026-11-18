@@ -28,6 +28,8 @@
 #	ssh ai-remote bash -s -- agenthook < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- agentmcp < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- shelltab < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- simplify < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- askaway < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -120,6 +122,15 @@
 #               answered; then "!echo x >" and Tab offers that command
 #               first, a second Tab takes it, and it runs again: tabs.log
 #               ends with two lines
+#   simplify    a branch adds a function that clamps a number by hand
+#               beside a clamp helper the repository has: /simplify should
+#               make it call the helper (acceptEdits, trusted; passed on
+#               box 1 with 0777ec0: Volume became return Clamp(requested,
+#               0, 100))
+#   askaway     askUserQuestionTimeout 60s: the model asks which colour,
+#               nobody answers, the question closes by itself after a
+#               minute, and the model goes on and writes color.txt
+#               (acceptEdits)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -136,9 +147,11 @@ case "$scenario" in
 basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
+askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
 focus) opts='"viewMode": "focus", ' ;;
 failhint) base=http://127.0.0.1:9 ;;
 secreview) flags="--trust-folder" ;;
+simplify) flags="--permission-mode acceptEdits --trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel | cd | leftover | elicit | agentmcp) flags="-y" ;;
@@ -154,7 +167,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway)" >&2
 	exit 2
 	;;
 esac
@@ -274,6 +287,45 @@ func Thumb(w http.ResponseWriter, r *http.Request) {
 EOF
 	g add handler.go && g commit -q -m "thumbnails" || exit 1
 fi
+if [ "$scenario" = simplify ]; then
+	# A helper on main, and a branch that clamps by hand beside it: the
+	# one thing for /simplify to find.
+	g() { git -c user.name=check -c user.email=check@example.com "$@"; }
+	printf 'module levels\n\ngo 1.22\n' > go.mod
+	cat > clamp.go <<'EOF'
+package levels
+
+// Clamp returns v held between lo and hi.
+func Clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+EOF
+	g init -q -b main && g add go.mod clamp.go notes.txt && g commit -q -m base || exit 1
+	g checkout -q -b volume || exit 1
+	cat > volume.go <<'EOF'
+package levels
+
+// Volume turns a requested volume into one the speaker can play: from 0
+// to 100.
+func Volume(requested int) int {
+	v := requested
+	if v < 0 {
+		v = 0
+	}
+	if v > 100 {
+		v = 100
+	}
+	return v
+}
+EOF
+	g add volume.go && g commit -q -m "volume" || exit 1
+fi
 bin=$HOME/.local/bin/gnosh
 if [ "$scenario" = restart ]; then
 	# A copy of its own, so that "installing" over it touches nothing else.
@@ -305,6 +357,16 @@ shelltab)
 	sleep 1
 	tmux send-keys -t "$S" Enter
 	done_when() { [ "$(wc -l <"$T/work/tabs.log" 2>/dev/null)" = 2 ] && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
+askaway)
+	tmux send-keys -t "$S" "Use the AskUserQuestion tool to ask me whether I prefer red or blue. Then write the colour you end up with, one word, to color.txt." Enter
+	done_when() { [ -s "$T/work/color.txt" ] && screen | grep -q "the model goes on without you" && screen | grep -q "done in"; }
+	;;
+simplify)
+	tmux send-keys -t "$S" "/simplify" Enter
+	# (Done once volume.go calls the helper: in acceptEdits the model then
+	# asks to run go test, which this scenario does not answer.)
+	done_when() { grep -q "Clamp(" "$T/work/volume.go" 2>/dev/null; }
 	;;
 plan)
 	tmux send-keys -t "$S" "Create a file hello.txt that says hi. Plan it first, then present the plan for approval." Enter
