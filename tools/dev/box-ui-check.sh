@@ -635,7 +635,6 @@ if [ "$scenario" = elicit ]; then
 fi
 if [ "$scenario" = agenthook ]; then
 	echo "=== done.txt: $(cat "$T/work/done.txt" 2>/dev/null || echo none)"
-	echo "=== the hook's sub-agents: $(ls "$T"/data/gnosh/projects/*/subagents 2>/dev/null | wc -l)"
 fi
 if [ "$scenario" = entertree ]; then
 	echo "=== work trees: $(git -C "$T/work" worktree list | tr '\n' ';')"

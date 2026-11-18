@@ -164,6 +164,10 @@ type reply struct {
 // thing at a time, and asks it to draw.
 type session struct {
 	th Theme
+	// hookSaid is the reason of the last hook that blocked, when its
+	// record showed it whole: the note that the turn goes on does not say
+	// it again.
+	hookSaid string
 	// profile, light and themed are config's, for the theme option
 	// (themecmd.go).
 	profile text.Profile

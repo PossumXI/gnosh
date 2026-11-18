@@ -131,9 +131,12 @@ func (s *session) handle(ev any) {
 		case ev.Checkpoint:
 			s.say(fmt.Sprintf("The turn goes on: %s objects, %d times in a row now, so the model is asked whether there is a real reason to stop: %s",
 				ev.Name, ev.Streak, oneLine(ev.Objection)))
+		case s.hookSaid != "" && oneLine(ev.Objection) == s.hookSaid:
+			s.say(fmt.Sprintf("The turn goes on: %s objects, as the hook above says.", ev.Name))
 		default:
 			s.say(fmt.Sprintf("The turn goes on: %s objects: %s", ev.Name, oneLine(ev.Objection)))
 		}
+		s.hookSaid = ""
 	case *agent.ContextEvent:
 		s.ctxs = ev.Context
 	case *agent.RoomEvent:
@@ -602,6 +605,9 @@ func (s *session) hooks(ev *app.HookEvent) {
 	for _, r := range ev.Records {
 		// The words are the hook package's own account of the record.
 		line := "hook: " + oneLine(r.String())
+		if reason := oneLine(r.Reason); string(r.Result) == "blocked" && reason != "" && strings.HasSuffix(line, reason) {
+			s.hookSaid = reason
+		}
 		// "none" is that package's word for a hook that ran and had
 		// nothing to say, and "background" for one started in the
 		// background, which decides nothing.

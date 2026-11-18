@@ -11,6 +11,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
@@ -594,6 +595,11 @@ func TestTurnEnds(t *testing.T) {
 		"It had been sent back by stop-hook: the tests do not pass yet")
 	g.ev(&agent.DriverEvent{Name: "stop-hook", Action: agent.Continue, Objection: "the tests do not pass yet", Streak: 1})
 	g.once("note: The turn goes on: stop-hook objects: the tests do not pass yet")
+	// The hook's record said the reason whole: the note does not say it
+	// again.
+	g.ev(&app.HookEvent{Event: "Stop", Records: []hooks.Record{{Event: "Stop", Command: "check.sh", Result: hooks.ResultBlocked, Reason: "done.txt is missing"}}})
+	g.ev(&agent.DriverEvent{Name: "stop-hook", Action: agent.Continue, Objection: "done.txt is missing", Streak: 1})
+	g.once("done.txt is missing", "note: The turn goes on: stop-hook objects, as the hook above says.")
 	g.ev(&agent.SummaryEvent{Phase: "start", Trigger: "auto", PreTokens: 250000})
 	g.liveHas("* writing a summary of the conversation, to make room")
 	g.ev(&agent.SummaryEvent{Phase: "end", Trigger: "auto", PreTokens: 250000, PostTokens: 4500})

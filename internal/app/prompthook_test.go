@@ -76,3 +76,23 @@ func TestAgentHookOnStop(t *testing.T) {
 		t.Errorf("the hooks inside the agent hook's sub-agent: %q, want only the PreToolUse command hook", got)
 	}
 }
+
+// In the plain session a Stop hook's reason is said once: in the hook's
+// record, and the note that the turn goes on points at it.
+func TestStopHookReasonSaidOnce(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Done."}, apptest.Reply{Text: "Wrote it."})
+	once := w.Home + "/hook-ran"
+	hook := w.Script(w.Home+"/hooks/stop.sh", "cat > /dev/null\n[ -e "+once+" ] && exit 0\ntouch "+once+"\necho 'write done.txt first' >&2\nexit 2")
+	w.Settings(`{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("finish up")
+	s.see("blocked")
+	s.see("write done.txt first")
+	s.see("The turn goes on: stop-hook objects, as the hook above says.")
+	s.see("Wrote it.")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+}

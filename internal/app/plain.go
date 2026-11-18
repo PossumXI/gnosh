@@ -19,6 +19,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/diff"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/term"
 	"github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -46,9 +47,13 @@ import (
 // It stands in until the full interface is attached in its place
 // (Options.Interactive), through the same Frontend interface.
 type plain struct {
-	p   *program
-	inv cli.Invocation
-	out io.Writer
+	// hookSaid is the reason of the last hook that blocked, when its
+	// record said it whole: the note that the turn goes on does not say it
+	// again.
+	hookSaid string
+	p        *program
+	inv      cli.Invocation
+	out      io.Writer
 	// in hands out the lines a person types, or is nil when nobody can
 	// type. piped is standard input when it is not a terminal, and term
 	// the terminal that was opened to type at in its place.
@@ -1186,9 +1191,12 @@ func (f *plain) Event(ev any) {
 		case ev.Action == agent.Halt:
 		case ev.Checkpoint:
 			f.say("The turn goes on: %s objects, %d times in a row now, so the model is asked whether there is a real reason to stop: %s", ev.Name, ev.Streak, visible(oneLine(ev.Objection, 300)))
+		case f.hookSaid != "" && strings.Join(strings.Fields(ev.Objection), " ") == f.hookSaid:
+			f.say("The turn goes on: %s objects, as the hook above says.", ev.Name)
 		default:
 			f.say("The turn goes on: %s objects: %s", ev.Name, visible(oneLine(ev.Objection, 300)))
 		}
+		f.hookSaid = ""
 	case *agent.LoopEvent:
 		switch {
 		case ev.On:
@@ -1207,7 +1215,11 @@ func (f *plain) Event(ev any) {
 		}
 	case *HookEvent:
 		for _, r := range ev.Records {
-			f.say("%s%s", markHook, visible(r.String()))
+			line := r.String()
+			if reason := strings.Join(strings.Fields(r.Reason), " "); r.Result == hooks.ResultBlocked && reason != "" && strings.HasSuffix(line, reason) {
+				f.hookSaid = reason
+			}
+			f.say("%s%s", markHook, visible(line))
 		}
 	case *TasksEvent:
 		f.printTasks(ev.Tasks)
