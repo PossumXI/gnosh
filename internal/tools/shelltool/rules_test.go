@@ -448,3 +448,33 @@ func FuzzRules(f *testing.F) {
 		}
 	})
 }
+
+// No command may hand gnokey a password on its standard input, the model's
+// or the person's, in either spelling, behind a pipe or split by quotes:
+// only gnosh's gnokey tool signs, at its masked prompt (TOOL-41). Queries
+// and unsigned transactions are left alone.
+func TestGnokeyPasswordFlagIsRefused(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{OnEnd: func(Ended) {}})
+	env := newEnv(t)
+	tool := toolNamed(t, m, BashName).(core.Describer)
+	for _, command := range []string{
+		"echo hunter2 | gnokey maketx call -func Inc -broadcast -insecure-password-stdin k",
+		"gnokey sign -tx-path t.tx --insecure-password-stdin=true k < pw.txt",
+		"printf '%s\\n' \"$PW\" | gnokey maketx send -broadcast '-insecure-password-std'in k",
+		"cd pkg &&\ngnokey maketx addpkg -broadcast -insecure-password-stdin k <<<\"$P\"",
+	} {
+		_, err := tool.Describe(core.ToolCall{Input: mustJSON(t, args{argCommand: command})}, env)
+		if err == nil || !strings.Contains(err.Error(), "only the gnokey tool opens") {
+			t.Errorf("%q: %v", command, err)
+		}
+		if _, err := m.PersonsBash().(core.Describer).Describe(core.ToolCall{Input: mustJSON(t, args{argCommand: command})}, env); err == nil || !strings.Contains(err.Error(), "Sign in a terminal of your own") {
+			t.Errorf("the person's %q: %v", command, err)
+		}
+	}
+	for _, command := range []string{"gnokey query auth/accounts/g1abc -remote 127.0.0.1:26657", "gnokey maketx call -func Inc k > call.tx", "gnokey list"} {
+		if _, err := tool.Describe(core.ToolCall{Input: mustJSON(t, args{argCommand: command})}, env); err != nil {
+			t.Errorf("%q was refused: %v", command, err)
+		}
+	}
+}

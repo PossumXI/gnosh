@@ -115,6 +115,15 @@ Built:
   of what is there, fewer parts, less work, the right place), the code
   doing what it did. All run in `gnosh -p` too; in a Gno project the
   security review holds Gno code against the Gno guides.
+- **gnokey, with a password the model never sees:** in a Gno project,
+  where gno.land's `gnokey` is installed, the model runs it as a tool (queries, unsigned
+  transactions, broadcasts, `maketx` and `sign`), and before anything is
+  signed gnosh asks you for the key's password at a masked prompt that
+  names the key and shows the exact command, saying so when the chain is
+  gno.land's main network. The password goes to gnokey alone, never to the
+  model, the session's file or its log; making, changing or handing out
+  keys stays in your own terminal, and the shell refuses gnokey's password
+  flag, so nothing else can sign.
 - **gnosh's own words to the model, yours to read and change:** `gnosh
   prompt show` lists every text gnosh sends (where it goes and about how
   many tokens), `gnosh prompt show <name>` prints one as it is sent, and

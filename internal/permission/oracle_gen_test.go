@@ -1058,5 +1058,5 @@ var attackLines = []string{
 	// A real shell reached past the stubs, handed a file: the file is a program of its own.
 	"command -p bash notes.md", "command -p bash notes.md src/.env < sneaky.txt >| out.txt", "/bin/sh notes.md", "command -p sh -c 'rm x'", "exec -a x /bin/bash notes.md",
 	// What dash prints for a bare set: PS4's own value, which is the trace's mark.
-	"set", "PAGER=rm set", "! { set; }", "f() { set; }; f", "seq \"$(set)\"", "echo \"$(set)\" | head -1", "ls \"$(set | grep PS4)\"", "printf '%s' \"$PS4\"; ls",
+	"set", "PAGER=rm set", "! { set; }", "f() { set; }; f", "seq \"$(set)\"", "git push `set` a{b,c}d", "echo \"$(set)\" | head -1", "ls \"$(set | grep PS4)\"", "printf '%s' \"$PS4\"; ls",
 }

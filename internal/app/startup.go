@@ -78,7 +78,7 @@ type startup struct {
 func ownTools() []string {
 	d := fstools.Defaults()
 	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
-		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, enterTreeName, exitTreeName, cronCreateName, cronListName, cronDeleteName, scheduleWakeupName, pushName, skillToolName}
+		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, enterTreeName, exitTreeName, cronCreateName, cronListName, cronDeleteName, scheduleWakeupName, pushName, skillToolName, gnokeyToolName}
 }
 
 // toolNames returns the one list of tool names of this program: gnosh's
@@ -405,6 +405,10 @@ func (st *startup) printProblems() bool {
 // change always asks.
 func (st *startup) permissionOptions(cfg *config.Config, protected []string) permission.Options {
 	known, quiet, _ := st.p.featureTools()
+	// gnosh's own tools that Claude Code has no tool like, which the
+	// engine does not know by itself: they ask before every call unless a
+	// rule or the mode allows them.
+	known = append(known, gnokeyToolName)
 	o := permission.Options{
 		Mode:            permission.Mode(cfg.Permissions.Mode.V),
 		Cwd:             cfg.Paths.Cwd,

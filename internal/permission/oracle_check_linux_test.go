@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1127,6 +1128,16 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 	}
 	if strings.Contains(lc.line, "PS4") || strings.Contains(lc.line, "XTRACE") || strings.Contains(lc.line, "set +") {
 		return "" // the line turns the trace off, or makes it unreadable
+	}
+	if r.shell == "dash" && slices.ContainsFunc(v.units, func(u *unit) bool { return len(u.cmd.words) == 1 && u.cmd.words[0].lit() == "set" }) {
+		// A bare set lists every variable, PS4's value among them, which is
+		// the trace's mark. dash's trace runs in with what the commands
+		// print, and a command handed the list ("git push `set` a{b,c}d",
+		// oracle seed 148: under the stubs that print their arguments)
+		// prints the mark where the trace reader takes it for the start of
+		// a command. The engine asks about or refuses every such line, for
+		// the substitution in it.
+		return ""
 	}
 	if strings.Contains(lc.line, "-C ''") || strings.Contains(lc.line, "-C \"\"") {
 		// compgen -C with an empty command: the words bash adds for the

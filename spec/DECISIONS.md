@@ -1745,3 +1745,34 @@ or kept with the reason said (27).
     quotes, $'...' strings, and here-document words with any character
     the shell takes in a word (END-OF-SCRIPT), and the ssh hint reads a
     line together with the lines a backslash carries it into.
+
+
+111. **The gnokey tool (TOOL-40, TOOL-41; D15).** Jae asked for "a real
+    Gno integration (gno toolchain, realm deploy, gnokey signing)"; the
+    earlier gnosh had the tool, and the rewrite had built the masked
+    prompt for it (a question of the kind "secret" in both front ends)
+    but not the tool. The tool, gnokey, takes the command line as typed
+    and runs gnokey with no shell (shellquote.Split refuses what only a
+    shell carries out). It asks permission as the shell does, showing the
+    command. A command that signs, gnokey sign, or maketx unless
+    -broadcast=false (gnokey of November 2026 signs and broadcasts by
+    default; with -broadcast=false it prints the transaction unsigned,
+    checked on the devbox), asks the person for the key's password at the
+    masked prompt, naming the key (the command's last word) and the
+    command, and gno.land's main network when the chain ID (gnoland1) or
+    the node (rpc.gno.land) is its. The password goes to gnokey on its
+    standard input by -insecure-password-stdin, which gnosh puts before
+    the key, and is taken out of the output; the model passing that flag
+    is refused, as are add, delete, rotate, import, export, generate and
+    recover. Esc at the prompt stops the turn. Only a session somebody
+    attends has the tool, in a project that holds Gno code (as the
+    system prompt's part about Gno is sent), where gnokey is on the PATH:
+    a run, a sub-agent, another project and a machine without gnokey
+    have none, and pay nothing for it in the prompt. The permission
+    engine knows the name from the program (Options.KnownTools), so an
+    agent's tool list can leave it out. The shell refuses -insecure-password-stdin in
+    any spelling, quoted or behind a pipe, for the model and the person
+    alike, so that only the masked prompt signs; told so, a model is to
+    give the person the command and stop. Tested with a stand-in gnokey
+    and, where the machine has it, the real one (a key made offline, a
+    wrong password reported, the right one signing).

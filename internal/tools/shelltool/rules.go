@@ -191,6 +191,17 @@ func reaches(command string) string {
 	return ""
 }
 
+// gnokeyPassword reports whether a command hands gnokey a password on its
+// standard input: gnokey's -insecure-password-stdin, in either spelling and
+// wherever it stands (behind a pipe, in quotes, split by them), which is
+// the one way gnokey takes a password without a terminal. Only gnosh's
+// gnokey tool uses it, for a password the user typed at its masked prompt
+// (spec/gnosh/harness-tools.md, TOOL-41).
+func gnokeyPassword(command string) bool {
+	plain := strings.NewReplacer(`'`, "", `"`, "", `\`, "").Replace(command)
+	return strings.Contains(plain, "insecure-password-stdin")
+}
+
 // commandLines are the lines of a command where the shell starts reading
 // a command (shellquote.CommandStarts: not the text of a here-document or
 // a line inside quotes), each with the lines it goes on into by a
@@ -291,6 +302,12 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 			return fmt.Errorf("the command is %s long, and a command for another machine goes to ssh as one argument, of at most %s. Send it in parts: a long file can be written on %s by several commands that each add to it (cat >> FILE <<'EOF' ... EOF)",
 				byteSize(int64(len(a.command))), byteSize(maxRemoteCommand), h.Name)
 		}
+	}
+	if gnokeyPassword(a.command) {
+		if person {
+			return errors.New("the command gives gnokey a password on its standard input, and a command typed here is kept in the session's file with the password in it. Sign in a terminal of your own")
+		}
+		return errors.New("the command gives gnokey a password on its standard input (-insecure-password-stdin), which no command here may do: a key's password is typed by the user, at a masked prompt that only the gnokey tool opens. Call that tool with the gnokey command instead, without the flag; where there is no such tool (nobody is at the terminal), give the user the exact command to run in their own terminal, and stop. Never ask for a password, and do not look for another way to give one")
 	}
 	if person {
 		return nil
