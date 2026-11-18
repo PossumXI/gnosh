@@ -741,6 +741,38 @@ func TestAgentViewStopCommandAndPlaceholder(t *testing.T) {
 	}
 }
 
+// Alt+↓ chooses the first run of the next group and Alt+↑ the first of
+// the group chosen, or of the one before when it is that one already, as
+// Claude Code's go between group headers; Ctrl+F starts its n: filter.
+func TestAgentViewGroupJumpsAndFind(t *testing.T) {
+	g := newAgentRig(t)
+	chosen := func(want string) {
+		t.Helper()
+		if r, _ := g.v.chosen(); r.ID != want {
+			t.Fatalf("the run chosen is %s, not %s", r.ID, want)
+		}
+	}
+	chosen(runTests)
+	g.keys(`<Alt+Down>`)
+	chosen(runFlaky)
+	g.keys(`<Alt+Down>`)
+	chosen(runFlaky)
+	g.keys(`<Alt+Up>`)
+	chosen(runTests)
+	g.keys(`<Down> <Alt+Up>`)
+	chosen(runTests)
+	g.keys(`<End> <Alt+Up>`)
+	chosen(runFlaky)
+	g.keys(`<Ctrl+F>`)
+	if g.v.box.Text() != "n:" {
+		t.Fatalf("Ctrl+F put %q in the box", g.v.box.Text())
+	}
+	g.keys(`"docs"`)
+	if body, _ := g.screen(); row(body, "docs") == "" || row(body, "deploy it") != "" {
+		t.Errorf("n:docs after Ctrl+F:\n%s", strings.Join(body, "\n"))
+	}
+}
+
 // /model and /effort typed in the box set what the runs started from the
 // view are given, for the view only, and default puts back what it was
 // opened with; "@name prompt" starts a run as that kind of agent; /exit

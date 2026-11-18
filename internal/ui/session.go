@@ -190,8 +190,11 @@ type session struct {
 	view   *transcriptView
 	// agents is the agent view while it is open over the session, and
 	// leftAt when ← was pressed in the empty box (agentsover.go).
-	agents *agentsOverlay
-	leftAt time.Time
+	// agentsHintUntil is when the status line stops saying "← for
+	// agents", a few seconds after the session began.
+	agents          *agentsOverlay
+	leftAt          time.Time
+	agentsHintUntil time.Time
 	// changed are the files the session's calls changed, the newest
 	// first, for the panel.
 	changed []changedFile
@@ -393,6 +396,7 @@ func newSession(cfg config) *session {
 
 // start writes the header and takes in what the session is.
 func (s *session) start() {
+	s.agentsHintUntil = s.now().Add(agentsHintFor)
 	s.refresh()
 	s.tasks = s.c.Tasks()
 	s.readDeliverables()
@@ -693,6 +697,10 @@ func (s *session) tick() {
 		s.agents.v.tick()
 		s.dirty = true
 	}
+	if !s.agentsHintUntil.IsZero() && !now.Before(s.agentsHintUntil) {
+		s.agentsHintUntil = time.Time{}
+		s.dirty = s.dirty || s.agentsOffered()
+	}
 	if s.busy && now.Sub(s.heard) > 3*time.Second {
 		// Nothing may look busy with nothing in flight. The session
 		// tells of going idle with an event; should that ever fail to
@@ -733,6 +741,9 @@ func (s *session) wake() time.Time {
 	}
 	if s.agents != nil {
 		soon(now.Add(agentsLook))
+	}
+	if !s.agentsHintUntil.IsZero() && s.agentsOffered() {
+		soon(s.agentsHintUntil)
 	}
 	if (s.busy || s.cmdRun != "") && s.q == nil && s.th.Fall.moves() {
 		// The drops of the working mark fall on: the deeper the thought,

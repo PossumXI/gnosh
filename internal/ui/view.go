@@ -777,7 +777,11 @@ func (s *session) statusLine(width int) string {
 	if v := oneLine(s.facts["background"]); v != "" && v != "0" {
 		segs = append(segs, segment{v + " in the background", th.Status, 65})
 	}
-	if v := oneLine(s.facts["agents"]); v != "" {
+	if v := oneLine(s.facts["agents"]); v == "" && s.agentsOffered() && s.now().Before(s.agentsHintUntil) {
+		// For its first seconds a session says how to see the runs in
+		// the background, as Claude Code's footer reads "← for agents".
+		segs = append(segs, segment{"← for agents", th.Status, 66})
+	} else if v != "" {
 		// Runs in the background that wait on the person, as Claude
 		// Code's footer counts them ("← 2 agents"): ← in the empty box
 		// opens the agent view that answers them, or gnosh agents does.

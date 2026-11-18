@@ -552,6 +552,51 @@ func (v *agentView) move(n int) {
 	v.sel = shown[v.at].ID
 }
 
+// groupOf is the group a run is listed under: its folder when the list is
+// grouped by folder, else Needs input, Working or Completed.
+func (v *agentView) groupOf(r app.AgentRun) string {
+	switch {
+	case v.byFolder:
+		return runFolder(r)
+	case r.State == "blocked":
+		return "Needs input"
+	case running(r):
+		return "Working"
+	}
+	return "Completed"
+}
+
+// jumpGroup chooses the first run of the next group, or going back, the
+// first of the group the run chosen is in, or of the one before when it is
+// that one already: Claude Code's Alt+↓ and Alt+↑ between group headers.
+func (v *agentView) jumpGroup(down bool) {
+	shown := v.shown()
+	if len(shown) == 0 {
+		return
+	}
+	at := min(max(v.at, 0), len(shown)-1)
+	g := v.groupOf(shown[at])
+	if down {
+		for i := at + 1; i < len(shown); i++ {
+			if v.groupOf(shown[i]) != g {
+				v.move(i - v.at)
+				return
+			}
+		}
+		return
+	}
+	start := at
+	for start > 0 && v.groupOf(shown[start-1]) == g {
+		start--
+	}
+	if start == at && start > 0 {
+		start--
+		for g = v.groupOf(shown[start]); start > 0 && v.groupOf(shown[start-1]) == g; start-- {
+		}
+	}
+	v.move(start - v.at)
+}
+
 // key takes in a key while the list is on the screen.
 func (v *agentView) key(k term.Key) {
 	empty := strings.TrimSpace(v.box.Text()) == ""
@@ -585,6 +630,15 @@ func (v *agentView) key(k term.Key) {
 		v.move(-1 << 30)
 	case k.IsKey(term.KeyEnd, 0):
 		v.move(1 << 30)
+	case k.IsKey(term.KeyDown, term.ModAlt), k.IsKey(term.KeyUp, term.ModAlt):
+		v.jumpGroup(k.IsKey(term.KeyDown, term.ModAlt))
+	case k.Is('f', term.ModCtrl):
+		// Find by name: Claude Code's Ctrl+F is its n: filter.
+		if !strings.HasPrefix(v.box.Text(), "n:") {
+			v.box.SetText("n:")
+			v.box.SetCursor(2)
+			v.keepChoice()
+		}
 	case k.IsKey(term.KeyEscape, 0):
 		switch {
 		case v.help:
@@ -1166,16 +1220,7 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	nameW = min(nameW, 24)
 	group := ""
 	for _, r := range shown {
-		g := "Completed"
-		switch {
-		case v.byFolder:
-			g = runFolder(r)
-		case r.State == "blocked":
-			g = "Needs input"
-		case running(r):
-			g = "Working"
-		}
-		if g != group {
+		if g := v.groupOf(r); g != group {
 			group = g
 			list = append(list, th.Quiet.Render(fit(v.m, g, width)))
 		}
@@ -1326,6 +1371,8 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 func (v *agentView) helpLines(width int) []string {
 	keys := [][2]string{
 		{"↑ ↓ PgUp PgDn Home End", "choose a run"},
+		{"Alt+↑ Alt+↓", "the first run of the group before, or the next"},
+		{"Ctrl+F", "find runs by name (n:)"},
 		{"Space", "peek at it, or stop peeking"},
 		{"Enter, →", "watch a working run as it goes; open one that is over (gnosh -r)"},
 		{"a prompt and Enter", "start a run on it in " + v.folder() + "; @name first runs it as that kind of agent"},

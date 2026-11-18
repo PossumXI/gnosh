@@ -40,8 +40,12 @@ type agentsOverlay struct {
 const agentsTwice = 2 * time.Second
 
 // agentsLook is how often the session's loop gives the open view the
-// time, for its clocks and to look at the runs again.
-const agentsLook = 250 * time.Millisecond
+// time, for its clocks and to look at the runs again, and agentsHintFor
+// how long a session's status line says "← for agents" as it begins.
+const (
+	agentsLook    = 250 * time.Millisecond
+	agentsHintFor = 10 * time.Second
+)
 
 // agentsOffered reports whether this session can open the agent view.
 func (s *session) agentsOffered() bool {

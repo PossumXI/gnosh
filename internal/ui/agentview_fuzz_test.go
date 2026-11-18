@@ -19,6 +19,7 @@ var agentPool = keyscript.MustParse(`
 	"a" "b" " " "1" "2" "3" "9" "?" "/" "@" ":" "n" "s" "o" "q" "世" "👍"
 	<Enter> <Shift+Enter> <Right> <Left> <Up> <Down> <PgUp> <PgDn> <Home> <End>
 	<Esc> <Esc> <Ctrl+C> <Ctrl+X> <Ctrl+X> <Ctrl+S> <Ctrl+R> <Ctrl+L> <Ctrl+W> <Ctrl+U>
+	<Alt+Up> <Alt+Down> <Ctrl+F> <Paste "/stop">
 	<Backspace> <Tab> <Space> <Space>
 	<Paste "s:working"> <Paste "n:docs"> <Paste "o:42"> <Paste "/model qwen/other"> <Paste "/effort high">
 	<Paste "/rename night"> <Paste "@reviewer look"> <Paste "tidy the README"> <Paste "a\nb">

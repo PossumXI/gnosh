@@ -2121,3 +2121,13 @@ or kept with the reason said (27).
     start, or the agent view opened over it, whose listing counts as
     looking): "← 2 runs done, 1 failed"; runs that wait on the person
     still come first, and stopped ones are not counted.
+
+131. **The agent view's group keys, and a session's first seconds.**
+    Claude Code's Alt+↑ and Alt+↓ move between the view's group headers:
+    gnosh's headers are not rows to choose, so Alt+↓ chooses the first run
+    of the next group, and Alt+↑ the first of the group chosen, or of the
+    one before when it is that one already. Ctrl+F is Claude Code's find
+    by name, the n: filter: it puts n: in the box. And as Claude Code's
+    footer reads "← for agents" for ten seconds after a session opens, a
+    session that can open the agent view says so on its status line for
+    its first ten seconds, when no run waits on the person.

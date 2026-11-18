@@ -35,6 +35,9 @@ func TestAgentViewOverASession(t *testing.T) {
 	src := newAgentRig(t).src
 	g.s.c = agentControls{g.c, src}
 
+	// For its first ten seconds the session says how to see the runs.
+	g.frame().liveHas("← for agents")
+	g.wait(11 * time.Second).liveLacks("for agents")
 	g.ev(facts{"agents": "1 run needs input"})
 	g.liveHas("← 1 run needs input").liveLacks("gnosh agents")
 
