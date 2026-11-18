@@ -127,8 +127,12 @@ func TestScheduledPromptsOffered(t *testing.T) {
 // minutes on; stop ends the loop.
 func TestSelfPacedLoop(t *testing.T) {
 	w := apptest.NewWorld(t,
-		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "ScheduleWakeup", Args: `{"delaySeconds":120,"reason":"waiting on CI"}`}}},
-		apptest.Reply{Text: "Checked; back in two minutes."},
+		// The turn ends with the round that schedules the next run: a
+		// second call in it does not run.
+		apptest.Reply{Calls: []apptest.Call{
+			{ID: "c1", Name: "ScheduleWakeup", Args: `{"delaySeconds":120,"reason":"waiting on CI"}`},
+			{ID: "c3", Name: "ScheduleWakeup", Args: `{"delaySeconds":60,"reason":"sooner"}`},
+		}},
 		apptest.Reply{Text: "Checked again."},
 		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "ScheduleWakeup", Args: `{"stop":true,"reason":"the build is green"}`}}},
 		apptest.Reply{Text: "Done."},
@@ -139,8 +143,7 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.typeLine("/loop check the build")
 	s.see("The prompt runs now, and again when the model says")
 	s.see("Next /loop run at 10:02: waiting on CI")
-	s.see("Checked; back in two minutes.")
-	s.see("-- done in ")
+	s.see("the loop's next run is at 10:02")
 	clk.add(2 * time.Minute)
 	s.see("The self-paced /loop runs again")
 	s.see("Checked again.")
@@ -152,7 +155,9 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.exit()
 	reqs := w.Model.Requests()
 	has(t, "the loop's first run", string(reqs[0].Body), "check the build", "This prompt runs as a self-paced /loop")
-	has(t, "the loop's second run", string(reqs[2].Body), "This is a run of the self-paced /loop")
+	has(t, "the first schedule", toolResult(t, w, 1, "c1"), "The loop's next run is at 10:02, in 2m0s. This turn ends here")
+	has(t, "the second schedule", toolResult(t, w, 1, "c2"), "This call did not run: the turn was ended first (the loop's next run is at 10:02)")
+	has(t, "the loop's second run", string(reqs[1].Body), "This is a run of the self-paced /loop")
 }
 
 // Tasks are kept in the session's file: -c brings back a recurring one,
@@ -200,15 +205,13 @@ func TestScheduledPromptsComeBack(t *testing.T) {
 func TestSelfPacedLoopIgnoresOtherTurns(t *testing.T) {
 	w := apptest.NewWorld(t,
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "ScheduleWakeup", Args: `{"delaySeconds":600,"reason":"nothing pending"}`}}},
-		apptest.Reply{Text: "Back in ten minutes."},
 		apptest.Reply{Text: "Four."},
 	)
 	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
 	s := sitWith(t, w, func(o *Options) { o.Now = clk.Now })
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/loop check the build")
-	s.see("Back in ten minutes.")
-	s.see("-- done in ")
+	s.see("the loop's next run is at 10:10")
 	s.typeLine("what is two and two?")
 	s.see("Four.")
 	s.see("-- done in ")

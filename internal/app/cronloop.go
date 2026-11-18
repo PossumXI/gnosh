@@ -51,6 +51,11 @@ type selfLoop struct {
 	// run says one of the loop's runs is under way: only its end is
 	// followed (loopTurnEnded), not that of a turn the person started.
 	run bool
+	// scheduled is the next run the turn under way scheduled, if it did:
+	// a turn schedules once (box 1, 18 November: Qwen called
+	// ScheduleWakeup and checked the clock every few seconds, each call
+	// moving the run a minute on, so that it never came).
+	scheduled time.Time
 }
 
 // loopNote is what the model is told as a self-paced /loop starts, and
@@ -153,7 +158,7 @@ func (l *live) loopTurnEnded() {
 	}
 	l.loopMu.Lock()
 	run := self.run
-	self.run = false
+	self.run, self.scheduled = false, time.Time{}
 	l.loopMu.Unlock()
 	if !run || l.hasWake() {
 		return
@@ -211,15 +216,25 @@ func (t *wakeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	}
 	in.Delay = min(in.Delay, 3600)
 	now := l.p.now()
+	l.loopMu.Lock()
+	already := self.scheduled
+	l.loopMu.Unlock()
+	if !already.IsZero() {
+		return core.ErrorResult(fmt.Sprintf("The loop's next run is scheduled already, at %s, and was not moved: a run schedules the next one once. End this turn now, with no more tool calls; the next run starts by itself, and nothing needs to wait for it or watch the clock.", whenText(already, now))), nil
+	}
 	task := l.wakeAt(now.Add(time.Duration(in.Delay)*time.Second), self.prompt)
 	l.loopMu.Lock()
-	self.fallback = false
+	self.fallback, self.scheduled = false, task.next
 	l.loopMu.Unlock()
-	text := fmt.Sprintf("The loop's next run is at %s, in %s.", whenText(task.next, now), roundTime(task.next.Sub(now)))
+	text := fmt.Sprintf("The loop's next run is at %s, in %s. This turn ends here: the run starts by itself then.", whenText(task.next, now), roundTime(task.next.Sub(now)))
 	if reason != "" {
 		l.notice(agent.LevelInfo, "loop", fmt.Sprintf("Next /loop run at %s: %s", whenText(task.next, now), reason))
 	}
-	return core.TextResult(text), nil
+	// The turn ends with the round, as the run's work is done when it
+	// schedules the next: a model that went on would only wait.
+	res := core.TextResult(text)
+	res.Meta = map[string]any{agent.MetaHalt: "the loop's next run is at " + whenText(task.next, now)}
+	return res, nil
 }
 
 // savedTask is a task as the session's file keeps it.

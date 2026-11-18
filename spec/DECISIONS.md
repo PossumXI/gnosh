@@ -1823,3 +1823,13 @@ or kept with the reason said (27).
       which a -config file or a pseudo-terminal can get around. It needs
       the password, which the model is never given; the permission rules
       ask about such lines in default mode.
+
+114. **A self-paced /loop's run ends when it schedules the next.** The box
+    1 sweep of 18 November found Qwen, after calling ScheduleWakeup,
+    checking the clock and calling it again every few seconds: each call
+    moved the next run a minute on, the turn never ended, and the run
+    never came. ScheduleWakeup now ends the turn with its round (the
+    tool result's halt, as EnterWorktree's), its result saying so, and a
+    second call in the same round is refused without moving the run.
+    stop true does not end the turn: the model may say what came of the
+    loop.
