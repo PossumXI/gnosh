@@ -31,6 +31,9 @@ type httpTransport struct {
 	url     string
 	headers map[string]string
 	client  *http.Client
+	// auth gives the requests the person's sign-in, when the server's
+	// Authorization header is not configured (auth.go).
+	auth *Authorizer
 	// base ends with the connection: every request is made in it too.
 	base context.Context
 	end  context.CancelFunc
@@ -49,6 +52,9 @@ func StartHTTP(ctx context.Context, name, url string, headers map[string]string,
 	opt = opt.defaults()
 	c := &Client{srv: Server{Name: name}, opt: opt, pending: map[string]chan message{}}
 	t := &httpTransport{c: c, url: url, headers: headers}
+	if opt.Auth != nil && !hasHeader(headers, "Authorization") {
+		t.auth = opt.Auth
+	}
 	t.base, t.end = context.WithCancel(context.Background())
 	t.client = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		// A redirect elsewhere would take the configured headers, which
@@ -80,6 +86,29 @@ func (t *httpTransport) send(ctx context.Context, m message) error {
 	if err != nil {
 		return err
 	}
+	for renewed := false; ; renewed = true {
+		resp, done, token, err := t.post(ctx, data)
+		if err != nil {
+			return err
+		}
+		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && t.auth != nil {
+			// The server wants a sign-in, or a better one: the token is
+			// renewed once, and otherwise the person signs in (/mcp).
+			www := resp.Header.Get("WWW-Authenticate")
+			resp.Body.Close()
+			done()
+			if !renewed && token != "" && t.auth.renew(ctx, token) {
+				continue
+			}
+			return &NeedsAuth{Status: resp.StatusCode, WWWAuthenticate: www}
+		}
+		return t.answered(m, resp, done)
+	}
+}
+
+// post makes one POST of a message: the answer, how to end the request
+// once its answer is read, and the token it carried.
+func (t *httpTransport) post(ctx context.Context, data []byte) (*http.Response, func(), string, error) {
 	// The request ends with ctx, or with the connection.
 	rctx, cancel := context.WithCancel(ctx)
 	unhook := context.AfterFunc(t.base, cancel)
@@ -90,19 +119,24 @@ func (t *httpTransport) send(ctx context.Context, m message) error {
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, t.url, bytes.NewReader(data))
 	if err != nil {
 		done()
-		return err
+		return nil, nil, "", err
 	}
-	t.header(req)
+	token := t.header(req)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	resp, err := t.client.Do(req)
 	if err != nil {
 		done()
 		if t.base.Err() != nil {
-			return ErrClosed
+			return nil, nil, "", ErrClosed
 		}
-		return fmt.Errorf("%w: %w", ErrUnreachable, err)
+		return nil, nil, "", fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
+	return resp, done, token, nil
+}
+
+// answered takes the server's answer to the message m.
+func (t *httpTransport) answered(m message, resp *http.Response, done func()) error {
 	if id := resp.Header.Get("Mcp-Session-Id"); id != "" && m.Method == "initialize" {
 		t.mu.Lock()
 		t.session = id
@@ -148,10 +182,16 @@ func (t *httpTransport) send(ctx context.Context, m message) error {
 }
 
 // header puts the configured headers, the session id and the protocol
-// version on a request.
-func (t *httpTransport) header(req *http.Request) {
+// version on a request, and the sign-in's token when there is one, which
+// it returns.
+func (t *httpTransport) header(req *http.Request) (token string) {
 	for k, v := range t.headers {
 		req.Header.Set(k, v)
+	}
+	if t.auth != nil {
+		if token = t.auth.token(); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -161,6 +201,7 @@ func (t *httpTransport) header(req *http.Request) {
 	if t.version != "" {
 		req.Header.Set("MCP-Protocol-Version", t.version)
 	}
+	return token
 }
 
 func (t *httpTransport) hasSession() bool {

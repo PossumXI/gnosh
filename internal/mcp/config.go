@@ -44,6 +44,9 @@ type Config struct {
 	// URL and Headers reach an http server.
 	URL     string
 	Headers map[string]string
+	// OAuth is an http server's oauth object: how gnosh signs in to it
+	// (oauth.go). Its zero value discovers everything.
+	OAuth OAuth
 	// Timeout bounds one tool call; zero means no bound.
 	Timeout time.Duration
 	// Scope is "local", "project", "user" or "command line", and Path the
@@ -224,6 +227,12 @@ func parseConfig(path, scope string, servers map[string]json.RawMessage, project
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 			Timeout *float64          `json:"timeout"`
+			OAuth   *struct {
+				ClientID              string `json:"clientId"`
+				CallbackPort          int    `json:"callbackPort"`
+				Scopes                string `json:"scopes"`
+				AuthServerMetadataURL string `json:"authServerMetadataUrl"`
+			} `json:"oauth"`
 		}
 		if err := json.Unmarshal(raw, &e); err != nil {
 			probs = append(probs, Problem{Path: path, Server: name, Message: fmt.Sprintf("its entry cannot be read (%v)", err)})
@@ -253,6 +262,9 @@ func parseConfig(path, scope string, servers map[string]json.RawMessage, project
 		}
 		switch strings.ToLower(e.Type) {
 		case "", "stdio":
+			if e.OAuth != nil {
+				probs = append(probs, Problem{Path: path, Server: name, Message: "its oauth object is for a server reached at a URL, and is left out"})
+			}
 			if e.Type == "" && e.URL != "" {
 				probs = append(probs, Problem{Path: path, Server: name, Message: "it has a url and no type; a server reached at a URL says \"type\": \"http\""})
 				continue
@@ -284,6 +296,17 @@ func parseConfig(path, scope string, servers map[string]json.RawMessage, project
 				for k, v := range e.Headers {
 					c.Headers[k] = remote(v)
 				}
+			}
+			if o := e.OAuth; o != nil {
+				switch {
+				case o.CallbackPort < 0 || o.CallbackPort > 65535:
+					probs = append(probs, Problem{Path: path, Server: name, Message: fmt.Sprintf("its oauth.callbackPort %d is not a port", o.CallbackPort)})
+					continue
+				case o.AuthServerMetadataURL != "" && !strings.HasPrefix(o.AuthServerMetadataURL, "https://"):
+					probs = append(probs, Problem{Path: path, Server: name, Message: "its oauth.authServerMetadataUrl is not an https address"})
+					continue
+				}
+				c.OAuth = OAuth{ClientID: o.ClientID, CallbackPort: o.CallbackPort, Scopes: strings.TrimSpace(o.Scopes), AuthServerMetadataURL: o.AuthServerMetadataURL}
 			}
 		case "sse", "ws":
 			probs = append(probs, Problem{Path: path, Server: name, Message: fmt.Sprintf("the %s transport is not one gnosh speaks; it speaks stdio and http", e.Type)})

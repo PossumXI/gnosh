@@ -78,6 +78,9 @@ type Options struct {
 	// dropped, as is a verdict from a server that did not declare
 	// claude/channel/permission. It is called as OnChannel is.
 	OnChannelVerdict func(requestID, behavior string)
+	// Auth, for a server reached at a URL, gives its requests the
+	// person's sign-in to it (auth.go); nil sends none.
+	Auth *Authorizer
 	// OnHandshake, when set, is told what the server said of itself as
 	// soon as the handshake is done, before any notification of the
 	// server's is taken: what a channel is goes in front of its first

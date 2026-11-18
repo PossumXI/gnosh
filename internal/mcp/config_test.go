@@ -168,3 +168,43 @@ func TestGivenConfig(t *testing.T) {
 		t.Errorf("with Strict: %d servers, want the 2 given", len(got))
 	}
 }
+
+// A server at a URL may carry an oauth object, read into Config.OAuth; a
+// port that is not one, or a metadata address not over https, keeps the
+// entry out, and an oauth object on a started server is said and left out.
+func TestOAuthConfig(t *testing.T) {
+	dir := t.TempDir()
+	user := filepath.Join(dir, "mcp.json")
+	os.WriteFile(user, []byte(`{"mcpServers": {
+  "far": {"type": "http", "url": "https://far.example.org/mcp", "oauth": {"clientId": "c-1", "callbackPort": 8080, "scopes": " read write ", "authServerMetadataUrl": "https://auth.example.org/meta"}},
+  "badport": {"type": "http", "url": "https://b.example.org/mcp", "oauth": {"callbackPort": 70000}},
+  "plain": {"type": "http", "url": "https://p.example.org/mcp", "oauth": {"authServerMetadataUrl": "http://auth.example.org/meta"}},
+  "local": {"command": "srv", "oauth": {"clientId": "x"}}
+}}`), 0o600)
+	got, probs := LoadConfig(Sources{User: user, Root: dir, Getenv: func(string) (string, bool) { return "", false }})
+	m := map[string]Config{}
+	for _, c := range got {
+		m[c.Name] = c
+	}
+	if o := m["far"].OAuth; o != (OAuth{ClientID: "c-1", CallbackPort: 8080, Scopes: "read write", AuthServerMetadataURL: "https://auth.example.org/meta"}) {
+		t.Errorf("far's oauth: %+v", o)
+	}
+	if _, ok := m["badport"]; ok {
+		t.Errorf("an entry with a callbackPort that is not a port was kept")
+	}
+	if _, ok := m["plain"]; ok {
+		t.Errorf("an entry with an authServerMetadataUrl over plain http was kept")
+	}
+	if _, ok := m["local"]; !ok {
+		t.Errorf("a started server with an oauth object was left out whole")
+	}
+	text := ""
+	for _, p := range probs {
+		text += p.String() + "\n"
+	}
+	for _, want := range []string{"oauth.callbackPort 70000 is not a port", "authServerMetadataUrl is not an https address", "oauth object is for a server reached at a URL"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the problems do not say %q:\n%s", want, text)
+		}
+	}
+}
