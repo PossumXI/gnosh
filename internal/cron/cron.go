@@ -7,9 +7,15 @@
 // Each field is a list of items parted by commas. An item is * (every
 // value), a value, a range a-b, or either of those with a step: */15,
 // 10-50/20, 5/15 (from 5 to the field's end). The day of the week runs
-// from 0 to 7, both Sunday. As in Vixie cron, when both days are limited
-// (neither is *), a date matches when either does. Names (MON, JAN) and
-// the extensions L, W, ? and # are not read.
+// from 0 to 7, both Sunday. As in Vixie cron, when both day fields are
+// limited (neither begins with *), a date matches when either does;
+// otherwise it must match both. Names (MON, JAN) and the extensions L, W,
+// ? and # are not read.
+//
+// Around the clocks changing, as cron(8) does: a time the clocks skip runs
+// at the first minute after the jump, and a time they pass twice runs
+// once, for a schedule of fixed hours (one that runs every hour runs by
+// the clock, twice in the hour that comes twice).
 package cron
 
 import (
@@ -23,10 +29,11 @@ import (
 // Schedule is a five-field cron schedule, read.
 type Schedule struct {
 	minute, hour, dom, month, dow uint64 // one bit per value that matches
-	// domAny and dowAny say the field was *, alone: then the other day
-	// field alone decides.
-	domAny, dowAny bool
-	text           string
+	// domStar and dowStar say the day field begins with *: then a date
+	// must match both day fields, not either; hourStar says the hour
+	// field does (the schedule runs by the clock through a repeated hour).
+	domStar, dowStar, hourStar bool
+	text                       string
 }
 
 // field is the range of one of the five fields.
@@ -59,7 +66,7 @@ func Parse(expr string) (*Schedule, error) {
 		}
 		*sets[i] = bits
 	}
-	s.domAny, s.dowAny = parts[2] == "*", parts[4] == "*"
+	s.domStar, s.dowStar, s.hourStar = strings.HasPrefix(parts[2], "*"), strings.HasPrefix(parts[4], "*"), strings.HasPrefix(parts[1], "*")
 	if s.dow&(1<<7) != 0 {
 		s.dow |= 1 // 7 is Sunday, as 0 is
 	}
@@ -129,13 +136,8 @@ func (s *Schedule) matchesDay(t time.Time) bool {
 	}
 	dom := s.dom&(1<<uint(t.Day())) != 0
 	dow := s.dow&(1<<uint(t.Weekday())) != 0
-	switch {
-	case s.domAny && s.dowAny:
-		return true
-	case s.domAny:
-		return dow
-	case s.dowAny:
-		return dom
+	if s.domStar || s.dowStar {
+		return dom && dow
 	}
 	return dom || dow
 }
@@ -158,17 +160,19 @@ func (s *Schedule) Next(t time.Time) (time.Time, error) {
 	c := t.Truncate(time.Minute).Add(time.Minute)
 	for c.Before(end) {
 		if !s.matchesDay(c) {
-			// The next day, at its first minute.
-			y, m, d := c.Date()
-			c = time.Date(y, m, d+1, 0, 0, 0, 0, loc)
+			c = nextDay(c, loc)
 			continue
 		}
 		if s.hour&(1<<uint(c.Hour())) == 0 {
-			y, m, d := c.Date()
-			next := time.Date(y, m, d, c.Hour()+1, 0, 0, 0, loc)
-			if !next.After(c) {
-				// (A clock set back: the same hour again.)
-				next = c.Truncate(time.Hour).Add(time.Hour)
+			next := nextHour(c, loc)
+			// The clocks went forward past an hour the schedule wanted: it
+			// runs at the first minute after the jump.
+			if y, m, d := next.Date(); y == c.Year() && m == c.Month() && d == c.Day() {
+				for h := c.Hour() + 1; h < next.Hour(); h++ {
+					if s.hour&(1<<uint(h)) != 0 {
+						return next, nil
+					}
+				}
 			}
 			c = next
 			continue
@@ -177,9 +181,51 @@ func (s *Schedule) Next(t time.Time) (time.Time, error) {
 			c = c.Add(time.Minute)
 			continue
 		}
+		if !s.hourStar && !wallAfter(c, t) {
+			// The clocks went back, and this minute of the clock has been
+			// passed already: a schedule of fixed hours runs it once.
+			c = c.Add(time.Minute)
+			continue
+		}
 		return c, nil
 	}
 	return time.Time{}, ErrNever
+}
+
+// nextDay is the first minute of the day after c's, in loc. Where the
+// clocks skip that midnight, it is the first minute after the jump: time.Date
+// may give a time of the day before for a midnight that is not there.
+func nextDay(c time.Time, loc *time.Location) time.Time {
+	y, m, d := c.Date()
+	n := time.Date(y, m, d+1, 0, 0, 0, 0, loc)
+	for !n.After(c) {
+		n = n.Add(time.Hour)
+	}
+	return n
+}
+
+// nextHour is the first minute of the hour after c's, by the clock: past
+// a jump forward, the first minute after it; in an hour the clocks pass
+// twice, the next hour by the clock in real time. c is a whole minute.
+func nextHour(c time.Time, loc *time.Location) time.Time {
+	y, m, d := c.Date()
+	n := time.Date(y, m, d, c.Hour()+1, 0, 0, 0, loc)
+	if !n.After(c) {
+		n = c.Add(time.Duration(60-c.Minute()) * time.Minute)
+	}
+	return n
+}
+
+// wallAfter reports whether c reads later on the clock than t, in c's
+// zone: a later date, or a later hour and minute that day.
+func wallAfter(c, t time.Time) bool {
+	t = t.In(c.Location())
+	cy, cm, cd := c.Date()
+	ty, tm, td := t.Date()
+	if cy != ty || cm != tm || cd != td {
+		return c.After(t)
+	}
+	return c.Hour()*60+c.Minute() > t.Hour()*60+t.Minute()
 }
 
 // Every is the schedule that comes due every d, d rounded to a step cron
@@ -193,37 +239,43 @@ func Every(d time.Duration) (expr string, step time.Duration, rounded bool) {
 		d = time.Minute
 	}
 	mins := int((d + time.Minute - 1) / time.Minute)
+	n := nearest(mins, everySteps)
 	switch {
-	case mins < 60:
-		n := nearest(mins, []int{1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30})
+	case n < 60:
 		expr = "*/" + strconv.Itoa(n) + " * * * *"
 		if n == 1 {
 			expr = "* * * * *"
 		}
-		return expr, time.Duration(n) * time.Minute, n != mins || odd
-	case mins < 24*60:
-		hours := (mins + 30) / 60
-		n := nearest(hours, []int{1, 2, 3, 4, 6, 8, 12})
-		expr = "0 */" + strconv.Itoa(n) + " * * *"
-		if n == 1 {
+	case n < 24*60:
+		expr = "0 */" + strconv.Itoa(n/60) + " * * *"
+		if n == 60 {
 			expr = "0 * * * *"
 		}
-		return expr, time.Duration(n) * time.Hour, n*60 != mins || odd
+	default:
+		expr = "0 0 */" + strconv.Itoa(n/(24*60)) + " * *"
+		if n == 24*60 {
+			expr = "0 0 * * *"
+		}
 	}
-	days := (mins + 12*60) / (24 * 60)
-	n := min(days, 31)
-	expr = "0 0 */" + strconv.Itoa(n) + " * *"
-	if n == 1 {
-		expr = "0 0 * * *"
-	}
-	return expr, time.Duration(n) * 24 * time.Hour, n*24*60 != mins || odd
+	return expr, time.Duration(n) * time.Minute, n != mins || odd
 }
 
-// nearest is the value of steps closest to n, the smaller one on a tie.
+// everySteps are the intervals, in minutes, a cron schedule keeps evenly:
+// minutes that divide an hour, hours that divide a day, and days.
+var everySteps = func() []int {
+	steps := []int{1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720}
+	for d := 1; d <= 31; d++ {
+		steps = append(steps, d*24*60)
+	}
+	return steps
+}()
+
+// nearest is the value of steps closest to n, the larger one on a tie
+// (the less often a prompt runs, the less it costs).
 func nearest(n int, steps []int) int {
 	best := steps[0]
 	for _, s := range steps {
-		if abs(s-n) < abs(best-n) {
+		if d, bd := abs(s-n), abs(best-n); d < bd || d == bd && s > best {
 			best = s
 		}
 	}

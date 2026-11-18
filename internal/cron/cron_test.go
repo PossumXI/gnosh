@@ -33,6 +33,8 @@ func TestNext(t *testing.T) {
 		// Both days limited: either one matches (Vixie cron).
 		{"0 12 1 * 1", "2026-11-17 13:00", "2026-11-23 12:00"},
 		{"0 12 18 * 1", "2026-11-17 13:00", "2026-11-18 12:00"},
+		// A day field that begins with *: both must match (Vixie cron).
+		{"0 0 */2 * 1", "2026-11-01 00:00", "2026-11-09 00:00"},
 		{"10-50/20 * * * *", "2026-11-17 10:15", "2026-11-17 10:30"},
 		{"5/15 * * * *", "2026-11-17 10:21", "2026-11-17 10:35"},
 		{"1,15,30 * * * *", "2026-11-17 10:16", "2026-11-17 10:30"},
@@ -130,11 +132,14 @@ func TestEvery(t *testing.T) {
 		{90 * time.Second, "*/2 * * * *", 2 * time.Minute, true},
 		{7 * time.Minute, "*/6 * * * *", 6 * time.Minute, true},
 		{20 * time.Minute, "*/20 * * * *", 20 * time.Minute, false},
-		{45 * time.Minute, "*/30 * * * *", 30 * time.Minute, true},
+		{45 * time.Minute, "0 * * * *", time.Hour, true}, // a tie goes to the longer
+		{50 * time.Minute, "0 * * * *", time.Hour, true},
 		{time.Hour, "0 * * * *", time.Hour, false},
 		{90 * time.Minute, "0 */2 * * *", 2 * time.Hour, true},
 		{2 * time.Hour, "0 */2 * * *", 2 * time.Hour, false},
-		{5 * time.Hour, "0 */4 * * *", 4 * time.Hour, true},
+		{5 * time.Hour, "0 */6 * * *", 6 * time.Hour, true},
+		{20 * time.Hour, "0 0 * * *", 24 * time.Hour, true},
+		{23*time.Hour + 50*time.Minute, "0 0 * * *", 24 * time.Hour, true},
 		{24 * time.Hour, "0 0 * * *", 24 * time.Hour, false},
 		{3 * 24 * time.Hour, "0 0 */3 * *", 3 * 24 * time.Hour, false},
 	} {
@@ -171,4 +176,68 @@ func FuzzSchedule(f *testing.F) {
 			t.Errorf("%q after %v: %v does not match", expr, from, next)
 		}
 	})
+}
+
+// Where the clocks skip a midnight, the next day still comes: Next used to
+// go round for ever in Havana, Santiago and the Azores.
+func TestNextPastAMissingMidnight(t *testing.T) {
+	for _, zone := range []string{"America/Havana", "America/Santiago", "Atlantic/Azores"} {
+		loc, err := time.LoadLocation(zone)
+		if err != nil {
+			t.Skip("no time zone database here")
+		}
+		s, _ := Parse("0 9 * * 1")
+		done := make(chan time.Time, 1)
+		go func() {
+			next, _ := s.Next(time.Date(2027, 3, 1, 7, 0, 0, 0, loc))
+			done <- next
+		}()
+		select {
+		case next := <-done:
+			if next.IsZero() || next.Hour() != 9 || next.Weekday() != time.Monday {
+				t.Errorf("%s: %v", zone, next)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: Next did not return", zone)
+		}
+		// And every day of a year there, without a stall.
+		s, _ = Parse("30 0 * * *")
+		at := time.Date(2026, 12, 31, 12, 0, 0, 0, loc)
+		for range 400 {
+			next, err := s.Next(at)
+			if err != nil || !next.After(at) || next.Sub(at) > 49*time.Hour {
+				t.Fatalf("%s after %v: %v, %v", zone, at, next, err)
+			}
+			at = next
+		}
+	}
+}
+
+// Around the clocks changing in New York: a fixed time the clocks pass
+// twice runs once, a time they skip runs right after the jump, and an
+// hourly schedule keeps to the clock.
+func TestNextAroundClockChanges(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no time zone database here")
+	}
+	// 2026-11-01: 01:00 to 02:00 comes twice.
+	s, _ := Parse("30 1 * * *")
+	first, _ := s.Next(time.Date(2026, 11, 1, 0, 0, 0, 0, ny))
+	second, _ := s.Next(first.Add(5 * time.Second))
+	if first.Day() != 1 || first.Hour() != 1 || second.Day() != 2 {
+		t.Errorf("a fixed 1:30 on the day the clocks go back: %v, then %v", first, second)
+	}
+	h, _ := Parse("15 * * * *")
+	a, _ := h.Next(time.Date(2026, 11, 1, 1, 0, 0, 0, ny))
+	b, _ := h.Next(a.Add(5 * time.Second))
+	if b.Sub(a) != time.Hour {
+		t.Errorf("an hourly schedule in the hour that comes twice: %v, then %v", a, b)
+	}
+	// 2027-03-14: 02:00 to 03:00 does not come.
+	s, _ = Parse("30 2 * * *")
+	next, _ := s.Next(time.Date(2027, 3, 14, 0, 0, 0, 0, ny))
+	if next.Day() != 14 || next.Hour() != 3 {
+		t.Errorf("a 2:30 the clocks skip: %v, want right after the jump on the 14th", next)
+	}
 }
