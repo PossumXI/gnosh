@@ -1320,3 +1320,31 @@ or kept with the reason said (27).
     inside its .git), every git command asks, whatever rule allows it.
     With permissions skipped nothing asks, as for the untrusted case.
 
+88. **Signing in to MCP servers by OAuth, as Claude Code's.** A server
+    reached at a URL that answers its handshake with 401 or 403 stands
+    as wanting a sign-in, and the person is told (a run says to sign in
+    from a session first, as Claude Code's -p does). /mcp login <name>
+    finds the authorization server (oauth.authServerMetadataUrl; else
+    the protected resource metadata, RFC 9728, from the 401's
+    WWW-Authenticate or /.well-known; else the server's origin, by RFC
+    8414 or OpenID Connect), registers gnosh as a public client when no
+    oauth.clientId is configured (RFC 7591), and gives the address to
+    sign in at, with PKCE (S256), a state and the resource (RFC 8707);
+    the redirect address is http://localhost:PORT/callback (any free
+    port, or oauth.callbackPort), on 127.0.0.1 and ::1. When the browser
+    comes back to this machine the sign-in ends by itself; over ssh the
+    person pastes the address it tried to go to after /mcp login <name>.
+    The issuer the answer names (iss) must be the one discovered, and
+    credentials go only to https endpoints or to this machine. The token
+    is kept by the server's URL in mcp-logins.json in gnosh's state
+    folder, readable by its owner alone, sent with every request unless
+    the entry configures an Authorization header (which is then the
+    credential in force, and its refusal a plain failure), refreshed once
+    when refused, and forgotten when it cannot be; offline_access is
+    asked for when the server offers it. /mcp logout <name> forgets the
+    sign-in without revoking it at the server; the /mcp picker offers
+    both. A browser is opened only at a desktop, not over ssh, and only
+    for a web address. Not built: the client ID metadata document
+    (CIMD), a client secret given when the server is added (a confidential
+    client registered by hand), and gnosh mcp login from a shell.
+

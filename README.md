@@ -183,11 +183,14 @@ all that was said in the scrollback. `/focus` (or the `viewMode` option,
 read, files edited with the lines added and taken out, commands run, how many
 failed), as Claude Code's focus view does; `/focus` again turns it off.
 
-Not built yet: signing in to an MCP server by OAuth (a key goes in its
-`headers`). WebSearch asks a SearXNG server you name (the `webSearchUrl`
-option); without one there is no WebSearch tool, and a search engine's
-MCP server can give the model one. The interface is in use over
-ssh, in tmux. Its wording to the model has not yet been compared run
+An MCP server at a URL that wants a sign-in is signed in to by OAuth, as
+Claude Code does it: `/mcp login <name>` gives the address to sign in at,
+and over ssh the address the browser tried to come back to is pasted after
+it (`oauth.clientId`, `callbackPort`, `scopes` and `authServerMetadataUrl`
+in the server's entry, as Claude Code's). WebSearch asks a SearXNG server
+you name (the `webSearchUrl` option); without one there is no WebSearch
+tool, and a search engine's MCP server can give the model one. The
+interface is in use over ssh, in tmux. Its wording to the model has not yet been compared run
 against run. Nothing here is released.
 
 ## Licence

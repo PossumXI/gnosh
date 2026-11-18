@@ -65,6 +65,9 @@ type mcpServer struct {
 	// refresh is held while the server's tool list is read again, and
 	// redial while a dropped connection is made again.
 	refresh, redial sync.Mutex
+	// www is what a server that wants a sign-in said in its
+	// WWW-Authenticate (mcpauth.go).
+	www string
 }
 
 // mcpSet is the session's servers.
@@ -72,6 +75,11 @@ type mcpSet struct {
 	mu      sync.Mutex
 	servers []*mcpServer
 	probs   []mcp.Problem
+	// logins are the sign-ins to servers at a URL, and flows the sign-ins
+	// under way, by server name, under mu (mcpauth.go).
+	loginsOnce sync.Once
+	logins     *mcp.LoginStore
+	flows      map[string]*mcpFlow
 }
 
 // loadMCP reads which servers there are.
@@ -181,12 +189,22 @@ func (l *live) connectMCP(s *mcpServer) {
 			l.refreshMCP(s, c)
 		}
 	}
+	opt.Auth = l.mcpAuthorizer(s)
 	client, err := mcpConnect(ctx, s.cfg, l.cfg.Paths.ProjectRoot, l.p.o.Environ, l.roots, opt)
+	if na, ok := errNeedsAuth(err); ok {
+		l.mcpNeedsAuth(s, gen, na)
+		return
+	}
 	if err != nil {
 		fail(err.Error())
 		return
 	}
 	tools, err := client.ListTools(ctx)
+	if na, ok := errNeedsAuth(err); ok {
+		_ = client.Close()
+		l.mcpNeedsAuth(s, gen, na)
+		return
+	}
 	if err != nil {
 		_ = client.Close()
 		fail("it connected, and its tools could not be listed: " + err.Error())
@@ -393,6 +411,8 @@ func (l *live) mcpLine(s *mcpServer) string {
 		return line
 	case "failed":
 		return fmt.Sprintf("%s: not connected (%s): %s", s.cfg.Name, where, oneLine(s.err, 400))
+	case "needs-auth":
+		return fmt.Sprintf("%s: wants a sign-in (%s): /mcp login %s", s.cfg.Name, where, s.cfg.Name)
 	case "disabled":
 		return fmt.Sprintf("%s: disabled for this session (%s); /mcp enable %s connects it", s.cfg.Name, where, s.cfg.Name)
 	}
@@ -404,8 +424,20 @@ func (l *live) mcpLine(s *mcpServer) string {
 // says how each came out. What disable does lasts for this session.
 func (l *live) mcpAct(c *SlashContext, words []string) error {
 	verb := words[0]
+	if (verb == "login" || verb == "logout") && len(words) >= 2 {
+		for _, s := range l.mcp.servers {
+			if s.cfg.Name != words[1] {
+				continue
+			}
+			if verb == "logout" {
+				return l.mcpLogout(c, s)
+			}
+			return l.mcpLogin(l.ctx, c, s, words[2:])
+		}
+		return fmt.Errorf("there is no MCP server named %s here", words[1])
+	}
 	if verb != "reconnect" && verb != "enable" && verb != "disable" || len(words) != 2 {
-		c.Say("/mcp takes nothing, or reconnect, enable or disable with a server's name or all after it: /mcp reconnect %s, say.", l.mcp.servers[0].cfg.Name)
+		c.Say("/mcp takes nothing, or reconnect, enable, disable, login or logout with a server's name after it (all, for the first three): /mcp reconnect %s, say.", l.mcp.servers[0].cfg.Name)
 		return nil
 	}
 	var picked []*mcpServer

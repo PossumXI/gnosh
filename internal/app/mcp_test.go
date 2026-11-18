@@ -222,7 +222,7 @@ func TestMCPReconnectAndDisable(t *testing.T) {
 	r = run(t, w, "-p", "/mcp reconnect nobody").wantCode(t, 0)
 	has(t, "/mcp reconnect of nobody", r.out, "There is no MCP server named nobody here; the servers are greeter.")
 	r = run(t, w, "-p", "/mcp frobnicate greeter").wantCode(t, 0)
-	has(t, "/mcp frobnicate", r.out, "/mcp takes nothing, or reconnect, enable or disable")
+	has(t, "/mcp frobnicate", r.out, "/mcp takes nothing, or reconnect, enable, disable, login or logout")
 }
 
 // --mcp-config gives a run servers of its own; --strict-mcp-config makes
