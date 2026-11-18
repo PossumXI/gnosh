@@ -444,7 +444,9 @@ panel)
 	done_when() { screen | grep -q "Files changed" && screen | grep -q "hello.txt +1" && screen | grep -q "done in"; }
 	;;
 worktree)
-	tmux send-keys -t "$S" "Call the Agent tool with isolation set to worktree, to have a sub-agent add the line delta at the end of notes.txt. Then tell me where its change is." Enter
+	# (With the Edit tool: a line added by a shell redirection is asked
+	# about in acceptEdits, as in Claude Code, and nobody answers here.)
+	tmux send-keys -t "$S" "Call the Agent tool with isolation set to worktree, to have a sub-agent add the line delta at the end of notes.txt with the Edit tool. Then tell me where its change is." Enter
 	# (The model words it "work tree" or "worktree"; the files say the rest.)
 	done_when() { screen | grep -q "done in"; }
 	;;
