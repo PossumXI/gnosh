@@ -26,7 +26,8 @@ import (
 // statusFacts is what an event of the session's may have to put facts on
 // the status line that the loop's own events do not carry. The facts are
 // named: "frame" (the frame the session is in), "background" (how many
-// commands run in the background), "goal" and "session" (the session's
+// commands run in the background), "agents" (how many runs in the
+// background wait on the person), "goal" and "session" (the session's
 // name). A fact that is left out stays as it was; an empty one is taken
 // off. (The task list has an event of its own, app.TasksEvent.)
 type statusFacts interface {

@@ -777,6 +777,11 @@ func (s *session) statusLine(width int) string {
 	if v := oneLine(s.facts["background"]); v != "" && v != "0" {
 		segs = append(segs, segment{v + " in the background", th.Status, 65})
 	}
+	if v := oneLine(s.facts["agents"]); v != "" {
+		// Runs in the background that wait on the person, as Claude
+		// Code's footer counts them: gnosh agents answers them.
+		segs = append(segs, segment{v + ": gnosh agents", th.Status, 66})
+	}
 	if delivered, pending := app.CountDeliverables(s.deliv); delivered+pending > 0 {
 		// What the agent has handed over and what it has promised, which
 		// /deliverables lists: "2 delivered · 1 pending". They are two

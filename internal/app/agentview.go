@@ -415,3 +415,49 @@ func (t *tailWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+// agentsLook is how often an attended session looks for runs in the
+// background that wait on the person (the status line's "agents" fact).
+const agentsLook = 5 * time.Second
+
+// watchAgents keeps the status line's "agents" fact while the person is
+// there: how many runs in the background, of any folder, wait for an
+// answer in gnosh agents, as Claude Code's footer counts the agents
+// waiting on you. It looks at once, and then every agentsLook.
+func (l *live) watchAgents() {
+	if !l.interactive || l.store == nil {
+		return
+	}
+	look := func() { l.setStatus("agents", waitingRuns(runsIn(l.store.ProjectDirs(), l.p.now().Add(-runsKept)))) }
+	look()
+	go func() {
+		tick := time.NewTicker(agentsLook)
+		defer tick.Stop()
+		for {
+			select {
+			case <-l.ctx.Done():
+				return
+			case <-tick.C:
+				look()
+			}
+		}
+	}()
+}
+
+// waitingRuns says how many of runs wait on the person: "" for none, "1
+// run needs input", "2 runs need input".
+func waitingRuns(runs []backgroundRun) string {
+	n := 0
+	for _, r := range runs {
+		if r.running && r.asking != nil {
+			n++
+		}
+	}
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return "1 run needs input"
+	}
+	return fmt.Sprintf("%d runs need input", n)
+}

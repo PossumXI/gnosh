@@ -1999,3 +1999,10 @@ or kept with the reason said (27).
     a bare /model or /effort says what new runs take. "@name prompt"
     starts the run with --agent=name. "<agent-name> <prompt>" without
     the @ is not read so: a prompt may well begin with a kind's name.
+
+123. **A session's status line counts the runs that wait on the
+    person.** Claude Code's footer counts the background agents waiting
+    on you ("← 2 agents"). An attended gnosh session now looks at once and
+    every five seconds at the runs in the background of every folder, and
+    while any waits on a question its status line says "1 run needs input:
+    gnosh agents", where it is answered.

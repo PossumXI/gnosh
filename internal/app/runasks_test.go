@@ -181,3 +181,50 @@ func TestRunReadsItsInbox(t *testing.T) {
 		t.Errorf("unread words: %q", got)
 	}
 }
+
+// An attended session's status line counts the runs in the background, of
+// any folder, that wait on the person ("agents"), as Claude Code's footer
+// does.
+func TestSessionCountsRunsThatWait(t *testing.T) {
+	w := apptest.NewWorld(t)
+	var log string
+	o := testOptions(w, "--bg", "clean the build")
+	o.Detach = func(_, _ []string, l string) (int, error) {
+		log = l
+		return 4242, nil
+	}
+	runWith(t, context.Background(), o).wantCode(t, 0)
+	id := strings.TrimSuffix(filepath.Base(log), ".background.log")
+	proc := exec.Command("sh", "-c", `trap "exit 0" TERM; while :; do sleep 0.1; done`, id)
+	if err := proc.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { proc.Process.Kill(); proc.Wait() })
+	if err := os.WriteFile(pidFile(log), []byte(strconv.Itoa(proc.Process.Pid)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ask, _ := json.Marshal(runAsk{ID: "q1", Token: strings.Repeat("ab", 16), Title: "Allow Bash?", Choices: []askChoice{{Key: "yes", Label: "Yes"}}})
+	if err := os.WriteFile(askFile(log), ask, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		deadline := time.Now().Add(20 * time.Second)
+		for c.Status()["agents"] != "1 run needs input" {
+			if time.Now().After(deadline) {
+				t.Errorf("the status line's facts: %v", c.Status())
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	if got := waitingRuns(nil); got != "" {
+		t.Errorf("no runs: %q", got)
+	}
+	two := []backgroundRun{{running: true, asking: &runAsk{}}, {running: true, asking: &runAsk{}}, {running: true}, {asking: &runAsk{}}}
+	if got := waitingRuns(two); got != "2 runs need input" {
+		t.Errorf("two waiting: %q", got)
+	}
+}

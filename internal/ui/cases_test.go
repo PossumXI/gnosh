@@ -716,10 +716,10 @@ func TestModes(t *testing.T) {
 // that it is one row at every width.
 func TestStatusLine(t *testing.T) {
 	g := newRig(t, 200, 24, text.NoColor)
-	g.ev(facts{"frame": "write the tests", "background": "2"})
+	g.ev(facts{"frame": "write the tests", "background": "2", "agents": "1 run needs input"})
 	g.ev(&agent.LoopEvent{On: true})
 	g.liveHas("idle", "manual mode", "qwen3.8-27b", "thinking on", "context 11%", "/loop on", "~/src/proj (main)",
-		"in write the tests", "2 in the background")
+		"in write the tests", "2 in the background", "1 run needs input: gnosh agents")
 	g.liveLacks("tasks ")
 	g.ev(&app.TasksEvent{Tasks: []app.Task{
 		{Content: "Read the spec", Status: app.TaskCompleted},

@@ -605,6 +605,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.channelsNotice()
 	l.startMCP()
 	l.startStatusLine()
+	l.watchAgents()
 	l.watchFiles(l.ctx)
 	if l.cronOff() == "" {
 		l.restoreCrons()
