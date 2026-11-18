@@ -396,7 +396,7 @@ func (s *runSource) Forget(id string) error {
 		}
 	}
 	for _, log := range logs {
-		if runAlive(id, log, firstOf(r.file, filepath.Join(filepath.Dir(log), id+".jsonl"))) {
+		if runAlive(id, log, r.file) {
 			return fmt.Errorf("the session %s is working: stop it first", id)
 		}
 	}

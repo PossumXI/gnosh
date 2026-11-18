@@ -126,12 +126,11 @@ type agentView struct {
 	starting int
 	told     map[string]bool
 
-	// prev is how each run stood when the list was last read, and seen
-	// says it was read before; notes are what the person is to be told of
-	// the changes since (a run needs input, or is done), for the loop to
-	// send by their notification channel.
+	// prev is how each run stood when the list was last read (nil before
+	// it was); notes are what the person is to be told of the changes
+	// since (a run needs input, or is done), for the loop to send by
+	// their notification channel.
 	prev  map[string]string
-	seen  bool
 	notes []string
 
 	// flags are what the runs started from the view are given: the -y,
@@ -218,7 +217,7 @@ func (v *agentView) refresh() {
 		states[r.ID] = r.State
 		was, known := v.prev[r.ID]
 		switch {
-		case !v.seen || r.State == was:
+		case v.prev == nil || r.State == was:
 		case r.State == "blocked" && r.Question != nil:
 			v.notes = append(v.notes, runName(r)+" needs input: "+oneLine(r.Question.Title))
 		case (r.State == "done" || r.State == "failed") && !stopped[r.ID] && (!known || was == "working" || was == "blocked"):
@@ -233,7 +232,7 @@ func (v *agentView) refresh() {
 			v.notes = append(v.notes, runName(r)+how+last)
 		}
 	}
-	v.prev, v.seen = states, true
+	v.prev = states
 	// Words a run ended before it read go to it again, as a reply to a
 	// run that is over does.
 	for _, r := range v.runs {
