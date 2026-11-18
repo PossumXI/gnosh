@@ -59,6 +59,9 @@ type treeMove struct {
 	Name    string `json:"name,omitempty"`
 	Branch  string `json:"branch,omitempty"`
 	Removed bool   `json:"removed,omitempty"`
+	// BranchKept says the removed tree's branch stayed: git would not
+	// delete it.
+	BranchKept bool `json:"branchKept,omitempty"`
 	// Carried says nothing moved: a session in a tree EnterWorktree moved
 	// it into starts again there (/restart), and the tree stays one
 	// ExitWorktree may take it back from. Nothing is said of it.
@@ -151,7 +154,7 @@ func (t *enterTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	if tree.includeErr != nil {
 		text += " " + tree.includeErr.Error() + "."
 	}
-	l.restartWhy.Store(ptrTo("The session moves into the git work tree " + tree.path + ": gnosh starts again there."))
+	l.restartWhy.Store(ptrTo("The session moves into the git work tree " + tree.path + ": gnosh starts again there." + l.loopEndsNote()))
 	res := core.TextResult(text)
 	res.Meta = map[string]any{agent.MetaHalt: "the session moves into the work tree " + tree.path}
 	return res, nil
@@ -194,7 +197,7 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	}
 	tctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	removed := false
+	removed, keptBranch := false, ""
 	if in.Action == "remove" {
 		what, err := treeHolds(tctx, l.p.o.Environ, &tree.worktree)
 		switch {
@@ -206,10 +209,18 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 		if _, err := runGit(tctx, l.p.o.Environ, tree.repo, "worktree", "remove", "--force", tree.path); err != nil {
 			return core.ErrorResult("The work tree could not be removed (" + err.Error() + "). Call again with action keep to leave it."), nil
 		}
-		_, _ = runGit(tctx, l.p.o.Environ, tree.repo, "branch", "-D", tree.branch)
+		// The branch goes only as far as git agrees that nothing on it is
+		// lost (-d), unless the user agreed to lose it.
+		del := "-d"
+		if in.Discard {
+			del = "-D"
+		}
+		if _, err := runGit(tctx, l.p.o.Environ, tree.repo, "branch", del, tree.branch); err != nil {
+			keptBranch = " Its branch " + tree.branch + " is kept: git would not delete it (" + oneLine(err.Error(), 200) + ")."
+		}
 		removed = true
 	}
-	move, _ := json.Marshal(treeMove{Left: tree.path, Name: tree.name, Branch: tree.branch, Removed: removed})
+	move, _ := json.Marshal(treeMove{Left: tree.path, Name: tree.name, Branch: tree.branch, Removed: removed, BranchKept: keptBranch != ""})
 	if err := l.moveFor(tree.from, string(move), func(r *cli.Relaunch) { r.Tree, r.LeaveTree = "", true }); err != nil {
 		if removed {
 			return core.ErrorResult("The work tree was removed, and the session could not move back to " + tree.from + " (" + err.Error() + "). /exit ends the session; gnosh -c in " + tree.from + " goes on with it."), nil
@@ -219,8 +230,11 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	text := fmt.Sprintf("The session leaves the git work tree %s, which is kept with its branch %s. This turn ends; gnosh starts again in %s, and the next turn goes on there.", tree.path, tree.branch, tree.from)
 	if removed {
 		text = fmt.Sprintf("The git work tree %s was removed with its branch %s. This turn ends; gnosh starts again in %s, and the next turn goes on there.", tree.path, tree.branch, tree.from)
+		if keptBranch != "" {
+			text = fmt.Sprintf("The git work tree %s was removed.%s This turn ends; gnosh starts again in %s, and the next turn goes on there.", tree.path, keptBranch, tree.from)
+		}
 	}
-	l.restartWhy.Store(ptrTo("The session goes back to " + tree.from + ": gnosh starts again there."))
+	l.restartWhy.Store(ptrTo("The session goes back to " + tree.from + ": gnosh starts again there." + l.loopEndsNote()))
 	res := core.TextResult(text)
 	res.Meta = map[string]any{agent.MetaHalt: "the session leaves the work tree " + tree.path}
 	return res, nil
@@ -294,6 +308,8 @@ func (l *live) treeMoved() {
 		t := l.st.tree
 		text = fmt.Sprintf("The session works in the git work tree %s now, on the branch %s, a checkout of %s at %s: commands run and files are read and written there, and the user's checkout at %s is out of reach for edits. Changes that were not committed there are not in the tree. The project's instructions and settings are the tree's. ExitWorktree takes the session back when the user asks.",
 			l.cwd(), t.branch, t.repo, shortCommit(t.base), t.from)
+	case m.Left != "" && m.Removed && m.BranchKept:
+		text = fmt.Sprintf("The session works in %s again: the git work tree %s was removed, and its branch %s is kept.", l.cwd(), m.Left, m.Branch)
 	case m.Left != "" && m.Removed:
 		text = fmt.Sprintf("The session works in %s again: the git work tree %s was removed with its branch %s.", l.cwd(), m.Left, m.Branch)
 	case m.Left != "":

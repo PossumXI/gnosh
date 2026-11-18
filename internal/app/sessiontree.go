@@ -180,7 +180,7 @@ func makeTree(ctx context.Context, env []string, folder trust.Folder, dataDir, n
 		if err != nil {
 			return nil, "", fmt.Errorf("the work tree %s is there, and its commit could not be read (%v)", t.path, err)
 		}
-		t.base, t.reused = head, true
+		t.base, t.reused = forkPoint(ctx, env, top, head), true
 	default:
 		base, err := runGit(ctx, env, top, "rev-parse", "--verify", "--quiet", "HEAD")
 		if err != nil || base == "" {
@@ -195,7 +195,7 @@ func makeTree(ctx context.Context, env []string, folder trust.Folder, dataDir, n
 		t.included, t.includeErr = copied, err
 		if branchErr == nil {
 			if head, err := runGit(ctx, env, t.path, "rev-parse", "HEAD"); err == nil {
-				t.base = head
+				t.base = forkPoint(ctx, env, top, head)
 			}
 			t.reused = true
 		}
@@ -209,6 +209,18 @@ func makeTree(ctx context.Context, env []string, folder trust.Folder, dataDir, n
 		}
 	}
 	return t, start, nil
+}
+
+// forkPoint is where the work of a work tree opened again, at head, began:
+// the last commit it shares with the checkout's own HEAD, so that what was
+// committed in it before this gnosh started counts as its work (and is not
+// lost when it is taken away as one left as made). Where that cannot be
+// told, head itself.
+func forkPoint(ctx context.Context, env []string, top, head string) string {
+	if base, err := runGit(ctx, env, top, "merge-base", "HEAD", head); err == nil && base != "" {
+		return base
+	}
+	return head
 }
 
 // listsTree reports whether git worktree list --porcelain lists the work

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
+	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
 // EnterWorktree, asked for, makes a git work tree of the repository's and
@@ -140,5 +141,34 @@ func TestWorktreeToolsOffered(t *testing.T) {
 	s.exit()
 	if strings.Contains(offered(2), `"EnterWorktree"`) {
 		t.Errorf("a gnosh that cannot start itself again was offered EnterWorktree")
+	}
+}
+
+// A work tree opened again (by its name, or by a new start after
+// /restart) counts what was committed in it before as its work: removing
+// it would lose that, so it is not taken for one left as made.
+func TestReopenedTreeKeepsItsCommits(t *testing.T) {
+	w := repoWorld(t)
+	env := []string{"HOME=" + w.Dir, "PATH=" + os.Getenv("PATH"), "GIT_CONFIG_NOSYSTEM=1"}
+	folder, err := trust.Resolve(w.Dir, w.Home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, _, err := makeTree(t.Context(), env, folder, filepath.Join(w.Dir, ".gnosh"), "feat", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree.path, "work.txt"), []byte("done\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, tree.path, "add", "work.txt")
+	gitIn(t, tree.path, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "work")
+	again, _, err := makeTree(t.Context(), env, folder, filepath.Join(w.Dir, ".gnosh"), "feat", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	what, err := treeHolds(t.Context(), env, &again.worktree)
+	if err != nil || len(what) == 0 || !strings.Contains(strings.Join(what, " "), "1 commit") {
+		t.Errorf("the tree opened again holds %q, %v; want its commit counted", what, err)
 	}
 }
