@@ -48,6 +48,10 @@ func TestBackgroundFromTheShell(t *testing.T) {
 		t.Errorf("the process id kept: %q", pid)
 	}
 
+	// The list names it by the name it was given.
+	has(t, "gnosh agents", run(t, w, "agents").wantCode(t, 0).out, id[:13]+"  ", "  nightly")
+	has(t, "gnosh agents --json --all", run(t, w, "agents", "--json", "--all").wantCode(t, 0).out, `"name": "nightly"`, `"prompt": "fix the flaky test"`)
+
 	// What the run printed, by the start of its id.
 	f, err := os.OpenFile(log, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {

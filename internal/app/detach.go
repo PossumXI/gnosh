@@ -30,7 +30,7 @@ import (
 
 // detachPlan is what /background goes on with once the session is closed.
 type detachPlan struct {
-	session, prompt, log string
+	session, name, prompt, log string
 	// cwd is the folder the run works in, and path the session's file,
 	// which the run holds while it works.
 	cwd, path string
@@ -47,7 +47,7 @@ func (p *program) detachedPlan() *detachPlan {
 // to the session, or, when it cannot, how to go on by hand.
 func (p *program) detach(args []string, d *detachPlan) int {
 	run := append(append(args, "--print", "--"), d.prompt)
-	p.logHead(d.log, d.session, d.cwd, d.path, d.prompt)
+	p.logHead(d.log, d.session, d.name, d.cwd, d.path, d.prompt)
 	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), d.log)
 	if err != nil {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
@@ -72,7 +72,12 @@ func (l *live) slashBackground(ctx context.Context, c *SlashContext) error {
 		return err
 	}
 	id := l.ts.ID()
-	d := &detachPlan{session: id, prompt: prompt, log: filepath.Join(l.crashDir(), id+".background.log"), cwd: l.cfg.Paths.Cwd, path: l.ts.Path()}
+	// (A name the person gave; one gnosh made is the first prompt's line.)
+	name, byPerson := l.title()
+	if !byPerson {
+		name = ""
+	}
+	d := &detachPlan{session: id, name: name, prompt: prompt, log: filepath.Join(l.crashDir(), id+".background.log"), cwd: l.cfg.Paths.Cwd, path: l.ts.Path()}
 	p := l.p
 	p.restartMu.Lock()
 	p.restart, p.detached = args, d
@@ -109,7 +114,13 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	log := filepath.Join(l.crashDir(), id+".background.log")
 	// (The copy's file is under the folder the session began in, which
 	// is not this one for a session of another folder opened by its id.)
-	l.p.logHead(log, id, l.cfg.Paths.Cwd, path, prompt)
+	name, byPerson := l.title()
+	if !byPerson {
+		name = ""
+	} else {
+		name += " (fork)" // (as copySession names the copy)
+	}
+	l.p.logHead(log, id, name, l.cfg.Paths.Cwd, path, prompt)
 	pid, err := l.p.o.Detach(run, slices.Clone(l.p.o.Environ), log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
@@ -188,17 +199,20 @@ func (l *live) copySession(what string) (id, path string, err error) {
 }
 
 // logHead begins a run's log with what it is: when it started, the
-// session it goes on with, its prompt, the folder it works in, and the
-// session's file (which the run holds while it works). The run's own
-// output follows. A log that cannot be written to is left to the run,
-// which says why.
-func (p *program) logHead(log, session, cwd, path, prompt string) {
+// session it goes on with, its prompt, its name when it has one, the
+// folder it works in, and the session's file (which the run holds while
+// it works). The run's own output follows. A log that cannot be written
+// to is left to the run, which says why.
+func (p *program) logHead(log, session, name, cwd, path, prompt string) {
 	f, err := os.OpenFile(log, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "gnosh: %s the session %s goes on in the background with: %s\n", p.now().UTC().Format(time.RFC3339), session, oneLine(prompt, 400))
+	if name = oneLine(name, 120); name != "" {
+		fmt.Fprintf(f, "%s%s\n", runNameLine, name)
+	}
 	if cwd != "" {
 		fmt.Fprintf(f, "%s%s\n", runFolderLine, cwd)
 	}
@@ -208,24 +222,25 @@ func (p *program) logHead(log, session, cwd, path, prompt string) {
 }
 
 // runFileLine begins the line of a run's log that names its session's
-// file, and runFolderLine the one that names the folder it works in.
-// runStopped ends the line gnosh stop adds to the log of a run it
-// stopped.
+// file, runFolderLine the one that names the folder it works in, and
+// runNameLine the one with its name. runStopped ends the line gnosh stop
+// adds to the log of a run it stopped.
 const (
 	runFileLine   = "gnosh: its session file is "
 	runFolderLine = "gnosh: its folder is "
+	runNameLine   = "gnosh: its name is "
 	runStopped    = " the run was stopped; what it did so far is kept."
 )
 
 // backgroundRun is a run in the background that gnosh --bg, /background or
-// /fork started: the session it goes on with, its prompt, its log, the
+// /fork started: the session it goes on with, its prompt and name, its log, the
 // folder it works in, the session's file, when it started, whether it
 // still runs or was stopped, and the last line it printed.
 type backgroundRun struct {
-	session, prompt, log, cwd, file string
-	started                         time.Time
-	running, stopped                bool
-	last                            string
+	session, prompt, name, log, cwd, file string
+	started                               time.Time
+	running, stopped                      bool
+	last                                  string
 }
 
 // runsShown is how many runs in the background /tasks lists, the newest
@@ -334,6 +349,10 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 	head := false // the lines logHead wrote after a first line go on
 	for _, line := range strings.Split(string(data), "\n") {
 		if head {
+			if p, ok := strings.CutPrefix(line, runNameLine); ok {
+				r.name = p
+				continue
+			}
 			if p, ok := strings.CutPrefix(line, runFolderLine); ok {
 				r.cwd = p
 				continue
@@ -353,7 +372,7 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			}
 			if terr == nil {
 				if p, ok := strings.CutPrefix(after, "the session "+id+" goes on in the background with: "); ok {
-					r.prompt, r.last, r.file, r.cwd, r.stopped, r.started = p, "", "", "", false, t
+					r.prompt, r.name, r.last, r.file, r.cwd, r.stopped, r.started = p, "", "", "", "", false, t
 					head = true
 					continue
 				}

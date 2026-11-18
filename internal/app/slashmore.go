@@ -189,7 +189,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		if r.running {
 			state = "running for " + roundTime(l.p.now().Sub(r.started))
 		}
-		c.Say("%s  a session in the background, %s: %s", runShort(r.session), state, oneLine(firstOf(r.prompt, "(its prompt is not in its log)"), 100))
+		c.Say("%s  a session in the background, %s: %s", runShort(r.session), state, oneLine(firstOf(r.name, r.prompt, "(its prompt is not in its log)"), 100))
 		if r.running {
 			c.Say("     what it prints: %s; /tasks stop %s stops it; gnosh -r %s opens it once it is done", l.tilde(r.log), runShort(r.session), r.session)
 		} else {

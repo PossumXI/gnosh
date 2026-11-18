@@ -95,7 +95,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	if inv.Worktree {
 		file = "" // (under the work tree's folder, which the run makes)
 	}
-	p.logHead(log, id, st.cfg.Paths.Cwd, file, prompt)
+	p.logHead(log, id, inv.Name, st.cfg.Paths.Cwd, file, prompt)
 	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), log)
 	if err != nil {
 		p.errf("the session could not be started in the background (%v).", err)
@@ -351,13 +351,14 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 			State     string    `json:"state"`
 			PID       int       `json:"pid,omitempty"`
 			Status    string    `json:"status,omitempty"`
+			Name      string    `json:"name,omitempty"`
 			Prompt    string    `json:"prompt,omitempty"`
 			Log       string    `json:"log"`
 		}
 		rows := []row{}
 		for _, r := range runs {
 			w := row{ID: r.session, Kind: "background", Cwd: r.cwd, StartedAt: r.started.UTC(), State: runState(r),
-				Status: oneLine(r.last, 400), Prompt: r.prompt, Log: r.log}
+				Status: oneLine(r.last, 400), Name: r.name, Prompt: r.prompt, Log: r.log}
 			if pid := runPID(r.log); r.running && pid != 0 && runIsFor(pid, r.session) {
 				w.PID = pid
 			}
@@ -390,7 +391,7 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 			state += " " + roundTime(now.Sub(r.started))
 		}
 		rows[i] = cells{runShort(r.session) + "  " + r.started.Local().Format("2006-01-02 15:04"), state,
-			homeTilde(st.cfg.Paths.Home, firstOf(r.cwd, "(folder not known)")), oneLine(firstOf(r.prompt, "(its prompt is not in its log)"), 80)}
+			homeTilde(st.cfg.Paths.Home, firstOf(r.cwd, "(folder not known)")), oneLine(firstOf(r.name, r.prompt, "(its prompt is not in its log)"), 80)}
 		wState, wDir = max(wState, utf8.RuneCountInString(state)), max(wDir, utf8.RuneCountInString(rows[i].dir))
 	}
 	for _, c := range rows {
