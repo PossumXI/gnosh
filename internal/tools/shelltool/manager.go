@@ -599,31 +599,31 @@ func (m *Manager) pruneDetached() {
 // and runs on, and it goes on the books as what let go of the output as
 // the command ended does (detached), so that Close stops it all the same.
 // It goes on those books in the same moment it leaves the list, so that a
-// Close at any point finds it on one of them; a Close that came first
-// leaves it to be stopped here.
+// Close at any point finds it on one of them. Once the manager is closing
+// it stays on the list: close looks at the list only after it is marked
+// closed, so the command is in what it looked at, or in what it will.
 func (m *Manager) settle(j *job) {
 	m.mu.Lock()
 	_, held := m.lingering[j]
-	if !held || m.closed {
-		delete(m.lingering, j)
-		m.mu.Unlock()
+	closing := m.closed
+	m.mu.Unlock()
+	if !held || closing {
 		return
 	}
-	m.mu.Unlock()
 	now, err := m.procs(j.pid)
 	left := err == nil && len(now) > 0
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return
+	}
 	delete(m.lingering, j)
-	closing := m.closed
-	if left && !closing {
+	if left {
 		m.detached[j.pid] = now
 		j.letGo.Store(true)
 	}
 	m.mu.Unlock()
-	switch {
-	case left && closing:
-		m.sweep(j.pid, now) // (the manager is closing)
-	case left:
+	if left {
 		m.pruneDetached()
 	}
 }

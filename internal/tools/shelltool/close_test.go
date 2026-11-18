@@ -746,3 +746,45 @@ func TestLetGoIsStoppedAtClose(t *testing.T) {
 		t.Errorf("the process in a session of its own was stopped")
 	}
 }
+
+// A command whose output closes once the manager is closing stays on the
+// list of those whose leftovers held it open, so that close stops what it
+// left: close looks at that list only after it is marked closed.
+func TestSettleWhileClosingLeavesItToClose(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{TermGrace: 30 * time.Millisecond, KillWait: 30 * time.Millisecond})
+	var mu sync.Mutex
+	var sent []int
+	m.signal = func(pid int, sig syscall.Signal) error {
+		mu.Lock()
+		defer mu.Unlock()
+		sent = append(sent, pid)
+		return nil
+	}
+	left := []procInfo{{pid: 5001, pgid: 5001, start: 9, image: "server"}}
+	m.procs = func(int) ([]procInfo, error) { return left, nil }
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	j := &job{pid: 5000, pipe: r, pumped: make(chan struct{})}
+	close(j.pumped)
+	m.mu.Lock()
+	m.lingering[j] = left
+	m.closed = true // (as close begins)
+	m.mu.Unlock()
+	m.settle(j)
+	m.mu.Lock()
+	_, held := m.lingering[j]
+	m.mu.Unlock()
+	if !held {
+		t.Fatal("settle took the command off the list while the manager was closing")
+	}
+	m.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(sent, -5001) {
+		t.Errorf("close did not stop what the command left: signalled %v", sent)
+	}
+}
