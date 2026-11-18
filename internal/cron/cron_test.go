@@ -241,3 +241,45 @@ func TestNextAroundClockChanges(t *testing.T) {
 		t.Errorf("a 2:30 the clocks skip: %v, want right after the jump on the 14th", next)
 	}
 }
+
+// zones are time zones whose clocks do odd things: skipped and repeated
+// midnights, half hours, quarter-hour offsets.
+var zones = []string{"UTC", "America/New_York", "America/Havana", "America/Santiago", "Atlantic/Azores",
+	"Australia/Lord_Howe", "Asia/Kathmandu", "Pacific/Chatham", "Asia/Beirut", "Africa/Cairo", "Europe/London",
+	"Pacific/Apia", "America/Asuncion", "Asia/Tehran"}
+
+// In any of those zones Next returns, a whole minute after the time asked
+// about, and well within the time a match takes to come round.
+func FuzzScheduleInZones(f *testing.F) {
+	for i, s := range []string{"*/5 * * * *", "0 9 * * 1-5", "30 2 * * *", "30 0 * * *", "0 0 * * 0", "15 1 1 * *", "0 0 29 2 *"} {
+		f.Add(s, int64(1794950000+i*86400*41), uint8(i))
+	}
+	f.Fuzz(func(t *testing.T, expr string, unix int64, zone uint8) {
+		s, err := Parse(expr)
+		if err != nil {
+			return
+		}
+		loc, err := time.LoadLocation(zones[int(zone)%len(zones)])
+		if err != nil {
+			t.Skip("no time zone database here")
+		}
+		from := time.Unix(unix%(1<<36), 0).In(loc)
+		done := make(chan struct{})
+		var next time.Time
+		go func() {
+			defer close(done)
+			next, err = s.Next(from)
+		}()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%q in %s after %v: Next did not return", expr, loc, from)
+		}
+		if err != nil {
+			return
+		}
+		if !next.After(from) || next.Second() != 0 || next.Nanosecond() != 0 {
+			t.Errorf("%q in %s after %v: %v", expr, loc, from, next)
+		}
+	})
+}
