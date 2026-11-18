@@ -48,10 +48,10 @@ Built:
     opens one that is over, Ctrl+X stops one, and Ctrl+S groups them by
     folder.
   - A run that waits on a permission question is under Needs input, and
-    a number answers it; the view tells you by your
-    preferredNotifChannel, and in the title.
-  - Words typed while peeking reach a working run between its steps, or
-    send one that is over back to work on them.
+    a number answers it, in the peek or while watching it; the view tells
+    you by your preferredNotifChannel, and in the title.
+  - Words typed while peeking or watching reach a working run between its
+    steps, or send one that is over back to work on them.
   - A prompt typed at the bottom starts a run; `/model` and `/effort` set
     what those runs get, and `@name` first starts one as that kind of
     agent, or in that folder (a git repo below the view's, or one runs
