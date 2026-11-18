@@ -115,6 +115,30 @@ func TestStackedSkills(t *testing.T) {
 	hasNot(t, "a run", third, "Tag the release")
 }
 
+// A typed skill that never reached the model (a UserPromptExpansion hook
+// blocked it) is not taken to be in the conversation: typed again, its
+// whole text goes, not the word that it is already there.
+func TestBlockedSkillIsSentWholeNextTime(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Tagged v9."})
+	w.Write(w.ConfigDir()+"/skills/ship/SKILL.md", shipSkill)
+	marker := w.Home + "/blocked-once"
+	hook := w.Script(w.Home+"/hooks/once.sh", "cat >/dev/null\nif [ ! -e "+marker+" ]; then touch "+marker+"; echo 'not yet' >&2; exit 2; fi")
+	w.Settings(`{"hooks": {"UserPromptExpansion": [{"matcher": "ship", "hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/ship v9")
+	s.see("blocked it. not yet")
+	s.typeLine("/ship v9")
+	s.see("Tagged v9.")
+	got := lastUser(t, w.Model.Requests()[0])
+	has(t, "what the model read", got, `The user ran the skill "ship" by typing: /ship v9`, "Tag the release v9")
+	hasNot(t, "what the model read", got, "Its text is the same")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+}
+
 // As the prompt of a run, a skill's name runs the skill, and the run is
 // the model's answer to it. A name that is no skill and no command is a
 // prompt like any other.

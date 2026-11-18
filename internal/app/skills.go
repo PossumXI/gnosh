@@ -587,12 +587,25 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 		more, args = l.stackedSkills(args)
 		stack = append(stack, more...)
 	}
+	// What the conversation is taken to hold of each skill (skillRuns) is
+	// put back as it was when the line does not reach the model after all,
+	// so that the next time it is typed its text is sent, not the word
+	// that it is already there.
+	l.skillMu.Lock()
+	ran := slices.Clone(l.skillRuns)
+	l.skillMu.Unlock()
+	fail := func(format string, a ...any) (CommandResult, bool, error) {
+		l.skillMu.Lock()
+		l.skillRuns = ran
+		l.skillMu.Unlock()
+		return res, true, fmt.Errorf(format, a...)
+	}
 	texts := make([]string, len(stack))
 	agains := make([]bool, len(stack))
 	for i, s := range stack {
 		text, again, refusal := l.loadSkill(s, args)
 		if refusal != "" {
-			return res, true, fmt.Errorf("the skill was not run: %s", refusal)
+			return fail("the skill was not run: %s", refusal)
 		}
 		texts[i], agains[i] = text, again
 	}
@@ -607,11 +620,11 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 			CommandName: s.Name, CommandArgs: args, CommandSource: s.Scope, Prompt: texts[i]})
 		switch {
 		case err != nil:
-			return res, true, fmt.Errorf("the skill was not run: the UserPromptExpansion hooks could not be run (%v)", err)
+			return fail("the skill was not run: the UserPromptExpansion hooks could not be run (%v)", err)
 		case out.EndTurn:
-			return res, true, fmt.Errorf("the skill was not run: a UserPromptExpansion hook the user set up stopped it. %s", firstOf(out.StopReason, out.Reason))
+			return fail("the skill was not run: a UserPromptExpansion hook the user set up stopped it. %s", firstOf(out.StopReason, out.Reason))
 		case out.Blocked:
-			return res, true, fmt.Errorf("the skill was not run: a UserPromptExpansion hook the user set up blocked it. %s", firstOf(out.Reason, "It gave no reason."))
+			return fail("the skill was not run: a UserPromptExpansion hook the user set up blocked it. %s", firstOf(out.Reason, "It gave no reason."))
 		}
 		if c := strings.TrimSpace(out.AdditionalContext); c != "" {
 			added += "\n\n" + hookWords(hooks.UserPromptExpansion, "", c)
@@ -648,7 +661,7 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	}
 	id, err := l.agent.Submit(agent.Prompt{Hidden: true, Source: "skill", Text: body, Notice: notice})
 	if err != nil {
-		return res, true, fmt.Errorf("the skill could not be sent to the model: %v", err)
+		return fail("the skill could not be sent to the model: %v", err)
 	}
 	res.Prompt = id
 	return res, true, nil
