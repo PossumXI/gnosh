@@ -492,6 +492,11 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 // its command line names the session. A process id is used again once
 // its process has ended, and a stop must not reach another program.
 func runIsFor(pid int, id string) bool {
+	// (A process that is gone is told so without running anything: most
+	// runs listed are over, and the agent view looks every second.)
+	if p, err := os.FindProcess(pid); err != nil || p.Signal(syscall.Signal(0)) != nil {
+		return false
+	}
 	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil {
 		return strings.Contains(string(data), id)
 	}

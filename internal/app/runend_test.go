@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -115,5 +116,24 @@ func TestRunStates(t *testing.T) {
 				t.Errorf("the end line was taken for what the run printed: %q", runs[0].output)
 			}
 		})
+	}
+}
+
+// A run's process is one whose command line names the session; one that
+// is gone is told so before anything is run to read a command line.
+func TestRunIsFor(t *testing.T) {
+	const id = "01a1eea5-6666-7000-8000-000000000006"
+	cmd := exec.Command("sh", "-c", `trap "exit 0" TERM; while :; do sleep 0.1; done`, id)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	if !runIsFor(pid, id) || runIsFor(pid, "01a1eea5-7777-7000-8000-000000000007") {
+		t.Errorf("the process of the run: for its session %v, for another %v", runIsFor(pid, id), runIsFor(pid, "01a1eea5-7777-7000-8000-000000000007"))
+	}
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+	if runIsFor(pid, id) {
+		t.Errorf("a process that is gone is taken for the run")
 	}
 }

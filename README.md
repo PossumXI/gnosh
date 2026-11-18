@@ -30,28 +30,34 @@ Built:
   ended.
 - **A session** in the terminal's own scrollback. Opened again (`-r`,
   `-c`, `/resume`), it shows where it left off: its last prompt and the
-  model's last answer. It can go on without the terminal (`/background`,
-  `/fork`), or start that way from a shell (`gnosh --bg "fix the flaky
-  test"`, as Claude Code's `claude --bg`); `/tasks` lists the sessions
-  sent off from the folder, running or with the last line each printed,
-  `gnosh agents` those of every folder (`--json`, `--all`, `--cwd`): on a
-  terminal, a live view of them, as Claude Code's agent view, in which
-  Space peeks at one, Enter watches a working one's conversation or opens
-  one that is over, Ctrl+X stops one, a prompt typed at the bottom starts
-  another, a run that waits on a permission question is listed under
-  Needs input, to be answered with a number (the view says so by your
-  preferredNotifChannel, and in the title), and words typed while
-  peeking at a working one reach it between its steps, or send one that
-  is over back to work on them (`gnosh --bg -r <session> "go on"` does
-  that from a shell); in its box `/model` and `/effort` set what the runs
-  it starts get, and `@name` first starts one as that kind of agent, or
-  in that folder (a git repo below the view's, or one runs work in); a
-  run that ended with an error, or was killed, is marked failed (✗) and
-  says how it ended; in a session, ← twice in the empty prompt box opens
-  the same view over it (the status line counts the runs that wait on
-  you with a ←, or those done since you last looked), and Esc comes back; `gnosh attach <session>` opens the view on one, `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
-  <session>` stops one, and `gnosh session list` marks the sessions open
-  now.
+  model's last answer.
+- **Runs in the background**, as Claude Code's background sessions: a
+  session goes on without the terminal (`/background`, `/fork`), or
+  starts that way from a shell (`gnosh --bg "fix the flaky test"`, as
+  `claude --bg`; `gnosh --bg -r <session> "go on"` sends one back to work).
+  `/tasks` lists the folder's runs; `gnosh agents` lists those of every
+  folder (`--json`, `--all`, `--cwd`), `gnosh logs <session>` shows (or
+  follows) what one printed, `gnosh stop <session>` stops one, and `gnosh
+  session list` marks the sessions open now.
+- **The agent view**, as Claude Code's: `gnosh agents` on a terminal,
+  `gnosh attach <session>` on one run, or ← twice in a session's empty
+  prompt box, over the session (Esc comes back; the status line counts
+  the runs that wait on you with a ←, or those done since you last
+  looked). In it:
+  - Space peeks at a run, Enter watches a working one's conversation or
+    opens one that is over, Ctrl+X stops one, and Ctrl+S groups them by
+    folder.
+  - A run that waits on a permission question is under Needs input, and
+    a number answers it; the view tells you by your
+    preferredNotifChannel, and in the title.
+  - Words typed while peeking reach a working run between its steps, or
+    send one that is over back to work on them.
+  - A prompt typed at the bottom starts a run; `/model` and `/effort` set
+    what those runs get, and `@name` first starts one as that kind of
+    agent, or in that folder (a git repo below the view's, or one runs
+    work in).
+  - A run that ended with an error, or was killed, is marked failed (✗)
+    and says how it ended.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small
   model with the model's request, from the open web only), WebSearch on a
   SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,
