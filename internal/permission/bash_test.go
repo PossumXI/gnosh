@@ -393,6 +393,9 @@ func TestBashReadOnly(t *testing.T) {
 		"cd src && git status", "cd /proj/src && git log", "cd .. && git log",
 		"git -C /proj/src status", "git -C src log", "git -C .. status", "git -C ~ status", "git -C /proj diff --output=x",
 		"cd src && git -C /proj/src log",
+		// (A review: -C goes through a link before its .., so lnk/.. may
+		// be another repository; a pattern names what it matches.)
+		"git -C src/.. log -p", "git -C /proj/src/.. status", "timeout 5 git -C src/.. diff", "git -C /pro? status", "git -C /{proj,x} status",
 		// Reads that leave the working directories.
 		"cat /etc/passwd", "cat ~/.ssh/id_ed25519", "cat ../other/x", "ls /", "ls ~", "head /etc/hosts",
 		"grep foo /etc/passwd", "grep -rn foo /", "find / -name x", "find ~ -name x", "wc -l ../x",

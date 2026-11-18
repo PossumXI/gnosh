@@ -1655,11 +1655,19 @@ func (e *Engine) allowCommand(words []word, viaXargs bool) *crule {
 // the line is in, where git would run anyway: "git -C /their/own/folder
 // diff --stat", as models often write, reads the same repository with the
 // same settings as "git diff --stat". Only the folder itself, written out
-// (absolute, or relative to where the line is), counts: a folder under it
-// may hold a repository of its own, and a link or a ~ is not followed.
+// (absolute, or relative to where the line is) with no .. and no pattern,
+// counts: a folder under it may hold a repository of its own, and a link
+// or a ~ is not followed.
 func gitHere(words []word, st *lineState) []word {
 	if len(words) < 3 || st.unknown || len(st.dirs) == 0 || !words[0].static() || words[0].joined() != "git" ||
-		!words[1].static() || words[1].joined() != "-C" || !words[2].static() || words[2].tilde {
+		!words[1].static() || words[1].joined() != "-C" || !words[2].static() || words[2].tilde || words[2].glob || words[2].brace {
+		return words
+	}
+	// A .. is not taken off as text: git's -C goes into each part as the
+	// system does, through a link first, so "git -C lnk/.." runs where lnk
+	// points, and above it (a review found it; the shell's patterns are
+	// left out for the same reason: what they match is not the text).
+	if strings.Contains("/"+words[2].joined()+"/", "/../") {
 		return words
 	}
 	for _, d := range st.dirs {

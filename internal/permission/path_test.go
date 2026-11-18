@@ -536,7 +536,9 @@ func TestGitPlaces(t *testing.T) {
 		{"git status", ""},
 		{"git log --oneline -C x", ""}, // after the subcommand: its own words
 		{"git -C /repo commit -am x", "/repo"},
-		{"git -C ../repo log", "/repo"},
+		{"git -C ../repo log", "-"}, // (a .. goes through a link first)
+		{"git -C lnk/.. status", "-"},
+		{"git --git-dir=/repo/x/../.git log", "-"},
 		{"git --git-dir=/repo/.git log", "/repo/.git"},
 		{"git --git-dir /repo/.git --work-tree /repo log", "/repo/.git /repo"},
 		{"GIT_DIR=/repo/.git git log", "/repo/.git"},
