@@ -1200,3 +1200,24 @@ or kept with the reason said (27).
     self-paced loop is not brought back. Not taken: the jitter Claude
     Code adds to spread its fleet's requests, which a local model server
     does not need.
+
+82. **Channels, as Claude Code's: MCP servers that push events into a
+    running session.** spec/cc/cli.md had listed --channels as
+    Anthropic-only, since Claude Code ties it to its plugin marketplace,
+    its approved list and its own sign-in. The protocol underneath is
+    plain MCP (its channels-reference page): a stdio server declares the
+    experimental capability claude/channel and sends
+    notifications/claude/channel with content and string meta. gnosh
+    takes it for servers of the session's own MCP configuration, named
+    --channels server:<name> (--dangerously-load-development-channels is
+    the same flag: there is no list of approved channels to step past,
+    and no plugins). Each event is put in front of the model as a
+    <channel source="name" key="value"> block (meta keys that are not
+    identifiers dropped, as Claude Code drops them; the content is an
+    outside source's words, and a </channel> in it is broken up), waking
+    an idle session, and the person sees "← name: content". A server
+    that does not declare itself a channel is not heard, and a channel's
+    instructions are put in front of the model as it connects. The use:
+    a CI webhook or a chat bridge reaching the session on an always-on
+    box. Not built: relaying permission questions to a channel
+    (claude/channel/permission).

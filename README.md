@@ -81,6 +81,9 @@ Built:
   `CronDelete` ("remind me at 3pm", "check the build every 20 minutes").
   `/loop <prompt>` with no interval lets the model choose when to come
   back (`ScheduleWakeup`); tasks come back with `-c` and `-r`.
+- **Channels**, as Claude Code's: `--channels server:<name>` lets an MCP
+  server of yours push events into the running session (a CI webhook, a
+  chat bridge), which the model reads and acts on as they come.
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.

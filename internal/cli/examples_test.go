@@ -151,7 +151,7 @@ func TestHarnessSpecExamples(t *testing.T) {
 		// CLI-13: not carried over.
 		{line: `gnosh -H box.example.com`, kind: ErrUnknownFlag},
 		{line: `gnosh --host box.example.com`, kind: ErrUnknownFlag},
-		{line: `gnosh --channels chat`, kind: ErrUnknownFlag},
+		{line: `gnosh --channels server:chat --dangerously-load-development-channels server:hook`, want: inter(Invocation{Channels: []string{"server:chat", "server:hook"}})},
 
 		// CLI-30.
 		{line: `gnosh --cwd /work/app -c`, want: inter(Invocation{Cwd: "/work/app", Conversation: ConversationContinue})},

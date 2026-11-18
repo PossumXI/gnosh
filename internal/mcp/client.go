@@ -19,8 +19,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -62,6 +64,13 @@ type Options struct {
 	// OnToolsChanged, when set, is called (in a goroutine of its own) each
 	// time the server says its tool list changed.
 	OnToolsChanged func()
+	// OnChannel, when set, is given each event the server pushes as a
+	// channel, Claude Code's notifications/claude/channel: its content,
+	// and its meta with only the keys that are letters, digits and
+	// underscores, and only string values. It is called in the order the
+	// events come, on the goroutine that reads the server, so it must not
+	// wait long.
+	OnChannel func(content string, meta map[string]string)
 }
 
 // Tool is one tool a server offers.
@@ -104,6 +113,11 @@ type Info struct {
 	// Resources says it offers resources, and Prompts that it offers
 	// prompts (its capabilities name them).
 	Resources, Prompts bool
+	// Channel says it declared itself a channel (the experimental
+	// capability claude/channel): it pushes events into the session.
+	// ChannelPermission says it also takes permission prompts to relay
+	// (claude/channel/permission, declared and not false).
+	Channel, ChannelPermission bool
 }
 
 // Prompt is one prompt a server offers: a message it writes for the user
@@ -194,6 +208,9 @@ type Client struct {
 	err     error // why the connection ended
 	// changed is set when the server says its tool list changed.
 	changed bool
+	// channel says the server declared itself a channel (Info.Channel),
+	// for the goroutine that reads it.
+	channel atomic.Bool
 }
 
 // transport carries messages to a server and brings its own back, which
@@ -273,8 +290,15 @@ func (c *Client) handshake(ctx context.Context) error {
 	}
 	_, resources := hello.Capabilities["resources"]
 	_, prompts := hello.Capabilities["prompts"]
+	var experimental map[string]json.RawMessage
+	_ = json.Unmarshal(hello.Capabilities["experimental"], &experimental)
+	_, channel := experimental["claude/channel"]
+	relay := strings.TrimSpace(string(experimental["claude/channel/permission"]))
 	c.info = Info{Name: hello.ServerInfo.Name, Version: hello.ServerInfo.Version, ProtocolVersion: hello.ProtocolVersion, Instructions: hello.Instructions,
-		Resources: resources, Prompts: prompts}
+		Resources: resources, Prompts: prompts, Channel: channel, ChannelPermission: relay != "" && relay != "false" && relay != "null"}
+	// (Read by the goroutine that reads the server: its events are taken
+	// from now on, the handshake done.)
+	c.channel.Store(channel)
 	if h, ok := c.t.(*httpTransport); ok {
 		h.setVersion(hello.ProtocolVersion)
 	}
@@ -593,15 +617,39 @@ func (c *Client) answer(m message) {
 
 // notified takes a notification from the server.
 func (c *Client) notified(m message) {
-	if m.Method == "notifications/tools/list_changed" {
+	switch m.Method {
+	case "notifications/tools/list_changed":
 		c.mu.Lock()
 		c.changed = true
 		c.mu.Unlock()
 		if c.opt.OnToolsChanged != nil {
 			go c.opt.OnToolsChanged()
 		}
+	case "notifications/claude/channel":
+		if c.opt.OnChannel == nil || !c.channel.Load() {
+			// (Only a server that declared itself a channel is heard.)
+			return
+		}
+		var p struct {
+			Content string         `json:"content"`
+			Meta    map[string]any `json:"meta"`
+		}
+		if json.Unmarshal(m.Params, &p) != nil {
+			return
+		}
+		meta := map[string]string{}
+		for k, v := range p.Meta {
+			if s, ok := v.(string); ok && metaKey.MatchString(k) {
+				meta[k] = s
+			}
+		}
+		c.opt.OnChannel(p.Content, meta)
 	}
 }
+
+// metaKey is what a key of a channel event's meta may be: letters, digits
+// and underscores, as an attribute of the tag the event is shown in.
+var metaKey = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 func mustJSON(v any) json.RawMessage {
 	if v == nil {

@@ -281,6 +281,10 @@ type Invocation struct {
 	// .mcp.json. StrictMCPConfig says to use those alone.
 	MCPConfigs      []string
 	StrictMCPConfig bool
+	// Channels are the MCP servers whose pushed events come into the
+	// session (--channels, and Claude Code's development spelling of it),
+	// each as written: server:<name>.
+	Channels []string
 }
 
 // Exit codes, for the code that runs what Parse describes.

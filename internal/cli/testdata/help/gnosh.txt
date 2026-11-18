@@ -129,6 +129,15 @@ Settings for this run
       of .mcp.json. A run waits for them before its turn. (Not built yet.)
   --strict-mcp-config
       Use only the MCP servers --mcp-config gives. (Not built yet.)
+  --channels <servers...>
+      MCP servers whose events come into this session as they happen, each as
+      server:<name>: a stdio server of your MCP configuration that declares
+      itself a channel, as Claude Code's do (a CI webhook, a chat bridge). The
+      model sees each event and may answer through the server's own tools.
+      (Not built yet.)
+  --dangerously-load-development-channels <servers...>
+      The same as --channels, which gnosh keeps no list of approved channels
+      for: Claude Code's spelling for a channel of one's own. (Not built yet.)
   --safe-mode
       Start with your customizations off (hooks, MCP servers, context files,
       skills on disk, custom commands), to fix a broken one. Providers, the
@@ -205,13 +214,13 @@ Reading the command line
   -- is the prompt, even if it begins with a dash.
 
   A list flag (--allowedTools, --disallowedTools, --tools, --add-dir,
-  --mcp-config) takes the argument after it, and then each argument after that
-  up to the next flag, for as long as the argument has no space in it (spaces
-  inside parentheses do not count). So a prompt of two words or more ends a
-  list (gnosh stops to ask if that prompt reads like more tools), but a
-  one-word prompt right after a list would join it: put the prompt first, put
-  -- before it, or attach the list with an equals sign, as in
-  --tools=Read,Edit.
+  --mcp-config, --channels, --dangerously-load-development-channels) takes the
+  argument after it, and then each argument after that up to the next flag,
+  for as long as the argument has no space in it (spaces inside parentheses do
+  not count). So a prompt of two words or more ends a list (gnosh stops to ask
+  if that prompt reads like more tools), but a one-word prompt right after a
+  list would join it: put the prompt first, put -- before it, or attach the
+  list with an equals sign, as in --tools=Read,Edit.
 
   In a list of tools or rules, commas and spaces separate the items, but not
   inside parentheses: "Bash(git diff *),Edit" is two rules.

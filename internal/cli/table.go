@@ -197,6 +197,12 @@ func Default() *Table {
 	mcpConfig := t.add(&flag{names: "--mcp-config", kind: kindList, list: listPaths, arg: "files-or-json...", group: groupSettings, pri: 1,
 		help: "MCP servers for this run, as files or the JSON itself, each in the shape of .mcp.json. A run waits for them before its turn.",
 		set:  func(i *Invocation, v flagValue) { i.MCPConfigs = append(i.MCPConfigs, v.items...) }})
+	channels := t.add(&flag{names: "--channels", kind: kindList, list: listPaths, arg: "servers...", group: groupSettings, pri: 1,
+		help: "MCP servers whose events come into this session as they happen, each as server:<name>: a stdio server of your MCP configuration that declares itself a channel, as Claude Code's do (a CI webhook, a chat bridge). The model sees each event and may answer through the server's own tools.",
+		set:  func(i *Invocation, v flagValue) { i.Channels = append(i.Channels, v.items...) }})
+	devChannels := t.add(&flag{names: "--dangerously-load-development-channels", kind: kindList, list: listPaths, arg: "servers...", group: groupSettings, pri: 1,
+		help: "The same as --channels, which gnosh keeps no list of approved channels for: Claude Code's spelling for a channel of one's own.",
+		set:  func(i *Invocation, v flagValue) { i.Channels = append(i.Channels, v.items...) }})
 	strictMCP := t.add(&flag{names: "--strict-mcp-config", group: groupSettings, pri: 1,
 		help: "Use only the MCP servers --mcp-config gives.",
 		set:  func(i *Invocation, _ flagValue) { i.StrictMCPConfig = true }})
@@ -271,7 +277,7 @@ func Default() *Table {
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents, asAgent,
-		cwd, worktree, settings, settingSrc, mcpConfig, strictMCP, safeMode, bare, noSlash, debug, debugFile, verbose,
+		cwd, worktree, settings, settingSrc, mcpConfig, strictMCP, channels, devChannels, safeMode, bare, noSlash, debug, debugFile, verbose,
 		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, prompts, noPersist,
 		help, version,
 	}

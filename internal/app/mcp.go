@@ -155,6 +155,13 @@ func (l *live) connectMCP(s *mcpServer) {
 	ctx, cancel := context.WithTimeout(l.ctx, timeout)
 	defer cancel()
 	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: timeout}
+	if l.channelNamed(s.cfg.Name) {
+		// A channel's events (the client hears only a server that declared
+		// itself one).
+		opt.OnChannel = func(content string, meta map[string]string) {
+			l.channelEvent(s.cfg.Name, content, meta)
+		}
+	}
 	// A server that says its tools changed has them read again, once it
 	// is connected.
 	opt.OnToolsChanged = func() {
@@ -194,6 +201,10 @@ func (l *live) connectMCP(s *mcpServer) {
 	s.status, s.client, s.tools, s.prompts, s.since = "connected", client, made, prompts, l.p.now()
 	l.mcp.mu.Unlock()
 	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
+	if l.channelNamed(s.cfg.Name) {
+		info := client.Info()
+		l.channelConnected(s.cfg.Name, info.Channel, info.Instructions)
+	}
 	l.offerMCPTools()
 	// It may have said its tools changed while they were being listed.
 	l.refreshMCP(s, client)

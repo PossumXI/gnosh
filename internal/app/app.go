@@ -301,7 +301,7 @@ var built = []string{
 	"mcp --scope", "mcp --scope=local", "mcp --scope=user", "mcp --scope=project",
 	"mcp --transport", "mcp --transport=stdio", "mcp --transport=http",
 	"mcp --env", "mcp --header",
-	"--mcp-config", "--strict-mcp-config",
+	"--mcp-config", "--strict-mcp-config", "--channels", "--dangerously-load-development-channels",
 }
 
 // buildTable makes the command-line table of this build: the table as it

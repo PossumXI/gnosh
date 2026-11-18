@@ -579,6 +579,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	// The MCP servers: their tools are added as each connects.
 	l.mcp = l.loadMCP()
+	l.channelsNotice()
 	l.startMCP()
 	l.startStatusLine()
 	l.watchFiles(l.ctx)

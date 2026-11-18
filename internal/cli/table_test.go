@@ -221,7 +221,7 @@ func TestTableHoldsWhatIsBuilt(t *testing.T) {
 	for _, gone := range []string{
 		// What the specs list as not carried over, or not adopted.
 		"gnosh server", "gnosh login", "gnosh logout", "gnosh update-providers", "gnosh schema",
-		"gnosh --channels", "gnosh -H", "gnosh --host", "gnosh --from-pr", "gnosh --betas",
+		"gnosh -H", "gnosh --host", "gnosh --from-pr", "gnosh --betas",
 		"gnosh --plugin-dir", "gnosh --plugin-url", "gnosh --prompt-suggestions", "gnosh --file",
 		"gnosh auth", "gnosh install", "gnosh plugin", "gnosh mcp serve", "gnosh mcp login",
 		// What spec/DECISIONS.md item 26 took off: print mode is -p, a
