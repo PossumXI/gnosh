@@ -1,6 +1,10 @@
 package prompt
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
 
 // Mark is the one character Defuse puts into a control sequence to make it
 // harmless: U+200B, the zero-width space. It takes no room on a screen, a
@@ -171,6 +175,9 @@ func ownTag(rest string) bool {
 // the name and a blank or a "/", as a tag with more in it begins:
 // <gnosh source="x">, <gnosh/>. A blank between the "<" and a name that
 // some other character follows is a comparison, as in "if used < mem {".
+// After the name, a blank is any space Unicode has (a no-break space, a
+// vertical tab) or a character that cannot be seen: a model reads past
+// them, and <gnosh` + bs + `u00a0source="x"> reads as gnosh's tag.
 func tagNamed(rest, name string) bool {
 	i := skipBlanks(rest, 0)
 	tight := i == 0
@@ -183,17 +190,32 @@ func tagNamed(rest, name string) bool {
 	if !hasName(s, name) {
 		return false
 	}
-	if j := skipBlanks(s, len(name)); j < len(s) && s[j] == '>' {
+	after := s[len(name):]
+	if j := skipWide(after); j < len(after) && after[j] == '>' {
 		return true
 	}
-	if !tight || len(s) == len(name) {
+	if !tight || after == "" {
 		return false
 	}
-	switch s[len(name)] {
-	case ' ', '\t', '\n', '\r', '/':
-		return true
+	r, _ := utf8.DecodeRuneInString(after)
+	return r == '/' || wideBlank(r)
+}
+
+// wideBlank reports whether r is a blank after a tag's name: a space of
+// any kind Unicode has, or a character that takes no room and is not seen.
+func wideBlank(r rune) bool {
+	return unicode.IsSpace(r) || unicode.Is(unicode.Zs, r) || unicode.Is(unicode.Cf, r)
+}
+
+// skipWide returns the index of the first rune of s that is not a
+// wideBlank.
+func skipWide(s string) int {
+	for i, r := range s {
+		if !wideBlank(r) {
+			return i
+		}
 	}
-	return false
+	return len(s)
 }
 
 // hasName reports whether s begins with name, in any letter case.
