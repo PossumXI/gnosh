@@ -170,8 +170,10 @@
 // or keeps failing until the wait for it runs out. A limit on the
 // person's requests is waited out as always. The switch holds for the rest
 // of the turn, and the next turn asks the session's model first again; a
-// fallback whose context window is smaller than the session model's is
-// passed over. --fallback-model outranks it:
+// fallback that cannot hold the conversation as it stands, or that is on a
+// model server of one's own that failed in the turn, is passed over, and
+// when every fallback fails too the turn waits for the session's model as
+// it would without them. --fallback-model outranks it:
 //
 //	"fallbackModel": ["box2/qwen3.8-27b", "studio/glm-5.3-flash"]
 //

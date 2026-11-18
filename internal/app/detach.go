@@ -208,10 +208,16 @@ func (l *live) watchRun(ctx context.Context, id, logPath, path, task string) {
 			took = true
 			continue
 		}
-		if runAlive(id, logPath, path) || !took && l.p.now().Sub(started) < runStart {
+		if runAlive(id, logPath, path) {
 			continue
 		}
 		r := readRunLog(logPath, id, started)
+		// A run that said how it ended took its session, even one that
+		// began and ended between two looks.
+		took = took || r.ended != "" || r.stopped
+		if !took && l.p.now().Sub(started) < runStart {
+			continue
+		}
 		said := ""
 		if r.last != "" {
 			said = " It ended with: " + oneLine(r.last, 160)

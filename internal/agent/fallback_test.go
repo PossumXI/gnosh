@@ -120,7 +120,7 @@ func TestFallbackChain(t *testing.T) {
 	narrow, down, last := &fakeModel{name: "narrow"}, &fakeModel{name: "down"}, &fakeModel{name: "last"}
 	r := newRig(t, func(o *Options) {
 		o.Fallbacks = []Fallback{
-			spareOf(narrow, "tiny", 32768),
+			spareOf(narrow, "tiny", 16),
 			{Name: "gone/model", Make: func(context.Context) (Model, error) { return Model{}, errors.New("no provider named gone") }},
 			spareOf(down, "m", 0),
 			spareOf(last, "m", 200000),
@@ -129,7 +129,7 @@ func TestFallbackChain(t *testing.T) {
 	r.model.answer(func(*core.Request, int) step { return refused() })
 	down.answer(func(*core.Request, int) step { return broken(core.ErrOverloaded, 503) })
 	last.push(say("the last one"))
-	res := r.run("hello")
+	res := r.run(strings.Repeat("a few words ", 100))
 	if res.Reason != EndCompleted || res.Text != "the last one" {
 		t.Fatalf("result = %+v", res)
 	}
@@ -145,7 +145,7 @@ func TestFallbackChain(t *testing.T) {
 		t.Errorf("the second switch says %q", fell[1].Message)
 	}
 	warned := strings.Join(notices(r.rec, LevelWarning), "\n")
-	for _, part := range []string{"narrow/tiny is passed over: its context window (33K tokens) is smaller than that of fake (big)", "gone/model cannot be used: no provider named gone"} {
+	for _, part := range []string{"narrow/tiny is passed over: its context window (16 tokens) cannot hold the conversation as it stands", "gone/model is passed over: it cannot be used (no provider named gone)"} {
 		if !strings.Contains(warned, part) {
 			t.Errorf("the warnings do not say %q:\n%s", part, warned)
 		}
@@ -174,7 +174,7 @@ func TestFallbackOnTheSameLocalServer(t *testing.T) {
 	if n := r.model.count(); n != 1 {
 		t.Errorf("the busy server was asked %d times: once for its own model, and never for another", n)
 	}
-	if warned := strings.Join(notices(r.rec, LevelWarning), "\n"); !strings.Contains(warned, "fake/other is passed over: it is on the same server as fake (big)") {
+	if warned := strings.Join(notices(r.rec, LevelWarning), "\n"); !strings.Contains(warned, "fake/other is passed over: it is on the same model server of your own as a model that failed in this turn") {
 		t.Errorf("warnings:\n%s", warned)
 	}
 }
@@ -182,21 +182,46 @@ func TestFallbackOnTheSameLocalServer(t *testing.T) {
 // r0 is the session's own provider, as Options names it.
 func r0(o *Options) core.Provider { return o.Model.Provider }
 
-// When every fallback fails too, the last is waited for as any model is,
-// and the turn ends as it would have without them.
+// When every fallback fails too, the turn goes back to the session's own
+// model and waits for it as it would have without them: a server that has
+// answered in the session is waited for as one that restarts, however
+// long a fallback that is down took to say so.
 func TestEveryFallbackFails(t *testing.T) {
 	spare := &fakeModel{name: "spare"}
 	r := newRig(t, func(o *Options) { o.Fallbacks = []Fallback{spareOf(spare, "small", 100000)} })
 	r.model.answer(func(*core.Request, int) step { return refused() })
 	spare.answer(func(*core.Request, int) step { return refused() })
 	res := r.run("hello")
-	if res.Reason != EndFailed || !strings.Contains(res.Err.Error(), "spare (small) is not running") {
+	if res.Reason != EndFailed || !strings.Contains(res.Err.Error(), "fake (big) at http://203.0.113.7:8080 is not running") {
 		t.Fatalf("result = %+v", res)
 	}
-	if n := r.model.count(); n != 1 {
-		t.Errorf("the session's model was asked %d times", n)
+	fell := fellBackEvents(r)
+	if len(fell) != 2 || fell[1].FellBack != "fake (big) at http://203.0.113.7:8080" ||
+		!strings.Contains(fell[1].Message, "No fallback model is left, so this turn waits for fake (big)") {
+		t.Fatalf("fell back = %+v", fell)
 	}
 	r.checkLog()
+
+	// A model that has answered in the session is waited for as one that
+	// restarts.
+	down := &fakeModel{name: "spare"}
+	down.answer(func(*core.Request, int) step { return refused() })
+	r2 := newRig(t, func(o *Options) { o.Fallbacks = []Fallback{spareOf(down, "small", 100000)} })
+	r2.model.push(say("hello"))
+	if res := r2.run("hi"); res.Reason != EndCompleted {
+		t.Fatalf("the first turn = %+v", res)
+	}
+	r2.model.push(refused(), refused(), say("back"))
+	if res := r2.run("still there?"); res.Reason != EndCompleted || res.Text != "back" {
+		t.Fatalf("the second turn = %+v", res)
+	}
+	waited := false
+	for _, e := range eventsOf[*RetryEvent](r2.rec) {
+		waited = waited || e.FellBack == "" && strings.Contains(e.Message, "may be restarting or loading a model")
+	}
+	if !waited {
+		t.Error("the session's own model, which had answered, was not waited for as one that restarts")
+	}
 }
 
 // A model chosen by hand outranks the fallback a turn went on with.
@@ -259,5 +284,88 @@ func TestFallbackMakesTheSummary(t *testing.T) {
 	if r.model.refused != 0 || spare.refused != 0 {
 		t.Errorf("requests over the window: %d and %d", r.model.refused, spare.refused)
 	}
+	for _, e := range eventsOf[*SummaryEvent](r.rec) {
+		if e.Err != nil {
+			t.Errorf("a summary handed to the fallback was said to have failed: %v", e.Err)
+		}
+	}
 	r.checkLog()
+}
+
+// A fallback whose window nobody knows is taken to hold UnknownWindow
+// tokens: it is passed over for a conversation larger than that, which
+// would otherwise be cut for good to fit it.
+func TestFallbackWithAnUnknownWindow(t *testing.T) {
+	unknown, big := &fakeModel{name: "unknown"}, &fakeModel{name: "big"}
+	r := newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 262144
+		o.Fallbacks = []Fallback{spareOf(unknown, "u", 0), spareOf(big, "b", 262144)}
+	})
+	r.model.answer(func(*core.Request, int) step { return refused() })
+	big.push(say("held"))
+	res := r.run(strings.Repeat("a long conversation ", 6000))
+	if res.Reason != EndCompleted || res.Text != "held" {
+		t.Fatalf("result = %+v", res)
+	}
+	if unknown.count() != 0 {
+		t.Error("the fallback with an unknown window was asked")
+	}
+	if len(r.log.of(EntrySummary)) != 0 {
+		t.Error("the conversation was summarized to fit a fallback")
+	}
+	if warned := strings.Join(notices(r.rec, LevelWarning), "\n"); !strings.Contains(warned, "unknown/u is passed over: its context window (not known, so taken to be 33K tokens) cannot hold the conversation as it stands") {
+		t.Errorf("warnings:\n%s", warned)
+	}
+}
+
+// A model server of one's own that failed is remembered for the turn: a
+// fallback on it is passed over even after another, elsewhere, failed in
+// between.
+func TestFailedLocalServerIsRemembered(t *testing.T) {
+	cloud, glm := &fakeModel{name: "cloud"}, 0
+	r := newRig(t, func(o *Options) {
+		o.Model.Local = true
+		o.Fallbacks = []Fallback{
+			spareOf(cloud, "x", 0),
+			{Name: "fake/glm", Make: func(context.Context) (Model, error) {
+				glm++
+				return Model{Provider: r0(o), Info: core.ModelInfo{ID: "glm"}, Local: true}, nil
+			}},
+		}
+	})
+	cloud.answer(func(*core.Request, int) step { return broken(core.ErrOverloaded, 529) })
+	r.model.push(broken(core.ErrOverloaded, 503), broken(core.ErrOverloaded, 503), say("finally"))
+	if res := r.run("hello"); res.Reason != EndCompleted || res.Text != "finally" {
+		t.Fatalf("result = %+v", res)
+	}
+	for _, req := range r.model.requests() {
+		if req.Model == "glm" {
+			t.Error("the session's own server was asked for another of its models")
+		}
+	}
+	if warned := strings.Join(notices(r.rec, LevelWarning), "\n"); !strings.Contains(warned, "fake/glm is passed over: it is on the same model server of your own") {
+		t.Errorf("warnings:\n%s", warned)
+	}
+}
+
+// Esc while a fallback is being made ready stops the turn: it is not a
+// failed one.
+func TestStopWhileAFallbackIsMade(t *testing.T) {
+	making := make(chan struct{})
+	var r *rig
+	r = newRig(t, func(o *Options) {
+		o.Fallbacks = []Fallback{{Name: "slow/m", Make: func(ctx context.Context) (Model, error) {
+			close(making)
+			<-ctx.Done()
+			return Model{}, ctx.Err()
+		}}}
+	})
+	r.model.answer(func(*core.Request, int) step { return refused() })
+	go func() {
+		<-making
+		r.a.Interrupt()
+	}()
+	if res := r.run("hello"); res.Reason != EndStopped {
+		t.Fatalf("result = %+v", res)
+	}
 }

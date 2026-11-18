@@ -2321,3 +2321,39 @@ or kept with the reason said (27).
     the last 40 lines the run printed, and says so when it was cut. As
     with /fork, a running turn must end first. Not built: the model
     starting a fork of its own (Claude Code's fork mode).
+
+142. **The review of fallback models and /subtask (1835835, fd5fc19).** A
+    fresh-eyes review found nine problems, fixed together:
+    - A fallback whose window nobody knew was let through and taken to
+      hold UnknownWindow tokens, so a long conversation was slid and
+      summarized for good to fit it. Now a fallback must hold the
+      conversation as it stands (the failed request's size under its
+      compaction point, a window nobody knows counted as UnknownWindow;
+      for a summary, which is there to cut, under its hard limit). A
+      smaller window that does hold it is used.
+    - A fallback that was down made a turn fail sooner than none: it was
+      called not running after 90 s, and the session forgot that its own
+      model had been answering. Which models have answered is now kept
+      per model for the session, and when every fallback fails the turn
+      goes back to the session's own model and waits for it as it would
+      without them.
+    - The same-server guard compared only with the model that failed
+      last; every model server of one's own that failed in a turn is now
+      remembered.
+    - What a provider's type adds to a request was looked up by the
+      model's id alone, so a fallback with the same id on a provider of
+      another type changed the session model's requests (its thinking
+      switch was lost). It is kept by provider and model; the agent's
+      Outgoing hook is given the provider's name.
+    - Making a fallback read the providers' lists without switchMu, as
+      every other maker of a model holds it.
+    - Esc while a fallback was being made ready ended the turn as failed;
+      it is a stop. The line says "getting the fallback model … ready".
+    - A summary handed to a fallback said "No summary was made"; it says
+      nothing, and the fallback's own summary reports.
+    - A panic at a turn's very end left the fallback in force.
+    - /subtask: a run that began and ended between two looks was said
+      not to have started; how it ended is read from its log.
+    Not changed: a /subtask whose session closes or restarts before it
+    ends does not report back (its answer stays in its own session and in
+    the agent view).

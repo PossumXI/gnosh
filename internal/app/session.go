@@ -120,7 +120,7 @@ type live struct {
 	// (serverload.go).
 	load   loadWatch
 	typeMu sync.Mutex
-	types  map[string]string // a model's id -> its provider's type
+	types  map[string]string // provider/model id -> the provider's type
 	// modelMu guards large once the session is open, and switchMu makes
 	// /model one switch at a time.
 	modelMu  sync.Mutex

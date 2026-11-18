@@ -82,6 +82,7 @@ func (a *Agent) runTurn(ctx context.Context, t *turn) {
 		// before the next turn builds on it.
 		if p := recover(); p != nil {
 			a.panicked("the turn's end", p, debug.Stack())
+			a.fellBackEnds()
 			a.settled = false
 			res := TurnResult{
 				Turn: t.id, Reason: EndFailed, ErrorKind: "internal",

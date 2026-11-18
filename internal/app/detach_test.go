@@ -284,6 +284,36 @@ func TestSubtaskAnswerComesBack(t *testing.T) {
 		"Its answer, in its own words", "Ran the suite.\nAll 42 tests pass.")
 }
 
+// A run that begins and ends between two looks of the watcher (it never
+// seems to hold its session) is read from its log: it is done, and its
+// answer comes back, not "ended without taking its session".
+func TestSubtaskThatEndsBetweenLooks(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."}, apptest.Reply{Text: "It says: fast answer."})
+	s := sitWith(t, w, func(o *Options) {
+		o.Detach = func(args, env []string, log string) (int, error) {
+			lf, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
+			if err != nil {
+				return 0, err
+			}
+			fmt.Fprintln(lf, "Fast answer.")
+			fmt.Fprintf(lf, "gnosh: %s%s\n", time.Now().UTC().Format(time.RFC3339), runDone)
+			lf.Close()
+			return 4646, nil
+		}
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("say hi")
+	s.see("-- done in ")
+	s.typeLine("/subtask answer fast")
+	s.see("is done (gnosh -r ")
+	s.see("It says: fast answer.")
+	s.typeLine("/exit")
+	s.exit()
+	if strings.Contains(s.out.String(), "ended without taking its session") {
+		t.Error("a run that ended between two looks was said not to have started")
+	}
+}
+
 func TestForkSaysWhenItIsDone(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
 	s := sitWith(t, w, func(o *Options) {

@@ -69,7 +69,10 @@ type Options struct {
 	// be reached or is not ready, says it is too busy, does not have the
 	// model, or keeps failing until the wait for it runs out. The switch
 	// holds for the rest of the turn; the next turn asks Model first
-	// again. Sub-agents are given the same list.
+	// again. One that cannot hold the conversation as it stands, or is on
+	// a model server of one's own that failed in the turn, is passed over;
+	// with none left the turn waits for Model as without them (fallback.go).
+	// Sub-agents are given the same list.
 	Fallbacks []Fallback
 	// System is the system prompt, in parts ordered from the part that
 	// changes least to the part that changes most.
@@ -160,9 +163,9 @@ type Options struct {
 	// instructions.
 	CleanResult func(call core.ToolCall, res core.ToolResult) core.ToolResult
 	// Outgoing, when not nil, is given every request just before it is
-	// sent, main, summary and side alike. It may change the request, which
-	// is the loop's own copy.
-	Outgoing func(req *core.Request)
+	// sent, main, summary and side alike, with the name of the provider it
+	// goes to. It may change the request, which is the loop's own copy.
+	Outgoing func(provider string, req *core.Request)
 
 	// OnPanic, when not nil, is told when a tool, a port or the loop
 	// itself panicked, with the stack. The loop carries on either way.
@@ -280,9 +283,13 @@ type Agent struct {
 	heldFor      string
 	warnedWindow string
 	summariesOff bool
-	answered     bool
-	answeredFor  string
-	rs           retryState
+	// answeredBy are the models that have answered in this session, so
+	// that one that answered and is restarting is waited for as such,
+	// also after a turn went on with a fallback; rsFor is the model rs is
+	// about.
+	answeredBy map[string]bool
+	rsFor      string
+	rs         retryState
 }
 
 // operation is what the session's goroutine is doing that a stop can
@@ -430,7 +437,7 @@ func newAgent(opts Options, parent *Agent, sub SubOptions) (*Agent, error) {
 		// a restart of it is ridden out for the sub-agent as for the
 		// parent.
 		if k, _ := parent.live.Load().(string); k != "" && k == modelKey(opts.Model) {
-			a.answered, a.answeredFor = true, k
+			a.answeredBy = map[string]bool{k: true}
 		}
 	} else {
 		a.sink = newSink(opts.SessionID, a.clock, opts.OnEvent, opts.EventBacklog)

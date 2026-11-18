@@ -350,7 +350,7 @@ func (l *live) buildModel(ctx context.Context, ref config.ModelRef, slot config.
 		m.Temperature = &t
 	}
 	l.typeMu.Lock()
-	l.types[ref.ID] = pu.cfg.Type
+	l.types[ref.Provider+"/"+ref.ID] = pu.cfg.Type
 	l.typeMu.Unlock()
 	return &modelUse{ref: ref, pu: pu, model: m}, nil
 }
@@ -370,6 +370,10 @@ func (l *live) fallbacks() []agent.Fallback {
 			if made != nil {
 				return *made, nil
 			}
+			// (As every other maker of a model: the providers' lists of
+			// models are not to be read and filled at once.)
+			l.switchMu.Lock()
+			defer l.switchMu.Unlock()
 			r, err := l.resolveRef(ctx, ref, true, nil)
 			if err != nil {
 				return agent.Model{}, err
@@ -525,10 +529,10 @@ func (l *live) setupModels(ctx context.Context, pick func(models []string) (stri
 // outgoing is the loop's last look at every request before it is sent: the
 // conversation is made harmless, and for the servers that take the
 // thinking switch in a field of their own, the switch is put there.
-func (l *live) outgoing(req *core.Request) {
+func (l *live) outgoing(provider string, req *core.Request) {
 	defuseRequest(req)
 	l.typeMu.Lock()
-	typ := l.types[req.Model]
+	typ := l.types[provider+"/"+req.Model]
 	l.typeMu.Unlock()
 	if typ == "openai-compatible" {
 		// Such a server reads the switch from the chat template's

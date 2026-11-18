@@ -21,7 +21,7 @@ type Fallback struct {
 }
 
 // errFellBack says a request went unanswered and the turn now goes on with
-// a fallback model: the request is to be made again, for that model.
+// another model: the request is to be made again, for that model.
 var errFellBack = errors.New("agent: the turn goes on with a fallback model")
 
 // fallsBack says whether a failure is one a fallback model is for: the
@@ -43,102 +43,134 @@ func fallsBack(pe *core.ProviderError, gaveUp bool) bool {
 	return gaveUp
 }
 
-// fellBack moves the turn to a fallback model when the failure pe of the
+// fellBack moves the turn to another model when the failure pe of the
 // model m is one a fallback is for (gaveUp: the wait for m ran out), and
-// says so with a RetryEvent that names it. It reports whether it moved.
-func (a *Agent) fellBack(ctx context.Context, t *turn, purpose string, m Model, pe *core.ProviderError, gaveUp bool, rep *reply) bool {
-	if !fallsBack(pe, gaveUp) {
-		return false
-	}
-	to, ok := a.fallTo(ctx, t, m)
-	if !ok {
+// says so with a RetryEvent that names it. est is the size of the request
+// that failed. With no fallback left, a turn that went on with one goes
+// back to the session's own model, which is then waited for as it would
+// be without fallbacks. It reports whether the turn moved.
+func (a *Agent) fellBack(ctx context.Context, t *turn, purpose string, m Model, pe *core.ProviderError, gaveUp bool, rep *reply, est int) bool {
+	if t == nil || len(a.opts.Fallbacks) == 0 || !fallsBack(pe, gaveUp) {
 		return false
 	}
 	a.mu.Lock()
 	primary := a.model
 	a.mu.Unlock()
-	next := "the next turn asks " + primary.label() + " first again"
-	if modelKey(m) != modelKey(primary) {
-		next = "the next turn asks " + primary.label() + " first"
+	to, ok := a.fallTo(ctx, m, est, purpose == "summary")
+	if ctx.Err() != nil {
+		return false
+	}
+	what := fmt.Sprintf("%s %s.", m.label(), whatHappened(pe))
+	var msg string
+	switch {
+	case ok:
+		next := "the next turn asks " + primary.label() + " first again"
+		if modelKey(m) != modelKey(primary) {
+			next = "the next turn asks " + primary.label() + " first"
+		}
+		msg = fmt.Sprintf("%s This turn goes on with the fallback model %s; %s.", what, to.label(), next)
+	case modelKey(m) != modelKey(primary):
+		// Every fallback has failed: the session's own model is waited for,
+		// as it would have been without them.
+		to = primary
+		a.mu.Lock()
+		a.fell, a.fellName = nil, ""
+		a.mu.Unlock()
+		msg = fmt.Sprintf("%s No fallback model is left, so this turn waits for %s, as it would without them.", what, primary.label())
+	default:
+		return false
 	}
 	a.emit(&RetryEvent{
-		Purpose: purpose, Attempt: 1, Kind: pe.Kind, Status: pe.Status, Discarded: !rep.empty(), FellBack: to.label(),
-		Message: fmt.Sprintf("%s %s. This turn goes on with the fallback model %s; %s.", m.label(), whatHappened(pe), to.label(), next),
+		Purpose: purpose, Attempt: 1, Kind: pe.Kind, Status: pe.Status, Discarded: !rep.empty(),
+		FellBack: to.label(), Message: msg,
 	})
 	return true
 }
 
-// fallTo moves the turn to the first fallback that is not the model that
-// failed, nor one that failed earlier in the turn, nor one whose window is
-// smaller than the session model's (the conversation would be cut to fit
-// it), and that can be made, and returns it. Nothing moves outside a turn:
-// a switch holds for the rest of a turn, and there is none to hold it.
-func (a *Agent) fallTo(ctx context.Context, t *turn, from Model) (Model, bool) {
-	if t == nil || len(a.opts.Fallbacks) == 0 {
-		return Model{}, false
-	}
+// fallTo moves the turn to the first fallback that is not a model that
+// failed in this turn, is not on a model server of one's own that failed
+// in it (no help when that server is down or busy, and one that holds a
+// model at a time would unload the one in use to load it), can hold the
+// conversation as it stands without cutting it (est tokens, with a window
+// nobody knows taken to be UnknownWindow), and can be made; it returns it.
+// For a summary, which is there to cut the conversation, it is enough
+// that the fallback can take the request.
+func (a *Agent) fallTo(ctx context.Context, from Model, est int, summary bool) (Model, bool) {
 	a.mu.Lock()
-	primary := a.model
 	if a.fellOut == nil {
 		a.fellOut = map[string]bool{}
 	}
 	a.fellOut[modelKey(from)] = true
+	if from.Local {
+		a.fellOut[serverKey(from)] = true
+		if from.Address != "" {
+			a.fellOut[addressKey(from)] = true
+		}
+	}
 	if a.fell != nil && modelKey(*a.fell) == modelKey(from) {
 		a.fellOut[a.fellName] = true
 	}
 	a.mu.Unlock()
-	for _, fb := range a.opts.Fallbacks {
+	out := func(keys ...string) bool {
 		a.mu.Lock()
-		out := a.fellOut[fb.Name]
+		defer a.mu.Unlock()
+		return slices.ContainsFunc(keys, func(k string) bool { return k != "" && a.fellOut[k] })
+	}
+	passOver := func(name, why string) {
+		a.mu.Lock()
+		a.fellOut[name] = true
 		a.mu.Unlock()
-		if out || fb.Make == nil {
+		a.notice(LevelWarning, "provider", fmt.Sprintf("The fallback model %s is passed over: %s.", name, why))
+	}
+	for _, fb := range a.opts.Fallbacks {
+		if fb.Make == nil || out(fb.Name) {
 			continue
 		}
+		a.setPhase(PhaseRetry, "getting the fallback model "+fb.Name+" ready")
 		m, err := fb.Make(ctx)
 		if err == nil && m.Provider == nil {
 			err = errors.New("it has no provider")
 		}
+		if ctx.Err() != nil {
+			return Model{}, false
+		}
 		if err != nil {
-			if ctx.Err() != nil {
-				return Model{}, false
+			passOver(fb.Name, fmt.Sprintf("it cannot be used (%v)", err))
+			continue
+		}
+		addr := ""
+		if m.Address != "" {
+			addr = addressKey(m)
+		}
+		switch {
+		case out(modelKey(m)):
+			continue
+		case out(serverKey(m), addr):
+			passOver(fb.Name, "it is on the same model server of your own as a model that failed in this turn, which would be no help and could unload the model in use")
+			continue
+		}
+		su := a.setup()
+		su.model = m
+		lim, need := a.limits(su), a.predict(est, m)
+		limit := lim.point
+		if summary {
+			limit = lim.hard
+		}
+		if need > limit {
+			window := tokens(lim.window) + " tokens"
+			if !lim.known {
+				window = "not known, so taken to be " + window
 			}
-			a.mu.Lock()
-			a.fellOut[fb.Name] = true
-			a.mu.Unlock()
-			a.notice(LevelWarning, "provider", fmt.Sprintf("The fallback model %s cannot be used: %v.", fb.Name, err))
-			continue
-		}
-		a.mu.Lock()
-		out = a.fellOut[modelKey(m)]
-		a.mu.Unlock()
-		if out || modelKey(m) == modelKey(from) {
-			continue
-		}
-		if from.Local && (m.Provider.Name() == from.Provider.Name() || m.Address != "" && m.Address == from.Address) {
-			// A model server of one's own that is down or busy is no help
-			// for another of its models, and one that holds a model at a
-			// time would unload the one in use to load it.
-			a.mu.Lock()
-			a.fellOut[fb.Name] = true
-			a.mu.Unlock()
-			a.notice(LevelWarning, "provider", fmt.Sprintf(
-				"The fallback model %s is passed over: it is on the same server as %s, which would be no help and could unload the model in use.",
-				fb.Name, from.label()))
-			continue
-		}
-		if w, pw := m.Info.ContextWindow, primary.Info.ContextWindow; w > 0 && pw > 0 && w < pw {
-			a.mu.Lock()
-			a.fellOut[fb.Name] = true
-			a.mu.Unlock()
-			a.notice(LevelWarning, "provider", fmt.Sprintf(
-				"The fallback model %s is passed over: its context window (%s tokens) is smaller than that of %s (%s), and the conversation would have to be cut to fit it.",
-				fb.Name, tokens(w), primary.label(), tokens(pw)))
+			passOver(fb.Name, fmt.Sprintf("its context window (%s) cannot hold the conversation as it stands (about %s tokens) without cutting it", window, tokens(need)))
 			continue
 		}
 		// The level of thinking chosen for the session holds where the
 		// fallback has it.
-		if primary.Level != "" && slices.Contains(m.Levels, primary.Level) {
-			m.Level = primary.Level
+		a.mu.Lock()
+		level := a.model.Level
+		a.mu.Unlock()
+		if level != "" && slices.Contains(m.Levels, level) {
+			m.Level = level
 		}
 		if checkLevel(m) != nil {
 			m.Level = ""
@@ -150,6 +182,17 @@ func (a *Agent) fallTo(ctx context.Context, t *turn, from Model) (Model, bool) {
 	}
 	return Model{}, false
 }
+
+// serverKey and addressKey name a model's server, by its provider and by
+// its address, among the things that failed in a turn.
+func serverKey(m Model) string {
+	if m.Provider == nil {
+		return ""
+	}
+	return "server\x00" + m.Provider.Name()
+}
+
+func addressKey(m Model) string { return "address\x00" + m.Address }
 
 // fellBackEnds puts the session's own model back in force, at the end of a
 // turn.

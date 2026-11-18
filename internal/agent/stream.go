@@ -105,8 +105,7 @@ type retryStep struct {
 }
 
 // next decides what to do about the failure pe, which happened at now.
-// answered says whether the provider has answered at all since its model
-// was chosen.
+// answered says whether the provider has answered at all in the session.
 func (p RetryPolicy) next(st *retryState, pe *core.ProviderError, answered bool, now time.Time) retryStep {
 	if st.since.IsZero() {
 		st.since = now
@@ -268,9 +267,8 @@ func (r *reply) silent() bool {
 // reply holds what had arrived; it is nil when the turn was stopped
 // between two tries, with no request out.
 func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core.Request, est int, m Model, show bool) (*reply, error) {
-	if a.answeredFor != modelKey(m) {
-		a.answered, a.answeredFor = false, modelKey(m)
-		a.rs = retryState{}
+	if a.rsFor != modelKey(m) {
+		a.rsFor, a.rs = modelKey(m), retryState{}
 	}
 	round := 0
 	if t != nil {
@@ -280,7 +278,7 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		send := req
 		if f := a.opts.Outgoing; f != nil {
 			send = cloneRequest(req)
-			f(send)
+			f(m.Provider.Name(), send)
 		}
 		a.emit(&RequestEvent{
 			Purpose: purpose, Round: round, Attempt: attempt,
@@ -306,9 +304,15 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		}
 		// A server that is down, not ready or too busy is not waited for
 		// while there is a fallback to go on with.
-		if a.fellBack(ctx, t, purpose, m, pe, false, rep) {
+		if a.fellBack(ctx, t, purpose, m, pe, false, rep, est) {
 			a.rs = retryState{}
 			return rep, errFellBack
+		}
+		if ctx.Err() != nil {
+			// Stopped while a fallback was being made ready. What had
+			// arrived of the failed try is not handed back, as after a
+			// wait (the person saw it cut off).
+			return nil, errStopped
 		}
 		if !pe.Retryable() {
 			return rep, &failure{
@@ -318,12 +322,15 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		}
 
 		now := a.clock.Now()
-		step := a.retry.next(&a.rs, pe, a.answered, now)
+		step := a.retry.next(&a.rs, pe, a.answeredBy[modelKey(m)], now)
 		if step.giveUp {
 			waited := now.Sub(a.rs.since)
 			a.rs = retryState{}
-			if a.fellBack(ctx, t, purpose, m, pe, true, rep) {
+			if a.fellBack(ctx, t, purpose, m, pe, true, rep, est) {
 				return rep, errFellBack
+			}
+			if ctx.Err() != nil {
+				return nil, errStopped
 			}
 			msg := fmt.Sprintf("%s did not come back within %s: it %s.", m.label(), span(waited), whatHappened(pe))
 			if step.notRunning {
@@ -413,7 +420,10 @@ func (a *Agent) count(t *turn, purpose string, m Model, rep *reply) {
 
 // alive notes that the provider has sent something: it is there.
 func (a *Agent) alive(m Model) {
-	a.answered = true
+	if a.answeredBy == nil {
+		a.answeredBy = map[string]bool{}
+	}
+	a.answeredBy[modelKey(m)] = true
 	a.live.Store(modelKey(m))
 	if !a.rs.since.IsZero() {
 		if a.rs.down {

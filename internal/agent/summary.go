@@ -70,6 +70,11 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 	a.setPhase(PhaseSummary, "writing a summary of the conversation")
 	post := 0
 	defer func() {
+		if errors.Is(err, errFellBack) {
+			// Not a summary that failed: the fallback model is asked for
+			// it, and says so with an end of its own.
+			return
+		}
 		ev := &SummaryEvent{Phase: "end", Trigger: trigger, PreTokens: pre, PostTokens: post}
 		if err != nil && !errors.Is(err, errStopped) {
 			ev.Err = err

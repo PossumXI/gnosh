@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
@@ -45,4 +46,33 @@ func TestFallbackModelFlag(t *testing.T) {
 		t.Fatalf("a run with its model gone and no fallback ended well: %q", r.out)
 	}
 	has(t, "stderr", r.err, "is not running")
+}
+
+// A fallback with the same model id on a provider of another type does not
+// change how the session's own model is asked afterwards: what each
+// provider's type adds to a request is kept by provider and model, not by
+// the model's id alone.
+func TestFallbackKeepsTheSessionModelsRequests(t *testing.T) {
+	primary := apptest.NewModel(t,
+		apptest.Reply{Status: 503, Body: `{"error":{"code":503,"message":"Loading model","type":"unavailable_error"}}`},
+		apptest.Reply{Text: "The session's own model again."})
+	w := apptest.NewWorld(t, apptest.Reply{Text: "From the fallback."})
+	w.Settings(`{"providers": {"vllm": {"type": "openai-compatible", "baseUrl": "` + primary.URL + `"}}, "models": {"vllm/test-model": {"thinkingLevels": ["off", "on"]}}, "model": {"id": "vllm/test-model", "thinking": false}, "fallbackModel": "local/test-model"}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("first")
+	s.see("This turn goes on with the fallback model local (test-model)")
+	s.see("From the fallback.")
+	s.see("-- done in ")
+	s.typeLine("second")
+	s.see("The session's own model again.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := primary.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the session's own model was asked %d times", len(reqs))
+	}
+	for i, r := range reqs {
+		has(t, fmt.Sprintf("request %d to the session's own model", i+1), string(r.Body), `"chat_template_kwargs":{"enable_thinking":false}`)
+	}
 }
