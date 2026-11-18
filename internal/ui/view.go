@@ -645,8 +645,9 @@ var modeNames = map[string]string{
 
 // customLines is the status line the configured command printed (Claude
 // Code's statusLine): the permission mode first, when it is not the
-// default, since it is always in sight, and then the command's lines, made
-// safe to draw and set in by the padding.
+// default, and the runs in the background that wait on the person, since
+// those are always in sight, and then the command's lines, made safe to
+// draw and set in by the padding.
 func (s *session) customLines(width int) []string {
 	var out, head []string
 	if v := s.vimWords(); v != "" {
@@ -654,6 +655,9 @@ func (s *session) customLines(width int) []string {
 	}
 	if s.mode != "" && s.mode != "default" {
 		head = append(head, s.modeWords())
+	}
+	if v := s.agentsWord(); v != "" {
+		head = append(head, s.th.Status.Render(v))
 	}
 	if len(head) > 0 {
 		out = append(out, strings.Join(head, "  "))
@@ -669,6 +673,24 @@ func (s *session) customLines(width int) []string {
 		out = append(out, pad+l)
 	}
 	return out
+}
+
+// agentsWord is what the status line says of the runs in the background
+// (the "agents" fact): how many wait on the person, or are done since they
+// looked, after the ← that opens the agent view over the session, as Claude
+// Code's footer reads "← 2 agents"; for a session's first seconds, "← for
+// agents". Where there is no agent view to open, gnosh agents answers them.
+func (s *session) agentsWord() string {
+	v := oneLine(s.facts["agents"])
+	switch {
+	case v == "" && s.agentsOffered() && s.now().Before(s.agentsHintUntil):
+		return "← for agents"
+	case v == "":
+		return ""
+	case s.agentsOffered():
+		return "← " + v
+	}
+	return v + ": gnosh agents"
 }
 
 // vimWords names the mode of the box's vim keys as vim's status line does
@@ -777,19 +799,7 @@ func (s *session) statusLine(width int) string {
 	if v := oneLine(s.facts["background"]); v != "" && v != "0" {
 		segs = append(segs, segment{v + " in the background", th.Status, 65})
 	}
-	if v := oneLine(s.facts["agents"]); v == "" && s.agentsOffered() && s.now().Before(s.agentsHintUntil) {
-		// For its first seconds a session says how to see the runs in
-		// the background, as Claude Code's footer reads "← for agents".
-		segs = append(segs, segment{"← for agents", th.Status, 66})
-	} else if v != "" {
-		// Runs in the background that wait on the person, as Claude
-		// Code's footer counts them ("← 2 agents"): ← in the empty box
-		// opens the agent view that answers them, or gnosh agents does.
-		if s.agentsOffered() {
-			v = "← " + v
-		} else {
-			v += ": gnosh agents"
-		}
+	if v := s.agentsWord(); v != "" {
 		segs = append(segs, segment{v, th.Status, 66})
 	}
 	if delivered, pending := app.CountDeliverables(s.deliv); delivered+pending > 0 {

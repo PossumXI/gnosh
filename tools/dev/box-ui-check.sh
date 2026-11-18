@@ -30,6 +30,7 @@
 #	ssh ai-remote bash -s -- shelltab < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- simplify < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- askaway < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- agents < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -131,6 +132,12 @@
 #               nobody answers, the question closes by itself after a
 #               minute, and the model goes on and writes color.txt
 #               (acceptEdits)
+#   agents      a run in the background (gnosh --bg) asks before it runs a
+#               command; the session's status line counts it ("← 1 run
+#               needs input"), ← twice in the empty box opens the agent
+#               view over the session, Enter shows the question, 1 answers
+#               it, the run writes out/asked.txt and is done, and Esc comes
+#               back to the session
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -144,7 +151,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
@@ -167,7 +174,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents)" >&2
 	exit 2
 	;;
 esac
@@ -339,6 +346,22 @@ echo "=== before"
 tmux capture-pane -p -t "$S"
 screen() { tmux capture-pane -p -S -80 -t "$S"; }
 case "$scenario" in
+agents)
+	$envs TERM=dumb "$bin" --bg --name asker "Run exactly this with the Bash tool: mkdir -p out && date > out/asked.txt. Then say done." < /dev/null > "$T/bg.out" 2>&1
+	for i in $(seq 1 120); do
+		sleep 1
+		screen | grep -q "← 1 run needs input" && break
+	done
+	echo "=== the status line ($i s): $(screen | grep -o '← 1 run needs input' | head -1)"
+	tmux send-keys -t "$S" Left
+	sleep 1
+	tmux send-keys -t "$S" Left
+	sleep 2
+	tmux send-keys -t "$S" Enter
+	sleep 1
+	tmux send-keys -t "$S" 1
+	done_when() { [ -s "$T/work/out/asked.txt" ] && screen | grep -q "0 working · 1 completed"; }
+	;;
 basic)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "ctx=[0-9]"; }
@@ -762,6 +785,12 @@ if [ "$scenario" = wtflag ]; then
 	echo "=== notes.txt in the work tree: $(tr '\n' ' ' < "$T/work/.gnosh/worktrees/demo/notes.txt" 2>/dev/null || echo none)"
 	echo "=== .env in the work tree: $(cat "$T/work/.gnosh/worktrees/demo/.env" 2>/dev/null || echo none)"
 	echo "=== branches: $(git -C "$T/work" branch --list | tr '\n' ' ')"
+fi
+if [ "$scenario" = agents ]; then
+	echo "=== asked.txt: $(cat "$T/work/out/asked.txt" 2>/dev/null || echo none)"
+	tmux send-keys -t "$S" Escape
+	sleep 2
+	echo "=== back in the session: $(screen | grep -v '^ *$' | tail -3 | tr '\n' '|')"
 fi
 if [ "$scenario" = plan ]; then
 	echo "=== hello.txt: $(cat "$T/work/hello.txt" 2>/dev/null || echo none)"

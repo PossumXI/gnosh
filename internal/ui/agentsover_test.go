@@ -96,3 +96,18 @@ func TestAgentViewOverASession(t *testing.T) {
 		t.Errorf("the commands run: %q, want /resume %s", commands, runShip)
 	}
 }
+
+// A custom status line (Claude Code's statusLine) keeps the runs that wait
+// on the person in sight, on the line of the permission mode, as Claude
+// Code's footer stays beside its status line; with no agent view to open,
+// gnosh agents answers them.
+func TestAgentsBesideACustomStatusLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.s.custom = []string{"my status"}
+	g.ev(facts{"agents": "1 run needs input"})
+	g.liveHas("1 run needs input: gnosh agents", "my status")
+	g.s.c = agentControls{g.c, newAgentRig(t).src}
+	g.frame().liveHas("← 1 run needs input", "my status")
+	g.ev(facts{"agents": ""})
+	g.liveLacks("run needs input")
+}
