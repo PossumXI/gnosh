@@ -394,9 +394,12 @@ func (f *plain) printFormQuestion() {
 			}
 		}
 	}
-	if q.MultiSelect {
+	switch {
+	case q.NoOther:
+		fmt.Fprintln(f.out, "Type a number and Enter.")
+	case q.MultiSelect:
 		fmt.Fprintln(f.out, "Type the numbers of all that apply, with commas between them, and Enter. Or answer in your own words.")
-	} else {
+	default:
 		fmt.Fprintln(f.out, "Type a number and Enter. Or answer in your own words.")
 	}
 }
@@ -405,6 +408,9 @@ func (f *plain) printFormQuestion() {
 // did not answer it.
 func (pf *plainForm) hint() string {
 	q := pf.form.Questions[pf.at]
+	if q.NoOther {
+		return fmt.Sprintf("That is not an answer. Type one number from 1 to %d.", len(q.Options))
+	}
 	if q.MultiSelect {
 		return fmt.Sprintf("That is not an answer. Type numbers from 1 to %d with commas between them, or your own words. (For an answer of your own that is only a number, put a word before it.)", len(q.Options))
 	}
@@ -442,6 +448,15 @@ func formAnswer(q FormQuestion, line string) (string, bool) {
 	seen := map[int]bool{}
 	for _, word := range fields {
 		n, err := strconv.Atoi(strings.TrimRight(word, "."))
+		if err != nil && q.NoOther {
+			// Words, where only the options will do: an option's label.
+			for _, o := range q.Options {
+				if strings.EqualFold(strings.TrimSpace(o.Label), line) {
+					return o.Label, true
+				}
+			}
+			return "", false
+		}
 		if err != nil {
 			// Words: the line is the person's own answer, as typed.
 			return line, true

@@ -299,7 +299,7 @@ func formOf(data any) []menu.Question {
 	}
 	var out []menu.Question
 	for _, q := range form.Questions {
-		mq := menu.Question{Header: oneLine(q.Header), Text: q.Question, Multi: q.MultiSelect}
+		mq := menu.Question{Header: oneLine(q.Header), Text: q.Question, Multi: q.MultiSelect, NoOther: q.NoOther}
 		for _, o := range q.Options {
 			mq.Options = append(mq.Options, menu.Option{Label: o.Label, Description: o.Description})
 		}

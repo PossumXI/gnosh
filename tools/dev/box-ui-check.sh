@@ -24,6 +24,8 @@
 #	ssh ai-remote bash -s -- hooks < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- leftover < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- focus < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- elicit < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- agenthook < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -93,6 +95,14 @@
 #   focus       focus view (viewMode "focus"): the model reads notes.txt and
 #               counts its lines with a command, and the two calls are one
 #               line, "Read 1 file, ran 1 command"; /focus turns it off
+#   elicit      an MCP server (python3 tools/dev/elicit-server.py, copied to
+#               ~/newgnosh-test) asks where to deploy in the middle of its
+#               tool's call: the form stands under its message, and EU West
+#               and Yes are picked (permissions skipped)
+#   agenthook   a Stop hook of type agent: its sub-agent looks for done.txt,
+#               which is not there, so the model is sent back to write it;
+#               then the hook finds it, and the turn ends (permissions
+#               skipped)
 #   cd          a turn, then /cd to a folder of its own whose settings wait
 #               for trust (said yes to) and whose GNOSH.md holds a codeword:
 #               gnosh starts again there, and the model is asked where it
@@ -119,7 +129,11 @@ failhint) base=http://127.0.0.1:9 ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
-background | btw | monitor | panel | cd | leftover) flags="-y" ;;
+background | btw | monitor | panel | cd | leftover | elicit) flags="-y" ;;
+agenthook)
+	flags="-y"
+	hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"agent\", \"prompt\": \"Check whether the file done.txt exists in the working folder and holds the word done. \$ARGUMENTS\", \"timeout\": 600 } ] } ] },"
+	;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 channel) flags="-y --channels server:hook" ;;
 relay) flags="--channels server:hook" ;;
@@ -128,7 +142,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook)" >&2
 	exit 2
 	;;
 esac
@@ -171,6 +185,10 @@ if [ "$scenario" = channel ] || [ "$scenario" = relay ]; then
 	asked=""
 	[ "$scenario" = relay ] && asked=", \"$T/questions.log\""
 	printf '{"mcpServers": {"hook": {"command": "python3", "args": ["%s", "18788", "%s"%s]}}}\n' "$HOME/newgnosh-test/channel-webhook.py" "$T/replies.log" "$asked" > "$T/config/gnosh/mcp.json"
+fi
+if [ "$scenario" = elicit ]; then
+	[ -f "$HOME/newgnosh-test/elicit-server.py" ] || { echo "box-ui-check: copy tools/dev/elicit-server.py to ~/newgnosh-test first" >&2; exit 2; }
+	printf '{"mcpServers": {"elicit": {"command": "python3", "args": ["%s", "%s"]}}}\n' "$HOME/newgnosh-test/elicit-server.py" "$T/elicit.log" > "$T/config/gnosh/mcp.json"
 fi
 if [ "$scenario" = keys ]; then
 	cat > "$T/config/gnosh/keybindings.json" <<'EOF'
@@ -342,6 +360,32 @@ relay)
 	echo "=== the question the channel got: $(head -1 "$T/questions.log" 2>/dev/null || echo none)"
 	curl -s -d "yes $id" 127.0.0.1:18788 >/dev/null
 	done_when() { [ -f "$T/work/relay.txt" ] && screen | grep -q "answered by the channel hook" && screen | grep -q "done in"; }
+	;;
+elicit)
+	# The server's form, mid-call: EU West (the second region), then Yes,
+	# then the review sends it.
+	tmux send-keys -t "$S" "Call the deploy tool once, then say in one line what it answered." Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "The MCP server elicit asks: Where should it go?" && break
+	done
+	sleep 2
+	echo "=== the form"
+	screen | grep -v '^ *$' | tail -10
+	tmux send-keys -t "$S" Down
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	sleep 1.5
+	tmux send-keys -t "$S" Enter
+	sleep 1.5
+	echo "=== the review"
+	screen | grep -v '^ *$' | tail -8
+	tmux send-keys -t "$S" Enter
+	done_when() { grep -q "eu-west" "$T/elicit.log" 2>/dev/null && screen | grep -q "done in"; }
+	;;
+agenthook)
+	tmux send-keys -t "$S" "Say hello in one line." Enter
+	done_when() { [ -f "$T/work/done.txt" ] && screen | grep -q "done in" && ! screen | grep -q "Stop hook.*running"; }
 	;;
 channel)
 	# An event pushed into the idle session wakes the model, which answers
@@ -585,6 +629,13 @@ if [ "$scenario" = worktree ]; then
 fi
 if [ "$scenario" = channel ]; then
 	echo "=== replies: $(cat "$T/replies.log" 2>/dev/null || echo none)"
+fi
+if [ "$scenario" = elicit ]; then
+	echo "=== what the server was told: $(tr '\n' ' ' < "$T/elicit.log" 2>/dev/null || echo none)"
+fi
+if [ "$scenario" = agenthook ]; then
+	echo "=== done.txt: $(cat "$T/work/done.txt" 2>/dev/null || echo none)"
+	echo "=== the hook's sub-agents: $(ls "$T"/data/gnosh/projects/*/subagents 2>/dev/null | wc -l)"
 fi
 if [ "$scenario" = entertree ]; then
 	echo "=== work trees: $(git -C "$T/work" worktree list | tr '\n' ';')"

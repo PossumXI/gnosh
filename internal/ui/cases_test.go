@@ -1277,10 +1277,10 @@ func TestServerFormEscCancels(t *testing.T) {
 	g := newRig(t, 80, 30, text.NoColor)
 	g.keys(`"deploy it" <Enter>`).start()
 	data := app.QuestionForm{Lead: "The MCP server deploy asks: Where should it go?", EscCancels: true, Questions: []app.FormQuestion{
-		{Question: "Region", Header: "region", Options: []app.FormOption{{Label: "US East"}, {Label: "EU West"}}},
+		{Question: "Region", Header: "region", Options: []app.FormOption{{Label: "US East"}, {Label: "EU West"}}, NoOther: true},
 	}}
 	g.ev(&agent.QuestionEvent{Question: agent.Question{ID: "q1", Kind: "question", Title: "The MCP server deploy asks for something", Data: data}})
-	g.liveHas("The MCP server deploy asks: Where should it go?", "Region", "EU West")
+	g.liveHas("The MCP server deploy asks: Where should it go?", "Region", "EU West").liveLacks("in your own words")
 	g.wait(time.Second)
 	g.keys(`<Esc>`)
 	if len(g.c.answers) != 1 || g.c.answers[0].ans.Choice != "cancel" {

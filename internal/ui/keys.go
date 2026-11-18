@@ -978,6 +978,15 @@ func (s *session) record(q *question, words string) {
 		lines = []string{""}
 	}
 	s.begin(blkAsk)
+	if len(lines) > 1 {
+		// Several answers (a form's): the title stands on its own line,
+		// and each answer under it.
+		s.put(wrap(s.m, title, s.cols, th.Ask.Render(th.AskMark)+" ", "  ")...)
+		for _, l := range lines {
+			s.put(wrap(s.m, th.Answer.Render(l), s.cols, "  ", "  ")...)
+		}
+		return
+	}
 	for i, l := range lines {
 		first := "  "
 		if i == 0 {

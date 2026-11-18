@@ -222,8 +222,9 @@ func elicitForm(e mcp.Elicitation) QuestionForm {
 		asked[q.Question] = true
 		switch {
 		case f.Type == "boolean":
-			q.Options = []FormOption{{Label: "Yes"}, {Label: "No"}}
+			q.Options, q.NoOther = []FormOption{{Label: "Yes"}, {Label: "No"}}, true
 		case len(f.Enum) > 0:
+			q.NoOther = true
 			for i, v := range f.Enum {
 				label := v
 				if i < len(f.EnumNames) && strings.TrimSpace(f.EnumNames[i]) != "" {
@@ -236,7 +237,7 @@ func elicitForm(e mcp.Elicitation) QuestionForm {
 	}
 	if len(form.Questions) == 0 {
 		// Nothing to fill in: the question is whether to go on.
-		form.Questions = []FormQuestion{{Question: "Go on?", Header: "Confirm", Options: []FormOption{{Label: "Yes"}, {Label: "No"}}}}
+		form.Questions = []FormQuestion{{Question: "Go on?", Header: "Confirm", Options: []FormOption{{Label: "Yes"}, {Label: "No"}}, NoOther: true}}
 	}
 	return form
 }

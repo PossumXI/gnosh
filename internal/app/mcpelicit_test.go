@@ -209,3 +209,23 @@ echo '{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "action": "a
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// A question that takes only its options (a server's list of values, a
+// Yes or No) takes a number or an option's label in the plain session,
+// and nothing else.
+func TestFormAnswerWithoutOwnWords(t *testing.T) {
+	q := FormQuestion{Question: "Sure", Options: []FormOption{{Label: "Yes"}, {Label: "No"}}, NoOther: true}
+	for line, want := range map[string]string{"1": "Yes", "2": "No", "no": "No", " YES ": "Yes"} {
+		if got, ok := formAnswer(q, line); !ok || got != want {
+			t.Errorf("%q: %q, %v; want %q", line, got, ok, want)
+		}
+	}
+	for _, line := range []string{"maybe", "3", "1, 2"} {
+		if got, ok := formAnswer(q, line); ok {
+			t.Errorf("%q was taken as %q", line, got)
+		}
+	}
+	if form := elicitForm(mcp.Elicitation{Fields: []mcp.ElicitField{{Name: "n", Type: "string"}, {Name: "b", Type: "boolean"}, {Name: "e", Type: "string", Enum: []string{"a"}}}}); form.Questions[0].NoOther || !form.Questions[1].NoOther || !form.Questions[2].NoOther {
+		t.Errorf("which questions take own words: %+v", form.Questions)
+	}
+}

@@ -63,6 +63,10 @@ type FormQuestion struct {
 	Options []FormOption
 	// MultiSelect says any number of the options may be chosen.
 	MultiSelect bool
+	// NoOther says the question takes only its options, and no answer in
+	// the person's own words (an MCP server's list of values, or a Yes or
+	// No).
+	NoOther bool
 }
 
 // FormOption is one answer a FormQuestion offers.
