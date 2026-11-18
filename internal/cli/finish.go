@@ -82,6 +82,22 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 			}
 		}
 	}
+	if o := p.given(idBack); o != nil {
+		// A new session, sent off at once: there is nobody here to read
+		// a run's output, or to pick a session.
+		for _, other := range []*occurrence{p.given(idPrint), chosen, p.given(idNoPersist)} {
+			if other != nil {
+				return fail(ErrConflict, o.typed,
+					"%s starts a new session in the background, and %s does not go with it, so nothing was started. Drop one of the two.",
+					o.typed, other.typed)
+			}
+		}
+		if strings.TrimSpace(inv.Prompt) == "" {
+			return fail(ErrUsage, o.typed,
+				"%s needs a prompt for the session to work on, after the flags (gnosh --bg \"fix the flaky test\"), so nothing was started.",
+				o.typed)
+		}
+	}
 	if printing && inv.Conversation == ConversationResume && inv.Resume == "" {
 		return fail(ErrUsage, chosen.typed,
 			"%s needs a session's ID or name after it in print mode, where nobody is there to pick from a list, so nothing was started.%s",

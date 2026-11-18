@@ -31,9 +31,12 @@ Built:
 - **A session** in the terminal's own scrollback. Opened again (`-r`,
   `-c`, `/resume`), it shows where it left off: its last prompt and the
   model's last answer. It can go on without the terminal (`/background`,
-  `/fork`); `/tasks` lists the sessions sent off from the folder, running
-  or with the last line each printed, and `gnosh session list` marks the
-  sessions open now.
+  `/fork`), or start that way from a shell (`gnosh --bg "fix the flaky
+  test"`, as Claude Code's `claude --bg`); `/tasks` lists the sessions
+  sent off from the folder, running or with the last line each printed,
+  `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  <session>` stops one, and `gnosh session list` marks the sessions open
+  now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small
   model with the model's request, from the open web only), WebSearch on a
   SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,

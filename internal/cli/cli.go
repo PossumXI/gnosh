@@ -46,8 +46,10 @@ const (
 	// CmdMem reads the project's mem; Invocation.Args holds the words after
 	// `mem`, for mem itself to read.
 	CmdMem Command = "mem"
-	// CmdLogs prints the project's log.
+	// CmdLogs prints the project's log, or a background run's.
 	CmdLogs Command = "logs"
+	// CmdStop stops a session that runs in the background.
+	CmdStop Command = "stop"
 	// CmdDirs says which config and data folders are in use.
 	CmdDirs Command = "dirs"
 	// CmdSSH is `gnosh ssh`: ssh, with what the far side copies put on
@@ -147,6 +149,9 @@ type Invocation struct {
 	// ForkSession says to go on in a copy of the conversation and leave the
 	// original as it was.
 	ForkSession bool
+	// Background says to start the session in the background (--bg): a
+	// run of its own on the prompt, while this command returns at once.
+	Background bool
 	// Name is the name to give the session (-n).
 	Name string
 	// NoSessionPersistence keeps nothing of a run: its session is not

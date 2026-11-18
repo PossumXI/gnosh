@@ -40,7 +40,8 @@ func uses(tab *Table) []flagUse {
 				if !f.printOnly {
 					out = append(out, flagUse{c, f, false})
 				}
-				if f.id != idPrint {
+				// (--bg starts a session in the background, never with -p.)
+				if f.id != idPrint && f.id != idBack {
 					out = append(out, flagUse{c, f, true})
 				}
 			default:

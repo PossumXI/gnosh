@@ -282,7 +282,7 @@ func (p *program) warnf(format string, args ...any) {
 // not built has no row (spec/DECISIONS.md, 26).
 var built = []string{
 	"doctor", "doctor --hosts", "trust", "trust --list", "trust --forget",
-	"dirs", "logs", "logs --tail", "logs --follow", "models", "ssh", "--worktree",
+	"dirs", "logs", "logs --tail", "logs --follow", "stop", "--bg", "models", "ssh", "--worktree",
 	"session list", "session show", "session last", "session rename",
 	"session --json",
 	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",
@@ -375,11 +375,16 @@ func (p *program) run(ctx context.Context) int {
 	case cli.CmdTrust:
 		return p.trustCommand(ctx, inv)
 	case cli.CmdInteractive, cli.CmdPrint:
+		if inv.Background {
+			return p.backgroundCommand(ctx, inv)
+		}
 		return p.sessionCommand(ctx, inv)
 	case cli.CmdDirs:
 		return p.dirsCommand(ctx, inv)
 	case cli.CmdLogs:
 		return p.logsCommand(ctx, inv)
+	case cli.CmdStop:
+		return p.stopCommand(ctx, inv)
 	case cli.CmdModels:
 		return p.modelsCommand(ctx, inv)
 	case cli.CmdSessionList, cli.CmdSessionShow, cli.CmdSessionLast, cli.CmdSessionRename:

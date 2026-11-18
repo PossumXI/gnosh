@@ -1641,3 +1641,21 @@ or kept with the reason said (27).
     opens no document), and sets under it only a here-document's text, a
     line that goes on, and what stands inside quotes across lines (this
     corrects 103, which set every line after the first under it).
+
+105. **gnosh --bg, gnosh logs <session> and gnosh stop, as Claude Code's
+    claude --bg, logs and stop.** --bg (also --background) starts a new
+    session in the background on the prompt and returns at once: the same
+    kind of run /background and /fork start (gnosh -p in a process of its
+    own, the command line written out by RelaunchArgs with a new session's
+    id, --bg left out), its output in <session>.background.log beside the
+    session's file, and now its process id in <session>.background.pid
+    (/background and /fork keep it too). It is refused with -p, -c, -r,
+    --no-session-persistence, or without a prompt. gnosh logs takes a
+    session's id or the start of one and prints that run's log; --follow
+    follows it until the run lets go of its session. gnosh stop (also
+    kill) asks the run to stop (SIGTERM, which ends it as Esc ends a
+    turn), and ends it after ten seconds if it still holds the session;
+    it acts only on a process whose command line names the session, so a
+    process id used again by another program is never reached. Claude
+    Code's agent view, attach, respawn and daemon are not built: gnosh's
+    runs ask nobody anything, and gnosh -r opens one once it is done.

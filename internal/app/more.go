@@ -414,7 +414,19 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 		}
 		return max(code, cli.ExitFailure)
 	}
-	path := filepath.Join(st.sessions().ProjectDir(st.cfg.Paths.Cwd), "gnosh.log")
+	dir := st.sessions().ProjectDir(st.cfg.Paths.Cwd)
+	path := filepath.Join(dir, "gnosh.log")
+	// With a session named, a run's log in place of the project's: what
+	// it printed, followed until it lets go of its session.
+	run := ""
+	if len(inv.Args) > 0 {
+		id, log, err := findRun(dir, inv.Args[0])
+		if err != nil {
+			p.errf("%v.", err)
+			return cli.ExitFailure
+		}
+		path, run = log, runSession(dir, id, log)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -442,6 +454,9 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for {
+		// (A run's log is followed while the run holds its session, and
+		// read once more after it lets go.)
+		done := run != "" && !transcript.InUse(run)
 		select {
 		case <-ctx.Done():
 			return cli.ExitOK
@@ -451,6 +466,9 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 		}
 		f, err := os.Open(path)
 		if err != nil {
+			if done {
+				return cli.ExitOK
+			}
 			continue
 		}
 		if info, err := f.Stat(); err == nil && info.Size() < at {
@@ -468,6 +486,9 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 			}
 		}
 		f.Close()
+		if done {
+			return cli.ExitOK
+		}
 	}
 }
 

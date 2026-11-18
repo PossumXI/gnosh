@@ -17,6 +17,7 @@ const (
 	idNoPersist = "--no-session-persistence"
 	idYolo      = "--yolo"
 	idMode      = "--permission-mode"
+	idBack      = "--bg"
 )
 
 // The headings flags are listed under in help, in the order they appear.
@@ -113,6 +114,9 @@ func Default() *Table {
 		help:  "Give the new conversation this ID, which must be a UUID. It is for a new conversation only: not with -c, -r or --fork-session.",
 		check: isUUID,
 		set:   func(i *Invocation, v flagValue) { i.SessionID = v.text }})
+	back := t.add(&flag{names: "--bg --background", group: groupConversation, pri: 1,
+		help: "Start the session in the background and return at once: it works on the prompt as a run of its own, as /background has a session go on, and gnosh says its ID and how to follow it (gnosh logs, gnosh stop, gnosh -r). It asks nobody anything, so what would ask is refused. A new session only: not with -p, -c, -r or --no-session-persistence.",
+		set:  func(i *Invocation, _ flagValue) { i.Background = true }})
 	fork := t.add(&flag{names: "--fork-session", group: groupConversation, pri: 1,
 		help: "With -c or -r: go on in a copy of the session and leave the original as it was.",
 		set:  func(i *Invocation, _ flagValue) { i.ForkSession = true }})
@@ -273,7 +277,7 @@ func Default() *Table {
 		help: "Print which build of gnosh this is: when it was built, and from which commit. (With -p, -v means --verbose.)"})
 
 	sessionFlags := []*flag{
-		cont, resume, sessionID, fork, name,
+		cont, resume, sessionID, fork, name, back,
 		model, effort,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents, asAgent,
@@ -383,9 +387,15 @@ func Default() *Table {
 		summary: "Read the project's mem, without a model.",
 		about:   "The words after mem go to mem as they are: show, find and log read it. What changes mem is done with /mem inside a session."})
 
-	t.command(root, &command{name: "logs", cmd: CmdLogs, pri: 1,
+	t.command(root, &command{name: "logs", cmd: CmdLogs, pri: 1, maxArgs: 1, argsUsage: "[session]",
 		flags:   []*flag{logsFollow, logsTail, cwd, help},
-		summary: "Print the end of the project's log, or follow it."})
+		summary: "Print the end of the project's log, or follow it.",
+		about:   "With a session's ID (or the start of one), what that session printed as a run in the background (gnosh --bg, /background, /fork); --follow follows it until the run is done."})
+
+	t.command(root, &command{name: "stop", aliases: []string{"kill"}, cmd: CmdStop, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<session>",
+		flags:   []*flag{cwd, help},
+		summary: "Stop a session that runs in the background.",
+		about:   "The session is a run that gnosh --bg, /background or /fork started from this folder, named by its ID or the start of one. It is stopped as Esc stops a turn, and what it did so far is kept: gnosh -r opens it."})
 
 	t.command(root, &command{name: "dirs", cmd: CmdDirs, pri: 1,
 		flags:   []*flag{cwd, help},

@@ -71,6 +71,9 @@ func (t *Table) RelaunchArgs(args []string, r Relaunch) ([]string, error) {
 		switch name := o.f.main(); {
 		case o.f.id == idContinue || o.f.id == idResume || o.f.id == idSessionID || o.f.id == idFork || name == "--name":
 			continue
+		case o.f.id == idBack:
+			// (The new start is the run itself, never sent off again.)
+			continue
 		case o.f.id == idYolo:
 			yolo, skipped = true, true
 			continue

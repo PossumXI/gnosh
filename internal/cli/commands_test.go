@@ -113,7 +113,7 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh logs -t 0`, kind: ErrBadValue, say: []string{"-t takes a whole number of 1 or more, and 0 is not one"}},
 		{line: `gnosh logs -t many`, kind: ErrBadValue, say: []string{"many is not one"}},
 		{line: `gnosh logs -t`, kind: ErrMissingValue, say: []string{"-t needs a value after it (<n>)"}},
-		{line: `gnosh logs 50`, kind: ErrUsage, say: []string{"50 was typed after gnosh logs"}},
+		{line: `gnosh logs 50 60`, kind: ErrUsage, say: []string{"60 is one argument too many for gnosh logs", "gnosh logs [session]"}},
 
 		// dirs
 		{line: `gnosh dirs`, want: Invocation{Command: CmdDirs}},

@@ -19,8 +19,10 @@ Commands
   session <command>       Look at and manage sessions. (Not built yet.)
   mem [show|find|log]     Read the project's mem, without a model. (Not built
                           yet.)
-  logs                    Print the end of the project's log, or follow it.
+  logs [session]          Print the end of the project's log, or follow it.
                           (Not built yet.)
+  stop <session>          Stop a session that runs in the background. (Not
+                          built yet.)
   dirs                    Say which config and data folders are in use. (Not
                           built yet.)
   ssh [ssh args]          Run ssh, putting what the far side copies on this
@@ -50,6 +52,13 @@ Which conversation
   -n, --name <name>
       Name the session: the new one, the one resumed, or the --fork-session
       copy. (Not built yet.)
+  --bg, --background
+      Start the session in the background and return at once: it works on the
+      prompt as a run of its own, as /background has a session go on, and
+      gnosh says its ID and how to follow it (gnosh logs, gnosh stop, gnosh
+      -r). It asks nobody anything, so what would ask is refused. A new
+      session only: not with -p, -c, -r or --no-session-persistence. (Not
+      built yet.)
 
 Which model
   -m, --model <model>

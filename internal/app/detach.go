@@ -50,6 +50,7 @@ func (p *program) detach(args []string, d *detachPlan) int {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
 		return cli.ExitFailure
 	}
+	writeRunPID(d.log, pid)
 	fmt.Fprintf(p.stderr, "gnosh: the session goes on in the background (process %d). What it prints is in %s; gnosh -r %s opens it again once it is done.\n", pid, d.log, d.session)
 	return cli.ExitOK
 }
@@ -108,6 +109,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}
+	writeRunPID(log, pid)
 	if t := l.st.tree; t != nil {
 		// The run works in this session's work tree, which must outlive
 		// this session.

@@ -80,6 +80,10 @@ func (st *Store) newID() (string, error) {
 	return st.ids.next(st.now(), st.Rand)
 }
 
+// NewID makes an id for a session that is to be made later, by a process
+// of its own given it (gnosh --bg, as --session-id).
+func (st *Store) NewID() (string, error) { return st.newID() }
+
 // projects is the directory that holds one directory per working directory.
 func (st *Store) projects() string {
 	return filepath.Join(st.Dir, "projects")
