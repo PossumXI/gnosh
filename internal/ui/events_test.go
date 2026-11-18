@@ -6,6 +6,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
 // Under a prompt, the interface says what each path it mentioned with @
@@ -106,6 +107,25 @@ func TestCompleteCommandMidPrompt(t *testing.T) {
 			t.Errorf("%q: offered %q, want %q", text, got, want)
 		}
 	}
+}
+
+// A slash in the middle of a prompt opens no list by itself, so Enter
+// sends what was typed (a route such as /st stays /st); Tab opens it.
+func TestMidPromptSlashWaitsForTab(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	g.keys(`"show GET /st"`)
+	g.liveLacks("/status")
+	g.keys(`<Enter>`)
+	if got := g.c.sent(); len(got) != 1 || got[0] != "show GET /st" {
+		t.Fatalf("sent %q", got)
+	}
+	g.keys(`"then /st" <Tab>`)
+	if g.box() != "then /status" {
+		t.Fatalf("Tab gave %q", g.box())
+	}
+	// At the start of the box the slash still opens the list of commands.
+	g.keys(`<Ctrl+U> "/st"`)
+	g.liveHas("/status")
 }
 
 // What is typed after /cd and /add-dir is a folder, slash or no slash:

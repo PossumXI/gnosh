@@ -487,6 +487,10 @@ func (l *live) mcpLine(s *mcpServer) string {
 	case "failed":
 		return fmt.Sprintf("%s: not connected (%s): %s", s.cfg.Name, where, oneLine(s.err, 400))
 	case "needs-auth":
+		if s.own != "" {
+			// /mcp login signs in the session's servers only.
+			return fmt.Sprintf("%s: wants a sign-in (%s), which only a server of the session's can have: add it to mcp.json, sign in with /mcp login, and name it in the agent's mcpServers", s.cfg.Name, where)
+		}
 		return fmt.Sprintf("%s: wants a sign-in (%s): /mcp login %s", s.cfg.Name, where, s.cfg.Name)
 	case "disabled":
 		return fmt.Sprintf("%s: disabled for this session (%s); /mcp enable %s connects it", s.cfg.Name, where, s.cfg.Name)
@@ -499,6 +503,11 @@ func (l *live) mcpLine(s *mcpServer) string {
 // says how each came out. What disable does lasts for this session.
 func (l *live) mcpAct(c *SlashContext, words []string) error {
 	verb := words[0]
+	if len(l.mcp.servers) == 0 {
+		// Only a running sub-agent's own servers, or files that named
+		// none gnosh could use: nothing of the session's to act on.
+		return errors.New("this session has no MCP server of its own to act on: a running sub-agent's own servers come and go with it, and /mcp alone lists what there is")
+	}
 	if (verb == "login" || verb == "logout") && len(words) >= 2 {
 		for _, s := range l.mcp.servers {
 			if s.cfg.Name != words[1] {

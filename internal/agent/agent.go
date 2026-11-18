@@ -1014,6 +1014,40 @@ func (a *Agent) Tell(n Note) error {
 	return nil
 }
 
+// Record puts a note into the conversation without starting a turn. When
+// no turn runs, it is written to the log at once, between turns: it stands
+// before the prompt that comes next, and is kept if the session ends
+// first. While a turn runs it waits for the turn's next request, as a
+// note told with Tell does. Wake is not read.
+func (a *Agent) Record(n Note) error {
+	if (Prompt{Text: n.Text}).blank() {
+		return ErrBlank
+	}
+	a.mu.Lock()
+	if a.closing {
+		a.mu.Unlock()
+		return ErrClosed
+	}
+	if a.busy {
+		a.notes = append(a.notes, n)
+		a.mu.Unlock()
+		return nil
+	}
+	a.mu.Unlock()
+	// (A prompt sent in between may be written first; the note then
+	// waits in the log for that turn's request, which reads it.)
+	entry := Entry{Kind: EntryNote, Source: firstNonEmpty(n.Source, "note"), Blocks: []core.Block{core.Text(n.Text)}}
+	if err := a.appendLog(entry); err != nil {
+		n.Wake = false
+		return a.Tell(n)
+	}
+	a.emit(&NoteEvent{Note: n})
+	if n.Notice != "" {
+		a.notice(LevelInfo, firstNonEmpty(n.Source, "note"), n.Notice)
+	}
+	return nil
+}
+
 // Submit hands a prompt to the session and returns its id at once. The
 // turn runs on the session's own goroutine. A prompt sent while a turn
 // runs is queued: it is given to the model between two rounds of that

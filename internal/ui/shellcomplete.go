@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/ui/editor"
 )
@@ -19,10 +20,24 @@ import (
 // word such as sudo that runs the command after it) by the names of the
 // programs on the PATH and of the shell's own commands, and anywhere else
 // by the names of files. The list opens on Tab only, never by itself
-// while the line is typed, so that Enter always runs the line as typed.
+// while the line is typed, and Enter takes a candidate only when it was
+// chosen with the arrows (the editor's rules for a shell line), so that
+// Enter runs the line as typed.
+//
+// The programs on the PATH are listed in the background, once, and again
+// when the list is older than programsAge: a folder on the PATH that is
+// slow to read, or one that never answers, holds up nothing but the list.
 
 // shellEarlier is the most commands run before that one Tab offers.
 const shellEarlier = 5
+
+// programsAge is how long a list of the PATH's programs is used before it
+// is made again, and maxPathEntries the most names read from one folder
+// on the PATH.
+const (
+	programsAge    = 5 * time.Minute
+	maxPathEntries = 50000
+)
 
 // shellBuiltins are the shell's own commands that a person may run behind
 // "!", which are not files on the PATH.
@@ -115,8 +130,10 @@ func (s *session) completeProgram(word string, start int) []editor.Candidate {
 			names = append(names, b)
 		}
 	}
-	if s.programs != nil {
-		names = append(names, s.programs(word)...)
+	for _, p := range s.programNames() {
+		if strings.HasPrefix(p, word) {
+			names = append(names, p)
+		}
 	}
 	slices.Sort(names)
 	names = slices.Compact(names)
@@ -130,25 +147,53 @@ func (s *session) completeProgram(word string, start int) []editor.Candidate {
 	return out
 }
 
+// programNames is the list of the PATH's programs as last made, which it
+// has made again in the background when it is missing or old. Until the
+// first list is made there is none. Without a host to work in the
+// background (a test's bare session), the list is made at once.
+func (s *session) programNames() []string {
+	if s.programs == nil {
+		return nil
+	}
+	if s.host == nil {
+		return s.programs()
+	}
+	if !s.progLoading && (s.progAt.IsZero() || s.now().Sub(s.progAt) > programsAge) {
+		s.progLoading = true
+		list := s.programs
+		s.host.spawn(func() func() {
+			names := list()
+			return func() {
+				s.progNames, s.progAt, s.progLoading = names, s.now(), false
+			}
+		})
+	}
+	return s.progNames
+}
+
 // pathPrograms lists the programs in the directories of path (a PATH
-// value) whose names begin with prefix: files that may be run, each name
-// once. A directory that is not written as an absolute path is passed
-// over, as the folder it means changes with the shell's.
-func pathPrograms(path, prefix string) []string {
+// value): files that may be run, each name once, in name order. A
+// directory that is not written as an absolute path is passed over, as
+// the folder it means changes with the shell's, and so is an entry that
+// is not a directory (a fifo there would hold its open up for ever).
+func pathPrograms(path string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, dir := range filepath.SplitList(path) {
 		if !filepath.IsAbs(dir) {
 			continue
 		}
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			continue
+		}
 		f, err := os.Open(dir)
 		if err != nil {
 			continue
 		}
-		names, _ := f.Readdirnames(maxDirEntries)
+		names, _ := f.Readdirnames(maxPathEntries)
 		_ = f.Close()
 		for _, name := range names {
-			if seen[name] || !strings.HasPrefix(name, prefix) || strings.ContainsAny(name, " \t\n") || editor.Visible(name) != name {
+			if seen[name] || strings.ContainsAny(name, " \t\n") || editor.Visible(name) != name {
 				continue
 			}
 			fi, err := os.Stat(filepath.Join(dir, name))
@@ -159,5 +204,6 @@ func pathPrograms(path, prefix string) []string {
 			out = append(out, name)
 		}
 	}
+	slices.Sort(out)
 	return out
 }

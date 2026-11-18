@@ -88,9 +88,10 @@ type config struct {
 	// project lists the project in a directory for the fuzzy @ search
 	// (mention.go), or is nil for none.
 	project func(dir string) []string
-	// programs lists the programs whose names begin with a prefix, for
-	// shell mode's Tab (shellcomplete.go), or is nil for none.
-	programs func(prefix string) []string
+	// programs lists the programs on the PATH, for shell mode's Tab
+	// (shellcomplete.go), or is nil for none. It is slow, and is run in
+	// the background.
+	programs func() []string
 }
 
 // phase is what the session is doing, as the line above the prompt box
@@ -201,7 +202,13 @@ type session struct {
 	cwd, home  string
 	branchOf   func(string) string
 	listDir    func(string) []fileEntry
-	programs   func(string) []string
+	// programs lists the PATH's programs, and progNames is the list as
+	// last made, at progAt, or being made again when progLoading
+	// (shellcomplete.go).
+	programs    func() []string
+	progNames   []string
+	progAt      time.Time
+	progLoading bool
 	// listProject and index are the fuzzy @ search's lister and what it
 	// last listed (mention.go).
 	listProject func(string) []string
@@ -379,8 +386,10 @@ func (s *session) start() {
 	s.header()
 	// (What in the keybindings file cannot be used is said at once.)
 	s.keysNow()
-	// (The project is listed for the fuzzy @ search while nothing waits.)
+	// (The project is listed for the fuzzy @ search while nothing waits,
+	// and the PATH's programs for shell mode's Tab.)
 	s.indexed()
+	s.programNames()
 	s.recap()
 	if h, ok := s.c.(historian); ok {
 		var drafts []editor.Draft

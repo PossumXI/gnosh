@@ -266,6 +266,64 @@ func TestTell(t *testing.T) {
 	r.checkLog()
 }
 
+// Record puts a note in the conversation without starting a turn. In an
+// idle session it is written to the log at once, between turns, so it
+// stands before the next prompt (and is there for a session opened
+// again); while a turn runs it goes out with the next request, as Tell's
+// do.
+func TestRecord(t *testing.T) {
+	bash, started, letGo := heldTool("Bash")
+	r := newRig(t, func(o *Options) { o.Tools = []core.Tool{bash} })
+
+	// Idle: in the log at once, before the prompt that follows.
+	if err := r.a.Record(Note{Text: "<note>$ make\nok</note>", Source: "shell", Notice: "The command is in the conversation."}); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.a.State(); st.Busy || st.Notes != 0 || r.model.count() != 0 {
+		t.Fatalf("a recorded note started something or waits: %+v, %d requests", st, r.model.count())
+	}
+	r.idle()
+	stored := r.log.of(EntryNote)
+	if len(stored) != 1 || stored[0].Source != "shell" || stored[0].Turn != "" {
+		t.Fatalf("note entries = %+v", stored)
+	}
+	if n := eventsOf[*NoteEvent](r.rec); len(n) != 1 || n[0].Note.Source != "shell" {
+		t.Errorf("note events = %+v", n)
+	}
+	if n := notices(r.rec, LevelInfo); len(n) != 1 || n[0] != "The command is in the conversation." {
+		t.Errorf("the quiet line = %v", n)
+	}
+	r.model.push(say("it built"))
+	r.run("did it build?")
+	if got, want := userBlocks(r.model.requests()[0]), []string{"<note>$ make\nok</note>", "did it build?"}; !slices.Equal(got, want) {
+		t.Errorf("the model was sent %q, want %q", got, want)
+	}
+
+	// Busy: it waits for the turn's next request.
+	r.model.push(use(tc("b", "Bash", `{}`)), say("seen"))
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("build it") }()
+	<-started
+	if err := r.a.Record(Note{Text: "<note>$ ls\na.go</note>", Source: "shell"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := r.a.State().Notes; n != 1 {
+		t.Errorf("%d notes wait", n)
+	}
+	letGo()
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	r.idle()
+	if got, want := userBlocks(r.model.requests()[2]), []string{"result:b", "<note>$ ls\na.go</note>"}; !slices.Equal(got, want) {
+		t.Errorf("the model was sent %q, want %q", got, want)
+	}
+	if err := r.a.Record(Note{Text: " "}); !errors.Is(err, ErrBlank) {
+		t.Errorf("an empty note: %v", err)
+	}
+	r.checkLog()
+}
+
 // A note that is to wake the session starts a turn in an idle one. When
 // the person stops that turn before the note went out, the note is kept
 // and waits like any other.

@@ -28,15 +28,7 @@ func TestCompleteShell(t *testing.T) {
 			}
 			return nil
 		},
-		programs: func(prefix string) []string {
-			var out []string
-			for _, p := range []string{"apt", "cat", "echo", "git", "gitk", "grep", "make", "true"} {
-				if strings.HasPrefix(p, prefix) {
-					out = append(out, p)
-				}
-			}
-			return out
-		},
+		programs: func() []string { return []string{"apt", "cat", "echo", "git", "gitk", "grep", "make", "true"} },
 	}
 	offered := func(text string) string {
 		var out []string
@@ -117,6 +109,25 @@ func TestShellTabOffersEarlierCommands(t *testing.T) {
 		t.Fatalf("the box holds %q", g.box())
 	}
 
+	// Enter on the open list runs the line as typed: an older command is
+	// taken only when it was chosen with the arrows. (This interface runs
+	// no shell lines, so the line comes back to the box.)
+	g = newRig(t, 80, 24, text.NoColor)
+	g.s.ed.AddHistory(editor.Draft{Text: "!cd /srv/app && git reset --hard"})
+	g.files["/"] = []fileEntry{{name: "srv", dir: true}, {name: "tmp", dir: true}}
+	g.keys(`"!cd /"`)
+	g.liveLacks("run before")
+	g.keys(`<Tab>`)
+	g.liveHas("cd /srv/app && git reset --hard")
+	g.keys(`<Enter>`)
+	if g.box() != "!cd /" {
+		t.Fatalf("Enter ran %q, not the line as typed", g.box())
+	}
+	g.keys(`<Ctrl+U> <Ctrl+U> "!cd /" <Tab> <Down> <Up> <Enter>`)
+	if g.box() != "!cd /srv/app && git reset --hard" {
+		t.Fatalf("the command chosen with the arrows was not taken: the box holds %q", g.box())
+	}
+
 	g = newRig(t, 80, 24, text.NoColor)
 	g.s.ed.AddHistory(editor.Draft{Text: "!git stash list"})
 	g.keys(`"!git stas" <Tab>`)
@@ -133,9 +144,9 @@ func TestShellTabOffersEarlierCommands(t *testing.T) {
 	g.liveHas("app/", "ui/")
 }
 
-// The programs of a PATH: files that may be run, by the start of their
-// names, each name once; directories, files that may not be run and
-// relative PATH entries are passed over.
+// The programs of a PATH: files that may be run, each name once, in name
+// order; directories, files that may not be run and relative PATH entries
+// are passed over.
 func TestPathPrograms(t *testing.T) {
 	one, two := t.TempDir(), t.TempDir()
 	write := func(dir, name string, mode os.FileMode) {
@@ -152,12 +163,11 @@ func TestPathPrograms(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := strings.Join([]string{one, "relative/bin", two}, string(os.PathListSeparator))
-	got := pathPrograms(path, "gnosh")
-	slices.Sort(got)
-	if strings.Join(got, ",") != "gnoshctl,gnoshy" {
+	got := pathPrograms(path)
+	if strings.Join(got, ",") != "gnoshctl,gnoshy,other" {
 		t.Errorf("found %q", got)
 	}
-	if got := pathPrograms("", "gnosh"); len(got) != 0 {
+	if got := pathPrograms(""); len(got) != 0 {
 		t.Errorf("an empty PATH gave %q", got)
 	}
 }
@@ -193,15 +203,7 @@ func FuzzComplete(f *testing.F) {
 			}
 			return nil
 		},
-		programs: func(prefix string) []string {
-			var out []string
-			for _, p := range []string{"apt", "cat", "echo", "git", "gitk", "grep", "make", "true"} {
-				if strings.HasPrefix(p, prefix) {
-					out = append(out, p)
-				}
-			}
-			return out
-		},
+		programs: func() []string { return []string{"apt", "cat", "echo", "git", "gitk", "grep", "make", "true"} },
 	}
 	f.Fuzz(func(t *testing.T, text string, cursor int) {
 		if !utf8.ValidString(text) || len(text) > 400 {

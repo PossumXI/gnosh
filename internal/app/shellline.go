@@ -27,7 +27,8 @@ import (
 // and what it printed go to the model as a prompt of gnosh's own, which
 // says whose command it was, and the model answers. One that the person
 // stopped is not answered, and with the respondToBashCommands option off
-// none is: it is put in front of the model with their next prompt.
+// none is: it is put in the conversation at once, before their next
+// prompt.
 //
 // The command line is also kept in the session's file as a meta entry
 // (metaShell), for the prompt history: Up and shell mode's Tab offer it
@@ -99,11 +100,14 @@ func (l *live) shellLine(command string) error {
 		// tool's: it is made harmless on its way in.
 		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, or go on with what they asked for before.") +
 			"\n\n$ " + prompt.Untrusted(command) + "\n" + prompt.Untrusted(core.TextOf(res.Content))
+		// One the model does not answer now is put in the conversation at
+		// once (Record), so that it stands before the person's next
+		// prompt and is kept if the session ends before that.
 		switch {
 		case stopped:
-			_ = l.agent.Tell(agent.Note{Source: "shell", Text: text + "\n" + prompt.Wrap("The user stopped it before it finished.")})
+			_ = l.agent.Record(agent.Note{Source: "shell", Text: text + "\n" + prompt.Wrap("The user stopped it before it finished.")})
 		case !l.respondShell.Load():
-			_ = l.agent.Tell(agent.Note{Source: "shell", Text: text})
+			_ = l.agent.Record(agent.Note{Source: "shell", Text: text})
 		default:
 			_, _ = l.agent.Submit(agent.Prompt{Text: text, Hidden: true, Source: "shell"})
 		}
@@ -158,7 +162,10 @@ func (l *live) promptHistory() []string {
 				if e.Kind != agent.EntryPrompt || e.Hidden {
 					continue
 				}
-				if text := strings.TrimSpace(core.TextOf(e.Blocks)); text != "" {
+				// (A blank at the start stays: " !x" and " /x" were sent
+				// as prompts, and must not come back as a shell line or a
+				// command.)
+				if text := strings.TrimRight(core.TextOf(e.Blocks), " \t\r\n"); strings.TrimSpace(text) != "" {
 					out = append(out, text)
 				}
 			}

@@ -555,3 +555,17 @@ func TestMCPResourceMention(t *testing.T) {
 	has(t, "the first request", users, "The user mentioned the resource memo:memo://plan of an MCP server", "PLAN-TEXT-12")
 	hasNot(t, "the first request", users, "nobody:memo://x of an MCP server")
 }
+
+// A file whose only server was written outside "mcpServers" leaves the
+// session with no server of its own: /mcp lists the problem, and /mcp
+// with words after it says there is nothing to act on, where it once
+// failed over the first server of an empty list.
+func TestMCPWithOnlyServersOutsideTheirPlace(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(filepath.Join(w.ConfigDir(), "mcp.json"), `{"github": {"command": "gh-server"}}`)
+	r := run(t, w, "-p", "/mcp")
+	has(t, "/mcp", r.out+r.err, `the server "github" at its top level`)
+	r = run(t, w, "-p", "/mcp frob")
+	has(t, "/mcp frob", r.out+r.err, "has no MCP server of its own to act on")
+	hasNot(t, "/mcp frob", r.out+r.err, "crashed")
+}

@@ -1560,3 +1560,26 @@ or kept with the reason said (27).
     the less sure findings too, marked). PR numbers, --comment and ultra
     are not taken: they need a forge or Anthropic's cloud. The notice
     names what the model is doing.
+
+100. **What a review of 96 to 99 changed.** A shell line never opens the
+    list by itself (the editor's "/" and "@" triggers opened it there),
+    and Enter on an open list runs the line as typed unless a candidate
+    was chosen with the arrows: a command run before begins with what was
+    typed, so Enter took it, and a second Enter would have run an older
+    line. A slash opens the list by itself only where it begins the box
+    and makes the line a command; in the middle of a prompt Tab opens it,
+    so a route such as /me or /st is sent as typed (this replaces the end
+    of 98). The PATH's programs are listed in the background, once and
+    again after five minutes, never on a key: a folder on the PATH that is
+    slow or never answers held up the interface, a fifo there held its
+    open for ever (an entry that is not a directory is passed over now),
+    and a folder past 4,000 names lost programs (now 50,000). A command's
+    output that the model does not answer now (stopped, or
+    respondToBashCommands false) is written to the session's file at
+    once (the agent's Record: between turns, before the next prompt), not
+    told with the next request after the prompt, where it came after the
+    prompt and was lost if the session ended first. /mcp with words after
+    it in a session with no server of its own says so instead of failing
+    over an empty list, and a sub-agent's own server that wants a sign-in
+    is not offered /mcp login. A prompt's leading blanks stay in the
+    history, so " !x" and " /x" come back as prompts.
