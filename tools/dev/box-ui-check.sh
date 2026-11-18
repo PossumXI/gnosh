@@ -112,12 +112,13 @@ agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel | cd | leftover) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
+channel) flags="-y --channels server:hook" ;;
 entertree) flags="--trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -152,6 +153,12 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = channel ]; then
+	# The webhook channel (tools/dev/channel-webhook.py), copied to
+	# ~/newgnosh-test before this runs.
+	[ -f "$HOME/newgnosh-test/channel-webhook.py" ] || { echo "box-ui-check: copy tools/dev/channel-webhook.py to ~/newgnosh-test first" >&2; exit 2; }
+	printf '{"mcpServers": {"hook": {"command": "python3", "args": ["%s", "18788", "%s"]}}}\n' "$HOME/newgnosh-test/channel-webhook.py" "$T/replies.log" > "$T/config/gnosh/mcp.json"
+fi
 if [ "$scenario" = keys ]; then
 	cat > "$T/config/gnosh/keybindings.json" <<'EOF'
 {"bindings": [{"context": "Chat", "bindings": {"ctrl+k": "chat:stash", "ctrl+y": "command:cost"}}]}
@@ -300,6 +307,17 @@ worktree)
 wtflag)
 	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
 	done_when() { screen | grep -q "done in"; }
+	;;
+channel)
+	# An event pushed into the idle session wakes the model, which answers
+	# through the channel's reply tool.
+	for i in $(seq 1 30); do
+		sleep 1
+		screen | grep -q "Channels: events from server:hook" && break
+	done
+	sleep 3
+	curl -s -d "The build of main failed. Answer on the channel with exactly the word: seen" 127.0.0.1:18788 >/dev/null
+	done_when() { [ -s "$T/replies.log" ] && screen | grep -q "done in"; }
 	;;
 cron)
 	# /loop 1m: the prompt runs at once and again each minute, between
@@ -529,6 +547,9 @@ if [ "$scenario" = worktree ]; then
 	for d in "$T"/work/.gnosh/worktrees/agent-*; do
 		[ -d "$d" ] && echo "=== notes.txt in $d: $(tr '\n' ' ' < "$d/notes.txt")"
 	done
+fi
+if [ "$scenario" = channel ]; then
+	echo "=== replies: $(cat "$T/replies.log" 2>/dev/null || echo none)"
 fi
 if [ "$scenario" = entertree ]; then
 	echo "=== work trees: $(git -C "$T/work" worktree list | tr '\n' ';')"
