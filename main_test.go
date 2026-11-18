@@ -334,7 +334,7 @@ func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
 		"gnosh", "gnosh doctor", "gnosh trust", "gnosh models",
 		"gnosh session", "gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename",
 		"gnosh mem", "gnosh logs", "gnosh dirs", "gnosh ssh",
-		"gnosh mcp", "gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
+		"gnosh mcp", "gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove", "gnosh mcp login", "gnosh mcp logout",
 		"gnosh help", "gnosh version",
 	}
 	if strings.Join(titles, ", ") != strings.Join(want, ", ") {
