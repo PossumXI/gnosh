@@ -291,8 +291,11 @@ type backgroundRun struct {
 	// nothing.
 	ended, failure string
 	died           bool
-	last           string
-	output         []string
+	// endedAt is when the line that says how it ended, or that gnosh stop
+	// stopped it, was written.
+	endedAt time.Time
+	last    string
+	output  []string
 	// asking is the permission question a working run waits on for the
 	// agent view to answer (runasks.go), if any.
 	asking *runAsk
@@ -432,7 +435,7 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			at, after, _ := strings.Cut(rest, " ")
 			t, terr := time.Parse(time.RFC3339, at)
 			if terr == nil && " "+after == runStopped {
-				r.stopped = true
+				r.stopped, r.endedAt = true, t
 				continue
 			}
 			if terr == nil {
@@ -446,7 +449,7 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 					ended = "stopped"
 				}
 				if ended != "" {
-					r.ended, r.failure = ended, failure
+					r.ended, r.failure, r.endedAt = ended, failure, t
 					continue
 				}
 			}
@@ -457,7 +460,7 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			if terr == nil {
 				if p, ok := strings.CutPrefix(after, "the session "+id+" goes on in the background with: "); ok {
 					r.prompt, r.name, r.last, r.file, r.cwd, r.stopped, r.started = p, "", "", "", "", false, t
-					r.ended, r.failure = "", ""
+					r.ended, r.failure, r.endedAt = "", "", time.Time{}
 					r.output = r.output[:0]
 					head = true
 					continue

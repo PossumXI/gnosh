@@ -43,6 +43,11 @@ type live struct {
 	inv cli.Invocation
 	cfg *config.Config
 
+	// agentsSeen is when the person last looked at the runs in the
+	// background from the session (its start, or the agent view opened
+	// over it), in Unix nanoseconds (agentview.go, agentsWord).
+	agentsSeen atomic.Int64
+
 	// interactive says a person is there to be asked. source is how the
 	// session came to be, in the SessionStart hook's words.
 	interactive bool

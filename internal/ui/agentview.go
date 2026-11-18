@@ -434,9 +434,9 @@ func (f filter) passes(r app.AgentRun) bool {
 		}
 	}
 	for _, s := range f.states {
-		// s:blocked is Claude Code's for what waits on the person: a run
-		// in the background here never does.
-		if !strings.HasPrefix(r.State, s) && !(s == "completed" && !running(r)) {
+		// A state (s:blocked is Claude Code's for what waits on the
+		// person), or a group: s:needs (input), s:completed.
+		if !strings.HasPrefix(r.State, s) && !(s == "completed" && !running(r)) && !(s == "needs" && r.State == "blocked") {
 			return false
 		}
 	}
@@ -821,6 +821,20 @@ func (v *agentView) boxCommand(text string) bool {
 	switch cmd {
 	case "/exit", "/quit":
 		v.quit = true
+		return true
+	case "/stop":
+		// The run chosen stops at once, as Ctrl+X stops it; Claude Code's
+		// reply of exactly /stop.
+		v.box.Reset()
+		r, ok := v.chosen()
+		switch {
+		case !ok:
+			v.say("There is no run to stop.")
+		case !running(r) || v.stopping[r.ID]:
+			v.say("%s is not running.", runName(r))
+		default:
+			v.stop(r)
+		}
 		return true
 	case "/rename":
 		v.box.Reset()
@@ -1288,22 +1302,22 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 		return out
 	}
 	var lines []string
+	none := "(it printed nothing)"
 	if running(r) {
-		lines = v.doing[r.ID]
-		if len(lines) == 0 {
-			lines = []string{th.Quiet.Render("(nothing in its conversation yet)")}
-		}
+		lines, none = v.doing[r.ID], "(nothing in its conversation yet)"
 	} else {
 		lines = r.Output
 		if len(lines) > peekRows {
 			lines = lines[len(lines)-peekRows:]
 		}
-		if len(lines) == 0 {
-			lines = []string{th.Quiet.Render("(it printed nothing)")}
-		}
 	}
 	for _, l := range lines {
 		out = append(out, fit(v.m, "  "+safeLine(l), width))
+	}
+	if len(lines) == 0 {
+		// (gnosh's own words, styled: not made safe as what a run said
+		// is, which would show their colours' codes.)
+		out = append(out, fit(v.m, "  "+th.Quiet.Render(none), width))
 	}
 	return out
 }
@@ -1316,6 +1330,7 @@ func (v *agentView) helpLines(width int) []string {
 		{"Enter, →", "watch a working run as it goes; open one that is over (gnosh -r)"},
 		{"a prompt and Enter", "start a run on it in " + v.folder() + "; @name first runs it as that kind of agent"},
 		{"/model, /effort", "what the runs started from here are given (default puts it back); /exit leaves"},
+		{"/stop", "stop the run chosen, as Ctrl+X does"},
 		{"n:<text> s:<state> o:<text>", "list only the runs whose name or prompt, state, or answer has it"},
 		{"Ctrl+X", "stop a working run; twice, take one that is over off the list"},
 		{"Ctrl+S", "group the runs by folder, or by how they stand"},

@@ -96,7 +96,8 @@ type AgentRun struct {
 	// a run that is over, its answer.
 	Output []string
 	// Started is when it started, and Ended, for a run that is over, when
-	// its log was last written to.
+	// it ended: as its log says, or for one that ended without a word,
+	// when its log or its session's file was last written to.
 	Started, Ended time.Time
 }
 
@@ -195,6 +196,9 @@ type runSource struct {
 	home   string
 	scoped bool
 	all    bool
+	// seen, when not nil, is told of the runs each time they are listed:
+	// the person sees them (a session's status line, agentsWord).
+	seen func([]backgroundRun)
 
 	mu sync.Mutex
 	// runs are the runs as last listed, by session id, and convs what was
@@ -217,7 +221,11 @@ func (s *runSource) Runs() []AgentRun {
 	}
 	listed := map[string]backgroundRun{}
 	var working, over []AgentRun
-	for _, r := range runsIn(s.dirs, since) {
+	runs := runsIn(s.dirs, since)
+	if s.seen != nil {
+		s.seen(runs)
+	}
+	for _, r := range runs {
 		if s.scoped && !within(r.cwd, s.cwd) {
 			continue
 		}
@@ -234,8 +242,13 @@ func (s *runSource) Runs() []AgentRun {
 			working = append(working, a)
 			continue
 		}
-		if info, err := os.Stat(r.log); err == nil {
-			a.Ended = info.ModTime()
+		// When it ended: as its log says, or for one that ended without a
+		// word, the last its log or its session's file was written.
+		a.Ended = r.endedAt
+		for _, f := range []string{r.log, r.file} {
+			if info, err := os.Stat(f); err == nil && r.endedAt.IsZero() && info.ModTime().After(a.Ended) {
+				a.Ended = info.ModTime()
+			}
 		}
 		over = append(over, a)
 	}
@@ -498,7 +511,10 @@ func (l *live) watchAgents() {
 	if !l.interactive || l.store == nil {
 		return
 	}
-	look := func() { l.setStatus("agents", waitingRuns(runsIn(l.store.ProjectDirs(), l.p.now().Add(-runsKept)))) }
+	l.agentsSeen.Store(l.p.now().UnixNano())
+	look := func() {
+		l.setStatus("agents", agentsWord(runsIn(l.store.ProjectDirs(), l.p.now().Add(-runsKept)), time.Unix(0, l.agentsSeen.Load())))
+	}
 	look()
 	go func() {
 		tick := time.NewTicker(agentsLook)
@@ -525,27 +541,52 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		return AgentViewInfo{}, errors.New("this session keeps no sessions (--no-session-persistence), so it has no runs in the background to show")
 	}
 	cwd, home := l.cfg.Paths.Cwd, l.cfg.Paths.Home
+	// What the view lists the person has seen: the status line counts no
+	// run that ended before as done, and says at once how many wait.
+	seen := func(runs []backgroundRun) {
+		now := l.p.now()
+		l.agentsSeen.Store(now.UnixNano())
+		l.setStatus("agents", agentsWord(runs, now))
+	}
 	return AgentViewInfo{
-		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home},
+		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home, seen: seen},
 		Cwd:    cwd, Home: home,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
 	}, nil
 }
 
-// waitingRuns says how many of runs wait on the person: "" for none, "1
-// run needs input", "2 runs need input".
-func waitingRuns(runs []backgroundRun) string {
-	n := 0
+// agentsWord is the status line's word on runs (the "agents" fact), as
+// Claude Code's footer reads "← 2 agents" or "← 2 done": how many wait on
+// the person ("1 run needs input", "2 runs need input"); or, when none
+// does, how many ended since seen, the last time the person looked at the
+// agent view from the session (or its start), done or failed ("2 runs
+// done, 1 failed"); or "".
+func agentsWord(runs []backgroundRun, seen time.Time) string {
+	waiting, done, failed := 0, 0, 0
 	for _, r := range runs {
-		if r.running && r.asking != nil {
-			n++
+		switch {
+		case r.running && r.asking != nil:
+			waiting++
+		case r.running || !r.endedAt.After(seen):
+		case runState(r) == "done":
+			done++
+		case runState(r) == "failed":
+			failed++
 		}
 	}
-	switch n {
-	case 0:
-		return ""
-	case 1:
-		return "1 run needs input"
+	if waiting > 0 {
+		return countWords(waiting, "run needs input", "runs need input")
 	}
-	return fmt.Sprintf("%d runs need input", n)
+	var parts []string
+	if done > 0 {
+		parts = append(parts, countWords(done, "run done", "runs done"))
+	}
+	if failed > 0 {
+		word := countWords(failed, "run failed", "runs failed")
+		if done > 0 {
+			word = fmt.Sprintf("%d failed", failed)
+		}
+		parts = append(parts, word)
+	}
+	return strings.Join(parts, ", ")
 }

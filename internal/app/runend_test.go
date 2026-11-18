@@ -103,6 +103,14 @@ func TestRunStates(t *testing.T) {
 			if got, end := runState(runs[0]), runEnding(runs[0]); got != c.state || end != c.end {
 				t.Errorf("state %q, ending %q; want %q, %q", got, end, c.state, c.end)
 			}
+			// When it ended is the time on its end line, or on gnosh stop's.
+			if want := map[string]string{"done": "10:01:00", "failed": "10:01:00", "signal": "10:01:00", "gnosh stop": "10:01:01", "again": "10:03:00"}[c.name]; want != "" {
+				if got := runs[0].endedAt.UTC().Format("15:04:05"); got != want {
+					t.Errorf("it ended at %s, not %s", got, want)
+				}
+			} else if !runs[0].endedAt.IsZero() {
+				t.Errorf("one that said nothing ended at %v", runs[0].endedAt)
+			}
 			if strings.Contains(strings.Join(runs[0].output, "\n"), "the run ") {
 				t.Errorf("the end line was taken for what the run printed: %q", runs[0].output)
 			}

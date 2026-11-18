@@ -119,7 +119,7 @@ func TestBlockedRunInTheList(t *testing.T) {
 	if err := os.WriteFile(askPath(runBase(log), "q1"), ask, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	has(t, "gnosh agents --json", run(t, w, "agents", "--json").wantCode(t, 0).out, `"state": "blocked"`, `"status": "Allow Bash?"`)
+	has(t, "gnosh agents --json", run(t, w, "agents", "--json").wantCode(t, 0).out, `"state": "blocked"`, `"status": "Allow Bash?"`, `"waitingFor": "permission prompt"`, `"sessionId": "`)
 	if err := answerAsk(log, "q1", "maybe", ""); err == nil || !strings.Contains(err.Error(), "is not one of the question's answers") {
 		t.Errorf("an answer the question does not offer: %v", err)
 	}
@@ -221,11 +221,25 @@ func TestSessionCountsRunsThatWait(t *testing.T) {
 		return 0
 	})
 	r.wantCode(t, 0)
-	if got := waitingRuns(nil); got != "" {
+	seen := time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC)
+	if got := agentsWord(nil, seen); got != "" {
 		t.Errorf("no runs: %q", got)
 	}
-	two := []backgroundRun{{running: true, asking: &runAsk{}}, {running: true, asking: &runAsk{}}, {running: true}, {asking: &runAsk{}}}
-	if got := waitingRuns(two); got != "2 runs need input" {
+	// Runs that ended since the person last looked count as done or
+	// failed; none counts while one waits on the person.
+	ended := []backgroundRun{
+		{ended: "done", endedAt: seen.Add(time.Minute)}, {ended: "done", endedAt: seen.Add(2 * time.Minute)},
+		{ended: "failed", failure: "it ended with exit status 1.", endedAt: seen.Add(time.Minute)},
+		{ended: "done", endedAt: seen.Add(-time.Minute)}, {stopped: true, endedAt: seen.Add(time.Minute)}, {running: true},
+	}
+	if got := agentsWord(ended, seen); got != "2 runs done, 1 failed" {
+		t.Errorf("ended since: %q", got)
+	}
+	if got := agentsWord(ended[2:3], seen); got != "1 run failed" {
+		t.Errorf("one failed since: %q", got)
+	}
+	two := append([]backgroundRun{{running: true, asking: &runAsk{}}, {running: true, asking: &runAsk{}}, {running: true}, {asking: &runAsk{}}}, ended...)
+	if got := agentsWord(two, seen); got != "2 runs need input" {
 		t.Errorf("two waiting: %q", got)
 	}
 }

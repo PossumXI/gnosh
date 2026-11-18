@@ -703,6 +703,44 @@ func TestAgentViewFailedRuns(t *testing.T) {
 	}
 }
 
+// /stop in the box stops the run chosen, as Ctrl+X does (Claude Code's
+// reply of exactly /stop), and says so of one that is not running; s:needs
+// lists the runs that wait on the person. In colour, gnosh's own words in
+// a peek keep their colour: what a run printed is made safe to show, and
+// the line that says it printed nothing is not (which showed its colour's
+// codes as text on a box).
+func TestAgentViewStopCommandAndPlaceholder(t *testing.T) {
+	g := newAgentRig(t)
+	g.keys(`<Paste "/stop"> <Enter>`)
+	if !slices.Equal(g.src.stopped, []string{runTests}) {
+		t.Fatalf("/stop stopped %q", g.src.stopped)
+	}
+	g.v.said = ""
+	g.keys(`<End> <Paste "/stop"> <Enter>`)
+	if len(g.src.stopped) != 1 || !strings.Contains(g.v.said, "is not running") {
+		t.Errorf("/stop on a run that is over: stopped %q, said %q", g.src.stopped, g.v.said)
+	}
+	g.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q1", Title: "Allow Bash?", Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}}}
+	})
+	g.v.refresh()
+	g.keys(`<Paste "s:needs">`)
+	if body, _ := g.screen(); row(body, "docs") == "" || row(body, "deploy it") != "" {
+		t.Errorf("s:needs:\n%s", strings.Join(body, "\n"))
+	}
+
+	c := newAgentRig(t)
+	c.v = newAgentView(DefaultTheme(text.ANSI256), text.Metrics{}, c.clk.Now, app.AgentViewInfo{Source: c.src, Cwd: "/home/jae/src/app", Home: "/home/jae"})
+	c.src.set(runShip, func(r *app.AgentRun) { r.Output = nil })
+	c.v.refresh()
+	c.keys(`<End> <Space>`)
+	body, _, _, _ := c.v.render(100, 20)
+	all := strings.Join(body, "\n")
+	if !strings.Contains(text.Strip(all), "  (it printed nothing)") || strings.Contains(all, "^[") {
+		t.Errorf("the peek of a run that printed nothing:\n%q", all)
+	}
+}
+
 // /model and /effort typed in the box set what the runs started from the
 // view are given, for the view only, and default puts back what it was
 // opened with; "@name prompt" starts a run as that kind of agent; /exit

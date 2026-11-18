@@ -2103,3 +2103,21 @@ or kept with the reason said (27).
     terminal's title is left to the session. The status line's count of
     runs that wait on the person reads "← 1 run needs input", as Claude
     Code's footer reads "← 2 agents".
+
+130. **The agent view's day, polished after its box checks.** Box 1
+    showed a killed run's age as 0s (its end was taken from its log's
+    time, which a killed run never writes again): a run's end is now the
+    time on its end line or gnosh stop's, and for one that ended without
+    a word the last its log or its session's file was written. The peek
+    of a run that printed nothing showed its grey's colour codes as
+    text: gnosh's own words there are no longer made safe as a run's
+    words are. The view's box takes /stop, Claude Code's reply that stops
+    a run at once (here the run chosen, as Ctrl+X does), and s:needs
+    lists those under Needs input. gnosh agents --json gives Claude
+    Code's waitingFor ("permission prompt") for a blocked run, and
+    sessionId. And as Claude Code's footer reads "← 2 done" when sessions
+    finished and none waits, a session's status line counts the runs that
+    ended since the person last looked at them from the session (its
+    start, or the agent view opened over it, whose listing counts as
+    looking): "← 2 runs done, 1 failed"; runs that wait on the person
+    still come first, and stopped ones are not counted.

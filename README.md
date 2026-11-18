@@ -48,7 +48,7 @@ Built:
   run that ended with an error, or was killed, is marked failed (✗) and
   says how it ended; in a session, ← twice in the empty prompt box opens
   the same view over it (the status line counts the runs that wait on
-  you with a ←), and Esc comes back; `gnosh attach <session>` opens the view on one, `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  you with a ←, or those done since you last looked), and Esc comes back; `gnosh attach <session>` opens the view on one, `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small

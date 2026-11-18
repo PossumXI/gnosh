@@ -452,16 +452,20 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 			State     string    `json:"state"`
 			PID       int       `json:"pid,omitempty"`
 			Status    string    `json:"status,omitempty"`
-			Name      string    `json:"name,omitempty"`
-			Prompt    string    `json:"prompt,omitempty"`
-			Log       string    `json:"log"`
+			// WaitingFor and SessionID are Claude Code's: what a blocked
+			// run waits on, and the id gnosh -r takes (here its id).
+			WaitingFor string `json:"waitingFor,omitempty"`
+			SessionID  string `json:"sessionId"`
+			Name       string `json:"name,omitempty"`
+			Prompt     string `json:"prompt,omitempty"`
+			Log        string `json:"log"`
 		}
 		rows := []row{}
 		for _, r := range runs {
 			w := row{ID: r.session, Kind: "background", Cwd: r.cwd, StartedAt: r.started.UTC(), State: runState(r),
-				Status: oneLine(r.last, 400), Name: r.name, Prompt: r.prompt, Log: r.log}
+				Status: oneLine(r.last, 400), SessionID: r.session, Name: r.name, Prompt: r.prompt, Log: r.log}
 			if r.asking != nil {
-				w.Status = oneLine(r.asking.Title, 400)
+				w.Status, w.WaitingFor = oneLine(r.asking.Title, 400), "permission prompt"
 			}
 			if pid := runPID(r.log); r.running && pid != 0 && runIsFor(pid, r.session) {
 				w.PID = pid
