@@ -26,6 +26,8 @@ Commands
                           yet.)
   logs [session]          Print the end of the project's log, or follow it.
                           (Not built yet.)
+  attach <session>        Open the agent view on a session that runs in the
+                          background. (Not built yet.)
   stop <session>          Stop a session that runs in the background. (Not
                           built yet.)
   dirs                    Say which config and data folders are in use. (Not

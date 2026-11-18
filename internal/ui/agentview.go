@@ -181,6 +181,27 @@ func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.Agent
 	return v
 }
 
+// focusOn opens the view on the run of the session id (gnosh attach): it
+// is chosen, and watched if it works, its question shown if it waits on
+// one, opened (gnosh -r) if it is over.
+func (v *agentView) focusOn(id string) {
+	r, ok := v.byID(id)
+	if !ok {
+		v.say("The run %s is not among the runs in the background.", runShortOf(id))
+		return
+	}
+	v.sel = id
+	v.keepChoice()
+	switch {
+	case r.Question != nil:
+		v.peek = true
+	case running(r):
+		v.watch = &watching{id: id, end: true}
+	default:
+		v.open = id
+	}
+}
+
 // refresh reads the list again, and what each working run is doing.
 func (v *agentView) refresh() {
 	v.looked = v.now()
@@ -1409,6 +1430,9 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 		}()
 	}
 	v.refresh()
+	if info.Focus != "" {
+		v.focusOn(info.Focus)
+	}
 	watched := ""
 	// drawn is what the screen's rows from the top show: a long
 	// conversation watched is laid into the screen again only when it

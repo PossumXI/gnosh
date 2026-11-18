@@ -128,6 +128,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	fmt.Fprintf(p.stdout, "%s%s · process %d\n", bgStarted, id, pid)
 	hints := [][2]string{
 		{"gnosh agents", "lists the sessions in the background"},
+		{"gnosh attach " + short, "watches it"},
 		{"gnosh logs " + short, "what it prints (-f follows it)"},
 		{"gnosh stop " + short, "stops it"},
 		{"gnosh -r " + short, "opens it once it is done"},

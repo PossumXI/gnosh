@@ -221,3 +221,32 @@ exit 1
 		t.Errorf("the runs after Stop: %+v", runs)
 	}
 }
+
+// gnosh attach opens the agent view on one run, named by its id, the start
+// of one, or its name, with every folder's runs however old; with no
+// terminal it says how to follow the run instead; a run it cannot find is
+// said so.
+func TestAttach(t *testing.T) {
+	w := apptest.NewWorld(t)
+	var log string
+	o := testOptions(w, "--bg", "--name", "nightly", "clean the build")
+	o.Detach = func(_, _ []string, l string) (int, error) {
+		log = l
+		return 4242, nil
+	}
+	runWith(t, context.Background(), o).wantCode(t, 0)
+	id := strings.TrimSuffix(filepath.Base(log), ".background.log")
+	for _, word := range []string{id[:13], "nightly"} {
+		var info AgentViewInfo
+		ao := testOptions(w, "attach", word)
+		ao.AgentView = func(i AgentViewInfo) int { info = i; return 0 }
+		runWith(t, context.Background(), ao).wantCode(t, 0)
+		if info.Focus != id || !info.All || info.Scoped {
+			t.Errorf("gnosh attach %s opened the view with %+v", word, info)
+		}
+	}
+	r := run(t, w, "attach", id[:13]).wantCode(t, 1)
+	has(t, "gnosh attach with no terminal", r.err, "gnosh attach opens the agent view, which needs a terminal: gnosh logs -f "+id[:13]+" follows the run here.")
+	r = run(t, w, "attach", "nosuch").wantCode(t, 1)
+	has(t, "gnosh attach of no run", r.err, "no session ran in the background under the ID nosuch")
+}

@@ -60,6 +60,8 @@ const (
 	CmdLogs Command = "logs"
 	// CmdStop stops a session that runs in the background.
 	CmdStop Command = "stop"
+	// CmdAttach opens the agent view on one session in the background.
+	CmdAttach Command = "attach"
 	// CmdDirs says which config and data folders are in use.
 	CmdDirs Command = "dirs"
 	// CmdSSH is `gnosh ssh`: ssh, with what the far side copies put on

@@ -115,10 +115,61 @@ type AgentViewInfo struct {
 	// Notify is how the view tells the person that a run needs input or
 	// is done: the preferredNotifChannel option ("auto" when not set).
 	Notify string
+	// Focus is the session of the run gnosh attach named: the view opens
+	// on it, watching it, showing its question, or opening it when it is
+	// over.
+	Focus string
+}
+
+// attachCommand is gnosh attach <session>, as Claude Code has claude
+// attach: the agent view, opened on that run (AgentViewInfo.Focus).
+func (p *program) attachCommand(ctx context.Context, inv cli.Invocation) int {
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
+	}
+	id, _, err := findRun(st.sessions().ProjectDirs(), inv.Args[0])
+	if err != nil {
+		if named := runNamed(st.sessions().ProjectDirs(), inv.Args[0]); named != "" {
+			id, err = named, nil
+		}
+	}
+	if err != nil {
+		p.errf("%v.", err)
+		return cli.ExitFailure
+	}
+	if p.o.AgentView == nil {
+		p.errf("gnosh attach opens the agent view, which needs a terminal: gnosh logs -f %s follows the run here.", runShort(id))
+		return cli.ExitFailure
+	}
+	// (Every folder's runs, as gnosh agents lists them, however old.)
+	inv.Cwd, inv.All = "", true
+	return p.agentViewOn(st, inv, id)
+}
+
+// runNamed is the session of the run whose name is name, among those whose
+// logs are in dirs, when one run alone has it.
+func runNamed(dirs []string, name string) string {
+	found := ""
+	for _, r := range runsIn(dirs, time.Time{}) {
+		if r.name != "" && strings.EqualFold(r.name, strings.TrimSpace(name)) {
+			if found != "" && found != r.session {
+				return ""
+			}
+			found = r.session
+		}
+	}
+	return found
 }
 
 // agentView opens the agent view for gnosh agents.
 func (p *program) agentView(st *startup, inv cli.Invocation) int {
+	return p.agentViewOn(st, inv, "")
+}
+
+// agentViewOn opens the agent view, on the run of the session focus when
+// it is not "".
+func (p *program) agentViewOn(st *startup, inv cli.Invocation, focus string) int {
 	cwd, home := st.cfg.Paths.Cwd, st.cfg.Paths.Home
 	var flags []string
 	for _, f := range [][2]string{{"--permission-mode", inv.PermissionMode}, {"--model", inv.Model}, {"--effort", inv.Effort}} {
@@ -130,6 +181,7 @@ func (p *program) agentView(st *startup, inv cli.Invocation) int {
 		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs(), cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All},
 		Cwd:    cwd, Home: home, Scoped: inv.Cwd != "", All: inv.All, Flags: flags,
 		Notify: firstOf(st.cfg.Options.PreferredNotifChannel.V, "auto"),
+		Focus:  focus,
 	})
 }
 

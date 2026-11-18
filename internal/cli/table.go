@@ -423,6 +423,11 @@ func Default() *Table {
 		summary: "Print the end of the project's log, or follow it.",
 		about:   "With a session's ID (or the start of one), what that session printed as a run in the background (gnosh --bg, /background, /fork; gnosh agents lists them); --follow follows it until the run is done."})
 
+	t.command(root, &command{name: "attach", cmd: CmdAttach, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<session>",
+		flags:   []*flag{cwd, help},
+		summary: "Open the agent view on a session that runs in the background.",
+		about:   "As Claude Code's claude attach: the session is a run that gnosh --bg, /background or /fork started, named by its ID, the start of one, or its name (gnosh agents lists them). A working run is watched as it goes, one that waits on a question shows the question, and one that is over opens as gnosh -r opens it. It needs a terminal; elsewhere gnosh logs -f follows a run."})
+
 	t.command(root, &command{name: "stop", aliases: []string{"kill"}, cmd: CmdStop, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<session>",
 		flags:   []*flag{cwd, help},
 		summary: "Stop a session that runs in the background.",

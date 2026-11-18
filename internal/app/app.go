@@ -301,7 +301,7 @@ func (p *program) warnf(format string, args ...any) {
 // not built has no row (spec/DECISIONS.md, 26).
 var built = []string{
 	"doctor", "doctor --hosts", "trust", "trust --list", "trust --forget",
-	"dirs", "agents", "agents --json", "agents --all", "logs", "logs --tail", "logs --follow", "stop", "--bg", "models", "ssh", "--worktree",
+	"dirs", "agents", "agents --json", "agents --all", "logs", "logs --tail", "logs --follow", "stop", "attach", "--bg", "models", "ssh", "--worktree",
 	"session list", "session show", "session last", "session rename",
 	"session --json",
 	"prompt show", "prompt path", "prompt export", "prompt export --force",
@@ -409,6 +409,8 @@ func (p *program) run(ctx context.Context) int {
 		return p.logsCommand(ctx, inv)
 	case cli.CmdStop:
 		return p.stopCommand(ctx, inv)
+	case cli.CmdAttach:
+		return p.attachCommand(ctx, inv)
 	case cli.CmdModels:
 		return p.modelsCommand(ctx, inv)
 	case cli.CmdSessionList, cli.CmdSessionShow, cli.CmdSessionLast, cli.CmdSessionRename:

@@ -750,3 +750,32 @@ func TestAgentViewRename(t *testing.T) {
 		t.Errorf("the name was not taken away:\n%s", strings.Join(body, "\n"))
 	}
 }
+
+// gnosh attach opens the view on one run: a working one is watched, one
+// that waits on a question shows it, one that is over is opened (gnosh
+// -r), and one that is not there is said so.
+func TestAgentViewAttach(t *testing.T) {
+	g := newAgentRig(t)
+	g.v.focusOn(runTests)
+	if g.v.watch == nil || g.v.watch.id != runTests || g.v.sel != runTests {
+		t.Errorf("attached to a working run: watch %v, chosen %q", g.v.watch, g.v.sel)
+	}
+	g = newAgentRig(t)
+	g.v.focusOn(runFlaky)
+	if g.v.open != runFlaky || g.v.watch != nil {
+		t.Errorf("attached to a run that is over: open %q", g.v.open)
+	}
+	g = newAgentRig(t)
+	g.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q", Title: "Allow Bash?", Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}}}
+	})
+	g.v.refresh()
+	g.v.focusOn(runDocs)
+	if !g.v.peek || g.v.sel != runDocs || !g.v.answering() {
+		t.Errorf("attached to a run that waits: peek %v, chosen %q", g.v.peek, g.v.sel)
+	}
+	g.v.focusOn("01a1eea5-0000-7000-8000-000000000000")
+	if _, live := g.screen(); live[len(live)-1] != "The run 01a1eea5-0000 is not among the runs in the background." {
+		t.Errorf("attached to no run: %q", live[len(live)-1])
+	}
+}

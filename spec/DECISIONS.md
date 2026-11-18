@@ -2028,3 +2028,13 @@ or kept with the reason said (27).
     line of the run's log of its own, "gnosh: <time> its name is now:
     <name>", which readRunLog reads wherever it stands, and gnosh --bg -r
     keeps the name for the run it starts.
+
+126. **gnosh attach opens the agent view on one run.** Claude Code's
+    claude attach <id> attaches to a background session, and leaving it
+    returns to the agent view. gnosh attach <session>, a run named by its
+    id, the start of one, or its name, opens the view on that run, every
+    folder's runs listed however old: a working run is watched as it goes,
+    one that waits on a question shows the question, and one that is over
+    opens as gnosh -r opens it, the view coming back when that session is
+    left. With no terminal it says that gnosh logs -f follows the run.
+    gnosh --bg's hints name it.
