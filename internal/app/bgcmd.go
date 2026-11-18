@@ -108,7 +108,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		{"gnosh agents", "lists the sessions in the background"},
 		{"gnosh logs " + short, "what it prints (-f follows it)"},
 		{"gnosh stop " + short, "stops it"},
-		{"gnosh -r " + id, "opens it once it is done"},
+		{"gnosh -r " + short, "opens it once it is done"},
 	}
 	width := 0
 	for _, h := range hints {
