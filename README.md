@@ -176,8 +176,8 @@ the project's files whose paths hold the word, as Claude Code's `@` does),
 and a line that
 begins with `!` is a command of your own. With nothing after them, `/model`,
 `/effort`, `/config`, `/export`, `/memory`, `/mcp`, `/permissions` and
-`/skills` open pickers, and `/hooks` a browser of the hooks in force, as
-Claude Code's do (`/permissions allow`, `ask`,
+`/skills` open pickers, `/hooks` a browser of the hooks in force and
+`/agents` one of the kinds of sub-agent, as Claude Code's do (`/permissions allow`, `ask`,
 `deny` or `remove` and a rule changes the rules at once, and `/skills <name>
 off` and the like set Claude Code's `skillOverrides`); Alt+T turns thinking on
 or off, Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents

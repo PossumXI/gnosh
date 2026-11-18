@@ -273,6 +273,10 @@ type SessionControls interface {
 	// /hooks with nothing after it opens, and a note on those configured
 	// and not in force.
 	HookChoices() ([]HookChoice, string)
+	// AgentChoices lists the kinds of sub-agent, for the read-only browser
+	// that /agents with nothing after it opens, and whether the model can
+	// start them (the Agent tool is on).
+	AgentChoices() ([]AgentChoice, bool)
 	// PermissionRules returns the permission mode and the rules in force,
 	// for the picker that /permissions with nothing after it opens;
 	// adding and taking out a rule are the commands /permissions allow,

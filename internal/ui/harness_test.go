@@ -550,6 +550,8 @@ type controls struct {
 	servers   []app.MCPChoice
 	hooks     []app.HookChoice
 	hooksNote string
+	agents    []app.AgentChoice
+	agentsOn  bool
 	rules     []app.PermissionRule
 	skills    []app.SkillChoice
 	levels    []string
@@ -583,6 +585,12 @@ func (c *controls) MCPChoices() []app.MCPChoice {
 }
 
 // HookChoices is the hooks a test set, and its note.
+func (c *controls) AgentChoices() ([]app.AgentChoice, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.agents), c.agentsOn
+}
+
 func (c *controls) HookChoices() ([]app.HookChoice, string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -506,6 +506,7 @@ var ownCommands = []struct {
 	{keybindingsWords, func(s *session, line string) bool { return s.q == nil && s.openKeybindings(line) }},
 	{mcpWords, func(s *session, line string) bool { return s.q == nil && s.chooseMCP(line) }},
 	{hooksWords, func(s *session, line string) bool { return s.q == nil && s.chooseHooks(line) }},
+	{agentsWords, func(s *session, line string) bool { return s.q == nil && s.chooseAgents(line) }},
 	{permissionsWords, func(s *session, line string) bool { return s.q == nil && s.choosePermissions(line) }},
 	{skillsWords, func(s *session, line string) bool { return s.q == nil && s.chooseSkills(line) }},
 	{effortWords, func(s *session, line string) bool { return s.q == nil && s.chooseEffort(line) }},
