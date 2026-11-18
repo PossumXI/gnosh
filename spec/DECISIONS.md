@@ -2131,3 +2131,17 @@ or kept with the reason said (27).
     footer reads "← for agents" for ten seconds after a session opens, a
     session that can open the agent view says so on its status line for
     its first ten seconds, when no run waits on the person.
+
+132. **@<repo> in the agent view's box.** Claude Code's dispatch box
+    takes @<agent-name> and @<repo>: the second runs the session in that
+    directory, from the git repositories one level below, the worktrees
+    in the repository and the directories that have sessions, and an
+    agent of the same name wins. gnosh's "@name prompt" now starts the run
+    as that kind of agent when one is named so (the view is given the
+    kinds there are), or else in the git repository one level below the
+    view's folder that is named so, or else in the one folder runs work
+    in whose last part is the name (two such folders name none); a name
+    that is none of these is taken for a kind, as before, so that the run
+    says which kind it does not know. Only the first word counts, as
+    before, and nothing is listed while typing; worktrees are not looked
+    for. The note that a run started now names its folder.

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
@@ -121,6 +122,31 @@ type AgentViewInfo struct {
 	// on it, watching it, showing its question, or opening it when it is
 	// over.
 	Focus string
+	// Kinds are the names of the kinds of agent there are, and Repos the
+	// git repositories one level below Cwd: "@name prompt" in the view's
+	// box starts the run as that kind of agent, or else in that folder,
+	// as Claude Code's @<agent> and @<repo> do (agentRepos).
+	Kinds, Repos []string
+}
+
+// agentRepos are the git repositories one level below dir: the folders in
+// it that hold a .git, by their paths.
+func agentRepos(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		if _, err := os.Stat(filepath.Join(p, ".git")); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // attachCommand is gnosh attach <session>, as Claude Code has claude
@@ -184,6 +210,8 @@ func (p *program) agentViewOn(st *startup, inv cli.Invocation, focus string) int
 		Cwd:    cwd, Home: home, Scoped: inv.Cwd != "", All: inv.All, Flags: flags,
 		Notify: firstOf(st.cfg.Options.PreferredNotifChannel.V, "auto"),
 		Focus:  focus,
+		Kinds:  agentdef.Over(loadAgentDefs(st.cfg, st.trusted, nil), st.agents).Names(),
+		Repos:  agentRepos(cwd),
 	})
 }
 
@@ -552,6 +580,8 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home, seen: seen},
 		Cwd:    cwd, Home: home,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
+		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents).Names(),
+		Repos:  agentRepos(cwd),
 	}, nil
 }
 

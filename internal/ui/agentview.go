@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -826,22 +827,27 @@ func (v *agentView) resume(r app.AgentRun, text, done string) {
 
 // dispatch starts a run on the prompt: or, for /model and /effort, sets
 // what the runs started from here are given, and /exit leaves. "@name
-// prompt" starts it as the kind of agent named (--agent), as Claude
-// Code's view does.
+// prompt" starts it as the kind of agent named (--agent), or else in the
+// folder named (a git repository one level below the view's folder, or a
+// folder runs work in), as Claude Code's @<agent> and @<repo> do.
 func (v *agentView) dispatch(prompt string) {
 	if v.boxCommand(prompt) {
 		return
 	}
 	flags := slices.Clone(v.flags)
+	dir, where := v.dispatchFolder()
 	if name, rest, ok := strings.Cut(prompt, " "); ok && strings.HasPrefix(name, "@") && len(name) > 1 {
-		flags = append(slices.DeleteFunc(flags, func(f string) bool { return strings.HasPrefix(f, "--agent=") }), "--agent="+name[1:])
+		if folder, found := v.namedFolder(name[1:]); found {
+			dir, where = folder, showPath("", v.info.Home, folder)
+		} else {
+			flags = append(slices.DeleteFunc(flags, func(f string) bool { return strings.HasPrefix(f, "--agent=") }), "--agent="+name[1:])
+		}
 		prompt = strings.TrimSpace(rest)
 	}
 	if len([]rune(prompt)) < minDispatch {
 		v.say("Too short: a prompt of %d characters or more starts a run.", minDispatch)
 		return
 	}
-	dir, where := v.dispatchFolder()
 	v.box.Reset()
 	v.starting++
 	v.say("Starting a run in %s …", where)
@@ -859,7 +865,7 @@ func (v *agentView) dispatch(prompt string) {
 			v.refresh()
 			v.sel = id
 			v.keepChoice()
-			v.say("Started %s: Enter watches it.", runShortOf(id))
+			v.say("Started %s in %s: Enter watches it.", runShortOf(id), where)
 		}
 	})
 }
@@ -974,6 +980,32 @@ func (v *agentView) dispatchFolder() (dir, shown string) {
 		return r.Cwd, runFolder(r)
 	}
 	return "", v.folder()
+}
+
+// namedFolder is the folder "@name" names when no kind of agent has that
+// name (Claude Code's agent wins over a same-named repo): a git
+// repository one level below the view's folder, or else the one folder
+// listed runs work in whose last part is name.
+func (v *agentView) namedFolder(name string) (string, bool) {
+	if slices.Contains(v.info.Kinds, name) {
+		return "", false
+	}
+	for _, repo := range v.info.Repos {
+		if filepath.Base(repo) == name {
+			return repo, true
+		}
+	}
+	found := ""
+	for _, r := range v.runs {
+		if r.Cwd == "" || filepath.Base(r.Cwd) != name || r.Cwd == found {
+			continue
+		}
+		if found != "" {
+			return "", false // (two such folders: not one named)
+		}
+		found = r.Cwd
+	}
+	return found, found != ""
 }
 
 // folder is where a run started from the view works, the short way.
@@ -1375,7 +1407,7 @@ func (v *agentView) helpLines(width int) []string {
 		{"Ctrl+F", "find runs by name (n:)"},
 		{"Space", "peek at it, or stop peeking"},
 		{"Enter, →", "watch a working run as it goes; open one that is over (gnosh -r)"},
-		{"a prompt and Enter", "start a run on it in " + v.folder() + "; @name first runs it as that kind of agent"},
+		{"a prompt and Enter", "start a run on it in " + v.folder() + "; @name first runs it as that kind of agent, or in that folder"},
 		{"/model, /effort", "what the runs started from here are given (default puts it back); /exit leaves"},
 		{"/stop", "stop the run chosen, as Ctrl+X does"},
 		{"n:<text> s:<state> o:<text>", "list only the runs whose name or prompt, state, or answer has it"},

@@ -44,7 +44,8 @@ Built:
   peeking at a working one reach it between its steps, or send one that
   is over back to work on them (`gnosh --bg -r <session> "go on"` does
   that from a shell); in its box `/model` and `/effort` set what the runs
-  it starts get, and `@name` first starts one as that kind of agent; a
+  it starts get, and `@name` first starts one as that kind of agent, or
+  in that folder (a git repo below the view's, or one runs work in); a
   run that ended with an error, or was killed, is marked failed (✗) and
   says how it ended; in a session, ← twice in the empty prompt box opens
   the same view over it (the status line counts the runs that wait on

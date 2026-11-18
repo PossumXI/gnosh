@@ -250,3 +250,29 @@ func TestAttach(t *testing.T) {
 	r = run(t, w, "attach", "nosuch").wantCode(t, 1)
 	has(t, "gnosh attach of no run", r.err, "no session ran in the background under the ID nosuch")
 }
+
+// The view's @<repo> knows the git repositories one level below its
+// folder: those that hold a .git (a folder, or a work tree's file), not a
+// folder without one, nor a hidden one.
+func TestAgentRepos(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range []string{"api/.git", "web/.git", "notes", ".cache/.git", "deep/x/.git"} {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "tree"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tree", ".git"), []byte("gitdir: /elsewhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := agentRepos(dir)
+	want := []string{filepath.Join(dir, "api"), filepath.Join(dir, "tree"), filepath.Join(dir, "web")}
+	if !slices.Equal(got, want) {
+		t.Errorf("agentRepos: %q, want %q", got, want)
+	}
+	if got := agentRepos(filepath.Join(dir, "nope")); got != nil {
+		t.Errorf("of a folder that is not there: %q", got)
+	}
+}

@@ -330,7 +330,7 @@ func TestAgentViewDispatch(t *testing.T) {
 		t.Fatalf("the run was not started: %q", g.src.dispatched)
 	}
 	if body[0] != "gnosh agents · 3 working · 2 completed" || !strings.HasPrefix(row(body, "tidy the README"), "> ✽ tidy the README") ||
-		live[len(live)-1] != "Started 01a1eea5-9999: Enter watches it." {
+		live[len(live)-1] != "Started 01a1eea5-9999 in ~/src/app: Enter watches it." {
 		t.Errorf("after the start:\n%s\n%s", strings.Join(body, "\n"), strings.Join(live, "\n"))
 	}
 	g.v.flags = []string{"--permission-mode=acceptEdits"}
@@ -738,6 +738,28 @@ func TestAgentViewStopCommandAndPlaceholder(t *testing.T) {
 	all := strings.Join(body, "\n")
 	if !strings.Contains(text.Strip(all), "  (it printed nothing)") || strings.Contains(all, "^[") {
 		t.Errorf("the peek of a run that printed nothing:\n%q", all)
+	}
+}
+
+// "@name prompt" starts the run in the folder named, as Claude Code's
+// @<repo>: a git repository one level below the view's folder, or the one
+// folder listed runs work in with that name. A kind of agent of that name
+// wins, and a name that is neither is taken for a kind, as before.
+func TestAgentViewDispatchesToAFolder(t *testing.T) {
+	g := newAgentRig(t)
+	g.v.info.Kinds = []string{"reviewer", "lib"}
+	g.v.info.Repos = []string{"/home/jae/src/app/api"}
+	g.keys(`<Paste "@api add the endpoint"> <Enter>`)
+	g.keys(`<Paste "@src look around"> <Enter>`)
+	g.keys(`<Paste "@lib fix the flaky one"> <Enter>`)
+	g.v.info.Kinds = nil
+	g.keys(`<Paste "@lib fix the flaky one"> <Enter>`)
+	want := []string{"in /home/jae/src/app/api add the endpoint", "--agent=src look around", "--agent=lib fix the flaky one", "in /home/jae/src/lib fix the flaky one"}
+	if !slices.Equal(g.src.dispatched, want) {
+		t.Errorf("dispatched %q, want %q", g.src.dispatched, want)
+	}
+	if !strings.Contains(g.v.said, "~/src/lib") {
+		t.Errorf("it says %q", g.v.said)
 	}
 }
 
