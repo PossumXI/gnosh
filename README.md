@@ -46,7 +46,9 @@ Built:
   that from a shell); in its box `/model` and `/effort` set what the runs
   it starts get, and `@name` first starts one as that kind of agent; a
   run that ended with an error, or was killed, is marked failed (✗) and
-  says how it ended; `gnosh attach <session>` opens the view on one, `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  says how it ended; in a session, ← twice in the empty prompt box opens
+  the same view over it (the status line counts the runs that wait on
+  you with a ←), and Esc comes back; `gnosh attach <session>` opens the view on one, `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small

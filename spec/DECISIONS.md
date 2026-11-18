@@ -2081,3 +2081,25 @@ or kept with the reason said (27).
     their logs age out of the week. The peek's question lines now wrap
     instead of being cut at the screen's edge (a box check showed "Why
     gnosh asks" cut at 120 columns).
+
+129. **← twice in a session's empty box opens the agent view over it.**
+    Claude Code's ← on an empty prompt backgrounds the session and opens
+    its agent view on the session's row; the first press says "Press ←
+    again". gnosh takes the same two presses (within two seconds; another
+    key between them starts over) and opens the view over the session
+    instead of sending it away: gnosh's background is a run of its own
+    (/background), and the session that opened the view is the one the
+    person comes back to with Esc. The session goes on underneath as it
+    does under the transcript view (Ctrl+O): what it says meanwhile is
+    held and goes into the scrollback when the view closes, and a
+    question of its own closes the view so that it is seen. In the view
+    everything works as in gnosh agents (the runs of every folder, peek,
+    answers, words, Ctrl+X, dispatch), except Enter on a run that is
+    over: that opens its session in place of this one (/resume <id>,
+    which keeps this one and refuses while a turn runs), not a gnosh -r
+    inside gnosh. The view is the same model (agentView) drawn by the
+    session's loop (agentsover.go; agentScreen is shared with gnosh
+    agents' own loop); its notes go by the person's channel, and the
+    terminal's title is left to the session. The status line's count of
+    runs that wait on the person reads "← 1 run needs input", as Claude
+    Code's footer reads "← 2 agents".

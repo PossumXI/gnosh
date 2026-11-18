@@ -779,8 +779,14 @@ func (s *session) statusLine(width int) string {
 	}
 	if v := oneLine(s.facts["agents"]); v != "" {
 		// Runs in the background that wait on the person, as Claude
-		// Code's footer counts them: gnosh agents answers them.
-		segs = append(segs, segment{v + ": gnosh agents", th.Status, 66})
+		// Code's footer counts them ("← 2 agents"): ← in the empty box
+		// opens the agent view that answers them, or gnosh agents does.
+		if s.agentsOffered() {
+			v = "← " + v
+		} else {
+			v += ": gnosh agents"
+		}
+		segs = append(segs, segment{v, th.Status, 66})
 	}
 	if delivered, pending := app.CountDeliverables(s.deliv); delivered+pending > 0 {
 		// What the agent has handed over and what it has promised, which

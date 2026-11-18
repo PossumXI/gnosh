@@ -188,6 +188,10 @@ type session struct {
 	inline *term.Renderer
 	panel  *term.Panel
 	view   *transcriptView
+	// agents is the agent view while it is open over the session, and
+	// leftAt when ← was pressed in the empty box (agentsover.go).
+	agents *agentsOverlay
+	leftAt time.Time
 	// changed are the files the session's calls changed, the newest
 	// first, for the panel.
 	changed []changedFile
@@ -570,6 +574,11 @@ func (s *session) frame() {
 		s.keep(s.r.Commit(s.pending...))
 		s.pending = s.pending[:0]
 	}
+	if s.agents != nil {
+		s.agentsFrame()
+		s.dirty = false
+		return
+	}
 	if s.view != nil {
 		s.viewFrame()
 		s.dirty = false
@@ -605,6 +614,15 @@ func (s *session) resize(cols, rows int) {
 	s.termCols, s.rows = cols, rows
 	if r, ok := s.c.(resizeTeller); ok {
 		r.Resized()
+	}
+	if o := s.agents; o != nil {
+		// The agent view is laid out again for the new size, as the
+		// transcript view is.
+		s.keep(o.scr.p.Resize(cols, rows))
+		o.scr.drawn = nil
+		s.relayout(cols)
+		s.dirty = true
+		return
 	}
 	if s.view != nil {
 		// The view is laid out again for the new size; what the session
@@ -670,6 +688,11 @@ func (s *session) tick() {
 		// Something on the screen counts seconds.
 		s.dirty = true
 	}
+	if s.agents != nil {
+		// The agent view counts seconds, and looks at the runs again.
+		s.agents.v.tick()
+		s.dirty = true
+	}
 	if s.busy && now.Sub(s.heard) > 3*time.Second {
 		// Nothing may look busy with nothing in flight. The session
 		// tells of going idle with an event; should that ever fail to
@@ -707,6 +730,9 @@ func (s *session) wake() time.Time {
 	}
 	if s.busy || s.cmdRun != "" || s.q != nil || s.ed.Hint() != editor.HintNone {
 		soon(now.Add(time.Second).Truncate(time.Second))
+	}
+	if s.agents != nil {
+		soon(now.Add(agentsLook))
 	}
 	if (s.busy || s.cmdRun != "") && s.q == nil && s.th.Fall.moves() {
 		// The drops of the working mark fall on: the deeper the thought,

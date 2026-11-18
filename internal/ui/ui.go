@@ -517,6 +517,10 @@ func (u *UI) shut() {
 		_, _ = u.s.view.p.Close()
 		u.s.view = nil
 	}
+	if u.s != nil && u.s.agents != nil {
+		_, _ = u.s.agents.scr.p.Close()
+		u.s.agents = nil
+	}
 	if u.s != nil && u.s.panel != nil {
 		_, _ = u.s.panel.Close()
 		u.s.panel = nil

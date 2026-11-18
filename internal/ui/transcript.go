@@ -115,8 +115,10 @@ func (s *session) openView() {
 }
 
 // closeView gives the screen back, and writes what the session said
-// meanwhile into the scrollback, where it would have been.
+// meanwhile into the scrollback, where it would have been. The agent view,
+// when it is open over the session, closes too.
 func (s *session) closeView() {
+	s.closeAgents()
 	v := s.view
 	if v == nil {
 		return

@@ -140,6 +140,10 @@ func (s *session) input(ev term.Event) {
 		if s.view != nil {
 			s.keep(s.view.p.Clear())
 		}
+		if o := s.agents; o != nil {
+			o.scr.drawn = nil
+			s.keep(o.scr.p.Clear())
+		}
 		s.dirty = true
 	case term.Key, term.Mouse, term.Paste:
 		if k, ok := ev.(term.Key); ok && s.rebound(k) {
@@ -147,6 +151,12 @@ func (s *session) input(ev term.Event) {
 		}
 		if _, key := ev.(term.Key); !key {
 			s.dropHeldKey()
+		}
+		if s.agents != nil {
+			// The agent view takes every key, and pastes, while it is
+			// open.
+			s.agentsInput(ev)
+			return
 		}
 		if s.view != nil {
 			// The transcript view takes every key while it is open.
@@ -237,6 +247,27 @@ func (s *session) typed(ev term.Event, k *term.Key) {
 	s.closeQuestion()
 }
 
+// suspendNow stops the process, as Ctrl+Z does to any program: the shell
+// has the screen while gnosh is stopped. When it is continued the live
+// region is drawn afresh, at the cursor. The side panel gives the screen
+// back first, and comes back after.
+func (s *session) suspendNow() {
+	panel := s.panel != nil
+	s.closePanel()
+	s.frame()
+	s.keep(s.r.Clear())
+	if err := s.host.suspend(); err != nil {
+		// Nothing was stopped, and nothing else has written to the
+		// terminal: the region is drawn again where it was.
+		s.flash("Ctrl+Z: " + err.Error() + ".")
+	} else {
+		s.r.Reset()
+	}
+	if panel {
+		s.openPanel()
+	}
+}
+
 // global carries out the keys that are the session's own in every state,
 // and reports whether k was one.
 func (s *session) global(k term.Key) bool {
@@ -249,23 +280,7 @@ func (s *session) global(k term.Key) bool {
 		}
 		s.keep(s.r.Clear())
 	case k.Is('z', term.ModCtrl):
-		// The shell has the screen while gnosh is stopped. When it is
-		// continued the live region is drawn afresh, at the cursor. The
-		// side panel gives the screen back first, and comes back after.
-		panel := s.panel != nil
-		s.closePanel()
-		s.frame()
-		s.keep(s.r.Clear())
-		if err := s.host.suspend(); err != nil {
-			// Nothing was stopped, and nothing else has written to the
-			// terminal: the region is drawn again where it was.
-			s.flash("Ctrl+Z: " + err.Error() + ".")
-		} else {
-			s.r.Reset()
-		}
-		if panel {
-			s.openPanel()
-		}
+		s.suspendNow()
 	case s.panel != nil && k.IsKey(term.KeyPageUp, 0):
 		s.scrollPanel(s.panel.Page())
 	case s.panel != nil && k.IsKey(term.KeyPageDown, 0):
@@ -348,8 +363,16 @@ func (s *session) box(ev term.Event, k *term.Key) {
 			return
 		}
 	}
+	if k != nil && !k.IsKey(term.KeyLeft, 0) {
+		s.leftAt = time.Time{}
+	}
 	if k != nil {
 		switch {
+		case !s.chord && k.IsKey(term.KeyLeft, 0) && s.ed.IsEmpty() && s.agentsOffered():
+			// ← in the empty box, twice, opens the agent view, as it
+			// does in Claude Code (agentsover.go).
+			s.leftKey()
+			return
 		case s.chord:
 			// The key after Ctrl+X.
 			s.chord = false

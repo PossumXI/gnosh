@@ -284,7 +284,8 @@ func (s *session) keysNow() {
 // whether it did: the action's own keys go to where they are taken, past
 // the bindings, and a key taken away does nothing.
 func (s *session) rebound(k term.Key) bool {
-	if s.q != nil {
+	if s.q != nil || s.agents != nil {
+		// (The agent view's keys are its own.)
 		return false
 	}
 	s.keysNow()
@@ -354,6 +355,10 @@ func (s *session) dropHeldKey() {
 
 // passKey hands a key on past the bindings, to where it is taken.
 func (s *session) passKey(k term.Key) {
+	if s.agents != nil {
+		s.agentsInput(k)
+		return
+	}
 	if s.view != nil {
 		s.viewInput(k)
 	} else {
@@ -376,11 +381,11 @@ func (s *session) doKeyAction(action string) {
 	case action == "":
 		// Taken away.
 	case action == "chat:clearInput":
-		if s.view == nil {
+		if s.view == nil && s.agents == nil {
 			s.ed.Clear()
 		}
 	case command:
-		if s.view == nil {
+		if s.view == nil && s.agents == nil {
 			s.command(editor.Draft{Text: "/" + name})
 		}
 	default:

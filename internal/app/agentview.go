@@ -514,6 +514,24 @@ func (l *live) watchAgents() {
 	}()
 }
 
+// AgentView is the agent view of gnosh agents, of the runs of every
+// folder, for ← in a session's empty box to open over the session, as
+// Claude Code's ← opens its agent view from a session.
+func (c *controls) AgentView() (AgentViewInfo, error) { return c.cur().agentView() }
+
+// agentView is controls.AgentView.
+func (l *live) agentView() (AgentViewInfo, error) {
+	if l.store == nil {
+		return AgentViewInfo{}, errors.New("this session keeps no sessions (--no-session-persistence), so it has no runs in the background to show")
+	}
+	cwd, home := l.cfg.Paths.Cwd, l.cfg.Paths.Home
+	return AgentViewInfo{
+		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home},
+		Cwd:    cwd, Home: home,
+		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
+	}, nil
+}
+
 // waitingRuns says how many of runs wait on the person: "" for none, "1
 // run needs input", "2 runs need input".
 func waitingRuns(runs []backgroundRun) string {

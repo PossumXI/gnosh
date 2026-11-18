@@ -1483,42 +1483,7 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 	if info.Focus != "" {
 		v.focusOn(info.Focus)
 	}
-	watched := ""
-	// drawn is what the screen's rows from the top show: a long
-	// conversation watched is laid into the screen again only when it
-	// changed.
-	var drawn []string
-	draw := func() {
-		cols, rows := p.Size()
-		body, live, crow, ccol := v.render(cols, rows)
-		w := v.watch
-		switch {
-		case w == nil && watched != "":
-			watched, drawn = "", nil
-			p.Scroll(-1 << 30)
-		case w != nil && watched != w.id:
-			watched, w.end, drawn = w.id, true, nil
-		}
-		if drawn != nil && slices.Equal(body, drawn) {
-			_ = p.SetLive(live, crow, ccol)
-		} else {
-			drawn = body
-			_ = p.SetView(body, live, crow, ccol)
-		}
-		if w == nil {
-			return
-		}
-		if w.start {
-			p.ScrollTo(0)
-		}
-		if n := w.rows + w.pages*p.Page(); n != 0 {
-			p.Scroll(n)
-		}
-		if w.end {
-			p.Scroll(-1 << 30)
-		}
-		w.rows, w.pages, w.start, w.end = 0, 0, false, false
-	}
+	scr := &agentScreen{p: p}
 	for _, ev := range ahead {
 		v.input(ev)
 	}
@@ -1554,7 +1519,7 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 			v.clear = false
 			_ = p.Clear()
 		}
-		draw()
+		_ = scr.draw(v)
 		tell()
 		select {
 		case ev, ok := <-events:
@@ -1564,7 +1529,7 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 			switch ev := ev.(type) {
 			case term.Resize:
 				_ = p.Resize(ev.Cols, ev.Rows)
-				drawn = nil
+				scr.drawn = nil
 			case term.Resume:
 				_ = t.SetModes(modes)
 				_ = p.Clear()
@@ -1591,7 +1556,7 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
 				return 1
 			}
-			watched, drawn = "", nil
+			scr = &agentScreen{p: p}
 		}
 		if v.open != "" {
 			id := v.open
@@ -1604,7 +1569,7 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
 				return 1
 			}
-			watched, drawn = "", nil
+			scr = &agentScreen{p: p}
 			if err != nil {
 				v.say("gnosh -r %s: %v.", runShortOf(id), err)
 			}
