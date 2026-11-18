@@ -512,6 +512,7 @@ func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, fo
 // it under the session's lock, so a prompt is never both folded in and
 // taken back.
 func (a *Agent) foldQueued(ctx context.Context, t *turn) error {
+	a.waitAdmitting(ctx)
 	a.mu.Lock()
 	var take []*submission
 	keep := a.queue[:0:0]
@@ -531,6 +532,29 @@ func (a *Agent) foldQueued(ctx context.Context, t *turn) error {
 	a.mu.Unlock()
 	a.emitQueue()
 	return a.sendPrompts(ctx, t, take, true)
+}
+
+// admitWait is how long the boundary between two rounds waits for a
+// prompt the person sent that is still being taken in.
+const admitWait = 3 * time.Second
+
+// waitAdmitting waits, up to admitWait, for what was sent and is still
+// being taken in (its hooks run, it is written down) to reach the queue,
+// so that a prompt the person sent before the round ended goes with the
+// next request rather than a turn of its own: sending at once moves the
+// commands aside and ends the round at once, while the prompt may still
+// be on its way (on a busy machine, writing it down takes a while).
+func (a *Agent) waitAdmitting(ctx context.Context) {
+	deadline := time.Now().Add(admitWait)
+	for ctx.Err() == nil && time.Now().Before(deadline) {
+		a.mu.Lock()
+		pending := slices.ContainsFunc(a.intake, func(s *submission) bool { return !s.taken && !s.prompt.Later })
+		a.mu.Unlock()
+		if !pending {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // ownPrompt sends the model a prompt of gnosh's own in the middle of a
