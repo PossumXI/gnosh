@@ -206,6 +206,9 @@ type Note struct {
 	// that the model reacts to it at once. Without it a note waits for
 	// the next request.
 	Wake bool
+	// recorded marks a note Record put in while a turn ran: when no
+	// request takes it, it is written to the log as the turn ends.
+	recorded bool
 }
 
 // QueuedPrompt is a prompt that waits for its turn.

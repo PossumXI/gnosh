@@ -1620,3 +1620,24 @@ or kept with the reason said (27).
     Go code in a here-document hard to read); every other control
     character is still escaped. Found in a box check, where Qwen asked to
     run a Go program it wrote in a here-document.
+
+104. **What a review of 99 to 103 changed.** A reopened session counts as
+    having sent a prompt only when its file holds a reply, a prompt, a
+    turn's end or a summary: a command's output written between turns
+    (Record) is not one, and the first prompt still carries the
+    instruction files and what else a first prompt carries. A note Record
+    keeps while a turn runs and no request of that turn takes is written
+    as the turn ends, and when the session ends. Any key, paste or mouse
+    event, the transcript view's keys and the return from Ctrl+Z count as
+    the person being there, for a question's time without them. The
+    skills of a typed line are first all made and their commands all
+    checked against the rules, each under its own allowed-tools alone,
+    and none run; a skill that cannot be run stops the line with nothing
+    of any run or left in force; then the commands run, each skill's
+    under its own grant, and only then do the line's grants, thinking
+    levels, hooks and records come in. The permission question puts the
+    prompt mark on every line where the shell starts a command (quotes,
+    here-strings and shifts inside $(( )) are followed, so a << there
+    opens no document), and sets under it only a here-document's text, a
+    line that goes on, and what stands inside quotes across lines (this
+    corrects 103, which set every line after the first under it).

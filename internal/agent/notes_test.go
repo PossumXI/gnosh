@@ -324,6 +324,57 @@ func TestRecord(t *testing.T) {
 	r.checkLog()
 }
 
+// A note recorded while a turn writes its last reply, which no request of
+// that turn takes, is written to the log as the turn ends, between turns:
+// before the next prompt, and kept when the session ends before one.
+func TestRecordWhileTheLastReplyIsWritten(t *testing.T) {
+	r := newRig(t, nil)
+	reached, release := make(chan struct{}), make(chan struct{})
+	last := say("all done")
+	last.at, last.wait = once(reached), release
+	r.model.push(last)
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("finish up") }()
+	<-reached
+	if err := r.a.Record(Note{Text: "<note>$ late\nok</note>", Source: "shell"}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	r.idle()
+	stored := r.log.of(EntryNote)
+	if len(stored) != 1 || stored[0].Turn != "" || r.a.State().Notes != 0 {
+		t.Fatalf("note entries = %+v, %d waiting", stored, r.a.State().Notes)
+	}
+	r.model.push(say("it printed ok"))
+	r.run("what did it print?")
+	if got, want := userBlocks(r.model.requests()[1]), []string{"<note>$ late\nok</note>", "what did it print?"}; !slices.Equal(got[len(got)-2:], want) {
+		t.Errorf("the model was sent %q, ending with %q", got, want)
+	}
+
+	// Recorded during a turn that the session's end stops: in the log.
+	r2 := newRig(t, nil)
+	reached2 := make(chan struct{})
+	r2.model.push(step{at: once(reached2), stall: true})
+	go func() { _ = r2.run("long work") }()
+	<-reached2
+	if err := r2.a.Record(Note{Text: "<note>$ kept\nok</note>", Source: "shell"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r2.a.End("prompt_input_exit"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range r2.log.of(EntryNote) {
+		found = found || slices.ContainsFunc(e.Blocks, func(b core.Block) bool { return strings.Contains(b.Text, "$ kept") })
+	}
+	if !found {
+		t.Errorf("the note recorded before the end was lost: %+v", r2.log.of(EntryNote))
+	}
+}
+
 // A note that is to wake the session starts a turn in an idle one. When
 // the person stops that turn before the note went out, the note is kept
 // and waits like any other.

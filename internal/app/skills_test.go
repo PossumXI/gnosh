@@ -139,6 +139,33 @@ func TestBlockedSkillIsSentWholeNextTime(t *testing.T) {
 	}
 }
 
+// Each stacked skill's commands are checked under the person's rules and
+// its own allowed-tools alone, as when it is typed by itself, and every
+// skill's are checked before any runs: a skill whose command is not let
+// run stops the line with nothing of the others run, and one skill's
+// grant never lets another's command run.
+func TestStackedSkillsCommandsUnderTheirOwnRules(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Did a."})
+	w.Write(w.ConfigDir()+"/skills/a/SKILL.md", "---\ndescription: A.\nallowed-tools: Bash(touch ran-a), Bash(touch ran-b)\n---\n!`touch ran-a`\nDo a.\n")
+	w.Write(w.ConfigDir()+"/skills/b/SKILL.md", "---\ndescription: B.\n---\n!`touch ran-b`\nDo b.\n")
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/a /b go")
+	s.see(`Shell command permission check failed for pattern "touch ran-b"`)
+	if w.Exists("ran-a") || w.Exists("ran-b") {
+		t.Fatalf("a command ran in a line that was stopped: ran-a %v, ran-b %v", w.Exists("ran-a"), w.Exists("ran-b"))
+	}
+	s.typeLine("/a go")
+	s.see("Did a.")
+	if !w.Exists("ran-a") {
+		t.Error("/a alone did not run its command")
+	}
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+}
+
 // As the prompt of a run, a skill's name runs the skill, and the run is
 // the model's answer to it. A name that is no skill and no command is a
 // prompt like any other.

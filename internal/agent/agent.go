@@ -1023,12 +1023,16 @@ func (a *Agent) Record(n Note) error {
 	if (Prompt{Text: n.Text}).blank() {
 		return ErrBlank
 	}
+	n.Wake = false
 	a.mu.Lock()
 	if a.closing {
 		a.mu.Unlock()
 		return ErrClosed
 	}
 	if a.busy {
+		// The turn's next request takes it; one that makes none leaves it
+		// to be written when the turn ends (leaveBusy), or the session.
+		n.recorded = true
 		a.notes = append(a.notes, n)
 		a.mu.Unlock()
 		return nil
@@ -1036,16 +1040,55 @@ func (a *Agent) Record(n Note) error {
 	a.mu.Unlock()
 	// (A prompt sent in between may be written first; the note then
 	// waits in the log for that turn's request, which reads it.)
+	if err := a.writeNote(n); err != nil {
+		return a.Tell(n)
+	}
+	return nil
+}
+
+// writeNote writes a note to the log as an entry of its own, between
+// turns, and says so.
+func (a *Agent) writeNote(n Note) error {
 	entry := Entry{Kind: EntryNote, Source: firstNonEmpty(n.Source, "note"), Blocks: []core.Block{core.Text(n.Text)}}
 	if err := a.appendLog(entry); err != nil {
-		n.Wake = false
-		return a.Tell(n)
+		return err
 	}
 	a.emit(&NoteEvent{Note: n})
 	if n.Notice != "" {
 		a.notice(LevelInfo, firstNonEmpty(n.Source, "note"), n.Notice)
 	}
 	return nil
+}
+
+// takeRecordedLocked takes out of the notes that wait the ones Record put
+// there while a turn ran. The caller holds a.mu.
+func (a *Agent) takeRecordedLocked() []Note {
+	var keep, took []Note
+	for _, n := range a.notes {
+		if n.recorded {
+			took = append(took, n)
+		} else {
+			keep = append(keep, n)
+		}
+	}
+	if len(took) > 0 {
+		a.notes = keep
+	}
+	return took
+}
+
+// writeRecorded writes the notes Record left while a turn ran that no
+// request took, now that the turn is over; one that cannot be written
+// waits for the next request, as a told one does.
+func (a *Agent) writeRecorded(notes []Note) {
+	for _, n := range notes {
+		if a.writeNote(n) != nil {
+			n.recorded = false
+			a.mu.Lock()
+			a.notes = append(a.notes, n)
+			a.mu.Unlock()
+		}
+	}
 }
 
 // Submit hands a prompt to the session and returns its id at once. The
@@ -1374,7 +1417,12 @@ func (a *Agent) End(reason string) error {
 		left := append(slices.Clone(a.queue), a.intake...)
 		a.queue, a.intake = nil, nil
 		had := a.sent
+		recorded := a.takeRecordedLocked()
 		a.mu.Unlock()
+		// (What Record kept for a request that never came is in the log.)
+		for _, n := range recorded {
+			_ = a.writeNote(n)
+		}
 		for _, s := range left {
 			a.emit(&PromptReturnedEvent{ID: s.id, Prompt: s.prompt, Why: ReturnClosed, Reason: "the session was closed before this prompt went out"})
 			s.resolve(TurnResult{Prompts: []string{s.id}, Reason: EndWithdrawn, Detail: "the session was closed before the prompt went out"})

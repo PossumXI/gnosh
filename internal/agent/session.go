@@ -150,14 +150,17 @@ func (a *Agent) leaveBusy(release func()) {
 	a.setPhase(PhaseIdle, "")
 	a.emit(&IdleEvent{})
 	a.mu.Lock()
+	var recorded []Note
 	if a.closing || !a.workLocked() {
 		a.busy = false
 		if a.idle != nil {
 			close(a.idle)
 			a.idle = nil
 		}
+		recorded = a.takeRecordedLocked()
 	}
 	a.mu.Unlock()
+	a.writeRecorded(recorded)
 }
 
 // step does the next thing there is to do, and reports false when there is
@@ -571,8 +574,27 @@ func (a *Agent) settle() error {
 		})
 	}
 
+	// A prompt went out before when the log holds a reply, a prompt, a
+	// turn's end or a summary. Notes alone, written between turns (Record),
+	// are not one: the first prompt still carries what a first prompt does.
+	before := false
+	for _, m := range v.Messages {
+		if m.Role == core.RoleAssistant {
+			before = true
+			break
+		}
+	}
+	for _, e := range tail {
+		if before {
+			break
+		}
+		switch e.Kind {
+		case EntryPrompt, EntryAssistant, EntryTurn, EntrySummary:
+			before = true
+		}
+	}
 	a.mu.Lock()
-	a.sent = a.sent || len(v.Messages) > 0
+	a.sent = a.sent || before
 	a.mu.Unlock()
 	a.settled = true
 	return nil

@@ -39,6 +39,19 @@ const (
 // injectCommands runs the commands a skill's text asks for and puts what
 // each printed in its place.
 func (l *live) injectCommands(sk skill.Skill, text string) (string, error) {
+	return l.inject(text, true)
+}
+
+// checkCommands checks every command a skill's text asks for against the
+// rules, as injectCommands does before it runs one, and runs none: a typed
+// line of several skills checks all of theirs before any runs.
+func (l *live) checkCommands(text string) error {
+	_, err := l.inject(text, false)
+	return err
+}
+
+// inject is injectCommands, and with run false checkCommands.
+func (l *live) inject(text string, run bool) (string, error) {
 	lines := strings.Split(text, "\n")
 	var out []string
 	for i := 0; i < len(lines); i++ {
@@ -50,7 +63,7 @@ func (l *live) injectCommands(sk skill.Skill, text string) (string, error) {
 			if j >= len(lines) {
 				return "", fmt.Errorf("the block of commands that begins on line %d of the skill's text is not closed with ```", i+1)
 			}
-			got, err := l.injectOne(strings.Join(lines[i+1:j], "\n"))
+			got, err := l.injectOne(strings.Join(lines[i+1:j], "\n"), run)
 			if err != nil {
 				return "", err
 			}
@@ -68,7 +81,7 @@ func (l *live) injectCommands(sk skill.Skill, text string) (string, error) {
 			if end < 0 {
 				break
 			}
-			got, err := l.injectOne(line[k+2 : k+2+end])
+			got, err := l.injectOne(line[k+2:k+2+end], run)
 			if err != nil {
 				return "", err
 			}
@@ -84,8 +97,8 @@ func (l *live) injectCommands(sk skill.Skill, text string) (string, error) {
 }
 
 // injectOne checks one command against the rules, as a call of the Bash
-// tool, runs it, and returns what it printed.
-func (l *live) injectOne(command string) (string, error) {
+// tool, runs it when run is set, and returns what it printed.
+func (l *live) injectOne(command string, run bool) (string, error) {
 	pattern := oneLine(command, 200)
 	refused := func(why string) error {
 		return fmt.Errorf("Shell command permission check failed for pattern %q: %s", pattern, why)
@@ -120,6 +133,9 @@ func (l *live) injectOne(command string) (string, error) {
 	}
 	if d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action)); d.Behavior != permission.Allow {
 		return "", refused(firstOf(strings.TrimRight(d.Reason, "."), "no rule lets it run") + ". A skill's commands never ask: its allowed-tools can let them run")
+	}
+	if !run {
+		return "", nil
 	}
 	out, code, err := l.runInjected(command, cwd)
 	if err == nil && code != 0 && (code != 1 || shelltool.HarmlessExit(command) == "") {

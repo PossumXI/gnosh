@@ -122,6 +122,14 @@ var commandWord = regexp.MustCompile(`^/[a-z][a-z0-9_-]*$`)
 
 // input takes in one thing the terminal reported.
 func (s *session) input(ev term.Event) {
+	switch ev.(type) {
+	case term.Key, term.Mouse, term.Paste, term.Resume:
+		// The person is here, in the transcript view, at the side panel's
+		// wheel or back from Ctrl+Z as well as at the box: the time without
+		// them (a question's time to close by itself, the note for one who
+		// is away) starts again.
+		s.lastInput = s.now()
+	}
 	switch ev := ev.(type) {
 	case term.Resize:
 		s.resize(ev.Cols, ev.Rows)
@@ -173,7 +181,9 @@ func (s *session) typedOrMouse(ev term.Event) {
 // typed takes in a key or a paste. k is the key, or nil for a paste.
 func (s *session) typed(ev term.Event, k *term.Key) {
 	now := s.now()
-	defer func() { s.lastInput = now }()
+	// (Taken when the key is done with: Ctrl+Z comes back here only once
+	// the shell has given the terminal back.)
+	defer func() { s.lastInput = s.now() }()
 	s.dirty = true
 	if k != nil && s.global(*k) {
 		return

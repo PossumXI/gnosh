@@ -434,17 +434,74 @@ func unbuiltSkill(sk skill.Skill) string {
 // loadSkill makes a skill ready for the conversation: its text with the
 // arguments put in, and the permission rules it carries put in force
 // until the person's next prompt. again says the same text is already in
-// the conversation. refusal says why it was not loaded.
+// the conversation. refusal says why it was not loaded. It is the three
+// steps below in a row, which a typed line takes one at a time.
 func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, refusal string) {
-	if len(sk.Unbuilt) > 0 {
-		return "", false, unbuiltSkill(sk)
+	if text, refusal = l.prepareSkill(sk, args); refusal != "" {
+		return "", false, refusal
 	}
+	if text, refusal = l.runSkillCommands(sk, text); refusal != "" {
+		return "", false, refusal
+	}
+	if refusal = l.commitSkill(sk); refusal != "" {
+		return "", false, refusal
+	}
+	if sk.Fork {
+		// (A forked skill's text is a sub-agent's task: it never enters
+		// this conversation, and is not given back after a summary.)
+		return text, false, ""
+	}
+	return text, l.recordSkillRun(sk.Name, text), ""
+}
+
+// prepareSkill makes a skill's text with its arguments put in, puts its
+// permission rules in force (addSkillGrant), and checks the commands its
+// text runs before the model sees it against those rules, running none
+// (inject.go). Nothing else of it is in force yet: runSkillCommands runs
+// the commands, and commitSkill puts the rest in.
+func (l *live) prepareSkill(sk skill.Skill, args string) (text, refusal string) {
+	if len(sk.Unbuilt) > 0 {
+		return "", unbuiltSkill(sk)
+	}
+	text = sk.Render(args, l.skillVars(sk))
+	if refusal := l.addSkillGrant(sk); refusal != "" {
+		return "", refusal
+	}
+	if err := l.checkCommands(text); err != nil {
+		return "", err.Error()
+	}
+	return text, ""
+}
+
+// runSkillCommands runs the commands a prepared skill's text asks for,
+// under the rules in force, and puts what each printed in its place.
+func (l *live) runSkillCommands(sk skill.Skill, text string) (string, string) {
+	injected, err := l.injectCommands(sk, text)
+	if err != nil {
+		return "", err.Error()
+	}
+	return injected, ""
+}
+
+// skillVars are what a skill's text and rules may name.
+func (l *live) skillVars(sk skill.Skill) skill.Vars {
 	effort := ""
 	if l.agent != nil {
 		effort = l.agent.State().Level
 	}
-	vars := skill.Vars{SessionID: l.ts.ID(), SkillDir: sk.Dir, ProjectDir: l.cfg.Paths.ProjectRoot, Effort: effort}
-	text = sk.Render(args, vars)
+	return skill.Vars{SessionID: l.ts.ID(), SkillDir: sk.Dir, ProjectDir: l.cfg.Paths.ProjectRoot, Effort: effort}
+}
+
+// addSkillGrant puts the permission rules a skill carries in force until
+// the person's next prompt: what it lets run, and what it takes away
+// (disallowed-tools, as rules that refuse: the model's list of tools stays
+// as it is, so that a local server keeps the prompt it has read). It says
+// why it could not, or "".
+func (l *live) addSkillGrant(sk skill.Skill) string {
+	if len(sk.AllowedTools)+len(sk.DisallowedTools) == 0 {
+		return ""
+	}
+	vars := l.skillVars(sk)
 	fill := func(list []string) []string {
 		rules := make([]string, len(list))
 		for i, r := range list {
@@ -453,46 +510,54 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 		}
 		return rules
 	}
-	if len(sk.AllowedTools)+len(sk.DisallowedTools) > 0 {
-		// What it lets run, and what it takes away (disallowed-tools, as
-		// rules that refuse: the model's list of tools stays as it is, so
-		// that a local server keeps the prompt it has read).
-		err := l.engine.AddLayer(permission.Layer{
-			Scope: permission.ScopeSkill, Name: "the skill " + sk.Name + " (" + sk.Source + ")",
-			FromProject: sk.Scope == "project", Allow: fill(sk.AllowedTools), Deny: fill(sk.DisallowedTools),
-		})
-		if err != nil {
-			return "", false, fmt.Sprintf("the permission rules the skill %s carries (allowed-tools or disallowed-tools, in %s) cannot be used: %v. It is not run without them", sk.Name, sk.Source, err)
-		}
+	err := l.engine.AddLayer(permission.Layer{
+		Scope: permission.ScopeSkill, Name: "the skill " + sk.Name + " (" + sk.Source + ")",
+		FromProject: sk.Scope == "project", Allow: fill(sk.AllowedTools), Deny: fill(sk.DisallowedTools),
+	})
+	if err != nil {
+		return fmt.Sprintf("the permission rules the skill %s carries (allowed-tools or disallowed-tools, in %s) cannot be used: %v. It is not run without them", sk.Name, sk.Source, err)
 	}
+	return ""
+}
+
+// commitSkill puts the rest of a prepared skill in force: the thinking
+// level it asks for, until the person's next prompt, and its own hooks,
+// for the session. It says why it could not, or "".
+func (l *live) commitSkill(sk skill.Skill) string {
 	if sk.Effort != "" {
 		l.skillEffort(sk)
 	}
-	if refusal := l.skillHooks(sk); refusal != "" {
-		return "", false, refusal
-	}
-	// The commands its text runs before the model sees it (inject.go).
-	injected, err := l.injectCommands(sk, text)
-	if err != nil {
-		return "", false, err.Error()
-	}
-	text = injected
-	if sk.Fork {
-		// (A forked skill's text is a sub-agent's task: it never enters
-		// this conversation, and is not given back after a summary.)
-		return text, false, ""
-	}
+	return l.skillHooks(sk)
+}
+
+// recordSkillRun notes that a skill's text is in the conversation, and
+// reports whether the same text was there already.
+func (l *live) recordSkillRun(name, text string) (again bool) {
 	l.skillMu.Lock()
 	defer l.skillMu.Unlock()
 	for i, r := range l.skillRuns {
-		if r.name == sk.Name {
+		if r.name == name {
 			again = r.text == text
 			l.skillRuns = append(l.skillRuns[:i], l.skillRuns[i+1:]...)
 			break
 		}
 	}
-	l.skillRuns = append(l.skillRuns, skillRun{sk.Name, text})
-	return text, again, ""
+	l.skillRuns = append(l.skillRuns, skillRun{name, text})
+	return again
+}
+
+// unrecordSkillRun takes back what recordSkillRun noted of a skill whose
+// text did not reach the conversation after all, when nothing has noted
+// it since.
+func (l *live) unrecordSkillRun(name, text string) {
+	l.skillMu.Lock()
+	defer l.skillMu.Unlock()
+	for i, r := range l.skillRuns {
+		if r.name == name && r.text == text {
+			l.skillRuns = append(l.skillRuns[:i], l.skillRuns[i+1:]...)
+			return
+		}
+	}
 }
 
 // dropSkillGrants ends the permission rules that skills brought with
@@ -587,27 +652,48 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 		more, args = l.stackedSkills(args)
 		stack = append(stack, more...)
 	}
-	// What the conversation is taken to hold of each skill (skillRuns) is
-	// put back as it was when the line does not reach the model after all,
-	// so that the next time it is typed its text is sent, not the word
-	// that it is already there.
-	l.skillMu.Lock()
-	ran := slices.Clone(l.skillRuns)
-	l.skillMu.Unlock()
+	// First every skill's text, with the commands it runs checked against
+	// the person's rules and its own grant alone, as when it is typed by
+	// itself, and none run: a skill that cannot be run stops the line
+	// before anything of any ran. Then the commands run, each skill's under
+	// its own grant; then, none stopped by a hook, the line's grants
+	// together, each skill's thinking level and hooks, and what the
+	// conversation is taken to hold of each.
 	fail := func(format string, a ...any) (CommandResult, bool, error) {
-		l.skillMu.Lock()
-		l.skillRuns = ran
-		l.skillMu.Unlock()
+		l.dropSkillGrants()
 		return res, true, fmt.Errorf(format, a...)
 	}
 	texts := make([]string, len(stack))
-	agains := make([]bool, len(stack))
 	for i, s := range stack {
-		text, again, refusal := l.loadSkill(s, args)
+		if i > 0 {
+			l.engine.RemoveLayers(permission.ScopeSkill)
+		}
+		text, refusal := l.prepareSkill(s, args)
 		if refusal != "" {
 			return fail("the skill was not run: %s", refusal)
 		}
-		texts[i], agains[i] = text, again
+		texts[i] = text
+	}
+	for i, s := range stack {
+		if len(stack) > 1 {
+			l.engine.RemoveLayers(permission.ScopeSkill)
+			if refusal := l.addSkillGrant(s); refusal != "" {
+				return fail("the skill was not run: %s", refusal)
+			}
+		}
+		text, refusal := l.runSkillCommands(s, texts[i])
+		if refusal != "" {
+			return fail("the skill was not run: %s", refusal)
+		}
+		texts[i] = text
+	}
+	if len(stack) > 1 {
+		l.engine.RemoveLayers(permission.ScopeSkill)
+		for _, s := range stack {
+			if refusal := l.addSkillGrant(s); refusal != "" {
+				return fail("the skill was not run: %s", refusal)
+			}
+		}
 	}
 	// The UserPromptExpansion hooks see what each skill expands into, and
 	// may stop the line or add to it.
@@ -628,6 +714,27 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 		}
 		if c := strings.TrimSpace(out.AdditionalContext); c != "" {
 			added += "\n\n" + hookWords(hooks.UserPromptExpansion, "", c)
+		}
+	}
+	for _, s := range stack {
+		if refusal := l.commitSkill(s); refusal != "" {
+			return fail("the skill was not run: %s", refusal)
+		}
+	}
+	agains := make([]bool, len(stack))
+	if !sk.Fork {
+		for i, s := range stack {
+			agains[i] = l.recordSkillRun(s.Name, texts[i])
+		}
+	}
+	// What the conversation is taken to hold of each skill is taken back
+	// when the line does not reach the model after all, so that the next
+	// time it is typed its text is sent, not the word that it is there.
+	unrecord := func() {
+		for i, s := range stack {
+			if !agains[i] {
+				l.unrecordSkillRun(s.Name, texts[i])
+			}
 		}
 	}
 	if sk.Fork {
@@ -661,6 +768,7 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	}
 	id, err := l.agent.Submit(agent.Prompt{Hidden: true, Source: "skill", Text: body, Notice: notice})
 	if err != nil {
+		unrecord()
 		return fail("the skill could not be sent to the model: %v", err)
 	}
 	res.Prompt = id

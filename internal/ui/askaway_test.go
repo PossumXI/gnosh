@@ -6,6 +6,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app"
+	"github.com/gnosh-ai/gnosh/internal/term"
 	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
@@ -50,5 +51,35 @@ func TestModelQuestionsCloseWhenNobodyAnswers(t *testing.T) {
 	g.wait(10 * time.Minute)
 	if len(g.c.answers) != 2 {
 		t.Fatalf("a question that waits was closed: %+v", g.c.answers)
+	}
+}
+
+// The person is there when they read the transcript view or come back from
+// Ctrl+Z, though no key reaches the question: the time it may go without
+// one starts again.
+func TestModelQuestionWaitsWhileThePersonReads(t *testing.T) {
+	g := newRig(t, 80, 30, text.NoColor, func(c *controls) { c.info.AskTimeout = time.Minute })
+	g.free = true // (the transcript view takes the whole screen)
+	g.keys(`"ask me" <Enter>`).start()
+	data := app.QuestionForm{Questions: []app.FormQuestion{
+		{Question: "Which database?", Header: "Database", Options: []app.FormOption{{Label: "SQLite"}, {Label: "Postgres"}}},
+	}}
+	g.ev(&agent.QuestionEvent{Question: agent.Question{ID: "q1", Kind: "question", Tool: "AskUserQuestion", Title: "Questions", Data: data}})
+	g.wait(50 * time.Second)
+	g.s.input(term.Resume{})
+	g.wait(50 * time.Second)
+	if len(g.c.answers) != 0 {
+		t.Fatalf("closed while the person was back from Ctrl+Z: %+v", g.c.answers)
+	}
+	g.keys(`<Ctrl+O>`)
+	g.wait(50 * time.Second)
+	g.keys(`"j"`)
+	g.wait(50 * time.Second)
+	if len(g.c.answers) != 0 {
+		t.Fatalf("closed while the person read the transcript: %+v", g.c.answers)
+	}
+	g.wait(11 * time.Second)
+	if len(g.c.answers) != 1 || g.c.answers[0].ans.Choice != app.AskedAway {
+		t.Fatalf("the question did not close after a minute without the person: %+v", g.c.answers)
 	}
 }

@@ -75,6 +75,7 @@ func TestShellLinesInTheHistoryAndUnanswered(t *testing.T) {
 func TestShellOutputKeptAcrossARestart(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "It said hello."})
 	w.Settings(`{"options": {"respondToBashCommands": false}}`)
+	w.Write("AGENTS.md", "The project's rule: the codeword is marmalade.\n")
 	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
 		if err := c.Shell("echo kept for later"); err != nil {
 			t.Errorf("Shell: %v", err)
@@ -89,5 +90,7 @@ func TestShellOutputKeptAcrossARestart(t *testing.T) {
 	if reqs := w.Model.Requests(); len(reqs) != 1 {
 		t.Fatalf("the model was asked %d times, want once", len(reqs))
 	}
-	has(t, "what the resumed session sent", strings.Join(userTexts(w.Model.Requests()[0]), "\n"), "$ echo kept for later", "what did my command print?")
+	// The session's first prompt still carries what a first prompt does:
+	// the command's output alone in the file did not count as one.
+	has(t, "what the resumed session sent", strings.Join(userTexts(w.Model.Requests()[0]), "\n"), "$ echo kept for later", "what did my command print?", "the codeword is marmalade")
 }
