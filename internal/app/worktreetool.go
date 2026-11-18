@@ -173,6 +173,18 @@ func (t *exitTreeTool) Spec() core.ToolSpec {
 }
 
 func (t *exitTreeTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
+	var in struct {
+		Action  string `json:"action"`
+		Discard bool   `json:"discard_changes"`
+	}
+	_ = json.Unmarshal(call.Input, &in)
+	if in.Action == "remove" && in.Discard {
+		// What is in the tree and not committed, or committed and not on
+		// the branch it came from, is lost: the person is asked first,
+		// whatever the mode, as Claude Code asks.
+		return core.Action{Kind: core.ActionOther, Confirm: true,
+			Summary: "Remove the session's git work tree and its branch, with the work in them that is kept nowhere else: that work is lost"}, nil
+	}
 	return core.Action{Kind: core.ActionOther, Summary: "Take the session out of its git work tree"}, nil
 }
 

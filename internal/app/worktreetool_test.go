@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 	"github.com/gnosh-ai/gnosh/internal/trust"
 )
@@ -170,5 +172,22 @@ func TestReopenedTreeKeepsItsCommits(t *testing.T) {
 	what, err := treeHolds(t.Context(), env, &again.worktree)
 	if err != nil || len(what) == 0 || !strings.Contains(strings.Join(what, " "), "1 commit") {
 		t.Errorf("the tree opened again holds %q, %v; want its commit counted", what, err)
+	}
+}
+
+// ExitWorktree that would remove a tree with the work in it
+// (discard_changes) is put to the person first, whatever the mode: the
+// work is lost. Removing a tree that holds none, and keeping one, are not.
+func TestExitWorktreeDiscardAsks(t *testing.T) {
+	tool := &exitTreeTool{}
+	for in, want := range map[string]bool{
+		`{"action":"remove","discard_changes":true}`: true,
+		`{"action":"remove"}`:                        false,
+		`{"action":"keep","discard_changes":true}`:   false,
+	} {
+		a, err := tool.Describe(core.ToolCall{Name: "ExitWorktree", Input: json.RawMessage(in)}, nil)
+		if err != nil || a.Confirm != want {
+			t.Errorf("ExitWorktree %s: Confirm %v (%v), want %v", in, a.Confirm, err, want)
+		}
 	}
 }
