@@ -34,6 +34,7 @@ Built:
   `/fork`), or start that way from a shell (`gnosh --bg "fix the flaky
   test"`, as Claude Code's `claude --bg`); `/tasks` lists the sessions
   sent off from the folder, running or with the last line each printed,
+  `gnosh agents` those of every folder (`--json`, `--all`, `--cwd`),
   `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.

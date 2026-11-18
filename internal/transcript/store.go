@@ -94,6 +94,19 @@ func (st *Store) ProjectDir(cwd string) string {
 	return filepath.Join(st.projects(), Slug(cwd))
 }
 
+// ProjectDirs are the directories that hold sessions: one for each
+// working directory a session was started in.
+func (st *Store) ProjectDirs() []string {
+	dirs, _ := os.ReadDir(st.projects())
+	var out []string
+	for _, d := range dirs {
+		if d.IsDir() {
+			out = append(out, filepath.Join(st.projects(), d.Name()))
+		}
+	}
+	return out
+}
+
 // Create starts a new session in the working directory cwd, which must be
 // an absolute path. Nothing is written until the first Append, so a session
 // that is never used leaves no file.

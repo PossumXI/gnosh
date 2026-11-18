@@ -1,9 +1,9 @@
 gnosh stop
 
   Stop a session that runs in the background. The session is a run that gnosh
-  --bg, /background or /fork started from this folder, named by its ID or the
-  start of one. It is stopped as Esc stops a turn, and what it did so far is
-  kept: gnosh -r opens it.
+  --bg, /background or /fork started, named by its ID or the start of one
+  (gnosh agents lists them). It is stopped as Esc stops a turn, and what it
+  did so far is kept: gnosh -r opens it.
   Also typed: gnosh kill.
 
   Not built yet in this build of gnosh: typing it stops with a message that

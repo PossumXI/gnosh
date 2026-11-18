@@ -313,7 +313,11 @@ func (l *live) originText(r config.OptionValue) string {
 
 // tilde writes a path under the home directory with ~ in its place.
 func (l *live) tilde(path string) string {
-	home := l.cfg.Paths.Home
+	return homeTilde(l.cfg.Paths.Home, path)
+}
+
+// homeTilde writes path with ~ for the home folder home.
+func homeTilde(home, path string) string {
 	if home != "" && home != "/" && (path == home || strings.HasPrefix(path, home+"/")) {
 		return "~" + path[len(home):]
 	}

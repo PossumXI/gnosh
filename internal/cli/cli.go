@@ -46,6 +46,9 @@ const (
 	// CmdMem reads the project's mem; Invocation.Args holds the words after
 	// `mem`, for mem itself to read.
 	CmdMem Command = "mem"
+	// CmdAgents lists the sessions in the background, of every folder or
+	// of Invocation.Cwd's.
+	CmdAgents Command = "agents"
 	// CmdLogs prints the project's log, or a background run's.
 	CmdLogs Command = "logs"
 	// CmdStop stops a session that runs in the background.
@@ -263,8 +266,11 @@ type Invocation struct {
 	// means no limit.
 	MaxTurns int
 
-	// JSON asks a subcommand to print JSON (`session ...`).
+	// JSON asks a subcommand to print JSON (`session ...`, `agents`).
 	JSON bool
+	// All belongs to `agents`: also every session in the background that
+	// is done, not only those of the last week.
+	All bool
 	// Hosts belongs to `doctor`: also try each declared host, which reaches
 	// out to other machines.
 	Hosts bool

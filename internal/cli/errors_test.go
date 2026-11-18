@@ -40,7 +40,7 @@ func TestUnknownFlags(t *testing.T) {
 		{line: `gnosh -help`, kind: ErrUnknownFlag, hint: "--help"},
 
 		// A flag of another command says where it belongs.
-		{line: `gnosh --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh, so nothing was started. It is a flag of gnosh session list, gnosh session show, gnosh session last and gnosh session rename."}},
+		{line: `gnosh --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh, so nothing was started. It is a flag of gnosh session list, gnosh session show, gnosh session last and others."}},
 		{line: `gnosh --cwd x version --cwd y`, kind: ErrUnknownFlag, say: []string{"--cwd does not go with gnosh version, so nothing was done. It is a flag of gnosh, gnosh doctor, gnosh trust and others."}},
 		{line: `gnosh --list`, kind: ErrUnknownFlag, say: []string{"--list does not go with gnosh", "It is a flag of gnosh trust."}},
 		{line: `gnosh -f`, kind: ErrUnknownFlag, say: []string{"-f does not go with gnosh", "It is a flag of gnosh logs."}},

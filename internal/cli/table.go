@@ -302,6 +302,12 @@ func Default() *Table {
 	sessionJSON := t.add(&flag{names: "--json", id: "session --json", pri: 1,
 		help: "Print JSON instead of text.",
 		set:  func(i *Invocation, _ flagValue) { i.JSON = true }})
+	agentsJSON := t.add(&flag{names: "--json", id: "agents --json", pri: 1,
+		help: "Print JSON instead of text: the working sessions, and with --all the others too.",
+		set:  func(i *Invocation, _ flagValue) { i.JSON = true }})
+	agentsAll := t.add(&flag{names: "--all", id: "agents --all", pri: 1,
+		help: "Also list every session that is done, not only those of the last week.",
+		set:  func(i *Invocation, _ flagValue) { i.All = true }})
 	logsFollow := t.add(&flag{names: "-f --follow", id: "logs --follow", pri: 1,
 		help: "Keep printing as the log grows.",
 		set:  func(i *Invocation, _ flagValue) { i.Follow = true }})
@@ -387,15 +393,20 @@ func Default() *Table {
 		summary: "Read the project's mem, without a model.",
 		about:   "The words after mem go to mem as they are: show, find and log read it. What changes mem is done with /mem inside a session."})
 
+	t.command(root, &command{name: "agents", cmd: CmdAgents, pri: 1,
+		flags:   []*flag{agentsJSON, agentsAll, cwd, help},
+		summary: "List the sessions that run in the background, and those that ran.",
+		about:   "The sessions gnosh --bg, /background and /fork started, from every folder (with --cwd, from that folder and the folders in it): the working ones first, then those done in the last week. Each is named by the start of its ID, which gnosh logs, gnosh stop and gnosh -r take."})
+
 	t.command(root, &command{name: "logs", cmd: CmdLogs, pri: 1, maxArgs: 1, argsUsage: "[session]",
 		flags:   []*flag{logsFollow, logsTail, cwd, help},
 		summary: "Print the end of the project's log, or follow it.",
-		about:   "With a session's ID (or the start of one), what that session printed as a run in the background (gnosh --bg, /background, /fork); --follow follows it until the run is done."})
+		about:   "With a session's ID (or the start of one), what that session printed as a run in the background (gnosh --bg, /background, /fork; gnosh agents lists them); --follow follows it until the run is done."})
 
 	t.command(root, &command{name: "stop", aliases: []string{"kill"}, cmd: CmdStop, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<session>",
 		flags:   []*flag{cwd, help},
 		summary: "Stop a session that runs in the background.",
-		about:   "The session is a run that gnosh --bg, /background or /fork started from this folder, named by its ID or the start of one. It is stopped as Esc stops a turn, and what it did so far is kept: gnosh -r opens it."})
+		about:   "The session is a run that gnosh --bg, /background or /fork started, named by its ID or the start of one (gnosh agents lists them). It is stopped as Esc stops a turn, and what it did so far is kept: gnosh -r opens it."})
 
 	t.command(root, &command{name: "dirs", cmd: CmdDirs, pri: 1,
 		flags:   []*flag{cwd, help},

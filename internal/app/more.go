@@ -420,12 +420,12 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 	// it printed, followed until it lets go of its session.
 	run := ""
 	if len(inv.Args) > 0 {
-		id, log, err := findRun(dir, inv.Args[0])
+		id, log, err := findRun(st.sessions().ProjectDirs(), inv.Args[0])
 		if err != nil {
 			p.errf("%v.", err)
 			return cli.ExitFailure
 		}
-		path, run = log, runSession(dir, id, log)
+		path, run = log, runSession(id, log)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -438,7 +438,7 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 	}
 	tail := inv.Tail
 	if tail <= 0 {
-		tail = 100
+		tail = 1000
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	if len(lines) > tail {

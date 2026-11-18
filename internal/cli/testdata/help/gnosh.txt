@@ -19,6 +19,8 @@ Commands
   session <command>       Look at and manage sessions. (Not built yet.)
   mem [show|find|log]     Read the project's mem, without a model. (Not built
                           yet.)
+  agents                  List the sessions that run in the background, and
+                          those that ran. (Not built yet.)
   logs [session]          Print the end of the project's log, or follow it.
                           (Not built yet.)
   stop <session>          Stop a session that runs in the background. (Not

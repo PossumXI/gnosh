@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,14 +13,16 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
-// This file is gnosh --bg and gnosh stop, as Claude Code has claude --bg
-// and claude stop: a session started in the background from a shell, and
-// stopped from one; gnosh logs <session> (more.go) shows what it printed.
+// This file is gnosh --bg, gnosh agents and gnosh stop, as Claude Code has
+// claude --bg, claude agents and claude stop: a session started in the
+// background from a shell, listed and stopped from one, from any folder;
+// gnosh logs <session> (more.go) shows what it printed.
 // The run is the kind /background and /fork start (detach.go): gnosh -p
 // in a process of its own, its output in <session>.background.log beside
 // the session's file, its process id in <session>.background.pid.
@@ -66,7 +69,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		return cli.ExitFailure
 	}
 	log := filepath.Join(dir, id+".background.log")
-	p.logHead(log, id, filepath.Join(dir, id+".jsonl"), inv.Prompt)
+	p.logHead(log, id, st.cfg.Paths.Cwd, filepath.Join(dir, id+".jsonl"), inv.Prompt)
 	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), log)
 	if err != nil {
 		p.errf("the session could not be started in the background (%v).", err)
@@ -112,37 +115,40 @@ func writeRunPID(log string, pid int) {
 	_ = os.WriteFile(pidFile(log), []byte(strconv.Itoa(pid)+"\n"), 0o600)
 }
 
-// findRun finds the run of this folder that word names: a session's id, or
-// the start of one that a single run's has, by its log.
-func findRun(dir, word string) (id, log string, err error) {
+// findRun finds the run in the background that word names, among those
+// whose logs are in dirs: a session's id, or the start of one that a
+// single run's has.
+func findRun(dirs []string, word string) (id, log string, err error) {
 	word = strings.TrimSpace(word)
 	if word == "" || strings.ContainsAny(word, `/\`) {
 		return "", "", fmt.Errorf("%q names no session", word)
 	}
-	paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
-	var found []string
-	for _, p := range paths {
-		run := strings.TrimSuffix(filepath.Base(p), ".background.log")
-		if run == word {
-			return run, p, nil
-		}
-		if strings.HasPrefix(run, word) {
-			found = append(found, run)
+	var found []string // the ids that begin with word, and their logs
+	var logs []string
+	for _, dir := range dirs {
+		paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
+		for _, p := range paths {
+			run := strings.TrimSuffix(filepath.Base(p), ".background.log")
+			if run == word {
+				return run, p, nil
+			}
+			if strings.HasPrefix(run, word) {
+				found, logs = append(found, run), append(logs, p)
+			}
 		}
 	}
 	switch len(found) {
 	case 1:
-		return found[0], filepath.Join(dir, found[0]+".background.log"), nil
+		return found[0], logs[0], nil
 	case 0:
-		return "", "", fmt.Errorf("no session of this folder ran in the background under the ID %s (gnosh --bg, /background and /fork start one; /tasks lists them)", word)
+		return "", "", fmt.Errorf("no session ran in the background under the ID %s (gnosh agents lists them; gnosh --bg, /background and /fork start one)", word)
 	}
-	return "", "", fmt.Errorf("%s is the start of the IDs of %d sessions that ran in the background here (%s): give more of it", word, len(found), strings.Join(found, ", "))
+	return "", "", fmt.Errorf("%s is the start of the IDs of %d sessions that ran in the background (%s): give more of it", word, len(found), strings.Join(found, ", "))
 }
 
 // runSession is the session file a run's log names, or the one beside it.
-func runSession(dir, id, log string) string {
-	_, _, _, file := readRunLog(log, time.Time{})
-	return firstOf(file, filepath.Join(dir, id+".jsonl"))
+func runSession(id, log string) string {
+	return firstOf(readRunLog(log, time.Time{}).file, filepath.Join(filepath.Dir(log), id+".jsonl"))
 }
 
 // stopCommand is gnosh stop <session>: the run is asked to stop, as Esc
@@ -156,13 +162,12 @@ func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
 		}
 		return max(code, cli.ExitFailure)
 	}
-	dir := st.sessions().ProjectDir(st.cfg.Paths.Cwd)
-	id, log, err := findRun(dir, inv.Args[0])
+	id, log, err := findRun(st.sessions().ProjectDirs(), inv.Args[0])
 	if err != nil {
 		p.errf("%v.", err)
 		return cli.ExitFailure
 	}
-	said, err := stopRun(ctx, p.now, dir, id, log)
+	said, err := stopRun(ctx, p.now, id, log)
 	if err != nil {
 		p.errf("%v.", err)
 		return cli.ExitFailure
@@ -173,16 +178,16 @@ func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
 
 // stopRun stops the run of a session in the background, as gnosh stop
 // and /tasks stop do: it is asked to stop, as Esc stops a turn, and made
-// to when it has not let go of its session in stopWait. It says what came
-// of it, or why nothing was stopped.
-func stopRun(ctx context.Context, now func() time.Time, dir, id, log string) (string, error) {
-	file := runSession(dir, id, log)
+// to when it has not let go of its session in stopWait. Its log then says
+// it was stopped. stopRun says what came of it, or why nothing was
+// stopped.
+func stopRun(ctx context.Context, now func() time.Time, id, log string) (string, error) {
+	file := runSession(id, log)
 	if !transcript.InUse(file) {
 		return fmt.Sprintf("the session %s is not running: gnosh -r %s opens it.", id, id), nil
 	}
-	data, err := os.ReadFile(pidFile(log))
-	pid, perr := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil || perr != nil || pid <= 1 {
+	pid := runPID(log)
+	if pid == 0 {
 		return "", fmt.Errorf("the session %s is running, and gnosh has no process ID for its run (an older gnosh started it, or the session is open somewhere else), so nothing was stopped", id)
 	}
 	if !runIsFor(pid, id) {
@@ -203,11 +208,128 @@ func stopRun(ctx context.Context, now func() time.Time, dir, id, log string) (st
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+	said := fmt.Sprintf("the session %s was stopped. What it did so far is kept: gnosh -r %s opens it.", id, id)
 	if transcript.InUse(file) && runIsFor(pid, id) {
 		_ = proc.Kill()
-		return fmt.Sprintf("the session %s did not stop within %s, and its run was ended. What it did so far is kept: gnosh -r %s opens it.", id, stopWait, id), nil
+		said = fmt.Sprintf("the session %s did not stop within %s, and its run was ended. What it did so far is kept: gnosh -r %s opens it.", id, stopWait, id)
 	}
-	return fmt.Sprintf("the session %s was stopped. What it did so far is kept: gnosh -r %s opens it.", id, id), nil
+	if f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+		fmt.Fprintf(f, "gnosh: %s%s\n", now().UTC().Format(time.RFC3339), runStopped)
+		f.Close()
+	}
+	return said, nil
+}
+
+// runPID is the process id kept beside a run's log, or 0.
+func runPID(log string) int {
+	data, err := os.ReadFile(pidFile(log))
+	pid, perr := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || perr != nil || pid <= 1 {
+		return 0
+	}
+	return pid
+}
+
+// runState is how a run stands, in the words Claude Code's list has for
+// it: working while it holds its session, then stopped when gnosh stop
+// stopped it, or else done.
+func runState(r backgroundRun) string {
+	switch {
+	case r.running:
+		return "working"
+	case r.stopped:
+		return "stopped"
+	}
+	return "done"
+}
+
+// agentsCommand is gnosh agents, as Claude Code has claude agents: the
+// sessions in the background (gnosh --bg, /background, /fork) of every
+// folder, or, with --cwd, of that folder and the folders under it. Claude
+// Code's opens a view to work in; gnosh's prints the list, the working
+// ones first: those done in the last week follow, or with --all every one
+// whose log is kept. --json prints them as JSON, the working ones only
+// unless --all is given too, as Claude Code's does.
+func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
+	st, code := p.prepare(ctx, inv, false)
+	if st == nil || st.cfg == nil {
+		if st != nil {
+			st.printProblems()
+		}
+		return max(code, cli.ExitFailure)
+	}
+	now := p.now()
+	since := now.Add(-runsKept)
+	if inv.All {
+		since = time.Time{}
+	}
+	var working, done []backgroundRun
+	for _, r := range runsIn(st.sessions().ProjectDirs(), since) {
+		switch {
+		case inv.Cwd != "" && !within(r.cwd, st.cfg.Paths.Cwd):
+		case r.running:
+			working = append(working, r)
+		case !inv.JSON || inv.All:
+			done = append(done, r)
+		}
+	}
+	runs := append(working, done...)
+	if inv.JSON {
+		type row struct {
+			ID        string    `json:"id"`
+			Kind      string    `json:"kind"`
+			Cwd       string    `json:"cwd,omitempty"`
+			StartedAt time.Time `json:"startedAt"`
+			State     string    `json:"state"`
+			PID       int       `json:"pid,omitempty"`
+			Status    string    `json:"status,omitempty"`
+			Prompt    string    `json:"prompt,omitempty"`
+			Log       string    `json:"log"`
+		}
+		rows := []row{}
+		for _, r := range runs {
+			w := row{ID: r.session, Kind: "background", Cwd: r.cwd, StartedAt: r.started.UTC(), State: runState(r),
+				Status: oneLine(r.last, 400), Prompt: r.prompt, Log: r.log}
+			if pid := runPID(r.log); r.running && pid != 0 && runIsFor(pid, r.session) {
+				w.PID = pid
+			}
+			rows = append(rows, w)
+		}
+		enc := json.NewEncoder(p.stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(rows)
+		return cli.ExitOK
+	}
+	if len(runs) == 0 {
+		said := "No session runs in the background"
+		if inv.Cwd != "" {
+			said += " from " + homeTilde(st.cfg.Paths.Home, st.cfg.Paths.Cwd) + " or a folder in it"
+		}
+		if inv.All {
+			said += ", and no log of one that ran is kept"
+		} else {
+			said += ", and none ran in the last week"
+		}
+		fmt.Fprintf(p.stdout, "%s: gnosh --bg <prompt> starts one.\n", said)
+		return cli.ExitOK
+	}
+	type cells struct{ name, state, dir, prompt string }
+	rows := make([]cells, len(runs))
+	wState, wDir := 0, 0
+	for i, r := range runs {
+		state := runState(r)
+		if r.running {
+			state += " " + roundTime(now.Sub(r.started))
+		}
+		rows[i] = cells{runShort(r.session) + "  " + r.started.Local().Format("2006-01-02 15:04"), state,
+			homeTilde(st.cfg.Paths.Home, firstOf(r.cwd, "(folder not known)")), oneLine(firstOf(r.prompt, "(its prompt is not in its log)"), 80)}
+		wState, wDir = max(wState, utf8.RuneCountInString(state)), max(wDir, utf8.RuneCountInString(rows[i].dir))
+	}
+	for _, c := range rows {
+		fmt.Fprintf(p.stdout, "%s  %-*s  %-*s  %s\n", c.name, wState, c.state, wDir, c.dir, c.prompt)
+	}
+	fmt.Fprintln(p.stdout, "gnosh logs <name> prints what one printed (-f follows it), gnosh stop <name> stops one, and gnosh -r <name> opens one.")
+	return cli.ExitOK
 }
 
 // runIsFor reports whether process pid is a gnosh run of the session id:

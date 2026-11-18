@@ -51,7 +51,7 @@ func TestCommands(t *testing.T) {
 		// models
 		{line: `gnosh models`, want: Invocation{Command: CmdModels}},
 		{line: `gnosh models --cwd x`, want: Invocation{Command: CmdModels, Cwd: "x"}},
-		{line: `gnosh models --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh models", "It is a flag of gnosh session list, gnosh session show, gnosh session last and gnosh session rename."}},
+		{line: `gnosh models --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh models", "It is a flag of gnosh session list, gnosh session show, gnosh session last and others."}},
 		{line: `gnosh models qwen`, kind: ErrUsage, say: []string{"qwen was typed after gnosh models"}},
 
 		// session
@@ -229,7 +229,7 @@ func TestWhatIsNotInTheTable(t *testing.T) {
 		{line: `gnosh ssh box.example.com`, want: Invocation{Command: CmdSSH, Args: []string{"box.example.com"}}},
 		{line: `gnosh projects`, want: inter(Invocation{Prompt: "projects"})},
 		{line: `gnosh stats`, want: inter(Invocation{Prompt: "stats"})},
-		{line: `gnosh stats --all`, kind: ErrUnknownFlag, say: []string{"--all is not a flag of gnosh"}},
+		{line: `gnosh stats --all`, kind: ErrUnknownFlag, say: []string{"--all does not go with gnosh, so nothing was started", "It is a flag of gnosh agents."}},
 		{line: `gnosh projects --json`, kind: ErrUnknownFlag, say: []string{"--json does not go with gnosh"}},
 	})
 

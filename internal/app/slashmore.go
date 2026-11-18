@@ -128,8 +128,8 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		// A session in the background that this folder sent off, as gnosh
 		// stop stops one.
 		if dir := l.crashDir(); dir != "" {
-			if id, log, err := findRun(dir, args[1]); err == nil {
-				said, err := stopRun(ctx, l.p.now, dir, id, log)
+			if id, log, err := findRun([]string{dir}, args[1]); err == nil {
+				said, err := stopRun(ctx, l.p.now, id, log)
 				if err != nil {
 					return err
 				}
@@ -166,6 +166,9 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	// session: they outlive the session that started them.
 	for _, r := range l.backgroundRuns() {
 		state := "done, started " + roundTime(l.p.now().Sub(r.started)) + " ago"
+		if r.stopped {
+			state = "stopped, started " + roundTime(l.p.now().Sub(r.started)) + " ago"
+		}
 		if r.running {
 			state = "running for " + roundTime(l.p.now().Sub(r.started))
 		}

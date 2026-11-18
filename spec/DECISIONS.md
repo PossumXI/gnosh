@@ -1675,3 +1675,24 @@ or kept with the reason said (27).
     (106) and, while it runs, says /tasks stop <name> stops it; /tasks
     stop takes a sub-agent's id, a background command's, or the start of
     a run's id, which it stops as gnosh stop does (one stopRun for both).
+
+108. **gnosh agents lists the sessions in the background of every folder.**
+    As Claude Code's claude agents does with no --cwd, and as its agent
+    view groups them, gnosh agents prints the runs gnosh --bg,
+    /background and /fork started from any folder: the working ones
+    first, then those done in the last week (--all: every one whose log
+    is kept), each by the 13 characters of its id (106) with when it
+    started, how it stands (working, done, or stopped), its folder and
+    its prompt. --cwd keeps the runs of that folder and the folders in
+    it. --json prints the working ones as Claude Code's --json does, and
+    with --all the rest, each with id, kind "background", cwd, startedAt
+    and state, the process id while it works, and gnosh's own prompt,
+    log and status (the last line the run printed). Claude Code opens a
+    view to work in here; gnosh prints the list, since its runs ask
+    nobody anything. A run's log now names its folder (logs from before
+    give it by the session's first entry), and gnosh stop adds a line
+    saying the run was stopped, from which the list tells a stopped run
+    from one that is done. gnosh logs and gnosh stop now find a run of
+    any folder, as the names gnosh agents prints are of any folder;
+    /tasks stop still reaches only this folder's. gnosh logs prints the
+    last 1000 lines, as its help and the spec say (it printed 100).
