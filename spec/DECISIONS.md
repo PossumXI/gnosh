@@ -2357,3 +2357,39 @@ or kept with the reason said (27).
     Not changed: a /subtask whose session closes or restarts before it
     ends does not report back (its answer stays in its own session and in
     the agent view).
+
+143. **The review of /rewind and its file copies.** A fresh-eyes review of
+    the rewind (checkpoint.go, rewind.go) found five ways to lose work or
+    put back the wrong thing, fixed together:
+    - A rewind of the conversation alone left the copies kept under the
+      prompts it took out unread, so a later rewind of the files put back
+      an abandoned attempt (or nothing). The files' rewind now goes by the
+      prompts of the session's file in order, those taken out of the
+      conversation among them: their changes were made to the files all
+      the same.
+    - A rewind overwrote or took away what a file held without looking:
+      the person's own edits, or a command's, since the model's change. It
+      now keeps what a file holds first, when that is not what is put
+      back, in the session's checkpoints/replaced, and says where. (Claude
+      Code overwrites; gnosh never loses work to a rewind.)
+    - A sub-agent's changes were kept as the session's own, so a rewind
+      took back work a worktree sub-agent had left for the person, or
+      wrote into a tree already removed. As in Claude Code, they are not
+      kept.
+    - A prompt typed while a turn ran was cut back to where it was typed,
+      with the turn's changes made meanwhile left in place and shown as
+      interrupted. The cut is where the prompt went out; a prompt that
+      waited is marked as taken back, so that a session opened again does
+      not send it.
+    - The copies were looked for under the folder gnosh was started in,
+      not the session's own: a session resumed from another folder, and a
+      branch (/branch, /fork, /subtask, --fork-session), found none. They
+      are found by the session's file, and a branch also reads the copies
+      of the session it came from, under the prompts it took over.
+    Also: a copy that fails is noted, so a later one is not taken for what
+    the file held before; copies are named afresh, not by count; a rewind
+    of the files waits for the sub-agents in the background; the files of
+    "/rewind N all" are put back only once the rewind is written and the
+    background work is stopped; and the menu is worked out from one read
+    of the session's file. Not changed yet: copies are never pruned, and
+    fileCheckpointingEnabled is not built.

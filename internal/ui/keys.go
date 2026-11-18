@@ -1141,7 +1141,7 @@ func (s *session) help() {
 
 // rewindNote is what the menu says of the files a rewind can and cannot
 // put back.
-const rewindNote = "What shell commands changed is not kept, and stays as it is."
+const rewindNote = "What a file holds when it is put back is kept first; what shell commands changed in other files is not put back."
 
 // rewind opens the list of the person's prompts, the newest first, to
 // take the conversation back to before one of them. It is what Esc Esc

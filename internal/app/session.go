@@ -467,7 +467,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 
 	// The tools, the instruction files and the system prompt. What the
 	// files the tools change held is kept beside the session's file.
-	l.checks = openCheckpoints(filepath.Join(l.st.dirs(l.ts.ID()).Session, "checkpoints"), l.p.now)
+	// (By the session's own file: a session resumed from another folder
+	// keeps its copies where they were made.)
+	l.checks = openCheckpoints(filepath.Join(strings.TrimSuffix(l.ts.Path(), ".jsonl"), "checkpoints"), l.p.now)
 	if err := l.buildTools(); err != nil {
 		return l, err
 	}
@@ -1495,18 +1497,10 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
 		all := l.rewindAll
 		l.rewindTo, l.rewindAll = "", false
-		files := ""
-		if all {
-			// The files first, while the session that changed them is the
-			// one behind the controls.
-			done, failed := l.checks.restore(l.rewindFiles(point))
-			l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point, len(done), len(failed))
-			files = restoreSaid(done, failed)
-		}
-		text, rerr := c.Rewind(ctx, point)
+		text, files, rerr := c.rewindWith(ctx, point, all)
 		if rerr != nil {
 			if files != "" {
-				return res, fmt.Errorf("%s But the conversation could not be taken back: %w", files, rerr)
+				return res, fmt.Errorf("%s But the session could not be opened again: %w", files, rerr)
 			}
 			return res, rerr
 		}
