@@ -83,6 +83,27 @@ func (s *seat) see(piece string) {
 	}
 }
 
+// mcpConnected waits until /mcp says the server is connected: a session
+// connects its servers in the background, and a prompt typed before then
+// finds none of their tools.
+func (s *seat) mcpConnected(name string) {
+	s.t.Helper()
+	deadline := time.Now().Add(patience)
+	for {
+		s.typeLine("/mcp")
+		for wait := time.Now().Add(time.Second); time.Now().Before(wait); time.Sleep(10 * time.Millisecond) {
+			screen := s.out.String()
+			if i := strings.LastIndex(screen, name+": connected"); i >= s.pos {
+				s.pos = i + len(name+": connected")
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			s.t.Fatalf("/mcp never said %s is connected.\nthe screen:\n%s\nstderr:\n%s", name, clip(s.out.String()), s.errs.String())
+		}
+	}
+}
+
 // typeLine types a line and Enter.
 func (s *seat) typeLine(line string) {
 	s.t.Helper()

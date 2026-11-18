@@ -141,6 +141,7 @@ func TestMCPElicitationInThePlainSession(t *testing.T) {
 
 	s := sit(t, w, "--dangerously-skip-permissions")
 	s.see("Type a prompt and Enter.")
+	s.mcpConnected("asker")
 	s.typeLine("deploy it")
 	s.see("? The MCP server asker asks: Where should it go?")
 	s.see("Question 1 of 2 [region]: Region: the data center")
@@ -201,6 +202,7 @@ echo '{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "action": "a
 	w.Settings(`{"hooks": {"ElicitationResult": [{"hooks": [{"type": "command", "command": "` + change + `"}]}]}}`)
 	s := sit(t, w, "--dangerously-skip-permissions")
 	s.see("Type a prompt and Enter.")
+	s.mcpConnected("asker")
 	s.typeLine("deploy it")
 	s.see("? The MCP server asker asks: Where should it go?")
 	s.typeLine("2")
