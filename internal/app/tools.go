@@ -146,7 +146,7 @@ func (l *live) buildTools() error {
 	}
 	if l.cronOff() == "" {
 		// Prompts scheduled for later in the session (crontool.go).
-		all = append(all, &cronCreateTool{l: l}, &cronListTool{l: l}, &cronDeleteTool{l: l})
+		all = append(all, &cronCreateTool{l: l}, &cronListTool{l: l}, &cronDeleteTool{l: l}, &wakeTool{l: l})
 	}
 	if len(l.forModel()) > 0 {
 		// The Skill tool is there when there is a skill a model may

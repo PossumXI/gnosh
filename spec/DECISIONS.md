@@ -1189,7 +1189,14 @@ or kept with the reason said (27).
     keeps its meaning (keep the session working on its task). The tools
     are an attended session's, quiet in the permission engine, and
     CLAUDE_CODE_DISABLE_CRON=1 takes them and the interval /loop away.
-    Not built yet: /loop <prompt> with no interval (the model choosing
-    when to come back, ScheduleWakeup), and bringing tasks back on
-    --resume. Not taken: the jitter Claude Code adds to spread its
-    fleet's requests, which a local model server does not need.
+    /loop <prompt> with no interval runs it now and again when the model
+    says: at the end of each run it calls ScheduleWakeup with a delay
+    from one minute to an hour, or with stop when the task is done; a run
+    that schedules nothing gets one more, 20 minutes on, and the loop
+    ends when that one schedules nothing either; /noloop ends it. The
+    tasks are kept in the session's file (a meta entry), and --resume or
+    --continue brings back the recurring ones younger than 7 days, from
+    their next time on, and the one-shot ones whose time has not come; a
+    self-paced loop is not brought back. Not taken: the jitter Claude
+    Code adds to spread its fleet's requests, which a local model server
+    does not need.

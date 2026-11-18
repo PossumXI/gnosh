@@ -257,8 +257,11 @@ type live struct {
 	// ExitWorktree), is what the front end is told when the turn has
 	// ended: the session closes for gnosh to start again (RestartEvent).
 	restartWhy atomic.Pointer[string]
-	// crons is the session's scheduled prompts (crontool.go).
-	crons cronBook
+	// crons is the session's scheduled prompts (crontool.go), and self its
+	// self-paced /loop, under loopMu (cronloop.go).
+	crons  cronBook
+	loopMu sync.Mutex
+	self   *selfLoop
 	// notif is the notification channel /config set while the session
 	// runs; "" is the configuration's.
 	notifMu sync.Mutex
@@ -580,6 +583,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.startStatusLine()
 	l.watchFiles(l.ctx)
 	if l.cronOff() == "" {
+		l.restoreCrons()
 		go l.runCron(l.ctx)
 	}
 	l.startInitialPrompt()

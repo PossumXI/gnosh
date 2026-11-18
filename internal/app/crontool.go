@@ -17,6 +17,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/cron"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
 // This file is a session's scheduled prompts, as Claude Code has them (its
@@ -54,8 +55,9 @@ type cronTask struct {
 	recurring bool
 	created   time.Time
 	next      time.Time
-	// loop says /loop made it.
-	loop bool
+	// loop says /loop made it, and wake that it is a self-paced loop's
+	// next run (ScheduleWakeup): no schedule, once, at next.
+	loop, wake bool
 }
 
 // cronBook is the session's scheduled prompts.
@@ -99,6 +101,7 @@ func (l *live) schedule(expr, prompt string, recurring, loop bool) (*cronTask, e
 	}
 	t := &cronTask{id: newTaskID(), sched: sched, prompt: prompt, recurring: recurring, created: now, next: next, loop: loop}
 	b.tasks = append(b.tasks, t)
+	l.saveCronsLocked()
 	return t, nil
 }
 
@@ -116,7 +119,11 @@ func (l *live) unschedule(id string) bool {
 	defer b.mu.Unlock()
 	n := len(b.tasks)
 	b.tasks = slices.DeleteFunc(b.tasks, func(t *cronTask) bool { return t.id == id })
-	return len(b.tasks) != n
+	if len(b.tasks) == n {
+		return false
+	}
+	l.saveCronsLocked()
+	return true
 }
 
 // scheduled returns the session's tasks, the next to run first.
@@ -172,7 +179,7 @@ func (l *live) fireDue() {
 		b.mu.Unlock()
 		return
 	}
-	last := !due.recurring || now.Sub(due.created) >= cronExpiry
+	last := !due.recurring || due.sched == nil || now.Sub(due.created) >= cronExpiry
 	if !last {
 		next, err := due.sched.Next(now)
 		if err != nil {
@@ -183,11 +190,15 @@ func (l *live) fireDue() {
 	}
 	if last {
 		b.tasks = slices.DeleteFunc(b.tasks, func(t *cronTask) bool { return t == due })
+		l.saveCronsLocked()
 	}
 	task := *due
 	b.mu.Unlock()
 	why := "Scheduled task " + task.id + " runs"
 	switch {
+	case task.wake:
+		why = "The self-paced /loop runs again"
+		_ = l.agent.Tell(agent.Note{Source: "loop", Text: prompt.Wrap(loopRunNote)})
 	case !task.recurring:
 		why += ", once"
 	case last:
@@ -284,6 +295,10 @@ func (l *live) scheduleList() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d scheduled:", len(tasks))
 	for _, t := range tasks {
+		if t.wake {
+			fmt.Fprintf(&b, "\n%s  the self-paced /loop's next run, at %s: %s", t.id, whenText(t.next, now), oneLine(t.prompt, 100))
+			continue
+		}
 		how := "recurring"
 		if !t.recurring {
 			how = "once"
@@ -370,7 +385,7 @@ func (l *live) slashLoopEvery(c *SlashContext) error {
 	every, prompt, ok := loopEvery(c.Args)
 	switch {
 	case !ok:
-		return errors.New("/loop <prompt> with no interval, the model choosing when to come back, is not built yet: give an interval, as /loop 5m <prompt> or /loop <prompt> every 2h. /loop alone keeps the session working on the task it has")
+		return l.startSelfLoop(c, prompt)
 	case prompt == "":
 		return fmt.Errorf("/loop %s has no prompt: /loop 5m <prompt> sends the prompt every 5 minutes", c.Args)
 	}

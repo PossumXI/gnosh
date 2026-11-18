@@ -56,8 +56,8 @@ func TestLoopEvery(t *testing.T) {
 
 // CronCreate schedules a prompt; it is sent between turns once it comes
 // due, and a one-shot task is gone after its run. /loop with an interval
-// sends its prompt at once and again every so often; without one, and
-// with no prompt, it says what it takes.
+// sends its prompt at once and again every so often; with no prompt, it
+// says what it takes.
 func TestScheduledPrompts(t *testing.T) {
 	w := apptest.NewWorld(t,
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "CronCreate", Args: `{"cron":"* * * * *","prompt":"say pong","recurring":false}`}}},
@@ -77,8 +77,6 @@ func TestScheduledPrompts(t *testing.T) {
 	s.see("Scheduled task ")
 	s.see("pong")
 
-	s.typeLine("/loop check the deploy")
-	s.see("is not built yet: give an interval")
 	s.typeLine("/loop 5m")
 	s.see("has no prompt")
 	s.typeLine("/loop 5m check the build")
@@ -121,5 +119,77 @@ func TestScheduledPromptsOffered(t *testing.T) {
 	s.exit()
 	if body := string(w.Model.Requests()[1].Body); strings.Contains(body, `"CronCreate"`) {
 		t.Errorf("CLAUDE_CODE_DISABLE_CRON=1 left CronCreate offered")
+	}
+}
+
+// /loop <prompt> with no interval runs it now and again when the model
+// says (ScheduleWakeup); a run that schedules nothing gets one more, 20
+// minutes on; stop ends the loop.
+func TestSelfPacedLoop(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "ScheduleWakeup", Args: `{"delaySeconds":120,"reason":"waiting on CI"}`}}},
+		apptest.Reply{Text: "Checked; back in two minutes."},
+		apptest.Reply{Text: "Checked again."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "ScheduleWakeup", Args: `{"stop":true,"reason":"the build is green"}`}}},
+		apptest.Reply{Text: "Done."},
+	)
+	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
+	s := sitWith(t, w, func(o *Options) { o.Now = clk.Now })
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/loop check the build")
+	s.see("The prompt runs now, and again when the model says")
+	s.see("Next /loop run at 10:02: waiting on CI")
+	s.see("Checked; back in two minutes.")
+	s.see("-- done in ")
+	clk.add(2 * time.Minute)
+	s.see("The self-paced /loop runs again")
+	s.see("Checked again.")
+	s.see("The /loop run scheduled no next one: it runs once more at 10:22")
+	clk.add(20 * time.Minute)
+	s.see("The self-paced /loop is over: the build is green.")
+	s.see("Done.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := w.Model.Requests()
+	has(t, "the loop's first run", string(reqs[0].Body), "check the build", "This prompt runs as a self-paced /loop")
+	has(t, "the loop's second run", string(reqs[2].Body), "This is a run of the self-paced /loop")
+}
+
+// Tasks are kept in the session's file: -c brings back a recurring one,
+// from its next time on, and it runs; one 7 days old does not come back.
+func TestScheduledPromptsComeBack(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "Fine."},
+		apptest.Reply{Text: "Still fine."},
+		apptest.Reply{Text: "ok"},
+	)
+	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
+	s := sitWith(t, w, func(o *Options) { o.Now = clk.Now })
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/loop 5m check the build")
+	s.see("Fine.")
+	s.see("-- done in ")
+	s.typeLine("/exit")
+	s.exit()
+
+	clk.add(time.Hour)
+	s = sitWith(t, w, func(o *Options) { o.Now = clk.Now }, "-c")
+	s.see("1 scheduled task is back from the session's file.")
+	clk.add(5 * time.Minute)
+	s.see("Still fine.")
+	s.see("-- done in ")
+	s.typeLine("/exit")
+	s.exit()
+	has(t, "the run after -c", string(w.Model.Requests()[1].Body), "check the build")
+
+	clk.add(8 * 24 * time.Hour)
+	s = sitWith(t, w, func(o *Options) { o.Now = clk.Now }, "-c")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("hi")
+	s.see("ok")
+	s.typeLine("/exit")
+	s.exit()
+	if out := s.out.String(); strings.Contains(out, "back from the session's file") {
+		t.Errorf("a task 8 days old came back:\n%s", out)
 	}
 }

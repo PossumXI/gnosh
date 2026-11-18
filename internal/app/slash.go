@@ -196,6 +196,9 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done; /loop 5m <prompt> sends a prompt every 5 minutes.", Run: l.slashLoop},
 		{Name: "noloop", Aliases: []string{"no_loop", "no-loop"}, Summary: "Turn /loop off.",
 			Run: func(ctx context.Context, c *SlashContext) error {
+				if l.endSelfLoop("/noloop ended it") {
+					return nil
+				}
 				if !c.Agent.Loop() {
 					c.Say("/loop is not on.")
 					return nil

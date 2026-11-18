@@ -79,6 +79,8 @@ Built:
   prompt every five minutes between turns, and the model schedules,
   lists and cancels prompts with `CronCreate`, `CronList` and
   `CronDelete` ("remind me at 3pm", "check the build every 20 minutes").
+  `/loop <prompt>` with no interval lets the model choose when to come
+  back (`ScheduleWakeup`); tasks come back with `-c` and `-r`.
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.
