@@ -1786,3 +1786,40 @@ or kept with the reason said (27).
     had worked only because a reopened session still counted as not yet
     sent. The note that tells the model of the move is now followed by
     that block for the folder the session came to.
+
+113. **The gnokey tool, after its security review.** A reviewer read 111
+    against gnokey's own source and found eleven defects, three high,
+    all closed here but the shell's text match (below).
+    - A password typed at once after the approval went to the prompt
+      box, where Enter sent it to the model: the TUI's guard routes keys
+      typed before a question could be read to the box. A masked
+      question now takes keys the moment it is drawn, and what was typed
+      into the box since the question before it closed (within ten
+      seconds) is taken out again. The plain front end, which reads
+      lines typed ahead as prompts and holds one question at a time, is
+      given no gnokey tool.
+    - The refusal of key management read the first word anywhere that
+      named a command, as typed; gnokey takes the first word after its
+      flags, in any letter case ("gnokey Delete -force k", "gnokey
+      -remote list delete k" deleted keys). The tool now reads the line
+      as gnokey does: the command first, any case, from a list of those
+      it runs (query, list, sign, verify, broadcast, maketx, version;
+      maketx's call, run, send, addpkg, session), flags told by gnokey's
+      own boolean flags, the key the first word that is no flag (the one
+      before the file for maketx run, which the last-word rule got
+      wrong), -master named in the prompt.
+    - The password went to whatever file was at gnokey's path when a call
+      ran, which the model could rebuild or replace. The file's identity
+      (device, inode, size, time) is kept when the session starts, and a
+      call refused when it changed; gnokey runs without the terminal.
+    - -config (flags from a file the person is not shown) is refused; a
+      word naming a device, pipe or socket (/dev/stdin under any name,
+      which turned the password into data) is refused; a word with a line
+      break is refused; the password is scrubbed as typed and as JSON
+      writes it; the prompt says the main network first and names the
+      folder when it is not the session's; a stop after the password says
+      the transaction may have gone out.
+    - Left: the shell's refusal of the password flag is a text match,
+      which a -config file or a pseudo-terminal can get around. It needs
+      the password, which the model is never given; the permission rules
+      ask about such lines in default mode.

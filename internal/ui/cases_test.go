@@ -1299,3 +1299,35 @@ func TestServerFormEscCancels(t *testing.T) {
 		t.Errorf("Esc on a server's form stopped the turn")
 	}
 }
+
+// A key's password typed at once after the command was approved goes
+// neither to the prompt box nor, by Enter, to the model: what was typed
+// between the approval and the masked question is taken out of the box
+// again, and the masked question takes keys the moment it is drawn. A
+// draft from before the approval stays.
+func TestPasswordTypedEarly(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"sign it" <Enter>`).start()
+	args := map[string]any{"command": "gnokey maketx call -func Inc k"}
+	g.ev(toolCall("c1", "gnokey"), replyEnd(core.StopToolUse), toolStart("c1", "gnokey", args))
+	g.keys(`"a draft"`)
+	g.ev(&agent.QuestionEvent{Question: permission("q1")})
+	g.wait(time.Second).keys(`<Enter>`)
+	g.ev(&agent.AnswerEvent{ID: "q1"})
+	// The password, typed straight away: the masked question is not up yet.
+	g.keys(`"hunt"`)
+	if g.box() != "a draft"+"hunt" {
+		t.Fatalf("the box holds %q", g.box())
+	}
+	g.ev(&agent.QuestionEvent{Question: agent.Question{ID: "q2", Kind: "secret", Title: "Password for the key k", Text: "gnokey is to sign with the key k"}})
+	if g.box() != "a draft" {
+		t.Fatalf("after the masked question opened the box holds %q", g.box())
+	}
+	g.keys(`"er22" <Enter>`)
+	if n := len(g.c.answers); n != 2 || g.c.answers[1].ans.Text != "er22" {
+		t.Fatalf("the masked question was answered as %+v", g.c.answers)
+	}
+	if strings.Contains(g.scr.Dump(), "hunt") || strings.Contains(g.scr.Dump(), "er22") {
+		t.Fatalf("the password is on the screen\n%s", g.dump())
+	}
+}

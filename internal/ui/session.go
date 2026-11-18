@@ -252,6 +252,12 @@ type session struct {
 	// q is the question on the screen and qwait the ones behind it.
 	q     *question
 	qwait []*question
+	// closedText is what the prompt box held when the last question
+	// closed, and closedAt when: what is typed between an answer and a
+	// masked question that follows it is taken out of the box again
+	// (secretGap).
+	closedText string
+	closedAt   time.Time
 
 	// busy says the session has work in hand: from its BusyEvent to its
 	// IdleEvent. ph is what it is doing and since when.

@@ -44,6 +44,9 @@ import (
 const (
 	guardShown = 400 * time.Millisecond
 	guardPause = 600 * time.Millisecond
+	// secretGap is how soon after a question closed a masked question
+	// takes back what was typed into the prompt box in between.
+	secretGap = 10 * time.Second
 )
 
 // asker is a question of the menu package, as the session holds one.

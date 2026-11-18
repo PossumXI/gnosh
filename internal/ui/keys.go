@@ -927,6 +927,18 @@ func (s *session) open(qs *question) {
 	if t := s.lastInput.Add(guardPause); t.After(qs.quiet) {
 		qs.quiet = t
 	}
+	if qs.secret {
+		// A key's password is typed at once, often before its question
+		// is drawn: no key typed for it may go to the prompt box, where
+		// Enter would send it to the model. The question takes keys at
+		// once, and what was typed into the box since the question
+		// before it closed (the approval of the command, a moment ago)
+		// is taken out again.
+		qs.guarded = false
+		if !s.closedAt.IsZero() && now.Sub(s.closedAt) < secretGap && s.ed.Text() != s.closedText {
+			s.ed.SetText(s.closedText)
+		}
+	}
 	if qs.form != nil && !qs.escCancels && qs.local == nil && qs.q.Tool == "AskUserQuestion" {
 		qs.idle = s.info.AskTimeout
 	}
@@ -966,6 +978,7 @@ func (s *session) questionAway(q *question) {
 // keys again, with whatever was in it, unless another question waits.
 func (s *session) closeQuestion() {
 	s.q = nil
+	s.closedText, s.closedAt = s.ed.Text(), s.now()
 	if len(s.qwait) > 0 {
 		next := s.qwait[0]
 		s.qwait = s.qwait[1:]

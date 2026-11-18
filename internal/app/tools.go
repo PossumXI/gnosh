@@ -149,8 +149,14 @@ func (l *live) buildTools() error {
 		all = append(all, &pushTool{l: l})
 		// gnokey, with a person to type a key's password, in a project
 		// that holds Gno code, where gnokey is installed (gnokeytool.go).
-		if bin, err := l.p.lookPath(gnokeyToolName); err == nil && hasGnoCode(l.cfg.Paths.ProjectRoot, l.cfg.Paths.Cwd) {
-			all = append(all, &gnokeyTool{l: l, bin: bin})
+		// (Not the plain front end's: it reads lines typed ahead as
+		// prompts, so a password typed early could go to the model.)
+		if _, plainFront := l.front.(*plain); !plainFront {
+			if bin, err := l.p.lookPath(gnokeyToolName); err == nil && hasGnoCode(l.cfg.Paths.ProjectRoot, l.cfg.Paths.Cwd) {
+				if t := newGnokeyTool(l, bin); t != nil {
+					all = append(all, t)
+				}
+			}
 		}
 	}
 	if l.cronOff() == "" {

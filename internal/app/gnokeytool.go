@@ -45,13 +45,18 @@ const (
 	gnokeyWait   = 5 * time.Minute
 )
 
-// gnokeyCommands are gnokey's commands, by which a command line's own is
-// told from the flags before it; gnokeyKeys are those that make, change
-// or hand out keys.
+// gnokeyRuns are the gnokey commands the tool runs; gnokeyKeys are those
+// that make, change or hand out keys, which it refuses by name. gnokey
+// reads a command's name in any letter case.
 var (
-	gnokeyCommands = []string{"add", "delete", "rotate", "import", "export", "generate", "recover", "list", "sign", "verify", "query", "broadcast", "maketx", "multisign", "version"}
-	gnokeyKeys     = []string{"add", "delete", "rotate", "import", "export", "generate", "recover"}
+	gnokeyRuns = []string{"query", "list", "sign", "verify", "broadcast", "maketx", "version"}
+	gnokeyKeys = []string{"add", "delete", "rotate", "import", "export", "generate", "recover"}
 )
+
+// gnokeyBools are gnokey's flags that take no value of their own; every
+// other flag written without = takes the next word as its value (gnokey
+// of November 2026, and of March 2026).
+var gnokeyBools = []string{"broadcast", "quiet", "insecure-password-stdin", "dry-run", "prove", "session", "h", "help"}
 
 // gnokeyMainnet names gno.land's main network, by its chain ID and the
 // host of its node: what is signed there is real.
@@ -66,24 +71,46 @@ const gnokeyDescription = `Runs gnokey, gno.land's tool for keys and transaction
 - A command that signs (maketx, which signs and broadcasts unless given -broadcast=false; gnokey sign) asks the user for the key's password at a masked prompt that shows them the exact command. You never see the password: never ask the user for it, never put it in a command, and never try to sign in the shell. Do not pass -insecure-password-stdin: gnosh adds what is needed. If the user does not give the password, nothing is signed; say so and stop.
 - Making, changing or handing out keys (add, delete, rotate, import, export, generate, recover) is refused: tell the user the command to run in their own terminal.
 
-The key's name is the last word, as gnokey takes it. On gno.land's main network (chain ID gnoland1) a transaction moves real value: say so before you sign there.`
+Put the command right after gnokey (gnokey maketx call ..., not gnokey -home x maketx ...); gnokey -config is refused, so give every flag on the command line. On gno.land's main network (chain ID gnoland1) a transaction moves real value: say so before you sign there.`
 
 var gnokeySchema = json.RawMessage(`{"type":"object","properties":{"command":{"type":"string","description":"The gnokey command line, beginning with gnokey, as it would be typed."},"description":{"type":"string","description":"One line saying what the command does, for the user."},"working_dir":{"type":"string","description":"Optional: the directory to run it in, such as one that holds a package to add. The working directory when left out."}},"required":["command","description"],"additionalProperties":false}`)
 
-// gnokeyTool is the gnokey tool of one session; bin is gnokey's path.
+// gnokeyTool is the gnokey tool of one session: bin is gnokey's path, its
+// links followed, and was what the file there was when the session
+// started, which it must still be when a call runs (a model that rebuilt
+// or replaced gnokey would be handed the password).
 type gnokeyTool struct {
 	l   *live
 	bin string
+	was os.FileInfo
+}
+
+// newGnokeyTool is the tool for the gnokey at path, or nil when the file
+// cannot be looked at.
+func newGnokeyTool(l *live, path string) *gnokeyTool {
+	bin, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil
+	}
+	info, err := os.Stat(bin)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
+	return &gnokeyTool{l: l, bin: bin, was: info}
 }
 
 // gnokeyCall is a call of the tool, read: gnokey's arguments, the command
-// they are, and, for one that signs, the key, and whether the chain is
-// gno.land's main one.
+// they are (with maketx's own, for maketx), and, for one that signs, the
+// key, the master account a session key acts for, and whether the chain
+// is gno.land's main one; head is how many of the arguments name the
+// command, after which gnosh puts the password's flag.
 type gnokeyCall struct {
 	args        []string
 	command     string
+	head        int
 	signs       bool
 	key         string
+	master      string
 	mainnet     bool
 	dir         string
 	description string
@@ -93,8 +120,8 @@ func (t *gnokeyTool) Spec() core.ToolSpec {
 	return core.ToolSpec{Name: gnokeyToolName, Description: gnokeyDescription, InputSchema: gnokeySchema}
 }
 
-// read reads a call, and says in words for the model what is wrong with it
-// when something is.
+// read reads a call as gnokey reads its command line, and says in words
+// for the model what is wrong with it when something is.
 func (t *gnokeyTool) read(input json.RawMessage, cwd string) (gnokeyCall, string) {
 	var in struct {
 		Command     string `json:"command"`
@@ -113,34 +140,91 @@ func (t *gnokeyTool) read(input json.RawMessage, cwd string) (gnokeyCall, string
 	}
 	c := gnokeyCall{args: words[1:], description: strings.TrimSpace(in.Description), dir: cwd}
 	for _, w := range c.args {
-		if name, _, _ := strings.Cut(strings.TrimLeft(w, "-"), "="); strings.HasPrefix(w, "-") && name == strings.TrimLeft(gnokeyPasswordFlag, "-") {
-			return c, "the command passes gnokey's " + gnokeyPasswordFlag + " itself, which only gnosh may do: leave it out. When the command signs, gnosh asks the user for the key's password and hands it to gnokey itself"
+		if strings.ContainsAny(w, "\n\r") {
+			return c, "a word of the command holds a line break, which the user would not be shown as one command: write the command on one line"
 		}
 	}
-	for _, w := range c.args {
-		if slices.Contains(gnokeyCommands, w) {
-			c.command = w
+	if len(c.args) == 0 || strings.HasPrefix(c.args[0], "-") {
+		return c, "put gnokey's command right after gnokey, before any flag (gnokey query ..., gnokey maketx call ...)"
+	}
+	name := strings.ToLower(c.args[0])
+	switch {
+	case slices.Contains(gnokeyKeys, name):
+		return c, fmt.Sprintf("gnokey %s makes, changes or hands out a key, which stays in the user's own terminal: tell the user the command to run there", name)
+	case !slices.Contains(gnokeyRuns, name):
+		return c, fmt.Sprintf("gnokey %s is not a command this tool runs; it runs gnokey %s", c.args[0], strings.Join(gnokeyRuns, ", "))
+	}
+	c.command, c.head = name, 1
+	if name == "maketx" {
+		if len(c.args) < 2 || strings.HasPrefix(c.args[1], "-") {
+			return c, "put maketx's own command right after it (gnokey maketx call, run, send, addpkg or session)"
+		}
+		c.command, c.head = "maketx "+strings.ToLower(c.args[1]), 2
+		if !slices.Contains([]string{"maketx call", "maketx run", "maketx send", "maketx addpkg", "maketx session"}, c.command) {
+			return c, fmt.Sprintf("gnokey maketx %s is not a command this tool runs; maketx's are call, run, send, addpkg and session", c.args[1])
+		}
+	}
+	// The flags and their values, and the words that are neither.
+	flags := map[string][]string{}
+	var positional []string
+	rest := c.args[c.head:]
+	for i := 0; i < len(rest); i++ {
+		w := rest[i]
+		if w == "--" {
+			positional = append(positional, rest[i+1:]...)
 			break
 		}
+		if !strings.HasPrefix(w, "-") || w == "-" {
+			positional = append(positional, w)
+			continue
+		}
+		fname, value, set := strings.Cut(strings.TrimLeft(w, "-"), "=")
+		if !set && !slices.Contains(gnokeyBools, fname) && i+1 < len(rest) {
+			i++
+			value = rest[i]
+		}
+		flags[fname] = append(flags[fname], value)
 	}
-	if slices.Contains(gnokeyKeys, c.command) {
-		return c, fmt.Sprintf("gnokey %s makes, changes or hands out a key, which stays in the user's own terminal: tell the user the command to run there", c.command)
+	switch {
+	case flags["insecure-password-stdin"] != nil:
+		return c, "the command passes gnokey's " + gnokeyPasswordFlag + " itself, which only gnosh may do: leave it out. When the command signs, gnosh asks the user for the key's password and hands it to gnokey itself"
+	case flags["config"] != nil:
+		return c, "gnokey -config reads flags from a file, which the user would not be shown: give every flag on the command line instead"
 	}
-	switch c.command {
-	case "sign":
+	switch {
+	case c.command == "sign":
 		c.signs = true
-	case "maketx":
-		c.signs = !gnokeyUnsigned(c.args)
+	case strings.HasPrefix(c.command, "maketx "):
+		off := false
+		for _, v := range flags["broadcast"] {
+			off = slices.Contains([]string{"false", "0", "f", "F", "FALSE", "False"}, v)
+		}
+		c.signs = !off
 	}
 	if c.signs {
-		if n := len(c.args); n > 0 && !strings.HasPrefix(c.args[n-1], "-") {
-			c.key = c.args[n-1]
+		// gnokey's key is the first word that is no flag: the only one for
+		// sign and most of maketx's, the one before the file for maketx
+		// run.
+		if len(positional) == 0 {
+			return c, "the command signs, and the key's name is missing: gnokey takes the key that signs after the flags"
 		}
-		if c.key == "" {
-			return c, "the command signs, and its last word, the key's name, is missing: gnokey takes the key that signs as its last word"
+		c.key = positional[0]
+		if m := flags["master"]; len(m) > 0 {
+			c.master = m[len(m)-1]
 		}
 	}
-	c.mainnet = gnokeyOnMainnet(c.args)
+	for _, v := range flags["chainid"] {
+		c.mainnet = c.mainnet || slices.Contains(gnokeyMainnetIDs, v)
+	}
+	for _, v := range flags["remote"] {
+		host := v
+		if u, err := url.Parse(v); err == nil && u.Host != "" {
+			host = u.Host
+		}
+		if h, _, _ := strings.Cut(host, ":"); strings.EqualFold(h, gnokeyMainnetHost) {
+			c.mainnet = true
+		}
+	}
 	if d := strings.TrimSpace(in.WorkingDir); d != "" {
 		if !filepath.IsAbs(d) {
 			d = filepath.Join(cwd, d)
@@ -150,60 +234,25 @@ func (t *gnokeyTool) read(input json.RawMessage, cwd string) (gnokeyCall, string
 		}
 		c.dir = filepath.Clean(d)
 	}
-	return c, ""
-}
-
-// gnokeyUnsigned reports whether gnokey maketx's arguments ask for the
-// transaction unsigned, which -broadcast=false does: maketx signs, then
-// simulates and broadcasts, unless told not to broadcast (gnokey of
-// November 2026; an older one signs either way, and without a password
-// it then fails, having signed nothing).
-func gnokeyUnsigned(args []string) bool {
-	off := false
-	for _, w := range args {
-		name, value, set := strings.Cut(strings.TrimLeft(w, "-"), "=")
-		if !strings.HasPrefix(w, "-") || name != "broadcast" {
+	// A file gnokey is to read that is no file, such as standard input
+	// under another name, would read the password.
+	words = slices.Clone(positional)
+	for _, vs := range flags {
+		words = append(words, vs...)
+	}
+	for _, w := range words {
+		if w == "" {
 			continue
 		}
-		off = set && slices.Contains([]string{"false", "0", "f", "F", "FALSE", "False"}, value)
-	}
-	return off
-}
-
-// gnokeyOnMainnet reports whether the arguments name gno.land's main
-// network, by its chain ID or its node.
-func gnokeyOnMainnet(args []string) bool {
-	value := func(i int, name string) (string, bool) {
-		w := args[i]
-		if !strings.HasPrefix(w, "-") {
-			return "", false
+		p := w
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(c.dir, p)
 		}
-		n, v, set := strings.Cut(strings.TrimLeft(w, "-"), "=")
-		switch {
-		case n != name:
-			return "", false
-		case set:
-			return v, true
-		case i+1 < len(args):
-			return args[i+1], true
-		}
-		return "", false
-	}
-	for i := range args {
-		if id, ok := value(i, "chainid"); ok && slices.Contains(gnokeyMainnetIDs, id) {
-			return true
-		}
-		if remote, ok := value(i, "remote"); ok {
-			host := remote
-			if u, err := url.Parse(remote); err == nil && u.Host != "" {
-				host = u.Host
-			}
-			if h, _, _ := strings.Cut(host, ":"); strings.EqualFold(h, gnokeyMainnetHost) {
-				return true
-			}
+		if info, err := os.Stat(p); err == nil && !info.Mode().IsRegular() && !info.IsDir() {
+			return c, fmt.Sprintf("%s is no file but a device, a pipe or a socket, which gnokey would read the password from: name a file", w)
 		}
 	}
-	return false
+	return c, ""
 }
 
 // line is the command as gnokey is run with it, without the password
@@ -233,6 +282,9 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 	if wrong != "" {
 		return core.ErrorResult("gnokey was not run: " + wrong + "."), nil
 	}
+	if now, err := os.Stat(t.bin); err != nil || !sameFile(t.was, now) {
+		return core.ErrorResult("gnokey was not run: " + t.bin + " is not the gnokey this session started with (it was changed, replaced or removed since), and gnosh hands a password only to that one. Tell the user; a new session takes the gnokey there now."), nil
+	}
 	args := c.args
 	var password string
 	if c.signs {
@@ -240,9 +292,17 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		if a == nil {
 			return core.ToolResult{}, errors.New("the gnokey tool was run outside a session")
 		}
-		body := []string{"gnokey is to sign with the key " + c.key + ":", "  " + c.line()}
+		var body []string
 		if c.mainnet {
 			body = append(body, "This is gno.land's main network: what it signs moves real value.")
+		}
+		who := "the key " + c.key
+		if c.master != "" {
+			who += ", for the account " + c.master
+		}
+		body = append(body, "gnokey is to sign with "+who+":", "  "+oneLine(c.line(), 600))
+		if c.dir != env.Cwd {
+			body = append(body, "It runs in "+t.l.tilde(c.dir)+".")
 		}
 		body = append(body, "The password goes to gnokey alone: the model, the session's file and its log never see it. Esc signs nothing and stops the turn.")
 		ans, err := a.Ask(ctx, agent.Question{Kind: secretKind, Title: "Password for the key " + c.key, Text: strings.Join(body, "\n"), CallID: call.ID, Tool: gnokeyToolName})
@@ -255,9 +315,9 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		if password = ans.Text; password == "" {
 			return core.ErrorResult("gnokey was not run: no password was given, so nothing was signed. Say so, and stop."), nil
 		}
-		// The flag goes before the key, among the flags of the command
-		// that signs, where gnokey reads it.
-		args = slices.Insert(slices.Clone(args), len(args)-1, gnokeyPasswordFlag)
+		// The flag goes right after the command's name, before its other
+		// flags, where gnokey reads every flag.
+		args = slices.Insert(slices.Clone(args), c.head, gnokeyPasswordFlag)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, gnokeyWait)
 	defer cancel()
@@ -269,16 +329,16 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}
+	// gnokey runs without the terminal, as the shell's commands do: it
+	// reads nothing typed at gnosh's.
+	noTerminal(cmd)
 	if c.signs {
 		cmd.Stdin = strings.NewReader(password + "\n")
 	}
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	runErr := cmd.Run()
-	text := out.String()
-	if len(password) >= 3 {
-		text = strings.ReplaceAll(text, password, "[the password]")
-	}
+	text := scrubPassword(out.String(), password)
 	password = ""
 	if len(text) > gnokeyOutput {
 		text = text[:gnokeyOutput] + fmt.Sprintf("\n[%d more bytes of gnokey's output were left out]", len(text)-gnokeyOutput)
@@ -288,6 +348,14 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 	switch {
 	case runErr == nil:
 		return core.TextResult(firstOf(text, "(gnokey printed nothing)")), nil
+	case runCtx.Err() != nil && c.signs:
+		// (Stopped after it had the password: it may have sent the
+		// transaction already.)
+		said := fmt.Sprintf("gnokey was stopped after it was given the password (it did not end within %s, or the turn was stopped), and the transaction may have been sent already. Check the account's sequence or the transaction before signing it again, or it may be paid for twice.", roundTime(gnokeyWait))
+		if ctx.Err() != nil {
+			return core.ErrorResult(said), nil
+		}
+		return core.ErrorResult(said + "\n" + text), nil
 	case errors.As(runErr, &exit):
 		said := fmt.Sprintf("gnokey exited with status %d.", exit.ExitCode())
 		if runCtx.Err() != nil && ctx.Err() == nil {
@@ -301,4 +369,20 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		return core.ToolResult{}, ctx.Err()
 	}
 	return core.ErrorResult("gnokey could not be run: " + runErr.Error() + "."), nil
+}
+
+// scrubPassword takes a password out of what gnokey printed: as typed, and
+// as JSON writes it. A password of fewer than three bytes is left: it
+// would take out letters of every word.
+func scrubPassword(text, password string) string {
+	if len(password) < 3 {
+		return text
+	}
+	text = strings.ReplaceAll(text, password, "[the password]")
+	if quoted, err := json.Marshal(password); err == nil {
+		if inner := string(quoted[1 : len(quoted)-1]); inner != password {
+			text = strings.ReplaceAll(text, inner, "[the password]")
+		}
+	}
+	return text
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
 
@@ -30,6 +32,38 @@ case " $* " in *" -insecure-password-stdin "*) read pw; echo "read: $pw";; esac`
 	return w
 }
 
+// gnokeySession runs a session through a front end of the test's own, the
+// way the full-screen interface would: prompt, then the turn's end. The
+// masked question is answered with password, a permission question with
+// yes. It returns the questions the front end was put.
+func gnokeySession(t *testing.T, w *apptest.World, prompt, password string, args ...string) []agent.Question {
+	t.Helper()
+	front := &testFront{
+		answer: func(q agent.Question) agent.Answer {
+			if q.Kind == secretKind {
+				return agent.Answer{Text: password}
+			}
+			return agent.Answer{Choice: "yes"}
+		},
+		run: func(ctx context.Context, c SessionControls, f *testFront) int {
+			if _, err := c.Submit(agent.Prompt{Text: prompt}); err != nil {
+				t.Error(err)
+			}
+			if err := c.Wait(ctx); err != nil {
+				t.Error(err)
+			}
+			c.Quit("prompt_input_exit")
+			return 0
+		}}
+	o := testOptions(w, args...)
+	o.StdinIsTerminal, o.StdoutIsTerminal = true, true
+	o.Signals = make(chan os.Signal, 4)
+	o.Interactive = func(FrontendInfo) Frontend { return front }
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	questions, _, _ := front.told()
+	return questions
+}
+
 // The gnokey tool runs a query as it is, and asks the person for the key's
 // password before a command that signs: at a masked prompt that names the
 // key and shows the command, the password then going to gnokey on its
@@ -41,25 +75,35 @@ func TestGnokeyToolSigns(t *testing.T) {
 	w := gnokeyWorld(t,
 		apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c1", "gnokey query vm/qrender -data 'gno.land/r/demo/counter:'")}},
 		apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c2", sign)}},
+		apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c3", "gnokey maketx run -gas-fee 1ugnot -gas-wanted 1 -chainid gnoland1 mainkey script.gno")}},
 		apptest.Reply{Text: "Incremented."})
-	s := sit(t, w, "-y")
-	s.see("Type a prompt and Enter.")
-	s.typeLine("increment the counter")
-	s.see("Password for the key testkey")
-	s.see("gnokey is to sign with the key testkey:")
-	s.see("gnokey maketx call -pkgpath gno.land/r/demo/counter")
-	s.see("The password goes to gnokey alone")
-	s.typeLine("hunter22")
-	s.see("Incremented.")
-	s.typeLine("/exit")
-	s.exit()
+	w.Write(w.Dir+"/script.gno", "package main\n")
+	questions := gnokeySession(t, w, "increment the counter", "hunter22", "-y")
+	var secrets []agent.Question
+	for _, q := range questions {
+		if q.Kind == secretKind {
+			secrets = append(secrets, q)
+		}
+	}
+	if len(secrets) != 2 {
+		t.Fatalf("%d masked questions, want 2: %+v", len(secrets), questions)
+	}
+	if secrets[0].Title != "Password for the key testkey" || !strings.Contains(secrets[0].Text, "gnokey is to sign with the key testkey:") || !strings.Contains(secrets[0].Text, "gnokey maketx call -pkgpath gno.land/r/demo/counter") || strings.Contains(secrets[0].Text, "main network") {
+		t.Errorf("the first masked question: %+v", secrets[0])
+	}
+	// maketx run's key is the word before the file, and gno.land's main
+	// network is said first.
+	if secrets[1].Title != "Password for the key mainkey" || !strings.HasPrefix(secrets[1].Text, "This is gno.land's main network") {
+		t.Errorf("the second masked question: %+v", secrets[1])
+	}
 
 	has(t, "the query", toolResult(t, w, 1, "c1"), "args: query vm/qrender -data gno.land/r/demo/counter:")
 	got := toolResult(t, w, 2, "c2")
-	has(t, "what the model read", got, "args: maketx call -pkgpath gno.land/r/demo/counter", "-broadcast -chainid dev -remote 127.0.0.1:26657 -insecure-password-stdin testkey", "read: [the password]")
-	for what, text := range map[string]string{"what the model read": got, "the screen": s.out.String()} {
-		if strings.Contains(text, "hunter22") {
-			t.Errorf("%s holds the password:\n%s", what, text)
+	has(t, "what the model read", got, "args: maketx call -insecure-password-stdin -pkgpath gno.land/r/demo/counter", "-chainid dev -remote 127.0.0.1:26657 testkey", "read: [the password]")
+	has(t, "maketx run", toolResult(t, w, 3, "c3"), "args: maketx run -insecure-password-stdin -gas-fee 1ugnot -gas-wanted 1 -chainid gnoland1 mainkey script.gno")
+	for i := range w.Model.Requests() {
+		if strings.Contains(string(w.Model.Requests()[i].Body), "hunter22") {
+			t.Errorf("request %d holds the password", i)
 		}
 	}
 	for _, path := range w.Sessions() {
@@ -86,20 +130,29 @@ func TestGnokeyToolRefuses(t *testing.T) {
 			gnokeyCallOf("c4", "rm -rf /"),
 			gnokeyCallOf("c5", "gnokey maketx send -to g1x -send 1ugnot -broadcast"),
 			gnokeyCallOf("c6", "gnokey maketx send -to g1x -send 1ugnot -broadcast=false k"),
+			// gnokey reads a command's name in any letter case, after its
+			// root flags: neither slips by.
+			gnokeyCallOf("c7", "gnokey Delete -force mykey"),
+			gnokeyCallOf("c8", "gnokey -remote list delete -force mykey"),
+			gnokeyCallOf("c9", "gnokey maketx send -config gnokey.toml -gas-fee 1ugnot k"),
+			gnokeyCallOf("c10", "gnokey sign -tx-path /dev/stdin -chainid dev k"),
+			gnokeyCallOf("c11", "gnokey maketx call -memo 'a\nb' k"),
+			gnokeyCallOf("c12", "gnokey frobnicate k"),
 		}},
 		apptest.Reply{Text: "Done."})
-	s := sit(t, w, "-y")
-	s.see("Type a prompt and Enter.")
-	s.typeLine("try it all")
-	s.see("Done.")
-	s.typeLine("/exit")
-	s.exit()
+	questions := gnokeySession(t, w, "try it all", "pw", "-y")
 	for id, want := range map[string]string{
-		"c1": "gnokey add makes, changes or hands out a key, which stays in the user's own terminal",
-		"c2": "passes gnokey's -insecure-password-stdin itself, which only gnosh may do",
-		"c3": "is a shell's to read, and this command is run with none",
-		"c4": "the command must begin with gnokey",
-		"c5": "its last word, the key's name, is missing",
+		"c1":  "gnokey add makes, changes or hands out a key, which stays in the user's own terminal",
+		"c2":  "passes gnokey's -insecure-password-stdin itself, which only gnosh may do",
+		"c3":  "is a shell's to read, and this command is run with none",
+		"c4":  "the command must begin with gnokey",
+		"c5":  "the key's name is missing",
+		"c7":  "gnokey delete makes, changes or hands out a key",
+		"c8":  "put gnokey's command right after gnokey",
+		"c9":  "gnokey -config reads flags from a file",
+		"c10": "is no file but a device, a pipe or a socket",
+		"c11": "holds a line break",
+		"c12": "gnokey frobnicate is not a command this tool runs",
 	} {
 		got := toolResult(t, w, 1, id)
 		has(t, id, got, want)
@@ -107,53 +160,68 @@ func TestGnokeyToolRefuses(t *testing.T) {
 	}
 	// An unsigned transaction is made with no password.
 	has(t, "c6", toolResult(t, w, 1, "c6"), "args: maketx send -to g1x -send 1ugnot -broadcast=false k")
-	if strings.Contains(s.out.String(), "Password for the key") {
-		t.Error("a refused call asked for a password")
+	for _, q := range questions {
+		if q.Kind == secretKind {
+			t.Errorf("a refused call asked for a password: %+v", q)
+		}
 	}
 
-	// A run has no gnokey tool.
+	// A run has no gnokey tool,
 	w2 := gnokeyWorld(t, apptest.Reply{Text: "ok"})
 	run(t, w2, "-p", "hi").wantCode(t, 0)
-	reqs := w2.Model.Requests()
-	if len(reqs) == 0 || slices.Contains(toolNamesOf(reqs[0]), "gnokey") {
+	if reqs := w2.Model.Requests(); len(reqs) == 0 || slices.Contains(toolNamesOf(reqs[0]), "gnokey") {
 		t.Errorf("a run was given the gnokey tool")
 	}
-	// Nor has a session in a project with no Gno code, where gnokey is
-	// installed,
+	// nor has the plain front end, which reads lines typed ahead as
+	// prompts,
+	w5 := gnokeyWorld(t, apptest.Reply{Text: "ok"})
+	s5 := sit(t, w5)
+	s5.see("Type a prompt and Enter.")
+	s5.typeLine("hi")
+	s5.see("ok")
+	s5.typeLine("/exit")
+	s5.exit()
+	if reqs := w5.Model.Requests(); len(reqs) == 0 || slices.Contains(toolNamesOf(reqs[0]), "gnokey") {
+		t.Errorf("the plain front end was given the gnokey tool")
+	}
+	// nor a session in a project with no Gno code.
 	w4 := gnokeyWorld(t, apptest.Reply{Text: "ok"})
 	os.Remove(w4.Dir + "/gnomod.toml")
-	s4 := sit(t, w4)
-	s4.see("Type a prompt and Enter.")
-	s4.typeLine("hi")
-	s4.see("ok")
-	s4.typeLine("/exit")
-	s4.exit()
+	gnokeySession(t, w4, "hi", "")
 	if reqs := w4.Model.Requests(); len(reqs) == 0 || slices.Contains(toolNamesOf(reqs[0]), "gnokey") {
 		t.Errorf("a session in a project with no Gno code was given the gnokey tool")
 	}
-	// nor one where gnokey is not installed (on a PATH that leaves out
-	// whatever gnokey this machine has).
-	w3 := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
-	w3.Write(w3.Dir+"/gnomod.toml", "module = \"gno.land/r/x\"\n")
-	empty := filepath.Join(w3.Root, "emptybin")
-	if err := os.MkdirAll(empty, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	s3 := sitWith(t, w3, func(o *Options) {
-		for i, kv := range o.Environ {
-			if strings.HasPrefix(kv, "PATH=") {
-				o.Environ[i] = "PATH=" + empty
+}
+
+// A gnokey that is not the one the session started with is handed no
+// password: a model that rebuilt or replaced it would read the password.
+func TestGnokeyToolRefusesAChangedGnokey(t *testing.T) {
+	w := gnokeyWorld(t,
+		apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c1", "gnokey list")}},
+		apptest.Reply{Text: "Done."})
+	bin := w.Root + "/gnobin/gnokey"
+	front := &testFront{
+		answer: func(q agent.Question) agent.Answer { return agent.Answer{Choice: "yes"} },
+		run: func(ctx context.Context, c SessionControls, f *testFront) int {
+			// Replaced once the session has started.
+			w.Script(bin, `echo "a gnokey of the model's"`)
+			if _, err := c.Submit(agent.Prompt{Text: "list the keys"}); err != nil {
+				t.Error(err)
 			}
-		}
-	})
-	s3.see("Type a prompt and Enter.")
-	s3.typeLine("hi")
-	s3.see("ok")
-	s3.typeLine("/exit")
-	s3.exit()
-	if reqs := w3.Model.Requests(); len(reqs) == 0 || slices.Contains(toolNamesOf(reqs[0]), "gnokey") {
-		t.Errorf("a session without gnokey installed was given the gnokey tool")
-	}
+			if err := c.Wait(ctx); err != nil {
+				t.Error(err)
+			}
+			c.Quit("prompt_input_exit")
+			return 0
+		}}
+	o := testOptions(w, "-y")
+	o.StdinIsTerminal, o.StdoutIsTerminal = true, true
+	o.Signals = make(chan os.Signal, 4)
+	o.Interactive = func(FrontendInfo) Frontend { return front }
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	got := toolResult(t, w, 1, "c1")
+	has(t, "a replaced gnokey", got, "is not the gnokey this session started with")
+	hasNot(t, "a replaced gnokey", got, "a gnokey of the model's")
 }
 
 // With the real gnokey, where this machine has it: a transaction made
@@ -185,16 +253,32 @@ func TestGnokeyToolWithTheRealGnokey(t *testing.T) {
 		apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c2", sign)}},
 		apptest.Reply{Text: "Signed."})
 	w.Write(w.Dir+"/gnomod.toml", "module = \"gno.land/r/demo/counter\"\n")
-	s := sit(t, w, "-y")
-	s.see("Type a prompt and Enter.")
-	s.typeLine("sign it")
-	s.see("Password for the key e2ekey")
-	s.typeLine("wrong-password")
-	s.see("Password for the key e2ekey")
-	s.typeLine("pw12345678")
-	s.see("Signed.")
-	s.typeLine("/exit")
-	s.exit()
+	tries := 0
+	front := &testFront{
+		answer: func(q agent.Question) agent.Answer {
+			if q.Kind != secretKind {
+				return agent.Answer{Choice: "yes"}
+			}
+			if tries++; tries == 1 {
+				return agent.Answer{Text: "wrong-password"}
+			}
+			return agent.Answer{Text: "pw12345678"}
+		},
+		run: func(ctx context.Context, c SessionControls, f *testFront) int {
+			if _, err := c.Submit(agent.Prompt{Text: "sign it"}); err != nil {
+				t.Error(err)
+			}
+			if err := c.Wait(ctx); err != nil {
+				t.Error(err)
+			}
+			c.Quit("prompt_input_exit")
+			return 0
+		}}
+	o := testOptions(w, "-y")
+	o.StdinIsTerminal, o.StdoutIsTerminal = true, true
+	o.Signals = make(chan os.Signal, 4)
+	o.Interactive = func(FrontendInfo) Frontend { return front }
+	runWith(t, t.Context(), o).wantCode(t, 0)
 	has(t, "a wrong password", toolResult(t, w, 1, "c1"), "invalid account password")
 	has(t, "the password", toolResult(t, w, 2, "c2"), "Tx successfully signed")
 	if data, _ := os.ReadFile(tx); !strings.Contains(string(data), `"signature":`) {
