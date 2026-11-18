@@ -83,7 +83,9 @@ Built:
   back (`ScheduleWakeup`); tasks come back with `-c` and `-r`.
 - **Channels**, as Claude Code's: `--channels server:<name>` lets an MCP
   server of yours push events into the running session (a CI webhook, a
-  chat bridge), which the model reads and acts on as they come.
+  chat bridge), which the model reads and acts on as they come; one that
+  relays permission questions lets you answer them from another device
+  (`yes abcde`), while the question stays open at the terminal too.
 - **PushNotification**, as Claude Code's: the model calls you back when
   you have walked away (a desktop note through your terminal, and your
   Notification hooks with the type `push_notification`).

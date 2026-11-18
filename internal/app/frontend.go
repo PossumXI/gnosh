@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"time"
@@ -498,6 +499,9 @@ type QuestionData struct {
 	// CommentOnYes says that words given with a yes (Answer.Text) are
 	// passed on to the model, as words given with a no are.
 	CommentOnYes bool
+	// Input is the input of the call the question is about, for the
+	// channels that relay permission questions (channelrelay.go).
+	Input json.RawMessage
 }
 
 // Deadline is when the question is taken back unanswered, or the zero

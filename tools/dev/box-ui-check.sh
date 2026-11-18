@@ -86,6 +86,10 @@
 #   leftover    the model starts a process that lets go of its output
 #               (sleep 321 >/dev/null 2>&1 &); the result says it was left
 #               running, and /exit stops it (permissions skipped)
+#   relay       a channel that relays permission questions (python3
+#               tools/dev/channel-webhook.py, copied to ~/newgnosh-test):
+#               the question about a Write goes to it, and "yes <id>"
+#               posted to it answers the question at the terminal
 #   focus       focus view (viewMode "focus"): the model reads notes.txt and
 #               counts its lines with a command, and the two calls are one
 #               line, "Read 1 file, ran 1 command"; /focus turns it off
@@ -118,12 +122,13 @@ plan) flags="--permission-mode plan" ;;
 background | btw | monitor | panel | cd | leftover) flags="-y" ;;
 worktree) flags="--permission-mode acceptEdits --trust-folder" ;;
 channel) flags="-y --channels server:hook" ;;
+relay) flags="--channels server:hook" ;;
 entertree) flags="--trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -158,11 +163,14 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
-if [ "$scenario" = channel ]; then
+if [ "$scenario" = channel ] || [ "$scenario" = relay ]; then
 	# The webhook channel (tools/dev/channel-webhook.py), copied to
-	# ~/newgnosh-test before this runs.
+	# ~/newgnosh-test before this runs; for relay it takes the permission
+	# questions too, and writes them to questions.log.
 	[ -f "$HOME/newgnosh-test/channel-webhook.py" ] || { echo "box-ui-check: copy tools/dev/channel-webhook.py to ~/newgnosh-test first" >&2; exit 2; }
-	printf '{"mcpServers": {"hook": {"command": "python3", "args": ["%s", "18788", "%s"]}}}\n' "$HOME/newgnosh-test/channel-webhook.py" "$T/replies.log" > "$T/config/gnosh/mcp.json"
+	asked=""
+	[ "$scenario" = relay ] && asked=", \"$T/questions.log\""
+	printf '{"mcpServers": {"hook": {"command": "python3", "args": ["%s", "18788", "%s"%s]}}}\n' "$HOME/newgnosh-test/channel-webhook.py" "$T/replies.log" "$asked" > "$T/config/gnosh/mcp.json"
 fi
 if [ "$scenario" = keys ]; then
 	cat > "$T/config/gnosh/keybindings.json" <<'EOF'
@@ -321,6 +329,19 @@ worktree)
 wtflag)
 	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
 	done_when() { screen | grep -q "done in"; }
+	;;
+relay)
+	# The question about a Write is answered from the channel ("yes <id>"),
+	# while it stands open at the terminal too.
+	tmux send-keys -t "$S" "Create the file relay.txt that says hi, with the Write tool, then say done." Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		[ -s "$T/questions.log" ] && break
+	done
+	id=$(head -c 5 "$T/questions.log" 2>/dev/null)
+	echo "=== the question the channel got: $(head -1 "$T/questions.log" 2>/dev/null || echo none)"
+	curl -s -d "yes $id" 127.0.0.1:18788 >/dev/null
+	done_when() { [ -f "$T/work/relay.txt" ] && screen | grep -q "allowed Write" && screen | grep -q "done in"; }
 	;;
 channel)
 	# An event pushed into the idle session wakes the model, which answers

@@ -1225,8 +1225,7 @@ or kept with the reason said (27).
     reached at a URL (a channel runs on this machine), and a channel's
     instructions are put in front of the model as it connects. The use:
     a CI webhook or a chat bridge reaching the session on an always-on
-    box. Not built: relaying permission questions to a channel
-    (claude/channel/permission).
+    box. Relaying permission questions to a channel is item 85.
 
 83. **PushNotification, as Claude Code's: the model calls the person
     back.** The tool sends one line (under 200 characters, blanks folded)
@@ -1260,3 +1259,26 @@ or kept with the reason said (27).
     live region under a "so far" line, questions show as always, and a
     deliverable stands on its own. Ctrl+O's transcript view shows every
     call whole either way.
+
+85. **Permission questions relayed to a channel, as Claude Code's.** A
+    channel named in --channels whose server declares
+    claude/channel/permission besides claude/channel is sent each
+    question about a tool call as it opens
+    (notifications/claude/channel/permission_request: a request id of
+    five lowercase letters without l, the tool's name, what the call
+    does, and its input as display text), and its verdict
+    (notifications/claude/channel/permission, allow or deny, with the id)
+    answers the question that stays open at the terminal; the first
+    answer counts. Deny is the terminal's bare no: the call does not run
+    and the turn stops. The text sent is made fit as Claude Code makes
+    it: characters that turn text around or cannot be seen left out,
+    quote and bracket lookalikes written plainly, blanks folded, values
+    over 3,500 characters kept by their start and end around a count of
+    what was left out, and the tokens services hand out as credentials
+    sent as [REDACTED] (never a span with a path's, a URL's or a shell's
+    characters). Where gnosh differs: a request id is never issued twice
+    in a session (Claude Code drops verdicts for an id that came up
+    twice), and plan approvals stay at the terminal, as trust questions
+    do in both. The person is told as the channel connects that whoever
+    answers through it can allow or refuse calls, and each answer from it
+    is said on the screen.

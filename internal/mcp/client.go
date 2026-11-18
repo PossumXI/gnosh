@@ -71,6 +71,13 @@ type Options struct {
 	// events come, on the goroutine that reads the server, so it must not
 	// wait long.
 	OnChannel func(content string, meta map[string]string)
+	// OnChannelVerdict, when set, is given each answer to a permission
+	// question the server sends as a channel that relays them, Claude
+	// Code's notifications/claude/channel/permission: the request's id,
+	// five lowercase letters, and "allow" or "deny". Anything else is
+	// dropped, as is a verdict from a server that did not declare
+	// claude/channel/permission. It is called as OnChannel is.
+	OnChannelVerdict func(requestID, behavior string)
 }
 
 // Tool is one tool a server offers.
@@ -209,8 +216,9 @@ type Client struct {
 	// changed is set when the server says its tool list changed.
 	changed bool
 	// channel says the server declared itself a channel (Info.Channel),
-	// for the goroutine that reads it.
-	channel atomic.Bool
+	// and relay that it takes permission questions too
+	// (Info.ChannelPermission), for the goroutine that reads it.
+	channel, relay atomic.Bool
 }
 
 // transport carries messages to a server and brings its own back, which
@@ -299,6 +307,7 @@ func (c *Client) handshake(ctx context.Context) error {
 	// (Read by the goroutine that reads the server: its events are taken
 	// from now on, the handshake done.)
 	c.channel.Store(channel)
+	c.relay.Store(channel && c.info.ChannelPermission)
 	if h, ok := c.t.(*httpTransport); ok {
 		h.setVersion(hello.ProtocolVersion)
 	}
@@ -644,7 +653,38 @@ func (c *Client) notified(m message) {
 			}
 		}
 		c.opt.OnChannel(p.Content, meta)
+	case "notifications/claude/channel/permission":
+		if c.opt.OnChannelVerdict == nil || !c.relay.Load() {
+			return
+		}
+		var p struct {
+			RequestID string `json:"request_id"`
+			Behavior  string `json:"behavior"`
+		}
+		if json.Unmarshal(m.Params, &p) != nil || !requestID.MatchString(p.RequestID) || (p.Behavior != "allow" && p.Behavior != "deny") {
+			return
+		}
+		c.opt.OnChannelVerdict(p.RequestID, p.Behavior)
 	}
+}
+
+// requestID is what the id of a permission question relayed to a channel
+// is: five lowercase letters, without l (Claude Code's alphabet, which a
+// phone's keyboard cannot mistake for a 1 or an I).
+var requestID = regexp.MustCompile(`^[a-km-z]{5}$`)
+
+// RelayPermission puts a permission question to a server that declared
+// itself a channel that relays them (Info.ChannelPermission), Claude
+// Code's notifications/claude/channel/permission_request: the request's
+// id, the tool's name, what the call does, and its input as display text.
+// The server answers, if it does, with a verdict (Options.OnChannelVerdict).
+func (c *Client) RelayPermission(id, tool, description, preview string) error {
+	if !c.relay.Load() {
+		return errors.New("mcp: the server takes no permission questions")
+	}
+	return c.notify("notifications/claude/channel/permission_request", map[string]string{
+		"request_id": id, "tool_name": tool, "description": description, "input_preview": preview,
+	})
 }
 
 // metaKey is what a key of a channel event's meta may be: letters, digits

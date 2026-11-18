@@ -266,6 +266,9 @@ type live struct {
 	// (channel.go), under chanMu.
 	chanMu    sync.Mutex
 	chanRates map[string]*channelRate
+	// relay is the permission questions put to the channels that relay
+	// them (channelrelay.go).
+	relay relayBook
 	// pushLast is when the last notification PushNotification asked for
 	// was sent (pushtool.go).
 	pushLast atomic.Pointer[time.Time]
@@ -1208,6 +1211,7 @@ func (l *live) deliver(ev any) {
 	}
 	l.loadMoment(ev)
 	l.statusPoke(ev)
+	l.relayEvent(ev)
 	// A command may have moved to the background, or one there may have
 	// been stopped.
 	if te, ok := ev.(*agent.ToolEndEvent); ok && (te.Name == shelltool.BashName || te.Name == shelltool.StopName) {

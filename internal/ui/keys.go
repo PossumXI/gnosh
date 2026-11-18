@@ -929,6 +929,11 @@ func (s *session) answered(ev *agent.AnswerEvent) {
 	if q := s.q; q != nil && q.q.ID == ev.ID {
 		if !q.answered {
 			words := "answered elsewhere"
+			for _, c := range q.q.Choices {
+				if c.Key == ev.Answer.Choice && ev.Answer.Choice != "" {
+					words += ": " + c.Label
+				}
+			}
 			switch {
 			case ev.Withdrawn && !q.deadline.IsZero() && !s.now().Before(q.deadline):
 				words = "taken back unanswered: nobody answered in time"

@@ -162,6 +162,9 @@ func (l *live) connectMCP(s *mcpServer) {
 		opt.OnChannel = func(content string, meta map[string]string) {
 			l.channelEvent(s.cfg.Name, content, meta)
 		}
+		opt.OnChannelVerdict = func(id, behavior string) {
+			l.channelVerdict(s.cfg.Name, id, behavior)
+		}
 	}
 	// A server that says its tools changed has them read again, once it
 	// is connected.
@@ -204,7 +207,7 @@ func (l *live) connectMCP(s *mcpServer) {
 	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
 	if l.channelNamed(s.cfg.Name) && s.cfg.Type != "http" {
 		info := client.Info()
-		l.channelConnected(s.cfg.Name, info.Channel, info.Instructions)
+		l.channelConnected(s.cfg.Name, info.Channel, info.ChannelPermission, info.Instructions)
 	}
 	l.offerMCPTools()
 	// It may have said its tools changed while they were being listed.
