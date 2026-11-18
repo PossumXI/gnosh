@@ -119,15 +119,25 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 			c.Say("The background sub-agent %s is stopped: %s", b.id, oneLine(b.desc, 100))
 			return nil
 		}
-		if l.shell == nil {
-			return fmt.Errorf("%s is not one of this session's background tasks; /tasks lists them", oneLine(args[1], 40))
+		if l.shell != nil {
+			if t, err := l.shell.Stop(ctx, args[1]); err == nil {
+				c.Say("%s is stopped: %s", t.ID, oneLine(t.Command, 100))
+				return nil
+			}
 		}
-		t, err := l.shell.Stop(ctx, args[1])
-		if err != nil {
-			return fmt.Errorf("%s is not one of this session's background tasks; /tasks lists them", oneLine(args[1], 40))
+		// A session in the background that this folder sent off, as gnosh
+		// stop stops one.
+		if dir := l.crashDir(); dir != "" {
+			if id, log, err := findRun(dir, args[1]); err == nil {
+				said, err := stopRun(ctx, l.p.now, dir, id, log)
+				if err != nil {
+					return err
+				}
+				c.Say("%s", strings.ToUpper(said[:1])+said[1:])
+				return nil
+			}
 		}
-		c.Say("%s is stopped: %s", t.ID, oneLine(t.Command, 100))
-		return nil
+		return fmt.Errorf("%s is not one of this session's background tasks, or a session of this folder in the background; /tasks lists them", oneLine(args[1], 40))
 	case len(args) > 0:
 		return errors.New("/tasks takes nothing after it, or stop and the id of a background task")
 	}
@@ -159,9 +169,9 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		if r.running {
 			state = "running for " + roundTime(l.p.now().Sub(r.started))
 		}
-		c.Say("%s  a session in the background, %s: %s", shortID(r.session), state, oneLine(firstOf(r.prompt, "(its prompt is not in its log)"), 100))
+		c.Say("%s  a session in the background, %s: %s", runShort(r.session), state, oneLine(firstOf(r.prompt, "(its prompt is not in its log)"), 100))
 		if r.running {
-			c.Say("     what it prints: %s; gnosh -r %s opens it once it is done", l.tilde(r.log), r.session)
+			c.Say("     what it prints: %s; /tasks stop %s stops it; gnosh -r %s opens it once it is done", l.tilde(r.log), runShort(r.session), r.session)
 		} else {
 			if r.last != "" {
 				c.Say("     it ended with: %s", oneLine(r.last, 120))

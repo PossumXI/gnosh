@@ -172,6 +172,7 @@ func TestTasksListsRunsInTheBackground(t *testing.T) {
 	s.typeLine("/tasks")
 	s.see("a session in the background, running for ")
 	s.see("write the docs")
+	s.see("/tasks stop " + running[:13] + " stops it")
 	s.see("gnosh -r " + running + " opens it once it is done")
 	s.see("a session in the background, done, started ")
 	s.see("fix the flaky test")
@@ -180,6 +181,11 @@ func TestTasksListsRunsInTheBackground(t *testing.T) {
 	if strings.Contains(s.out.String(), "an older run") {
 		t.Error("an earlier run in the same log was listed")
 	}
+	// /tasks stop reaches a run of this folder too, as gnosh stop does.
+	s.typeLine("/tasks stop " + done[:13])
+	s.see("The session " + done + " is not running: gnosh -r " + done + " opens it.")
+	s.typeLine("/tasks stop " + running[:13])
+	s.see("gnosh has no process ID for its run")
 	s.typeLine("/exit")
 	s.exit()
 }

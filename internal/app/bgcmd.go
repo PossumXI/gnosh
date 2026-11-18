@@ -162,44 +162,52 @@ func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
 		p.errf("%v.", err)
 		return cli.ExitFailure
 	}
+	said, err := stopRun(ctx, p.now, dir, id, log)
+	if err != nil {
+		p.errf("%v.", err)
+		return cli.ExitFailure
+	}
+	fmt.Fprintf(p.stdout, "gnosh: %s\n", said)
+	return cli.ExitOK
+}
+
+// stopRun stops the run of a session in the background, as gnosh stop
+// and /tasks stop do: it is asked to stop, as Esc stops a turn, and made
+// to when it has not let go of its session in stopWait. It says what came
+// of it, or why nothing was stopped.
+func stopRun(ctx context.Context, now func() time.Time, dir, id, log string) (string, error) {
 	file := runSession(dir, id, log)
 	if !transcript.InUse(file) {
-		fmt.Fprintf(p.stdout, "gnosh: the session %s is not running: gnosh -r %s opens it.\n", id, id)
-		return cli.ExitOK
+		return fmt.Sprintf("the session %s is not running: gnosh -r %s opens it.", id, id), nil
 	}
 	data, err := os.ReadFile(pidFile(log))
 	pid, perr := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || perr != nil || pid <= 1 {
-		p.errf("the session %s is running, and gnosh has no process ID for its run (an older gnosh started it, or the session is open somewhere else), so nothing was stopped.", id)
-		return cli.ExitFailure
+		return "", fmt.Errorf("the session %s is running, and gnosh has no process ID for its run (an older gnosh started it, or the session is open somewhere else), so nothing was stopped", id)
 	}
 	if !runIsFor(pid, id) {
-		p.errf("process %d, which ran the session %s, is not running it any more, and the session is open somewhere else; nothing was stopped.", pid, id)
-		return cli.ExitFailure
+		return "", fmt.Errorf("process %d, which ran the session %s, is not running it any more, and the session is open somewhere else; nothing was stopped", pid, id)
 	}
 	proc, err := os.FindProcess(pid)
 	if err == nil {
 		err = proc.Signal(syscall.SIGTERM)
 	}
 	if err != nil && !errors.Is(err, os.ErrProcessDone) {
-		p.errf("process %d could not be asked to stop: %v.", pid, err)
-		return cli.ExitFailure
+		return "", fmt.Errorf("process %d could not be asked to stop: %v", pid, err)
 	}
-	deadline := p.now().Add(stopWait)
-	for transcript.InUse(file) && p.now().Before(deadline) {
+	deadline := now().Add(stopWait)
+	for transcript.InUse(file) && now().Before(deadline) {
 		select {
 		case <-ctx.Done():
-			return cli.ExitFailure
+			return "", ctx.Err()
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
 	if transcript.InUse(file) && runIsFor(pid, id) {
 		_ = proc.Kill()
-		fmt.Fprintf(p.stdout, "gnosh: the session %s did not stop within %s, and its run was ended. What it did so far is kept: gnosh -r %s opens it.\n", id, stopWait, id)
-		return cli.ExitOK
+		return fmt.Sprintf("the session %s did not stop within %s, and its run was ended. What it did so far is kept: gnosh -r %s opens it.", id, stopWait, id), nil
 	}
-	fmt.Fprintf(p.stdout, "gnosh: the session %s was stopped. What it did so far is kept: gnosh -r %s opens it.\n", id, id)
-	return cli.ExitOK
+	return fmt.Sprintf("the session %s was stopped. What it did so far is kept: gnosh -r %s opens it.", id, id), nil
 }
 
 // runIsFor reports whether process pid is a gnosh run of the session id:

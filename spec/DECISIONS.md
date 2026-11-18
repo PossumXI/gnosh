@@ -1669,3 +1669,9 @@ or kept with the reason said (27).
     the three hints out in one column; gnosh logs and gnosh stop take
     any start of an id that one run alone has, and name every match when
     more have it.
+
+107. **/tasks stop reaches the folder's background runs.** /tasks names
+    each session in the background by the first 13 characters of its id
+    (106) and, while it runs, says /tasks stop <name> stops it; /tasks
+    stop takes a sub-agent's id, a background command's, or the start of
+    a run's id, which it stops as gnosh stop does (one stopRun for both).
