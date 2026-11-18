@@ -77,6 +77,10 @@ type question struct {
 	guarded bool
 	// deadline is when the asker takes the question back, or zero.
 	deadline time.Time
+	// idle is how long the model's questions (AskUserQuestion) may go
+	// without a key before the interface closes them by itself, with what
+	// was picked by then (the askUserQuestionTimeout option), or zero.
+	idle time.Duration
 	// width is the terminal width the question's body was laid out for.
 	width int
 	// notified says the Notification hooks were told that it waits.
@@ -88,6 +92,19 @@ type question struct {
 	// as the list of prompts to go back to: the session did not ask, and
 	// what was chosen goes to this function and not to the session.
 	local func(res menu.Result)
+}
+
+// awayCountdown is how long before the model's questions close by
+// themselves the screen counts down to it.
+const awayCountdown = 20 * time.Second
+
+// idleSince is when the question's time without a key began: when it was
+// put on the screen, or the last key after that.
+func (qs *question) idleSince(lastInput time.Time) time.Time {
+	if lastInput.After(qs.opened) {
+		return lastInput
+	}
+	return qs.opened
 }
 
 // deadliner is what the Data of a question with a time limit has.

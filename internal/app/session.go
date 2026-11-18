@@ -60,6 +60,9 @@ type live struct {
 	// respondShell is the respondToBashCommands option as it stands: the
 	// model answers a command the person ran behind "!" (shellline.go).
 	respondShell atomic.Bool
+	// askIdle is the askUserQuestionTimeout option as it stands, as a
+	// duration in nanoseconds; zero for none (askuser.go).
+	askIdle atomic.Int64
 
 	store  *transcript.Store
 	ts     *transcript.Session
@@ -564,6 +567,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.watchSettings()
 	l.suggestOn.Store(l.cfg.Options.PromptSuggestionEnabled.V)
 	l.respondShell.Store(l.cfg.Options.RespondToBashCommands.V)
+	l.askIdle.Store(int64(askIdleOf(l.cfg.Options.AskUserQuestionTimeout.V)))
 	a, err := agent.New(opts)
 	l.agent = a
 	// Published for the code that runs beside the session's opening (a
@@ -1301,6 +1305,7 @@ func (l *live) info() SessionInfo {
 		Keybindings:    l.keybindingsPath(),
 		ShowPast:       l.showPast,
 		NotifChannel:   l.notifChannel(),
+		AskTimeout:     time.Duration(l.askIdle.Load()),
 		Resume:         "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {

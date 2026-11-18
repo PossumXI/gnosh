@@ -51,6 +51,10 @@ type Options struct {
 	// person ran behind "!" printed, as soon as it has ended. Off, the
 	// command and its output wait for the person's next prompt.
 	RespondToBashCommands Value[bool]
+	// AskUserQuestionTimeout is how long the model's questions
+	// (AskUserQuestion) may go without a key before they close by
+	// themselves: "60s", "5m" or "10m", or "" for never.
+	AskUserQuestionTimeout Value[string]
 
 	// UserInstructionFiles are more instruction files of the person's own,
 	// read in every project: files, or folders of Markdown files, as
@@ -199,6 +203,10 @@ var optionDefs = []optionDef{
 		what: "background commands that may run at once", from: fromPlain + ", with Claude Code's word for them (background tasks)",
 		bounded: true, min: 1, max: 100000,
 		num: func(o *Options) *Value[int] { return &o.MaxBackgroundTasks }},
+	{key: "askUserQuestionTimeout", kind: oEnum, def: "unset (a question waits for its answer)",
+		what: "how long a question the model asks (AskUserQuestion) may go without a key before it closes by itself, with what was picked by then, and the model goes on on its own judgment: 60s, 5m or 10m; permission questions never close so; not from a project's file",
+		from: fromClaudeCode + ": the settings key", enum: []string{"60s", "5m", "10m"}, ownOnly: true,
+		text: func(o *Options) *Value[string] { return &o.AskUserQuestionTimeout }},
 	{key: "respondToBashCommands", kind: oBool, def: "true",
 		what:  "the model answers what a command you ran behind ! printed, as soon as it ends; false puts the command and its output in front of the model with your next prompt instead",
 		from:  fromClaudeCode + ": the settings key",

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
@@ -577,16 +579,32 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	}
 	l.dropSkillGrants()
 	l.nameAfter(line)
-	text, again, refusal := l.loadSkill(sk, args)
-	if refusal != "" {
-		return res, true, fmt.Errorf("the skill was not run: %s", refusal)
+	// Skills stacked after the first (/write-tests /fix-issue 123) are
+	// all loaded, with the words after the last as the arguments of each.
+	stack := []skill.Skill{sk}
+	if !sk.Fork {
+		var more []skill.Skill
+		more, args = l.stackedSkills(args)
+		stack = append(stack, more...)
 	}
-	// The UserPromptExpansion hooks see what the line expands into, and
-	// may stop it or add to it.
+	texts := make([]string, len(stack))
+	agains := make([]bool, len(stack))
+	for i, s := range stack {
+		text, again, refusal := l.loadSkill(s, args)
+		if refusal != "" {
+			return res, true, fmt.Errorf("the skill was not run: %s", refusal)
+		}
+		texts[i], agains[i] = text, again
+	}
+	// The UserPromptExpansion hooks see what each skill expands into, and
+	// may stop the line or add to it.
 	added := ""
-	if l.hooks.has(hooks.UserPromptExpansion) {
+	for i, s := range stack {
+		if !l.hooks.has(hooks.UserPromptExpansion) {
+			break
+		}
 		out, err := l.hooks.run(l.ctx, hooks.Input{Event: hooks.UserPromptExpansion, ExpansionType: "slash_command",
-			CommandName: sk.Name, CommandArgs: args, CommandSource: sk.Scope, Prompt: text})
+			CommandName: s.Name, CommandArgs: args, CommandSource: s.Scope, Prompt: texts[i]})
 		switch {
 		case err != nil:
 			return res, true, fmt.Errorf("the skill was not run: the UserPromptExpansion hooks could not be run (%v)", err)
@@ -596,24 +614,91 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 			return res, true, fmt.Errorf("the skill was not run: a UserPromptExpansion hook the user set up blocked it. %s", firstOf(out.Reason, "It gave no reason."))
 		}
 		if c := strings.TrimSpace(out.AdditionalContext); c != "" {
-			added = "\n\n" + hookWords(hooks.UserPromptExpansion, "", c)
+			added += "\n\n" + hookWords(hooks.UserPromptExpansion, "", c)
 		}
 	}
 	if sk.Fork {
-		return l.typedFork(sk, text, line, res)
+		return l.typedFork(sk, texts[0], line, res)
 	}
-	lead := fmt.Sprintf("The user ran the skill %q by typing: %s\nWhat follows is the skill: the user's own instructions for this kind of task. Carry them out now.", sk.Name, oneLine(line, 400))
-	body := prompt.Wrap(lead) + "\n\n" + text + added
-	if again {
+	var body, notice string
+	switch {
+	case len(stack) > 1:
+		names := make([]string, len(stack))
+		for i, s := range stack {
+			names[i] = s.Name
+		}
+		lead := fmt.Sprintf("The user ran the skills %s by typing: %s\nWhat follows are those skills, in that order: the user's own instructions for this kind of task. Carry them out now, together.", quotedList(names), oneLine(line, 400))
+		body = prompt.Wrap(lead)
+		for i, s := range stack {
+			if agains[i] {
+				body += "\n\n" + prompt.Wrap(fmt.Sprintf("The skill %q: its text is the same as when it was last loaded, earlier in this conversation; carry it out again from there.", s.Name))
+				continue
+			}
+			body += "\n\n" + texts[i]
+		}
+		body += added
+		notice = fmt.Sprintf("The skills %s are in front of the model.", strings.Join(names, ", "))
+	case agains[0]:
 		body = prompt.Wrap(fmt.Sprintf("The user ran the skill %q again by typing: %s\nIts text is the same as when it was last loaded, earlier in this conversation: carry it out again from there.", sk.Name, oneLine(line, 400)))
+		notice = fmt.Sprintf("The skill %s is in front of the model (%s).", sk.Name, sk.Source)
+	default:
+		lead := fmt.Sprintf("The user ran the skill %q by typing: %s\nWhat follows is the skill: the user's own instructions for this kind of task. Carry them out now.", sk.Name, oneLine(line, 400))
+		body = prompt.Wrap(lead) + "\n\n" + texts[0] + added
+		notice = fmt.Sprintf("The skill %s is in front of the model (%s).", sk.Name, sk.Source)
 	}
-	id, err := l.agent.Submit(agent.Prompt{Hidden: true, Source: "skill", Text: body,
-		Notice: fmt.Sprintf("The skill %s is in front of the model (%s).", sk.Name, sk.Source)})
+	id, err := l.agent.Submit(agent.Prompt{Hidden: true, Source: "skill", Text: body, Notice: notice})
 	if err != nil {
 		return res, true, fmt.Errorf("the skill could not be sent to the model: %v", err)
 	}
 	res.Prompt = id
 	return res, true, nil
+}
+
+// quotedList is names, each in quotes, joined for a sentence.
+func quotedList(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	return strings.Join(quoted, ", ")
+}
+
+// maxStacked is how many skills may be stacked after the first one of a
+// typed line: six in all, as Claude Code has it.
+const maxStacked = 5
+
+// stackedSkills reads the skills stacked after the first at the start of
+// a typed line, as Claude Code expands them at its prompt: each word
+// /name of a skill the person may run, that runs in this conversation
+// (not in a sub-agent of its own), up to maxStacked. The first word that
+// is not one ends the stack, and it and what follows are the arguments of
+// every skill (rest). A run (gnosh -p) loads the first skill alone.
+func (l *live) stackedSkills(args string) (more []skill.Skill, rest string) {
+	rest = args
+	if !l.interactive {
+		return nil, rest
+	}
+	for len(more) < maxStacked {
+		trimmed := strings.TrimLeftFunc(rest, unicode.IsSpace)
+		word, after := trimmed, ""
+		if i := strings.IndexFunc(trimmed, unicode.IsSpace); i >= 0 {
+			word, after = trimmed[:i], trimmed[i:]
+		}
+		name, ok := strings.CutPrefix(word, "/")
+		if !ok || name == "" {
+			break
+		}
+		next, found := l.skills().Get(name)
+		if !found || next.Off || next.NoUser || next.Fork {
+			break
+		}
+		more = append(more, next)
+		rest = after
+	}
+	if len(more) > 0 {
+		rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
+	}
+	return more, rest
 }
 
 // skillTool is the Skill tool of one session.

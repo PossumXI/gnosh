@@ -114,6 +114,8 @@
 //	  autoCompactWindow        tokens of context before room is made
 //	  loopMaxTurns             an optional cap on /loop
 //	  maxBackgroundTasks       background commands that may run at once
+//	  askUserQuestionTimeout   60s, 5m or 10m: a question of the model's
+//	                           with no key for that long closes by itself
 //	  respondToBashCommands    the model answers a command run behind !
 //	                           when it ends; false waits for the next prompt
 //	  userInstructionFiles     more instruction files of the person's own

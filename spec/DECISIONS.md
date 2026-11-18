@@ -1583,3 +1583,30 @@ or kept with the reason said (27).
     over an empty list, and a sub-agent's own server that wants a sign-in
     is not offered /mcp login. A prompt's leading blanks stay in the
     history, so " !x" and " /x" come back as prompts.
+
+101. **Skills stacked in one line, as Claude Code's prompt has them.**
+    "/write-tests /fix-issue 123" typed in a session loads both skills,
+    in that order, in one prompt to the model, each with "123" as its
+    arguments. Up to five more after the first (six in all); the first
+    word that is not a skill the person may run in this conversation (a
+    command, a word, a skill switched off, one for the model alone, or
+    one that runs in a sub-agent of its own) ends the stack, and it and
+    what follows are the arguments. A run (gnosh -p), as Claude Code's
+    -p, loads the first skill alone. Each skill's permission rules,
+    effort and hooks come in as when it is typed alone, and the
+    UserPromptExpansion hooks are asked about each.
+
+102. **askUserQuestionTimeout, as Claude Code's.** The option (60s, 5m
+    or 10m; the person's own files and /config only, live) gives the
+    model's questions (AskUserQuestion) a time without a key after which
+    the full interface closes them by itself: what was picked by then
+    goes as the answer, with the Choice "away", and the model reads that
+    nobody answered in time, that the person may be away, what had been
+    picked, and to go on with its own judgment and ask again later. Any
+    key restarts the time; the last twenty seconds count down on the
+    line above the question. Permission questions, plan approval and a
+    server's form (an MCP elicitation) never close so. Claude Code also
+    stops the time while the terminal says its window has focus; gnosh
+    does not read focus (tmux drops it unless told), and counts from the
+    last key alone. The plain session asks line by line and has no
+    timer.

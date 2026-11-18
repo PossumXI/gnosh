@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -36,6 +37,26 @@ const askToolName = "AskUserQuestion"
 
 // questionKind is the kind of the question the tool puts.
 const questionKind = "question"
+
+// AskedAway is the Choice of the answer an interface gives for the model's
+// questions when they went without a key for the askUserQuestionTimeout
+// option's time (SessionInfo.AskTimeout): its Data holds what was picked
+// by then, and the model goes on without the person.
+const AskedAway = "away"
+
+// askIdleOf reads the askUserQuestionTimeout option: 60s, 5m or 10m, and
+// otherwise none.
+func askIdleOf(v string) time.Duration {
+	switch v {
+	case "60s":
+		return time.Minute
+	case "5m":
+		return 5 * time.Minute
+	case "10m":
+		return 10 * time.Minute
+	}
+	return 0
+}
 
 // QuestionForm is the Data of a question of the kind "question" that a
 // model put with AskUserQuestion: its questions, as the model wrote them.
@@ -228,7 +249,33 @@ func (t *askTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 		return core.ToolResult{}, err
 	}
 	answers, _ := ans.Data.(map[string]string)
+	if ans.Choice == AskedAway {
+		return t.away(in, answers), nil
+	}
 	return t.result(in, answers, strings.TrimSpace(ans.Text), ""), nil
+}
+
+// away is the result of questions that closed by themselves, nobody having
+// touched a key for the askUserQuestionTimeout option's time: what was
+// picked by then, and that the model goes on without the person.
+func (t *askTool) away(in askInput, answers map[string]string) core.ToolResult {
+	kept := map[string]string{}
+	var b strings.Builder
+	b.WriteString("Nobody answered the questions in time: the user may be away from the keyboard.")
+	for i, q := range in.Questions {
+		got := strings.TrimSpace(answers[q.Question])
+		if got == "" {
+			continue
+		}
+		if len(kept) == 0 {
+			b.WriteString(" What they had picked by then:\n")
+		}
+		kept[q.Question] = got
+		fmt.Fprintf(&b, "%d. %s\n   Answer: %s\n", i+1, q.Question, got)
+	}
+	b.WriteString("\nGo on with your own judgment for what is not answered, say in your answer what you assumed, and ask again later if it still matters.")
+	meta := map[string]any{"questions": in.Questions, "answers": kept, "timedOut": true}
+	return core.ToolResult{Content: []core.Block{core.Text(b.String())}, Meta: meta}
 }
 
 // result writes the tool's result: what the model reads, and Claude

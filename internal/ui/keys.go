@@ -917,8 +917,39 @@ func (s *session) open(qs *question) {
 	if t := s.lastInput.Add(guardPause); t.After(qs.quiet) {
 		qs.quiet = t
 	}
+	if qs.form != nil && !qs.escCancels && qs.local == nil && qs.q.Tool == "AskUserQuestion" {
+		qs.idle = s.info.AskTimeout
+	}
 	s.q = qs
 	s.dirty = true
+}
+
+// questionAway closes the model's questions when they went without a key
+// for their idle time (the askUserQuestionTimeout option): what was picked
+// by then is the answer, with the Choice app.AskedAway, and the model goes
+// on without the person.
+func (s *session) questionAway(q *question) {
+	f, ok := q.ui.(*menu.Form)
+	if !ok {
+		q.idle = 0
+		return
+	}
+	ans, record, _ := q.answer(menu.Result{Done: true, Answers: f.Answers()})
+	ans.Choice = app.AskedAway
+	if err := s.c.Answer(q.q.ID, ans); err != nil {
+		// Answered a moment before from elsewhere.
+		return
+	}
+	words := "no answer in " + span(q.idle) + ": the model goes on without you"
+	for _, line := range strings.Split(record, "\n") {
+		if !strings.HasSuffix(line, "(no answer)") {
+			words += "; picked by then: " + strings.ReplaceAll(record, "\n", "; ")
+			break
+		}
+	}
+	s.record(q, words)
+	q.answered = true
+	s.closeQuestion()
 }
 
 // closeQuestion takes the question off the screen. The prompt box has the

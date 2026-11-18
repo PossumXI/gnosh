@@ -465,8 +465,13 @@ func (s *session) activityLine(width int, now time.Time) string {
 		// The question itself stands right under this line.
 		what = "waiting for your answer"
 		since = s.q.opened
-		if d := s.q.deadline; !d.IsZero() {
+		switch d := s.q.deadline; {
+		case !d.IsZero():
 			extra = "answered as no in " + span(d.Sub(now))
+		case s.q.idle > 0:
+			if left := s.q.idle - now.Sub(s.q.idleSince(s.lastInput)); left <= awayCountdown {
+				extra = "goes on without you in " + span(max(left, 0))
+			}
 		}
 	case !s.busy && s.cmdRun != "":
 		shown, _ := shownCommand(s.cmdRun)

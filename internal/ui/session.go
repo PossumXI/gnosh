@@ -650,6 +650,9 @@ func (s *session) tick() {
 		s.q.guarded = false
 		s.dirty = true
 	}
+	if q := s.q; q != nil && q.idle > 0 && !q.answered && now.Sub(q.idleSince(s.lastInput)) >= q.idle {
+		s.questionAway(q)
+	}
 	if s.hint != "" && !now.Before(s.hintUntil) {
 		s.hint = ""
 		s.dirty = true

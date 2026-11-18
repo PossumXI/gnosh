@@ -44,7 +44,10 @@ Built:
   tools are `mcp__<server>__<tool>`, and a server may ask you for a few
   values in the middle of a call, Claude Code's elicitation).
 - **Permissions:** modes, plan mode included (the model presents its plan
-  with ExitPlanMode and you approve it), and rules.
+  with ExitPlanMode and you approve it), and rules. The model's own
+  questions (AskUserQuestion) can close by themselves after a while
+  without a key, so that a session you left goes on
+  (`"options": {"askUserQuestionTimeout": "5m"}`, or 60s or 10m).
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks, mcp_tool hooks, prompt hooks (a rule or a condition
   the model judges, `{"ok": false, "reason": ...}` blocking as a command
@@ -61,7 +64,9 @@ Built:
 - **What the model is given:** instruction files, skills (with
   allowed-tools and disallowed-tools, effort, `context: fork` in a
   sub-agent, paths, hooks of their own, and commands run before the model
-  sees them), and a status line command (Claude Code's `statusLine`).
+  sees them; up to six typed at the start of one line, `/write-tests
+  /fix-issue 123`, go together with the same arguments, as Claude Code's
+  prompt has it), and a status line command (Claude Code's `statusLine`).
 - **Sub-agents** in the foreground and, in a session, in the background:
   general-purpose, Explore, Plan and your own, given more to do once they
   end with SendMessage. Your own may name MCP servers (`mcpServers`): the

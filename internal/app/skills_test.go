@@ -79,6 +79,42 @@ func TestSkillTypedByThePerson(t *testing.T) {
 	checkSession(t, w, w.Sessions()[0])
 }
 
+// Skills stacked at the start of a typed line are all loaded, in order,
+// each with the words after the last as its arguments, as Claude Code's
+// prompt has it. A skill that runs in a sub-agent of its own, or a word
+// that is no skill, ends the stack and starts the arguments. A run loads
+// the first skill alone.
+func TestStackedSkills(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Both done."}, apptest.Reply{Text: "Tagged."}, apptest.Reply{Text: "Written."})
+	w.Write(w.ConfigDir()+"/skills/ship/SKILL.md", shipSkill)
+	w.Write(w.ConfigDir()+"/skills/changelog/SKILL.md", "---\ndescription: Writes the changelog entry.\n---\n\nWrite a changelog entry for $ARGUMENTS.\n")
+	w.Write(w.ConfigDir()+"/skills/forky/SKILL.md", "---\ndescription: Counts in a sub-agent.\ncontext: fork\n---\n\nCount things.\n")
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/changelog /ship v3")
+	s.see("The skills changelog, ship are in front of the model.")
+	s.see("Both done.")
+	first := lastUser(t, w.Model.Requests()[0])
+	has(t, "what the model read", first, `The user ran the skills "changelog", "ship" by typing: /changelog /ship v3`, "Write a changelog entry for v3.", "Tag the release v3 and say")
+	if strings.Index(first, "Write a changelog entry") > strings.Index(first, "Tag the release") {
+		t.Errorf("the skills are not in the order typed:\n%s", first)
+	}
+	s.typeLine("/ship /forky v4")
+	s.see("Tagged.")
+	second := lastUser(t, w.Model.Requests()[1])
+	has(t, "a skill in a sub-agent ends the stack", second, `The user ran the skill "ship" by typing: /ship /forky v4`)
+	hasNot(t, "a skill in a sub-agent ends the stack", second, "Count things.", "the skills")
+	s.typeLine("/exit")
+	if code := s.exit(); code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+
+	run(t, w, "-p", "/changelog /ship v5").wantCode(t, 0)
+	third := lastUser(t, w.Model.Requests()[2])
+	has(t, "a run", third, "Write a changelog entry for /ship v5.")
+	hasNot(t, "a run", third, "Tag the release")
+}
+
 // As the prompt of a run, a skill's name runs the skill, and the run is
 // the model's answer to it. A name that is no skill and no command is a
 // prompt like any other.

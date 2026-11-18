@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -192,4 +193,38 @@ func TestAskUserQuestionThroughAnInterface(t *testing.T) {
 	if asked {
 		t.Errorf("the questions were put in a session that is never to be asked")
 	}
+}
+
+// With askUserQuestionTimeout set, the interface is told how long the
+// model's questions may wait without a key; when they close by
+// themselves (the Choice AskedAway), the model reads what was picked by
+// then and that the person may be away, and goes on.
+func TestAskUserQuestionAway(t *testing.T) {
+	w := apptest.NewWorld(t, askCall(twoQuestions), apptest.Reply{Text: "Going on with SQLite."})
+	w.Settings(`{"options": {"askUserQuestionTimeout": "5m"}}`)
+	var info SessionInfo
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		info = c.Info()
+		if _, err := c.Submit(agent.Prompt{Text: "ask me"}); err != nil {
+			return 1
+		}
+		q := find(f, "the question", func(e *agent.QuestionEvent) bool { return true }).Question
+		ans := agent.Answer{Choice: AskedAway, Data: map[string]string{
+			"Which database should the service use?":  "SQLite",
+			"Which checks should run before a merge?": "",
+		}}
+		if err := c.Answer(q.ID, ans); err != nil {
+			t.Errorf("Answer: %v", err)
+		}
+		_ = c.Wait(ctx)
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	if info.AskTimeout != 5*time.Minute {
+		t.Errorf("the interface was told %v, want 5m", info.AskTimeout)
+	}
+	got := toolResult(t, w, 1, "c1")
+	has(t, "what the model read", got, "Nobody answered the questions in time", "may be away", "Answer: SQLite", "Go on with your own judgment")
+	hasNot(t, "what the model read", got, "Which checks should run before a merge?")
 }

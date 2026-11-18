@@ -398,6 +398,11 @@ type SessionInfo struct {
 	NotifChannel string
 	// Theme is the theme option: "auto", "dark", "light" or "ansi".
 	Theme string
+	// AskTimeout is how long a question of the model's (AskUserQuestion)
+	// may go without a key before the interface closes it by itself, with
+	// what was picked by then and the Choice AskedAway (the
+	// askUserQuestionTimeout option); zero for never.
+	AskTimeout time.Duration
 	// Vim says the box takes vim's keys (the editorMode option, "vim"),
 	// and VimRemaps are the INSERT-mode pairs that stand for Esc (the
 	// vimInsertModeRemaps option).

@@ -153,7 +153,7 @@ var permissionKeys = []keyDef{
 var claudeCodeKeys = []string{
 	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
 	"fileCheckpointingEnabled",
-	"respectGitignore", "fileSuggestion", "claudeMdExcludes", "askUserQuestionTimeout",
+	"respectGitignore", "fileSuggestion", "claudeMdExcludes",
 	"bashOutputMaxChars", "showTurnDuration", "language", "spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "fallbackModel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
