@@ -776,7 +776,10 @@ func TestSendAtOnceWhileAHookRuns(t *testing.T) {
 	p := runProgram(t, w)
 	p.has("manual mode", "idle")
 	p.keys(`"wait a while" <Enter>`)
-	p.has("sleep 300")
+	// (The call is on the screen as the model writes it; "running" says
+	// it has begun, and its hook runs: what is sent at once then moves
+	// it to the background. On a loaded machine the keys came before.)
+	p.has("running sleep 300")
 	p.keys(`"and tell me when" <Enter>`)
 	p.has("and tell me when")
 	p.keys(`<Ctrl+X> <Ctrl+S>`)
