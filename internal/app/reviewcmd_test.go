@@ -63,5 +63,20 @@ func TestReviewCommands(t *testing.T) {
 	has(t, "what the person reads", r.out+r.err, "Nothing real.")
 	has(t, "what the model is asked", asked(), "The user typed /security-review", "from where this branch left main ("+base+")", "git diff "+base, "Change no file", "look at this in particular: the login path")
 	run(t, w, "--trust-folder", "-p", "/review").wantCode(t, 0)
-	has(t, "/review", asked(), "The user typed /review", "for bugs", "git diff "+base)
+	has(t, "/review", asked(), "The user typed /review", "for bugs", "git diff "+base, "Change no file")
+
+	// Claude Code's name for it, a level, --fix, and what to look at.
+	r = run(t, w, "--trust-folder", "-p", "/code-review low --fix the parser").wantCode(t, 0)
+	has(t, "what the person reads", r.out+r.err, "/review: the model is reviewing the changes and fixing the bugs it is sure of.")
+	has(t, "/code-review low --fix", asked(), "The user typed /review", "Then fix each bug you are sure of", "at most three findings", "look at this in particular: the parser")
+	hasNot(t, "/code-review low --fix", asked(), "Change no file", "in particular: low", "in particular: --fix")
+
+	// /simplify: the same range, and the model may change files.
+	r = run(t, w, "--trust-folder", "-p", "/simplify the new function").wantCode(t, 0)
+	has(t, "what the person reads", r.out+r.err, "/simplify: the model is making the changes simpler.")
+	has(t, "/simplify", asked(), "The user typed /simplify", "git diff "+base, "reuse:", "efficiency:", "not a search for bugs", "look at this in particular: the new function")
+	hasNot(t, "/simplify", asked(), "Change no file")
+	// The level words and --fix are /review's own: elsewhere they are words.
+	run(t, w, "--trust-folder", "-p", "/security-review high --fix").wantCode(t, 0)
+	has(t, "/security-review high --fix", asked(), "Change no file", "look at this in particular: high --fix")
 }

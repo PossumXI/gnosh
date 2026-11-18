@@ -1544,3 +1544,19 @@ or kept with the reason said (27).
     reads its name. The slash already opened the list as it is typed;
     Enter takes a candidate that completes the word, as it does for @ and
     paths.
+
+99. **/simplify, and /review's --fix and levels, as Claude Code's.**
+    /simplify [what to look at] sends the model the same range /review
+    covers with gnosh's own task: make the changes simpler, the code
+    doing what it did, looking for reuse of what the repository has,
+    simpler code, less work and the right place for each change, then
+    run the tests; bugs are /review's. Claude Code's /simplify runs four
+    review agents at once; gnosh asks the one model once, since its boxes
+    hold one model on one GPU. /review takes Claude Code's /code-review
+    name as another, its --fix (the bugs the model is sure of are fixed,
+    then the tests run; the rest are left and named) and its first word
+    low, medium, high, xhigh or max (low: at most three findings it is
+    most sure of; high and up: every changed function and its callers,
+    the less sure findings too, marked). PR numbers, --comment and ultra
+    are not taken: they need a forge or Anthropic's cloud. The notice
+    names what the model is doing.
