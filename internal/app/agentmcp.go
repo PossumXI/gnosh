@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -46,6 +47,15 @@ func (l *live) agentMCPConfigs(def agentdef.Def, have []mcp.Config) ([]mcp.Confi
 	if len(own) == 0 {
 		return nil, probs
 	}
+	if l.inv.StrictMCPConfig || l.cfg.Switches.SafeMode.V {
+		if def.Scope != agentdef.ScopeCommandLine {
+			// (--agents is the person's word for this run, as --mcp-config
+			// is: what a file writes is left out.)
+			probs = append(probs, mcp.Problem{Path: where,
+				Message: fmt.Sprintf("the agent %s writes MCP servers of its own, which --strict-mcp-config (or safe mode) leaves out, so the agent goes without them", def.Name)})
+			return nil, probs
+		}
+	}
 	cfgs, wrong := mcp.ParseServers(where, "agent", own, l.mcpSources())
 	return cfgs, append(probs, wrong...)
 }
@@ -68,7 +78,13 @@ func (l *live) connectAgentMCP(s *subSession) {
 		l.notice(agent.LevelWarning, "mcp", p.String())
 	}
 	for _, c := range cfgs {
-		srv := &mcpServer{cfg: c, status: "pending"}
+		if slices.ContainsFunc(have, func(h mcp.Config) bool { return h.Name == c.Name }) {
+			// Its tools' names would be the session's server's: the
+			// sub-agent has the session's, and this one is not started.
+			l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The sub-agent %s writes an MCP server of its own named %s, the name of one of this session's, so it is not started: the session's %s is the one it has.", s.def.Name, c.Name, c.Name))
+			continue
+		}
+		srv := &mcpServer{cfg: c, status: "pending", own: s.def.Name}
 		l.connectMCP(srv)
 		s.ownMCP = append(s.ownMCP, srv)
 	}

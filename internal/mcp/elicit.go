@@ -180,7 +180,14 @@ func (c *Client) elicited(ctx context.Context, m message) message {
 	if res.Action != "accept" {
 		res.Content = nil
 	}
-	reply.Result = mustJSON(res)
+	data, err := json.Marshal(res)
+	if err != nil {
+		// (A value JSON cannot hold, such as NaN: no answer at all would
+		// leave the server waiting.)
+		reply.Error = &RPCError{Code: -32603, Message: "gnosh could not write the answer: " + err.Error()}
+		return reply
+	}
+	reply.Result = data
 	return reply
 }
 

@@ -99,7 +99,8 @@ type Outcome struct {
 	// ElicitAction is the hooks' answer to an MCP server's request
 	// (Elicitation), or what they put in place of the person's answer
 	// (ElicitationResult): "accept", with ElicitContent, the values as a
-	// JSON object; "decline" (a hook declined or blocked, or could not
+	// JSON object, or nil when the hooks gave none (the person's stand);
+	// "decline" (a hook declined or blocked, or could not
 	// evaluate, and Blocked is true; or two hooks answered with different
 	// values); "cancel"; or "", which leaves the form to the person
 	// (Elicitation) or lets their answer go as it is (ElicitationResult).
@@ -448,10 +449,9 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 		case p.exit != 0:
 			v.notes = append(v.notes, fmt.Sprintf("its answer was not used, because it exited with status %d: an answer counts only from a hook that exits 0", p.exit))
 		default:
+			// (An accept with no "content" stays without: on
+			// ElicitationResult it keeps the person's values.)
 			v.action, v.content = a.action, a.content
-			if v.action == "accept" && v.content == nil {
-				v.content = json.RawMessage("{}")
-			}
 		}
 	}
 	if a.approve {
@@ -522,6 +522,8 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		blocks, asks, approves []string
 		stops, contexts        []string
 		answerer, otherAnswer  string // (two Elicitation hooks' different values)
+		accepted               json.RawMessage
+		cancelled              bool
 	)
 	for i, v := range verdicts {
 		h, p := sel[i], procs[i]
@@ -572,18 +574,18 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		if v.context != "" {
 			contexts = append(contexts, v.context)
 		}
-		switch {
-		case v.action == "cancel":
+		switch v.action {
+		case "cancel":
 			rec.Result = ResultAnswered
-			out.ElicitAction, out.ElicitContent = "cancel", nil
-		case v.action == "accept" && out.ElicitAction == "":
+			cancelled = true
+		case "accept":
 			rec.Result = ResultAnswered
-			out.ElicitAction, out.ElicitContent, answerer = "accept", v.content, h.label()
-		case v.action == "accept" && out.ElicitAction == "accept" && !bytes.Equal(out.ElicitContent, v.content) && otherAnswer == "":
-			rec.Result = ResultAnswered
-			otherAnswer = h.label()
-		case v.action == "accept":
-			rec.Result = ResultAnswered
+			switch {
+			case answerer == "":
+				accepted, answerer = v.content, h.label()
+			case !bytes.Equal(accepted, v.content) && otherAnswer == "":
+				otherAnswer = h.label()
+			}
 		}
 		switch {
 		case v.approved:
@@ -656,12 +658,19 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		out.Blocked = true
 		blocks = append(blocks, fmt.Sprintf("The PreToolUse hooks %s and %s each changed the call's input, in different ways. gnosh cannot apply both, and a call whose hooks do not agree on what to run is not run. Have one hook make the change.", changer, clash))
 	}
-	if otherAnswer != "" && out.ElicitAction == "accept" {
+	if otherAnswer != "" {
 		out.Blocked = true
 		blocks = append(blocks, fmt.Sprintf("The %s hooks %s and %s answered the MCP server with different values. gnosh cannot send both, so the request was declined. Have one hook answer.", event, answerer, otherAnswer))
 	}
-	if out.Blocked && (event == Elicitation || event == ElicitationResult) {
-		out.ElicitAction, out.ElicitContent = "decline", nil
+	if event == Elicitation || event == ElicitationResult {
+		switch {
+		case out.Blocked:
+			out.ElicitAction = "decline"
+		case cancelled:
+			out.ElicitAction = "cancel"
+		case answerer != "":
+			out.ElicitAction, out.ElicitContent = "accept", accepted
+		}
 	}
 	out.AdditionalContext = join(contexts)
 	out.StopReason = join(stops)

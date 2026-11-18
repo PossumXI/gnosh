@@ -122,3 +122,20 @@ func TestPromptHookConfig(t *testing.T) {
 		}
 	}
 }
+
+// The answer is the last object with "ok" in the reply: an example or a
+// quoted object before it is not the answer, and an object inside another
+// is part of it.
+func TestReadVerdictTakesTheLast(t *testing.T) {
+	for text, want := range map[string]bool{
+		`health said {"ok": true, "db": "down"}, so: {"ok": false, "reason": "db down"}`:      false,
+		`I'll answer {"ok": true} if they pass. They do not. {"ok": false, "reason": "fail"}`: false,
+		`{"ok": false, "reason": "x", "detail": {"ok": true}}`:                                false,
+		"Checked.\n```json\n{\"ok\": true}\n```":                                              true,
+	} {
+		v, err := readVerdict(text)
+		if err != nil || *v.OK != want {
+			t.Errorf("%q: %+v, %v; want ok %v", text, v, err, want)
+		}
+	}
+}

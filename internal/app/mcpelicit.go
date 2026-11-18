@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/mail"
 	"net/url"
 	"strconv"
@@ -39,19 +40,31 @@ import (
 // answers do not fit is declined.
 const elicitTries = 3
 
-// mcpElicit is the elicitation handler of the server name.
-func (l *live) mcpElicit(name string) func(context.Context, mcp.Elicitation) (mcp.ElicitResult, error) {
+// mcpElicit is the elicitation handler of the server s.
+func (l *live) mcpElicit(s *mcpServer) func(context.Context, mcp.Elicitation) (mcp.ElicitResult, error) {
+	name := s.cfg.Name
 	return func(ctx context.Context, e mcp.Elicitation) (mcp.ElicitResult, error) {
 		if l.agent == nil {
 			return mcp.ElicitResult{Action: "decline"}, nil
 		}
-		if turn := l.agent.TurnContext(); turn != nil {
-			// What a server asks in the middle of a turn is about that
-			// turn's work: stopping the turn takes it back.
+		if calls := s.inFlight(); len(calls) > 0 {
+			// What a server asks while calls of its tools run is about
+			// them: once every one of them has ended (finished, or
+			// stopped with the turn or the sub-agent that made it), the
+			// question is taken back.
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithCancel(ctx)
 			defer cancel()
-			defer context.AfterFunc(turn, cancel)()
+			go func() {
+				for _, c := range calls {
+					select {
+					case <-c.Done():
+					case <-ctx.Done():
+						return
+					}
+				}
+				cancel()
+			}()
 		}
 		if res, done := l.elicitHooks(ctx, name, e); done {
 			return res, nil
@@ -93,6 +106,10 @@ func (l *live) elicitPerson(ctx context.Context, name string, e mcp.Elicitation)
 		if len(values) == 0 && strings.TrimSpace(ans.Text) == "" && len(e.Fields) > 0 {
 			return mcp.ElicitResult{Action: "cancel"}
 		}
+		if len(e.Fields) == 0 && strings.TrimSpace(values[form.Questions[0].Question]) != "Yes" {
+			// No to a confirmation is an answer: the request is declined.
+			return mcp.ElicitResult{Action: "decline"}
+		}
 		content, why := elicitContent(e.Fields, form, values)
 		if why == "" {
 			l.flog.logf("mcp", "the MCP server %s was given what it asked for (%d fields)", name, len(content))
@@ -114,12 +131,20 @@ func (l *live) elicitHooks(ctx context.Context, name string, e mcp.Elicitation) 
 		return mcp.ElicitResult{}, false
 	}
 	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.Elicitation, MCPServerName: name, Message: e.Message, Mode: "form", RequestedSchema: e.Schema})
-	if err != nil {
+	switch {
+	case ctx.Err() != nil:
+		// Taken back while the hooks ran (the call ended, or the server
+		// took it back): nobody is told anything.
+		return mcp.ElicitResult{Action: "cancel"}, true
+	case err != nil:
 		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("The Elicitation hooks could not be run (%v), so what the MCP server %s asked for was declined.", err, name))
 		return mcp.ElicitResult{Action: "decline"}, true
 	}
 	if out.ElicitAction == "" {
 		return mcp.ElicitResult{}, false
+	}
+	if out.ElicitContent == nil {
+		out.ElicitContent = json.RawMessage("{}")
 	}
 	return l.elicitByHook(hooks.Elicitation, name, e, out), true
 }
@@ -136,11 +161,20 @@ func (l *live) elicitResultHooks(ctx context.Context, name string, e mcp.Elicita
 	}
 	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.ElicitationResult, MCPServerName: name, Action: res.Action, Mode: "form", Content: content})
 	switch {
+	case ctx.Err() != nil:
+		return mcp.ElicitResult{Action: "cancel"}
 	case err != nil:
 		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("The ElicitationResult hooks could not be run (%v), so the answer to the MCP server %s was declined.", err, name))
 		return mcp.ElicitResult{Action: "decline"}
 	case out.ElicitAction == "":
 		return res
+	}
+	if out.ElicitContent == nil {
+		// An accept that gives no values keeps the person's.
+		out.ElicitContent = content
+		if out.ElicitContent == nil {
+			out.ElicitContent = json.RawMessage("{}")
+		}
 	}
 	return l.elicitByHook(hooks.ElicitationResult, name, e, out)
 }
@@ -315,7 +349,7 @@ func elicitContent(fields []mcp.ElicitField, form QuestionForm, values map[strin
 			}
 		case "number", "integer":
 			n, err := strconv.ParseFloat(got, 64)
-			if err != nil || f.Type == "integer" && n != float64(int64(n)) {
+			if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || f.Type == "integer" && n != float64(int64(n)) {
 				return nil, name + " is " + map[string]string{"number": "a number", "integer": "a whole number"}[f.Type]
 			}
 			if f.Minimum != nil && n < *f.Minimum || f.Maximum != nil && n > *f.Maximum {

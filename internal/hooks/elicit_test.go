@@ -20,7 +20,7 @@ func TestElicitationHookAnswers(t *testing.T) {
 	if out.ElicitAction != "accept" || string(out.ElicitContent) != `{"project_key":"DOCS"}` || out.Blocked || out.Records[0].Result != ResultAnswered {
 		t.Errorf("accept: %+v", out)
 	}
-	if out := one(t, Elicitation, prints(t, answer("accept", ""))); out.ElicitAction != "accept" || string(out.ElicitContent) != `{}` {
+	if out := one(t, Elicitation, prints(t, answer("accept", ""))); out.ElicitAction != "accept" || out.ElicitContent != nil {
 		t.Errorf("accept with no content: %+v", out)
 	}
 	if out := one(t, Elicitation, prints(t, answer("cancel", ""))); out.ElicitAction != "cancel" || out.Blocked {
@@ -84,6 +84,13 @@ func TestElicitationHooksTogether(t *testing.T) {
 	}
 	if out := both(answer("accept", `{"project_key": "DOCS"}`), answer("accept", `{ "project_key" : "DOCS" }`)); out.ElicitAction != "accept" || out.Blocked {
 		t.Errorf("two accepts that agree: %+v", out)
+	}
+	// Two accepts that differ decline, whatever a third hook says.
+	r := newRunner(t, options(t), Hook{Event: Elicitation, Command: prints(t, answer("cancel", ""))},
+		Hook{Event: Elicitation, Command: prints(t, answer("accept", `{"project_key": "DOCS"}`))},
+		Hook{Event: Elicitation, Command: prints(t, answer("accept", `{"project_key": "WEB"}`))})
+	if out := run(t, r, input(Elicitation)); out.ElicitAction != "decline" || !out.Blocked {
+		t.Errorf("a cancel beside two different accepts: %+v", out)
 	}
 }
 

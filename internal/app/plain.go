@@ -400,6 +400,8 @@ func (f *plain) printFormQuestion() {
 		}
 	}
 	switch {
+	case len(q.Options) == 0:
+		fmt.Fprintln(f.out, "Type your answer and Enter, or Enter alone to leave it empty.")
 	case q.NoOther:
 		fmt.Fprintln(f.out, "Type a number and Enter.")
 	case q.MultiSelect:
@@ -426,6 +428,10 @@ func (pf *plainForm) hint() string {
 // the line was an answer, and more that another question waits after it.
 // With the last answer it returns the answer to the whole form.
 func (pf *plainForm) take(line string) (ans agent.Answer, more, good bool) {
+	if pf.form.EscCancels && strings.TrimSpace(line) == "/cancel" {
+		// A server's form, cancelled: the server is told so.
+		return agent.Answer{Choice: "cancel"}, false, true
+	}
 	q := pf.form.Questions[pf.at]
 	said, ok := formAnswer(q, line)
 	if !ok {
@@ -445,6 +451,11 @@ func (pf *plainForm) take(line string) (ans agent.Answer, more, good bool) {
 // several), which stands for its label, or the person's own words.
 func formAnswer(q FormQuestion, line string) (string, bool) {
 	line = strings.TrimSpace(line)
+	if len(q.Options) == 0 {
+		// A question answered by typing (a server's field): the line as
+		// it is, a number too; an empty one leaves it unanswered.
+		return line, true
+	}
 	if line == "" {
 		return "", false
 	}
@@ -1142,6 +1153,9 @@ func (f *plain) Event(ev any) {
 				head = form.Lead
 			}
 			fmt.Fprintln(f.out, "? "+visible(head))
+			if form.EscCancels {
+				fmt.Fprintln(f.out, "(/cancel answers that you will not say.)")
+			}
 			f.printFormQuestion()
 		} else {
 			f.printQuestion(q)

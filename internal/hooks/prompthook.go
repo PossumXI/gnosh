@@ -109,8 +109,10 @@ func (r *Runner) askModel(ctx context.Context, h Hook, event []byte, limit time.
 }
 
 // readVerdict finds the answer in what the model wrote: the whole text, or
-// the first JSON object in it that says "ok" (a model may put words or a
-// code block around it).
+// the last JSON object in it that says "ok" (a model may put words or a
+// code block around it, and an example or a quoted object before it: the
+// answer comes at the end). An object inside another is not one of its
+// own.
 func readVerdict(text string) (judgement, error) {
 	try := func(s string) (judgement, bool) {
 		var v judgement
@@ -123,16 +125,24 @@ func readVerdict(text string) (judgement, error) {
 	if v, ok := try(t); ok {
 		return v, nil
 	}
+	var last *judgement
 	for i := 0; i < len(t); i++ {
 		if t[i] != '{' {
 			continue
 		}
+		dec := json.NewDecoder(strings.NewReader(t[i:]))
 		var raw json.RawMessage
-		if json.NewDecoder(strings.NewReader(t[i:])).Decode(&raw) == nil {
-			if v, ok := try(string(raw)); ok {
-				return v, nil
-			}
+		if dec.Decode(&raw) != nil {
+			continue
 		}
+		if v, ok := try(string(raw)); ok {
+			last = &v
+		}
+		// (Past the whole object: what is inside it is part of it.)
+		i += int(dec.InputOffset()) - 1
+	}
+	if last != nil {
+		return *last, nil
 	}
 	return judgement{}, errors.New(`no JSON object with "ok" in it`)
 }

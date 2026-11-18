@@ -276,7 +276,6 @@ type Agent struct {
 type operation struct {
 	cancel context.CancelFunc
 	turn   *turn
-	ctx    context.Context // the turn's context, when it is a turn
 }
 
 // submission is a prompt on its way through the session.
@@ -906,23 +905,6 @@ func (a *Agent) toolEnv(callID string) *core.ToolEnv {
 			a.emit(&ToolProgressEvent{CallID: p.CallID, Stream: p.Stream, Text: p.Text})
 		},
 	}
-}
-
-// TurnContext is the context of the turn that runs, which ends when the
-// turn is stopped or over, or nil when no turn runs. A question about the
-// turn's work that comes from outside it (an MCP server's elicitation
-// arrives on its own) is put with it, so that stopping the turn takes the
-// question back as it does the turn's own questions.
-func (a *Agent) TurnContext() context.Context {
-	if a.parent != nil {
-		return a.parent.TurnContext()
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.cur == nil || a.cur.turn == nil {
-		return nil
-	}
-	return a.cur.ctx
 }
 
 // Ask puts a question to the person and waits for the answer, which the

@@ -70,6 +70,42 @@ type mcpServer struct {
 	// www is what a server that wants a sign-in said in its
 	// WWW-Authenticate (mcpauth.go).
 	www string
+	// own is the kind of sub-agent whose own server this is (agentmcp.go),
+	// or empty for one of the session's.
+	own string
+	// calls are the contexts of its tools' calls in flight, by a mark of
+	// each, under callsMu: what the server asks while they run is about
+	// them (mcpelicit.go).
+	callsMu sync.Mutex
+	calls   map[*byte]context.Context
+}
+
+// calling notes a call of one of the server's tools, made in ctx, until
+// done is called.
+func (s *mcpServer) calling(ctx context.Context) (done func()) {
+	mark := new(byte)
+	s.callsMu.Lock()
+	if s.calls == nil {
+		s.calls = map[*byte]context.Context{}
+	}
+	s.calls[mark] = ctx
+	s.callsMu.Unlock()
+	return func() {
+		s.callsMu.Lock()
+		delete(s.calls, mark)
+		s.callsMu.Unlock()
+	}
+}
+
+// inFlight is the contexts of the server's calls that run now.
+func (s *mcpServer) inFlight() []context.Context {
+	s.callsMu.Lock()
+	defer s.callsMu.Unlock()
+	out := make([]context.Context, 0, len(s.calls))
+	for _, c := range s.calls {
+		out = append(out, c)
+	}
+	return out
 }
 
 // mcpSet is the session's servers.
@@ -172,13 +208,17 @@ func (l *live) connectMCP(s *mcpServer) {
 		s.status, s.err = "failed", why
 		l.mcp.mu.Unlock()
 		l.flog.logf("mcp", "the MCP server %s did not connect: %s", s.cfg.Name, why)
+		if s.own != "" {
+			l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s of the sub-agent %s is not connected: %s. The sub-agent goes without it.", s.cfg.Name, s.own, oneLine(why, 300)))
+			return
+		}
 		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s is not connected: %s (/mcp says more)", s.cfg.Name, oneLine(why, 300)))
 	}
 	timeout := l.cfg.Limits.MCPTimeout.V
 	ctx, cancel := context.WithTimeout(l.ctx, timeout)
 	defer cancel()
 	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: timeout}
-	if l.channelNamed(s.cfg.Name) && s.cfg.Type != "http" {
+	if l.channelNamed(s.cfg.Name) && s.cfg.Type != "http" && s.own == "" {
 		// A channel's events (the client hears only a server that declared
 		// itself one). A channel runs on this machine: one reached at a URL
 		// is not heard (channelsNotice says so).
@@ -208,9 +248,15 @@ func (l *live) connectMCP(s *mcpServer) {
 	if l.interactive || l.hooks.has(hooks.Elicitation) {
 		// (A run has nobody to ask, and declares no elicitation unless a
 		// hook may answer.)
-		opt.OnElicit = l.mcpElicit(s.cfg.Name)
+		opt.OnElicit = l.mcpElicit(s)
 	}
 	client, err := mcpConnect(ctx, s.cfg, l.cfg.Paths.ProjectRoot, l.p.o.Environ, l.roots, opt)
+	if _, ok := errNeedsAuth(err); ok && s.own != "" {
+		// (A sign-in is kept for the session's servers, by name: /mcp
+		// login cannot see a sub-agent's own.)
+		fail("it wants a sign-in, which only a server of the session's can have: add it to mcp.json, sign in with /mcp login, and name it in the agent's mcpServers")
+		return
+	}
 	if na, ok := errNeedsAuth(err); ok {
 		l.mcpNeedsAuth(s, gen, na)
 		return
@@ -222,6 +268,10 @@ func (l *live) connectMCP(s *mcpServer) {
 	tools, err := client.ListTools(ctx)
 	if na, ok := errNeedsAuth(err); ok {
 		_ = client.Close()
+		if s.own != "" {
+			fail("it wants a sign-in, which only a server of the session's can have: add it to mcp.json, sign in with /mcp login, and name it in the agent's mcpServers")
+			return
+		}
 		l.mcpNeedsAuth(s, gen, na)
 		return
 	}
@@ -579,6 +629,7 @@ func (t *mcpTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 		ctx, cancel = context.WithTimeout(ctx, limit)
 		defer cancel()
 	}
+	defer t.server.calling(ctx)()
 	res, err := client.CallTool(ctx, t.tool.Name, call.Input)
 	// A server that changed its tools on the way says so before it answers.
 	t.l.refreshMCP(t.server, client)

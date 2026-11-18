@@ -122,3 +122,58 @@ func TestStatusNamesUnusedFiles(t *testing.T) {
 	r := run(t, w, "-p", "/status").wantCode(t, 0)
 	has(t, "/status", r.out, "not used", "agents/broken.md: no kind of sub-agent")
 }
+
+// With --strict-mcp-config the servers an agent's file writes are left
+// out, and that is said; the session that runs as an agent whose tools
+// name one server's has that server's tools and no other's.
+func TestAgentServersUnderStrictAndToolLists(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
+	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	w.Write(w.ConfigDir()+"/agents/greeter.md", `---
+name: greeter
+description: Greets people.
+tools: Read, mcp__own__*
+mcpServers:
+  - own:
+      command: "`+server+`"
+---
+You greet people.
+`)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"other": {"command": "`+server+`"}}}`)
+	r := run(t, w, "--agent", "greeter", "--strict-mcp-config", "-p", "/mcp").wantCode(t, 0)
+	has(t, "/mcp under --strict-mcp-config", r.out+r.err, "leaves out")
+	hasNot(t, "/mcp under --strict-mcp-config", r.out, "own: connected")
+
+	run(t, w, "--agent", "greeter", "-y", "-p", "hi").wantCode(t, 0)
+	body := string(w.Model.Requests()[0].Body)
+	has(t, "the tools of the agent's own server", body, "mcp__own__greet")
+	hasNot(t, "the tools of a server its tools do not name", body, "mcp__other__greet")
+}
+
+// A sub-agent's own server named like one of the session's is not started:
+// the sub-agent has the session's.
+func TestSubAgentOwnServerNamedLikeTheSessions(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"greet","prompt":"Greet Jae.","subagent_type":"greeter"}`}}},
+		apptest.Reply{Text: "Greeted."},
+		apptest.Reply{Text: "Done."},
+	)
+	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	started := w.Home + "/own-started"
+	own := w.Script(w.Home+"/bin/own.sh", "touch "+started+"\n"+fakeMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"own": {"command": "`+server+`"}}}`)
+	w.Write(w.ConfigDir()+"/agents/greeter.md", `---
+name: greeter
+description: Greets people.
+mcpServers:
+  - own:
+      command: "`+own+`"
+---
+You greet people.
+`)
+	r := run(t, w, "-y", "-p", "greet Jae").wantCode(t, 0)
+	has(t, "what was said", r.out+r.err, "the name of one of this session's, so it is not started")
+	if w.Exists(started) {
+		t.Errorf("the sub-agent's own server of a session server's name was started")
+	}
+}

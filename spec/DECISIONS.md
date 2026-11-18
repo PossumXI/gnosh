@@ -1480,3 +1480,25 @@ or kept with the reason said (27).
     the agent and skill files it found and does not use, and why. Already
     so in gnosh: /export never writes over a file, Up and Down keep the
     cursor's column, and Tab in a shell line completes only paths.
+
+95. **What a review of 90 to 94 changed.** A server's form is tied to the
+    calls of that server's tools that run when it asks, not to the
+    session's turn: it is taken back (and cancelled) once they have all
+    ended, so a background sub-agent's form outlives the main turn's end.
+    No to a confirmation declines at once; a number that is NaN or
+    infinite is no number; an answer JSON cannot hold is an error to the
+    server, never an empty reply. In the plain session a question with no
+    options takes the line as typed (a number too, and nothing for an
+    optional field), and /cancel cancels a server's form. A hook's run
+    stopped with the request is a quiet cancel. An ElicitationResult
+    hook's accept with no values keeps the person's; two hooks that accept
+    with different values decline whatever a third says. An agent hook
+    whose sub-agent did not finish (its turn failed, was stopped or ended)
+    could not run, and every hook's verdict is the last top-level JSON
+    object with "ok" in the reply, not the first. With
+    --strict-mcp-config or in safe mode the servers an agent's file writes
+    are left out (those of --agents stay, as the person's word); a
+    sub-agent's own server named like a session server is not started; an
+    agent's own server never takes part in channels, and one that wants a
+    sign-in is refused with how to give it one; the session run as an
+    agent is offered only the MCP tools its definition lists.

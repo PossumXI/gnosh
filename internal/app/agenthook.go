@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -67,11 +68,15 @@ func (l *live) agentHookRun(ctx context.Context, model, task string) (string, er
 	l.hookAgents.ids.Store(s.id, true)
 	defer l.hookAgents.ids.Delete(s.id)
 	res, err := s.agent.Run(ctx, agent.Prompt{Text: task})
-	if err != nil {
+	switch {
+	case err != nil:
 		return "", err
-	}
-	if s.capped.Load() {
+	case s.capped.Load():
 		return "", errors.New("its sub-agent wrote its 50 replies without an answer")
+	case res.Reason != agent.EndCompleted && res.Reason != agent.EndModelStopped:
+		// (A turn that failed, was stopped or was ended leaves an
+		// unfinished reply, which is no answer.)
+		return "", fmt.Errorf("its sub-agent did not finish (%s: %s)", res.Reason, oneLine(firstOf(res.Detail, "no more is known"), 200))
 	}
 	return strings.TrimSpace(res.Text), nil
 }

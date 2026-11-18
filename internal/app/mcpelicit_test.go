@@ -54,6 +54,7 @@ func TestElicitFormAndContent(t *testing.T) {
 		{[]string{"staging", "", "Yes", ""}, "one of main, dev"},
 		{[]string{"main", "", "maybe", ""}, "Yes or No"},
 		{[]string{"main", "", "No", "not-an-address"}, "is an email address"},
+		{[]string{"main", "NaN", "Yes", ""}, "a whole number"},
 	} {
 		if _, why := elicitContent(fields, form, answer(c.vals...)); !strings.Contains(why, c.want) {
 			t.Errorf("%q: %q, want %q", c.vals, why, c.want)
@@ -169,7 +170,8 @@ func TestMCPElicitationInThePlainSession(t *testing.T) {
 // ElicitationResult hook may put other values in place of the person's.
 func TestMCPElicitationHooks(t *testing.T) {
 	call := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "mcp__asker__deploy", Args: `{}`}}}
-	w := apptest.NewWorld(t, call, apptest.Reply{Text: "Deployed."}, call, apptest.Reply{Text: "Refused."}, call, apptest.Reply{Text: "Deployed again."})
+	w := apptest.NewWorld(t, call, apptest.Reply{Text: "Deployed."}, call, apptest.Reply{Text: "Refused."}, call, apptest.Reply{Text: "Deployed again."},
+		call, apptest.Reply{Text: "Deployed a third time."})
 	hellos := make(chan string, 8)
 	srv := askingMCP(t, hellos)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"asker": {"type": "http", "url": "`+srv.URL+`"}}}`)
@@ -206,6 +208,17 @@ echo '{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "action": "a
 	s.typeLine("1")
 	s.see("Deployed again.")
 	has(t, "what the model read after the change", toolResult(t, w, 5, "c1"), `told: {"action":"accept","content":{"region":"us-east","sure":true}}`)
+
+	// An ElicitationResult hook's accept with no values keeps the person's.
+	w.Script(change, `cat > /dev/null
+echo '{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "action": "accept"}}'`)
+	s.typeLine("deploy it")
+	s.see("Question 1 of 2 [region]")
+	s.typeLine("2")
+	s.see("Question 2 of 2 [sure]")
+	s.typeLine("1")
+	s.see("Deployed a third time.")
+	has(t, "what the model read after an accept with no values", toolResult(t, w, 7, "c2"), `told: {"action":"accept","content":{"region":"eu-west","sure":true}}`)
 	s.typeLine("/exit")
 	s.exit()
 }
@@ -227,5 +240,13 @@ func TestFormAnswerWithoutOwnWords(t *testing.T) {
 	}
 	if form := elicitForm(mcp.Elicitation{Fields: []mcp.ElicitField{{Name: "n", Type: "string"}, {Name: "b", Type: "boolean"}, {Name: "e", Type: "string", Enum: []string{"a"}}}}); form.Questions[0].NoOther || !form.Questions[1].NoOther || !form.Questions[2].NoOther {
 		t.Errorf("which questions take own words: %+v", form.Questions)
+	}
+	// A question answered by typing takes the line as it is, a number
+	// too, and an empty line leaves it unanswered.
+	typed := FormQuestion{Question: "replicas (a whole number)"}
+	for line, want := range map[string]string{"3": "3", "  42 ": "42", "": "", "3 or 4": "3 or 4"} {
+		if got, ok := formAnswer(typed, line); !ok || got != want {
+			t.Errorf("typed %q: %q, %v; want %q", line, got, ok, want)
+		}
 	}
 }
