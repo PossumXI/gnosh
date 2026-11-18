@@ -26,6 +26,10 @@ type Input struct {
 	// filter (Hook.If). Nil means every filter takes it. It is never sent
 	// to a hook.
 	IfMatch func(rule string) bool
+	// NoAgentHooks says the event is one of an agent hook's own sub-agent:
+	// no agent hook runs on it, so that a hook cannot set itself off. It
+	// is never sent to a hook.
+	NoAgentHooks bool
 
 	// SessionID is the session the user is in ("session_id"). For a
 	// sub-agent's event it is still the user's session; AgentID names the

@@ -318,7 +318,8 @@ var hookFields = map[string]string{
 	"server":         "",
 	"tool":           "",
 	"input":          "",
-	// The fields of a prompt hook.
+	// The fields of a prompt hook (prompt and model those of an agent hook
+	// too).
 	"prompt":          "",
 	"model":           "",
 	"continueOnBlock": "",

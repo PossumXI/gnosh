@@ -32,6 +32,12 @@ import (
 // A model that does not answer in time, or not with that JSON, is a hook
 // that could not run, as a command that failed is. The model asked is
 // the one gnosh asks its own side questions (Options.Prompt).
+//
+// An agent hook ("type": "agent") is the same question put to a sub-agent
+// that may look with its tools first (Options.Agent), whose last message
+// is read for the answer. Its "ok": false is read as a prompt hook's with
+// continueOnBlock (the reason goes back to the model, and the turn goes
+// on), and "impossible" is not read, as in Claude Code.
 
 // promptEvents are the events a prompt hook runs on.
 var promptEvents = map[Event]bool{
@@ -39,9 +45,13 @@ var promptEvents = map[Event]bool{
 	Stop: true, SubagentStop: true, UserPromptSubmit: true, UserPromptExpansion: true, PermissionRequest: true,
 }
 
-// promptTimeoutDefault is how long a prompt hook's model is given when the
-// hook sets no timeout, as in Claude Code.
-const promptTimeoutDefault = 30 * time.Second
+// promptTimeoutDefault and agentTimeoutDefault are how long a prompt
+// hook's model and an agent hook's sub-agent are given when the hook sets
+// no timeout, as in Claude Code.
+const (
+	promptTimeoutDefault = 30 * time.Second
+	agentTimeoutDefault  = 60 * time.Second
+)
 
 // judgement is a prompt hook's answer.
 type judgement struct {
@@ -57,7 +67,11 @@ func (r *Runner) askModel(ctx context.Context, h Hook, event []byte, limit time.
 	p.exit, p.limit = -1, limit
 	began := r.now()
 	defer func() { p.took = r.now().Sub(began) }()
-	if r.opts.Prompt == nil {
+	ask := r.opts.Prompt
+	if h.Agent {
+		ask = r.opts.Agent
+	}
+	if ask == nil {
 		p.startErr = errors.New("this gnosh asks no model for a hook")
 		return p
 	}
@@ -69,7 +83,7 @@ func (r *Runner) askModel(ctx context.Context, h Hook, event []byte, limit time.
 	}
 	cctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
-	answer, err := r.opts.Prompt(cctx, h.Model, text)
+	answer, err := ask(cctx, h.Model, text)
 	switch {
 	case ctx.Err() != nil:
 		p.cancelled = true
@@ -87,7 +101,10 @@ func (r *Runner) askModel(ctx context.Context, h Hook, event []byte, limit time.
 		p.stderr = answer
 		return p
 	}
-	p.exit, p.stdout = 0, verdictOutput(h.Event, v, h.ContinueOnBlock)
+	if h.Agent {
+		v.Impossible = false
+	}
+	p.exit, p.stdout = 0, verdictOutput(h.Event, v, h.ContinueOnBlock || h.Agent)
 	return p
 }
 

@@ -42,11 +42,11 @@ func TestParseConfigReadsClaudeCodesBlock(t *testing.T) {
 
 // With no file named, a problem still says where in the block it is.
 func TestParseConfigWithNoSourceNamed(t *testing.T) {
-	cfg, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "true"}, {"type": "agent"}]}], "stopp": []}`), "")
+	cfg, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "true"}, {"type": "script"}]}], "stopp": []}`), "")
 	if err == nil || len(cfg.Hooks) != 1 || cfg.Hooks[0].Source != "Stop group 1, hook 1" {
 		t.Fatalf("ParseConfig = %+v, %v", cfg.Hooks, err)
 	}
-	contains(t, "the error", err.Error(), `Stop group 1, hook 2: the hook has "type": "agent"`, "\n\"stopp\" is not a hook event")
+	contains(t, "the error", err.Error(), `Stop group 1, hook 2: the hook has "type": "script"`, "\n\"stopp\" is not a hook event")
 }
 
 func TestParseConfigTakesAnAbsentBlock(t *testing.T) {
@@ -128,7 +128,7 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"an mcp_tool hook with neither", hook(`"type": "mcp_tool"`), []string{`the mcp_tool hook names no "server" and no "tool"`}},
 		{"an mcp_tool hook whose input is not an object", hook(`"type": "mcp_tool", "server": "s", "tool": "t", "input": [1]`), []string{`"input" is a JSON object`}},
 		{"a command hook with a server", hook(`"type": "command", "command": "x", "server": "s"`), []string{`"server", which a hook of "type": "command" does not take`}},
-		{"an agent hook", hook(`"type": "agent", "prompt": "is it done?"`), []string{`"type": "agent"`, "command hooks, http hooks, mcp_tool hooks and prompt hooks only"}},
+		{"a hook of another type", hook(`"type": "script", "prompt": "is it done?"`), []string{`"type": "script"`, "command hooks, http hooks, mcp_tool hooks, prompt hooks and agent hooks only"}},
 
 		{"an if filter that is not a string", hook(`"type": "command", "command": "true", "if": ["Bash(rm *)"]`), []string{`"if" is one permission rule`, "this one is a list"}},
 		{"an empty if filter", hook(`"type": "command", "command": "true", "if": " "`), []string{`"if" is empty`, `leave "if" out`}},
@@ -198,7 +198,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	  "PreToolUse": [
 	    { "matcher": "Bash", "hooks": [
 	        { "type": "command", "command": "./ok.sh" },
-	        { "type": "agent", "prompt": "is it safe?" },
+	        { "type": "script", "prompt": "is it safe?" },
 	        { "type": "command", "command": "./filtered.sh", "if": 7, "timeout": -1 } ] } ],
 	  "stop": [ { "hooks": [ { "type": "command", "command": "./tests.sh" } ] } ],
 	  "PermissionRequest": [ { "hooks": [ { "type": "command", "command": "./answer.sh" } ] } ]
@@ -209,7 +209,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	}
 	text := err.Error()
 	contains(t, "the error", text,
-		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "agent"`,
+		`gnosh.json: PreToolUse group 1, hook 2: the hook has "type": "script"`,
 		`gnosh.json: PreToolUse group 1, hook 3: "if" is one permission rule`,
 		`gnosh.json: PreToolUse group 1, hook 3: the timeout "-1" cannot be used`,
 		`gnosh.json: "stop" is not a hook event`,
@@ -224,7 +224,7 @@ func TestParseConfigReportsEverythingAtOnce(t *testing.T) {
 	// PermissionRequest hooks.
 	fires := []Event{PreToolUse, Stop}
 	all := problemsText(Check(cfg, Options{Fires: fires}))
-	contains(t, "Check", all, `"type": "agent"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
+	contains(t, "Check", all, `"type": "script"`, `"if" is one permission rule`, `"stop" is not a hook event`, "does not run PermissionRequest hooks yet")
 }
 
 func TestNewHook(t *testing.T) {
@@ -523,7 +523,7 @@ func TestMergeCarriesProblemsAlong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./ok.sh"}, {"type": "agent", "prompt": "done?"}]}], "WorktreeCreate": []}`), "b.json")
+	bad, err := ParseConfig(json.RawMessage(`{"Stop": [{"hooks": [{"type": "command", "command": "./ok.sh"}, {"type": "script", "prompt": "done?"}]}], "WorktreeCreate": []}`), "b.json")
 	if err == nil {
 		t.Fatal("the second block was accepted")
 	}
@@ -535,7 +535,7 @@ func TestMergeCarriesProblemsAlong(t *testing.T) {
 	if len(problems) != 2 {
 		t.Fatalf("got %d problems, want 2:\n%s", len(problems), problemsText(problems))
 	}
-	contains(t, "the problems", problemsText(problems), `b.json: Stop group 1, hook 2: the hook has "type": "agent"`, `b.json: "WorktreeCreate"`)
+	contains(t, "the problems", problemsText(problems), `b.json: Stop group 1, hook 2: the hook has "type": "script"`, `b.json: "WorktreeCreate"`)
 	_, err = NewRunner(all, Options{Fires: Events(), ProjectDir: "/project"})
 	var ce *ConfigError
 	if !errors.As(err, &ce) || len(ce.Problems) != 2 {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 )
 
@@ -210,23 +211,23 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 	case !hasType:
 		p.fail(place, "the hook has no \"type\". gnosh runs command hooks: \"type\": \"command\".")
 		return
-	case kind != "command" && kind != "http" && kind != "mcp_tool" && kind != "prompt":
-		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks, http hooks, mcp_tool hooks and prompt hooks only, so this hook would not run as written.", quote(kind))
+	case kind != "command" && kind != "http" && kind != "mcp_tool" && kind != "prompt" && kind != "agent":
+		p.fail(place, "the hook has \"type\": %s. gnosh runs command hooks, http hooks, mcp_tool hooks, prompt hooks and agent hooks only, so this hook would not run as written.", quote(kind))
 		return
 	}
 	// The fields of one type are a mistake on another.
-	only := map[string]string{"command": "command", "args": "command", "async": "command", "asyncRewake": "command", "shell": "command",
-		"url": "http", "headers": "http", "allowedEnvVars": "http",
-		"server": "mcp_tool", "tool": "mcp_tool", "input": "mcp_tool",
-		"prompt": "prompt", "model": "prompt", "continueOnBlock": "prompt"}
+	only := map[string][]string{"command": {"command"}, "args": {"command"}, "async": {"command"}, "asyncRewake": {"command"}, "shell": {"command"},
+		"url": {"http"}, "headers": {"http"}, "allowedEnvVars": {"http"},
+		"server": {"mcp_tool"}, "tool": {"mcp_tool"}, "input": {"mcp_tool"},
+		"prompt": {"prompt", "agent"}, "model": {"prompt", "agent"}, "continueOnBlock": {"prompt"}}
 	for _, f := range fields {
-		if want, ok := only[f.key]; ok && want != kind && !isNull(f.value) {
+		if kinds, ok := only[f.key]; ok && !slices.Contains(kinds, kind) && !isNull(f.value) {
 			p.fail(place, "the hook has %s, which a hook of \"type\": %s does not take.", quote(f.key), quote(kind))
 			return
 		}
 	}
 
-	h := Hook{Event: event, Matcher: pattern, Source: p.at(place)}
+	h := Hook{Event: event, Matcher: pattern, Source: p.at(place), Agent: kind == "agent"}
 	before := len(p.cfg.problems)
 	badCommand := false
 	for _, f := range fields {
@@ -356,6 +357,10 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 	}
 	if kind == "prompt" && h.Prompt == "" && !badCommand {
 		p.fail(place, "the prompt hook has no \"prompt\": the rule or the condition the model judges.")
+		badCommand = true
+	}
+	if kind == "agent" && h.Prompt == "" && !badCommand {
+		p.fail(place, "the agent hook has no \"prompt\": the task its sub-agent is given.")
 		badCommand = true
 	}
 	if kind == "http" && h.URL == "" && !badCommand {

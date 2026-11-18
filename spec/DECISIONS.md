@@ -1382,7 +1382,7 @@ or kept with the reason said (27).
     hook). The timeout is 30 seconds unless the hook sets one. A model
     that does not answer in time, or not with that JSON, is a hook that
     could not run, which blocks where a hook can block, as a failed
-    command does. Not built: agent hooks ("type": "agent").
+    command does. Agent hooks ("type": "agent") came later (92).
 
 90. **MCP elicitation, as Claude Code's.** An MCP server may ask the
     person for a few values in the middle of a call (elicitation/create:
@@ -1426,3 +1426,22 @@ or kept with the reason said (27).
     values are not sent (Claude Code sends them with the cancel; MCP
     sends content only with accept). Command, http and mcp_tool hooks
     run on these events; prompt hooks do not, as in Claude Code.
+
+92. **Agent hooks, as Claude Code's.** A hook of "type": "agent" gives its
+    prompt ($ARGUMENTS as in a prompt hook) to a sub-agent of its own with
+    Read, Glob, Grep and Bash, which the session's permission rules apply
+    to, for at most 50 replies and 60 seconds unless the hook sets a
+    timeout; its last message is read for {"ok": ..., "reason": ...} as a
+    prompt hook's answer is. "ok": false is handled as a prompt hook's
+    with continueOnBlock, Claude Code's rule: on PreToolUse the call is
+    refused and the reason goes to the model, on PostToolUse the reason
+    goes to the model, on Stop and SubagentStop it is the next
+    instruction; "impossible" is not read. Agent hooks run on the prompt
+    hooks' events except PermissionRequest, and take no continueOnBlock.
+    Inside the hook's sub-agent no agent hook runs, and no SubagentStart
+    or SubagentStop hook, so that a hook cannot set itself off; the other
+    hooks (a PreToolUse guard) still apply to its calls. The sub-agent
+    reads the instruction files, where how to run the tests often is; a
+    hook's "model" is read and not honored, as for prompt hooks. A
+    sub-agent that writes its 50 replies without an answer is a hook that
+    could not run.

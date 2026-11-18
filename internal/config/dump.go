@@ -306,6 +306,9 @@ func (c *Config) HooksJSON() []byte {
 		}
 		if h.Prompt != "" {
 			hd = handler{Type: "prompt", Prompt: h.Prompt, Model: h.Model, ContinueOnBlock: h.ContinueOnBlock, Timeout: h.Timeout.Seconds()}
+			if h.Agent {
+				hd = handler{Type: "agent", Prompt: h.Prompt, Model: h.Model, Timeout: h.Timeout.Seconds()}
+			}
 		}
 		if h.Args != nil {
 			// (An empty list is still the exec form.)

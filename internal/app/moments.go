@@ -58,6 +58,13 @@ func (h *hookRunner) has(e hooks.Event) bool { return h != nil && h.r != nil && 
 // tells the hooks the same ones.
 func (h *hookRunner) run(ctx context.Context, in hooks.Input) (hooks.Outcome, error) {
 	l := h.l
+	if l.isHookAgent(in.AgentID) {
+		// An agent hook's own sub-agent (agenthook.go).
+		if in.Event == hooks.SubagentStart || in.Event == hooks.SubagentStop {
+			return hooks.Outcome{}, nil
+		}
+		in.NoAgentHooks = true
+	}
 	in.SessionID = l.ts.ID()
 	in.TranscriptPath = l.ts.Path()
 	if in.Cwd == "" {

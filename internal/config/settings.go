@@ -191,14 +191,14 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		how, known := hookFields[m.key]
 		switch {
 		case !known:
-			bad(m.line, "%s is not a field of a hook handler that gnosh knows, so the hook might not run as it was written. gnosh reads \"type\", \"command\", \"args\", \"timeout\" and \"if\" (and the fields of http, mcp_tool and prompt hooks).", showName(m.key))
+			bad(m.line, "%s is not a field of a hook handler that gnosh knows, so the hook might not run as it was written. gnosh reads \"type\", \"command\", \"args\", \"timeout\" and \"if\" (and the fields of http, mcp_tool, prompt and agent hooks).", showName(m.key))
 		case m.key == "type":
 			if m.val.kind != jString {
 				bad(m.line, "a hook's \"type\" is a string, and here it is %s.", m.val.kind.word())
 				break
 			}
-			if typ = m.val.str; typ != "command" && typ != "http" && typ != "mcp_tool" && typ != "prompt" {
-				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\", \"http\", \"mcp_tool\" and \"prompt\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
+			if typ = m.val.str; typ != "command" && typ != "http" && typ != "mcp_tool" && typ != "prompt" && typ != "agent" {
+				bad(m.line, "this hook has \"type\": %s, and gnosh runs hooks of type \"command\", \"http\", \"mcp_tool\", \"prompt\" and \"agent\" only. A hook it cannot run as written is not run some other way: rewrite it as a command, or take it out.", showName(typ))
 			}
 		case m.key == "command":
 			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
@@ -268,13 +268,13 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 			h.Input = m.val.marshal()
 		case m.key == "prompt":
 			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
-				bad(m.line, "a prompt hook's \"prompt\" is the rule or the condition the model judges, as a string that is not empty.")
+				bad(m.line, "a prompt or agent hook's \"prompt\" is the rule, the condition or the task the model is given, as a string that is not empty.")
 				break
 			}
 			h.Prompt = m.val.str
 		case m.key == "model":
 			if m.val.kind != jString {
-				bad(m.line, "a prompt hook's \"model\" is a string, and here it is %s.", m.val.kind.word())
+				bad(m.line, "a prompt or agent hook's \"model\" is a string, and here it is %s.", m.val.kind.word())
 				break
 			}
 			h.Model = m.val.str
@@ -348,11 +348,16 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 		bad(n.line, "this hook handler has no \"command\", so it would run nothing.")
 	case typ == "prompt" && h.Prompt == "":
 		bad(n.line, "this prompt hook has no \"prompt\": the rule or the condition the model judges.")
-	case typ == "prompt" && (h.Command != "" || h.Args != nil || h.URL != "" || h.Async || h.AsyncRewake):
-		bad(n.line, "this prompt hook has fields of a command hook or an http hook, which it does not take.")
-	case typ != "prompt" && (h.Prompt != "" || h.Model != "" || h.ContinueOnBlock):
-		bad(n.line, "this hook has \"prompt\", \"model\" or \"continueOnBlock\", which only a prompt hook takes. Write \"type\": \"prompt\" for one.")
+	case typ == "agent" && h.Prompt == "":
+		bad(n.line, "this agent hook has no \"prompt\": the task its sub-agent is given.")
+	case (typ == "prompt" || typ == "agent") && (h.Command != "" || h.Args != nil || h.URL != "" || h.Async || h.AsyncRewake):
+		bad(n.line, "this %s hook has fields of a command hook or an http hook, which it does not take.", typ)
+	case typ == "agent" && h.ContinueOnBlock:
+		bad(n.line, "an agent hook takes no \"continueOnBlock\": its \"ok\": false always goes back to the model, and the turn goes on.")
+	case typ != "prompt" && typ != "agent" && (h.Prompt != "" || h.Model != "" || h.ContinueOnBlock):
+		bad(n.line, "this hook has \"prompt\", \"model\" or \"continueOnBlock\", which only a prompt hook (or an agent hook, for \"prompt\" and \"model\") takes. Write \"type\": \"prompt\" or \"agent\" for one.")
 	}
+	h.Agent = typ == "agent"
 	if !good {
 		return
 	}

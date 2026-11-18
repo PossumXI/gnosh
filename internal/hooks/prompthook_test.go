@@ -114,7 +114,7 @@ func TestPromptHookConfig(t *testing.T) {
 		`{"Stop": [{"hooks": [{"type": "prompt"}]}]}`:                                              "the prompt hook has no",
 		`{"Stop": [{"hooks": [{"type": "prompt", "prompt": "x", "command": "true"}]}]}`:            `"type": "prompt" does not take`,
 		`{"Stop": [{"hooks": [{"type": "command", "command": "true", "continueOnBlock": true}]}]}`: `"type": "command" does not take`,
-		`{"Stop": [{"hooks": [{"type": "agent", "prompt": "x"}]}]}`:                                "prompt hooks only",
+		`{"Stop": [{"hooks": [{"type": "script", "prompt": "x"}]}]}`:                               "prompt hooks and agent hooks only",
 	} {
 		_, err := ParseConfig(json.RawMessage(text), "settings.json")
 		if err == nil || !strings.Contains(err.Error(), want) {

@@ -108,6 +108,12 @@ type Hook struct {
 	Prompt          string
 	Model           string
 	ContinueOnBlock bool
+	// Agent makes the hook an agent hook (Claude Code's "type": "agent"):
+	// Prompt is then a task for a sub-agent that looks with its tools
+	// before it answers as a prompt hook's model does (agenthook.go in the
+	// app). Its "ok": false is read as a prompt hook's with
+	// ContinueOnBlock, and "impossible" is not read.
+	Agent bool
 }
 
 // label is the hook's name in a sentence: the name it was given, or its
@@ -125,6 +131,9 @@ func (h Hook) label() string {
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
 		return "POST " + h.URL
+	}
+	if h.Prompt != "" && h.Agent {
+		return "agent: " + shorten(h.Prompt, 80)
 	}
 	if h.Prompt != "" {
 		return "prompt: " + shorten(h.Prompt, 80)
@@ -175,10 +184,12 @@ type Spec struct {
 	// Server, Tool and Input make an MCP tool hook (see Hook).
 	Server, Tool string
 	Input        json.RawMessage
-	// Prompt, Model and ContinueOnBlock make a prompt hook (see Hook).
+	// Prompt, Model and ContinueOnBlock make a prompt hook, and Agent
+	// with Prompt and Model an agent hook (see Hook).
 	Prompt          string
 	Model           string
 	ContinueOnBlock bool
+	Agent           bool
 }
 
 // NewHook checks a hook that was read from a settings file by someone else
@@ -210,6 +221,7 @@ func NewHook(s Spec) (Hook, error) {
 		Prompt:          s.Prompt,
 		Model:           s.Model,
 		ContinueOnBlock: s.ContinueOnBlock,
+		Agent:           s.Agent,
 		Source:          s.Source,
 		Global:          s.Global,
 		If:              strings.TrimSpace(s.If),
@@ -266,6 +278,22 @@ func hookProblems(h Hook) []string {
 		msgs = append(msgs, eventProblem(string(h.Event)))
 	}
 	switch {
+	case h.Agent && h.Prompt == "":
+		msgs = append(msgs, "the agent hook has no \"prompt\": the task its sub-agent is given.")
+	case h.Agent:
+		if h.Command != "" || h.Args != nil || h.URL != "" || h.Server != "" || h.Tool != "" || h.Async || h.AsyncRewake {
+			msgs = append(msgs, "the hook is both an agent hook and a command, an address or an MCP tool; it is one of them.")
+		}
+		if h.ContinueOnBlock {
+			msgs = append(msgs, "an agent hook takes no \"continueOnBlock\": its \"ok\": false always goes back to the model, and the turn goes on.")
+		}
+		if known && (!promptEvents[h.Event] || h.Event == PermissionRequest) {
+			runs := "command, http and mcp_tool hooks"
+			if h.Event == PermissionRequest {
+				runs = "command, http, mcp_tool and prompt hooks"
+			}
+			msgs = append(msgs, fmt.Sprintf("an agent hook runs on PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop, UserPromptSubmit and UserPromptExpansion, as in Claude Code; %s runs %s.", h.Event, runs))
+		}
 	case h.Prompt != "":
 		if h.Command != "" || h.Args != nil || h.URL != "" || h.Server != "" || h.Tool != "" || h.Async || h.AsyncRewake {
 			msgs = append(msgs, "the hook is both a prompt and a command, an address or an MCP tool; it is one of them.")

@@ -116,6 +116,10 @@ type Options struct {
 	// returns its answer; model is the hook's own "model", which the
 	// caller may not honor. Nil: such a hook could not run.
 	Prompt func(ctx context.Context, model, text string) (string, error)
+	// Agent runs an agent hook's task in a sub-agent that may look with
+	// its tools, and returns the sub-agent's last message (the app's
+	// agenthook.go). Without it an agent hook could not run.
+	Agent func(ctx context.Context, model, task string) (string, error)
 }
 
 const (
@@ -427,7 +431,11 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 			}
 			if h.Prompt != "" {
 				limit := h.Timeout
-				if limit <= 0 {
+				switch {
+				case limit > 0:
+				case h.Agent:
+					limit = agentTimeoutDefault
+				default:
 					limit = promptTimeoutDefault
 				}
 				procs[i] = r.askModel(ctx, h.Hook, stdin, limit)
@@ -481,6 +489,9 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 	for _, h := range hooks {
 		if h.agent != "" && h.agent != in.AgentID {
 			// A sub-agent's own hook, and this is not its event.
+			continue
+		}
+		if h.Agent && in.NoAgentHooks {
 			continue
 		}
 		matched, guardOnly := true, false

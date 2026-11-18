@@ -556,6 +556,7 @@ func hooksConfig(cfg *config.Config) (hooks.Config, []hooks.Problem) {
 			Prompt:          h.Prompt,
 			Model:           h.Model,
 			ContinueOnBlock: h.ContinueOnBlock,
+			Agent:           h.Agent,
 			Timeout:         h.Timeout,
 			Source:          h.Origin.String(),
 			Global:          h.Scope == "user",

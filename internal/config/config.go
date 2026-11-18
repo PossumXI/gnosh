@@ -345,6 +345,9 @@ type Hook struct {
 	Prompt          string
 	Model           string
 	ContinueOnBlock bool
+	// Agent makes the hook an agent hook: Prompt is a task for a sub-agent
+	// that looks with its tools before it answers (hooks/prompthook.go).
+	Agent bool
 	// Timeout is how long the hook may run. Zero means the event's default.
 	Timeout time.Duration
 	// If is the hook's "if" filter: one permission rule. On a tool event
@@ -367,6 +370,9 @@ func (h Hook) CommandLine() string {
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool
+	}
+	if h.Prompt != "" && h.Agent {
+		return "agent: " + h.Prompt
 	}
 	if h.Prompt != "" {
 		return "prompt: " + h.Prompt

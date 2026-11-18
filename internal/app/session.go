@@ -58,18 +58,20 @@ type live struct {
 	suggestOn atomic.Bool
 	suggest   suggester
 
-	store     *transcript.Store
-	ts        *transcript.Session
-	log       *sessionLog
-	engine    *permission.Engine
-	hooks     *hookRunner
-	shell     *shelltool.Manager
-	texts     *prompt.Set
-	instr     *instructions.Set
-	tools     []core.Tool
-	own       []core.Tool // gnosh's own tools that are offered, without the Agent tool
-	toolStore *sync.Map
-	roots     []string
+	store  *transcript.Store
+	ts     *transcript.Session
+	log    *sessionLog
+	engine *permission.Engine
+	hooks  *hookRunner
+	// hookAgents are the sub-agents agent hooks run (agenthook.go).
+	hookAgents hookAgents
+	shell      *shelltool.Manager
+	texts      *prompt.Set
+	instr      *instructions.Set
+	tools      []core.Tool
+	own        []core.Tool // gnosh's own tools that are offered, without the Agent tool
+	toolStore  *sync.Map
+	roots      []string
 	// addedDirs are the folders /add-dir added, which a new start of the
 	// session (/restart, /cd) is given as --add-dir.
 	addedDirs []string
@@ -432,6 +434,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	ho.Background = l.backgroundHook
 	ho.MCP = l.mcpHookCall
 	ho.Prompt = l.promptHookAsk
+	ho.Agent = l.agentHookRun
 	for _, c := range l.contribs {
 		if c.c.Hooks != nil {
 			fires := ho.Fires
