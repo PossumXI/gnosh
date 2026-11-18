@@ -645,6 +645,13 @@ func (s *Set) PrintWait(waited, work string) string {
 	return s.fill(textPrintWait, values{"waited": oneLine(waited, maxName), "work": oneLine(work, maxQuote)})
 }
 
+// PrintLeftovers returns the line that tells the model, once, as a run is
+// about to end, what its commands left running, which the end stops: left
+// is the process groups, as the commands' results named them.
+func (s *Set) PrintLeftovers(left string) string {
+	return s.fill(textPrintLeftovers, values{"left": oneLine(left, maxQuote)})
+}
+
 // SummaryIntro returns the line that stands just before a summary, where
 // the summary takes the place of the conversation it replaced. The summary
 // itself follows it, outside the marker: it is the model's own text.

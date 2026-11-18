@@ -24,14 +24,24 @@ import (
 // the work with TaskStop or wait on. CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
 // still sets a ceiling for whoever wants one (a number of milliseconds;
 // 0 waits with no checkpoint).
+//
+// When nothing is left to wait for, a run whose commands left processes
+// running (a server started with nohup ... &), which its end stops, tells
+// the model so once and gives it a turn to keep one with setsid: the
+// commands' results said so too, and a model that took no notice of it
+// lost a FrontierHarness task, its server stopped before it was graded,
+// that Pi passed with the same command.
 
 // backgrounder is what a session's controls may also be: able to say what
 // still runs in the background, to put a checkpoint to the model, and to
-// stop the lot.
+// stop the lot; and to say what its commands left running, and tell the
+// model of it.
 type backgrounder interface {
 	BackgroundWork() (running []string, ever bool)
 	CheckBackground(waited time.Duration, work []string)
 	StopBackground()
+	LeftRunning() []string
+	TellLeftRunning(left []string) bool
 }
 
 // The pace of the wait: how often it looks, how long all must be quiet
@@ -42,6 +52,9 @@ const (
 	waitSettle     = time.Second
 	waitSay        = 5 * time.Second
 	waitCheckpoint = 10 * time.Minute
+	// wakeLost is how long a note that was to wake the model may go
+	// without a turn starting before the run stops waiting for one.
+	wakeLost = 10 * time.Second
 )
 
 // awaitBackground keeps the run open for the background work its turns
@@ -53,8 +66,18 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 	if !ok {
 		return res, nil, agent.State{}
 	}
+	// told says the model was told what the run's end stops, and woken
+	// that the turn it was woken for has not ended yet (since wokenAt).
+	told, woken, wokenAt := false, false, time.Time{}
+	ended := func(r agent.TurnResult) bool {
+		return r.Reason == agent.EndCompleted || r.Reason == agent.EndModelStopped
+	}
 	if _, ever := b.BackgroundWork(); !ever {
-		return res, nil, agent.State{}
+		left := b.LeftRunning()
+		if len(left) == 0 || !ended(res) || !b.TellLeftRunning(left) {
+			return res, nil, agent.State{}
+		}
+		told, woken, wokenAt = true, true, time.Now()
 	}
 	if f.format == cli.FormatStreamJSON {
 		f.mu.Lock()
@@ -79,7 +102,12 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			if f.format == cli.FormatStreamJSON {
 				f.emitResult(c, r)
 			}
-			res, idleSince, quietSince = r, time.Now(), time.Time{}
+			if !woken || ended(r) {
+				// (The turn the model was told what the end stops in is
+				// no reason for the run to fail.)
+				res = r
+			}
+			idleSince, quietSince, woken = time.Now(), time.Time{}, false
 			continue
 		case s := <-signals:
 			st := c.State()
@@ -90,7 +118,11 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 		case <-tick.C:
 		}
 		st := c.State()
-		if st.Busy || st.Queued > 0 {
+		if woken && !st.Busy && st.Queued == 0 && time.Since(wokenAt) >= wakeLost {
+			// The note never started a turn (the session is closing).
+			woken = false
+		}
+		if st.Busy || st.Queued > 0 || woken {
 			idleSince, quietSince = time.Now(), time.Time{}
 			continue
 		}
@@ -101,10 +133,16 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			// must stay quiet for a moment.
 			if quietSince.IsZero() {
 				quietSince = time.Now()
-			} else if time.Since(quietSince) >= waitSettle {
-				return res, nil, st
+				continue
 			}
-			continue
+			if time.Since(quietSince) < waitSettle {
+				continue
+			}
+			if left := b.LeftRunning(); !told && len(left) > 0 && ended(res) && b.TellLeftRunning(left) {
+				told, woken, wokenAt, quietSince = true, true, time.Now(), time.Time{}
+				continue
+			}
+			return res, nil, st
 		}
 		quietSince = time.Time{}
 		waited := time.Since(idleSince)

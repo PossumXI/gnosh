@@ -314,6 +314,47 @@ func (m *Manager) expect(callID string) (forget func()) {
 	}
 }
 
+// LeftRunning says what Close would stop of what finished commands left
+// running, holding their output or not (cmd >log 2>&1 &, nohup cmd &):
+// each process group still there, with its programs, as the command's
+// result named it ("process group 4242 (python3)"). What started a
+// session of its own (setsid) is not in it: Close leaves that alone. It is
+// what a run tells the model before it ends (app's printwait.go), so that
+// a server the task needs is not stopped unseen.
+func (m *Manager) LeftRunning() []string {
+	m.mu.Lock()
+	sessions := make(map[int][]procInfo, len(m.lingering)+len(m.detached))
+	for j, procs := range m.lingering {
+		sessions[j.pid] = append(sessions[j.pid], procs...)
+	}
+	for sid, procs := range m.detached {
+		sessions[sid] = append(sessions[sid], procs...)
+	}
+	m.mu.Unlock()
+	var out []string
+	for sid, then := range sessions {
+		if sid <= 1 || len(then) == 0 {
+			continue
+		}
+		// As sweep finds them: the same processes, or else those that
+		// carry the session's mark.
+		now, err := m.procs(sid)
+		if err != nil || len(now) == 0 {
+			continue
+		}
+		if !sameProcess(now, then) {
+			if now = m.marked(now); len(now) == 0 {
+				continue
+			}
+		}
+		if text, _ := describeGroups(now); text != "" {
+			out = append(out, text)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // Close stops every command the manager started and is still running,
 // foreground and background, with everything those commands started; kills
 // what a finished command left behind if that still holds the command's

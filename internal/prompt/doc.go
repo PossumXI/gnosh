@@ -286,6 +286,9 @@
 //   - print-wait (PrintWait) wakes the model in a run (-p) that has waited
 //     long for background work it started: what still runs and for how
 //     long; stop it with TaskStop, or end the turn to wait on.
+//   - print-leftovers (PrintLeftovers) wakes the model once as a run (-p)
+//     is about to end with processes its commands left running, which the
+//     end stops: keep one with setsid, or end the turn.
 //   - structured-output (StructuredOutput) asks, after a run's turn with
 //     --json-schema and beside the session's request, for the result as
 //     one JSON value that conforms to the schema, again with what was

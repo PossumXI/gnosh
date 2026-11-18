@@ -1652,6 +1652,34 @@ func (c *controls) CheckBackground(waited time.Duration, work []string) {
 	})
 }
 
+// LeftRunning says what the session's end would stop of what its
+// commands left running (shelltool's Manager.LeftRunning): each process
+// group, as the commands' results named it.
+func (c *controls) LeftRunning() []string {
+	l := c.cur()
+	if l.shell == nil {
+		return nil
+	}
+	return l.shell.LeftRunning()
+}
+
+// TellLeftRunning hands the model, as a run is about to end, what its
+// commands left running, which the end stops: a note that wakes it, so
+// that a server the task needs can be kept with setsid. It reports
+// whether the note went to the model.
+func (c *controls) TellLeftRunning(left []string) bool {
+	l := c.cur()
+	if l.agent == nil || l.closing.Load() {
+		return false
+	}
+	return l.agent.Tell(agent.Note{
+		Text:   l.texts.PrintLeftovers(strings.Join(left, ", ")),
+		Source: "print-leftovers",
+		Notice: "The run is about to end, and stops what its commands left running: " + strings.Join(left, ", ") + ". The model is told once, to keep what the task needs with setsid.",
+		Wake:   true,
+	}) == nil
+}
+
 // StopBackground stops everything that runs in the background of the
 // session: its background commands and its sub-agents.
 func (c *controls) StopBackground() {

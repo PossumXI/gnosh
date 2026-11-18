@@ -714,9 +714,9 @@ func TestCommandsCarryTheMark(t *testing.T) {
 }
 
 // A process a command left running that let go of its output (a server
-// started with its output sent to a file) is said in the result and
-// stopped when the manager closes; one in a session of its own (setsid)
-// is left alone.
+// started with its output sent to a file) is said in the result, is what
+// LeftRunning names, and is stopped when the manager closes; one in a
+// session of its own (setsid) is left alone, and not named.
 func TestLetGoIsStoppedAtClose(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
@@ -736,8 +736,15 @@ func TestLetGoIsStoppedAtClose(t *testing.T) {
 	if !alive(server) || !alive(kept) {
 		t.Fatalf("before Close: server alive %v, kept alive %v", alive(server), alive(kept))
 	}
+	// (The command's shell leads the process group the sleep is in.)
+	if left := m.LeftRunning(); len(left) != 1 || !strings.HasPrefix(left[0], "process group ") || !strings.HasSuffix(left[0], " (sleep)") {
+		t.Errorf("LeftRunning before Close: %q", left)
+	}
 	if err := m.Close(); err != nil {
 		t.Errorf("Close: %v", err)
+	}
+	if left := m.LeftRunning(); len(left) != 0 {
+		t.Errorf("LeftRunning after Close: %q", left)
 	}
 	if alive(server) {
 		t.Errorf("the process left running is still there after Close")

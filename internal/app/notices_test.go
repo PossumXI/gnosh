@@ -2,7 +2,11 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -87,6 +91,51 @@ func TestRunWaitsForItsBackgroundWork(t *testing.T) {
 	r = run(t, w, "-y", "-p", "--output-format", "json", "start it again").wantCode(t, 0)
 	has(t, "the JSON result", r.out, `"result":"Done again."`)
 	hasNot(t, "the JSON result", r.out, "Started again.")
+}
+
+// A run whose command left a process running (a server started with
+// nohup ... &, its output sent to a file) tells the model, once, as it is
+// about to end, that its end stops it, and gives it a turn: one restarted
+// with setsid is left running after the run; what is not is stopped. A
+// run that left nothing running is not told. (The FrontierHarness run of
+// 18 November lost a task this way: the server was stopped before it was
+// graded.)
+func TestRunTellsWhatItsEndStops(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"nohup sleep 300 > server.log 2>&1 & echo $! > server.pid"}`}}},
+		apptest.Reply{Text: "Done."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"setsid nohup sleep 301 > kept.log 2>&1 < /dev/null & echo $! > kept.pid"}`}}},
+		apptest.Reply{Text: "Kept the server."})
+	r := run(t, w, "-y", "-p", "start the server").wantCode(t, 0)
+	if r.out != "Done.\n\nKept the server.\n" {
+		t.Errorf("the run printed %q", r.out)
+	}
+	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) is about to end, and what your commands left running is stopped with it: process group", "(sleep)", "setsid nohup <command>")
+	pidOf := func(name string) int {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(w.Dir, name))
+		pid, perr := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil || perr != nil {
+			t.Fatalf("%s: %q, %v", name, data, err)
+		}
+		return pid
+	}
+	server, kept := pidOf("server.pid"), pidOf("kept.pid")
+	t.Cleanup(func() { syscall.Kill(kept, syscall.SIGKILL); syscall.Kill(server, syscall.SIGKILL) })
+	if syscall.Kill(server, 0) == nil {
+		t.Errorf("the process the model did not keep is still running after the run")
+	}
+	if syscall.Kill(kept, 0) != nil {
+		t.Errorf("the process started with setsid was stopped with the run")
+	}
+	w.Model.Done()
+
+	w.Model.Add(apptest.Reply{Text: "Nothing to start."})
+	r = run(t, w, "-y", "-p", "say so").wantCode(t, 0)
+	if r.out != "Nothing to start.\n" {
+		t.Errorf("a run that left nothing running printed %q", r.out)
+	}
+	w.Model.Done()
 }
 
 // In stream-json output each turn's result line is written as the turn

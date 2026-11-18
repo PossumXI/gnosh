@@ -1858,3 +1858,17 @@ or kept with the reason said (27).
     reaping they guard against, PR labels, grouping by folder, and the
     `<` key that backgrounds a session into the view (/background does
     that).
+
+117. **A run tells the model what its end stops, once.** gnosh stops, as
+    a session ends, what its commands left running (946cfaa, after the
+    servers a test harness's runs had left on box 1 for two weeks), and
+    the command's result says so and how to keep one (setsid). On the
+    FrontierHarness run of 18 November Qwen started a server with nohup
+    ... &, said done, and the run's end stopped the server before it was
+    graded; Pi, which leaves such processes running as Claude Code does,
+    passed with the same command. Rather than leave everything running
+    again, a run (-p, also --bg) that is about to end with such processes
+    still there tells the model once which they are, and gives it a turn
+    to start one again with setsid if the task needs it. A run that left
+    nothing running is not told, and that turn's failing does not fail
+    the run.
