@@ -658,7 +658,13 @@ func (s *session) turnEnd(res agent.TurnResult) {
 		s.begin(blkTurn)
 		s.put(wrap(s.m, th.WarnLabel.Render("stopped")+th.Quiet.Render(" by you"+tail+th.Sep+"what was done is kept"), s.cols, "", "  ")...)
 	case agent.EndHalted:
-		s.notice(agent.LevelWarning, "The turn was ended"+tail+": "+firstNonEmpty(detail, "something ended it and gave no reason")+".")
+		level := agent.LevelWarning
+		if res.Driver == "EnterWorktree" || res.Driver == "ExitWorktree" {
+			// (A move the model made, which ends the turn on purpose:
+			// gnosh starts again where the session moved.)
+			level = agent.LevelInfo
+		}
+		s.notice(level, "The turn was ended"+tail+": "+firstNonEmpty(detail, "something ended it and gave no reason")+".")
 	case agent.EndModelStopped:
 		words := "The model chose to stop" + tail + ". Its reason: " + firstNonEmpty(detail, "(it gave none)")
 		if res.Objection != "" {
