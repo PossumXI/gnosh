@@ -71,7 +71,7 @@ func TestRestoreLeavesHardLinkedFiles(t *testing.T) {
 	if err := os.Link(file, filepath.Join(dir, "other-name.txt")); err != nil {
 		t.Skip("no hard links here: ", err)
 	}
-	done, failed := c.restore(c.since(map[string]bool{"p1": true}))
+	done, failed := c.restore(c.since(map[string]bool{"p1": true}), nil)
 	if len(done) != 0 || len(failed) != 1 || !strings.Contains(failed[0], "hard-linked") {
 		t.Errorf("done %q, failed %q", done, failed)
 	}
@@ -102,7 +102,7 @@ func TestFailedCopyIsNoted(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = c.keep("p1", file)
-	_, failed := c.restore(c.since(map[string]bool{"p1": true}))
+	_, failed := c.restore(c.since(map[string]bool{"p1": true}), nil)
 	if len(failed) != 1 || !strings.Contains(failed[0], "could not be kept") {
 		t.Errorf("failed %q", failed)
 	}

@@ -349,22 +349,26 @@ func (c *checkpoints) since(prompts map[string]bool) []fileCheckpoint {
 // no file where there was none. What a file holds now, when that is not
 // what is put back, is kept first, in the store's folder "replaced", and
 // what was put back says where. done lists what was put back, and failed
-// what could not be, each with why.
-func (c *checkpoints) restore(cps []fileCheckpoint) (done, failed []string) {
+// what could not be, each with why; show writes a path for the person.
+func (c *checkpoints) restore(cps []fileCheckpoint, show func(string) string) (done, failed []string) {
+	if show == nil {
+		show = func(p string) string { return p }
+	}
 	for _, cp := range cps {
+		path := show(cp.Path)
 		if cp.Failed {
-			failed = append(failed, cp.Path+": what it held before could not be kept, so it cannot be put back")
+			failed = append(failed, path+": what it held before could not be kept, so it cannot be put back")
 			continue
 		}
 		if cp.Large {
-			failed = append(failed, fmt.Sprintf("%s: it was too large to keep (%s)", cp.Path, byteCount(cp.Size)))
+			failed = append(failed, fmt.Sprintf("%s: it was too large to keep (%s)", path, byteCount(cp.Size)))
 			continue
 		}
 		var want []byte
 		if cp.Existed {
 			var err error
 			if want, err = os.ReadFile(filepath.Join(cp.dir, cp.Blob)); err != nil {
-				failed = append(failed, fmt.Sprintf("%s: its copy cannot be read (%v)", cp.Path, err))
+				failed = append(failed, fmt.Sprintf("%s: its copy cannot be read (%v)", path, err))
 				continue
 			}
 		}
@@ -372,31 +376,31 @@ func (c *checkpoints) restore(cps []fileCheckpoint) (done, failed []string) {
 		there := err == nil
 		switch {
 		case err != nil && !errors.Is(err, fs.ErrNotExist):
-			failed = append(failed, fmt.Sprintf("%s: %v", cp.Path, err))
+			failed = append(failed, fmt.Sprintf("%s: %v", path, err))
 			continue
 		case there && !info.Mode().IsRegular():
-			failed = append(failed, cp.Path+": something other than a file is there now, and is left alone")
+			failed = append(failed, path+": something other than a file is there now, and is left alone")
 			continue
 		case there && hardLinked(cp.Path):
 			// Put back by a new file in its place, it would no longer be
 			// the file its other names (as pnpm makes them) stand for.
-			failed = append(failed, cp.Path+": it is hard-linked under another name, which putting it back would cut it off from, so it is left as it is")
+			failed = append(failed, path+": it is hard-linked under another name, which putting it back would cut it off from, so it is left as it is")
 			continue
 		}
 		saved := ""
 		if there {
 			now, err := os.ReadFile(cp.Path)
 			if err != nil {
-				failed = append(failed, fmt.Sprintf("%s: %v", cp.Path, err))
+				failed = append(failed, fmt.Sprintf("%s: %v", path, err))
 				continue
 			}
 			if !cp.Existed || !bytes.Equal(now, want) {
 				name, err := c.write("replaced", filepath.Base(cp.Path), now)
 				if err != nil {
-					failed = append(failed, fmt.Sprintf("%s: what it holds now could not be kept first (%v), so it is left as it is", cp.Path, err))
+					failed = append(failed, fmt.Sprintf("%s: what it holds now could not be kept first (%v), so it is left as it is", path, err))
 					continue
 				}
-				saved = filepath.Join(c.dir, "replaced", name)
+				saved = show(filepath.Join(c.dir, "replaced", name))
 			}
 		}
 		kept := ""
@@ -405,22 +409,22 @@ func (c *checkpoints) restore(cps []fileCheckpoint) (done, failed []string) {
 		}
 		switch {
 		case !cp.Existed && !there:
-			done = append(done, cp.Path+" (was not there, and is not)")
+			done = append(done, path+" (was not there, and is not)")
 		case !cp.Existed:
 			if err := os.Remove(cp.Path); err != nil {
-				failed = append(failed, fmt.Sprintf("%s: %v", cp.Path, err))
+				failed = append(failed, fmt.Sprintf("%s: %v", path, err))
 			} else {
-				done = append(done, cp.Path+" (taken away: it was not there"+kept+")")
+				done = append(done, path+" (taken away: it was not there"+kept+")")
 			}
 		case saved == "" && there:
-			done = append(done, cp.Path+" (it held that already)")
+			done = append(done, path+" (it held that already)")
 		default:
 			if err := putBack(cp.Path, want, cp.Mode); err != nil {
-				failed = append(failed, fmt.Sprintf("%s: %v", cp.Path, err))
+				failed = append(failed, fmt.Sprintf("%s: %v", path, err))
 			} else if kept != "" {
-				done = append(done, cp.Path+" ("+strings.TrimPrefix(kept, "; ")+")")
+				done = append(done, path+" ("+strings.TrimPrefix(kept, "; ")+")")
 			} else {
-				done = append(done, cp.Path)
+				done = append(done, path)
 			}
 		}
 	}
@@ -543,6 +547,17 @@ var (
 	errFilesGone     = fmt.Errorf("the copies of what the files held before that prompt were let go: gnosh keeps those of your %d most recent prompts", checkpointPrompts)
 	errNoCheckpoints = errors.New("what Write and Edit change is not kept here (fileCheckpointingEnabled is false), so no file can be put back")
 )
+
+// showPath writes a path for the person: relative to the working
+// directory when it lies under it, else with ~ for the home directory.
+func (l *live) showPath(p string) string {
+	if l.log != nil {
+		if s := l.log.shownFile(p); !filepath.IsAbs(s) {
+			return s
+		}
+	}
+	return l.tilde(p)
+}
 
 // filePaths lists the paths of checkpoints.
 func filePaths(cps []fileCheckpoint) []string {

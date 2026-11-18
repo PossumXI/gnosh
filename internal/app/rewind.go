@@ -173,7 +173,7 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 	old.flog.logf("turn", "the conversation was taken back to before the prompt in entry %s", point)
 	old.close("other")
 	if files {
-		done, failed := old.checks.restore(restore)
+		done, failed := old.checks.restore(restore, old.showPath)
 		old.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point, len(done), len(failed))
 		filesSaid = restoreSaid(done, failed)
 	}
@@ -241,7 +241,7 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 		if ferr != nil {
 			return ferr
 		}
-		done, failed := l.checks.restore(cps)
+		done, failed := l.checks.restore(cps, l.showPath)
 		l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point.ID, len(done), len(failed))
 		if len(done) > 0 {
 			c.Say("The files are back as they were before your prompt: %s", oneLine(point.Text, 100))

@@ -156,6 +156,9 @@
 #               conversation to work in the background; when it is done its
 #               answer comes back, and the model tells it in a turn of its
 #               own
+#   rewind      (acceptEdits) the model writes note.txt, the person changes
+#               it by hand, and /rewind 1 files takes it away again, keeping
+#               what the person wrote beside the session
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -172,6 +175,7 @@ case "$scenario" in
 basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
+rewind) flags="--permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
@@ -194,7 +198,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind)" >&2
 	exit 2
 	;;
 esac
@@ -743,6 +747,13 @@ invisible)
 failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
+	;;
+rewind)
+	tmux send-keys -t "$S" "Write the word one into a file named note.txt in the current folder, with the Write tool. Then say done." Enter
+	for i in $(seq 1 240); do sleep 1; [ -s "$T/work/note.txt" ] && screen | grep -q "done in" && break; done
+	echo "by hand" > "$T/work/note.txt"
+	tmux send-keys -t "$S" "/rewind 1 files" Enter
+	done_when() { [ ! -e "$T/work/note.txt" ] && screen | grep -q "what it held is kept at"; }
 	;;
 subtask)
 	tmux send-keys -t "$S" "Say hi in two words." Enter
