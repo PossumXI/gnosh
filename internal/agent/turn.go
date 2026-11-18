@@ -544,13 +544,15 @@ const admitWait = 2 * time.Second
 // next request rather than a turn of its own: sending at once moves the
 // commands aside and ends the round at once, while the prompt may still
 // be on its way (on a busy machine, writing it down takes a while). It
-// waits for what the person sent alone: gnosh's own hidden prompts, which
-// may come often, never hold a round up.
+// waits for what the person sent alone, hidden or not (a !command's
+// output, a /skill): the notes gnosh tells the model (Tell: a channel's
+// event, a background task's end), which may come often, never hold a
+// round up.
 func (a *Agent) waitAdmitting(ctx context.Context) {
 	deadline := time.Now().Add(admitWait)
 	for ctx.Err() == nil && time.Now().Before(deadline) {
 		a.mu.Lock()
-		pending := slices.ContainsFunc(a.intake, func(s *submission) bool { return !s.taken && !s.prompt.Later && !s.prompt.Hidden })
+		pending := slices.ContainsFunc(a.intake, func(s *submission) bool { return !s.taken && !s.prompt.Later && !s.note })
 		a.mu.Unlock()
 		if !pending {
 			return
