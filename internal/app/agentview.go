@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,15 +39,17 @@ type AgentSource interface {
 	// session stays.
 	Forget(id string) error
 	// Dispatch starts a new run on the prompt, as gnosh --bg does, in the
-	// folder the view was opened in, and returns its session's id.
-	Dispatch(ctx context.Context, prompt string) (string, error)
+	// folder the view was opened in, with the flags given (the view's
+	// defaults for the runs it starts), and returns its session's id.
+	Dispatch(ctx context.Context, prompt string, flags []string) (string, error)
 	// Open opens a run's session as gnosh -r does, in its folder and on
 	// this terminal, and returns when the person leaves it. The view has
 	// given the terminal up meanwhile.
 	Open(id string) error
 	// Resume sends a run that is over back to work on the prompt, as gnosh
-	// --bg -r does: its session goes on, in its folder, as a run again.
-	Resume(ctx context.Context, id, prompt string) error
+	// --bg -r does, with the flags given: its session goes on, in its
+	// folder, as a run again.
+	Resume(ctx context.Context, id, prompt string, flags []string) error
 	// Tell sends words to a working run, which it reads between its steps
 	// as the person's (runasks.go); Unread takes back what a run that has
 	// ended did not read of them.
@@ -121,7 +124,7 @@ func (p *program) agentView(st *startup, inv cli.Invocation) int {
 		}
 	}
 	return p.o.AgentView(AgentViewInfo{
-		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs(), cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All, flags: flags},
+		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs(), cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All},
 		Cwd:    cwd, Home: home, Scoped: inv.Cwd != "", All: inv.All, Flags: flags,
 		Notify: firstOf(st.cfg.Options.PreferredNotifChannel.V, "auto"),
 	})
@@ -136,8 +139,6 @@ type runSource struct {
 	home   string
 	scoped bool
 	all    bool
-	// flags go to every run Dispatch starts.
-	flags []string
 
 	mu sync.Mutex
 	// runs are the runs as last listed, by session id, and convs what was
@@ -314,8 +315,8 @@ func (s *runSource) Forget(id string) error {
 // session's id after it.
 const bgStarted = "gnosh: backgrounded · "
 
-func (s *runSource) Dispatch(ctx context.Context, prompt string) (string, error) {
-	return s.background(ctx, s.cwd, nil, prompt)
+func (s *runSource) Dispatch(ctx context.Context, prompt string, flags []string) (string, error) {
+	return s.background(ctx, s.cwd, flags, prompt)
 }
 
 func (s *runSource) Tell(id, text string) error {
@@ -334,7 +335,7 @@ func (s *runSource) Unread(id string) []string {
 	return unreadWords(r.log)
 }
 
-func (s *runSource) Resume(ctx context.Context, id, prompt string) error {
+func (s *runSource) Resume(ctx context.Context, id, prompt string, flags []string) error {
 	r, err := s.run(id)
 	if err != nil {
 		return err
@@ -343,17 +344,17 @@ func (s *runSource) Resume(ctx context.Context, id, prompt string) error {
 	if info, err := os.Stat(r.cwd); err == nil && info.IsDir() {
 		dir = r.cwd
 	}
-	_, err = s.background(ctx, dir, []string{"--resume=" + id}, prompt)
+	_, err = s.background(ctx, dir, append(slices.Clone(flags), "--resume="+id), prompt)
 	return err
 }
 
-// background runs gnosh --bg in dir, with the view's flags, more, and the
-// prompt, and returns the id of the session it sent to the background.
-func (s *runSource) background(ctx context.Context, dir string, more []string, prompt string) (string, error) {
+// background runs gnosh --bg in dir with flags and the prompt, and returns
+// the id of the session it sent to the background.
+func (s *runSource) background(ctx context.Context, dir string, flags []string, prompt string) (string, error) {
 	if s.p.o.Executable == "" {
 		return "", errors.New("gnosh does not know its own program file, so it cannot start a run")
 	}
-	args := append(append(append([]string{"--bg"}, s.flags...), more...), "--", prompt)
+	args := append(append([]string{"--bg"}, flags...), "--", prompt)
 	cmd := exec.CommandContext(ctx, s.p.o.Executable, args...)
 	cmd.Dir, cmd.Env = dir, s.p.o.Environ
 	var out, errs bytes.Buffer

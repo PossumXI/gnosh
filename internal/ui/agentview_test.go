@@ -51,9 +51,9 @@ func (f *fakeRuns) Unread(id string) []string {
 	return words
 }
 
-func (f *fakeRuns) Resume(_ context.Context, id, prompt string) error {
+func (f *fakeRuns) Resume(_ context.Context, id, prompt string, flags []string) error {
 	f.mu.Lock()
-	f.resumed = append(f.resumed, id+" "+prompt)
+	f.resumed = append(f.resumed, words(id, strings.Join(flags, " "), prompt))
 	f.mu.Unlock()
 	f.set(id, func(r *app.AgentRun) { r.State, r.Started, r.Ended, r.Prompt = "working", f.now(), time.Time{}, prompt })
 	return nil
@@ -105,13 +105,13 @@ func (f *fakeRuns) Forget(id string) error {
 	return nil
 }
 
-func (f *fakeRuns) Dispatch(_ context.Context, prompt string) (string, error) {
+func (f *fakeRuns) Dispatch(_ context.Context, prompt string, flags []string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.dispatchErr != nil {
 		return "", f.dispatchErr
 	}
-	f.dispatched = append(f.dispatched, prompt)
+	f.dispatched = append(f.dispatched, words(strings.Join(flags, " "), prompt))
 	id := fmt.Sprintf("01a1eea5-9999-7000-8000-%012d", len(f.dispatched))
 	f.runs = append([]app.AgentRun{{ID: id, Short: id[:13], State: "working", Prompt: prompt, Started: f.now()}}, f.runs...)
 	return id, nil
@@ -122,6 +122,11 @@ func (f *fakeRuns) Open(id string) error {
 	defer f.mu.Unlock()
 	f.opened = append(f.opened, id)
 	return nil
+}
+
+// words joins the parts that are not empty with spaces.
+func words(parts ...string) string {
+	return strings.Join(slices.DeleteFunc(parts, func(p string) bool { return p == "" }), " ")
 }
 
 // The ids of the runs of agentRig.
@@ -316,7 +321,7 @@ func TestAgentViewDispatch(t *testing.T) {
 		live[len(live)-1] != "Started 01a1eea5-9999: Enter watches it." {
 		t.Errorf("after the start:\n%s\n%s", strings.Join(body, "\n"), strings.Join(live, "\n"))
 	}
-	g.v.info.Flags = []string{"--permission-mode=acceptEdits"}
+	g.v.flags = []string{"--permission-mode=acceptEdits"}
 	g.keys(`"tidy"`)
 	if _, live := g.screen(); live[1] != "Enter starts a run in ~/src/app with --permission-mode=acceptEdits · Esc empties the box" {
 		t.Errorf("the box with a prompt and the view's flags: %q", live)
@@ -645,5 +650,39 @@ func TestAgentViewTells(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("Esc did not leave the view")
+	}
+}
+
+// /model and /effort typed in the box set what the runs started from the
+// view are given, for the view only, and default puts back what it was
+// opened with; "@name prompt" starts a run as that kind of agent; /exit
+// leaves.
+func TestAgentViewBoxCommands(t *testing.T) {
+	g := newAgentRig(t)
+	g.v.info.Flags = []string{"--effort=low"}
+	g.v.flags = []string{"--effort=low"}
+	g.keys(`"/model qwen/other" <Enter>`)
+	if _, live := g.screen(); live[len(live)-1] != "New runs from here start with --model=qwen/other (for this view only)." {
+		t.Errorf("after /model: %q", live[len(live)-1])
+	}
+	g.keys(`"/effort high" <Enter> "@reviewer look over the diff" <Enter>`)
+	if want := []string{"--model=qwen/other --effort=high --agent=reviewer look over the diff"}; !slices.Equal(g.src.dispatched, want) {
+		t.Errorf("the run was started with %q, want %q", g.src.dispatched, want)
+	}
+	g.keys(`"/effort default" <Enter> "/model" <Enter>`)
+	if _, live := g.screen(); live[len(live)-1] != "New runs from here start with --model=qwen/other; /model default puts back what gnosh would take." ||
+		!slices.Equal(g.v.flags, []string{"--model=qwen/other", "--effort=low"}) {
+		t.Errorf("after /effort default and /model: %q, flags %q", live[len(live)-1], g.v.flags)
+	}
+	// While peeking, a command of the view's is still one, not words for
+	// the run.
+	g.v.sel = runTests
+	g.keys(`<Space> "/effort max" <Enter>`)
+	if len(g.src.told) != 0 || !slices.Contains(g.v.flags, "--effort=max") {
+		t.Errorf("/effort while peeking: told %q, flags %q", g.src.told, g.v.flags)
+	}
+	g.keys(`"/exit" <Enter>`)
+	if !g.v.quit || len(g.src.dispatched) != 1 {
+		t.Errorf("/exit: quit %v, dispatched %q", g.v.quit, g.src.dispatched)
 	}
 }

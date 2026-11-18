@@ -158,7 +158,7 @@ exit 1
 	}
 
 	// Dispatch runs gnosh --bg in the view's folder.
-	id, err := src.Dispatch(context.Background(), "tidy the README")
+	id, err := src.Dispatch(context.Background(), "tidy the README", nil)
 	if err != nil || id != "01a1eea5-0000-7000-8000-000000000001" {
 		t.Errorf("Dispatch: %q, %v", id, err)
 	}
@@ -172,7 +172,7 @@ exit 1
 	if got, _ := os.ReadFile(said); string(got) != real(w.Dir)+"|--bg|--|tidy the README|" {
 		t.Errorf("gnosh --bg was run as %q", got)
 	}
-	if _, err := src.Dispatch(context.Background(), "fail"); err == nil || err.Error() != "the folder is not trusted" {
+	if _, err := src.Dispatch(context.Background(), "fail", nil); err == nil || err.Error() != "the folder is not trusted" {
 		t.Errorf("a Dispatch that fails: %v", err)
 	}
 	// What gnosh agents is given for them goes to the runs it starts.
@@ -182,7 +182,7 @@ exit 1
 		if want := []string{"--permission-mode=bypassPermissions", "--model=qwen/qwen3.8-27b", "--effort=high"}; !slices.Equal(i.Flags, want) {
 			t.Errorf("the view was given the flags %q", i.Flags)
 		}
-		if _, err := i.Source.Dispatch(context.Background(), "tidy it"); err != nil {
+		if _, err := i.Source.Dispatch(context.Background(), "tidy it", i.Flags); err != nil {
 			t.Errorf("Dispatch with flags: %v", err)
 		}
 		return 0
@@ -192,7 +192,7 @@ exit 1
 		t.Errorf("gnosh --bg with the view's flags was run as %q", got)
 	}
 	// Resume runs gnosh --bg on the run's session, in its folder.
-	if err := src.Resume(context.Background(), working, "go on"); err != nil {
+	if err := src.Resume(context.Background(), working, "go on", nil); err != nil {
 		t.Errorf("Resume: %v", err)
 	}
 	if got, _ := os.ReadFile(said); string(got) != real(other)+"|--bg|--resume="+working+"|--|go on|" {

@@ -135,6 +135,11 @@ type agentView struct {
 	seen  bool
 	notes []string
 
+	// flags are what the runs started from the view are given: the -y,
+	// mode, model and effort gnosh agents was given, as /model and
+	// /effort typed in the box change them for this view (not saved).
+	flags []string
+
 	watch *watching
 	// open is the run whose session is to be opened (gnosh -r), and
 	// suspend says the person pressed Ctrl+Z: the loop does both.
@@ -161,6 +166,7 @@ func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.Agent
 	v := &agentView{th: th, m: m, now: now, info: info, src: info.Source,
 		doing: map[string][]string{}, status: map[string]string{}, stopping: map[string]bool{}, told: map[string]bool{}}
 	v.async = func(work func() func(*agentView)) { work()(v) }
+	v.flags = slices.Clone(info.Flags)
 	v.box = editor.New(editor.Options{
 		Theme:       th.Editor,
 		Metrics:     m,
@@ -533,7 +539,7 @@ func (v *agentView) key(k term.Key) {
 		if i := int(k.Rune - '1'); i < len(r.Question.Choices) {
 			v.answer(r, r.Question.Choices[i], "")
 		}
-	case !empty && v.peek && !v.help && !v.answering() && k.IsKey(term.KeyEnter, 0):
+	case !empty && v.replying() && k.IsKey(term.KeyEnter, 0):
 		// A reply to the run peeked at.
 		if r, ok := v.chosen(); ok {
 			v.reply(r, strings.TrimSpace(v.box.Text()))
@@ -589,6 +595,17 @@ func (v *agentView) enter() {
 	v.open = r.ID
 }
 
+// replying reports whether what is in the box is words for the run peeked
+// at: not a filter or a command of the view's (/model ... ), which keep
+// their meaning while peeking.
+func (v *agentView) replying() bool {
+	if !v.peek || v.help || v.answering() || strings.HasPrefix(strings.TrimSpace(v.box.Text()), "/") {
+		return false
+	}
+	_, isFilter := v.boxFilter()
+	return !isFilter
+}
+
 // answering reports whether the question of the run chosen is on the
 // screen to be answered: peeking at a run that waits on one.
 func (v *agentView) answering() bool {
@@ -641,7 +658,7 @@ func (v *agentView) resume(r app.AgentRun, text, done string) {
 	v.async(func() func(*agentView) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		err := src.Resume(ctx, r.ID, text)
+		err := src.Resume(ctx, r.ID, text, v.flags)
 		return func(v *agentView) {
 			v.starting--
 			if err != nil {
@@ -654,8 +671,19 @@ func (v *agentView) resume(r app.AgentRun, text, done string) {
 	})
 }
 
-// dispatch starts a run on the prompt.
+// dispatch starts a run on the prompt: or, for /model and /effort, sets
+// what the runs started from here are given, and /exit leaves. "@name
+// prompt" starts it as the kind of agent named (--agent), as Claude
+// Code's view does.
 func (v *agentView) dispatch(prompt string) {
+	if v.boxCommand(prompt) {
+		return
+	}
+	flags := slices.Clone(v.flags)
+	if name, rest, ok := strings.Cut(prompt, " "); ok && strings.HasPrefix(name, "@") && len(name) > 1 {
+		flags = append(slices.DeleteFunc(flags, func(f string) bool { return strings.HasPrefix(f, "--agent=") }), "--agent="+name[1:])
+		prompt = strings.TrimSpace(rest)
+	}
 	if len([]rune(prompt)) < minDispatch {
 		v.say("Too short: a prompt of %d characters or more starts a run.", minDispatch)
 		return
@@ -667,7 +695,7 @@ func (v *agentView) dispatch(prompt string) {
 	v.async(func() func(*agentView) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		id, err := src.Dispatch(ctx, prompt)
+		id, err := src.Dispatch(ctx, prompt, flags)
 		return func(v *agentView) {
 			v.starting--
 			if err != nil {
@@ -680,6 +708,52 @@ func (v *agentView) dispatch(prompt string) {
 			v.say("Started %s: Enter watches it.", runShortOf(id))
 		}
 	})
+}
+
+// boxCommand does a command typed in the box, and reports whether it was
+// one: /model and /effort set what the runs started from here are given
+// (default puts back what gnosh agents was given), and /exit and /quit
+// leave, as in Claude Code's view.
+func (v *agentView) boxCommand(text string) bool {
+	cmd, arg, _ := strings.Cut(strings.TrimSpace(text), " ")
+	arg = strings.TrimSpace(arg)
+	flag := ""
+	switch cmd {
+	case "/exit", "/quit":
+		v.quit = true
+		return true
+	case "/model":
+		flag = "--model"
+	case "/effort":
+		flag = "--effort"
+	default:
+		return false
+	}
+	v.box.Reset()
+	now := ""
+	for _, f := range v.flags {
+		if v, ok := strings.CutPrefix(f, flag+"="); ok {
+			now = v
+		}
+	}
+	switch {
+	case arg == "" && now == "":
+		v.say("New runs from here take the %s gnosh would. %s <name> changes that; default puts it back.", strings.TrimPrefix(flag, "--"), cmd)
+	case arg == "":
+		v.say("New runs from here start with %s=%s; %s default puts back what gnosh would take.", flag, now, cmd)
+	case arg == "default":
+		v.flags = slices.DeleteFunc(v.flags, func(f string) bool { return strings.HasPrefix(f, flag+"=") })
+		for _, f := range v.info.Flags {
+			if strings.HasPrefix(f, flag+"=") {
+				v.flags = append(v.flags, f)
+			}
+		}
+		v.say("New runs from here take the %s they took as the view opened.", strings.TrimPrefix(flag, "--"))
+	default:
+		v.flags = append(slices.DeleteFunc(v.flags, func(f string) bool { return strings.HasPrefix(f, flag+"=") }), flag+"="+arg)
+		v.say("New runs from here start with %s=%s (for this view only).", flag, arg)
+	}
+	return true
 }
 
 // title is the terminal's title while the view is open: how many runs
@@ -1084,7 +1158,8 @@ func (v *agentView) helpLines(width int) []string {
 		{"↑ ↓ PgUp PgDn Home End", "choose a run"},
 		{"Space", "peek at it, or stop peeking"},
 		{"Enter, →", "watch a working run as it goes; open one that is over (gnosh -r)"},
-		{"a prompt and Enter", "start a run on it in " + v.folder()},
+		{"a prompt and Enter", "start a run on it in " + v.folder() + "; @name first runs it as that kind of agent"},
+		{"/model, /effort", "what the runs started from here are given (default puts it back); /exit leaves"},
 		{"n:<text> s:<state> o:<text>", "list only the runs whose name or prompt, state, or answer has it"},
 		{"Ctrl+X", "stop a working run; twice, take one that is over off the list"},
 		{"Esc", "stop peeking, empty the box, or leave; the runs go on"},
@@ -1113,7 +1188,7 @@ func (v *agentView) hintLine() string {
 	switch {
 	case isFilter:
 		parts = []string{"Enter opens the run chosen", "Esc empties the box"}
-	case text != "" && v.peek && !v.help && !v.answering():
+	case text != "" && v.replying():
 		r, _ := v.chosen()
 		send := "Enter sends " + runName(r) + " back to work on it"
 		if running(r) {
@@ -1122,8 +1197,8 @@ func (v *agentView) hintLine() string {
 		parts = []string{send, "Esc empties the box"}
 	case text != "":
 		start := "Enter starts a run in " + v.folder()
-		if len(v.info.Flags) > 0 {
-			start += " with " + strings.Join(v.info.Flags, " ")
+		if len(v.flags) > 0 {
+			start += " with " + strings.Join(v.flags, " ")
 		}
 		parts = []string{start, "Esc empties the box"}
 	case v.answering():

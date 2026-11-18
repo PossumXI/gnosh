@@ -1987,3 +1987,15 @@ or kept with the reason said (27).
     any wait, the terminal's own title coming back as the view closes.
     What was there as the view opened is not told. A run stopped by the
     person is not told either: they know.
+
+122. **The agent view's box takes /model, /effort, /exit and @agent.** In
+    Claude Code's view, /model, /effort and /fast set the defaults of the
+    sessions dispatched from that window, not saved, with default
+    resetting them; @<agent-name> or "<agent-name> <prompt>" runs that
+    custom agent as the session's main agent; /exit or /quit closes the
+    view. gnosh's box now does the same for /model and /effort (gnosh has
+    no /fast): the runs started or sent back to work from the view are
+    given them, default puts back what gnosh agents was opened with, and
+    a bare /model or /effort says what new runs take. "@name prompt"
+    starts the run with --agent=name. "<agent-name> <prompt>" without
+    the @ is not read so: a prompt may well begin with a kind's name.
