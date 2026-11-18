@@ -39,7 +39,7 @@ func (g *rig) show(what string) *rig {
 func TestIdleScreen(t *testing.T) {
 	each(t, func(t *testing.T, cols int) {
 		g := newRig(t, cols, 24, text.NoColor)
-		g.committedHas("GNOSH test-build", "qwen3.8-27b", "~/src/proj")
+		g.committedHas("GNOSH test-build", "qwen3.8-27b", "~/src/proj", "https://gnosh.ai · built on gno.land (https://gno.land) · /license")
 		g.liveHas("> ", "idle", "manual mode")
 		if cols >= 80 {
 			g.liveHas("qwen3.8-27b", "thinking on", "context 11%", "~/src/proj (main)")

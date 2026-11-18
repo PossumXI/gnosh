@@ -1,6 +1,6 @@
 # gnosh
 
-An AI harness that thinks in Gno.
+An AI harness that thinks in Gno, built on [gno.land](https://gno.land).
 
 gnosh sits between a person, a language model and the machine. The model
 reads, edits and runs things under the person's rules, and it keeps its plan
@@ -258,7 +258,11 @@ against run. Nothing here is released.
 The GNO Network General Public License, version 6, with Additional Terms
 (Strong Attribution): see [LICENSE.md](LICENSE.md). The GnoVM subsystem has
 its own copy in `internal/gnovm/LICENSE.md`. A user interface built on gnosh
-shows "built on gnosh" with a link to <https://gnosh.ai>.
+shows "built on gnosh" with a link to <https://gnosh.ai>. gnosh includes
+gno.land's GnoVM, whose licence asks the same with "built on gno.land" and
+<https://gno.land>: every session's header shows both, and `/license` the
+legal notices. The libraries gnosh is built with keep their own licences
+(BSD, MIT, ISC, Apache-2.0, MPL-2.0), and none conflicts with gnosh's.
 
 ## Build
 

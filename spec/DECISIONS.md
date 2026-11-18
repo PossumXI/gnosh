@@ -2256,3 +2256,19 @@ or kept with the reason said (27).
       the deep state, not as a stronger pull on each drop. The pull was
       raised a little all the same (5 to 8, 30 to 40), since the line is
       several times longer than the strip was.
+
+139. **The credits and the legal notices are in the interface.** gnosh's
+    licence (LICENSE.md, the Additional Terms) asks an interface built on
+    gnosh to show "built on gnosh" with a link to https://gnosh.ai, and the
+    GnoVM's (gno.land's) asks an interface that includes the GnoVM to show
+    "built on gno.land" with a link to https://gno.land; gnosh showed
+    neither except at the end of gnovm_list. Now the header that opens a
+    session ends with one line: https://gnosh.ai · built on gno.land
+    (https://gno.land) · /license, the addresses as links where the
+    terminal takes them. /license (also /licence) shows the copyright, that
+    there is no warranty, the licence and where to read it, and both
+    credits: the "Appropriate Legal Notices" of the licence's section 0, so
+    that under its section 5 d a work made from gnosh shows them in its own
+    interface too. gnovm_list ends with gnovm.AttributionNotice, whose
+    words it already printed. Asked by Jae on 18 November 2026: "make sure
+    the new gnosh license is good, strong attribution too".

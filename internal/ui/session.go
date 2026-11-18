@@ -469,6 +469,25 @@ func (s *session) header() {
 	}
 	s.put(wrap(s.m, where, s.cols, "", "  ")...)
 	s.put(wrap(s.m, th.Quiet.Render("? shows the keys"+th.Sep+"/help lists the commands"+th.Sep+"Esc stops a turn"), s.cols, "", "")...)
+	s.put(wrap(s.m, th.credits(), s.cols, "", "")...)
+}
+
+// The addresses the header's last line names. gnosh's licence asks an
+// interface built on gnosh to show "built on gnosh" with a link to
+// gnoshURL, and the GnoVM's licence, gno.land's, asks an interface that
+// includes the GnoVM to show "built on gno.land" with a link to gnoURL
+// (LICENSE.md and internal/gnovm/LICENSE.md, the Additional Terms).
+const (
+	gnoshURL = "https://gnosh.ai"
+	gnoURL   = "https://gno.land"
+)
+
+// credits is the header's last line: gnosh's address, the credit the
+// GnoVM's licence asks for, and the command that shows the legal notices
+// (DECISIONS item 139).
+func (th *Theme) credits() string {
+	return th.Profile.Hyperlink(gnoshURL, gnoshURL) + th.Quiet.Render(th.Sep+"built on gno.land (") +
+		th.Profile.Hyperlink(gnoURL, gnoURL) + th.Quiet.Render(")"+th.Sep+"/license")
 }
 
 // begin starts a block of the given kind in the scrollback. No blank line
