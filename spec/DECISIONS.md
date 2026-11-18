@@ -2180,3 +2180,14 @@ or kept with the reason said (27).
     first (shelltool Manager.StopLeftRunning, the sweep Close makes) and
     tells the model they were stopped; one it starts again with setsid
     finds the port free and outlives the run.
+
+136. **Runs started from the agent view over a session keep its mode.**
+    Claude Code's sessions dispatched from an agent view opened with ←
+    start in the directory's defaultMode, or else in the mode of the
+    session the view was opened from. gnosh's view over a session (←
+    twice) started its runs with no mode, so from a session started with
+    -y every run stopped at its first command to ask. Now the view is
+    given the session's mode for the runs it starts
+    (--permission-mode=<mode>); a session in the default mode names none,
+    and the run reads its folder's defaultMode itself. gnosh agents keeps
+    its own --permission-mode flag for the runs it starts.

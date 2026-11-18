@@ -276,3 +276,33 @@ func TestAgentRepos(t *testing.T) {
 		t.Errorf("of a folder that is not there: %q", got)
 	}
 }
+
+// The agent view opened over a session (←) starts runs in the session's
+// permission mode, as Claude Code's dispatched from a view opened with ←
+// take the source session's; a session in the default mode names none, so
+// that a run reads its folder's defaultMode itself.
+func TestAgentViewOverASessionKeepsItsMode(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"-y"}, []string{"--permission-mode=bypassPermissions"}},
+		{[]string{"--permission-mode", "acceptEdits"}, []string{"--permission-mode=acceptEdits"}},
+		{nil, nil},
+	} {
+		w := apptest.NewWorld(t)
+		_, r := attach(t, w, nil, func(ctx context.Context, sc SessionControls, f *scripted) int {
+			av, ok := sc.(interface{ AgentView() (AgentViewInfo, error) })
+			if !ok {
+				t.Fatal("the session offers no agent view")
+			}
+			info, err := av.AgentView()
+			if err != nil || !slices.Equal(info.Flags, c.want) {
+				t.Errorf("%q: the view's flags are %q (%v), want %q", c.args, info.Flags, err, c.want)
+			}
+			sc.Quit("prompt_input_exit")
+			return 0
+		}, c.args...)
+		r.wantCode(t, 0)
+	}
+}

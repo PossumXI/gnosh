@@ -569,9 +569,17 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		l.agentsSeen.Store(now.UnixNano())
 		l.setStatus("agents", agentsWord(runs, now))
 	}
+	// The runs started from it work in this session's permission mode, as
+	// Claude Code's dispatched from a view opened with ← work in the
+	// source session's; in the default mode none is named, and a run reads
+	// its folder's defaultMode itself.
+	var flags []string
+	if m := string(l.engine.Mode()); m != "" && m != "default" {
+		flags = append(flags, "--permission-mode="+m)
+	}
 	return AgentViewInfo{
 		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home, seen: seen},
-		Cwd:    cwd, Home: home,
+		Cwd:    cwd, Home: home, Flags: flags,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
 		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents).Names(),
 		Repos:  agentRepos(cwd),
