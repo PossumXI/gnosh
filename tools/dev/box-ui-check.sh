@@ -341,7 +341,7 @@ relay)
 	id=$(head -c 5 "$T/questions.log" 2>/dev/null)
 	echo "=== the question the channel got: $(head -1 "$T/questions.log" 2>/dev/null || echo none)"
 	curl -s -d "yes $id" 127.0.0.1:18788 >/dev/null
-	done_when() { [ -f "$T/work/relay.txt" ] && screen | grep -q "allowed Write" && screen | grep -q "done in"; }
+	done_when() { [ -f "$T/work/relay.txt" ] && screen | grep -q "answered by the channel hook" && screen | grep -q "done in"; }
 	;;
 channel)
 	# An event pushed into the idle session wakes the model, which answers
