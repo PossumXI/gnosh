@@ -128,6 +128,11 @@ func TestRunIsFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := cmd.Process.Pid
+	// (Its command line is there a moment after it starts: the kernel
+	// shows it once the new program is laid out.)
+	for deadline := time.Now().Add(5 * time.Second); !runIsFor(pid, id) && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if !runIsFor(pid, id) || runIsFor(pid, "01a1eea5-7777-7000-8000-000000000007") {
 		t.Errorf("the process of the run: for its session %v, for another %v", runIsFor(pid, id), runIsFor(pid, "01a1eea5-7777-7000-8000-000000000007"))
 	}
