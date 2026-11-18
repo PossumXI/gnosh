@@ -51,9 +51,12 @@ SSH="ssh ${KEY:+-i $KEY -o IdentitiesOnly=yes} -o BatchMode=yes -o ConnectTimeou
 
 # Room first. The copies of other commits are kept for a look afterwards,
 # the newest eight of them; and Go's build cache, which grew to 39G in five
-# days on the devbox and filled its disk (2026-11-16), is cleared whenever
-# fewer than 20G are free.
-prep="ls -1dt $ROOT/gnosh-* 2>/dev/null | tail -n +9 | xargs -r rm -rf; mkdir -p $ROOT; free=\$(df -Pk $ROOT | awk 'NR==2 {print \$4}'); [ \"\$free\" -gt 20971520 ] || { echo \"remote-ci: \$((free / 1048576))G free: clearing Go's build cache\"; /usr/local/go/bin/go clean -cache; }"
+# days on the devbox and filled its disk (2026-11-16), is cleared when
+# fewer than 20G are free and the cache is what holds the room (over 4G),
+# or when fewer than 4G are free whatever holds them. (A disk filled by
+# other things gains nothing from a small cache cleared, and every run
+# would start cold.)
+prep="ls -1dt $ROOT/gnosh-* 2>/dev/null | tail -n +9 | xargs -r rm -rf; mkdir -p $ROOT; free=\$(df -Pk $ROOT | awk 'NR==2 {print \$4}'); if [ \"\$free\" -le 20971520 ]; then cache=\$(du -sk \"\$(/usr/local/go/bin/go env GOCACHE)\" 2>/dev/null | cut -f1); if [ \"\${cache:-0}\" -gt 4194304 ] || [ \"\$free\" -le 4194304 ]; then echo \"remote-ci: \$((free / 1048576))G free, the build cache \$((\${cache:-0} / 1048576))G: clearing it\"; /usr/local/go/bin/go clean -cache; fi; fi"
 # shellcheck disable=SC2086,SC2029
 git archive "$sha" | $SSH "$HOST" "$prep; rm -rf $dir && mkdir -p $dir && tar -x -C $dir"
 
