@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"maps"
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // The few rules about commands that are the shell tool's own, and the notes
@@ -191,35 +191,18 @@ func reaches(command string) string {
 	return ""
 }
 
-// heredocRe finds where a here-document begins on a line: << or <<-, and
-// the word that ends it, quoted or not.
-var heredocRe = regexp.MustCompile(`<<(-?)\s*(?:'([^']*)'|"([^"]*)"|\\?([A-Za-z0-9_]+))`)
-
-// commandLines are the lines of a command that hold commands: not blank,
-// not comments, and not the text of a here-document.
+// commandLines are the lines of a command where the shell starts reading
+// a command (shellquote.CommandStarts: not the text of a here-document, a
+// line that the one before goes on into, or one inside quotes), and that
+// are not blank or comments.
 func commandLines(command string) []string {
 	var out []string
-	var ends []string // the words that end the open here-documents, in order
-	var dash []bool   // each may stand indented by tabs (<<-)
-	for _, line := range strings.Split(command, "\n") {
-		if len(ends) > 0 {
-			l := line
-			if dash[0] {
-				l = strings.TrimLeft(l, "\t")
-			}
-			if l == ends[0] {
-				ends, dash = ends[1:], dash[1:]
-			}
-			continue
-		}
-		if t := strings.TrimSpace(line); t == "" || strings.HasPrefix(t, "#") {
+	starts := shellquote.CommandStarts(command)
+	for i, line := range strings.Split(command, "\n") {
+		if t := strings.TrimSpace(line); !starts[i] || t == "" || strings.HasPrefix(t, "#") {
 			continue
 		}
 		out = append(out, line)
-		for _, m := range heredocRe.FindAllStringSubmatch(line, -1) {
-			ends = append(ends, m[2]+m[3]+m[4])
-			dash = append(dash, m[1] == "-")
-		}
 	}
 	return out
 }

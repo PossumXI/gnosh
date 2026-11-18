@@ -81,8 +81,13 @@ func TestReaches(t *testing.T) {
 		// Every line is looked at (box 1, 16 November: ssh under an
 		// assignment and a comment ran).
 		{"echo one\nssh render ls", "ssh"},
-		{"D=104.248.69.97 # the vlm droplet\nssh -o BatchMode=yes root@$D 'bash -s' <<'EOF'\nset -e\nEOF", "ssh"},
+		{"D=203.0.113.9 # the render droplet\nssh -o BatchMode=yes root@$D 'bash -s' <<'EOF'\nset -e\nEOF", "ssh"},
 		{"cat > d.sh <<'EOF'\nls\nEOF\nscp d.sh render:", "scp"},
+		// A << inside quotes opens no here-document, and a line inside
+		// quotes, or one a backslash goes on into, is no command.
+		{"echo '<<X'\nssh render ls", "ssh"},
+		{"echo \"a\nssh render ls\"", ""},
+		{"echo a \\\nssh render ls", ""},
 	}
 	for _, tt := range tests {
 		if got := reaches(tt.command); got != tt.want {
