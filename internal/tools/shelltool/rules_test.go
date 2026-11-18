@@ -478,3 +478,21 @@ func TestGnokeyPasswordFlagIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// A gnokey that asked for a password at a terminal, run as a command,
+// fails with a note that says signing goes through the gnokey tool, or to
+// the user (TOOL-41).
+func TestGnokeyWithoutATerminalIsExplained(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	env := newEnv(t)
+	dir := t.TempDir()
+	script := filepath.Join(dir, "gnokey")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'Enter password.'\necho 'inappropriate ioctl for device' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	res := bash(t, m, env, script+" maketx call -func Inc k")
+	if !hasNote(res, "signing goes through the gnokey tool, which asks the user for the password at a masked prompt") || !hasNote(res, "give the user the exact command to run in their own terminal, and stop") {
+		t.Errorf("gnokey without a terminal:\n%s", core.TextOf(res.Content))
+	}
+}

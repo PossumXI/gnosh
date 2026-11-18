@@ -454,6 +454,11 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 		}
 	case e.code == 0 && a.host != nil && onlyChangesDirectory(a.command):
 		notes = append(notes, "a change of directory does not carry over on a host: the next command on "+a.host.Name+" starts in the account's home directory again. Put the cd and the work in one command")
+	case e.code != 0 && strings.Contains(a.command, "gnokey") && strings.Contains(body, "inappropriate ioctl for device"):
+		// (gnokey asked for a password at a terminal: the old fork's
+		// Qwen, told only that it could not sign, spent its whole window
+		// in the shell looking for another way, TOOL-41.)
+		notes = append(notes, "gnokey asked for the key's password, and a command here has no terminal to type it in, nor may it be given one: signing goes through the gnokey tool, which asks the user for the password at a masked prompt. If you have that tool, call it with this gnokey command; if not, give the user the exact command to run in their own terminal, and stop. Do not look for another way")
 	}
 	return notes
 }
