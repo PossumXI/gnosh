@@ -81,9 +81,10 @@ type AgentRun struct {
 	// ID is its session's id, Short the start of it that names the run
 	// (runShort), and Name the name it was given, or "".
 	ID, Short, Name string
-	// State is "working", "blocked" (a question waits: Question), "done"
-	// or "stopped".
-	State string
+	// State is "working", "blocked" (a question waits: Question), "done",
+	// "failed" (with an error, or killed) or "stopped"; Ending says how
+	// one that failed or was stopped ended, in a few words.
+	State, Ending string
 	// Question is the permission question a blocked run waits on.
 	Question *AgentQuestion
 	// Cwd is the folder it works in, and Folder the same with ~ for the
@@ -221,7 +222,7 @@ func (s *runSource) Runs() []AgentRun {
 			continue
 		}
 		listed[r.session] = r
-		a := AgentRun{ID: r.session, Short: runShort(r.session), Name: r.name, State: runState(r),
+		a := AgentRun{ID: r.session, Short: runShort(r.session), Name: r.name, State: runState(r), Ending: runEnding(r),
 			Cwd: r.cwd, Folder: homeTilde(s.home, r.cwd), Prompt: r.prompt, Output: r.output, Started: r.started}
 		if q := r.asking; q != nil {
 			a.Question = &AgentQuestion{ID: q.ID, Title: q.Title, Text: q.Text, Since: q.Since}

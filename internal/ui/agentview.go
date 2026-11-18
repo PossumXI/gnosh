@@ -231,12 +231,16 @@ func (v *agentView) refresh() {
 		case !v.seen || r.State == was:
 		case r.State == "blocked" && r.Question != nil:
 			v.notes = append(v.notes, runName(r)+" needs input: "+oneLine(r.Question.Title))
-		case r.State == "done" && !stopped[r.ID] && (!known || was == "working" || was == "blocked"):
+		case (r.State == "done" || r.State == "failed") && !stopped[r.ID] && (!known || was == "working" || was == "blocked"):
 			last := "it printed nothing"
 			if len(r.Output) > 0 {
 				last = oneLine(r.Output[len(r.Output)-1])
 			}
-			v.notes = append(v.notes, runName(r)+" is done: "+last)
+			how := " is done: "
+			if r.State == "failed" {
+				how = " failed: "
+			}
+			v.notes = append(v.notes, runName(r)+how+last)
 		}
 	}
 	v.prev, v.seen = states, true
@@ -1066,8 +1070,8 @@ func (v *agentView) statusOf(r app.AgentRun) string {
 		return strings.TrimSpace(oneLine(r.Question.Title) + " " + firstOf(r.Question.Text))
 	case running(r):
 		return firstNonEmpty(v.status[r.ID], "starting")
-	case r.State == "stopped":
-		return strings.TrimSuffix("stopped"+v.th.Sep+last, v.th.Sep)
+	case r.State == "stopped" || r.State == "failed":
+		return strings.TrimSuffix(r.State+v.th.Sep+firstNonEmpty(last, r.Ending), v.th.Sep)
 	}
 	return firstNonEmpty(last, "(it printed nothing)")
 }
@@ -1207,6 +1211,8 @@ func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string
 		mark = th.Ask.Render(th.AskMark)
 	case running(r):
 		mark = th.Busy.Render("✽")
+	case r.State == "failed":
+		mark = th.Fail.Render(th.FailMark)
 	}
 	name := rowName(r)
 	if w := v.m.Width(name); w > nameW {
@@ -1220,7 +1226,7 @@ func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string
 	lead := pointer + mark + " " + name + "  "
 	room := width - v.m.VisibleWidth(lead) - v.m.Width(age) - 2
 	status := v.statusOf(r)
-	if v.byFolder && r.State != "stopped" {
+	if v.byFolder && r.State != "stopped" && r.State != "failed" {
 		// (The group no longer says how it stands.)
 		word := map[string]string{"blocked": "needs input", "working": "working", "done": "done"}[r.State]
 		status = strings.TrimSuffix(word+th.Sep+status, th.Sep)
@@ -1255,16 +1261,27 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 		}
 		out = append(out, rows...)
 	}
+	if e := r.Ending; e != "" && !running(r) {
+		// How it failed, or that a signal stopped it.
+		mark := th.Quiet.Render("∙")
+		if r.State == "failed" {
+			mark = th.Fail.Render(th.FailMark)
+		}
+		out = append(out, wrap(v.m, mark+" "+oneLine(e), width, "", "  ")...)
+	}
 	if q := r.Question; q != nil {
-		// What it asks, and the answers, numbered for the keys.
+		// What it asks, and the answers, numbered for the keys. (Its
+		// lines wrap: why gnosh asks is read whole.)
 		out = append(out, fit(v.m, th.Ask.Render(th.AskMark)+" "+oneLine(q.Title), width))
-		text := safeLines(q.Text)
+		var text []string
+		for _, l := range safeLines(q.Text) {
+			lead := "  " + strings.Repeat(" ", len(l)-len(strings.TrimLeft(l, " ")))
+			text = append(text, wrap(v.m, strings.TrimLeft(l, " "), width, lead, lead)...)
+		}
 		if len(text) > 2*peekRows {
-			text = append(text[:2*peekRows:2*peekRows], th.Quiet.Render(fmt.Sprintf("  … %s", count(len(safeLines(q.Text))-2*peekRows, "more line", "more lines"))))
+			text = append(text[:2*peekRows:2*peekRows], th.Quiet.Render(fit(v.m, fmt.Sprintf("  … %s", count(len(text)-2*peekRows, "more row", "more rows")), width)))
 		}
-		for _, l := range text {
-			out = append(out, fit(v.m, "  "+l, width))
-		}
+		out = append(out, text...)
 		for i, c := range q.Choices {
 			out = append(out, fit(v.m, fmt.Sprintf("  %d. %s", i+1, oneLine(c.Label)), width))
 		}

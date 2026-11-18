@@ -247,6 +247,7 @@ func TestForkSaysWhenItIsDone(t *testing.T) {
 				lf, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
 				if err == nil {
 					fmt.Fprintln(lf, "All 42 tests pass.")
+					fmt.Fprintf(lf, "gnosh: %s%s\n", time.Now().UTC().Format(time.RFC3339), runDone)
 					lf.Close()
 				}
 			}()

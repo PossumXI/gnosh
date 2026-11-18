@@ -113,7 +113,7 @@ func TestAgentsListsTheRunsOfEveryFolder(t *testing.T) {
 	}
 	done, doneLog := start(w.Dir, "fix the flaky test")
 	// The run quotes gnosh's own lines: they are its output, not gnosh's.
-	addTo(doneLog, "  gnosh: its folder is /elsewhere\ngnosh: its session file is /elsewhere/x.jsonl\nAll 42 tests pass.\n")
+	addTo(doneLog, "  gnosh: its folder is /elsewhere\ngnosh: its session file is /elsewhere/x.jsonl\nAll 42 tests pass.\ngnosh: 2026-11-18T10:00:00Z"+runDone+"\n")
 	working, workingLog := start(other, "write the docs")
 	addTo(workingLog, "Reading the README.\n")
 	// The working run's process: one whose command line names its

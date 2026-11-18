@@ -161,12 +161,22 @@ func (l *live) watchRun(ctx context.Context, id, logPath, path string) {
 		if runAlive(id, logPath, path) || !took && l.p.now().Sub(started) < runStart {
 			continue
 		}
+		r := readRunLog(logPath, id, started)
 		said := ""
-		if last := readRunLog(logPath, id, started).last; last != "" {
-			said = " It ended with: " + oneLine(last, 160)
+		if r.last != "" {
+			said = " It ended with: " + oneLine(r.last, 160)
 		}
 		if took {
-			l.notice(agent.LevelInfo, "fork", fmt.Sprintf("The fork %s is done (gnosh -r %s opens it).%s", runShort(id), id, said))
+			level, how := agent.LevelInfo, "is done"
+			switch {
+			case r.stopped || r.ended == "stopped":
+				how = "was stopped"
+			case r.ended == "failed":
+				level, how = agent.LevelWarning, "failed, "+strings.TrimSuffix(r.failure, ".")
+			case r.ended == "":
+				level, how = agent.LevelWarning, "ended without a word: it was killed, or its machine stopped"
+			}
+			l.notice(level, "fork", fmt.Sprintf("The fork %s %s (gnosh -r %s opens it).%s", runShort(id), how, id, said))
 		} else {
 			l.notice(agent.LevelWarning, "fork", fmt.Sprintf("The fork %s ended without taking its session (what it printed is in %s).%s", runShort(id), l.tilde(logPath), said))
 		}
@@ -233,6 +243,12 @@ const (
 	// runRenamed begins, after the time, the line that gives a run a new
 	// name (the agent view's Ctrl+R); empty after it takes the name away.
 	runRenamed = " its name is now: "
+	// runDone is, after the time, the line a run ends its log with when
+	// it ends well, and runFailed and runSignalled begin the one it ends
+	// it with when it ends with an error, or on a signal (runEnded).
+	runDone      = " the run is done."
+	runFailed    = " the run failed: "
+	runSignalled = " the run was stopped by a signal"
 )
 
 // renameRun gives the run of the session id whose log is log a new name,
@@ -268,8 +284,15 @@ type backgroundRun struct {
 	session, prompt, name, log, cwd, file string
 	started                               time.Time
 	running, stopped                      bool
-	last                                  string
-	output                                []string
+	// ended is how the run said it ended, as the last line of its log:
+	// "done", "failed" (and failure the rest of that line), or "stopped"
+	// (by a signal); empty when it said nothing (it runs, or it was
+	// killed). died is true of one whose process is gone and that said
+	// nothing.
+	ended, failure string
+	died           bool
+	last           string
+	output         []string
 	// asking is the permission question a working run waits on for the
 	// agent view to answer (runasks.go), if any.
 	asking *runAsk
@@ -324,6 +347,9 @@ func runsIn(dirs []string, since time.Time) []backgroundRun {
 			if r.running {
 				r.asking = readAsk(p)
 			}
+			// (A run gets its process id beside its log the moment it
+			// starts, so one that has none yet is starting, or an old one.)
+			r.died = !r.running && !r.stopped && r.ended == "" && runPID(p) != 0
 			if r.cwd == "" {
 				r.cwd = sessionFolder(r.file)
 			}
@@ -409,6 +435,21 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 				r.stopped = true
 				continue
 			}
+			if terr == nil {
+				ended, failure := "", ""
+				switch {
+				case " "+after == runDone:
+					ended = "done"
+				case strings.HasPrefix(" "+after, runFailed):
+					ended, failure = "failed", strings.TrimPrefix(" "+after, runFailed)
+				case strings.HasPrefix(" "+after, runSignalled):
+					ended = "stopped"
+				}
+				if ended != "" {
+					r.ended, r.failure = ended, failure
+					continue
+				}
+			}
 			if name, ok := strings.CutPrefix(after, id+runRenamed); terr == nil && ok {
 				r.name = strings.TrimSpace(name)
 				continue
@@ -416,6 +457,7 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			if terr == nil {
 				if p, ok := strings.CutPrefix(after, "the session "+id+" goes on in the background with: "); ok {
 					r.prompt, r.name, r.last, r.file, r.cwd, r.stopped, r.started = p, "", "", "", "", false, t
+					r.ended, r.failure = "", ""
 					r.output = r.output[:0]
 					head = true
 					continue

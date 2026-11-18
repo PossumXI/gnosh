@@ -182,10 +182,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	// The runs /background and /fork started from this folder, from any
 	// session: they outlive the session that started them.
 	for _, r := range l.backgroundRuns() {
-		state := "done, started " + roundTime(l.p.now().Sub(r.started)) + " ago"
-		if r.stopped {
-			state = "stopped, started " + roundTime(l.p.now().Sub(r.started)) + " ago"
-		}
+		state := runState(r) + ", started " + roundTime(l.p.now().Sub(r.started)) + " ago"
 		if r.running {
 			state = "running for " + roundTime(l.p.now().Sub(r.started))
 		}
@@ -193,6 +190,9 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		if r.running {
 			c.Say("     what it prints: %s; /tasks stop %s stops it; gnosh -r %s opens it once it is done", l.tilde(r.log), runShort(r.session), r.session)
 		} else {
+			if e := runEnding(r); e != "" {
+				c.Say("     %s", e)
+			}
 			if r.last != "" {
 				c.Say("     it ended with: %s", oneLine(r.last, 120))
 			}

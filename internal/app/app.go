@@ -197,6 +197,7 @@ func Main(ctx context.Context, o Options) (code int) {
 		if v := recover(); v != nil {
 			code = p.crashed("", v, debug.Stack())
 		}
+		p.runEnded(code)
 	}()
 	code = p.run(ctx)
 	if args := p.restartArgs(); args != nil && code == cli.ExitOK {
@@ -500,6 +501,30 @@ func (p *program) versionLine() string {
 		b.Commit = p.o.BuildID
 	}
 	return cli.VersionLine(b)
+}
+
+// runEnded ends the log of a run in the background, as its last line, with
+// how the run ended (runDone, runFailed, runSignalled), for gnosh agents
+// and the agent view, as Claude Code's list tells a session that failed
+// from one that is done. A run whose process is gone and whose log has no
+// such line ended without a word: it was killed, or its machine stopped.
+func (p *program) runEnded(code int) {
+	if p.runAsks == "" {
+		return
+	}
+	f, err := os.OpenFile(p.runAsks+".log", os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	how := runDone
+	switch {
+	case code > 128:
+		how = fmt.Sprintf("%s (exit status %d).", runSignalled, code)
+	case code != cli.ExitOK:
+		how = fmt.Sprintf("%sit ended with exit status %d.", runFailed, code)
+	}
+	fmt.Fprintf(f, "gnosh: %s%s\n", p.now().UTC().Format(time.RFC3339), how)
 }
 
 // signalExit is the exit code of a program that a signal stopped: 130 for

@@ -47,7 +47,7 @@ func TestAgentViewSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString("The test raced on its clock.\n\nAll 42 tests pass.\n")
+	f.WriteString("The test raced on its clock.\n\nAll 42 tests pass.\ngnosh: 2026-11-18T10:00:00Z" + runDone + "\n")
 	f.Close()
 	working, workingLog := start(other, "write the docs")
 	proc := exec.Command("sh", "-c", `trap "exit 0" TERM; while :; do sleep 0.1; done`, working)

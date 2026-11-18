@@ -2059,3 +2059,25 @@ or kept with the reason said (27).
     The token is honest about what it guards: it stops a model that writes
     the answer or inbox file blind; code the model runs without being asked
     (-y, broad allow rules) could read it, as it could do anything else.
+
+128. **A run that failed says so.** Claude Code's list tells a session
+    that ended with an error (red, Failed) from one that is done, and one
+    whose process was ended from outside (Stopped). gnosh's runs had no
+    word of how they ended, so every run that was over and not stopped
+    by gnosh stop was done, a crash and a reboot too. Now a run in the
+    background ends its log with one line of how it ended: "the run is
+    done.", "the run failed: it ended with exit status N." or "the run was
+    stopped by a signal (exit status N)." (runEnded, written by the run
+    itself as Main returns, after a recovered panic too). gnosh agents
+    (--json state "failed", as Claude Code's), /tasks, the agent view and
+    /fork's notice read it: a failed run is marked ✗, its row says failed
+    and what it printed last, its peek how it ended, and the view tells
+    of it as of one that is done; s:failed lists them. A run whose
+    process is gone, that has a process id beside its log and ended its
+    log with no such line, failed without a word: it was killed, or its
+    machine stopped. One with no process id yet is starting (or an older
+    gnosh started it), and stays done when it is over, as before; runs an
+    older gnosh started that are over with an id read as failed until
+    their logs age out of the week. The peek's question lines now wrap
+    instead of being cut at the screen's edge (a box check showed "Why
+    gnosh asks" cut at 120 columns).

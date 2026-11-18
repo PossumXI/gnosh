@@ -47,12 +47,18 @@ func agentSession(t *testing.T, data []byte, cols, rows int) {
 		case b >= 240:
 			// The runs change under the view.
 			id := []string{runTests, runDocs, runFlaky, runShip}[int(b)%4]
-			switch b % 5 {
+			switch b % 6 {
 			case 0:
 				g.src.set(id, func(r *app.AgentRun) { r.State, r.Ended = "done", g.clk.Now() })
+			case 5:
+				g.src.set(id, func(r *app.AgentRun) {
+					r.State, r.Ended, r.Question = "failed", g.clk.Now(), nil
+					r.Ending = "it ended without a word: it was killed, or its machine stopped, " + strings.Repeat("and so on ", int(b)%4)
+				})
 			case 1:
 				g.src.set(id, func(r *app.AgentRun) {
-					r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q", Title: "Allow Bash?", Text: "  $ rm -rf x",
+					r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q", Title: "Allow Bash?",
+						Text:    "  $ rm -rf x\n  Why gnosh asks: " + strings.Repeat("rm changes files, which asks unless a rule allows it; ", int(b)%5),
 						Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}, {Key: "no", Label: "No"}}}
 				})
 			case 2:

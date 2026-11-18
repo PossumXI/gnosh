@@ -377,18 +377,38 @@ func runPID(log string) int {
 
 // runState is how a run stands, in the words Claude Code's list has for
 // it: working while it holds its session (blocked while a question waits
-// for the agent view), then stopped when gnosh stop stopped it, or else
-// done.
+// for the agent view), then stopped when gnosh stop or a signal stopped
+// it, failed when it ended with an error or without a word (killed), or
+// else done.
 func runState(r backgroundRun) string {
 	switch {
 	case r.running && r.asking != nil:
 		return "blocked"
 	case r.running:
 		return "working"
-	case r.stopped:
+	case r.stopped || r.ended == "stopped":
 		return "stopped"
+	case r.ended == "failed" || r.died:
+		return "failed"
 	}
 	return "done"
+}
+
+// runEnding is how a run that failed, or that a signal stopped, ended, in
+// a few words, or "" for any other.
+func runEnding(r backgroundRun) string {
+	switch runState(r) {
+	case "failed":
+		if r.died {
+			return "it ended without a word: it was killed, or its machine stopped"
+		}
+		return strings.TrimSuffix(r.failure, ".")
+	case "stopped":
+		if !r.stopped {
+			return "it was stopped by a signal"
+		}
+	}
+	return ""
 }
 
 // agentsCommand is gnosh agents, as Claude Code has claude agents: the

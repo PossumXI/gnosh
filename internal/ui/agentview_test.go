@@ -665,6 +665,44 @@ func TestAgentViewTells(t *testing.T) {
 	}
 }
 
+// A run that failed is marked so (✗), as Claude Code's list marks one in
+// red: its row says failed and what it printed last, its peek says how it
+// ended, the view tells of it as it does of one that is done, and s:failed
+// lists it. One that a signal stopped says so in its peek.
+func TestAgentViewFailedRuns(t *testing.T) {
+	g := newAgentRig(t)
+	g.src.set(runTests, func(r *app.AgentRun) {
+		r.State, r.Ending, r.Ended = "failed", "it ended with exit status 1", g.clk.Now()
+		r.Output = []string{"Running the tests.", "gnosh: the model server did not answer."}
+	})
+	g.src.set(runShip, func(r *app.AgentRun) { r.Ending = "it was stopped by a signal" })
+	g.v.refresh()
+	if want := []string{"01a1eea5-1111 failed: gnosh: the model server did not answer."}; !slices.Equal(g.v.notes, want) {
+		t.Errorf("the notes: %q, want %q", g.v.notes, want)
+	}
+	body, _ := g.screen()
+	if r := row(body, "run the tests"); !strings.HasPrefix(r, "> ✗ run the tests and fix w…  failed · gnosh: the model server did not answer.") {
+		t.Errorf("the failed run's row: %q\n%s", r, strings.Join(body, "\n"))
+	}
+	g.keys("<Space>")
+	body, _ = g.screen()
+	peek := strings.Join(body, "\n")
+	for _, want := range []string{"─ 01a1eea5-1111 · failed 2m · ~/src/app ─", "> run the tests and fix what fails\n✗ it ended with exit status 1\n  Running the tests.\n  gnosh: the model server did not answer."} {
+		if !strings.Contains(peek, want) {
+			t.Errorf("peeking at the failed run does not show %q:\n%s", want, peek)
+		}
+	}
+	g.keys("<Space> <End> <Space>")
+	if body, _ = g.screen(); !strings.Contains(strings.Join(body, "\n"), "> deploy it\n∙ it was stopped by a signal\n  Building.") {
+		t.Errorf("peeking at the run a signal stopped:\n%s", strings.Join(body, "\n"))
+	}
+	g.keys(`<Space> <Paste "s:failed">`)
+	body, _ = g.screen()
+	if !strings.Contains(strings.Join(body, "\n"), "run the tests") || strings.Contains(strings.Join(body, "\n"), "deploy it") {
+		t.Errorf("s:failed does not list only the failed run:\n%s", strings.Join(body, "\n"))
+	}
+}
+
 // /model and /effort typed in the box set what the runs started from the
 // view are given, for the view only, and default puts back what it was
 // opened with; "@name prompt" starts a run as that kind of agent; /exit
