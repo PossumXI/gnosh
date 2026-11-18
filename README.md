@@ -84,6 +84,9 @@ Built:
 - **Channels**, as Claude Code's: `--channels server:<name>` lets an MCP
   server of yours push events into the running session (a CI webhook, a
   chat bridge), which the model reads and acts on as they come.
+- **PushNotification**, as Claude Code's: the model calls you back when
+  you have walked away (a desktop note through your terminal, and your
+  Notification hooks with the type `push_notification`).
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.

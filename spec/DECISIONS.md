@@ -1221,3 +1221,16 @@ or kept with the reason said (27).
     a CI webhook or a chat bridge reaching the session on an always-on
     box. Not built: relaying permission questions to a channel
     (claude/channel/permission).
+
+83. **PushNotification, as Claude Code's: the model calls the person
+    back.** The tool sends one line (under 200 characters, blanks folded)
+    the ways gnosh already tells a person who is away that the session
+    waits: a desktop note through the terminal by preferredNotifChannel
+    (OSC 9 or 99, or the bell), and the Notification hooks, with the
+    notification type push_notification (gnosh's own; Claude Code's
+    reaches a phone through Remote Control, and a hook that forwards
+    this type to a phone service is gnosh's way). When a key was pressed
+    in the last half minute the person is at the terminal and nothing is
+    sent, as in Claude Code, and the model is told so; the plain
+    interface sends none. Offered in attended sessions, quiet in the
+    permission engine.

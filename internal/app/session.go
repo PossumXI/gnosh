@@ -1553,7 +1553,7 @@ func (c *controls) Signals() <-chan os.Signal { return c.p.o.Signals }
 // them.
 func (c *controls) Notify(kind, title, message string) {
 	l := c.cur()
-	if !l.hooks.has(hooks.Notification) || (kind != "permission_prompt" && kind != "idle_prompt") {
+	if !l.hooks.has(hooks.Notification) || (kind != "permission_prompt" && kind != "idle_prompt" && kind != "push_notification") {
 		return
 	}
 	in := hooks.Input{Event: hooks.Notification, NotificationType: kind, Title: title, Message: message}

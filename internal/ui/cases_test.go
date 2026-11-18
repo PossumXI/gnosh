@@ -1225,3 +1225,21 @@ func TestNoteSeq(t *testing.T) {
 		}
 	}
 }
+
+// A notification the model sends (PushNotification) goes to the hooks only
+// when the person seems away: within half a minute of a key it is not sent,
+// and the model is told why.
+func TestPushNotification(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor, func(c *controls) { c.info.NotifyHooks = true })
+	g.keys(`"build it and tell me" <Enter>`).start()
+	reply := make(chan string, 1)
+	g.ev(&app.PushEvent{Message: "build done: 0 failures", Reply: reply})
+	if said := <-reply; !strings.HasPrefix(said, "not sent: the user is at the terminal") || len(g.c.notified) != 0 {
+		t.Fatalf("right after a key: %q, hooks told %q", said, g.c.notified)
+	}
+	g.wait(31 * time.Second)
+	g.ev(&app.PushEvent{Message: "build done: 0 failures", Reply: reply})
+	if said := <-reply; said != "sent" || len(g.c.notified) != 1 || g.c.notified[0] != "push_notification" {
+		t.Fatalf("after half a minute away: %q, hooks told %q", said, g.c.notified)
+	}
+}

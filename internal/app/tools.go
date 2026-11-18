@@ -144,6 +144,10 @@ func (l *live) buildTools() error {
 			all = append(all, &exitTreeTool{l: l})
 		}
 	}
+	if l.interactive {
+		// Calling the person back (pushtool.go).
+		all = append(all, &pushTool{l: l})
+	}
 	if l.cronOff() == "" {
 		// Prompts scheduled for later in the session (crontool.go).
 		all = append(all, &cronCreateTool{l: l}, &cronListTool{l: l}, &cronDeleteTool{l: l}, &wakeTool{l: l})

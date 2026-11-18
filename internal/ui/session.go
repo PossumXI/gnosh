@@ -713,6 +713,30 @@ func (s *session) notify(now time.Time) {
 	}
 }
 
+// pushAway is how long with no key pressed the person counts as away
+// from the terminal, for a notification the model sends.
+const pushAway = 30 * time.Second
+
+// push sends a notification the model asked for (PushNotification) when
+// the person seems to be away: a desktop note by their channel, and their
+// Notification hooks, of the type push_notification. It says what it did.
+func (s *session) push(msg string) string {
+	if !s.lastInput.IsZero() && s.now().Sub(s.lastInput) < pushAway {
+		return "not sent: the user is at the terminal (a key pressed in the last half minute) and reads what you write"
+	}
+	hooks, desk := s.info.NotifyHooks, s.host.desktop(s.info.NotifChannel, "")
+	if !hooks && !desk {
+		return "not sent: no way to notify reaches the user here (their preferredNotifChannel, or a Notification hook, would)"
+	}
+	if hooks {
+		s.c.Notify("push_notification", "gnosh", msg)
+	}
+	if desk {
+		s.host.desktop(s.info.NotifChannel, msg)
+	}
+	return "sent"
+}
+
 // idleWaits reports whether the hooks are still to be told that the
 // session sits idle: a turn has ended, nothing was typed since, and they
 // have not been told.

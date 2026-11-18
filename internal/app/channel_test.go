@@ -94,3 +94,22 @@ func TestChannelNotDeclared(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// PushNotification asks the front end, which says what it did; the plain
+// interface sends no notifications, and says so.
+func TestPushNotificationInPlainMode(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "PushNotification", Args: `{"message":"build done:\n0 failures"}`}}},
+		apptest.Reply{Text: "Told you."},
+	)
+	s := sitWith(t, w, nil)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("build and tell me")
+	s.see("Told you.")
+	s.typeLine("/exit")
+	s.exit()
+	has(t, "the tool's result", toolResult(t, w, 1, "c1"), "Notification not sent: the plain interface sends no notifications.")
+	if body := string(w.Model.Requests()[0].Body); !strings.Contains(body, `"PushNotification"`) {
+		t.Errorf("an interactive session was not offered PushNotification")
+	}
+}

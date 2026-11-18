@@ -148,7 +148,8 @@ type Controls interface {
 	// shutdown short.
 	Signals() <-chan os.Signal
 	// Notify fires the person's Notification hooks: kind is
-	// "permission_prompt" (a question has waited a while) or "idle_prompt"
+	// "permission_prompt" (a question has waited a while), "push_notification"
+	// (the model's PushNotification) or "idle_prompt"
 	// (a turn finished a while ago and nothing was typed since). It does
 	// not wait for them.
 	Notify(kind, title, message string)
@@ -452,6 +453,19 @@ type CommandInfo struct {
 // start says itself where the session is.
 type RestartEvent struct {
 	Why string
+}
+
+// PushEvent asks the front end to tell the person something the model
+// thinks worth calling them back for (PushNotification): a desktop note by
+// their channel (preferredNotifChannel) and their Notification hooks, of
+// the type "push_notification". A front end that sees the person at the
+// terminal (a key pressed in the last half minute) sends nothing: what
+// the model writes reaches them already. It answers on Reply, once, with
+// what it did in a few words ("sent", or why not); a front end that knows
+// nothing of it never answers, and the tool says so.
+type PushEvent struct {
+	Message string
+	Reply   chan<- string
 }
 
 // StatusEvent says that named facts for a status line have changed: see

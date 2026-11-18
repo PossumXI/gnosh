@@ -167,6 +167,8 @@ func (s *session) handle(ev any) {
 	case *app.TasksEvent:
 		s.tasks = ev.Tasks
 		s.dirty = true
+	case *app.PushEvent:
+		ev.Reply <- s.push(ev.Message)
 	case *app.RestartEvent:
 		// A tool moved the session (EnterWorktree, ExitWorktree): it
 		// closes, and gnosh starts again where it moved, as after

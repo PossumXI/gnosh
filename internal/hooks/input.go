@@ -148,8 +148,8 @@ type Input struct {
 
 	// Message, Title and NotificationType describe a notification
 	// ("message", "title", "notification_type"). NotificationType is
-	// permission_prompt or idle_prompt, and is what the matchers are
-	// tested against.
+	// permission_prompt, idle_prompt, or push_notification (the model's
+	// own, PushNotification), and is what the matchers are tested against.
 	Message          string
 	Title            string
 	NotificationType string

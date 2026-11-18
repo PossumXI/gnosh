@@ -1189,6 +1189,8 @@ func (f *plain) Event(ev any) {
 		}
 	case *TasksEvent:
 		f.printTasks(ev.Tasks)
+	case *PushEvent:
+		ev.Reply <- "not sent: the plain interface sends no notifications"
 	case *RestartEvent:
 		f.say("%s", visible(ev.Why))
 		f.restarting.Store(true)

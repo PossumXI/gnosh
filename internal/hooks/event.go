@@ -289,7 +289,7 @@ func describe(e Event) (eventInfo, bool) {
 	case Notification:
 		return eventInfo{
 			class: records, subject: ownValue, what: "the type of notification",
-			values: []string{"permission_prompt", "idle_prompt"},
+			values: []string{"permission_prompt", "idle_prompt", "push_notification"},
 		}, true
 	case PreModelSwitch:
 		return eventInfo{
