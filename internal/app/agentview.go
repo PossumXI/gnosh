@@ -38,6 +38,8 @@ type AgentSource interface {
 	// Forget takes a run that is over off the list: its log goes, and its
 	// session stays.
 	Forget(id string) error
+	// Rename gives a run the name the list calls it by ("" takes it away).
+	Rename(id, name string) error
 	// Dispatch starts a new run on the prompt, as gnosh --bg does, in the
 	// folder dir (the one the view was opened in when it is ""), with the
 	// flags given (the view's defaults for the runs it starts), and
@@ -284,6 +286,14 @@ func (s *runSource) Answer(id, question, choice, text string) error {
 		return err
 	}
 	return answerAsk(r.log, question, choice, text)
+}
+
+func (s *runSource) Rename(id, name string) error {
+	r, err := s.run(id)
+	if err != nil {
+		return err
+	}
+	return renameRun(r.log, name, s.p.now())
 }
 
 func (s *runSource) Forget(id string) error {

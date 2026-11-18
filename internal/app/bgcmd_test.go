@@ -349,8 +349,23 @@ func TestBackgroundGoesOnWithASession(t *testing.T) {
 		}
 		has(t, "what is said", r.out, "gnosh: backgrounded · "+id+" · process 4242")
 	}
-	data, _ := os.ReadFile(strings.TrimSuffix(session, ".jsonl") + ".background.log")
-	if n := strings.Count(string(data), "goes on in the background with: "); n != 2 {
+	// A name given (the agent view's Ctrl+R) is the run's, and a run sent
+	// back to work keeps it.
+	log := strings.TrimSuffix(session, ".jsonl") + ".background.log"
+	if err := renameRun(log, "nightly", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if r := readRunLog(log, id, time.Time{}); r.name != "nightly" {
+		t.Errorf("after the rename the run is called %q", r.name)
+	}
+	if _, _, r := send("--bg", "-r", id, "and once more"); r.code != 0 {
+		t.Fatalf("a third send: %d %s", r.code, r.err)
+	}
+	if r := readRunLog(log, id, time.Time{}); r.name != "nightly" || r.prompt != "and once more" {
+		t.Errorf("the run sent back to work is called %q, on %q", r.name, r.prompt)
+	}
+	data, _ := os.ReadFile(log)
+	if n := strings.Count(string(data), "goes on in the background with: "); n != 3 {
 		t.Errorf("the log holds %d heads:\n%s", n, data)
 	}
 	_, _, r := send("--bg", "-r", "no such name", "go on")

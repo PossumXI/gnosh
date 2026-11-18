@@ -438,8 +438,23 @@ func (v *agentView) chosen() (app.AgentRun, bool) {
 	return app.AgentRun{}, false
 }
 
-// name is what a run is called on the screen: its name, or the start of
-// its id.
+// rowName is what the list calls a run: the name it was given, or else
+// its prompt's first line, as a session is named after its first prompt
+// (Claude Code's view names each session too); its id when it has
+// neither. Notes and the peek's head say runName, the id that gnosh logs,
+// stop and -r take.
+func rowName(r app.AgentRun) string {
+	if r.Name != "" {
+		return oneLine(r.Name)
+	}
+	if p := firstOf(r.Prompt); p != "" {
+		return p
+	}
+	return r.Short
+}
+
+// runName is what a run is called in what the view says of it: its name,
+// or the start of its id.
 func runName(r app.AgentRun) string {
 	if r.Name != "" {
 		return oneLine(r.Name)
@@ -553,6 +568,13 @@ func (v *agentView) key(k term.Key) {
 		v.suspend = true
 	case k.Is('x', term.ModCtrl):
 		v.stopOrForget()
+	case k.Is('r', term.ModCtrl):
+		// Rename the run chosen: its name goes in the box, after /rename.
+		if r, ok := v.chosen(); ok {
+			v.box.SetText("/rename " + oneLine(r.Name))
+			v.box.SetCursor(len(v.box.Text()))
+			v.say("Enter names %s so; an empty name takes its name away.", r.Short)
+		}
 	case k.Is('s', term.ModCtrl):
 		v.byFolder = !v.byFolder
 		v.sortRuns()
@@ -751,6 +773,24 @@ func (v *agentView) boxCommand(text string) bool {
 	case "/exit", "/quit":
 		v.quit = true
 		return true
+	case "/rename":
+		v.box.Reset()
+		r, ok := v.chosen()
+		if !ok {
+			v.say("There is no run to name.")
+			return true
+		}
+		if err := v.src.Rename(r.ID, arg); err != nil {
+			v.say("%s was not named: %v.", r.Short, err)
+			return true
+		}
+		v.refresh()
+		if arg == "" {
+			v.say("%s has no name now.", r.Short)
+		} else {
+			v.say("%s is named %s.", r.Short, oneLine(arg))
+		}
+		return true
 	case "/model":
 		flag = "--model"
 	case "/effort":
@@ -885,9 +925,10 @@ func (v *agentView) layWatch(force bool) {
 		return
 	}
 	w.shown = len(entries)
-	w.lines, _ = layTranscript(&v.th, v.m, entries, max(w.width, 20), false)
+	width := max(w.width, 10)
+	w.lines, _ = layTranscript(&v.th, v.m, entries, width, false)
 	if len(w.lines) == 0 {
-		w.lines = []string{v.th.Quiet.Render("(nothing in its conversation yet)")}
+		w.lines = []string{v.th.Quiet.Render(fit(v.m, "(nothing in its conversation yet)", width))}
 	}
 }
 
@@ -1039,18 +1080,18 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	var list []string
 	selRow := -1
 	if len(shown) == 0 {
+		said := "No session runs in the background: type a prompt below and Enter to start one."
 		switch _, isFilter := v.boxFilter(); {
 		case isFilter:
-			list = append(list, th.Quiet.Render("No run is like that."))
+			said = "No run is like that."
 		case v.info.Scoped:
-			list = append(list, th.Quiet.Render("No session runs in the background from "+v.folder()+": type a prompt below and Enter to start one."))
-		default:
-			list = append(list, th.Quiet.Render("No session runs in the background: type a prompt below and Enter to start one."))
+			said = "No session runs in the background from " + v.folder() + ": type a prompt below and Enter to start one."
 		}
+		list = append(list, wrap(v.m, th.Quiet.Render(said), width, "", "")...)
 	}
 	nameW := 0
 	for _, r := range shown {
-		nameW = max(nameW, v.m.Width(runName(r)))
+		nameW = max(nameW, v.m.Width(rowName(r)))
 	}
 	nameW = min(nameW, 24)
 	group := ""
@@ -1066,7 +1107,7 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 		}
 		if g != group {
 			group = g
-			list = append(list, th.Quiet.Render(g))
+			list = append(list, th.Quiet.Render(fit(v.m, g, width)))
 		}
 		if r.ID == v.sel {
 			selRow = len(list)
@@ -1115,7 +1156,7 @@ func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string
 	case running(r):
 		mark = th.Busy.Render("✽")
 	}
-	name := runName(r)
+	name := rowName(r)
 	if w := v.m.Width(name); w > nameW {
 		name = v.m.Truncate(name, nameW, "…")
 	}
@@ -1209,6 +1250,7 @@ func (v *agentView) helpLines(width int) []string {
 		{"n:<text> s:<state> o:<text>", "list only the runs whose name or prompt, state, or answer has it"},
 		{"Ctrl+X", "stop a working run; twice, take one that is over off the list"},
 		{"Ctrl+S", "group the runs by folder, or by how they stand"},
+		{"Ctrl+R, /rename <name>", "name the run chosen"},
 		{"Esc", "stop peeking, empty the box, or leave; the runs go on"},
 	}
 	kw := 0

@@ -230,7 +230,22 @@ const (
 	runFolderLine = "gnosh: its folder is "
 	runNameLine   = "gnosh: its name is "
 	runStopped    = " the run was stopped; what it did so far is kept."
+	// runRenamed begins, after the time, the line that gives a run a new
+	// name (the agent view's Ctrl+R); empty after it takes the name away.
+	runRenamed = " its name is now: "
 )
+
+// renameRun gives the run whose log is log a new name, as a line of the
+// log's own, which readRunLog reads wherever it stands.
+func renameRun(log, name string, now time.Time) error {
+	f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = fmt.Fprintf(f, "gnosh: %s%s%s\n", now.UTC().Format(time.RFC3339), runRenamed, oneLine(name, 120))
+	return err
+}
 
 // backgroundRun is a run in the background that gnosh --bg, /background or
 // /fork started: the session it goes on with, its prompt and name, its log, the
@@ -380,6 +395,10 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			t, terr := time.Parse(time.RFC3339, at)
 			if terr == nil && " "+after == runStopped {
 				r.stopped = true
+				continue
+			}
+			if name, ok := strings.CutPrefix(" "+after, runRenamed); terr == nil && ok {
+				r.name = strings.TrimSpace(name)
 				continue
 			}
 			if terr == nil {

@@ -32,6 +32,7 @@ type fakeRuns struct {
 	answered    []string
 	resumed     []string
 	told        []string
+	renamed     []string
 	unread      map[string][]string
 	now         func() time.Time
 }
@@ -95,6 +96,14 @@ func (f *fakeRuns) Stop(_ context.Context, id string) (string, error) {
 	f.mu.Unlock()
 	f.set(id, func(r *app.AgentRun) { r.State, r.Ended = "stopped", f.now() })
 	return "the session " + id + " was stopped. What it did so far is kept: gnosh -r " + id + " opens it.", nil
+}
+
+func (f *fakeRuns) Rename(id, name string) error {
+	f.mu.Lock()
+	f.renamed = append(f.renamed, words(id, name))
+	f.mu.Unlock()
+	f.set(id, func(r *app.AgentRun) { r.Name = name })
+	return nil
 }
 
 func (f *fakeRuns) Forget(id string) error {
@@ -225,16 +234,16 @@ func TestAgentViewLists(t *testing.T) {
 		t.Fatalf("the list:\n%s", strings.Join(body, "\n"))
 	}
 	for _, c := range []struct{ name, row string }{
-		{"01a1eea5-1111", "> ✽ 01a1eea5-1111  $ go test ./..."},
-		{"docs", "  ✽ docs           thinking"},
-		{"01a1eea5-3333", "  ∙ 01a1eea5-3333  All 42 tests pass."},
-		{"01a1eea5-4444", "  ∙ 01a1eea5-4444  stopped · Building."},
+		{"run the tests", "> ✽ run the tests and fix w…  $ go test ./..."},
+		{"docs", "  ✽ docs                      thinking"},
+		{"fix the flaky test", "  ∙ fix the flaky test        All 42 tests pass."},
+		{"deploy it", "  ∙ deploy it                 stopped · Building."},
 	} {
 		if r := row(body, c.name); !strings.HasPrefix(r, c.row) {
 			t.Errorf("the row of %s is %q, not %q...", c.name, r, c.row)
 		}
 	}
-	for name, age := range map[string]string{"01a1eea5-1111": " 2m", "docs": " 30s", "01a1eea5-3333": " 45s", "01a1eea5-4444": " 5m"} {
+	for name, age := range map[string]string{"run the tests": " 2m", "docs": " 30s", "fix the flaky test": " 45s", "deploy it": " 5m"} {
 		if r := row(body, name); !strings.HasSuffix(r, age) || len([]rune(r)) != 100 {
 			t.Errorf("the row of %s does not end at the right edge with its age %q: %q", name, age, r)
 		}
@@ -248,7 +257,7 @@ func TestAgentViewLists(t *testing.T) {
 	// A minute on, the working runs are older and the others are not.
 	g.clk.add(time.Minute)
 	body, _ = g.screen()
-	if !strings.HasSuffix(row(body, "docs"), " 1m") || !strings.HasSuffix(row(body, "01a1eea5-3333"), " 45s") {
+	if !strings.HasSuffix(row(body, "docs"), " 1m") || !strings.HasSuffix(row(body, "fix the flaky test"), " 45s") {
 		t.Errorf("a minute on:\n%s", strings.Join(body, "\n"))
 	}
 }
@@ -272,7 +281,7 @@ func TestAgentViewPeekAndKeys(t *testing.T) {
 	g.keys("<Down> <Down>")
 	body, _ = g.screen()
 	peek = strings.Join(body, "\n")
-	if !strings.HasPrefix(row(body, "01a1eea5-3333"), "> ") || !strings.Contains(peek, "─ 01a1eea5-3333 · done 45s · ~/src/lib ─") ||
+	if !strings.HasPrefix(row(body, "fix the flaky test"), "> ") || !strings.Contains(peek, "─ 01a1eea5-3333 · done 45s · ~/src/lib ─") ||
 		!strings.Contains(peek, "  The test raced on its clock.\n  All 42 tests pass.") {
 		t.Errorf("peeking at the run that is done:\n%s", peek)
 	}
@@ -289,7 +298,7 @@ func TestAgentViewPeekAndKeys(t *testing.T) {
 		t.Errorf("Esc did not just close the keys")
 	}
 	g.keys("<End>")
-	if body, _ = g.screen(); !strings.HasPrefix(row(body, "01a1eea5-4444"), "> ") {
+	if body, _ = g.screen(); !strings.HasPrefix(row(body, "deploy it"), "> ") {
 		t.Errorf("End did not choose the last run")
 	}
 	g.keys("<Esc>")
@@ -320,7 +329,7 @@ func TestAgentViewDispatch(t *testing.T) {
 	if !slices.Equal(g.src.dispatched, []string{"tidy the README"}) || g.v.box.Text() != "" {
 		t.Fatalf("the run was not started: %q", g.src.dispatched)
 	}
-	if body[0] != "gnosh agents · 3 working · 2 completed" || !strings.HasPrefix(row(body, "01a1eea5-9999"), "> ✽ 01a1eea5-9999") ||
+	if body[0] != "gnosh agents · 3 working · 2 completed" || !strings.HasPrefix(row(body, "tidy the README"), "> ✽ tidy the README") ||
 		live[len(live)-1] != "Started 01a1eea5-9999: Enter watches it." {
 		t.Errorf("after the start:\n%s\n%s", strings.Join(body, "\n"), strings.Join(live, "\n"))
 	}
@@ -354,19 +363,19 @@ func TestAgentViewFilters(t *testing.T) {
 		filter string
 		names  []string
 	}{
-		{"s:work", []string{"01a1eea5-1111", "docs"}},
-		{"s:stop", []string{"01a1eea5-4444"}},
-		{"s:completed", []string{"01a1eea5-3333", "01a1eea5-4444"}},
+		{"s:work", []string{"run the tests", "docs"}},
+		{"s:stop", []string{"deploy it"}},
+		{"s:completed", []string{"fix the flaky test", "deploy it"}},
 		{"n:DOCS", []string{"docs"}},
-		{"n:deploy s:stopped", []string{"01a1eea5-4444"}},
-		{"o:42", []string{"01a1eea5-3333"}},
+		{"n:deploy s:stopped", []string{"deploy it"}},
+		{"o:42", []string{"fix the flaky test"}},
 		{"n:nothing", nil},
 	} {
 		g.v.box.Reset()
 		g.keys(fmt.Sprintf("%q", c.filter))
 		body, live := g.screen()
 		var names []string
-		for _, n := range []string{"01a1eea5-1111", "docs", "01a1eea5-3333", "01a1eea5-4444"} {
+		for _, n := range []string{"run the tests", "docs", "fix the flaky test", "deploy it"} {
 			if row(body, n) != "" {
 				names = append(names, n)
 			}
@@ -395,7 +404,7 @@ func TestAgentViewStopAndForget(t *testing.T) {
 	g := newAgentRig(t)
 	g.keys("<Ctrl+X>")
 	body, live := g.screen()
-	if !slices.Equal(g.src.stopped, []string{runTests}) || !strings.HasPrefix(row(body, "01a1eea5-1111"), "> ∙ 01a1eea5-1111  stopped") {
+	if !slices.Equal(g.src.stopped, []string{runTests}) || !strings.HasPrefix(row(body, "run the tests"), "> ∙ run the tests and fix w…  stopped") {
 		t.Fatalf("Ctrl+X on a working run: stopped %q\n%s", g.src.stopped, strings.Join(body, "\n"))
 	}
 	if live[len(live)-1] != "01a1eea5-1111 was stopped. What it did so far is kept: gnosh -r 01a1eea5-1111 opens it" {
@@ -408,7 +417,7 @@ func TestAgentViewStopAndForget(t *testing.T) {
 	}
 	g.keys("<Ctrl+X>")
 	body, live = g.screen()
-	if !slices.Equal(g.src.forgotten, []string{runFlaky}) || row(body, "01a1eea5-3333") != "" ||
+	if !slices.Equal(g.src.forgotten, []string{runFlaky}) || row(body, "fix the flaky test") != "" ||
 		live[len(live)-1] != "01a1eea5-3333 is off the list. Its session is kept: gnosh -r 01a1eea5-3333 opens it." {
 		t.Errorf("the second Ctrl+X: forgot %q\n%s\n%s", g.src.forgotten, strings.Join(body, "\n"), live[len(live)-1])
 	}
@@ -528,7 +537,7 @@ func TestAgentViewNeedsInput(t *testing.T) {
 	g.v.refresh()
 	body, live := g.screen()
 	if body[0] != "gnosh agents · 1 needs input · 2 working · 2 completed" || body[1] != "Needs input" ||
-		!strings.HasPrefix(body[2], "> ? 01a1eea5-5555  Allow Bash? $ rm -rf build") || body[3] != "Working" {
+		!strings.HasPrefix(body[2], "> ? clean the build           Allow Bash? $ rm -rf build") || body[3] != "Working" {
 		t.Fatalf("the list:\n%s", strings.Join(body, "\n"))
 	}
 	if live[len(live)-1] != "↑↓ choose · Space peeks · Enter answers · Ctrl+X stops · ? keys · Esc leaves" {
@@ -579,7 +588,7 @@ func TestAgentViewReply(t *testing.T) {
 		t.Fatalf("the reply resumed %q and started %q", g.src.resumed, g.src.dispatched)
 	}
 	body, live := g.screen()
-	if !strings.HasPrefix(row(body, "01a1eea5-3333"), "> ✽ 01a1eea5-3333") || live[len(live)-1] != "01a1eea5-3333 goes on in the background: Enter watches it." {
+	if !strings.HasPrefix(row(body, "and the README too"), "> ✽ and the README too") || live[len(live)-1] != "01a1eea5-3333 goes on in the background: Enter watches it." {
 		t.Errorf("after the reply:\n%s\n%s", strings.Join(body, "\n"), live[len(live)-1])
 	}
 	g.v.sel = runTests
@@ -701,7 +710,7 @@ func TestAgentViewByFolder(t *testing.T) {
 	if body[1] != "~/src/app" || !strings.Contains(all, "\n~/src/lib\n") || strings.Contains(all, "\nWorking\n") {
 		t.Fatalf("grouped by folder:\n%s", all)
 	}
-	for name, want := range map[string]string{"01a1eea5-1111": "working · $ go test ./...", "01a1eea5-3333": "done · All 42 tests pass.", "01a1eea5-4444": "stopped · Building."} {
+	for name, want := range map[string]string{"run the tests": "working · $ go test ./...", "fix the flaky test": "done · All 42 tests pass.", "deploy it": "stopped · Building."} {
 		if !strings.Contains(row(body, name), want) {
 			t.Errorf("the row of %s does not say %q: %q", name, want, row(body, name))
 		}
@@ -718,5 +727,26 @@ func TestAgentViewByFolder(t *testing.T) {
 	g.keys("<Ctrl+S>")
 	if body, _ = g.screen(); body[1] != "Working" {
 		t.Errorf("grouped by how they stand again:\n%s", strings.Join(body, "\n"))
+	}
+}
+
+// The list calls a run by the name it was given, or else by its prompt's
+// first line; Ctrl+R puts /rename and its name in the box, and Enter names
+// it so (an empty name takes the name away).
+func TestAgentViewRename(t *testing.T) {
+	g := newAgentRig(t)
+	g.keys("<Ctrl+R>")
+	if g.v.box.Text() != "/rename " {
+		t.Errorf("Ctrl+R put %q in the box", g.v.box.Text())
+	}
+	g.keys(`"nightly tests" <Enter>`)
+	body, live := g.screen()
+	if !slices.Equal(g.src.renamed, []string{runTests + " nightly tests"}) || !strings.HasPrefix(row(body, "nightly tests"), "> ✽ nightly tests") ||
+		live[len(live)-1] != "01a1eea5-1111 is named nightly tests." {
+		t.Errorf("after the rename: renamed %q\n%s\n%s", g.src.renamed, strings.Join(body, "\n"), live[len(live)-1])
+	}
+	g.keys(`<Ctrl+R> <Ctrl+W> <Ctrl+W> <Enter>`)
+	if body, _ = g.screen(); row(body, "run the tests") == "" {
+		t.Errorf("the name was not taken away:\n%s", strings.Join(body, "\n"))
 	}
 }

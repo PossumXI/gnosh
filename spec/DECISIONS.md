@@ -2016,3 +2016,15 @@ or kept with the reason said (27).
     run's says so already), and a prompt starts its run in the folder of
     the run chosen, which the keys line names. Unlike Claude Code's, the
     choice is not remembered from one opening of the view to the next.
+
+125. **The agent view calls a run by its name, or its prompt, and Ctrl+R
+    names it.** Claude Code's view names every session (a small model
+    writes the name) and Ctrl+R renames one. gnosh's list now calls a run
+    by the name it was given, or else by its prompt's first line, as a
+    session is named after its first prompt (no model call: the boxes have
+    one GPU); notes and the peek's head keep the short id, which gnosh
+    logs, stop and -r take. Ctrl+R puts "/rename <its name>" in the box,
+    and Enter names the run chosen so (an empty name takes it away): a
+    line of the run's log of its own, "gnosh: <time> its name is now:
+    <name>", which readRunLog reads wherever it stands, and gnosh --bg -r
+    keeps the name for the run it starts.
