@@ -44,7 +44,7 @@ var exits = []struct {
 
 // Every exit status on every event that can block.
 func TestExitStatusOnEveryBlockingEvent(t *testing.T) {
-	for _, event := range []Event{PreToolUse, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, PreModelSwitch, ConfigChange, PostToolBatch} {
+	for _, event := range []Event{PreToolUse, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, PreModelSwitch, ConfigChange, PostToolBatch, Elicitation, ElicitationResult} {
 		for _, tt := range exits {
 			t.Run(string(event)+"/"+tt.name, func(t *testing.T) {
 				t.Parallel()
@@ -145,9 +145,11 @@ var cannot = []struct {
 	{
 		name: "it passed its timeout",
 		hook: func(t *testing.T, _ *Options) Hook {
-			return Hook{Command: "echo 'still checking' >&2; sleep 600", Timeout: 150 * time.Millisecond}
+			// (Long enough for a shell to start and write its line on a
+			// box busy with every package's tests at once.)
+			return Hook{Command: "echo 'still checking' >&2; sleep 600", Timeout: 2 * time.Second}
 		},
-		says: []string{"did not finish within 150ms", "was stopped", "still checking"},
+		says: []string{"did not finish within 2 seconds", "was stopped", "still checking"},
 	},
 	{
 		name: "it exited 1 and said why",
@@ -236,10 +238,10 @@ func TestCouldNotEvaluateOnEveryEvent(t *testing.T) {
 						t.Errorf("Blocked %v, PermissionDecision %q; want the call blocked", out.Blocked, out.PermissionDecision)
 					}
 					contains(t, "the reason", out.Reason, append(sentence, c.says...)...)
-				case PostToolUse, PostToolUseFailure, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange, PostToolBatch:
+				case PostToolUse, PostToolUseFailure, UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange, PostToolBatch, Elicitation, ElicitationResult:
 					// The reason is feedback for the model; the prompt is
 					// blocked; the turn is held open; the settings are
-					// kept.
+					// kept; the MCP server's request is declined.
 					if !out.Blocked || out.PermissionDecision != NoDecision {
 						t.Errorf("Blocked %v, PermissionDecision %q; want blocked", out.Blocked, out.PermissionDecision)
 					}
@@ -298,7 +300,7 @@ func TestExitTwoOnEveryEvent(t *testing.T) {
 				if !out.Blocked || out.PermissionDecision != Deny || out.Reason != "not like this" || rec.Result != ResultBlocked {
 					t.Errorf("got %+v", out)
 				}
-			case UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange, PostToolBatch:
+			case UserPromptSubmit, UserPromptExpansion, Stop, SubagentStop, ConfigChange, PostToolBatch, Elicitation, ElicitationResult:
 				if !out.Blocked || out.PermissionDecision != NoDecision || out.Reason != "not like this" || rec.Result != ResultBlocked {
 					t.Errorf("got %+v", out)
 				}
