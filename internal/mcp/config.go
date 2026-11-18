@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -133,6 +134,12 @@ func LoadConfig(src Sources) ([]Config, []Problem) {
 			probs = append(probs, Problem{Path: path, Message: fmt.Sprintf("it is not JSON in the shape {\"mcpServers\": {...}} (%v), so none of it is used", err)})
 			return nil
 		}
+		var top map[string]json.RawMessage
+		if json.Unmarshal(data, &top) == nil {
+			if names := strays(top); len(names) > 0 {
+				probs = append(probs, Problem{Path: path, Message: fmt.Sprintf("it holds %s, outside \"mcpServers\", where no server is read: move %s inside \"mcpServers\": {...}", strayText(names), itOrThem(len(names)))})
+			}
+		}
 		return &f
 	}
 	use := func(path, scope string, servers map[string]json.RawMessage) {
@@ -210,6 +217,49 @@ func heldOf(src Sources) map[string]bool {
 		held[v] = true
 	}
 	return held
+}
+
+// strays names the entries at the top of a file of servers that are
+// servers themselves, objects with a "command" or a "url": written beside
+// "mcpServers" instead of inside it, where nothing reads them.
+func strays(top map[string]json.RawMessage) []string {
+	var out []string
+	for key, raw := range top {
+		if key == "mcpServers" || key == "projects" {
+			continue
+		}
+		var e map[string]json.RawMessage
+		if json.Unmarshal(raw, &e) != nil {
+			continue
+		}
+		_, local := e["command"]
+		_, remote := e["url"]
+		if local || remote {
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// strayText names servers written at the top of a file, for a message.
+func strayText(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	if len(quoted) == 1 {
+		return "the server " + quoted[0] + " at its top level"
+	}
+	return "the servers " + strings.Join(quoted, ", ") + " at its top level"
+}
+
+// itOrThem is the pronoun for n things.
+func itOrThem(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 // configFile is one file of servers: its own at the top, and the user's

@@ -1522,3 +1522,13 @@ or kept with the reason said (27).
     the model with the next prompt, as a stopped command already was,
     instead of starting a turn. This replaces the last words of 94 (Tab
     in a shell line completed only paths).
+
+97. **Servers written at the top of a file of servers.** An entry beside
+    "mcpServers" instead of inside it that is a server itself (an object
+    with a "command" or a "url") was never read, without a word. Now
+    reading the file names such entries ("it holds the server "github"
+    at its top level, outside "mcpServers", where no server is read: move
+    it inside"), and gnosh mcp add into that file stops and leaves it as
+    it is, as Claude Code 2.1.327's mcp add --scope project stops instead
+    of writing over such a file. Other keys at the top are kept, as
+    before.

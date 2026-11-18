@@ -85,6 +85,14 @@ func Put(pl Place, name string, entry json.RawMessage, mode fs.FileMode) error {
 	if err := json.Compact(&compact, entry); err != nil {
 		return fmt.Errorf("the entry is not JSON: %w", err)
 	}
+	// A file whose servers were written at its top level, beside
+	// "mcpServers" instead of inside it, is not added to: one more shape
+	// in it would hide that its servers are not read.
+	if root, err := readPlace(pl.Path); err == nil {
+		if names := strays(root.vals); len(names) > 0 {
+			return fmt.Errorf("%s holds %s, outside \"mcpServers\", where no server is read. Move %s inside \"mcpServers\": {...} first; the file was left as it is", pl.Path, strayText(names), itOrThem(len(names)))
+		}
+	}
 	return change(pl, mode, func(servers *object) bool {
 		servers.put(name, compact.Bytes())
 		return true
