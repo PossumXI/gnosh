@@ -135,7 +135,7 @@ func TestOpenSessionsMarked(t *testing.T) {
 	other.typeLine("/exit")
 	other.exit()
 	r := run(t, w, "-r", id, "-p", "hello")
-	has(t, "opening it again", r.out+r.err, "is open in another gnosh", "If it is a run in the background, it lets go of the session when it is done", ".background.log")
+	has(t, "opening it again", r.out+r.err, "is open in another gnosh", "If it is a run in the background, it lets go of the session when it is done: gnosh logs -f "+id[:13]+" follows it, and gnosh stop "+id[:13]+" stops it")
 	s.typeLine("/exit")
 	s.exit()
 	hasNot(t, "the list once it is closed", run(t, w, "session", "list").wantCode(t, 0).out, "(open now)")

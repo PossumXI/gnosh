@@ -34,12 +34,9 @@ const stopWait = 10 * time.Second
 // backgroundCommand is gnosh --bg: a new session on the prompt, as a run in
 // the background, and how to follow it.
 func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	if p.o.Detach == nil {
 		p.errf("this gnosh cannot start a session in the background, so nothing was started.")
@@ -79,6 +76,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	short := runShort(id)
 	fmt.Fprintf(p.stdout, "gnosh: backgrounded · %s · process %d\n", id, pid)
 	hints := [][2]string{
+		{"gnosh agents", "lists the sessions in the background"},
 		{"gnosh logs " + short, "what it prints (-f follows it)"},
 		{"gnosh stop " + short, "stops it"},
 		{"gnosh -r " + id, "opens it once it is done"},
@@ -155,12 +153,9 @@ func runSession(id, log string) string {
 // stops a turn, and made to when it has not let go of its session in
 // stopWait. What it did so far stays in its session.
 func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	id, log, err := findRun(st.sessions().ProjectDirs(), inv.Args[0])
 	if err != nil {
@@ -220,6 +215,13 @@ func stopRun(ctx context.Context, now func() time.Time, id, log string) (string,
 	return said, nil
 }
 
+// heldByRun says what to do about a session that may be held by a run in
+// the background: it lets go once it is done.
+func heldByRun(id string) string {
+	short := runShort(id)
+	return fmt.Sprintf("If it is a run in the background, it lets go of the session when it is done: gnosh logs -f %s follows it, and gnosh stop %s stops it", short, short)
+}
+
 // runPID is the process id kept beside a run's log, or 0.
 func runPID(log string) int {
 	data, err := os.ReadFile(pidFile(log))
@@ -251,12 +253,9 @@ func runState(r backgroundRun) string {
 // whose log is kept. --json prints them as JSON, the working ones only
 // unless --all is given too, as Claude Code's does.
 func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	now := p.now()
 	since := now.Add(-runsKept)

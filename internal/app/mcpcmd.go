@@ -243,12 +243,8 @@ func (p *program) mcpShow(ctx context.Context, inv cli.Invocation, places mcpPla
 // problems of the files, and the project's servers that wait for the
 // folder to be trusted. A nil startup comes with the exit code.
 func (p *program) mcpLoad(ctx context.Context, inv cli.Invocation, places mcpPlaces) (st *startup, cfgs []mcp.Config, probs []mcp.Problem, waiting []string, code int) {
-	st, code = p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return nil, nil, nil, nil, max(code, cli.ExitFailure)
+	if st, code = p.prepared(ctx, inv); st == nil {
+		return nil, nil, nil, nil, code
 	}
 	var keys []string
 	for _, pc := range st.cfg.Providers {

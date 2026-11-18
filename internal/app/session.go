@@ -719,7 +719,7 @@ func (l *live) openTranscript(ctx context.Context) error {
 			why := fmt.Sprintf("the session %s is open in another gnosh, and one session has one writer. Close that one, or add --fork-session to go on in a copy", locked.ID)
 			if log := strings.TrimSuffix(locked.Path, ".jsonl") + ".background.log"; fileExists(log) {
 				// (A run /background or /fork started, most likely.)
-				why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done; what it prints is in %s", log)
+				why += ". " + heldByRun(locked.ID)
 			}
 			return errors.New(why)
 		case errors.Is(err, transcript.ErrNotFound):

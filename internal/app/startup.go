@@ -159,6 +159,20 @@ func (p *program) absFrom(path string) string {
 	return filepath.Clean(path)
 }
 
+// prepared is prepare for a command that needs the config and starts no
+// session: with a nil result, what kept the folder or the config from
+// being read has been printed, and the int is the exit code.
+func (p *program) prepared(ctx context.Context, inv cli.Invocation) (*startup, int) {
+	st, code := p.prepare(ctx, inv, false)
+	if st == nil || st.cfg == nil {
+		if st != nil {
+			st.printProblems()
+		}
+		return nil, max(code, cli.ExitFailure)
+	}
+	return st, code
+}
+
 // prepare settles the folder a command line works in, its trust and its
 // config. ask, when not nil, is how the person is put the trust question;
 // it reports yes, and whether the person quit instead of answering.

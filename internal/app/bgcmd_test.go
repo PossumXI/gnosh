@@ -40,7 +40,7 @@ func TestBackgroundFromTheShell(t *testing.T) {
 	if len(got) != 6 || !slices.Equal(head, want[:3]) || !slices.Equal(got[3:], want[3:]) {
 		t.Fatalf("the run was started with %q", got)
 	}
-	has(t, "what is said", r.out, "gnosh: backgrounded · "+id+" · process 4242", "gnosh logs "+id[:13], "gnosh stop "+id[:13], "gnosh -r "+id)
+	has(t, "what is said", r.out, "gnosh: backgrounded · "+id+" · process 4242", "gnosh agents ", "gnosh logs "+id[:13], "gnosh stop "+id[:13], "gnosh -r "+id)
 	if pid, _ := os.ReadFile(strings.TrimSuffix(log, ".log") + ".pid"); strings.TrimSpace(string(pid)) != "4242" {
 		t.Errorf("the process id kept: %q", pid)
 	}

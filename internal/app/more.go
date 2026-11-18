@@ -356,7 +356,7 @@ func (c *controls) resume(ctx context.Context, id string) (string, error) {
 		// likely), and one session has one writer: this one stays.
 		why := fmt.Sprintf("the session %s is open in another gnosh, and one session has one writer, so this one stays open", probe.ID())
 		if log := strings.TrimSuffix(probe.Path(), ".jsonl") + ".background.log"; fileExists(log) {
-			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done; what it prints is in %s", old.tilde(log))
+			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done: /tasks lists it, and /tasks stop %s stops it", runShort(probe.ID()))
 		}
 		return "", errors.New(why)
 	}
@@ -378,12 +378,9 @@ func (c *controls) resume(ctx context.Context, id string) (string, error) {
 
 // dirsCommand is `gnosh dirs`: the folders in use.
 func (p *program) dirsCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	d := st.dirs("")
 	settings := st.cfg.Paths.UserSettings
@@ -407,12 +404,9 @@ func (p *program) dirsCommand(ctx context.Context, inv cli.Invocation) int {
 // logsCommand is `gnosh logs`: the end of the project's log. With
 // --follow it keeps printing what is added until it is stopped.
 func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	dir := st.sessions().ProjectDir(st.cfg.Paths.Cwd)
 	path := filepath.Join(dir, "gnosh.log")
@@ -496,12 +490,9 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 // sends one request for the list to each address and never names a model,
 // so nothing is loaded.
 func (p *program) modelsCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	cfg := st.cfg
 	if len(cfg.Providers) == 0 {
@@ -542,12 +533,9 @@ func (p *program) modelsCommand(ctx context.Context, inv cli.Invocation) int {
 
 // sessionCommandFor is `gnosh session list`, `show`, `last` and `rename`.
 func (p *program) sessionsCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepare(ctx, inv, false)
-	if st == nil || st.cfg == nil {
-		if st != nil {
-			st.printProblems()
-		}
-		return max(code, cli.ExitFailure)
+	st, code := p.prepared(ctx, inv)
+	if st == nil {
+		return code
 	}
 	store, cwd := st.sessions(), st.cfg.Paths.Cwd
 	list, err := store.List(ctx, cwd)
