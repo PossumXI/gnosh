@@ -23,6 +23,7 @@
 #	ssh ai-remote bash -s -- cache < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- hooks < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- leftover < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- focus < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -85,6 +86,9 @@
 #   leftover    the model starts a process that lets go of its output
 #               (sleep 321 >/dev/null 2>&1 &); the result says it was left
 #               running, and /exit stops it (permissions skipped)
+#   focus       focus view (viewMode "focus"): the model reads notes.txt and
+#               counts its lines with a command, and the two calls are one
+#               line, "Read 1 file, ran 1 command"; /focus turns it off
 #   cd          a turn, then /cd to a folder of its own whose settings wait
 #               for trust (said yes to) and whose GNOSH.md holds a codeword:
 #               gnosh starts again there, and the model is asked where it
@@ -106,6 +110,7 @@ case "$scenario" in
 basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
+focus) opts='"viewMode": "focus", ' ;;
 failhint) base=http://127.0.0.1:9 ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
@@ -240,6 +245,15 @@ plan)
 background)
 	tmux send-keys -t "$S" "Call the Agent tool with run_in_background set to true, to have a sub-agent count the lines of notes.txt. Then end your turn; when its report comes, tell me the count." Enter
 	done_when() { screen | grep -q "background sub-agent finished" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
+focus)
+	tmux send-keys -t "$S" "Read notes.txt with the Read tool, then count its lines with the Bash tool running wc -l notes.txt, then say the count in one line." Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "done in" && break
+	done
+	tmux send-keys -t "$S" "/focus" Enter
+	done_when() { screen | grep -q "Read 1 file, ran 1 command" && screen | grep -q 'viewMode is "default" from now on'; }
 	;;
 mention)
 	tmux send-keys -t "$S" "What is the second line of @notes.txt? Answer with that one word and call no tool." Enter
