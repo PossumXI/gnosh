@@ -448,8 +448,19 @@ func TestAgentViewWatch(t *testing.T) {
 			t.Errorf("the run watched does not show %q:\n%s", want, all)
 		}
 	}
-	if len(live) != 1 || live[0] != "watching 01a1eea5-1111 · working 2m · Ctrl+X stops it · Esc goes back" {
-		t.Errorf("the last row: %q", live)
+	if len(live) != 2 || live[0] != "> words for this run: it reads them between its steps" || live[1] != "watching 01a1eea5-1111 · working 2m · Ctrl+X stops it · Esc goes back" {
+		t.Errorf("the last rows: %q", live)
+	}
+	// Words typed under it reach it between its steps, as Claude Code's
+	// attached session takes a prompt; q is a letter here, and Esc first
+	// empties the box.
+	g.keys(`"quick: the flaky one too" <Enter>`)
+	if !slices.Equal(g.src.told, []string{runTests + " quick: the flaky one too"}) || g.v.watch == nil || g.v.box.Text() != "" {
+		t.Errorf("words while watching: told %q, watching %v, box %q", g.src.told, g.v.watch != nil, g.v.box.Text())
+	}
+	g.keys(`"never mind" <Esc>`)
+	if g.v.watch == nil || g.v.box.Text() != "" {
+		t.Errorf("Esc with words in the box: watching %v, box %q", g.v.watch != nil, g.v.box.Text())
 	}
 	g.src.mu.Lock()
 	g.src.convs[runTests] = append(g.src.convs[runTests], app.TranscriptEntry{Kind: "results", Message: core.Message{Role: core.RoleUser,
@@ -463,7 +474,7 @@ func TestAgentViewWatch(t *testing.T) {
 	g.src.set(runTests, func(r *app.AgentRun) { r.State, r.Ended = "done", g.clk.Now() })
 	g.clk.add(agentLook)
 	g.v.tick()
-	if _, live = g.screen(); live[0] != "watching 01a1eea5-1111 · done 2m · Enter opens it · Esc goes back" {
+	if _, live = g.screen(); live[len(live)-1] != "watching 01a1eea5-1111 · done 2m · Enter opens it · Esc goes back" {
 		t.Errorf("the last row once it is over: %q", live)
 	}
 	g.keys("<Esc>")

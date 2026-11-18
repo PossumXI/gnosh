@@ -172,7 +172,7 @@ func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.Agent
 		Plain:       true,
 		MaxHeight:   4,
 		Now:         now,
-		Placeholder: "a prompt starts a run in the background · n: s: o: filter the list",
+		Placeholder: listPlaceholder,
 	})
 	return v
 }
@@ -1056,7 +1056,10 @@ func (v *agentView) layWatch(force bool) {
 // watchInput takes in what the terminal reported while a run is watched.
 func (v *agentView) watchInput(ev term.Event) {
 	w := v.watch
+	empty := strings.TrimSpace(v.box.Text()) == ""
 	switch ev := ev.(type) {
+	case term.Paste:
+		v.box.Handle(ev)
 	case term.Mouse:
 		switch ev.Action {
 		case term.MouseWheelUp:
@@ -1067,8 +1070,17 @@ func (v *agentView) watchInput(ev term.Event) {
 	case term.Key:
 		k := ev
 		switch {
-		case typedRune(k, 'q'), k.IsKey(term.KeyEscape, 0), k.IsKey(term.KeyLeft, 0), k.Is('c', term.ModCtrl):
+		case !empty && (k.IsKey(term.KeyEscape, 0) || k.Is('c', term.ModCtrl)):
+			v.box.Reset()
+		case k.IsKey(term.KeyEscape, 0), empty && k.IsKey(term.KeyLeft, 0), k.Is('c', term.ModCtrl):
 			v.watch = nil
+		case !empty && k.IsKey(term.KeyEnter, 0):
+			// Words for the run watched: a working one reads them between
+			// its steps, and one that is over goes on with them, as
+			// Claude Code's attached session takes a prompt.
+			if r, ok := v.byID(w.id); ok {
+				v.reply(r, strings.TrimSpace(v.box.Text()))
+			}
 		case k.IsKey(term.KeyUp, 0):
 			w.rows++
 		case k.IsKey(term.KeyDown, 0):
@@ -1093,9 +1105,20 @@ func (v *agentView) watchInput(ev term.Event) {
 			v.clear = true
 		case k.Is('z', term.ModCtrl):
 			v.suspend = true
+		default:
+			if v.box.Handle(k).Changed {
+				v.said = ""
+			}
 		}
 	}
 }
+
+// listPlaceholder and watchPlaceholder are what the box says while it is
+// empty, under the list and under a run watched.
+const (
+	listPlaceholder  = "a prompt starts a run in the background · n: s: o: filter the list"
+	watchPlaceholder = "words for this run: it reads them between its steps"
+)
 
 // byID is the run of the session id, as last listed.
 func (v *agentView) byID(id string) (app.AgentRun, bool) {
@@ -1157,6 +1180,7 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	}
 	th := &v.th
 	width := max(cols, 10)
+	v.box.SetPlaceholder(listPlaceholder)
 	view := v.box.Render(width)
 	live = append(live, view.Lines...)
 	crow, ccol = view.CursorRow, view.CursorCol
@@ -1466,7 +1490,10 @@ func (v *agentView) renderWatch(cols int) (body, live []string, crow, ccol int) 
 	if v.said != "" {
 		parts = []string{oneLine(v.said)}
 	}
-	return w.lines, []string{fit(v.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols)}, -1, 0
+	v.box.SetPlaceholder(watchPlaceholder)
+	view := v.box.Render(max(cols, 10))
+	live = append(append([]string(nil), view.Lines...), fit(v.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols))
+	return w.lines, live, view.CursorRow, view.CursorCol
 }
 
 // runAgentView runs the agent view until the person leaves it, and returns

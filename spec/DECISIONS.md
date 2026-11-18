@@ -2145,3 +2145,14 @@ or kept with the reason said (27).
     says which kind it does not know. Only the first word counts, as
     before, and nothing is listed while typing; worktrees are not looked
     for. The note that a run started now names its folder.
+
+133. **Words typed while watching a run reach it.** Claude Code's attach
+    is the session itself: what is typed goes to it. gnosh's agent view
+    watched a working run's conversation read-only, and words for it were
+    typed in the peek, in the list. Now the watch screen has the box under
+    the conversation ("words for this run: it reads them between its
+    steps"): Enter sends what is typed to a working run between its steps,
+    or sends one that is over back to work on it, as the peek's reply
+    does; Esc first empties the box, then goes back; ← on an empty box
+    goes back too. q no longer goes back from a run watched, since it is a
+    letter in the box (Esc, ← and Ctrl+C still do).
