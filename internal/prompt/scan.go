@@ -145,12 +145,8 @@ func imitates(rest string) string {
 			return strings.TrimSuffix(w, ">") + " marker"
 		}
 	}
-	i := skipBlanks(rest, 0)
-	if i < len(rest) && rest[i] == '/' {
-		i = skipBlanks(rest, i+1)
-	}
 	for _, name := range harnessTags {
-		if closesTag(rest[i:], name) {
+		if tagNamed(rest, name) {
 			return name + " tag"
 		}
 	}

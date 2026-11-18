@@ -159,21 +159,46 @@ func templateTag(rest string) bool {
 	return false
 }
 
-// ownTag reports whether rest goes on as one of gnosh's own tags: blanks,
-// an optional "/", blanks, the tag's name in any letter case, blanks, and
-// the closing ">".
+// ownTag reports whether rest goes on as one of gnosh's own tags.
 func ownTag(rest string) bool {
-	i := skipBlanks(rest, 0)
-	if i < len(rest) && rest[i] == '/' {
-		i = skipBlanks(rest, i+1)
-	}
-	return closesTag(rest[i:], tagName) || closesTag(rest[i:], memTag)
+	return tagNamed(rest, tagName) || tagNamed(rest, memTag)
 }
 
-// closesTag reports whether s is name, in any letter case, then blanks,
-// then ">".
-func closesTag(s, name string) bool {
-	if len(s) <= len(name) {
+// tagNamed reports whether rest, the text that follows a "<", goes on as a
+// tag called name, opening or closing, in any letter case: blanks, an
+// optional "/", blanks, the name, blanks and the closing ">", as in
+// "< / gnosh >"; or, with nothing between the "<" or "</" and the name,
+// the name and a blank or a "/", as a tag with more in it begins:
+// <gnosh source="x">, <gnosh/>. A blank between the "<" and a name that
+// some other character follows is a comparison, as in "if used < mem {".
+func tagNamed(rest, name string) bool {
+	i := skipBlanks(rest, 0)
+	tight := i == 0
+	if i < len(rest) && rest[i] == '/' {
+		j := skipBlanks(rest, i+1)
+		tight = tight && j == i+1
+		i = j
+	}
+	s := rest[i:]
+	if !hasName(s, name) {
+		return false
+	}
+	if j := skipBlanks(s, len(name)); j < len(s) && s[j] == '>' {
+		return true
+	}
+	if !tight || len(s) == len(name) {
+		return false
+	}
+	switch s[len(name)] {
+	case ' ', '\t', '\n', '\r', '/':
+		return true
+	}
+	return false
+}
+
+// hasName reports whether s begins with name, in any letter case.
+func hasName(s, name string) bool {
+	if len(s) < len(name) {
 		return false
 	}
 	for j := 0; j < len(name); j++ {
@@ -185,8 +210,7 @@ func closesTag(s, name string) bool {
 			return false
 		}
 	}
-	i := skipBlanks(s, len(name))
-	return i < len(s) && s[i] == '>'
+	return true
 }
 
 // skipBlanks returns the index of the first byte of s at or after i that
