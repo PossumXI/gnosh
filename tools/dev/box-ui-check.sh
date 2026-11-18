@@ -103,7 +103,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 failhint) base=http://127.0.0.1:9 ;;
@@ -117,7 +117,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd)" >&2
 	exit 2
 	;;
 esac
@@ -300,6 +300,19 @@ worktree)
 wtflag)
 	tmux send-keys -t "$S" "Add the line delta at the end of notes.txt, then say where notes.txt is." Enter
 	done_when() { screen | grep -q "done in"; }
+	;;
+cron)
+	# /loop 1m: the prompt runs at once and again each minute, between
+	# turns; asked, the model cancels the task with CronDelete.
+	tmux send-keys -t "$S" "/loop 1m Reply with exactly one word: tick" Enter
+	for i in $(seq 1 240); do
+		sleep 1
+		[ "$(screen | grep -c "Scheduled task .* runs")" -ge 2 ] && [ "$(screen | grep -c "done in")" -ge 3 ] && break
+	done
+	echo "=== after two scheduled runs"
+	screen | grep -v '^ *$' | tail -14
+	tmux send-keys -t "$S" "Cancel the scheduled tick task." Enter
+	done_when() { [ "$(screen | grep -c "done in")" -ge 4 ] && screen | grep -q "CronDelete"; }
 	;;
 entertree)
 	# EnterWorktree: gnosh starts again in the tree, in this pane, and the
