@@ -788,3 +788,40 @@ func TestSettleWhileClosingLeavesItToClose(t *testing.T) {
 		t.Errorf("close did not stop what the command left: signalled %v", sent)
 	}
 }
+
+// A command whose output closed between the check that it was held and
+// its going on the list (settle came and found nothing) has what is still
+// in its session put on the books of what let go of the output, so that
+// Close stops it all the same.
+func TestLingerAfterTheOutputClosed(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{TermGrace: 30 * time.Millisecond, KillWait: 30 * time.Millisecond})
+	var mu sync.Mutex
+	var sent []int
+	m.signal = func(pid int, sig syscall.Signal) error {
+		mu.Lock()
+		defer mu.Unlock()
+		sent = append(sent, pid)
+		return nil
+	}
+	left := []procInfo{{pid: 6001, pgid: 6001, start: 9, image: "server"}}
+	m.procs = func(int) ([]procInfo, error) { return left, nil }
+	j := &job{pid: 6000, pumped: make(chan struct{})}
+	close(j.pumped)
+	if !m.linger(j, left) {
+		t.Fatal("linger refused a command while the manager was open")
+	}
+	m.mu.Lock()
+	_, held := m.lingering[j]
+	_, booked := m.detached[6000]
+	m.mu.Unlock()
+	if held || !booked || !j.letGo.Load() {
+		t.Fatalf("after the output closed: on the lingering list %v, on the books %v, let go %v", held, booked, j.letGo.Load())
+	}
+	m.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(sent, -6001) {
+		t.Errorf("close did not stop what the command left: signalled %v", sent)
+	}
+}

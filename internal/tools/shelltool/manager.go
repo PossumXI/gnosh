@@ -542,16 +542,28 @@ func (m *Manager) unlist(j *job) {
 // stays on that list until its output closes (see settle). It reports false
 // when the manager is already closing, or is listening to as many such
 // commands as it will; the caller then deals with this one at once.
+//
+// When the output closed in the meantime, settle has come and gone and
+// found nothing on the list: what is still in the command's session let
+// go of the output, and goes on the books of what did (detached), as settle
+// would have put it.
 func (m *Manager) linger(j *job, left []procInfo) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.closed || len(m.lingering) >= m.maxLingering {
+		m.mu.Unlock()
 		return false
 	}
 	if !closed(j.pumped) {
-		// Otherwise the output closed in the meantime, and nothing is left
-		// to deal with.
 		m.lingering[j] = left
+		m.mu.Unlock()
+		return true
+	}
+	m.mu.Unlock()
+	if now, err := m.procs(j.pid); err == nil && len(now) > 0 {
+		j.letGo.Store(true)
+		if !m.keepDetached(j.pid, now) {
+			m.sweep(j.pid, now) // (the manager is closing)
+		}
 	}
 	return true
 }
