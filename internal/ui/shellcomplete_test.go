@@ -6,7 +6,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
+	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/ui/editor"
 )
@@ -158,4 +160,69 @@ func TestPathPrograms(t *testing.T) {
 	if got := pathPrograms("", "gnosh"); len(got) != 0 {
 		t.Errorf("an empty PATH gave %q", got)
 	}
+}
+
+// Completion, of a prompt, a command line or a shell line, never panics,
+// and each candidate starts at or before the cursor where a character
+// begins, ends inside the text, and begins with what it replaces (in any
+// case of the letters).
+func FuzzComplete(f *testing.F) {
+	for _, seed := range []string{
+		"!ls && ca", "! gi", "!echo x >ma", "!ls \\\nma", "!sudo ap", "!(ca", "!./scr", "!cd do",
+		"then /re", "then /", "/re", "/cd do", "/loop 5m /re", "look at @ma", "@agent-", "~/co",
+		"!git st", "!git status ", "!ünï /", "then /st/x", "!a\nb && c", "!\\\n",
+	} {
+		f.Add(seed, len(seed))
+	}
+	ed := editor.New(editor.Options{})
+	for _, h := range []string{"!git status", "!git stash list", "a prompt", "! ls -la", "!echo ü"} {
+		ed.AddHistory(editor.Draft{Text: h})
+	}
+	s := &session{cwd: "/proj", home: "/home/u", ed: ed,
+		info: app.SessionInfo{
+			Commands:    []string{"help", "review", "recap", "status"},
+			CommandList: []app.CommandInfo{{Name: "exit", Aliases: []string{"quit"}}},
+			Skills:      []app.CommandInfo{{Name: "release-notes"}},
+		},
+		listDir: func(dir string) []fileEntry {
+			switch dir {
+			case "/proj", "/":
+				return []fileEntry{{name: "docs", dir: true}, {name: "main.go"}, {name: "Makefile"}, {name: "scripts", dir: true}, {name: "ünïcode.txt"}}
+			case "/proj/scripts", "/home/u":
+				return []fileEntry{{name: "build.sh"}, {name: "code", dir: true}}
+			}
+			return nil
+		},
+		programs: func(prefix string) []string {
+			var out []string
+			for _, p := range []string{"apt", "cat", "echo", "git", "gitk", "grep", "make", "true"} {
+				if strings.HasPrefix(p, prefix) {
+					out = append(out, p)
+				}
+			}
+			return out
+		},
+	}
+	f.Fuzz(func(t *testing.T, text string, cursor int) {
+		if !utf8.ValidString(text) || len(text) > 400 {
+			return
+		}
+		cursor = min(max(cursor, 0), len(text))
+		// (The editor's cursor is always where a character begins.)
+		for cursor > 0 && cursor < len(text) && !utf8.RuneStart(text[cursor]) {
+			cursor--
+		}
+		for _, c := range s.complete(text, cursor) {
+			end := max(c.End, cursor)
+			if c.Start < 0 || c.Start > cursor || end > len(text) {
+				t.Fatalf("%q at %d: candidate %+v is out of place", text, cursor, c)
+			}
+			if c.Start < len(text) && !utf8.RuneStart(text[c.Start]) {
+				t.Fatalf("%q at %d: candidate %+v starts inside a character", text, cursor, c)
+			}
+			if replaced := text[c.Start:end]; !strings.HasPrefix(strings.ToLower(c.Text), strings.ToLower(replaced)) {
+				t.Fatalf("%q at %d: candidate %q does not begin with %q, which it replaces", text, cursor, c.Text, replaced)
+			}
+		}
+	})
 }
