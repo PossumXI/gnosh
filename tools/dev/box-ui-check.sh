@@ -27,6 +27,7 @@
 #	ssh ai-remote bash -s -- elicit < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- agenthook < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- agentmcp < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- shelltab < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -114,6 +115,11 @@
 #               gnosh starts again there, and the model is asked where it
 #               is, for the codeword, and to write here.txt (permissions
 #               skipped)
+#   shelltab    shell mode's Tab: "!ech" and Tab completes the program's
+#               name, and the line (echo x >> tabs.log) runs and is
+#               answered; then "!echo x >" and Tab offers that command
+#               first, a second Tab takes it, and it runs again: tabs.log
+#               ends with two lines
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -127,7 +133,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab) ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 focus) opts='"viewMode": "focus", ' ;;
@@ -148,7 +154,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab)" >&2
 	exit 2
 	;;
 esac
@@ -284,6 +290,21 @@ case "$scenario" in
 basic)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "ctx=[0-9]"; }
+	;;
+shelltab)
+	tmux send-keys -t "$S" "!ech" Tab
+	sleep 1
+	tmux send-keys -t "$S" "x >> tabs.log" Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		screen | grep -q "done in" && break
+	done
+	tmux send-keys -t "$S" "!echo x >" Tab
+	sleep 1
+	tmux send-keys -t "$S" Tab
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	done_when() { [ "$(wc -l <"$T/work/tabs.log" 2>/dev/null)" = 2 ] && [ "$(screen | grep -c "done in")" -ge 2 ]; }
 	;;
 plan)
 	tmux send-keys -t "$S" "Create a file hello.txt that says hi. Plan it first, then present the plan for approval." Enter
