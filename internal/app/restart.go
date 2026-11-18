@@ -117,9 +117,9 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 	}
 	p.restartMu.Unlock()
 	if p.newBuild() {
-		c.Say("gnosh starts again, the newer one, in this session.")
+		c.Say("gnosh starts again, the newer one, in this session." + l.loopEndsNote())
 	} else {
-		c.Say("gnosh starts again, in this session.")
+		c.Say("gnosh starts again, in this session." + l.loopEndsNote())
 	}
 	return nil
 }

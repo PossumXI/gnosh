@@ -95,7 +95,7 @@ func (l *live) slashCd(ctx context.Context, c *SlashContext) error {
 	p.restartMu.Lock()
 	p.restart, p.moving = args, cur
 	p.restartMu.Unlock()
-	c.Say("The session moves to %s: gnosh starts again there, with that folder's own settings, instructions and skills.", dir)
+	c.Say("The session moves to %s: gnosh starts again there, with that folder's own settings, instructions and skills.%s", dir, l.loopEndsNote())
 	return nil
 }
 

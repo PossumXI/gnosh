@@ -48,6 +48,9 @@ const (
 type selfLoop struct {
 	prompt   string
 	fallback bool
+	// run says one of the loop's runs is under way: only its end is
+	// followed (loopTurnEnded), not that of a turn the person started.
+	run bool
 }
 
 // loopNote is what the model is told as a self-paced /loop starts, and
@@ -63,7 +66,7 @@ func (l *live) startSelfLoop(c *SlashContext, text string) error {
 		return fmt.Errorf("/loop %s has no prompt", c.Args)
 	}
 	l.loopMu.Lock()
-	l.self = &selfLoop{prompt: text}
+	l.self = &selfLoop{prompt: text, run: true}
 	l.loopMu.Unlock()
 	l.dropWakes()
 	_ = l.agent.Tell(agent.Note{Source: "loop", Text: prompt.Wrap(loopNote)})
@@ -113,6 +116,25 @@ func (l *live) wakeAt(at time.Time, text string) *cronTask {
 	return t
 }
 
+// loopRunStarts notes that one of the self-paced loop's runs goes out now.
+func (l *live) loopRunStarts() {
+	l.loopMu.Lock()
+	defer l.loopMu.Unlock()
+	if l.self != nil {
+		l.self.run = true
+	}
+}
+
+// loopEndsNote is what to tell the person when the session starts again
+// with a self-paced loop running, which the new start does not take up:
+// "" when none runs.
+func (l *live) loopEndsNote() string {
+	if l.currentLoop() == nil {
+		return ""
+	}
+	return " The self-paced /loop does not go on in the new start: /loop starts it again."
+}
+
 // hasWake reports whether the self-paced loop has a run pending.
 func (l *live) hasWake() bool {
 	b := &l.crons
@@ -126,7 +148,14 @@ func (l *live) hasWake() bool {
 // fallback run scheduled nothing either is over.
 func (l *live) loopTurnEnded() {
 	self := l.currentLoop()
-	if self == nil || l.hasWake() {
+	if self == nil {
+		return
+	}
+	l.loopMu.Lock()
+	run := self.run
+	self.run = false
+	l.loopMu.Unlock()
+	if !run || l.hasWake() {
 		return
 	}
 	l.loopMu.Lock()

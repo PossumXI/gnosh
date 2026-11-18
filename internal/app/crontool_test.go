@@ -193,3 +193,30 @@ func TestScheduledPromptsComeBack(t *testing.T) {
 		t.Errorf("a task 8 days old came back:\n%s", out)
 	}
 }
+
+// Only the end of one of the loop's own runs is followed: a turn the
+// person starts while the loop waits does not count as a run that
+// scheduled nothing.
+func TestSelfPacedLoopIgnoresOtherTurns(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "ScheduleWakeup", Args: `{"delaySeconds":600,"reason":"nothing pending"}`}}},
+		apptest.Reply{Text: "Back in ten minutes."},
+		apptest.Reply{Text: "Four."},
+	)
+	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
+	s := sitWith(t, w, func(o *Options) { o.Now = clk.Now })
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/loop check the build")
+	s.see("Back in ten minutes.")
+	s.see("-- done in ")
+	s.typeLine("what is two and two?")
+	s.see("Four.")
+	s.see("-- done in ")
+	s.typeLine("/noloop")
+	s.see("The self-paced /loop is over: /noloop ended it.")
+	s.typeLine("/exit")
+	s.exit()
+	if out := s.out.String(); strings.Contains(out, "scheduled no next one") {
+		t.Errorf("a turn of the person's was taken for a run of the loop:\n%s", out)
+	}
+}

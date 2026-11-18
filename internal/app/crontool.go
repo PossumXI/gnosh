@@ -112,18 +112,25 @@ func newTaskID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// unschedule removes the task id, and reports whether there was one.
-func (l *live) unschedule(id string) bool {
+// unschedule removes the task id, and reports whether there was one, and
+// whether it was the self-paced loop's next run.
+func (l *live) unschedule(id string) (found, wake bool) {
 	b := &l.crons
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	n := len(b.tasks)
-	b.tasks = slices.DeleteFunc(b.tasks, func(t *cronTask) bool { return t.id == id })
-	if len(b.tasks) == n {
+	b.tasks = slices.DeleteFunc(b.tasks, func(t *cronTask) bool {
+		if t.id == id {
+			wake = wake || t.wake
+			return true
+		}
 		return false
+	})
+	if len(b.tasks) == n {
+		return false, false
 	}
 	l.saveCronsLocked()
-	return true
+	return true, wake
 }
 
 // scheduled returns the session's tasks, the next to run first.
@@ -198,6 +205,7 @@ func (l *live) fireDue() {
 	switch {
 	case task.wake:
 		why = "The self-paced /loop runs again"
+		l.loopRunStarts()
 		_ = l.agent.Tell(agent.Note{Source: "loop", Text: prompt.Wrap(loopRunNote)})
 	case !task.recurring:
 		why += ", once"
@@ -331,8 +339,14 @@ func (t *cronDeleteTool) Run(ctx context.Context, call core.ToolCall, env *core.
 		return core.ErrorResult("The input could not be read: " + err.Error()), nil
 	}
 	id := strings.TrimSpace(in.ID)
-	if !t.l.unschedule(id) {
+	found, wake := t.l.unschedule(id)
+	if !found {
 		return core.ErrorResult(fmt.Sprintf("No task %q is scheduled. %s", id, t.l.scheduleList())), nil
+	}
+	if wake {
+		// The self-paced loop's next run: cancelling it ends the loop.
+		t.l.endSelfLoop("its next run was cancelled")
+		return core.TextResult("Task " + id + ", the self-paced /loop's next run, is cancelled, and the loop is over."), nil
 	}
 	return core.TextResult("Task " + id + " is cancelled."), nil
 }
