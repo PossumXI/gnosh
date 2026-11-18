@@ -44,6 +44,9 @@ type AgentSource interface {
 	// this terminal, and returns when the person leaves it. The view has
 	// given the terminal up meanwhile.
 	Open(id string) error
+	// Resume sends a run that is over back to work on the prompt, as gnosh
+	// --bg -r does: its session goes on, in its folder, as a run again.
+	Resume(ctx context.Context, id, prompt string) error
 	// Answer answers the question a run waits on (AgentRun.Question):
 	// question is its ID, choice the key of the answer chosen, and text
 	// words that go with it ("no" with words lets the model carry on).
@@ -303,12 +306,31 @@ func (s *runSource) Forget(id string) error {
 const bgStarted = "gnosh: backgrounded · "
 
 func (s *runSource) Dispatch(ctx context.Context, prompt string) (string, error) {
+	return s.background(ctx, s.cwd, nil, prompt)
+}
+
+func (s *runSource) Resume(ctx context.Context, id, prompt string) error {
+	r, err := s.run(id)
+	if err != nil {
+		return err
+	}
+	dir := s.cwd
+	if info, err := os.Stat(r.cwd); err == nil && info.IsDir() {
+		dir = r.cwd
+	}
+	_, err = s.background(ctx, dir, []string{"--resume=" + id}, prompt)
+	return err
+}
+
+// background runs gnosh --bg in dir, with the view's flags, more, and the
+// prompt, and returns the id of the session it sent to the background.
+func (s *runSource) background(ctx context.Context, dir string, more []string, prompt string) (string, error) {
 	if s.p.o.Executable == "" {
 		return "", errors.New("gnosh does not know its own program file, so it cannot start a run")
 	}
-	args := append(append([]string{"--bg"}, s.flags...), "--", prompt)
+	args := append(append(append([]string{"--bg"}, s.flags...), more...), "--", prompt)
 	cmd := exec.CommandContext(ctx, s.p.o.Executable, args...)
-	cmd.Dir, cmd.Env = s.cwd, s.p.o.Environ
+	cmd.Dir, cmd.Env = dir, s.p.o.Environ
 	var out, errs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errs
 	err := cmd.Run()

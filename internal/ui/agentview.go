@@ -491,6 +491,11 @@ func (v *agentView) key(k term.Key) {
 		if i := int(k.Rune - '1'); i < len(r.Question.Choices) {
 			v.answer(r, r.Question.Choices[i], "")
 		}
+	case !empty && v.peek && !v.help && !v.answering() && k.IsKey(term.KeyEnter, 0):
+		// A reply to the run peeked at.
+		if r, ok := v.chosen(); ok {
+			v.reply(r, strings.TrimSpace(v.box.Text()))
+		}
 	case !empty && v.answering() && k.IsKey(term.KeyEnter, 0):
 		r, _ := v.chosen()
 		for _, c := range r.Question.Choices {
@@ -564,6 +569,34 @@ func (v *agentView) answer(r app.AgentRun, c app.QuestionChoice, text string) {
 	v.peek = false
 	v.refresh()
 	v.say("Answered %s: %s.", runName(r), strings.TrimSuffix(said, "."))
+}
+
+// reply sends words to the run r peeked at: one that is over goes on with
+// them in the background (gnosh --bg -r); a working run takes none yet.
+func (v *agentView) reply(r app.AgentRun, text string) {
+	name := runName(r)
+	if running(r) {
+		v.say("%s is working: it takes words once it is done (Ctrl+X stops it).", name)
+		return
+	}
+	v.box.Reset()
+	v.starting++
+	v.say("Sending %s back to work …", name)
+	src := v.src
+	v.async(func() func(*agentView) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		err := src.Resume(ctx, r.ID, text)
+		return func(v *agentView) {
+			v.starting--
+			if err != nil {
+				v.say("%s did not go on: %v.", name, err)
+				return
+			}
+			v.refresh()
+			v.say("%s goes on in the background: Enter watches it.", name)
+		}
+	})
 }
 
 // dispatch starts a run on the prompt.
@@ -1010,6 +1043,9 @@ func (v *agentView) hintLine() string {
 	switch {
 	case isFilter:
 		parts = []string{"Enter opens the run chosen", "Esc empties the box"}
+	case text != "" && v.peek && !v.help && !v.answering():
+		r, _ := v.chosen()
+		parts = []string{"Enter sends " + runName(r) + " back to work on it", "Esc empties the box"}
 	case text != "":
 		start := "Enter starts a run in " + v.folder()
 		if len(v.info.Flags) > 0 {

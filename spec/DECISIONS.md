@@ -1946,3 +1946,17 @@ or kept with the reason said (27).
     which the model reads. An answer without the token is not heard, so a
     model that wrote the file itself would not be either, and the token is
     in no file the model was shown. gnosh stop still ends such a run.
+
+119. **gnosh --bg goes on with a session -c or -r names, and the agent
+    view's peek replies with it.** Claude Code's claude --resume <id> --bg
+    continues that session in the background, and a reply to a finished
+    session from its peek restarts it on the reply. gnosh --bg took a new
+    session only; now -c (the folder's newest session no gnosh holds
+    open) and -r with an ID, the start of one, a file or a name send that
+    session back to work: the run resumes it (--resume), its log is beside
+    the session's file, and a session open in another gnosh is not sent.
+    In the agent view, words typed while peeking at a run that is over,
+    and Enter, run gnosh --bg -r on it in its folder (without the peek
+    they start a new run, as Claude Code's do). A working run takes no
+    words yet: that needs a way into a run's queue, which is left for
+    later. --fork-session does not go with --bg.

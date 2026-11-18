@@ -83,14 +83,20 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 		}
 	}
 	if o := p.given(idBack); o != nil {
-		// A new session, sent off at once: there is nobody here to read
-		// a run's output, or to pick a session.
-		for _, other := range []*occurrence{p.given(idPrint), chosen, p.given(idNoPersist)} {
+		// A session sent off at once, a new one or one that -c or -r
+		// names: there is nobody here to read a run's output, or to pick
+		// a session from a list.
+		for _, other := range []*occurrence{p.given(idPrint), p.given(idFork), p.given(idNoPersist)} {
 			if other != nil {
 				return fail(ErrConflict, o.typed,
-					"%s starts a new session in the background, and %s does not go with it, so nothing was started. Drop one of the two.",
+					"%s sends a session to the background, and %s does not go with it, so nothing was started. Drop one of the two.",
 					o.typed, other.typed)
 			}
+		}
+		if inv.Conversation == ConversationResume && strings.TrimSpace(inv.Resume) == "" {
+			return fail(ErrUsage, chosen.typed,
+				"%s with %s needs the session's ID or name after it, since nobody is there to pick one from a list, so nothing was started.",
+				chosen.typed, o.typed)
 		}
 		if strings.TrimSpace(inv.Prompt) == "" {
 			return fail(ErrUsage, o.typed,

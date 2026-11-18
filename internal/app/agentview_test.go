@@ -191,6 +191,13 @@ exit 1
 	if got, _ := os.ReadFile(said); string(got) != real(w.Dir)+"|--bg|--permission-mode=bypassPermissions|--model=qwen/qwen3.8-27b|--effort=high|--|tidy it|" {
 		t.Errorf("gnosh --bg with the view's flags was run as %q", got)
 	}
+	// Resume runs gnosh --bg on the run's session, in its folder.
+	if err := src.Resume(context.Background(), working, "go on"); err != nil {
+		t.Errorf("Resume: %v", err)
+	}
+	if got, _ := os.ReadFile(said); string(got) != real(other)+"|--bg|--resume="+working+"|--|go on|" {
+		t.Errorf("gnosh --bg -r was run as %q", got)
+	}
 	// Open runs gnosh -r in the run's folder; a failure says why.
 	src.Runs()
 	if err := src.Open(working); err == nil || err.Error() != "no session "+working {

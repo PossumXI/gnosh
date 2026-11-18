@@ -66,7 +66,7 @@ func TestBackgroundFromTheShell(t *testing.T) {
 	r = run(t, w, "stop", "nosuch").wantCode(t, 1)
 	has(t, "gnosh stop", r.err, "no session ran in the background under the ID nosuch", "gnosh agents lists them")
 
-	for _, bad := range [][]string{{"--bg", "-p", "x"}, {"--bg", "-c", "x"}, {"--bg"}} {
+	for _, bad := range [][]string{{"--bg", "-p", "x"}, {"--bg", "--fork-session", "-c", "x"}, {"--bg"}} {
 		o := testOptions(w, bad...)
 		started := false
 		o.Detach = func([]string, []string, string) (int, error) { started = true; return 1, nil }
@@ -301,4 +301,74 @@ func FuzzReadRunLog(f *testing.F) {
 			t.Fatalf("a folder %q was read from a log with no first line of gnosh's", r.cwd)
 		}
 	})
+}
+
+// gnosh --bg -r <session> and --bg -c send a session that is there back
+// to work: the run resumes it (--resume, not --session-id), and its log is
+// beside the session's file, the new run's head after the old one's. A
+// session open in another gnosh is not sent; a name that matches none
+// says so.
+func TestBackgroundGoesOnWithASession(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "First."})
+	run(t, w, "-p", "the first prompt").wantCode(t, 0)
+	w.Model.Done()
+	files, _ := filepath.Glob(filepath.Join(w.Root, "*", "gnosh", "projects", "*", "*.jsonl"))
+	if len(files) != 1 {
+		files, _ = filepath.Glob(filepath.Join(w.Root, "**", "*.jsonl"))
+	}
+	var session string
+	_ = filepath.WalkDir(w.Root, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".jsonl") && !strings.Contains(p, "checkpoints") {
+			session = p
+		}
+		return nil
+	})
+	if session == "" {
+		t.Fatal("the first run left no session file")
+	}
+	id := strings.TrimSuffix(filepath.Base(session), ".jsonl")
+	send := func(args ...string) ([]string, string, result) {
+		t.Helper()
+		var got []string
+		var log string
+		o := testOptions(w, args...)
+		o.Detach = func(a, _ []string, l string) (int, error) {
+			got, log = a, l
+			return 4242, nil
+		}
+		return got, log, runWith(t, context.Background(), o)
+	}
+	for _, args := range [][]string{{"--bg", "-r", id[:13], "go on"}, {"--bg", "-c", "go on again"}} {
+		got, log, r := send(args...)
+		r.wantCode(t, 0)
+		if !slices.Contains(got, "--resume="+id) || slices.ContainsFunc(got, func(a string) bool { return strings.HasPrefix(a, "--session-id") }) {
+			t.Errorf("%q started the run with %q", args, got)
+		}
+		if log != strings.TrimSuffix(session, ".jsonl")+".background.log" {
+			t.Errorf("%q: the log is %s, not beside %s", args, log, session)
+		}
+		has(t, "what is said", r.out, "gnosh: backgrounded · "+id+" · process 4242")
+	}
+	data, _ := os.ReadFile(strings.TrimSuffix(session, ".jsonl") + ".background.log")
+	if n := strings.Count(string(data), "goes on in the background with: "); n != 2 {
+		t.Errorf("the log holds %d heads:\n%s", n, data)
+	}
+	_, _, r := send("--bg", "-r", "no such name", "go on")
+	r.wantCode(t, 1)
+	has(t, "an unknown session", r.err, `no session has the ID or the name "no such name", so nothing was started`)
+	// Held open by another gnosh: not sent.
+	f, err := os.Open(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	got, _, r := send("--bg", "-r", id, "go on")
+	r.wantCode(t, 1)
+	if got != nil {
+		t.Errorf("a held session was sent: %q", got)
+	}
+	has(t, "a held session", r.err, "is open in another gnosh, and one session has one writer, so nothing was started")
 }

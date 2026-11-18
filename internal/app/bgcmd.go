@@ -68,6 +68,20 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	}
 	store := st.sessions()
 	id := inv.SessionID
+	// resumed is the file of the session -c or -r names, which the run
+	// goes on with.
+	resumed := ""
+	if inv.Conversation != cli.ConversationNew {
+		var err error
+		if id, resumed, err = p.bgSession(ctx, st, inv); err != nil {
+			p.errf("%v, so nothing was started.", err)
+			return cli.ExitFailure
+		}
+		if transcript.InUse(resumed) {
+			p.errf("the session %s is open in another gnosh, and one session has one writer, so nothing was started. %s.", id, heldByRun(id))
+			return cli.ExitFailure
+		}
+	}
 	if id == "" {
 		var err error
 		if id, err = store.NewID(); err != nil {
@@ -75,7 +89,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 			return cli.ExitFailure
 		}
 	}
-	args, err := p.table.RelaunchArgs(p.o.Args, cli.Relaunch{Session: id, Fresh: true})
+	args, err := p.table.RelaunchArgs(p.o.Args, cli.Relaunch{Session: id, Fresh: resumed == ""})
 	if err != nil {
 		p.errf("the command line for the run could not be made (%v), so nothing was started.", err)
 		return cli.ExitFailure
@@ -85,13 +99,17 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	}
 	run := append(args, "--print", "--", prompt)
 	dir := store.ProjectDir(st.cfg.Paths.Cwd)
+	if resumed != "" {
+		// (Its runs' logs are beside the session's file.)
+		dir = filepath.Dir(resumed)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		p.errf("the folder for the session's files, %s, could not be made (%v), so nothing was started.", dir, err)
 		return cli.ExitFailure
 	}
 	log := filepath.Join(dir, id+".background.log")
-	file := filepath.Join(dir, id+".jsonl")
-	if inv.Worktree {
+	file := firstOf(resumed, filepath.Join(dir, id+".jsonl"))
+	if inv.Worktree && resumed == "" {
 		file = "" // (under the work tree's folder, which the run makes)
 	}
 	p.logHead(log, id, inv.Name, st.cfg.Paths.Cwd, file, prompt)
@@ -117,6 +135,57 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		fmt.Fprintf(p.stdout, "  %-*s  %s\n", width, h[0], h[1])
 	}
 	return cli.ExitOK
+}
+
+// bgSession is the session gnosh --bg -c or -r <session> sends to the
+// background: its id and its file. -c is the newest session of the
+// folder that no gnosh holds open; -r is a session's id, the start of
+// one, its file, or its name among the folder's.
+func (p *program) bgSession(ctx context.Context, st *startup, inv cli.Invocation) (id, path string, err error) {
+	store := st.sessions()
+	cwd := st.cfg.Paths.Cwd
+	idOf := func(path string) string { return strings.TrimSuffix(filepath.Base(path), ".jsonl") }
+	if inv.Conversation == cli.ConversationContinue {
+		list, err := store.List(ctx, cwd)
+		if err != nil {
+			return "", "", fmt.Errorf("the sessions of this folder could not be listed: %w", err)
+		}
+		for _, info := range list {
+			if !transcript.InUse(info.Path) {
+				return info.ID, info.Path, nil
+			}
+		}
+		return "", "", fmt.Errorf("there is no session of %s to continue that no gnosh holds open", cwd)
+	}
+	word := strings.TrimSpace(inv.Resume)
+	if inv.ResumeIsFile {
+		if !fileExists(word) {
+			return "", "", fmt.Errorf("there is no session file %s", word)
+		}
+		return idOf(word), word, nil
+	}
+	if path, err := store.Path(word); err == nil {
+		return idOf(path), path, nil
+	} else if ambiguous := (*transcript.AmbiguousError)(nil); errors.As(err, &ambiguous) {
+		return "", "", fmt.Errorf("%q is the start of more than one session's id (%s): give more of it", word, strings.Join(ambiguous.IDs, ", "))
+	}
+	list, err := store.List(ctx, cwd)
+	if err != nil {
+		return "", "", fmt.Errorf("the sessions of this folder could not be listed: %w", err)
+	}
+	var found []transcript.Info
+	for _, info := range list {
+		if info.Title != "" && strings.EqualFold(strings.TrimSpace(info.Title), word) {
+			found = append(found, info)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return "", "", fmt.Errorf("no session has the ID or the name %q", word)
+	case 1:
+		return found[0].ID, found[0].Path, nil
+	}
+	return "", "", fmt.Errorf("%d sessions of this folder are named %q: give the ID of one", len(found), word)
 }
 
 // runShort is the start of a session's id that names its run in the

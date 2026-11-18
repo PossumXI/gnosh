@@ -30,7 +30,16 @@ type fakeRuns struct {
 	forgotten   []string
 	opened      []string
 	answered    []string
+	resumed     []string
 	now         func() time.Time
+}
+
+func (f *fakeRuns) Resume(_ context.Context, id, prompt string) error {
+	f.mu.Lock()
+	f.resumed = append(f.resumed, id+" "+prompt)
+	f.mu.Unlock()
+	f.set(id, func(r *app.AgentRun) { r.State, r.Started, r.Ended, r.Prompt = "working", f.now(), time.Time{}, prompt })
+	return nil
 }
 
 func (f *fakeRuns) Answer(id, question, choice, text string) error {
@@ -526,5 +535,30 @@ func TestAgentViewNeedsInput(t *testing.T) {
 	g.keys(`<Enter> "use git clean instead" <Enter>`)
 	if len(g.src.answered) != 2 || g.src.answered[1] != runAsk+" q7 no use git clean instead" || len(g.src.dispatched) != 0 {
 		t.Errorf("words and Enter answered %q and started %q", g.src.answered, g.src.dispatched)
+	}
+}
+
+// Words typed while peeking at a run that is over, and Enter, send it back
+// to work on them (gnosh --bg -r), where without the peek they would start
+// a new run; a working run takes none yet, and says so.
+func TestAgentViewReply(t *testing.T) {
+	g := newAgentRig(t)
+	g.v.sel = runFlaky
+	g.keys(`<Space> "and the README too"`)
+	if _, live := g.screen(); live[len(live)-1] != "Enter sends 01a1eea5-3333 back to work on it · Esc empties the box" {
+		t.Errorf("the keys line while replying: %q", live[len(live)-1])
+	}
+	g.keys("<Enter>")
+	if !slices.Equal(g.src.resumed, []string{runFlaky + " and the README too"}) || len(g.src.dispatched) != 0 {
+		t.Fatalf("the reply resumed %q and started %q", g.src.resumed, g.src.dispatched)
+	}
+	body, live := g.screen()
+	if !strings.HasPrefix(row(body, "01a1eea5-3333"), "> ✽ 01a1eea5-3333") || live[len(live)-1] != "01a1eea5-3333 goes on in the background: Enter watches it." {
+		t.Errorf("after the reply:\n%s\n%s", strings.Join(body, "\n"), live[len(live)-1])
+	}
+	g.v.sel = runTests
+	g.keys(`"stop and test again" <Enter>`)
+	if _, live = g.screen(); live[len(live)-1] != "01a1eea5-1111 is working: it takes words once it is done (Ctrl+X stops it)." || len(g.src.resumed) != 1 {
+		t.Errorf("a reply to a working run: %q, resumed %q", live[len(live)-1], g.src.resumed)
 	}
 }

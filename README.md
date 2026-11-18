@@ -38,8 +38,10 @@ Built:
   terminal, a live view of them, as Claude Code's agent view, in which
   Space peeks at one, Enter watches a working one's conversation or opens
   one that is over, Ctrl+X stops one, a prompt typed at the bottom starts
-  another, and a run that waits on a permission question is listed under
-  Needs input, to be answered with a number; `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  another, a run that waits on a permission question is listed under
+  Needs input, to be answered with a number, and words typed while
+  peeking at one that is over send it back to work on them (`gnosh --bg
+  -r <session> "go on"` does that from a shell); `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small

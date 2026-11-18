@@ -115,7 +115,7 @@ func Default() *Table {
 		check: isUUID,
 		set:   func(i *Invocation, v flagValue) { i.SessionID = v.text }})
 	back := t.add(&flag{names: "--bg --background", group: groupConversation, pri: 1,
-		help: "Start the session in the background and return at once: it works on the prompt as a run of its own, as /background has a session go on, and gnosh says its ID and how to follow it (gnosh agents, gnosh logs, gnosh stop, gnosh -r). A call that needs a yes waits for one in gnosh agents, listed there under Needs input. A new session only: not with -p, -c, -r or --no-session-persistence.",
+		help: "Start the session in the background and return at once: it works on the prompt as a run of its own, as /background has a session go on, and gnosh says its ID and how to follow it (gnosh agents, gnosh logs, gnosh stop, gnosh -r). A call that needs a yes waits for one in gnosh agents, listed there under Needs input. With -c, or -r and a session's ID or name, it goes on with that session instead of a new one. Not with -p, --fork-session or --no-session-persistence.",
 		set:  func(i *Invocation, _ flagValue) { i.Background = true }})
 	fork := t.add(&flag{names: "--fork-session", group: groupConversation, pri: 1,
 		help: "With -c or -r: go on in a copy of the session and leave the original as it was.",
