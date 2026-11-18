@@ -39,9 +39,10 @@ type AgentSource interface {
 	// session stays.
 	Forget(id string) error
 	// Dispatch starts a new run on the prompt, as gnosh --bg does, in the
-	// folder the view was opened in, with the flags given (the view's
-	// defaults for the runs it starts), and returns its session's id.
-	Dispatch(ctx context.Context, prompt string, flags []string) (string, error)
+	// folder dir (the one the view was opened in when it is ""), with the
+	// flags given (the view's defaults for the runs it starts), and
+	// returns its session's id.
+	Dispatch(ctx context.Context, dir, prompt string, flags []string) (string, error)
 	// Open opens a run's session as gnosh -r does, in its folder and on
 	// this terminal, and returns when the person leaves it. The view has
 	// given the terminal up meanwhile.
@@ -315,8 +316,14 @@ func (s *runSource) Forget(id string) error {
 // session's id after it.
 const bgStarted = "gnosh: backgrounded · "
 
-func (s *runSource) Dispatch(ctx context.Context, prompt string, flags []string) (string, error) {
-	return s.background(ctx, s.cwd, flags, prompt)
+func (s *runSource) Dispatch(ctx context.Context, dir, prompt string, flags []string) (string, error) {
+	if dir == "" {
+		dir = s.cwd
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%s is not a folder that is there", dir)
+	}
+	return s.background(ctx, dir, flags, prompt)
 }
 
 func (s *runSource) Tell(id, text string) error {

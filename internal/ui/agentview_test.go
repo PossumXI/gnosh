@@ -105,13 +105,16 @@ func (f *fakeRuns) Forget(id string) error {
 	return nil
 }
 
-func (f *fakeRuns) Dispatch(_ context.Context, prompt string, flags []string) (string, error) {
+func (f *fakeRuns) Dispatch(_ context.Context, dir, prompt string, flags []string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.dispatchErr != nil {
 		return "", f.dispatchErr
 	}
-	f.dispatched = append(f.dispatched, words(strings.Join(flags, " "), prompt))
+	if dir != "" {
+		dir = "in " + dir
+	}
+	f.dispatched = append(f.dispatched, words(dir, strings.Join(flags, " "), prompt))
 	id := fmt.Sprintf("01a1eea5-9999-7000-8000-%012d", len(f.dispatched))
 	f.runs = append([]app.AgentRun{{ID: id, Short: id[:13], State: "working", Prompt: prompt, Started: f.now()}}, f.runs...)
 	return id, nil
@@ -684,5 +687,36 @@ func TestAgentViewBoxCommands(t *testing.T) {
 	g.keys(`"/exit" <Enter>`)
 	if !g.v.quit || len(g.src.dispatched) != 1 {
 		t.Errorf("/exit: quit %v, dispatched %q", g.v.quit, g.src.dispatched)
+	}
+}
+
+// Ctrl+S groups the runs by folder: each row then says how it stands, and
+// a prompt starts a run in the folder of the run chosen, as Claude Code's
+// view does. Ctrl+S again groups them by how they stand.
+func TestAgentViewByFolder(t *testing.T) {
+	g := newAgentRig(t)
+	g.keys("<Ctrl+S>")
+	body, _ := g.screen()
+	all := strings.Join(body, "\n")
+	if body[1] != "~/src/app" || !strings.Contains(all, "\n~/src/lib\n") || strings.Contains(all, "\nWorking\n") {
+		t.Fatalf("grouped by folder:\n%s", all)
+	}
+	for name, want := range map[string]string{"01a1eea5-1111": "working · $ go test ./...", "01a1eea5-3333": "done · All 42 tests pass.", "01a1eea5-4444": "stopped · Building."} {
+		if !strings.Contains(row(body, name), want) {
+			t.Errorf("the row of %s does not say %q: %q", name, want, row(body, name))
+		}
+	}
+	g.v.sel = runFlaky
+	g.keys(`"tidy the lib"`)
+	if _, live := g.screen(); live[len(live)-1] != "Enter starts a run in ~/src/lib · Esc empties the box" {
+		t.Errorf("the keys line: %q", live[len(live)-1])
+	}
+	g.keys("<Enter>")
+	if !slices.Equal(g.src.dispatched, []string{"in /home/jae/src/lib tidy the lib"}) {
+		t.Errorf("the run was started %q", g.src.dispatched)
+	}
+	g.keys("<Ctrl+S>")
+	if body, _ = g.screen(); body[1] != "Working" {
+		t.Errorf("grouped by how they stand again:\n%s", strings.Join(body, "\n"))
 	}
 }

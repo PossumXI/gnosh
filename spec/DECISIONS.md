@@ -2006,3 +2006,13 @@ or kept with the reason said (27).
     every five seconds at the runs in the background of every folder, and
     while any waits on a question its status line says "1 run needs input:
     gnosh agents", where it is answered.
+
+124. **Ctrl+S groups the agent view by folder.** Claude Code's Ctrl+S
+    switches the view between grouping by state and by directory; grouped
+    by directory each summary starts with its state, and a prompt is
+    dispatched into the selected row's directory. gnosh's does the same:
+    the folders by name, the runs that wait on the person first in each,
+    each row's status led by "needs input", "working" or "done" (a stopped
+    run's says so already), and a prompt starts its run in the folder of
+    the run chosen, which the keys line names. Unlike Claude Code's, the
+    choice is not remembered from one opening of the view to the next.

@@ -112,7 +112,10 @@ type agentView struct {
 	top int
 
 	peek, help bool
-	box        *editor.Editor
+	// byFolder groups the list by the runs' folders instead of by how
+	// they stand (Ctrl+S, as Claude Code's).
+	byFolder bool
+	box      *editor.Editor
 	// said is a line that says what came of a key, until saidUntil.
 	said      string
 	saidUntil time.Time
@@ -182,9 +185,7 @@ func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.Agent
 func (v *agentView) refresh() {
 	v.looked = v.now()
 	v.runs = v.src.Runs()
-	// Those that wait on the person first, then the working ones,
-	// whatever order the source keeps.
-	slices.SortStableFunc(v.runs, func(a, b app.AgentRun) int { return cmp.Compare(rank(a), rank(b)) })
+	v.sortRuns()
 	doing, status := map[string][]string{}, map[string]string{}
 	for _, r := range v.runs {
 		if !running(r) {
@@ -227,6 +228,24 @@ func (v *agentView) refresh() {
 	}
 	v.keepChoice()
 }
+
+// sortRuns puts the runs in the list's order: those that wait on the
+// person first, then the working ones, whatever order the source keeps;
+// grouped by folder, the folders by name first.
+func (v *agentView) sortRuns() {
+	slices.SortStableFunc(v.runs, func(a, b app.AgentRun) int {
+		if v.byFolder {
+			if c := cmp.Compare(runFolder(a), runFolder(b)); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(rank(a), rank(b))
+	})
+}
+
+// runFolder is the folder a run's group is named by when the list is
+// grouped by folder.
+func runFolder(r app.AgentRun) string { return firstNonEmpty(r.Folder, "(folder not known)") }
 
 // rank is where a run's group stands in the list: Needs input, Working,
 // Completed.
@@ -534,6 +553,15 @@ func (v *agentView) key(k term.Key) {
 		v.suspend = true
 	case k.Is('x', term.ModCtrl):
 		v.stopOrForget()
+	case k.Is('s', term.ModCtrl):
+		v.byFolder = !v.byFolder
+		v.sortRuns()
+		v.keepChoice()
+		if v.byFolder {
+			v.say("The runs are grouped by folder; a prompt starts a run in the folder of the one chosen. Ctrl+S groups them by how they stand.")
+		} else {
+			v.say("The runs are grouped by how they stand. Ctrl+S groups them by folder.")
+		}
 	case empty && v.answering() && k.Code == term.KeyRune && k.Rune >= '1' && k.Rune <= '9' && k.Mod&^term.ModShift == 0:
 		r, _ := v.chosen()
 		if i := int(k.Rune - '1'); i < len(r.Question.Choices) {
@@ -688,14 +716,15 @@ func (v *agentView) dispatch(prompt string) {
 		v.say("Too short: a prompt of %d characters or more starts a run.", minDispatch)
 		return
 	}
+	dir, where := v.dispatchFolder()
 	v.box.Reset()
 	v.starting++
-	v.say("Starting a run in %s …", v.folder())
+	v.say("Starting a run in %s …", where)
 	src := v.src
 	v.async(func() func(*agentView) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		id, err := src.Dispatch(ctx, prompt, flags)
+		id, err := src.Dispatch(ctx, dir, prompt, flags)
 		return func(v *agentView) {
 			v.starting--
 			if err != nil {
@@ -778,6 +807,16 @@ func runShortOf(id string) string {
 		return id[:13]
 	}
 	return id
+}
+
+// dispatchFolder is where a run started from the view works: the view's
+// folder, or grouped by folder the chosen run's, as Claude Code's does;
+// and the same the short way. "" is the view's own.
+func (v *agentView) dispatchFolder() (dir, shown string) {
+	if r, ok := v.chosen(); ok && v.byFolder && r.Cwd != "" {
+		return r.Cwd, runFolder(r)
+	}
+	return "", v.folder()
 }
 
 // folder is where a run started from the view works, the short way.
@@ -1018,6 +1057,8 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	for _, r := range shown {
 		g := "Completed"
 		switch {
+		case v.byFolder:
+			g = runFolder(r)
 		case r.State == "blocked":
 			g = "Needs input"
 		case running(r):
@@ -1086,6 +1127,11 @@ func (v *agentView) runRow(r app.AgentRun, chosen bool, nameW, width int) string
 	lead := pointer + mark + " " + name + "  "
 	room := width - v.m.VisibleWidth(lead) - v.m.Width(age) - 2
 	status := v.statusOf(r)
+	if v.byFolder && r.State != "stopped" {
+		// (The group no longer says how it stands.)
+		word := map[string]string{"blocked": "needs input", "working": "working", "done": "done"}[r.State]
+		status = strings.TrimSuffix(word+th.Sep+status, th.Sep)
+	}
 	if room < 8 {
 		return fit(v.m, lead+status, width)
 	}
@@ -1162,6 +1208,7 @@ func (v *agentView) helpLines(width int) []string {
 		{"/model, /effort", "what the runs started from here are given (default puts it back); /exit leaves"},
 		{"n:<text> s:<state> o:<text>", "list only the runs whose name or prompt, state, or answer has it"},
 		{"Ctrl+X", "stop a working run; twice, take one that is over off the list"},
+		{"Ctrl+S", "group the runs by folder, or by how they stand"},
 		{"Esc", "stop peeking, empty the box, or leave; the runs go on"},
 	}
 	kw := 0
@@ -1196,7 +1243,8 @@ func (v *agentView) hintLine() string {
 		}
 		parts = []string{send, "Esc empties the box"}
 	case text != "":
-		start := "Enter starts a run in " + v.folder()
+		_, where := v.dispatchFolder()
+		start := "Enter starts a run in " + where
 		if len(v.flags) > 0 {
 			start += " with " + strings.Join(v.flags, " ")
 		}
