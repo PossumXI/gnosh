@@ -60,7 +60,7 @@ func TestChannelRelayAllows(t *testing.T) {
 	s := sitWith(t, w, nil, "--channels", "server:phone")
 	s.see("The channel phone takes permission questions too")
 	s.typeLine("write it")
-	s.see("← phone: allowed Write, answering the question from the channel.")
+	s.see("(the channel phone answered the question: yes.)")
 	s.see("Done.")
 	s.typeLine("/exit")
 	s.exit()
@@ -72,7 +72,7 @@ func TestChannelRelayAllows(t *testing.T) {
 		t.Errorf("the question the channel was sent: %q", p)
 	}
 	preview := p["input_preview"]
-	has(t, "the input it was shown", preview, `"file_path":"out.txt"`, `"content":"key [REDACTED]"`)
+	has(t, "the input it was shown", preview, `"file_path":"out.txt"`, `"content":"key [REDACTED]\n"`)
 	if strings.Contains(preview, "sk-live") {
 		t.Errorf("a credential went to the channel: %s", preview)
 	}
@@ -90,7 +90,7 @@ func TestChannelRelayDenies(t *testing.T) {
 	s := sitWith(t, w, nil, "--channels", "server:phone")
 	s.see("The channel phone takes permission questions too")
 	s.typeLine("write it")
-	s.see("← phone: refused Write, answering the question from the channel.")
+	s.see("(the channel phone answered the question: no.)")
 	s.typeLine("/exit")
 	s.exit()
 	if w.Exists("out.txt") {
@@ -133,10 +133,26 @@ func TestMaskCredentials(t *testing.T) {
 		{"sk-learn and task-list-12345678", "sk-learn and task-list-12345678"},
 		{"cat ~/keys/ghp_abcdefgh1234/x", "cat ~/keys/ghp_abcdefgh1234/x"},
 		{"https://example.com/ghp_abcdefgh1234.txt", "https://example.com/ghp_abcdefgh1234.txt"},
+		{"git clone https://x:ghp_abcdefgh1234@github.com/o/r", "git clone https://x:[REDACTED]@github.com/o/r"},
+		{"curl 'https://example.com/v1?key=AIzaSyA1234567890abcdef&alt=json'", "curl 'https://example.com/v1?key=[REDACTED]&alt=json'"},
 	} {
 		if got := maskCredentials(c.in); got != c.want {
 			t.Errorf("maskCredentials(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+	// A character that cannot be seen, put inside a credential, does not
+	// hide it.
+	if got := relayText("export T=ghp_abcd\u200befgh1234"); got != "export T=[REDACTED]" {
+		t.Errorf("a credential with a zero-width space in it: %q", got)
+	}
+}
+
+// A value's line ends stay in the preview, written as JSON writes them,
+// so a command of two lines does not read as one.
+func TestRelayPreviewKeepsLines(t *testing.T) {
+	got := relayPreview(json.RawMessage(`{"command":"echo ok\nrm -rf ~/src","description":"say ok"}`))
+	if want := `{"command":"echo ok\nrm -rf ~/src","description":"say ok"}`; got != want {
+		t.Errorf("relayPreview = %s, want %s", got, want)
 	}
 }
 
@@ -169,5 +185,31 @@ func TestRelayBook(t *testing.T) {
 	b.close("q-closed")
 	if _, ok := b.take(closed, "phone"); ok {
 		t.Errorf("a verdict for a question answered at the terminal was taken")
+	}
+}
+
+// A question only the person may answer, about a call that could destroy
+// what has to be kept, is never sent to a channel: it waits at the
+// terminal alone.
+func TestChannelRelayLeavesPersonOnlyQuestions(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"rm -rf ~"}`}}},
+	)
+	record := w.Home + "/relayed.jsonl"
+	server := w.Script(w.Home+"/bin/phone.sh", relayChannel(record, "allow"))
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"phone": {"command": "`+server+`"}}}`)
+	s := sitWith(t, w, nil, "--channels", "server:phone")
+	s.see("The channel phone takes permission questions too")
+	s.typeLine("clean up")
+	s.see("? Allow Bash?")
+	s.typeLine("no")
+	s.see("-- ended")
+	s.typeLine("/exit")
+	s.exit()
+	if w.Exists(record) {
+		t.Errorf("the channel was sent a question only the person may answer:\n%s", w.Read(record))
+	}
+	if strings.Contains(s.out.String(), "answered the question") {
+		t.Errorf("a channel answered a question only the person may answer:\n%s", s.out.String())
 	}
 }

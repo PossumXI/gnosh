@@ -33,6 +33,10 @@ type fileIndex struct {
 	paths, lower []string
 	at           time.Time
 	loading      bool
+	// stale says the project may have changed since the listing began (a
+	// turn ended): it is listed again when next used, even when a listing
+	// under way ends after the change.
+	stale bool
 }
 
 // newIndex keeps of the paths of dir the ones that can be offered.
@@ -70,12 +74,15 @@ func (s *session) indexed() *fileIndex {
 	if s.listProject == nil || s.cwd == "" {
 		return nil
 	}
-	if ix := &s.index; !ix.loading && (ix.dir != s.cwd || s.now().Sub(ix.at) > indexAge) {
-		ix.loading = true
+	if ix := &s.index; !ix.loading && (ix.dir != s.cwd || ix.stale || s.now().Sub(ix.at) > indexAge) {
+		ix.loading, ix.stale = true, false
 		dir, list, now := s.cwd, s.listProject, s.now
 		s.host.spawn(func() func() {
 			ix := newIndex(dir, list(dir), now())
-			return func() { s.index = ix }
+			return func() {
+				ix.stale = s.index.stale
+				s.index = ix
+			}
 		})
 	}
 	if s.index.dir != s.cwd {
@@ -182,12 +189,18 @@ func fuzzyRank(lp, q string) int {
 // In a git repository it is git's list of the files it tracks and the
 // ones it would track (so the ignored ones are left out); elsewhere a walk
 // by the ignore rules gnosh's search tools go by, without the folders
-// whose names begin with a dot. At most maxIndexed paths, read in at most
-// indexWait.
+// whose names begin with a dot. At most maxIndexed paths, each way read in
+// at most indexWait.
+//
+// It runs in a folder that may not be trusted, so git is kept from
+// running any program the repository's own settings name: ls-files reads
+// the index, and a repository's core.fsmonitor is a command git would run
+// for that (the setting is turned off on the command line, which wins
+// over the repository's), and nothing else ls-files does runs one.
 func listProject(dir string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), indexWait)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
+	cmd := exec.CommandContext(ctx, "git", "-c", "core.fsmonitor=false", "--no-pager", "-C", dir, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var files []string
 	if out, err := cmd.Output(); err == nil {
@@ -197,7 +210,10 @@ func listProject(dir string) []string {
 			}
 		}
 	} else {
-		files = walkProject(ctx, dir)
+		// (A walk of its own time: git's may be what ran out.)
+		walk, stop := context.WithTimeout(context.Background(), indexWait)
+		files = walkProject(walk, dir)
+		stop()
 	}
 	folders := map[string]bool{}
 	paths := make([]string, 0, len(files))

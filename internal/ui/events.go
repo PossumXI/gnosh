@@ -566,7 +566,7 @@ func (s *session) toolEnd(ev *agent.ToolEndEvent) {
 		s.drop(c)
 	}
 	s.noteChange(ev)
-	if s.foldsCall(ev) {
+	if s.foldsCall(c, ev) {
 		s.fold.add(ev)
 		s.dirty = true
 	} else {
@@ -617,7 +617,8 @@ func (s *session) hooks(ev *app.HookEvent) {
 			s.notice(agent.LevelWarning, line)
 		}
 	}
-	if silent > 0 && c != nil {
+	if silent > 0 && c != nil && !s.focus {
+		// (In focus view a call whose hooks said nothing folds.)
 		c.hooks = append(c.hooks, fmt.Sprintf("%s ran on %s and had nothing to say",
 			count(silent, "hook", "hooks"), oneLine(fmt.Sprint(ev.Event))))
 	}
@@ -644,7 +645,7 @@ func (s *session) summary(ev *agent.SummaryEvent) {
 func (s *session) turnEnd(res agent.TurnResult) {
 	// (The model may have made or removed files: the fuzzy @ search lists
 	// the project again when it is next used.)
-	s.index.at = time.Time{}
+	s.index.stale = true
 	s.endReply()
 	for _, c := range append([]*call(nil), s.calls...) {
 		s.cut(c, "no result: the turn ended first")

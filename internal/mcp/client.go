@@ -78,6 +78,11 @@ type Options struct {
 	// dropped, as is a verdict from a server that did not declare
 	// claude/channel/permission. It is called as OnChannel is.
 	OnChannelVerdict func(requestID, behavior string)
+	// OnHandshake, when set, is told what the server said of itself as
+	// soon as the handshake is done, before any notification of the
+	// server's is taken: what a channel is goes in front of its first
+	// event.
+	OnHandshake func(Info)
 }
 
 // Tool is one tool a server offers.
@@ -306,6 +311,9 @@ func (c *Client) handshake(ctx context.Context) error {
 		Resources: resources, Prompts: prompts, Channel: channel, ChannelPermission: relay != "" && relay != "false" && relay != "null"}
 	// (Read by the goroutine that reads the server: its events are taken
 	// from now on, the handshake done.)
+	if c.opt.OnHandshake != nil {
+		c.opt.OnHandshake(c.info)
+	}
 	c.channel.Store(channel)
 	c.relay.Store(channel && c.info.ChannelPermission)
 	if h, ok := c.t.(*httpTransport); ok {

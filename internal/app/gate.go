@@ -225,7 +225,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	}
 	askCtx := ctx
 	q := l.permissionQuestion(call, action, d)
-	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input}
+	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical}
 	for i, s := range d.Suggestions {
 		if s.Mode != "" {
 			data.Modes["always:"+strconv.Itoa(i)] = string(s.Mode)

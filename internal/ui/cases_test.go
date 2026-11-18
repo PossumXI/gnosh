@@ -279,6 +279,32 @@ func TestQuestionWithdrawn(t *testing.T) {
 	g.committedHas("taken back unanswered: nobody answered in time")
 }
 
+// A question answered from elsewhere (a channel that relays permission
+// questions) leaves the screen in one line that says who answered and
+// what; a key pressed a moment after does not count, and is not written
+// as the answer.
+func TestQuestionAnsweredByAChannel(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	g.ev(&agent.QuestionEvent{Question: permission("q1")})
+	g.liveHas("Allow Bash?")
+	g.ev(&agent.AnswerEvent{ID: "q1", Answer: agent.Answer{Choice: "yes", By: "the channel hook"}})
+	g.liveLacks("Allow Bash?").once("? Allow Bash? answered by the channel hook: Yes, this once")
+
+	// The channel's answer counted first; the person's no, a moment
+	// later, is not written as what was answered.
+	g.ev(&agent.QuestionEvent{Question: permission("q2")})
+	g.c.mu.Lock()
+	g.c.answerErr = errors.New("no such question")
+	g.c.mu.Unlock()
+	g.keys(`<Esc>`)
+	g.committedLacks("Allow Bash? No")
+	g.ev(&agent.AnswerEvent{ID: "q2", Answer: agent.Answer{Choice: "yes", By: "the channel hook"}})
+	if n := strings.Count(g.scroll(), "answered by the channel hook: Yes, this once"); n != 2 {
+		t.Errorf("the channel's answers were written %d times, want 2:\n%s", n, g.scroll())
+	}
+}
+
 // deadline is the Data of a question with a time limit.
 type deadline time.Time
 

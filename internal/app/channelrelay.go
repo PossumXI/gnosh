@@ -37,8 +37,11 @@ import (
 //
 // Where gnosh differs: a request id is never issued twice in a session
 // (Claude Code issues ids at random and drops verdicts for one that came
-// up twice), and plan approvals (ExitPlanMode) stay at the terminal, as
-// trust and MCP consent do in both.
+// up twice), and some questions stay at the terminal, as trust and MCP
+// consent do in both: plan approvals (ExitPlanMode), and the questions
+// only the person may answer (QuestionData.PersonOnly: a call that throws
+// away what cannot be got back, a removal that could destroy what has to
+// be kept).
 
 // relayed is a question put to the channels that relay them.
 type relayed struct {
@@ -144,11 +147,15 @@ func (l *live) relayQuestion(q agent.Question) {
 	if q.Kind != "permission" || q.Tool == "" || q.Tool == exitPlanName || len(l.inv.Channels) == 0 {
 		return
 	}
+	data, _ := q.Data.(QuestionData)
+	if data.PersonOnly {
+		// (What only the person may approve is asked at the terminal.)
+		return
+	}
 	to := l.relayers()
 	if len(to) == 0 {
 		return
 	}
-	data, _ := q.Data.(QuestionData)
 	r := &relayed{question: q.ID, tool: q.Tool, to: map[string]bool{}}
 	for name := range to {
 		r.to[name] = true
@@ -178,15 +185,15 @@ func (l *live) channelVerdict(channel, id, behavior string) {
 		l.flog.logf("channel", "a verdict from %s for %s was dropped: no open question of that id went there", channel, id)
 		return
 	}
-	choice, words := "no", "refused"
+	choice := "no"
 	if behavior == "allow" {
-		choice, words = "yes", "allowed"
+		choice = "yes"
 	}
-	if err := l.agent.Answer(r.question, agent.Answer{Choice: choice}); err != nil {
-		// (Answered at the terminal a moment before.)
-		return
+	// (An error is a question answered at the terminal a moment before.
+	// The interface says, as the question ends, who answered it.)
+	if err := l.agent.Answer(r.question, agent.Answer{Choice: choice, By: "the channel " + channel}); err == nil {
+		l.flog.logf("channel", "%s answered the question about %s: %s", channel, r.tool, choice)
 	}
-	l.notice(agent.LevelInfo, "channel", fmt.Sprintf("← %s: %s %s, answering the question from the channel.", channel, words, r.tool))
 }
 
 // relayDescription says what a call does, for a channel: for a command,
@@ -209,7 +216,9 @@ func relayDescription(q agent.Question, input json.RawMessage) string {
 }
 
 // relayPreview is a call's input as display text for a channel: a JSON
-// object of its fields, each value made fit with relayText.
+// object of its fields, each value made fit with relayValue. A value's
+// line ends stay in it, written as JSON writes them (\n), so a command of
+// two lines does not read as one.
 func relayPreview(input json.RawMessage) string {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input, &fields) != nil || fields == nil {
@@ -241,7 +250,7 @@ func relayPreview(input json.RawMessage) string {
 		_ = enc.Encode(relayText(k))
 		b.Truncate(b.Len() - 1) // (Encode's line end)
 		b.WriteByte(':')
-		_ = enc.Encode(relayText(value))
+		_ = enc.Encode(relayValue(value))
 		b.Truncate(b.Len() - 1)
 	}
 	b.WriteByte('}')
@@ -259,22 +268,44 @@ var lookalikes = strings.NewReplacer(
 	"\u2039", "<", "\u203A", ">", "\u2329", "<", "\u232A", ">", "\u27E8", "<", "\u27E9", ">", "\u3008", "<", "\u3009", ">", "\uFF1C", "<", "\uFF1E", ">", "\uFE64", "<", "\uFE65", ">",
 )
 
-// relayText makes text fit to be sent to a channel's person: credentials
-// masked, characters that turn text around or cannot be seen left out,
-// lookalikes written plainly, blanks folded, and the middle of a long text
-// left out with a count of it.
+// relayText makes a line fit to be sent to a channel's person: what
+// relayValue does, with every run of blanks and line ends folded into one
+// space.
 func relayText(s string) string {
-	s = maskCredentials(strings.ToValidUTF8(s, "\uFFFD"))
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, relayClean(s))
+	return elide(strings.Join(strings.Fields(s), " "))
+}
+
+// relayValue makes a value fit to be sent to a channel's person:
+// characters that turn text around or cannot be seen left out (first, so
+// that one inside a credential does not hide it), lookalikes written
+// plainly, credentials masked, and the middle of a long value left out
+// with a count of it. Line ends and other control characters stay, for
+// the JSON they go in to write as escapes.
+func relayValue(s string) string {
+	return elide(relayClean(s))
+}
+
+// relayClean is relayValue but for the eliding.
+func relayClean(s string) string {
 	s = strings.Map(func(r rune) rune {
 		switch {
 		case unicode.Is(unicode.Bidi_Control, r), unicode.Is(unicode.Cf, r), r == '\u115F', r == '\u1160', r == '\u3164', r == '\uFFA0':
 			return -1
-		case unicode.IsControl(r):
-			return ' '
 		}
 		return r
-	}, lookalikes.Replace(s))
-	s = strings.Join(strings.Fields(s), " ")
+	}, strings.ToValidUTF8(s, "\uFFFD"))
+	return maskCredentials(lookalikes.Replace(s))
+}
+
+// elide keeps the start and the end of a text longer than relayMax
+// characters, around a count of what was left out.
+func elide(s string) string {
 	if n := utf8.RuneCountInString(s); n > relayMax {
 		r := []rune(s)
 		const keep = relayMax / 2
@@ -292,11 +323,14 @@ var credentialPrefixes = []string{
 	"AKIA", "ASIA", "AIza",
 }
 
-// maskCredentials writes [REDACTED] for each token in s that begins, at a
-// word's start, with one of credentialPrefixes and has 8 characters or
-// more after it, one of them a digit. A token is letters, digits, "_" and
-// "-" alone, so a span with a path's, a URL's or a shell's characters in it
-// is never masked: what a call does stays readable.
+// maskCredentials writes [REDACTED] for each token in s that begins with
+// one of credentialPrefixes and has 8 characters or more after it, one of
+// them a digit. A token is letters, digits, "_" and "-", so what is masked
+// never holds a path's, a URL's or a shell's characters: a token that is a
+// piece of a path or a file's name (a "/" or "\\" beside it, or a "." and
+// a name after it) is left whole, and what a call does stays readable. A
+// token in a URL's user part or query (x:TOKEN@host, ?key=TOKEN&) is
+// masked, and the place it goes to is still there to read.
 func maskCredentials(s string) string {
 	tokenRune := func(r rune) bool {
 		return r < utf8.RuneSelf && (r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-')
@@ -317,17 +351,9 @@ func maskCredentials(s string) string {
 			}
 			j += size
 		}
-		// A token whose next character is one of a path's, a URL's or a
-		// shell's is part of a longer span, and is left whole.
-		next := byte(0)
-		if j < len(s) {
-			next = s[j]
-		}
-		prev := byte(0)
-		if i > 0 {
-			prev = s[i-1]
-		}
-		if tok := s[i:j]; credential(tok) && !strings.ContainsRune("/\\:.@=?&#%$`", rune(next)) && !strings.ContainsRune("/\\:.@?&#%$`", rune(prev)) {
+		pathPiece := i > 0 && (s[i-1] == '/' || s[i-1] == '\\' || s[i-1] == '.') ||
+			j < len(s) && (s[j] == '/' || s[j] == '\\' || s[j] == '.' && j+1 < len(s) && tokenRune(rune(s[j+1])))
+		if tok := s[i:j]; credential(tok) && !pathPiece {
 			b.WriteString(s[last:i])
 			b.WriteString("[REDACTED]")
 			last = j

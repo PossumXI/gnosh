@@ -254,6 +254,10 @@ type Answer struct {
 	Text string
 	// Data is anything else the asker and the front end have agreed on.
 	Data any
+	// By names who gave the answer when it was not the person at the
+	// front end: "the channel hook", for a channel that relays permission
+	// questions. "" is the person.
+	By string
 }
 
 // BusyEvent says a prompt has made the session busy.

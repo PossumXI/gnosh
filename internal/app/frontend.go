@@ -502,6 +502,11 @@ type QuestionData struct {
 	// Input is the input of the call the question is about, for the
 	// channels that relay permission questions (channelrelay.go).
 	Input json.RawMessage
+	// PersonOnly says the question is for the person alone: a call that
+	// throws away what cannot be got back (core.Action.Confirm), or one
+	// the engine found could destroy what has to be kept. No channel is
+	// sent it.
+	PersonOnly bool
 }
 
 // Deadline is when the question is taken back unanswered, or the zero

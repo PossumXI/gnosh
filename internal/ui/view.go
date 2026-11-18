@@ -236,6 +236,10 @@ func failHintFor(kind string) string {
 // flight.
 func (s *session) streamLines(width int) []string {
 	var out []string
+	if s.focus && s.fold.calls > 0 {
+		// (Above what is being written, where the scrollback will have it.)
+		out = append(out, fit(s.m, s.foldLine(true), width))
+	}
 	rp := &s.reply
 	if rp.thinking {
 		words := rp.thinkRest
@@ -262,9 +266,6 @@ func (s *session) streamLines(width int) []string {
 	}
 	if rp.md != nil {
 		out = append(out, rp.md.Live()...)
-	}
-	if s.focus && s.fold.calls > 0 {
-		out = append(out, fit(s.m, s.foldLine(true), width))
 	}
 	shown := s.calls
 	const most = 4

@@ -207,15 +207,23 @@ func (s *session) typed(ev term.Event, k *term.Key) {
 		return
 	}
 	ans, record, how := q.answer(res)
-	s.record(q, record)
-	q.answered = true
 	if how == endLeft {
 		// Esc on a question that has no "no": the turn is stopped, in
 		// plain words, and the session takes its question back.
+		s.record(q, record)
+		q.answered = true
 		s.interrupt()
-	} else if err := s.c.Answer(q.q.ID, ans); err != nil {
-		s.say("That question is no longer waiting for an answer.")
+		s.closeQuestion()
+		return
 	}
+	if err := s.c.Answer(q.q.ID, ans); err != nil {
+		// Answered a moment before from elsewhere (a channel that relays
+		// the questions): this answer did not count, and the question's
+		// end, on its way, says what did.
+		return
+	}
+	s.record(q, record)
+	q.answered = true
 	s.closeQuestion()
 }
 
@@ -649,15 +657,16 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			}
 		}
 		if mode, ok := configSet(line, "viewMode"); ok && err == nil && res.Name == "config" {
-			// So is the viewMode option, and /focus, which sets it.
-			s.setView(mode)
+			// So is the viewMode option, and /focus, which sets it; set to
+			// nothing, verbose decides.
+			s.setView(firstNonEmpty(mode, s.unfocused()))
 		}
 		if on, ok := focusSet(line); ok && err == nil && res.Name == "focus" {
 			switch {
 			case on:
 				s.setView("focus")
 			case s.focus:
-				s.setView("default")
+				s.setView(s.unfocused())
 			}
 		}
 		if mode, ok := configSet(line, "editorMode"); ok && mode != "" && err == nil && res.Name == "config" {
@@ -929,6 +938,9 @@ func (s *session) answered(ev *agent.AnswerEvent) {
 	if q := s.q; q != nil && q.q.ID == ev.ID {
 		if !q.answered {
 			words := "answered elsewhere"
+			if ev.Answer.By != "" {
+				words = "answered by " + ev.Answer.By
+			}
 			for _, c := range q.q.Choices {
 				if c.Key == ev.Answer.Choice && ev.Answer.Choice != "" {
 					words += ": " + c.Label

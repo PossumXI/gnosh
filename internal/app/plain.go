@@ -1132,8 +1132,11 @@ func (f *plain) Event(ev any) {
 			f.question, f.form = nil, nil
 		}
 		f.showTyping()
-		if ev.Withdrawn {
+		switch {
+		case ev.Withdrawn:
 			f.say("(The question was taken back: the turn was stopped.)")
+		case ev.Answer.By != "":
+			f.say("(%s answered the question: %s.)", visible(ev.Answer.By), visible(ev.Answer.Choice))
 		}
 		if f.ask != nil {
 			f.ask.Stop()

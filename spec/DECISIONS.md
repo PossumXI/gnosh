@@ -1172,7 +1172,10 @@ or kept with the reason said (27).
     They refuse while work runs in the background or the person's
     prompts wait, which the restart would lose. Unlike Claude Code's, a
     tree is named, never given as a path: a work tree made with git
-    worktree add is worked in by starting gnosh there.
+    worktree add is worked in by starting gnosh there. ExitWorktree that
+    removes a tree with discard_changes (its work is lost) asks the
+    person first, whatever the mode, as Claude Code's does since
+    2.1.327; without it, a tree that holds work is not removed.
 
 81. **Scheduled prompts, as Claude Code's: CronCreate, CronList,
     CronDelete, and /loop with an interval.** A session can schedule a

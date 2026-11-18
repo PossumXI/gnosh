@@ -361,20 +361,21 @@ func configArgs(s string) ([]string, error) {
 // a name it is /config theme=<name>; with none it says which is in force.
 // (The full interface opens a picker for it instead.)
 // slashFocus is /focus: focus view, in which each run of tool calls is
-// folded into one line that sums it up. /focus on and /focus off set the
-// viewMode option, kept for every project, and a bare /focus turns it
-// over (the interface sends it as one of the two, by what it shows).
+// folded into one line that sums it up. /focus on sets the viewMode option
+// to focus, kept for every project, and /focus off takes that setting away
+// again, so that the verbose option decides as before; a bare /focus turns
+// it over (the interface sends it as one of the two, by what it shows).
 func (l *live) slashFocus(ctx context.Context, c *SlashContext) error {
 	var mode string
 	switch arg := strings.ToLower(strings.TrimSpace(c.Args)); arg {
 	case "on":
 		mode = "focus"
 	case "off":
-		mode = "default"
+		mode = l.viewModeOff()
 	case "":
-		mode = "focus"
-		if l.viewModeNow() == "focus" {
-			mode = "default"
+		mode = l.viewModeOff()
+		if l.viewModeNow() != "focus" {
+			mode = "focus"
 		}
 	default:
 		return fmt.Errorf("/focus takes on or off, or nothing to turn focus view over; %q is neither", c.Args)
@@ -395,6 +396,24 @@ func (l *live) viewModeNow() string {
 		return mode
 	}
 	return firstOf(l.cfg.Options.ViewMode.V, "default")
+}
+
+// viewModeOff is what /focus off sets the viewMode option to: nothing,
+// so that the verbose option decides again, unless one of the person's
+// config files sets focus, which a /config setting must then outweigh:
+// the view verbose gives.
+func (l *live) viewModeOff() string {
+	l.configMu.Lock()
+	_, now := l.configNow["viewMode"]
+	l.configMu.Unlock()
+	o := l.cfg.Options.ViewMode
+	if now || !o.Set || o.Origin.Layer == config.LayerState || o.V != "focus" {
+		return ""
+	}
+	if l.cfg.Options.Verbose.V {
+		return "verbose"
+	}
+	return "default"
 }
 
 // viewModeSet is the viewMode option for the interface: "" when nothing

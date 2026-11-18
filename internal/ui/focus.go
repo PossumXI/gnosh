@@ -193,9 +193,10 @@ func (s *session) writeFold() {
 
 // foldsCall reports whether focus view takes the call that ended into the
 // fold: every call but a deliverable, which is the thing the person asked
-// for and stands on its own.
-func (s *session) foldsCall(ev *agent.ToolEndEvent) bool {
-	if !s.focus {
+// for and stands on its own, and one a hook said something about, which
+// is written whole so that what the hook said is seen.
+func (s *session) foldsCall(c *call, ev *agent.ToolEndEvent) bool {
+	if !s.focus || len(c.hooks) > 0 {
 		return false
 	}
 	_, _, ok := app.DeliverableOf(ev.Result.Meta)
@@ -211,6 +212,15 @@ func (s *session) setView(mode string) {
 	}
 	s.focus = mode == "focus"
 	s.detail = mode == "verbose"
+}
+
+// unfocused is the view focus view is left for: verbose when the verbose
+// option is on, else the default.
+func (s *session) unfocused() string {
+	if s.info.Verbose {
+		return "verbose"
+	}
+	return "default"
 }
 
 // viewOf is the viewMode the interface starts with: the option when it was
