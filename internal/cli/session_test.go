@@ -50,6 +50,12 @@ func TestInvocationForms(t *testing.T) {
 		{line: `gnosh -m qwen help doctor`, want: Invocation{Command: CmdHelp, HelpFor: []string{"doctor"}}},
 		{line: `gnosh -y version`, want: Invocation{Command: CmdVersion}},
 		{line: `gnosh --bogus help`, kind: ErrUnknownFlag, say: []string{"--bogus is not a flag of gnosh"}},
+
+		// --bg sends off a run in print mode, so the flags print mode takes
+		// go with it at a terminal as they do from a script; -p does not.
+		{line: `gnosh --bg --max-turns 5 "fix it"`, want: inter(Invocation{Background: true, MaxTurns: 5, Prompt: "fix it"})},
+		{line: `gnosh --bg --max-turns 5 "fix it"`, env: &captured, want: pr(Invocation{Background: true, MaxTurns: 5, Prompt: "fix it", PrintImplied: true})},
+		{line: `gnosh --bg -p "fix it"`, kind: ErrConflict, say: []string{"--bg starts a new session in the background, and -p does not go with it"}},
 	})
 }
 

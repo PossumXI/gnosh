@@ -192,19 +192,34 @@ func reaches(command string) string {
 }
 
 // commandLines are the lines of a command where the shell starts reading
-// a command (shellquote.CommandStarts: not the text of a here-document, a
-// line that the one before goes on into, or one inside quotes), and that
-// are not blank or comments.
+// a command (shellquote.CommandStarts: not the text of a here-document or
+// a line inside quotes), each with the lines it goes on into by a
+// backslash at its end, and that are not blank or comments.
 func commandLines(command string) []string {
 	var out []string
+	lines := strings.Split(command, "\n")
 	starts := shellquote.CommandStarts(command)
-	for i, line := range strings.Split(command, "\n") {
-		if t := strings.TrimSpace(line); !starts[i] || t == "" || strings.HasPrefix(t, "#") {
+	for i := 0; i < len(lines); i++ {
+		if !starts[i] {
+			continue
+		}
+		line := lines[i]
+		for i+1 < len(lines) && !starts[i+1] && continues(line) {
+			i++
+			line = line[:len(line)-1] + lines[i]
+		}
+		if t := strings.TrimSpace(line); t == "" || strings.HasPrefix(t, "#") {
 			continue
 		}
 		out = append(out, line)
 	}
 	return out
+}
+
+// continues reports whether a line ends with a backslash that is not
+// itself escaped: the shell reads on into the next line.
+func continues(line string) bool {
+	return (len(line)-len(strings.TrimRight(line, `\`)))%2 == 1
 }
 
 // leadingSleep returns how long a command only sleeps before it does

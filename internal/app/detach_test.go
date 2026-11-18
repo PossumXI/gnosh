@@ -185,7 +185,7 @@ func TestTasksListsRunsInTheBackground(t *testing.T) {
 	s.typeLine("/tasks stop " + done[:13])
 	s.see("The session " + done + " is not running: gnosh -r " + done + " opens it.")
 	s.typeLine("/tasks stop " + running[:13])
-	s.see("gnosh has no process ID for its run")
+	s.see("gnosh has no process ID for a run of it")
 	s.typeLine("/exit")
 	s.exit()
 }

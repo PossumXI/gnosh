@@ -1718,3 +1718,30 @@ or kept with the reason said (27).
     "prompt" goes after -- (or -p), and a word after gnosh prompt that is
     none of its commands says so; the parser now says, for any command
     first on the line, that words meant as a prompt go after --.
+
+110. **A run in the background works while its process does (a third
+    review of 105 to 109).** A run was taken to work while its session's
+    file was held, which is wrong at both ends: a run started with --bg
+    holds nothing until it writes its first entry, so gnosh stop said
+    "not running" and the run went on, and gnosh logs -f stopped before
+    the run's last lines; and a session opened in a gnosh of its own read
+    as a run at work. A run now works while the process kept beside its
+    log is gnosh at work on its session (runAlive); the hold on the file
+    tells only for a run without a kept process. gnosh stop waits up to a
+    minute, not ten seconds, before it ends a run, since a stopped turn
+    waits at the end of a session for a mem call under way (30 seconds),
+    sub-agents in the background (15) and hooks (10): ended sooner, a
+    push or a pop could be lost. /tasks stop reaches a run of any folder,
+    and waits beside the session. gnosh --bg leaves --worktree to the run
+    (the process that started it made a tree of its own, which leaked),
+    takes what is piped in with the prompt, as gnosh -p does (up to 100
+    KiB, which goes on the run's command line), and takes the flags of
+    print mode at a terminal. A run's log is read for gnosh's own lines
+    only where gnosh writes them, so a run that quotes them is not taken
+    at its word, and a session sent off from two folders is told by its
+    working run, or else its newer one. /fork's log names the copy's own
+    file, which is under the folder the session began in. The shell
+    reader of 103 follows quotes inside $(...) and backquotes inside
+    quotes, $'...' strings, and here-document words with any character
+    the shell takes in a word (END-OF-SCRIPT), and the ssh hint reads a
+    line together with the lines a backslash carries it into.

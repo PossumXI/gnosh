@@ -356,7 +356,7 @@ func (c *controls) resume(ctx context.Context, id string) (string, error) {
 		// likely), and one session has one writer: this one stays.
 		why := fmt.Sprintf("the session %s is open in another gnosh, and one session has one writer, so this one stays open", probe.ID())
 		if log := strings.TrimSuffix(probe.Path(), ".jsonl") + ".background.log"; fileExists(log) {
-			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done: /tasks lists it, and /tasks stop %s stops it", runShort(probe.ID()))
+			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done: /tasks stop %s stops it", runShort(probe.ID()))
 		}
 		return "", errors.New(why)
 	}
@@ -412,14 +412,17 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 	path := filepath.Join(dir, "gnosh.log")
 	// With a session named, a run's log in place of the project's: what
 	// it printed, followed until it lets go of its session.
-	run := ""
+	// alive says whether what is followed goes on: the project's log
+	// always, a run's while the run works.
+	alive := func() bool { return true }
 	if len(inv.Args) > 0 {
 		id, log, err := findRun(st.sessions().ProjectDirs(), inv.Args[0])
 		if err != nil {
 			p.errf("%v.", err)
 			return cli.ExitFailure
 		}
-		path, run = log, runSession(id, log)
+		file := runSession(id, log)
+		path, alive = log, func() bool { return runAlive(id, log, file) }
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -448,9 +451,9 @@ func (p *program) logsCommand(ctx context.Context, inv cli.Invocation) int {
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		// (A run's log is followed while the run holds its session, and
-		// read once more after it lets go.)
-		done := run != "" && !transcript.InUse(run)
+		// (A run's log is followed while the run works, and read once
+		// more after it ends.)
+		done := !alive()
 		select {
 		case <-ctx.Done():
 			return cli.ExitOK

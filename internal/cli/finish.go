@@ -114,8 +114,9 @@ func finishSession(inv *Invocation, p *parsed, env Env) *Error {
 		inv.PermissionMode = ModeBypassPermissions
 	}
 
-	// Flags that only print mode acts on.
-	if !printing {
+	// Flags that only print mode acts on (a session sent off with --bg
+	// is a run in print mode).
+	if !printing && p.given(idBack) == nil {
 		for k := range p.occs {
 			o := &p.occs[k]
 			if !o.f.printOnly {

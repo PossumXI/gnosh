@@ -27,20 +27,45 @@ import (
 // in a process of its own, its output in <session>.background.log beside
 // the session's file, its process id in <session>.background.pid.
 
-// stopWait is how long gnosh stop waits for a run to let go of its session
-// after it was asked to stop, before it is made to.
-const stopWait = 10 * time.Second
+// stopWait is how long gnosh stop waits for a run to end after it was
+// asked to stop, before it is made to: long enough for what a stopped turn
+// waits for at the end of a session (a mem call under way, sub-agents in
+// the background, hooks), so that it ends in good order.
+const stopWait = time.Minute
+
+// maxPipedPrompt is the most a prompt of gnosh --bg may hold with what was
+// piped in: it goes to the run on its command line, where one argument
+// may be no longer than 128 KiB on Linux.
+const maxPipedPrompt = 100 << 10
 
 // backgroundCommand is gnosh --bg: a new session on the prompt, as a run in
 // the background, and how to follow it.
 func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int {
-	st, code := p.prepared(ctx, inv)
+	// The run makes its own work tree for --worktree: this process only
+	// starts it, in the folder it was started in.
+	here := inv
+	here.Worktree, here.WorktreeName = false, ""
+	st, code := p.prepared(ctx, here)
 	if st == nil {
 		return code
 	}
 	if p.o.Detach == nil {
 		p.errf("this gnosh cannot start a session in the background, so nothing was started.")
 		return cli.ExitFailure
+	}
+	prompt := inv.Prompt
+	if inv.ReadStdin {
+		// What was piped in goes with the prompt, as for gnosh -p; the
+		// run itself reads nothing.
+		piped, err := p.readPiped(ctx, true)
+		if err != nil {
+			p.errf("what was piped in could not be read (%v), so nothing was started.", err)
+			return cli.ExitFailure
+		}
+		if prompt = joinPrompt(piped, prompt); len(prompt) > maxPipedPrompt {
+			p.errf("what was piped in is %s with the prompt, more than a run in the background can be handed (%s), so nothing was started. Save it to a file and name the file in the prompt.", byteCount(int64(len(prompt))), byteCount(maxPipedPrompt))
+			return cli.ExitFailure
+		}
 	}
 	store := st.sessions()
 	id := inv.SessionID
@@ -59,14 +84,18 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 	if inv.Name != "" {
 		args = append(args, "--name="+inv.Name)
 	}
-	run := append(args, "--print", "--", inv.Prompt)
+	run := append(args, "--print", "--", prompt)
 	dir := store.ProjectDir(st.cfg.Paths.Cwd)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		p.errf("the folder for the session's files, %s, could not be made (%v), so nothing was started.", dir, err)
 		return cli.ExitFailure
 	}
 	log := filepath.Join(dir, id+".background.log")
-	p.logHead(log, id, st.cfg.Paths.Cwd, filepath.Join(dir, id+".jsonl"), inv.Prompt)
+	file := filepath.Join(dir, id+".jsonl")
+	if inv.Worktree {
+		file = "" // (under the work tree's folder, which the run makes)
+	}
+	p.logHead(log, id, st.cfg.Paths.Cwd, file, prompt)
 	pid, err := p.o.Detach(run, slices.Clone(p.o.Environ), log)
 	if err != nil {
 		p.errf("the session could not be started in the background (%v).", err)
@@ -115,43 +144,75 @@ func writeRunPID(log string, pid int) {
 
 // findRun finds the run in the background that word names, among those
 // whose logs are in dirs: a session's id, or the start of one that a
-// single run's has.
+// single session's has. A session sent off from two folders has a log in
+// each: the one found is the log of the run that works, or else the
+// newer.
 func findRun(dirs []string, word string) (id, log string, err error) {
 	word = strings.TrimSpace(word)
 	if word == "" || strings.ContainsAny(word, `/\`) {
 		return "", "", fmt.Errorf("%q names no session", word)
 	}
-	var found []string // the ids that begin with word, and their logs
-	var logs []string
+	logs := map[string][]string{} // the logs of each session whose id begins with word
+	var ids []string
 	for _, dir := range dirs {
 		paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
 		for _, p := range paths {
 			run := strings.TrimSuffix(filepath.Base(p), ".background.log")
-			if run == word {
-				return run, p, nil
+			if !strings.HasPrefix(run, word) {
+				continue
 			}
-			if strings.HasPrefix(run, word) {
-				found, logs = append(found, run), append(logs, p)
+			if logs[run] == nil {
+				ids = append(ids, run)
 			}
+			logs[run] = append(logs[run], p)
 		}
 	}
-	switch len(found) {
-	case 1:
-		return found[0], logs[0], nil
+	if len(logs[word]) > 0 {
+		ids = []string{word} // the whole id: no other is meant
+	}
+	switch len(ids) {
 	case 0:
 		return "", "", fmt.Errorf("no session ran in the background under the ID %s (gnosh agents lists them; gnosh --bg, /background and /fork start one)", word)
+	case 1:
+	default:
+		return "", "", fmt.Errorf("%s is the start of the IDs of %d sessions that ran in the background (%s): give more of it", word, len(ids), strings.Join(ids, ", "))
 	}
-	return "", "", fmt.Errorf("%s is the start of the IDs of %d sessions that ran in the background (%s): give more of it", word, len(found), strings.Join(found, ", "))
+	id = ids[0]
+	best := backgroundRun{}
+	for _, p := range logs[id] {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		r := readRunLog(p, id, info.ModTime())
+		r.running = runAlive(id, p, firstOf(r.file, filepath.Join(filepath.Dir(p), id+".jsonl")))
+		if best.log == "" || r.running && !best.running || r.running == best.running && r.started.After(best.started) {
+			best = r
+		}
+	}
+	return id, firstOf(best.log, logs[id][0]), nil
 }
 
 // runSession is the session file a run's log names, or the one beside it.
 func runSession(id, log string) string {
-	return firstOf(readRunLog(log, time.Time{}).file, filepath.Join(filepath.Dir(log), id+".jsonl"))
+	return firstOf(readRunLog(log, id, time.Time{}).file, filepath.Join(filepath.Dir(log), id+".jsonl"))
+}
+
+// runAlive reports whether the run of the session id whose log is log
+// still works: its process, kept beside the log, is there and is gnosh at
+// work on that session. A session open in some other gnosh is not its run.
+// A run whose process id was not kept (an older gnosh's) is told by the
+// hold on its session's file instead.
+func runAlive(id, log, file string) bool {
+	if pid := runPID(log); pid != 0 {
+		return runIsFor(pid, id)
+	}
+	return file != "" && transcript.InUse(file)
 }
 
 // stopCommand is gnosh stop <session>: the run is asked to stop, as Esc
-// stops a turn, and made to when it has not let go of its session in
-// stopWait. What it did so far stays in its session.
+// stops a turn, and made to when it has not ended in stopWait. What it
+// did so far stays in its session.
 func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
 	st, code := p.prepared(ctx, inv)
 	if st == nil {
@@ -162,7 +223,11 @@ func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
 		p.errf("%v.", err)
 		return cli.ExitFailure
 	}
-	said, err := stopRun(ctx, p.now, id, log)
+	proc, said, err := askStop(id, log)
+	if err == nil && proc != nil {
+		fmt.Fprintf(p.stderr, "gnosh: the session %s was asked to stop; it ends what it was doing first (up to %s).\n", id, roundTime(stopWait))
+		said, err = awaitStop(ctx, p.now, id, log, proc)
+	}
 	if err != nil {
 		p.errf("%v.", err)
 		return cli.ExitFailure
@@ -171,32 +236,35 @@ func (p *program) stopCommand(ctx context.Context, inv cli.Invocation) int {
 	return cli.ExitOK
 }
 
-// stopRun stops the run of a session in the background, as gnosh stop
-// and /tasks stop do: it is asked to stop, as Esc stops a turn, and made
-// to when it has not let go of its session in stopWait. Its log then says
-// it was stopped. stopRun says what came of it, or why nothing was
-// stopped.
-func stopRun(ctx context.Context, now func() time.Time, id, log string) (string, error) {
+// askStop asks the run of a session in the background to stop, as Esc
+// stops a turn, for gnosh stop and /tasks stop. It returns the run's
+// process, for awaitStop, or, when the run does not work, what to say of
+// it, or why nothing was stopped.
+func askStop(id, log string) (*os.Process, string, error) {
 	file := runSession(id, log)
-	if !transcript.InUse(file) {
-		return fmt.Sprintf("the session %s is not running: gnosh -r %s opens it.", id, id), nil
+	if !runAlive(id, log, file) {
+		return nil, fmt.Sprintf("the session %s is not running: gnosh -r %s opens it.", id, id), nil
 	}
 	pid := runPID(log)
 	if pid == 0 {
-		return "", fmt.Errorf("the session %s is running, and gnosh has no process ID for its run (an older gnosh started it, or the session is open somewhere else), so nothing was stopped", id)
-	}
-	if !runIsFor(pid, id) {
-		return "", fmt.Errorf("process %d, which ran the session %s, is not running it any more, and the session is open somewhere else; nothing was stopped", pid, id)
+		return nil, "", fmt.Errorf("the session %s is open, and gnosh has no process ID for a run of it (an older gnosh started it, or it is open in a gnosh of its own), so nothing was stopped", id)
 	}
 	proc, err := os.FindProcess(pid)
 	if err == nil {
 		err = proc.Signal(syscall.SIGTERM)
 	}
 	if err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return "", fmt.Errorf("process %d could not be asked to stop: %v", pid, err)
+		return nil, "", fmt.Errorf("process %d could not be asked to stop: %v", pid, err)
 	}
+	return proc, "", nil
+}
+
+// awaitStop waits for a run askStop asked to stop to end, and ends it when
+// it has not in stopWait. Its log then says it was stopped. It says what
+// came of it.
+func awaitStop(ctx context.Context, now func() time.Time, id, log string, proc *os.Process) (string, error) {
 	deadline := now().Add(stopWait)
-	for transcript.InUse(file) && now().Before(deadline) {
+	for runIsFor(proc.Pid, id) && now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -204,9 +272,9 @@ func stopRun(ctx context.Context, now func() time.Time, id, log string) (string,
 		}
 	}
 	said := fmt.Sprintf("the session %s was stopped. What it did so far is kept: gnosh -r %s opens it.", id, id)
-	if transcript.InUse(file) && runIsFor(pid, id) {
+	if runIsFor(proc.Pid, id) {
 		_ = proc.Kill()
-		said = fmt.Sprintf("the session %s did not stop within %s, and its run was ended. What it did so far is kept: gnosh -r %s opens it.", id, stopWait, id)
+		said = fmt.Sprintf("the session %s did not stop within %s, and its run was ended; commands it left running in the background may still run. What it did so far is kept: gnosh -r %s opens it.", id, roundTime(stopWait), id)
 	}
 	if f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
 		fmt.Fprintf(f, "gnosh: %s%s\n", now().UTC().Format(time.RFC3339), runStopped)
@@ -216,7 +284,8 @@ func stopRun(ctx context.Context, now func() time.Time, id, log string) (string,
 }
 
 // heldByRun says what to do about a session that may be held by a run in
-// the background: it lets go once it is done.
+// the background: it lets go once it is done. (gnosh stop and /tasks stop
+// find a run of any folder.)
 func heldByRun(id string) string {
 	short := runShort(id)
 	return fmt.Sprintf("If it is a run in the background, it lets go of the session when it is done: gnosh logs -f %s follows it, and gnosh stop %s stops it", short, short)

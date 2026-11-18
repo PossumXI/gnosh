@@ -125,19 +125,36 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 				return nil
 			}
 		}
-		// A session in the background that this folder sent off, as gnosh
-		// stop stops one.
+		// A session in the background, this folder's or another's, as
+		// gnosh stop stops one. The wait for it to end goes on beside the
+		// session.
 		if dir := l.crashDir(); dir != "" {
-			if id, log, err := findRun([]string{dir}, args[1]); err == nil {
-				said, err := stopRun(ctx, l.p.now, id, log)
+			id, log, err := findRun([]string{dir}, args[1])
+			if err != nil && strings.HasPrefix(err.Error(), "no session ") {
+				id, log, err = findRun(l.store.ProjectDirs(), args[1])
+			}
+			if err != nil && !strings.HasPrefix(err.Error(), "no session ") {
+				return err
+			}
+			if err == nil {
+				proc, said, err := askStop(id, log)
 				if err != nil {
 					return err
 				}
-				c.Say("%s", strings.ToUpper(said[:1])+said[1:])
+				if proc == nil {
+					c.Say("%s", strings.ToUpper(said[:1])+said[1:])
+					return nil
+				}
+				c.Say("The session %s was asked to stop; it ends what it was doing first (up to %s).", runShort(id), roundTime(stopWait))
+				l.background(func(ctx context.Context) {
+					if said, err := awaitStop(ctx, l.p.now, id, log, proc); err == nil {
+						l.notice(agent.LevelInfo, "tasks", strings.ToUpper(said[:1])+said[1:])
+					}
+				})
 				return nil
 			}
 		}
-		return fmt.Errorf("%s is not one of this session's background tasks, or a session of this folder in the background; /tasks lists them", oneLine(args[1], 40))
+		return fmt.Errorf("%s is not one of this session's background tasks, or a session in the background; /tasks lists them, and gnosh agents those of every folder", oneLine(args[1], 40))
 	case len(args) > 0:
 		return errors.New("/tasks takes nothing after it, or stop and the id of a background task")
 	}

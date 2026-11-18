@@ -88,6 +88,10 @@ func TestReaches(t *testing.T) {
 		{"echo '<<X'\nssh render ls", "ssh"},
 		{"echo \"a\nssh render ls\"", ""},
 		{"echo a \\\nssh render ls", ""},
+		// A line goes on into the next: the two are one command.
+		{"cd /srv && \\\nssh render ls", "ssh"},
+		{"ls # a comment \\\nssh render ls", "ssh"},
+		{"echo \"$(grep -c \"can't\" app.log) failures\"\nssh render ls", "ssh"},
 	}
 	for _, tt := range tests {
 		if got := reaches(tt.command); got != tt.want {
