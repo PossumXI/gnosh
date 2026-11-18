@@ -536,19 +536,21 @@ func (a *Agent) foldQueued(ctx context.Context, t *turn) error {
 
 // admitWait is how long the boundary between two rounds waits for a
 // prompt the person sent that is still being taken in.
-const admitWait = 3 * time.Second
+const admitWait = 2 * time.Second
 
 // waitAdmitting waits, up to admitWait, for what was sent and is still
 // being taken in (its hooks run, it is written down) to reach the queue,
 // so that a prompt the person sent before the round ended goes with the
 // next request rather than a turn of its own: sending at once moves the
 // commands aside and ends the round at once, while the prompt may still
-// be on its way (on a busy machine, writing it down takes a while).
+// be on its way (on a busy machine, writing it down takes a while). It
+// waits for what the person sent alone: gnosh's own hidden prompts, which
+// may come often, never hold a round up.
 func (a *Agent) waitAdmitting(ctx context.Context) {
 	deadline := time.Now().Add(admitWait)
 	for ctx.Err() == nil && time.Now().Before(deadline) {
 		a.mu.Lock()
-		pending := slices.ContainsFunc(a.intake, func(s *submission) bool { return !s.taken && !s.prompt.Later })
+		pending := slices.ContainsFunc(a.intake, func(s *submission) bool { return !s.taken && !s.prompt.Later && !s.prompt.Hidden })
 		a.mu.Unlock()
 		if !pending {
 			return
