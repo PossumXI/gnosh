@@ -149,6 +149,21 @@ func TestMCPCommands(t *testing.T) {
 	has(t, "a second add", r.err, "there is a server named greeter in local", "gnosh mcp remove greeter -s local")
 	r = run(t, w, "mcp", "add-json", "bad", `{"type": "http"}`).wantCode(t, 1)
 	has(t, "add-json of a bad entry", r.err, "the entry of bad would not be used", "no url")
+
+	// add-json with - reads the entry from standard input, so that a key
+	// stays off the command line; with nothing piped in it says so.
+	o := testOptions(w, "mcp", "add-json", "-s", "user", "piped", "-")
+	o.Stdin = strings.NewReader(`{"type": "http", "url": "https://203.0.113.9/mcp", "headers": {"Authorization": "Bearer from-stdin"}}` + "\n")
+	r = runWith(t, context.Background(), o).wantCode(t, 0)
+	has(t, "add-json -", r.out, "Added piped to user")
+	if data, _ := os.ReadFile(w.ConfigDir() + "/mcp.json"); !strings.Contains(string(data), "Bearer from-stdin") {
+		t.Errorf("the entry read from standard input is not in the file:\n%s", data)
+	}
+	run(t, w, "mcp", "remove", "-s", "user", "piped").wantCode(t, 0)
+	o = testOptions(w, "mcp", "add-json", "lonely", "-")
+	o.StdinIsTerminal = true
+	r = runWith(t, context.Background(), o).wantCode(t, 1)
+	has(t, "add-json - at a terminal", r.err, "none is piped in", "Nothing was added.")
 	r = run(t, w, "mcp", "add", "a.b", server).wantCode(t, 1)
 	has(t, "a bad name", r.err, `"a.b" cannot be a server's name`)
 

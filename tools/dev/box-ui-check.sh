@@ -26,6 +26,7 @@
 #	ssh ai-remote bash -s -- focus < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- elicit < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- agenthook < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- agentmcp < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -103,6 +104,11 @@
 #               which is not there, so the model is sent back to write it;
 #               then the hook finds it, and the turn ends (permissions
 #               skipped)
+#   agentmcp    a kind of sub-agent, greeter, whose definition writes an MCP
+#               server of its own (python3 tools/dev/greet-server.py, copied
+#               to ~/newgnosh-test): the model hands it the greeting, it
+#               calls the server's greet, and the session's model never has
+#               that tool (permissions skipped)
 #   cd          a turn, then /cd to a folder of its own whose settings wait
 #               for trust (said yes to) and whose GNOSH.md holds a codeword:
 #               gnosh starts again there, and the model is asked where it
@@ -129,7 +135,7 @@ failhint) base=http://127.0.0.1:9 ;;
 secreview) flags="--trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
-background | btw | monitor | panel | cd | leftover | elicit) flags="-y" ;;
+background | btw | monitor | panel | cd | leftover | elicit | agentmcp) flags="-y" ;;
 agenthook)
 	flags="-y"
 	hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"agent\", \"prompt\": \"Check whether the file done.txt exists in the working folder and holds the word done. \$ARGUMENTS\", \"timeout\": 600 } ] } ] },"
@@ -142,7 +148,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp)" >&2
 	exit 2
 	;;
 esac
@@ -189,6 +195,21 @@ fi
 if [ "$scenario" = elicit ]; then
 	[ -f "$HOME/newgnosh-test/elicit-server.py" ] || { echo "box-ui-check: copy tools/dev/elicit-server.py to ~/newgnosh-test first" >&2; exit 2; }
 	printf '{"mcpServers": {"elicit": {"command": "python3", "args": ["%s", "%s"]}}}\n' "$HOME/newgnosh-test/elicit-server.py" "$T/elicit.log" > "$T/config/gnosh/mcp.json"
+fi
+if [ "$scenario" = agentmcp ]; then
+	[ -f "$HOME/newgnosh-test/greet-server.py" ] || { echo "box-ui-check: copy tools/dev/greet-server.py to ~/newgnosh-test first" >&2; exit 2; }
+	mkdir -p "$T/config/gnosh/agents"
+	cat > "$T/config/gnosh/agents/greeter.md" <<EOF
+---
+name: greeter
+description: Greets people by name with its greet tool. Hand it any greeting to make.
+mcpServers:
+  - greet:
+      command: python3
+      args: ["$HOME/newgnosh-test/greet-server.py", "$T/greet.log"]
+---
+You greet people. Call your greet tool with the person's name, and report exactly what it answered.
+EOF
 fi
 if [ "$scenario" = keys ]; then
 	cat > "$T/config/gnosh/keybindings.json" <<'EOF'
@@ -382,6 +403,10 @@ elicit)
 	screen | grep -v '^ *$' | tail -8
 	tmux send-keys -t "$S" Enter
 	done_when() { grep -q "eu-west" "$T/elicit.log" 2>/dev/null && screen | grep -q "done in"; }
+	;;
+agentmcp)
+	tmux send-keys -t "$S" "Have the greeter sub-agent greet Jae, then tell me in one line what it said." Enter
+	done_when() { [ -s "$T/greet.log" ] && screen | grep -q "done in"; }
 	;;
 agenthook)
 	tmux send-keys -t "$S" "Say hello in one line." Enter
@@ -632,6 +657,9 @@ if [ "$scenario" = channel ]; then
 fi
 if [ "$scenario" = elicit ]; then
 	echo "=== what the server was told: $(tr '\n' ' ' < "$T/elicit.log" 2>/dev/null || echo none)"
+fi
+if [ "$scenario" = agentmcp ]; then
+	echo "=== the server's calls: $(tr '\n' ' ' < "$T/greet.log" 2>/dev/null || echo none)"
 fi
 if [ "$scenario" = agenthook ]; then
 	echo "=== done.txt: $(cat "$T/work/done.txt" 2>/dev/null || echo none)"

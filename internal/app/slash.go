@@ -804,6 +804,13 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		}
 		c.Say("%-12s %s", label, line)
 	}
+	for i, line := range l.unusedFiles() {
+		label := "not used"
+		if i > 0 {
+			label = ""
+		}
+		c.Say("%-12s %s", label, line)
+	}
 	for _, j := range l.contribs {
 		if j.f.Name != "" {
 			c.Say("feature      %s", j.f.Name)
@@ -814,6 +821,29 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 	c.Say("The configuration in force, each setting with where it came from:")
 	c.Say("%s", strings.TrimRight(l.cfg.String(), "\n"))
 	return nil
+}
+
+// unusedFiles are the agent and skill files this session found and does
+// not use, each with why, for /status (Claude Code 2.1.327 lists its
+// broken agent, skill and command files there).
+func (l *live) unusedFiles() []string {
+	var out []string
+	for _, sk := range l.agentDefs().Skipped() {
+		out = append(out, fmt.Sprintf("%s: no kind of sub-agent, %s", l.tilde(sk.Path), oneLine(sk.Reason, 200)))
+	}
+	if l.skillsOff() {
+		return out
+	}
+	set := l.skills()
+	for _, sk := range set.Skipped() {
+		out = append(out, fmt.Sprintf("%s: no skill, %s", l.tilde(sk.Path), oneLine(sk.Reason, 200)))
+	}
+	for _, sk := range set.All() {
+		if len(sk.Unbuilt) > 0 {
+			out = append(out, fmt.Sprintf("%s: the skill %s asks for %s, which this gnosh cannot run", l.tilde(sk.Source), sk.Name, strings.Join(sk.Unbuilt, ", ")))
+		}
+	}
+	return out
 }
 
 // switchedOff are the features of gnosh that are off in this session, each

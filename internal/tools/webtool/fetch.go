@@ -71,9 +71,16 @@ type Page struct {
 // ErrRefused wraps every refusal made before a request goes out.
 var ErrRefused = errors.New("refused")
 
+// MaxURL is the most characters of a URL Fetch takes, as Claude Code's
+// WebFetch: a longer one is refused before anybody is asked about it.
+const MaxURL = 2000
+
 // Check reads a URL as Fetch would and says why it would be refused, or
 // returns the URL Fetch would ask for (http upgraded to https).
 func Check(raw string, allowPrivate bool) (*url.URL, error) {
+	if n := utf8.RuneCountInString(strings.TrimSpace(raw)); n > MaxURL {
+		return nil, fmt.Errorf("%w: the URL is %d characters long, and one of at most %d is fetched", ErrRefused, n, MaxURL)
+	}
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("%w: %q is not a URL with a host", ErrRefused, raw)

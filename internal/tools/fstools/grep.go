@@ -65,7 +65,7 @@ output_mode chooses what comes back:
 - content: the matching lines, under the path of the file they are in, each as its line number, a colon, and the line. -A, -B and -C add lines around each match; those have a dash where matching lines have the colon, and a line of -- stands between stretches that are not next to each other. -o shows only the text that matched.
 - count: for each file, its path, a colon, and how many of its lines match; then the total.
 
-Files come most recently changed first. A match lies within one line unless multiline is true. With multiline the pattern may run over line breaks (write \n for one; . still does not match a line break unless the pattern starts with (?s)), ^ and $ match at the start and end of every line, and count counts matches, not lines.
+Files with a match come most recently changed first; lines and counts come in the order of their files' paths, so that paging with offset is steady. A match lies within one line unless multiline is true. With multiline the pattern may run over line breaks (write \n for one; . still does not match a line break unless the pattern starts with (?s)), ^ and $ match at the start and end of every line, and count counts matches, not lines.
 
 At most %[2]d lines (content) or files (the other modes) are shown unless head_limit says otherwise, and at most %[3]s of text whatever it says. offset skips that many first. When something is left out, a note at the end says so and gives the offset to go on from.
 
@@ -455,9 +455,13 @@ func (t *grepTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		return refused(failf("%s is %s, which cannot be searched.", q.root.abs, kindOf(mode)))
 	}
 
+	// Files with a match come newest first, the order Claude Code gives;
+	// lines and counts come in the order of their files' paths, which does
+	// not change while they are paged through with offset (a file written
+	// between two pages would move, and lines be shown twice or never).
 	hits := tally.hits
 	sort.Slice(hits, func(i, j int) bool {
-		if !hits[i].modTime.Equal(hits[j].modTime) {
+		if q.mode == modeFiles && !hits[i].modTime.Equal(hits[j].modTime) {
 			return hits[i].modTime.After(hits[j].modTime)
 		}
 		return hits[i].path < hits[j].path

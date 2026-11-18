@@ -411,11 +411,11 @@ func Default() *Table {
 		flags:   []*flag{mcpScope, mcpTransport, mcpEnv, mcpHeader, cwd, help},
 		summary: "Add a server.",
 		about:   "A server gnosh starts is its command and arguments; one at a URL is -t http and the URL. Put -- before the command when it has flags of its own."})
-	t.command(mcp, &command{name: "add-json", cmd: CmdMCPAddJSON, pri: 1, minArgs: 2, maxArgs: 2,
+	t.command(mcp, &command{name: "add-json", cmd: CmdMCPAddJSON, pri: 1, minArgs: 2, maxArgs: 2, dashIsStdin: true,
 		argsUsage: "<name> <json>",
 		flags:     []*flag{mcpScope, cwd, help},
 		summary:   "Add a server from its entry, as JSON.",
-		about:     `The entry is what goes under the server's name in "mcpServers", such as {"type": "http", "url": "https://..."}.`})
+		about:     `The entry is what goes under the server's name in "mcpServers", such as {"type": "http", "url": "https://..."}. With - in its place the entry is read from standard input, so that a key in it stays off the command line.`})
 	t.command(mcp, &command{name: "get", cmd: CmdMCPGet, pri: 1, minArgs: 1, maxArgs: 1, argsUsage: "<name>",
 		flags:   []*flag{cwd, help},
 		summary: "Show one server, and whether it connects.",

@@ -113,3 +113,12 @@ You greet people with the greet tool.
 	r := run(t, w, "--agent", "greeter", "-p", "/mcp").wantCode(t, 0)
 	has(t, "/mcp", r.out, "own: connected", "agent, ")
 }
+
+// /status names the agent and skill files it found and does not use, and
+// why.
+func TestStatusNamesUnusedFiles(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/agents/broken.md", "---\nname: broken\n---\nNo description.\n")
+	r := run(t, w, "-p", "/status").wantCode(t, 0)
+	has(t, "/status", r.out, "not used", "agents/broken.md: no kind of sub-agent")
+}

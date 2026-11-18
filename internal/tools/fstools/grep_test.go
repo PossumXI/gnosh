@@ -907,12 +907,12 @@ func TestGrepLiteralShortCutChangesNothing(t *testing.T) {
 	}
 	// And the answers are the right ones.
 	got := f.ok(f.grep, in{"pattern": "NEEDLE", "output_mode": "count", "-i": true})
-	want := f.path("big.txt") + ":12\n" + f.path("small.txt") + ":2\n" + f.path("crlf.txt") + ":1\n\nTotal: 15 matching lines in 3 files.\n"
+	want := f.path("big.txt") + ":12\n" + f.path("crlf.txt") + ":1\n" + f.path("small.txt") + ":2\n\nTotal: 15 matching lines in 3 files.\n"
 	if got != want {
 		t.Errorf("count ignoring case =\n%s\nwant\n%s", got, want)
 	}
 	got = f.ok(f.grep, in{"pattern": "needle", "output_mode": "count"})
-	want = f.path("big.txt") + ":8\n" + f.path("small.txt") + ":2\n" + f.path("crlf.txt") + ":1\n\nTotal: 11 matching lines in 3 files.\n"
+	want = f.path("big.txt") + ":8\n" + f.path("crlf.txt") + ":1\n" + f.path("small.txt") + ":2\n\nTotal: 11 matching lines in 3 files.\n"
 	if got != want {
 		t.Errorf("count =\n%s\nwant\n%s", got, want)
 	}

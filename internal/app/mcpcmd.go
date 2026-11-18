@@ -2,9 +2,11 @@ package app
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -97,6 +99,9 @@ func (p *program) mcpCommand(ctx context.Context, inv cli.Invocation) int {
 	return p.mcpShow(ctx, inv, places)
 }
 
+// maxMCPEntry is the most of a server's entry read from standard input.
+const maxMCPEntry = 1 << 20
+
 // mcpAdd is `gnosh mcp add` and `add-json`.
 func (p *program) mcpAdd(inv cli.Invocation, places mcpPlaces) int {
 	name := inv.Args[0]
@@ -106,9 +111,27 @@ func (p *program) mcpAdd(inv cli.Invocation, places mcpPlaces) int {
 	}
 	scope := firstOf(inv.MCPScope, "local")
 	var entry json.RawMessage
-	if inv.Command == cli.CmdMCPAddJSON {
+	switch {
+	case inv.Command == cli.CmdMCPAddJSON && inv.Args[1] == "-":
+		// The entry from standard input, so that a key in it stays off
+		// the command line and out of the shell's history.
+		if p.o.StdinIsTerminal || p.o.Stdin == nil {
+			p.errf("with - the entry is read from standard input, and none is piped in: echo '{...}' | gnosh mcp add-json %s -. Nothing was added.", name)
+			return cli.ExitFailure
+		}
+		data, err := io.ReadAll(io.LimitReader(p.o.Stdin, maxMCPEntry+1))
+		switch {
+		case err != nil:
+			p.errf("the entry could not be read from standard input: %v. Nothing was added.", err)
+			return cli.ExitFailure
+		case len(data) > maxMCPEntry:
+			p.errf("the entry on standard input is longer than %d KiB, which no server's entry is. Nothing was added.", maxMCPEntry>>10)
+			return cli.ExitFailure
+		}
+		entry = json.RawMessage(bytes.TrimSpace(data))
+	case inv.Command == cli.CmdMCPAddJSON:
 		entry = json.RawMessage(inv.Args[1])
-	} else {
+	default:
 		var err error
 		entry, err = mcp.Entry(inv.MCPTransport, inv.Args[1], inv.Args[2:], inv.MCPEnv, inv.MCPHeaders)
 		if err != nil {

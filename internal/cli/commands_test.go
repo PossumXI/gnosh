@@ -132,6 +132,8 @@ func TestCommands(t *testing.T) {
 		{line: `gnosh mcp add greeter`, kind: ErrUsage, say: []string{"gnosh mcp add needs more after it"}},
 		{line: `gnosh mcp add-json far '{"type":"http","url":"https://x"}'`, want: Invocation{Command: CmdMCPAddJSON, Args: []string{"far", `{"type":"http","url":"https://x"}`}}},
 		{line: `gnosh mcp add-json far -t http x`, kind: ErrUnknownFlag, say: []string{"-t does not go with gnosh mcp add-json"}},
+		{line: `gnosh mcp add-json far -`, want: Invocation{Command: CmdMCPAddJSON, Args: []string{"far", "-"}}},
+		{line: `gnosh mcp get -`, kind: ErrUsage, say: []string{"- by itself means nothing"}},
 		{line: `gnosh mcp list`, want: Invocation{Command: CmdMCPList}},
 		{line: `gnosh mcp ls --cwd /w`, want: Invocation{Command: CmdMCPList, Cwd: "/w"}},
 		{line: `gnosh mcp get far`, want: Invocation{Command: CmdMCPGet, Args: []string{"far"}}},

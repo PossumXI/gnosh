@@ -79,6 +79,8 @@ func (t *Table) walk(args []string) (*parsed, *Error) {
 			p.early = len(p.args)
 		case strings.HasPrefix(a, "--"):
 			i, err = p.word(args, i)
+		case a == "-" && p.cmd != nil && p.cmd.dashIsStdin:
+			err = p.plain(args, i)
 		case a == "-":
 			err = &Error{Kind: ErrUsage, Typed: a, Message: fmt.Sprintf(
 				"- by itself means nothing to gnosh, so %s. Text piped in is read without being asked for; to send a dash as an argument, put -- before it.",

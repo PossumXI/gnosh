@@ -187,8 +187,13 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 		if q.Kind == "permission" {
 			hint = "no"
 		}
+		// On a question about letting something happen, the cursor keys
+		// stop at the ends rather than going round from no to yes, and a
+		// number past the last answer goes to no, as in Claude Code.
+		safety := q.Kind == "permission" || q.Kind == "trust"
 		qs.ui = menu.NewSelect(menu.SelectOptions{
 			Title: title, Body: body(), Options: opts, Selected: selected, CancelHint: hint,
+			NoWrap: safety, RefuseRow: map[bool]int{true: no + 1}[safety && no >= 0],
 			Theme: th.Menu, Metrics: m,
 		})
 	}

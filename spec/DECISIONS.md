@@ -1464,3 +1464,19 @@ or kept with the reason said (27).
     under it; "- name: value" on one line is refused rather than read as
     a name. Not built: the memory field, which would be a second memory
     beside mem (Jae's design call).
+
+94. **Claude Code 2.1.327's small changes, where gnosh has the thing.**
+    gnosh mcp add-json <name> - reads the entry from standard input, so
+    that a key in it stays off the command line (a lone - is an argument
+    only of a command that reads standard input; elsewhere it is still
+    refused). On a permission or trust question the cursor keys stop at
+    the first and the last answer instead of going round from no to yes,
+    and a number past the last answer moves the cursor to no without
+    answering. A prompt's first 100 @ words are looked up, and no more.
+    WebFetch refuses a URL of more than 2,000 characters before anybody
+    is asked about it. Grep gives lines and counts in the order of their
+    files' paths, which does not change while they are paged through with
+    offset (files with a match still come newest first). /status lists
+    the agent and skill files it found and does not use, and why. Already
+    so in gnosh: /export never writes over a file, Up and Down keep the
+    cursor's column, and Tab in a shell line completes only paths.

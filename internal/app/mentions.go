@@ -40,11 +40,14 @@ var mentionWord = regexp.MustCompile(`(?:^|\s)@("[^"\n]+"|[^\s"]+)`)
 // resourceMention is "@server:scheme://rest", a resource of an MCP server.
 var resourceMention = regexp.MustCompile(`^([A-Za-z0-9_.-]+):([A-Za-z][A-Za-z0-9+.-]*://\S+)$`)
 
-// maxMentions is how many paths one prompt brings, and maxListing how
-// many names of a directory are listed.
+// maxMentions is how many paths one prompt brings, maxMentionWords how
+// many of its @ words are looked up at all (a prompt of thousands of them
+// is not held up by as many lookups, as in Claude Code), and maxListing
+// how many names of a directory are listed.
 const (
-	maxMentions = 10
-	maxListing  = 200
+	maxMentions     = 10
+	maxMentionWords = 100
+	maxListing      = 200
 )
 
 // mentionLines is a PromptLines provider: the paths a typed prompt
@@ -62,7 +65,7 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 	cwd := l.cwd()
 	seen := map[string]bool{}
 	var parts []agent.Part
-	for _, m := range mentionWord.FindAllStringSubmatch(info.Prompt.Text, -1) {
+	for _, m := range mentionWord.FindAllStringSubmatch(info.Prompt.Text, maxMentionWords) {
 		raw := m[1]
 		if strings.HasPrefix(raw, `"`) {
 			raw = strings.Trim(raw, `"`)
