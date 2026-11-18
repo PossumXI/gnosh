@@ -811,6 +811,18 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		}
 		c.Say("%-12s %s", label, line)
 	}
+	// What the configuration was warned of as the session started: a
+	// setting that does nothing, a hook whose matcher fits nothing (Claude
+	// Code 2.1.327's /status lists these too).
+	if l.st != nil {
+		for i, pr := range config.Warnings(l.st.problems) {
+			label := "warnings"
+			if i > 0 {
+				label = ""
+			}
+			c.Say("%-12s %s", label, oneLine(pr.String(), 400))
+		}
+	}
 	for _, j := range l.contribs {
 		if j.f.Name != "" {
 			c.Say("feature      %s", j.f.Name)

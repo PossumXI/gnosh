@@ -195,3 +195,12 @@ func TestAgentDetails(t *testing.T) {
 		t.Errorf("a kind that sets nothing: %q", got)
 	}
 }
+
+// /status says what the configuration was warned of: here a hook whose
+// matcher fits no tool, which never runs.
+func TestStatusNamesConfigWarnings(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Settings(`{"hooks": {"PreToolUse": [{"matcher": "NoSuchTool", "hooks": [{"type": "command", "command": "true"}]}]}}`)
+	r := run(t, w, "-p", "/status").wantCode(t, 0)
+	has(t, "/status", r.out, "warnings", `the matcher "NoSuchTool"`, "fits no tool gnosh has")
+}
