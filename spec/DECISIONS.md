@@ -2209,3 +2209,50 @@ or kept with the reason said (27).
     status line's count of runs done since a look in the same second
     finds it; an end line followed by more of what the run printed is a
     quote, not its end; and how a run ended is shown as one line.
+
+138. **The fall runs through the words, behind one mark (Jae, 18 November
+    2026; replaces the strip of 116).** Of the ten-cell strip of 116 he
+    said: "make it two part (it already is) where the first part is like
+    claude, i think a single letter, and then the second part is the
+    text that starts non-white and the whole text is animated. the thing
+    that moves rightward is a different color of the text, but the text
+    is always the same... and the transition to fasater/more rightward
+    should be faster".
+    - The mark is one cell again: a spark that turns through four of
+      gnosh's own sparkle marks, swelling and dwindling, six shapes a
+      second while calm and twelve in a deep thought, in the colour of
+      the drop that started last. One changing character before the
+      words is what he asked for by "like claude"; the shapes are
+      gnosh's (UI-50's sparkle) and not that program's.
+    - While gnosh works the words of the line are no longer the
+      terminal's own colour: they stand in a grey between the quiet grey
+      and white (the quiet grey itself on a light background), and what
+      follows them (the time, the key that stops) in the quiet grey, as
+      before.
+    - The drops of 116 fall through the letters themselves, as colour. A
+      drop starts at the first letter and is pulled to the right along
+      the whole line, the time and the keys included. The letter its
+      head is over takes the drop's colour, and so do the letters behind
+      it: one, and as many more as the drop crosses in a seventh of a
+      second, up to eight, the first four in the head's colour and the
+      rest in the next, fading into the letters' own. No drop goes
+      faster than 60 cells a second, however long the line. No letter
+      changes, moves or is hidden. (UI-52's one colour holds for every
+      letter no drop is over; the colour that passes is what he asked
+      for.)
+    - Depth is as in 116 but comes sooner: it begins three seconds into
+      one unbroken thought and is full at fifteen, where 116 had five
+      and forty, and "is deep in thought" is said from fifteen. Calm:
+      one drop at a time, a pull of 8 cells a second each second, pale
+      (a tenth of the way from the colour of the person's own words to
+      its own colour). Deep: three at a time, a pull of 40, the four
+      colours of 116, bold heads, glints toward the pale colour, the
+      mark bold. Frames, settling, and what happens with no colour and
+      while a question waits are as in 116.
+    - With sixteen colours the words are faint and a calm drop is one of
+      the terminal's whites; on a light background a calm drop is the
+      terminal's own colour over grey words.
+    - "The transition ... should be faster" was read as the build-up to
+      the deep state, not as a stronger pull on each drop. The pull was
+      raised a little all the same (5 to 8, 30 to 40), since the line is
+      several times longer than the strip was.

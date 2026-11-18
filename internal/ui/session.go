@@ -271,8 +271,9 @@ type session struct {
 	busy  bool
 	ph    phase
 	since time.Time
-	// fall is the working mark's drops, as they stood when the mark was
-	// last drawn (fall.go).
+	// fall is what falls through the words of the line that says what
+	// the session is doing, as it stood when the line was last drawn
+	// (fall.go).
 	fall fall
 	// heard is when the session last reported anything.
 	heard time.Time
@@ -746,8 +747,8 @@ func (s *session) wake() time.Time {
 		soon(s.agentsHintUntil)
 	}
 	if (s.busy || s.cmdRun != "") && s.q == nil && s.th.Fall.moves() {
-		// The drops of the working mark fall on: the deeper the thought,
-		// the sooner the next step.
+		// The fall goes on through the working line: the deeper the
+		// thought, the sooner the next step.
 		soon(now.Add(s.th.Fall.every(s.fall.depth)))
 	}
 	if s.info.NotifyHooks || s.host.desktop(s.info.NotifChannel, "") {

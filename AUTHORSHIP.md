@@ -186,6 +186,19 @@ that stretches with a drop's speed, the glints, the grey the colours start
 near, and that the fall is drawn and timed from his words and not from how
 the other program's line or the earlier program's animation is made.
 
+The same day, of the strip of marks that came of it:
+
+> make it two part (it already is) where the first part is like claude, i think a single letter, and then the second part is the text that starts non-white and the whole text is animated. the thing that moves rightward is a different color of the text, but the text is always the same... and the transition to fasater/more rightward should be faster
+
+Set: one changing mark before the words; the words themselves in a colour
+that is not white; what moves to the right is colour passing over the
+letters, which stay as they are; and the deep state comes sooner
+(`spec/DECISIONS.md` item 138). Claude's part: reading "the transition
+should be faster" as the build-up (three to fifteen seconds of a thought,
+where it was five to forty), the grey the words stand in, the tail that
+fades into the letters, the limit on a drop's speed, and that the mark's
+shapes are gnosh's own.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
