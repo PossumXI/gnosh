@@ -73,12 +73,32 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		return cli.ExitFailure
 	}
 	writeRunPID(log, pid)
-	short := shortID(id)
+	short := runShort(id)
 	fmt.Fprintf(p.stdout, "gnosh: backgrounded · %s · process %d\n", id, pid)
-	fmt.Fprintf(p.stdout, "  gnosh logs %s      what it prints (-f follows it)\n", short)
-	fmt.Fprintf(p.stdout, "  gnosh stop %s      stops it\n", short)
-	fmt.Fprintf(p.stdout, "  gnosh -r %s        opens it once it is done\n", id)
+	hints := [][2]string{
+		{"gnosh logs " + short, "what it prints (-f follows it)"},
+		{"gnosh stop " + short, "stops it"},
+		{"gnosh -r " + id, "opens it once it is done"},
+	}
+	width := 0
+	for _, h := range hints {
+		width = max(width, len(h[0]))
+	}
+	for _, h := range hints {
+		fmt.Fprintf(p.stdout, "  %-*s  %s\n", width, h[0], h[1])
+	}
 	return cli.ExitOK
+}
+
+// runShort is the start of a session's id that names its run in the
+// folder's runs: up to the end of its second group, the time to the
+// millisecond in gnosh's ids, since two runs started within the same
+// minute share the first eight characters.
+func runShort(id string) string {
+	if len(id) > 13 && id[8] == '-' {
+		return id[:13]
+	}
+	return id
 }
 
 // pidFile is the file beside a run's log that holds its process id.

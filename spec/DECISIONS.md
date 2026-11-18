@@ -1659,3 +1659,13 @@ or kept with the reason said (27).
     process id used again by another program is never reached. Claude
     Code's agent view, attach, respawn and daemon are not built: gnosh's
     runs ask nobody anything, and gnosh -r opens one once it is done.
+
+106. **A background run is named by the first 13 characters of its id.**
+    gnosh's session ids begin with the time, so two runs started within
+    a minute share the first eight characters, and gnosh stop with them
+    found two runs (found on box 1, where a check started two runs 30
+    seconds apart). gnosh --bg's hints give the start of the id up to
+    the end of its second group, the time to the millisecond, and lay
+    the three hints out in one column; gnosh logs and gnosh stop take
+    any start of an id that one run alone has, and name every match when
+    more have it.

@@ -38,7 +38,7 @@ func TestBackgroundFromTheShell(t *testing.T) {
 	if len(got) != 6 || !slices.Equal(head, want[:3]) || !slices.Equal(got[3:], want[3:]) {
 		t.Fatalf("the run was started with %q", got)
 	}
-	has(t, "what is said", r.out, "gnosh: backgrounded · "+id+" · process 4242", "gnosh logs "+id[:8], "gnosh stop "+id[:8], "gnosh -r "+id)
+	has(t, "what is said", r.out, "gnosh: backgrounded · "+id+" · process 4242", "gnosh logs "+id[:13], "gnosh stop "+id[:13], "gnosh -r "+id)
 	if pid, _ := os.ReadFile(strings.TrimSuffix(log, ".log") + ".pid"); strings.TrimSpace(string(pid)) != "4242" {
 		t.Errorf("the process id kept: %q", pid)
 	}
@@ -50,9 +50,9 @@ func TestBackgroundFromTheShell(t *testing.T) {
 	}
 	f.WriteString("The flaky test is fixed.\n")
 	f.Close()
-	r = run(t, w, "logs", id[:8]).wantCode(t, 0)
+	r = run(t, w, "logs", id[:13]).wantCode(t, 0)
 	has(t, "gnosh logs", r.out, "goes on in the background with: fix the flaky test", "The flaky test is fixed.")
-	r = run(t, w, "stop", id[:8]).wantCode(t, 0)
+	r = run(t, w, "stop", id[:13]).wantCode(t, 0)
 	has(t, "gnosh stop", r.out, "the session "+id+" is not running: gnosh -r "+id+" opens it")
 	r = run(t, w, "stop", "nosuch").wantCode(t, 1)
 	has(t, "gnosh stop", r.err, "no session of this folder ran in the background under the ID nosuch")
