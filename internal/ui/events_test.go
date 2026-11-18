@@ -66,6 +66,48 @@ func TestCompleteAgent(t *testing.T) {
 	}
 }
 
+// A command named partway through a prompt, as Claude Code completes it:
+// the commands and skills whose names begin with what follows the slash,
+// a bare slash for every one, and a path when no name begins that way or
+// the word goes on past a second slash. A line that is itself a command
+// keeps its words for the command.
+func TestCompleteCommandMidPrompt(t *testing.T) {
+	s := &session{cwd: "/proj", info: app.SessionInfo{
+		Commands:    []string{"help", "review", "recap", "status"},
+		CommandList: []app.CommandInfo{{Name: "exit", Aliases: []string{"quit"}}},
+		Skills:      []app.CommandInfo{{Name: "release-notes"}},
+	}, listDir: func(dir string) []fileEntry {
+		if dir == "/" {
+			return []fileEntry{{name: "tmp", dir: true}, {name: "srv", dir: true}}
+		}
+		return nil
+	}}
+	offered := func(text string) string {
+		var out []string
+		for _, c := range s.complete(text, len(text)) {
+			if !strings.HasPrefix(c.Text, text[c.Start:]) {
+				t.Errorf("%q: candidate %+v", text, c)
+			}
+			out = append(out, c.Text)
+		}
+		return strings.Join(out, " ")
+	}
+	for text, want := range map[string]string{
+		"run the tests, then /re": "/review /recap /release-notes",
+		"then /st":                "/status",
+		"then /":                  "/help /review /recap /status /release-notes",
+		"then /qu":                "/quit",
+		"look in /tm":             "/tmp/",
+		"look in /srv/x":          "",
+		"/re":                     "/review /recap /release-notes",
+		"/loop 5m /re":            "",
+	} {
+		if got := offered(text); got != want {
+			t.Errorf("%q: offered %q, want %q", text, got, want)
+		}
+	}
+}
+
 // What is typed after /cd and /add-dir is a folder, slash or no slash:
 // only folders are offered for it, from the folder the session is in. A
 // folder typed in full is offered as typed first, so that Enter runs the

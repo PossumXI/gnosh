@@ -167,7 +167,9 @@ to an action, null to take one away, command:<name> to run one), `/cost`,
 (with reconnect, enable and disable), `/skills`, `/reload-skills`, `/hooks`,
 `/statusline`, `/debug` (debug logging on, and the model finds out from
 gnosh's log what went wrong) and `/doctor`, with gnosh's own `/mem`, `/goal`,
-`/loop` and `/deliverables` beside them. Shift+Tab goes through the permission
+`/loop` and `/deliverables` beside them; a `/` partway through a prompt
+offers the commands and skills whose names begin with what follows it, as
+Claude Code's does (`run the tests, then /rev`). Shift+Tab goes through the permission
 modes, Esc stops a turn and Esc twice goes back to an earlier prompt, Ctrl+O
 shows the whole transcript (every thought, call and result) on the whole
 screen, Ctrl+B moves a running command to the background, `@path` in a prompt

@@ -42,7 +42,7 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 		return s.completeShell(text, cursor)
 	}
 	if strings.HasPrefix(text, "/") && !strings.ContainsAny(before, " \t\n") {
-		return s.completeCommand(before)
+		return s.completeCommand(before, 0)
 	}
 	start := strings.LastIndexAny(before, " \t\n") + 1
 	word := before[start:]
@@ -50,6 +50,17 @@ func (s *session) complete(text string, cursor int) []editor.Candidate {
 		// /cd and /add-dir take a folder: what is typed after them is
 		// one, slash or no slash, and only folders are offered.
 		return s.completeFolder(word, start)
+	}
+	if strings.HasPrefix(word, "/") && !strings.Contains(word[1:], "/") && !strings.HasPrefix(text, "/") {
+		// A command named partway through a prompt ("run the tests, then
+		// /com"), as Claude Code completes it: only names that begin
+		// with what was typed, so that a path such as /tmp, which no
+		// command's name begins with, is completed as a path. A bare /
+		// lists every command. The command does not run from there; the
+		// model reads its name.
+		if c := s.completeCommand(word, start); len(c) > 0 {
+			return c
+		}
 	}
 	switch {
 	case strings.HasPrefix(word, "@"):
@@ -97,18 +108,18 @@ func (s *session) completeAgent(typed string, start int) []editor.Candidate {
 // completeCommand offers the session's commands whose names begin with
 // what was typed, in the order /help lists them, and after them the
 // person's skills. When no name begins that way, the commands' other
-// names that do are offered.
-func (s *session) completeCommand(typed string) []editor.Candidate {
+// names that do are offered. start is where the typed word begins.
+func (s *session) completeCommand(typed string, start int) []editor.Candidate {
 	want := strings.TrimPrefix(typed, "/")
 	var out []editor.Candidate
 	for _, name := range s.info.Commands {
 		if strings.HasPrefix(name, strings.ToLower(want)) {
-			out = append(out, editor.Candidate{Text: "/" + name, Start: 0})
+			out = append(out, editor.Candidate{Text: "/" + name, Start: start})
 		}
 	}
 	for _, sk := range s.info.Skills {
 		if strings.HasPrefix(sk.Name, want) && !slices.Contains(s.info.Commands, sk.Name) {
-			out = append(out, editor.Candidate{Text: "/" + sk.Name, Start: 0})
+			out = append(out, editor.Candidate{Text: "/" + sk.Name, Start: start})
 		}
 	}
 	if len(out) == 0 && want != "" {
@@ -118,7 +129,7 @@ func (s *session) completeCommand(typed string) []editor.Candidate {
 		for _, c := range s.info.CommandList {
 			for _, alias := range c.Aliases {
 				if strings.HasPrefix(alias, strings.ToLower(want)) {
-					out = append(out, editor.Candidate{Text: "/" + alias, Start: 0})
+					out = append(out, editor.Candidate{Text: "/" + alias, Start: start})
 				}
 			}
 		}

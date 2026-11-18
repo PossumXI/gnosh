@@ -1532,3 +1532,15 @@ or kept with the reason said (27).
     it is, as Claude Code 2.1.327's mcp add --scope project stops instead
     of writing over such a file. Other keys at the top are kept, as
     before.
+
+98. **A command named partway through a prompt.** As Claude Code's does,
+    a word that begins with a slash after a space, in a prompt (not on a
+    line that is itself a command, whose words are the command's), is
+    completed from the commands and skills whose names begin with what
+    follows the slash, then from the commands' other names; a bare slash
+    lists them all. When no name begins that way, or the word goes on
+    past a second slash, it is completed as a path, as before, so /tmp
+    and /srv/x stay paths. The command does not run from there: the model
+    reads its name. The slash already opened the list as it is typed;
+    Enter takes a candidate that completes the word, as it does for @ and
+    paths.
