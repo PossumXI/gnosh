@@ -18,7 +18,8 @@ import (
 // a path to mention, and so, on Tab, is any word that reads as a path.
 // Paths are completed a directory at a time, by the start of a name; the
 // files a project's ignore rules leave out are not offered, and neither
-// are names that begin with a dot until a dot is typed.
+// are names that begin with a dot until a dot is typed. A line of shell
+// mode, which begins with "!", is completed as shellcomplete.go says.
 
 // fileEntry is one name in a directory, as completion offers it.
 type fileEntry struct {
@@ -37,6 +38,9 @@ const (
 func (s *session) complete(text string, cursor int) []editor.Candidate {
 	cursor = min(max(cursor, 0), len(text))
 	before := text[:cursor]
+	if strings.HasPrefix(text, "!") && cursor > 0 {
+		return s.completeShell(text, cursor)
+	}
 	if strings.HasPrefix(text, "/") && !strings.ContainsAny(before, " \t\n") {
 		return s.completeCommand(before)
 	}

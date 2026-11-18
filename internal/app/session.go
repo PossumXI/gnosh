@@ -57,6 +57,9 @@ type live struct {
 	// suggest the suggestion being made (suggest.go).
 	suggestOn atomic.Bool
 	suggest   suggester
+	// respondShell is the respondToBashCommands option as it stands: the
+	// model answers a command the person ran behind "!" (shellline.go).
+	respondShell atomic.Bool
 
 	store  *transcript.Store
 	ts     *transcript.Session
@@ -560,6 +563,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	// (What the session loaded is the settings it has taken in.)
 	l.watchSettings()
 	l.suggestOn.Store(l.cfg.Options.PromptSuggestionEnabled.V)
+	l.respondShell.Store(l.cfg.Options.RespondToBashCommands.V)
 	a, err := agent.New(opts)
 	l.agent = a
 	// Published for the code that runs beside the session's opening (a

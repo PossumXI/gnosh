@@ -26,8 +26,12 @@ import (
 // The front end is shown it as a tool call. When it has ended, the command
 // and what it printed go to the model as a prompt of gnosh's own, which
 // says whose command it was, and the model answers. One that the person
-// stopped is not answered: it is put in front of the model with their
-// next prompt.
+// stopped is not answered, and with the respondToBashCommands option off
+// none is: it is put in front of the model with their next prompt.
+//
+// The command line is also kept in the session's file as a meta entry
+// (metaShell), for the prompt history: Up and shell mode's Tab offer it
+// again, in this session and the folder's later ones.
 func (l *live) shellLine(command string) error {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -45,6 +49,11 @@ func (l *live) shellLine(command string) error {
 	ctx, cancel := context.WithCancel(l.ctx)
 	l.shellStop = cancel
 	l.shellMu.Unlock()
+	if l.ts != nil {
+		// (A history that lacks a line is no reason to keep the command
+		// from running.)
+		_, _ = l.ts.Append(transcript.MetaEntry(metaShell, command))
+	}
 
 	input, _ := json.Marshal(map[string]string{"command": command})
 	call := core.ToolCall{ID: newCallID(), Name: shelltool.BashName, Input: input}
@@ -90,14 +99,21 @@ func (l *live) shellLine(command string) error {
 		// tool's: it is made harmless on its way in.
 		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, or go on with what they asked for before.") +
 			"\n\n$ " + prompt.Untrusted(command) + "\n" + prompt.Untrusted(core.TextOf(res.Content))
-		if stopped {
+		switch {
+		case stopped:
 			_ = l.agent.Tell(agent.Note{Source: "shell", Text: text + "\n" + prompt.Wrap("The user stopped it before it finished.")})
-			return
+		case !l.respondShell.Load():
+			_ = l.agent.Tell(agent.Note{Source: "shell", Text: text})
+		default:
+			_, _ = l.agent.Submit(agent.Prompt{Text: text, Hidden: true, Source: "shell"})
 		}
-		_, _ = l.agent.Submit(agent.Prompt{Text: text, Hidden: true, Source: "shell"})
 	}()
 	return nil
 }
+
+// metaShell is the key of the meta entries that hold the command lines
+// the person ran behind "!", as typed after it.
+const metaShell = "shell"
 
 // runPersonsCommand runs the command and survives a tool that crashes
 // over it.
@@ -119,7 +135,8 @@ const (
 
 // promptHistory is SessionControls.History: the prompts the person sent from
 // this folder, in its most recent sessions and in this one, the oldest
-// first. A prompt that a session's file no longer holds (one that was
+// first, and among them the command lines they ran behind "!", with the
+// "!". A prompt that a session's file no longer holds (one that was
 // erased from it) is not in it.
 func (l *live) promptHistory() []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -131,6 +148,12 @@ func (l *live) promptHistory() []string {
 	prompts := func(entries []transcript.Entry) []string {
 		var out []string
 		for i := range entries {
+			if te := &entries[i]; te.Type == transcript.TypeMeta {
+				if te.Key == metaShell && strings.TrimSpace(te.Value) != "" {
+					out = append(out, "!"+te.Value)
+				}
+				continue
+			}
 			for _, e := range decode(&entries[i]) {
 				if e.Kind != agent.EntryPrompt || e.Hidden {
 					continue

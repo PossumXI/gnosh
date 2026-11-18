@@ -1,0 +1,161 @@
+package ui
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/gnosh-ai/gnosh/internal/text"
+	"github.com/gnosh-ai/gnosh/internal/ui/editor"
+)
+
+// Shell mode's Tab: where a command goes (the line's first word, after an
+// operator, after sudo and its like), the shell's own commands and the
+// programs on the PATH; anywhere else, files; nothing for an option or a
+// quoted, computed or pattern word.
+func TestCompleteShell(t *testing.T) {
+	s := &session{cwd: "/proj", home: "/home/u",
+		listDir: func(dir string) []fileEntry {
+			switch dir {
+			case "/proj":
+				return []fileEntry{{name: "docs", dir: true}, {name: "main.go"}, {name: "Makefile"}, {name: "scripts", dir: true}}
+			case "/proj/scripts":
+				return []fileEntry{{name: "build.sh"}}
+			}
+			return nil
+		},
+		programs: func(prefix string) []string {
+			var out []string
+			for _, p := range []string{"apt", "cat", "echo", "git", "gitk", "grep", "make", "true"} {
+				if strings.HasPrefix(p, prefix) {
+					out = append(out, p)
+				}
+			}
+			return out
+		},
+	}
+	offered := func(text string) string {
+		var out []string
+		for _, c := range s.complete(text, len(text)) {
+			// It completes the word it starts at.
+			if c.Start > len(text) || !strings.HasPrefix(strings.ToLower(c.Text), strings.ToLower(text[c.Start:])) {
+				t.Errorf("%q: candidate %+v", text, c)
+			}
+			out = append(out, c.Text)
+		}
+		return strings.Join(out, ",")
+	}
+	for text, want := range map[string]string{
+		"!gi":            "git ,gitk ",
+		"! gi":           "git ,gitk ",
+		"!e":             "echo ,eval ,exec ,export ",
+		"!ls && ca":      "cat ",
+		"!ls&&ca":        "cat ",
+		"!ls | gr":       "grep ",
+		"!make; ec":      "echo ",
+		"!(ca":           "cat ",
+		"!cmd 2>&1 | gr": "grep ",
+		"!sleep 1 & ec":  "echo ",
+		"!sudo ap":       "apt ",
+		"!if tr":         "true ",
+		"!ls\nma":        "make ",
+		"!ls ma":         "main.go,Makefile",
+		"!ls \\\nma":     "main.go,Makefile",
+		"!cd do":         "docs/",
+		"!echo x >ma":    "main.go,Makefile",
+		"!echo x >&ma":   "main.go,Makefile",
+		"!git sudo ma":   "main.go,Makefile",
+		"!./scr":         "./scripts/",
+		"!sh scripts/b":  "scripts/build.sh",
+		"!echo $HO":      "",
+		"!ls -l":         "",
+		"!ls 'ma":        "",
+		"!ls *.g":        "",
+		"!":              "",
+		"!ls ":           "docs/,main.go,Makefile,scripts/",
+		"!ls && ":        "",
+	} {
+		if got := offered(text); got != want {
+			t.Errorf("%q: offered %q, want %q", text, got, want)
+		}
+	}
+	// A line of shell mode is not a prompt: no mention is offered in it.
+	if got := offered("!cat @ma"); got != "" {
+		t.Errorf("a mention was offered in a shell line: %q", got)
+	}
+}
+
+// Shell mode's Tab offers the commands run before that begin with the
+// line typed so far, the newest first and each once, ahead of what
+// completes the word; a single one is taken at once. A prompt that was
+// not a shell line is not offered, and the list never opens by itself
+// while a shell line is typed, so Enter runs what was typed.
+func TestShellTabOffersEarlierCommands(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	for _, h := range []string{"!git status", "git stash this prompt", "!git stash list", "!git status"} {
+		g.s.ed.AddHistory(editor.Draft{Text: h})
+	}
+	g.files["/home/jae/src/proj"] = []fileEntry{{name: "internal", dir: true}, {name: "stuff.txt"}}
+	g.keys(`"!git st"`)
+	g.liveLacks("run before", "stuff.txt")
+	g.keys(`<Tab>`)
+	g.liveHas("git status", "git stash list", "run before", "stuff.txt").liveLacks("git stash this prompt")
+	at := -1
+	for _, item := range []string{"git status", "git stash list", "stuff.txt"} {
+		i := slices.IndexFunc(g.live, func(l string) bool { return strings.Contains(l, item) })
+		if i <= at {
+			t.Fatalf("%q is not listed after the one before it:\n%s", item, strings.Join(g.live, "\n"))
+		}
+		at = i
+	}
+	g.keys(`<Tab>`)
+	if g.box() != "!git status" {
+		t.Fatalf("the box holds %q", g.box())
+	}
+
+	g = newRig(t, 80, 24, text.NoColor)
+	g.s.ed.AddHistory(editor.Draft{Text: "!git stash list"})
+	g.keys(`"!git stas" <Tab>`)
+	if g.box() != "!git stash list" {
+		t.Fatalf("a single earlier command was not taken at once: the box holds %q", g.box())
+	}
+
+	// A path typed in a shell line opens nothing until Tab.
+	g = newRig(t, 80, 24, text.NoColor)
+	g.files["/home/jae/src/proj/internal"] = []fileEntry{{name: "app", dir: true}, {name: "ui", dir: true}}
+	g.keys(`"!ls internal/"`)
+	g.liveLacks("app/", "ui/")
+	g.keys(`<Tab>`)
+	g.liveHas("app/", "ui/")
+}
+
+// The programs of a PATH: files that may be run, by the start of their
+// names, each name once; directories, files that may not be run and
+// relative PATH entries are passed over.
+func TestPathPrograms(t *testing.T) {
+	one, two := t.TempDir(), t.TempDir()
+	write := func(dir, name string, mode os.FileMode) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(one, "gnoshy", 0o755)
+	write(one, "gnosh-data", 0o644)
+	write(two, "gnoshy", 0o755)
+	write(two, "gnoshctl", 0o700)
+	write(two, "other", 0o755)
+	if err := os.Mkdir(filepath.Join(two, "gnoshdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := strings.Join([]string{one, "relative/bin", two}, string(os.PathListSeparator))
+	got := pathPrograms(path, "gnosh")
+	slices.Sort(got)
+	if strings.Join(got, ",") != "gnoshctl,gnoshy" {
+		t.Errorf("found %q", got)
+	}
+	if got := pathPrograms("", "gnosh"); len(got) != 0 {
+		t.Errorf("an empty PATH gave %q", got)
+	}
+}

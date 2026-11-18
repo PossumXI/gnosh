@@ -1502,3 +1502,23 @@ or kept with the reason said (27).
     agent's own server never takes part in channels, and one that wants a
     sign-in is refused with how to give it one; the session run as an
     agent is offered only the MCP tools its definition lists.
+
+96. **Shell mode's Tab and history, and respondToBashCommands, as Claude
+    Code's.** A command run behind `!` is kept in the session's file as a
+    meta entry ("shell"), so the prompt history holds it, with its `!`, in
+    the folder's later sessions too (the hidden prompt that hands its
+    output to the model never was history). Tab on a shell line offers,
+    first, at most five commands run before that begin with the line typed
+    so far, the newest first, when the cursor is at the line's end; then
+    for the word at the cursor, where a command goes (the first word, a
+    word after &&, ||, ;, |, & or "(", or after sudo, time, env, xargs,
+    then, do and their like), the shell's own commands and the programs on
+    the PATH, and anywhere else the files. An option, a quoted, computed
+    or pattern word gets nothing, and the @ mention is not offered in a
+    shell line. The list opens on Tab only, never while the line is typed,
+    because Enter on an open list takes the candidate and a shell line
+    must run as typed. The respondToBashCommands option (default true; in
+    /config, live) with false puts the command and its output in front of
+    the model with the next prompt, as a stopped command already was,
+    instead of starting a turn. This replaces the last words of 94 (Tab
+    in a shell line completed only paths).

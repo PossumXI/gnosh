@@ -88,6 +88,9 @@ type config struct {
 	// project lists the project in a directory for the fuzzy @ search
 	// (mention.go), or is nil for none.
 	project func(dir string) []string
+	// programs lists the programs whose names begin with a prefix, for
+	// shell mode's Tab (shellcomplete.go), or is nil for none.
+	programs func(prefix string) []string
 }
 
 // phase is what the session is doing, as the line above the prompt box
@@ -198,6 +201,7 @@ type session struct {
 	cwd, home  string
 	branchOf   func(string) string
 	listDir    func(string) []fileEntry
+	programs   func(string) []string
 	// listProject and index are the fuzzy @ search's lister and what it
 	// last listed (mention.go).
 	listProject func(string) []string
@@ -349,7 +353,7 @@ func newSession(cfg config) *session {
 		th: cfg.theme, profile: cfg.profile, light: cfg.light, themed: cfg.themed,
 		m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, inline: cfg.renderer, host: cfg.host,
 		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), termCols: max(cfg.cols, 1), home: cfg.home,
-		branchOf: cfg.branch, listDir: cfg.files, listProject: cfg.project, selectKey: cfg.selectKey,
+		branchOf: cfg.branch, listDir: cfg.files, listProject: cfg.project, programs: cfg.programs, selectKey: cfg.selectKey,
 		facts: map[string]string{},
 	}
 	if s.now == nil {

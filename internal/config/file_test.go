@@ -290,6 +290,7 @@ func TestOptions(t *testing.T) {
     "preferredNotifChannel": "terminal_bell",
     "vimInsertModeRemaps": ["jj", "jk"],
     "promptSuggestionEnabled": true,
+    "respondToBashCommands": false,
     "theme": "light",
     "viewMode": "focus"
   }
@@ -334,6 +335,7 @@ func TestOptions(t *testing.T) {
 	check("preferredNotifChannel", o.PreferredNotifChannel.V, "terminal_bell")
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 	check("promptSuggestionEnabled", o.PromptSuggestionEnabled.V, true)
+	check("respondToBashCommands", o.RespondToBashCommands.V, false)
 	check("theme", o.Theme.V, "light")
 	check("viewMode", o.ViewMode.V, "focus")
 

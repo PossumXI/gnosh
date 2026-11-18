@@ -79,6 +79,24 @@ func (e *Editor) AddHistory(d Draft) {
 	e.hist = append(e.hist, entry{text: t})
 }
 
+// Sent returns the history's entries that were sent, the newest first,
+// each once: without the drafts the person cleared, and without the ones
+// that hold a collapsed paste or more than one line, which are not
+// offered as a completion.
+func (e *Editor) Sent() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := len(e.hist) - 1; i >= 0; i-- {
+		h := e.hist[i]
+		if h.gone || h.cleared || seen[h.text] || strings.Contains(h.text, marksLead) || strings.Contains(h.text, "\n") {
+			continue
+		}
+		seen[h.text] = true
+		out = append(out, h.text)
+	}
+	return out
+}
+
 // SetSearchHistory gives the editor a wider list for Ctrl+R to search
 // than the one Up and Down walk (Claude Code searches the prompts of
 // every project), oldest first. Nil means search the same list.

@@ -638,6 +638,7 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 		metrics: u.m, now: u.now, controls: c, renderer: u.r, host: u,
 		cols: cols, rows: rows, home: u.env("HOME"), selectKey: selectKey(termProgram(u.env)),
 		branch: gitBranch, files: listDir, project: listProject,
+		programs: func(prefix string) []string { return pathPrograms(u.env("PATH"), prefix) },
 	})
 	u.s = s
 	s.start()

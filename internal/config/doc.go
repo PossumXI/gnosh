@@ -114,6 +114,8 @@
 //	  autoCompactWindow        tokens of context before room is made
 //	  loopMaxTurns             an optional cap on /loop
 //	  maxBackgroundTasks       background commands that may run at once
+//	  respondToBashCommands    the model answers a command run behind !
+//	                           when it ends; false waits for the next prompt
 //	  userInstructionFiles     more instruction files of the person's own
 //	  projectInstructionFiles  more instruction files of the project
 //	  hiddenSkills             skills to hide from the model

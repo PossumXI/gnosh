@@ -47,6 +47,10 @@ type Options struct {
 	MaxBackgroundTasks Value[int]
 	// MemReviewCloses switches the review of a closed todo.
 	MemReviewCloses Value[bool]
+	// RespondToBashCommands says the model answers what a command the
+	// person ran behind "!" printed, as soon as it has ended. Off, the
+	// command and its output wait for the person's next prompt.
+	RespondToBashCommands Value[bool]
 
 	// UserInstructionFiles are more instruction files of the person's own,
 	// read in every project: files, or folders of Markdown files, as
@@ -121,6 +125,7 @@ func defaultOptions() Options {
 	o.AutoCompactEnabled.V = true
 	o.MaxBackgroundTasks.V = 50
 	o.MemReviewCloses.V = true
+	o.RespondToBashCommands.V = true
 	o.MemoryText.V = "lean"
 	o.DeliverablesServer.V = DefaultDeliverablesServer
 	o.ProjectDataDir.V = ".gnosh"
@@ -194,6 +199,10 @@ var optionDefs = []optionDef{
 		what: "background commands that may run at once", from: fromPlain + ", with Claude Code's word for them (background tasks)",
 		bounded: true, min: 1, max: 100000,
 		num: func(o *Options) *Value[int] { return &o.MaxBackgroundTasks }},
+	{key: "respondToBashCommands", kind: oBool, def: "true",
+		what:  "the model answers what a command you ran behind ! printed, as soon as it ends; false puts the command and its output in front of the model with your next prompt instead",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.RespondToBashCommands }},
 
 	// What the model reads.
 	{key: "userInstructionFiles", kind: oPathList, def: "none beyond your GNOSH.md and AGENTS.md",

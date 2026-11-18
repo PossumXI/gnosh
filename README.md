@@ -174,7 +174,12 @@ screen, Ctrl+B moves a running command to the background, `@path` in a prompt
 brings that file (or a directory's listing) along with it (`@focus` offers
 the project's files whose paths hold the word, as Claude Code's `@` does),
 and a line that
-begins with `!` is a command of your own. With nothing after them, `/model`,
+begins with `!` is a command of your own: the model answers what it printed
+(with `"options": {"respondToBashCommands": false}` it waits for your next
+prompt instead), Up brings it back in the folder's later sessions, and Tab
+offers the commands you ran before that begin with what you typed, the
+programs on the PATH where a command goes (also after `&&`, `;` or `|`), and
+files anywhere else. With nothing after them, `/model`,
 `/effort`, `/config`, `/export`, `/memory`, `/mcp`, `/permissions` and
 `/skills` open pickers, `/hooks` a browser of the hooks in force and
 `/agents` one of the kinds of sub-agent, as Claude Code's do (`/permissions allow`, `ask`,
