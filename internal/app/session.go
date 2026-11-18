@@ -262,6 +262,13 @@ type live struct {
 	crons  cronBook
 	loopMu sync.Mutex
 	self   *selfLoop
+	// chanRates counts what each channel pushed in the present minute
+	// (channel.go), under chanMu.
+	chanMu    sync.Mutex
+	chanRates map[string]*channelRate
+	// pushLast is when the last notification PushNotification asked for
+	// was sent (pushtool.go).
+	pushLast atomic.Pointer[time.Time]
 	// notif is the notification channel /config set while the session
 	// runs; "" is the configuration's.
 	notifMu sync.Mutex

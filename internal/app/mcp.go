@@ -155,9 +155,10 @@ func (l *live) connectMCP(s *mcpServer) {
 	ctx, cancel := context.WithTimeout(l.ctx, timeout)
 	defer cancel()
 	opt := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(l.p.o.BuildID, "devel"), StartTimeout: timeout}
-	if l.channelNamed(s.cfg.Name) {
+	if l.channelNamed(s.cfg.Name) && s.cfg.Type != "http" {
 		// A channel's events (the client hears only a server that declared
-		// itself one).
+		// itself one). A channel runs on this machine: one reached at a URL
+		// is not heard (channelsNotice says so).
 		opt.OnChannel = func(content string, meta map[string]string) {
 			l.channelEvent(s.cfg.Name, content, meta)
 		}
@@ -201,7 +202,7 @@ func (l *live) connectMCP(s *mcpServer) {
 	s.status, s.client, s.tools, s.prompts, s.since = "connected", client, made, prompts, l.p.now()
 	l.mcp.mu.Unlock()
 	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
-	if l.channelNamed(s.cfg.Name) {
+	if l.channelNamed(s.cfg.Name) && s.cfg.Type != "http" {
 		info := client.Info()
 		l.channelConnected(s.cfg.Name, info.Channel, info.Instructions)
 	}

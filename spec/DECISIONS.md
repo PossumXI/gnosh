@@ -1213,10 +1213,16 @@ or kept with the reason said (27).
     the same flag: there is no list of approved channels to step past,
     and no plugins). Each event is put in front of the model as a
     <channel source="name" key="value"> block (meta keys that are not
-    identifiers dropped, as Claude Code drops them; the content is an
-    outside source's words, and a </channel> in it is broken up), waking
-    an idle session, and the person sees "← name: content". A server
-    that does not declare itself a channel is not heard, and a channel's
+    identifiers dropped, as Claude Code drops them, and so are source
+    and role), waking an idle session, and the person sees "← name:
+    content". Each block comes after a line of gnosh's own saying it is
+    an outside source's words, never the user's, so that the word
+    survives a summary; the content has &, < and > written as entities,
+    so nothing in it closes the block or reads as gnosh's tag, and is
+    cut at 16 KiB. A channel pushes 30 events a minute at most: the rest
+    of the minute's are dropped, and the person is told once. A server
+    that does not declare itself a channel is not heard, nor is one
+    reached at a URL (a channel runs on this machine), and a channel's
     instructions are put in front of the model as it connects. The use:
     a CI webhook or a chat bridge reaching the session on an always-on
     box. Not built: relaying permission questions to a channel
@@ -1232,5 +1238,7 @@ or kept with the reason said (27).
     this type to a phone service is gnosh's way). When a key was pressed
     in the last half minute the person is at the terminal and nothing is
     sent, as in Claude Code, and the model is told so; the plain
-    interface sends none. Offered in attended sessions, quiet in the
-    permission engine.
+    interface sends none. One is sent a minute at most, and the text
+    loses its control characters (a terminal acts on an escape or a
+    bell) and the marks that turn text around. Offered in attended
+    sessions, quiet in the permission engine.

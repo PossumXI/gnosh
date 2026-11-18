@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -19,11 +20,18 @@ import (
 // push_notification, which a hook can forward to a phone. When the person
 // is at the terminal (a key pressed in the last half minute) nothing is
 // sent, as in Claude Code: what the model writes reaches them already.
+// One is sent in a minute at most, so that a model in a loop cannot keep
+// calling the person; the text is one line, without control characters,
+// which a terminal would act on.
 
 const pushName = "PushNotification"
 
-// pushWait is how long the tool waits for the front end's word.
-const pushWait = 2 * time.Second
+// pushWait is how long the tool waits for the front end's word, and
+// pushEvery the least time between two notifications sent.
+const (
+	pushWait  = 2 * time.Second
+	pushEvery = time.Minute
+)
 
 // pushTool is PushNotification.
 type pushTool struct{ l *live }
@@ -53,10 +61,18 @@ func (t *pushTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	if msg == "" {
 		return core.ErrorResult("The message is empty: nothing was sent."), nil
 	}
+	l := t.l
+	if last := l.pushLast.Load(); last != nil && l.p.now().Sub(*last) < pushEvery {
+		return core.TextResult("Notification not sent: one was sent less than a minute ago."), nil
+	}
 	reply := make(chan string, 1)
-	t.l.deliver(&PushEvent{Message: msg, Reply: reply})
+	l.deliver(&PushEvent{Message: msg, Reply: reply})
 	select {
 	case said := <-reply:
+		if strings.HasPrefix(said, "sent") {
+			now := l.p.now()
+			l.pushLast.Store(&now)
+		}
 		return core.TextResult("Notification " + said + "."), nil
 	case <-time.After(pushWait):
 		return core.TextResult("Notification not sent: this session's interface does not send notifications."), nil
@@ -66,8 +82,19 @@ func (t *pushTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 }
 
 // pushText is a notification's text: one line, its blanks folded, cut to
-// 200 characters.
+// 200 characters. Control characters (an escape, a bell, which a terminal
+// acts on) count as blanks, and the marks that turn the direction of text
+// around, which can make a line read as another, are left out.
 func pushText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.Is(unicode.Bidi_Control, r):
+			return -1
+		case unicode.IsControl(r):
+			return ' '
+		}
+		return r
+	}, strings.ToValidUTF8(s, ""))
 	s = strings.Join(strings.Fields(s), " ")
 	if utf8.RuneCountInString(s) <= 200 {
 		return s
