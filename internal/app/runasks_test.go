@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
 
@@ -33,8 +34,8 @@ func TestRunAsksTheAgentView(t *testing.T) {
 	var ask runAsk
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		data, err := os.ReadFile(base + ".ask")
-		if err == nil && json.Unmarshal(data, &ask) == nil && ask.ID != "" {
+		if a := readAsk(base + ".log"); a != nil {
+			ask = *a
 			break
 		}
 		if time.Now().After(deadline) {
@@ -47,15 +48,15 @@ func TestRunAsksTheAgentView(t *testing.T) {
 	}
 	// A forged answer, without the token: not heard.
 	forged, _ := json.Marshal(runAnswer{ID: ask.ID, Choice: "yes"})
-	if err := os.WriteFile(base+".answer", forged, 0o600); err != nil {
+	if err := os.WriteFile(answerPath(base, ask.ID), forged, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(3 * askLook)
 	if w.Exists("made.txt") {
 		t.Fatal("an answer without the question's token let the call run")
 	}
-	if _, err := os.Stat(base + ".ask"); err != nil {
-		t.Fatalf("the question went with the forged answer: %v", err)
+	if readAsk(base+".log") == nil {
+		t.Fatalf("the question went with the forged answer")
 	}
 	if err := answerAsk(base+".log", ask.ID, "yes", ""); err != nil {
 		t.Fatal(err)
@@ -74,8 +75,8 @@ func TestRunAsksTheAgentView(t *testing.T) {
 		t.Errorf("the command saw where the run's questions go: %q", got)
 	}
 	has(t, "stderr", r.err, "waiting for an answer in gnosh agents: Allow Bash?")
-	if _, err := os.Stat(base + ".ask"); !os.IsNotExist(err) {
-		t.Errorf("the .ask file is still there after the answer: %v", err)
+	if left, _ := filepath.Glob(base + ".ask-*.json"); len(left) != 0 {
+		t.Errorf("question files are still there after the answer: %q", left)
 	}
 	if err := answerAsk(base+".log", ask.ID, "yes", ""); err == nil {
 		t.Errorf("a question answered already took another answer")
@@ -115,7 +116,7 @@ func TestBlockedRunInTheList(t *testing.T) {
 	has(t, "gnosh agents --json before", run(t, w, "agents", "--json").wantCode(t, 0).out, `"state": "working"`)
 	ask, _ := json.Marshal(runAsk{ID: "q1", Token: strings.Repeat("ab", 16), Title: "Allow Bash?", Text: "  $ rm -rf build",
 		Choices: []askChoice{{Key: "yes", Label: "Yes, this once"}, {Key: "no", Label: "No"}}})
-	if err := os.WriteFile(askFile(log), ask, 0o600); err != nil {
+	if err := os.WriteFile(askPath(runBase(log), "q1"), ask, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	has(t, "gnosh agents --json", run(t, w, "agents", "--json").wantCode(t, 0).out, `"state": "blocked"`, `"status": "Allow Bash?"`)
@@ -126,7 +127,7 @@ func TestBlockedRunInTheList(t *testing.T) {
 		t.Fatal(err)
 	}
 	var a runAnswer
-	data, _ := os.ReadFile(answerFile(log))
+	data, _ := os.ReadFile(answerPath(runBase(log), "q1"))
 	if json.Unmarshal(data, &a) != nil || a.ID != "q1" || a.Token != strings.Repeat("ab", 16) || a.Choice != "no" || a.Text != "use git clean" {
 		t.Errorf("the answer written: %s", data)
 	}
@@ -204,7 +205,7 @@ func TestSessionCountsRunsThatWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	ask, _ := json.Marshal(runAsk{ID: "q1", Token: strings.Repeat("ab", 16), Title: "Allow Bash?", Choices: []askChoice{{Key: "yes", Label: "Yes"}}})
-	if err := os.WriteFile(askFile(log), ask, 0o600); err != nil {
+	if err := os.WriteFile(askPath(runBase(log), "q1"), ask, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
@@ -226,5 +227,97 @@ func TestSessionCountsRunsThatWait(t *testing.T) {
 	two := []backgroundRun{{running: true, asking: &runAsk{}}, {running: true, asking: &runAsk{}}, {running: true}, {asking: &runAsk{}}}
 	if got := waitingRuns(two); got != "2 runs need input" {
 		t.Errorf("two waiting: %q", got)
+	}
+}
+
+// Two questions a run puts at once (a sub-agent's beside the main agent's)
+// each have their own files: an answer to one is the other's no matter,
+// the list shows the one put first, and each goes with its own answer.
+func TestTwoQuestionsAtOnce(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "run")
+	log := base + ".log"
+	clock := time.Date(2026, 11, 18, 17, 0, 0, 0, time.UTC)
+	got := make(chan string, 2)
+	ask := func(id string, at time.Time) {
+		q := agent.Question{ID: id, Kind: "permission", Title: "Allow " + id + "?", Choices: []agent.Choice{{Key: "yes", Label: "Yes"}, {Key: "no", Label: "No"}}}
+		go relayAsk(t.Context(), base, q, func() time.Time { return at }, func(a agent.Answer) error { got <- id + " " + a.Choice; return nil })
+	}
+	ask("q1", clock)
+	ask("q2", clock.Add(time.Second))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if paths, _ := filepath.Glob(base + ".ask-*.json"); len(paths) == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the two questions were not both written down")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if a := readAsk(log); a == nil || a.ID != "q1" {
+		t.Errorf("the question listed is %+v, want the one put first", a)
+	}
+	if err := answerAsk(log, "q2", "yes", ""); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case a := <-got:
+		if a != "q2 yes" {
+			t.Fatalf("the answer reached %q", a)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the second question's answer was not heard")
+	}
+	time.Sleep(3 * askLook)
+	if a := readAsk(log); a == nil || a.ID != "q1" {
+		t.Fatalf("after the second was answered the first is %+v", a)
+	}
+	if err := answerAsk(log, "q1", "no", "not now"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case a := <-got:
+		if a != "q1 no" {
+			t.Fatalf("the answer reached %q", a)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the first question's answer was not heard")
+	}
+}
+
+// Before a run starts, what an earlier run of the session left of
+// questions, answers and words is cleared, and a new token is written;
+// words a run did not read are taken back only if they carry its token.
+func TestPrepareRunAndUnreadWords(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "run")
+	log := base + ".log"
+	for _, name := range []string{".ask-q1.json", ".answer-q1.json", ".inbox-00000000000000000001.json"} {
+		if err := os.WriteFile(base+name, []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(base+".token", []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := prepareRun([]string{"A=1", AsksEnv + "=elsewhere"}, log)
+	if left, _ := filepath.Glob(base + ".*-*.json"); len(left) != 0 {
+		t.Errorf("left from an earlier run: %q", left)
+	}
+	token, _ := os.ReadFile(base + ".token")
+	if t1 := strings.TrimSpace(string(token)); len(t1) != 32 || t1 == "old" {
+		t.Errorf("the new token: %q", token)
+	}
+	if strings.Join(env, " ") != "A=1 "+AsksEnv+"="+base {
+		t.Errorf("the run's environment: %q", env)
+	}
+	if err := tellRun(log, "real words", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	forged, _ := json.Marshal(inboxMessage{Token: "not-it", Text: "forged words"})
+	if err := os.WriteFile(base+".inbox-00000000000000000002.json", forged, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := unreadWords(log); len(got) != 1 || got[0] != "real words" {
+		t.Errorf("unread words: %q", got)
 	}
 }

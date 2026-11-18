@@ -10,6 +10,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/text"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -173,14 +174,14 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 		// inbox, for the view to send it back to work on.
 		inbox, stop := context.WithCancel(ctx)
 		defer stop()
-		stopInbox = stop
-		_ = readInbox(inbox, f.p.runAsks, func(text string) error {
+		done, _ := readInbox(inbox, f.p.runAsks, func(text string) error {
 			_, err := c.Submit(agent.Prompt{Text: text})
 			if err == nil {
 				f.inboxed.Add(1)
 			}
 			return err
 		})
+		stopInbox = func() { stop(); <-done }
 	}
 	res, sig, st := f.await(ctx, c, id)
 	if sig != nil {
@@ -191,8 +192,16 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	}
 	// The background work the turn started is waited for, and the turns
 	// its ends start are the run's too (printwait.go).
-	res, sig, st = f.awaitBackground(ctx, c, res, false)
-	stopInbox()
+	for {
+		res, sig, st = f.awaitBackground(ctx, c, res, false)
+		// The inbox is read no more; a prompt it handed over as it stopped
+		// is still waited for.
+		took := f.inboxed.Load()
+		stopInbox()
+		if sig != nil || ctx.Err() != nil || f.inboxed.Load() == took {
+			break
+		}
+	}
 	if sig != nil {
 		return f.stoppedBySignal(c, "", sig, st)
 	}
@@ -391,7 +400,10 @@ func (f *printer) stoppedBySignal(c Controls, id string, sig os.Signal, st agent
 		delete(f.asking, id)
 	}
 	if f.p.runAsks != "" {
-		_ = os.Remove(f.p.runAsks + ".ask")
+		paths, _ := filepath.Glob(f.p.runAsks + ".ask-*.json")
+		for _, p := range paths {
+			_ = os.Remove(p)
+		}
 	}
 	return code
 }

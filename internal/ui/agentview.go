@@ -208,8 +208,12 @@ func (v *agentView) refresh() {
 	v.runs = v.src.Runs()
 	v.sortRuns()
 	doing, status := map[string][]string{}, map[string]string{}
+	// (Those the person stopped are told of no more, and get no words
+	// again.)
+	stopped := map[string]bool{}
 	for _, r := range v.runs {
 		if !running(r) {
+			stopped[r.ID] = v.stopping[r.ID] || r.State == "stopped"
 			delete(v.stopping, r.ID)
 			continue
 		}
@@ -227,7 +231,7 @@ func (v *agentView) refresh() {
 		case !v.seen || r.State == was:
 		case r.State == "blocked" && r.Question != nil:
 			v.notes = append(v.notes, runName(r)+" needs input: "+oneLine(r.Question.Title))
-		case r.State == "done" && (!known || was == "working" || was == "blocked"):
+		case r.State == "done" && !stopped[r.ID] && (!known || was == "working" || was == "blocked"):
 			last := "it printed nothing"
 			if len(r.Output) > 0 {
 				last = oneLine(r.Output[len(r.Output)-1])
@@ -243,6 +247,12 @@ func (v *agentView) refresh() {
 			continue
 		}
 		delete(v.told, r.ID)
+		if stopped[r.ID] {
+			if unread := v.src.Unread(r.ID); len(unread) > 0 {
+				v.say("%s was stopped before it read your words: %s", runName(r), oneLine(strings.Join(unread, " ")))
+			}
+			continue
+		}
 		if unread := v.src.Unread(r.ID); len(unread) > 0 {
 			v.resume(r, strings.Join(unread, "\n\n"), "ended before it read your words, and goes on with them in the background")
 		}
@@ -615,13 +625,19 @@ func (v *agentView) key(k term.Key) {
 		if r, ok := v.chosen(); ok {
 			v.reply(r, strings.TrimSpace(v.box.Text()))
 		}
-	case !empty && v.answering() && k.IsKey(term.KeyEnter, 0):
+	case !empty && v.answering() && !v.viewWords() && k.IsKey(term.KeyEnter, 0):
+		// Words for the question: no, with them.
 		r, _ := v.chosen()
+		no := false
 		for _, c := range r.Question.Choices {
 			if c.Key == "no" {
+				no = true
 				v.answer(r, c, strings.TrimSpace(v.box.Text()))
 				v.box.Reset()
 			}
+		}
+		if !no {
+			v.say("This question takes no words: a number answers it.")
 		}
 	case empty && typedRune(k, ' '):
 		v.peek, v.help = !v.peek, false
@@ -655,8 +671,9 @@ func (v *agentView) enter() {
 		return
 	}
 	switch {
-	case r.Question != nil:
-		// What it asks is shown, to be answered.
+	case r.Question != nil && !v.peek:
+		// What it asks is shown, to be answered; Enter again watches the
+		// conversation, where a long question is whole.
 		v.peek, v.help = true, false
 		return
 	case running(r):
@@ -670,11 +687,18 @@ func (v *agentView) enter() {
 // at: not a filter or a command of the view's (/model ... ), which keep
 // their meaning while peeking.
 func (v *agentView) replying() bool {
-	if !v.peek || v.help || v.answering() || strings.HasPrefix(strings.TrimSpace(v.box.Text()), "/") {
-		return false
+	return v.peek && !v.help && !v.answering() && !v.viewWords()
+}
+
+// viewWords reports whether what is in the box is the view's own: a
+// command (/model ... ) or a filter, which keep their meaning whatever is
+// peeked at or asked.
+func (v *agentView) viewWords() bool {
+	if strings.HasPrefix(strings.TrimSpace(v.box.Text()), "/") {
+		return true
 	}
 	_, isFilter := v.boxFilter()
-	return !isFilter
+	return isFilter
 }
 
 // answering reports whether the question of the run chosen is on the
@@ -725,15 +749,15 @@ func (v *agentView) resume(r app.AgentRun, text, done string) {
 	name := runName(r)
 	v.starting++
 	v.say("Sending %s back to work …", name)
-	src := v.src
+	src, flags := v.src, slices.Clone(v.flags)
 	v.async(func() func(*agentView) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		err := src.Resume(ctx, r.ID, text, v.flags)
+		err := src.Resume(ctx, r.ID, text, flags)
 		return func(v *agentView) {
 			v.starting--
 			if err != nil {
-				v.say("%s did not go on: %v.", name, err)
+				v.say("%s did not go on (%v); your words were: %s", name, err, oneLine(text))
 				return
 			}
 			v.refresh()
@@ -1096,6 +1120,13 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 			under = v.peekLines(r, width)
 		}
 	}
+	if over := len(under) + len(body) + 1 - room; over > 0 && len(under) > 3 {
+		// What peeking shows is too tall: the lines after its head go
+		// first, so that a question's answers stay in sight.
+		cut := min(over+1, len(under)-3)
+		marker := th.Quiet.Render(fit(v.m, fmt.Sprintf("  … %s more (Enter watches the conversation, where it is whole)", count(cut, "line", "lines")), width))
+		under = append([]string{under[0], marker}, under[1+cut:]...)
+	}
 	listRoom := max(room-len(body)-len(under), 1)
 
 	var list []string
@@ -1296,6 +1327,8 @@ func (v *agentView) hintLine() string {
 	_, isFilter := v.boxFilter()
 	var parts []string
 	switch {
+	case v.answering() && text != "" && !v.viewWords():
+		parts = []string{"Enter answers no, with your words", "Esc empties the box"}
 	case isFilter:
 		parts = []string{"Enter opens the run chosen", "Esc empties the box"}
 	case text != "" && v.replying():
@@ -1314,7 +1347,7 @@ func (v *agentView) hintLine() string {
 		parts = []string{start, "Esc empties the box"}
 	case v.answering():
 		r, _ := v.chosen()
-		parts = []string{fmt.Sprintf("1-%d answers", len(r.Question.Choices)), "words and Enter: no, with them", "Esc closes"}
+		parts = []string{fmt.Sprintf("1-%d answers", len(r.Question.Choices)), "words and Enter: no, with them", "Enter watches", "Esc closes"}
 	default:
 		parts = []string{"↑↓ choose", "Space peeks"}
 		r, ok := v.chosen()

@@ -118,7 +118,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		name = readRunLog(log, id, time.Time{}).name
 	}
 	p.logHead(log, id, name, st.cfg.Paths.Cwd, file, prompt)
-	pid, err := p.o.Detach(run, runEnv(p.o.Environ, log), log)
+	pid, err := p.o.Detach(run, prepareRun(p.o.Environ, log), log)
 	if err != nil {
 		p.errf("the session could not be started in the background (%v).", err)
 		return cli.ExitFailure

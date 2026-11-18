@@ -2038,3 +2038,24 @@ or kept with the reason said (27).
     opens as gnosh -r opens it, the view coming back when that session is
     left. With no terminal it says that gnosh logs -f follows the run.
     gnosh --bg's hints name it.
+
+127. **After a review of the agent view's day of work.** A reviewer read
+    the view, the question and inbox files and --bg's resuming afresh,
+    and found ten things; these were fixed. Two questions a run puts at
+    once (a sub-agent's beside the main agent's) shared one .ask and one
+    .answer, so one could be lost and its run wait unseen: each question
+    now has its own pair, <base>.ask-<id>.json and .answer-<id>.json, and
+    the list shows the one put first. Before a run starts (gnosh --bg,
+    /background, /fork) what an earlier run of its session left of
+    questions, answers and words is cleared, and its token is written
+    then, so that words sent in its first moment carry it. With a question
+    shown, a command or a filter typed in the box keeps its meaning
+    instead of answering no; a long question keeps its head and its answers
+    in sight, and Enter again watches the conversation, where it is whole.
+    A run the person stopped is not told of as done and is not sent words
+    again; the inbox reader is waited for as a run ends, and a prompt it
+    handed over as it stopped is still waited for; renaming a run that is
+    over keeps the time it ended, and the rename line names the session.
+    The token is honest about what it guards: it stops a model that writes
+    the answer or inbox file blind; code the model runs without being asked
+    (-y, broad allow rules) could read it, as it could do anything else.

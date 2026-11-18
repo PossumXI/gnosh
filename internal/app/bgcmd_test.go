@@ -352,7 +352,7 @@ func TestBackgroundGoesOnWithASession(t *testing.T) {
 	// A name given (the agent view's Ctrl+R) is the run's, and a run sent
 	// back to work keeps it.
 	log := strings.TrimSuffix(session, ".jsonl") + ".background.log"
-	if err := renameRun(log, "nightly", time.Now()); err != nil {
+	if err := renameRun(log, id, "nightly", time.Now(), true); err != nil {
 		t.Fatal(err)
 	}
 	if r := readRunLog(log, id, time.Time{}); r.name != "nightly" {

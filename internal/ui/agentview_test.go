@@ -552,7 +552,7 @@ func TestAgentViewNeedsInput(t *testing.T) {
 			t.Errorf("the question does not show %q:\n%s", want, all)
 		}
 	}
-	if live[len(live)-1] != "1-3 answers · words and Enter: no, with them · Esc closes" || g.v.watch != nil {
+	if live[len(live)-1] != "1-3 answers · words and Enter: no, with them · Enter watches · Esc closes" || g.v.watch != nil {
 		t.Errorf("the keys line while answering: %q", live[len(live)-1])
 	}
 	g.keys(`"1"`)
@@ -777,5 +777,84 @@ func TestAgentViewAttach(t *testing.T) {
 	g.v.focusOn("01a1eea5-0000-7000-8000-000000000000")
 	if _, live := g.screen(); live[len(live)-1] != "The run 01a1eea5-0000 is not among the runs in the background." {
 		t.Errorf("attached to no run: %q", live[len(live)-1])
+	}
+}
+
+// While a question is shown, a command or a filter typed in the box keeps
+// its meaning and does not answer it; other words answer no, with them,
+// as the keys line says. A question too long for the screen keeps its
+// head and its answers in sight, and Enter again watches the whole.
+func TestAgentViewAnsweringKeepsCommands(t *testing.T) {
+	g := newAgentRig(t)
+	long := strings.Repeat("a line of the plan\n", 30)
+	g.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q9", Title: "Carry out this plan?", Text: long,
+			Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes, carry it out"}, {Key: "no", Label: "No, keep planning"}}}
+	})
+	g.v.refresh()
+	g.v.sel = runDocs
+	g.keys("<Enter>")
+	body, live := g.screen()
+	all := strings.Join(body, "\n")
+	if !strings.Contains(all, "  1. Yes, carry it out") || !strings.Contains(all, "  2. No, keep planning") || !strings.Contains(all, "more (Enter watches the conversation, where it is whole)") {
+		t.Errorf("a long question at 20 rows:\n%s", all)
+	}
+	if len(body)+len(live) != 20 {
+		t.Errorf("the frame is %d rows", len(body)+len(live))
+	}
+	g.keys(`"/rename planner" <Enter>`)
+	if len(g.src.answered) != 0 || !slices.Equal(g.src.renamed, []string{runDocs + " planner"}) {
+		t.Errorf("/rename while a question is shown: answered %q, renamed %q", g.src.answered, g.src.renamed)
+	}
+	g.v.peek = true
+	g.keys(`"use smaller steps"`)
+	if _, live = g.screen(); live[len(live)-1] != "Enter answers no, with your words · Esc empties the box" {
+		t.Errorf("the keys line with words for the question: %q", live[len(live)-1])
+	}
+	g.keys("<Enter>")
+	if !slices.Equal(g.src.answered, []string{runDocs + " q9 no use smaller steps"}) {
+		t.Errorf("words and Enter answered %q", g.src.answered)
+	}
+	// Enter again, on a question shown, watches the conversation.
+	g.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q10", Title: "Allow Bash?", Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}}}
+	})
+	g.v.refresh()
+	g.v.sel, g.v.peek = runDocs, true
+	g.keys("<Enter>")
+	if g.v.watch == nil || g.v.watch.id != runDocs {
+		t.Errorf("Enter on a question shown did not watch the run")
+	}
+}
+
+// A run the person stopped is not told of as done, and words it was sent
+// and did not read are not sent again: they are said.
+func TestAgentViewStoppedBeforeItRead(t *testing.T) {
+	g := newAgentRig(t)
+	g.v.sel, g.v.peek = runTests, true
+	g.keys(`"and the docs too" <Enter> <Ctrl+X>`)
+	if !slices.Equal(g.src.stopped, []string{runTests}) {
+		t.Fatalf("stopped %q", g.src.stopped)
+	}
+	g.src.unread = map[string][]string{runTests: {"and the docs too"}}
+	g.v.notes = nil
+	g.v.refresh()
+	if len(g.src.resumed) != 0 {
+		t.Errorf("a stopped run was sent back to work: %q", g.src.resumed)
+	}
+	for _, n := range g.v.notes {
+		if strings.Contains(n, "is done") {
+			t.Errorf("a stopped run was told of as done: %q", n)
+		}
+	}
+	// (Stopping made it "stopped" in the fake; one whose log says done
+	// while it was being stopped is not told of either.)
+	g.v.stopping[runDocs] = true
+	g.src.set(runDocs, func(r *app.AgentRun) { r.State, r.Ended = "done", g.clk.Now() })
+	g.v.refresh()
+	for _, n := range g.v.notes {
+		if strings.Contains(n, "docs is done") {
+			t.Errorf("a run being stopped was told of as done: %q", n)
+		}
 	}
 }

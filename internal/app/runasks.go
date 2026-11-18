@@ -33,11 +33,25 @@ import (
 // it starts, as it does RestartedEnv: nothing it starts may see it.
 const AsksEnv = "GNOSH_RUN_ASKS"
 
-// runEnv is the environment of a run in the background whose log is
-// log: this one's, and where its questions go.
-func runEnv(environ []string, log string) []string {
+// prepareRun readies the files of a run in the background whose log is
+// log, before it starts and before it can be listed as working: what an
+// earlier run of the session left of questions, answers and words is
+// cleared, and a new token is written, which words sent to the run must
+// carry from its first moment. It returns the run's environment: this
+// one's, and where its questions go.
+func prepareRun(environ []string, log string) []string {
+	base := runBase(log)
+	for _, pattern := range []string{".ask-*.json", ".answer-*.json", ".inbox-*.json"} {
+		paths, _ := filepath.Glob(base + pattern)
+		for _, p := range paths {
+			_ = os.Remove(p)
+		}
+	}
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	_ = writeFileAtomic(base+".token", []byte(hex.EncodeToString(b[:])+"\n"))
 	env := slices.DeleteFunc(slices.Clone(environ), func(kv string) bool { return strings.HasPrefix(kv, AsksEnv+"=") })
-	return append(env, AsksEnv+"="+strings.TrimSuffix(log, ".log"))
+	return append(env, AsksEnv+"="+base)
 }
 
 // askLook is how often a run looks for the answer to its question.
@@ -67,10 +81,24 @@ type runAnswer struct {
 	Text   string `json:"text,omitempty"`
 }
 
-// askFile and answerFile are where the questions of the run whose log is
-// log go.
-func askFile(log string) string    { return strings.TrimSuffix(log, ".log") + ".ask" }
-func answerFile(log string) string { return strings.TrimSuffix(log, ".log") + ".answer" }
+// askPath and answerPath are the files of the question id of the run whose
+// files begin at base: one pair for each question, so that two put at once
+// (a sub-agent's beside the main agent's) never share one.
+func askPath(base, id string) string    { return base + ".ask-" + fileKey(id) + ".json" }
+func answerPath(base, id string) string { return base + ".answer-" + fileKey(id) + ".json" }
+
+// fileKey is a question's id as a part of a file's name.
+func fileKey(id string) string {
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return hex.EncodeToString([]byte(id))
+		}
+	}
+	return id
+}
+
+// runBase is where the files of the run whose log is log begin.
+func runBase(log string) string { return strings.TrimSuffix(log, ".log") }
 
 // writeFileAtomic writes data to path in one step: a reader sees the old
 // file or the whole new one.
@@ -104,13 +132,14 @@ func relayAsk(ctx context.Context, base string, q agent.Question, now func() tim
 		ask.Choices = append(ask.Choices, askChoice{Key: c.Key, Label: c.Label})
 	}
 	data, _ := json.Marshal(ask)
-	asks, answers := base+".ask", base+".answer"
-	_ = os.Remove(answers) // (an answer to an earlier question)
+	asks, answers := askPath(base, q.ID), answerPath(base, q.ID)
 	if err := writeFileAtomic(asks, data); err != nil {
 		_ = answer(agent.Answer{Choice: "no", Text: fmt.Sprintf("(gnosh could not put the question to the agent view: %v. Nobody saw it.)", err)})
 		return
 	}
+	// (Its own files go with it, and no other question's.)
 	defer os.Remove(asks)
+	defer os.Remove(answers)
 	tick := time.NewTicker(askLook)
 	defer tick.Stop()
 	for {
@@ -135,25 +164,34 @@ func relayAsk(ctx context.Context, base string, q agent.Question, now func() tim
 	}
 }
 
-// readAsk is the question the run whose log is log waits on, if any.
+// readAsk is the question the run whose log is log waits on, if any: the
+// one it put first, when it waits on more than one.
 func readAsk(log string) *runAsk {
-	data, err := os.ReadFile(askFile(log))
-	if err != nil {
-		return nil
+	paths, _ := filepath.Glob(runBase(log) + ".ask-*.json")
+	var first *runAsk
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var a runAsk
+		if json.Unmarshal(data, &a) != nil || a.ID == "" || a.Token == "" || path != askPath(runBase(log), a.ID) {
+			continue
+		}
+		if first == nil || a.Since.Before(first.Since) {
+			first = &a
+		}
 	}
-	var a runAsk
-	if json.Unmarshal(data, &a) != nil || a.ID == "" || a.Token == "" {
-		return nil
-	}
-	return &a
+	return first
 }
 
 // answerAsk writes the answer the person chose to the question the run
 // whose log is log waits on: choice is the key of one of its choices, and
 // text words that go with it.
 func answerAsk(log, id, choice, text string) error {
-	a := readAsk(log)
-	if a == nil || a.ID != id {
+	var a runAsk
+	data, err := os.ReadFile(askPath(runBase(log), id))
+	if err != nil || json.Unmarshal(data, &a) != nil || a.ID != id {
 		return fmt.Errorf("the question was answered or taken back already")
 	}
 	known := false
@@ -163,8 +201,8 @@ func answerAsk(log, id, choice, text string) error {
 	if !known {
 		return fmt.Errorf("%q is not one of the question's answers", choice)
 	}
-	data, _ := json.Marshal(runAnswer{ID: a.ID, Token: a.Token, Choice: choice, Text: text})
-	return writeFileAtomic(answerFile(log), data)
+	data, _ = json.Marshal(runAnswer{ID: a.ID, Token: a.Token, Choice: choice, Text: text})
+	return writeFileAtomic(answerPath(runBase(log), id), data)
 }
 
 // A run's inbox: words a person sends a working run from the agent view
@@ -195,16 +233,25 @@ func inboxMessages(base string) []string {
 	return paths
 }
 
-// readInbox makes the run's token, writes it down, and hands submit each
-// message its inbox gets, until ctx ends.
-func readInbox(ctx context.Context, base string, submit func(string) error) error {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	token := hex.EncodeToString(b[:])
-	if err := writeFileAtomic(base+".token", []byte(token+"\n")); err != nil {
-		return err
+// readInbox hands submit each message the run's inbox gets that carries
+// its token (prepareRun's, or one made here for a run started otherwise),
+// until ctx ends; the channel it returns is closed once it has stopped
+// reading, so that nothing it took is left half handed over.
+func readInbox(ctx context.Context, base string, submit func(string) error) (<-chan struct{}, error) {
+	done := make(chan struct{})
+	data, err := os.ReadFile(base + ".token")
+	token := strings.TrimSpace(string(data))
+	if err != nil || token == "" {
+		var b [16]byte
+		_, _ = rand.Read(b[:])
+		token = hex.EncodeToString(b[:])
+		if err := writeFileAtomic(base+".token", []byte(token+"\n")); err != nil {
+			close(done)
+			return done, err
+		}
 	}
 	go func() {
+		defer close(done)
 		tick := time.NewTicker(inboxLook)
 		defer tick.Stop()
 		for {
@@ -223,13 +270,16 @@ func readInbox(ctx context.Context, base string, submit func(string) error) erro
 					_ = os.Remove(path) // not heard
 					continue
 				}
+				if ctx.Err() != nil {
+					return // (what came now stays for the view)
+				}
 				if strings.TrimSpace(m.Text) == "" || submit(m.Text) == nil {
 					_ = os.Remove(path)
 				}
 			}
 		}
 	}()
-	return nil
+	return done, nil
 }
 
 // tellRun puts words in the inbox of the run whose log is log.
@@ -245,10 +295,12 @@ func tellRun(log, text string, now time.Time) error {
 // unreadWords takes back the words a run was told and did not read before
 // it ended: what its inbox holds, which is emptied.
 func unreadWords(log string) []string {
+	data, _ := os.ReadFile(tokenFile(log))
+	token := strings.TrimSpace(string(data))
 	var out []string
-	for _, path := range inboxMessages(strings.TrimSuffix(log, ".log")) {
+	for _, path := range inboxMessages(runBase(log)) {
 		var m inboxMessage
-		if data, err := os.ReadFile(path); err == nil && json.Unmarshal(data, &m) == nil && strings.TrimSpace(m.Text) != "" {
+		if data, err := os.ReadFile(path); err == nil && json.Unmarshal(data, &m) == nil && token != "" && m.Token == token && strings.TrimSpace(m.Text) != "" {
 			out = append(out, m.Text)
 		}
 		_ = os.Remove(path)

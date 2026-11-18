@@ -48,7 +48,7 @@ func (p *program) detachedPlan() *detachPlan {
 func (p *program) detach(args []string, d *detachPlan) int {
 	run := append(append(args, "--print", "--"), d.prompt)
 	p.logHead(d.log, d.session, d.name, d.cwd, d.path, d.prompt)
-	pid, err := p.o.Detach(run, runEnv(p.o.Environ, d.log), d.log)
+	pid, err := p.o.Detach(run, prepareRun(p.o.Environ, d.log), d.log)
 	if err != nil {
 		p.errf("the session could not go on in the background (%v). It is kept: gnosh %s runs the prompt, and gnosh -r %s opens it.", err, shellquote.Words(run), d.session)
 		return cli.ExitFailure
@@ -121,7 +121,7 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 		name += " (fork)" // (as copySession names the copy)
 	}
 	l.p.logHead(log, id, name, l.cfg.Paths.Cwd, path, prompt)
-	pid, err := l.p.o.Detach(run, runEnv(l.p.o.Environ, log), log)
+	pid, err := l.p.o.Detach(run, prepareRun(l.p.o.Environ, log), log)
 	if err != nil {
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}
@@ -235,15 +235,27 @@ const (
 	runRenamed = " its name is now: "
 )
 
-// renameRun gives the run whose log is log a new name, as a line of the
-// log's own, which readRunLog reads wherever it stands.
-func renameRun(log, name string, now time.Time) error {
+// renameRun gives the run of the session id whose log is log a new name,
+// as a line of the log's own that names the session (a line the run
+// printed is not taken for one), which readRunLog reads wherever it
+// stands. A run that is over keeps the time its log was last written,
+// which is when it ended.
+func renameRun(log, id, name string, now time.Time, over bool) error {
+	info, err := os.Stat(log)
+	if err != nil {
+		return err
+	}
 	f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = fmt.Fprintf(f, "gnosh: %s%s%s\n", now.UTC().Format(time.RFC3339), runRenamed, oneLine(name, 120))
+	_, err = fmt.Fprintf(f, "gnosh: %s %s%s%s\n", now.UTC().Format(time.RFC3339), id, runRenamed, oneLine(name, 120))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && over {
+		err = os.Chtimes(log, info.ModTime(), info.ModTime())
+	}
 	return err
 }
 
@@ -397,7 +409,7 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 				r.stopped = true
 				continue
 			}
-			if name, ok := strings.CutPrefix(" "+after, runRenamed); terr == nil && ok {
+			if name, ok := strings.CutPrefix(after, id+runRenamed); terr == nil && ok {
 				r.name = strings.TrimSpace(name)
 				continue
 			}

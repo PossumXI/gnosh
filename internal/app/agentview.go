@@ -345,7 +345,7 @@ func (s *runSource) Rename(id, name string) error {
 	if err != nil {
 		return err
 	}
-	return renameRun(r.log, name, s.p.now())
+	return renameRun(r.log, id, name, s.p.now(), !r.running)
 }
 
 func (s *runSource) Forget(id string) error {
