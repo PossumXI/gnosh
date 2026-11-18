@@ -98,7 +98,9 @@ func (l *live) shellLine(command string) error {
 		}
 		// Into the conversation. The command's output is data, like a
 		// tool's: it is made harmless on its way in.
-		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, or go on with what they asked for before.") +
+		// (Not "go on with what they asked for before": on box 1, in a
+		// session with nothing asked before, Qwen went looking for it.)
+		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, in a few words, and if you were in the middle of something for them, go on with it.") +
 			"\n\n$ " + prompt.Untrusted(command) + "\n" + prompt.Untrusted(core.TextOf(res.Content))
 		// One the model does not answer now is put in the conversation at
 		// once (Record), so that it stands before the person's next
