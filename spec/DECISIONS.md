@@ -1445,3 +1445,22 @@ or kept with the reason said (27).
     hook's "model" is read and not honored, as for prompt hooks. A
     sub-agent that writes its 50 replies without an answer is a hook that
     could not run.
+
+93. **An agent's MCP servers (mcpServers), as Claude Code's.** An agent
+    definition may name MCP servers: an entry that is a name uses the
+    session's server of that name (a name the session lacks is said, and
+    the agent goes without it); an entry that is an object, a server's
+    name with its settings in the shape of .mcp.json, is the agent's own.
+    A sub-agent's own servers are connected when it starts and closed when
+    it ends, and only it is offered their tools; the session that runs as
+    an agent (--agent) has its servers from the start, with the files',
+    shown in /mcp with the scope agent (an agent's own server of the same
+    name as a file's wins). A project's definitions are read only in a
+    folder the person trusts, and so are their servers. The definition's
+    tools and disallowedTools take MCP tools by name or by server:
+    mcp__github__* in tools gives every tool of github, and mcp__github,
+    mcp__github__* or mcp__* in disallowedTools take them away. A server
+    of the agent's own is written as its name with its settings indented
+    under it; "- name: value" on one line is refused rather than read as
+    a name. Not built: the memory field, which would be a second memory
+    beside mem (Jae's design call).

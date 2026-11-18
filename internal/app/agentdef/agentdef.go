@@ -92,16 +92,78 @@ type Def struct {
 	// level of its model, max, or auto.
 	Skills []string
 	Effort string
+	// MCPServers are the MCP servers the agent is given (mcpServers), in
+	// the order written: each a server the session has, by its Name, or
+	// one of its own, Inline (an entry in the shape .mcp.json writes one,
+	// under Name), connected while the agent runs.
+	MCPServers []MCPServer
 	// Other lists the fields of the frontmatter that change what the
-	// sub-agent is or may do and that this package only notes:
-	// mcpServers, memory. A caller that cannot honour one must say so, and
-	// not run the agent as if the field were not there.
+	// sub-agent is or may do and that this package only notes: memory. A
+	// caller that cannot honour one must say so, and not run the agent as
+	// if the field were not there.
 	Other []string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
 	// definition was read from (empty for a built-in).
 	Scope  string
 	Source string
+}
+
+// MCPServer is one entry of an agent's mcpServers: a server of the
+// session's, by name, or one of the agent's own, Inline.
+type MCPServer struct {
+	Name   string
+	Inline json.RawMessage
+}
+
+// mcpServers reads an agent's mcpServers, as JSON: a list whose entries are
+// each a server's name, or an object holding one server under its name.
+// The reason says what is wrong, as the end of a sentence about the field.
+func mcpServers(raw json.RawMessage) ([]MCPServer, string) {
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, "is not a list of servers' names and servers"
+	}
+	var out []MCPServer
+	seen := map[string]bool{}
+	add := func(m MCPServer) string {
+		if seen[m.Name] {
+			return fmt.Sprintf("names the server %q twice", m.Name)
+		}
+		seen[m.Name] = true
+		out = append(out, m)
+		return ""
+	}
+	for _, item := range items {
+		var name string
+		if json.Unmarshal(item, &name) == nil {
+			if name = strings.TrimSpace(name); name == "" {
+				return nil, "has an entry with no name"
+			}
+			if strings.ContainsAny(name, ": \t") {
+				// (A server of its own written on one line, "- name: x".)
+				return nil, fmt.Sprintf("has the entry %q, which is not a server's name: a server of the agent's own is written as its name and, indented under it, its settings", name)
+			}
+			if why := add(MCPServer{Name: name}); why != "" {
+				return nil, why
+			}
+			continue
+		}
+		var one map[string]json.RawMessage
+		if json.Unmarshal(item, &one) != nil || len(one) != 1 {
+			return nil, "has an entry that is neither a server's name nor one server written under its name"
+		}
+		for name, server := range one {
+			var fields map[string]json.RawMessage
+			if strings.TrimSpace(name) == "" || json.Unmarshal(server, &fields) != nil || fields == nil {
+				return nil, fmt.Sprintf("has the server %q, which is not written as an object of its settings", name)
+			}
+			if why := add(MCPServer{Name: name, Inline: server}); why != "" {
+				return nil, why
+			}
+		}
+	}
+	return out, ""
 }
 
 // Skipped is a file that holds no usable definition, with the reason.
@@ -368,7 +430,20 @@ func Parse(text string) (d Def, reason string) {
 			}
 		case "isolation":
 			d.Isolation = f.scalar
-		case "mcpServers", "memory":
+		case "mcpServers":
+			raw, err := json.Marshal(f.list())
+			if f.nested {
+				raw, err = BlockJSON(f.block)
+			}
+			if err != nil {
+				return d, "its mcpServers cannot be read: " + err.Error()
+			}
+			servers, why := mcpServers(raw)
+			if why != "" {
+				return d, "its mcpServers " + why
+			}
+			d.MCPServers = servers
+		case "memory":
 			if f.scalar != "" || len(f.items) > 0 || f.nested {
 				d.Other = append(d.Other, f.key)
 			}

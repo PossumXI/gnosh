@@ -115,10 +115,7 @@ var withheld = []string{
 func LoadConfig(src Sources) ([]Config, []Problem) {
 	var probs []Problem
 	byName := map[string]Config{}
-	held := map[string]bool{}
-	for _, v := range append(append([]string(nil), withheld...), src.Withheld...) {
-		held[v] = true
-	}
+	held := heldOf(src)
 	read := func(path string) *configFile {
 		if path == "" {
 			return nil
@@ -194,6 +191,25 @@ func LoadConfig(src Sources) ([]Config, []Problem) {
 		out = append(out, byName[n])
 	}
 	return out, probs
+}
+
+// ParseServers reads servers written somewhere else in the shape of an
+// .mcp.json file's entries (an agent's mcpServers), from the file at path,
+// under the scope given: ${VAR} is filled in and credentials are withheld
+// as LoadConfig does. They come back in the order of their names.
+func ParseServers(path, scope string, servers map[string]json.RawMessage, src Sources) ([]Config, []Problem) {
+	got, probs := parseConfig(path, scope, servers, src.Root, src.Getenv, heldOf(src))
+	sort.Slice(got, func(i, j int) bool { return got[i].Name < got[j].Name })
+	return got, probs
+}
+
+// heldOf is the variables a server at a URL is never sent.
+func heldOf(src Sources) map[string]bool {
+	held := map[string]bool{}
+	for _, v := range append(append([]string(nil), withheld...), src.Withheld...) {
+		held[v] = true
+	}
+	return held
 }
 
 // configFile is one file of servers: its own at the top, and the user's

@@ -64,7 +64,8 @@ Built:
   sees them), and a status line command (Claude Code's `statusLine`).
 - **Sub-agents** in the foreground and, in a session, in the background:
   general-purpose, Explore, Plan and your own, given more to do once they
-  end with SendMessage.
+  end with SendMessage. Your own may name MCP servers (`mcpServers`): the
+  session's, or servers of their own, connected only while they run.
 - **`mem`** and frames, with the close check, `/goal`, the slide, peers'
   turn locks, and `gnosh mem`.
 - **Commands:** `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json,

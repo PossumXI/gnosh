@@ -1,6 +1,7 @@
 package agentdef
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,5 +170,48 @@ func TestLoad(t *testing.T) {
 	}
 	if _, ok := s.Get("nobody"); ok {
 		t.Error("Get found an agent that is not defined")
+	}
+}
+
+// An agent's mcpServers: names of the session's servers and servers of its
+// own, in a block, as a flow list, and in --agents JSON; mcp__ entries in
+// its tools are kept whole.
+func TestParseMCPServers(t *testing.T) {
+	d, reason := Parse("---\nname: browser\ndescription: Tests in a browser.\ntools: Read, mcp__playwright__*\nmcpServers:\n  # its own, and the session's\n  - playwright:\n      type: stdio\n      command: npx\n      args: [\"-y\", \"@playwright/mcp@latest\"]\n  - github\n---\nTest it.")
+	if reason != "" {
+		t.Fatalf("skipped: %s", reason)
+	}
+	if len(d.MCPServers) != 2 || d.MCPServers[0].Name != "playwright" || d.MCPServers[1].Name != "github" || d.MCPServers[1].Inline != nil || len(d.Other) != 0 {
+		t.Fatalf("read as %+v", d.MCPServers)
+	}
+	var own struct {
+		Type, Command string
+		Args          []string
+	}
+	if err := json.Unmarshal(d.MCPServers[0].Inline, &own); err != nil || own.Type != "stdio" || own.Command != "npx" || strings.Join(own.Args, " ") != "-y @playwright/mcp@latest" {
+		t.Errorf("its own server: %s", d.MCPServers[0].Inline)
+	}
+	if strings.Join(d.Tools, ",") != "Read,mcp__playwright__*" {
+		t.Errorf("tools: %q", d.Tools)
+	}
+	d, reason = Parse("---\nname: notes\ndescription: Notes.\nmcpServers: [github, slack]\n---\nGo.")
+	if reason != "" || len(d.MCPServers) != 2 || d.MCPServers[1].Name != "slack" {
+		t.Errorf("a flow list: %+v (%s)", d.MCPServers, reason)
+	}
+	for text, want := range map[string]string{
+		"---\nname: a\ndescription: A.\nmcpServers:\n  - github\n  - github\n---\nGo.":                  `names the server "github" twice`,
+		"---\nname: a\ndescription: A.\nmcpServers:\n  - one:\n      type: stdio\n    two: x\n---\nGo.": "neither a server's name nor one server",
+		"---\nname: a\ndescription: A.\nmcpServers:\n  - one: stdio\n---\nGo.":                          `"one: stdio", which is not a server's name`,
+	} {
+		if _, reason := Parse(text); !strings.Contains(reason, want) {
+			t.Errorf("%q: skipped for %q, want %q", text, reason, want)
+		}
+	}
+	defs, err := FromJSON(`{"tester": {"description": "Tests.", "prompt": "Test.", "mcpServers": ["github", {"local": {"command": "./srv"}}]}}`)
+	if err != nil || len(defs) != 1 || len(defs[0].MCPServers) != 2 || string(defs[0].MCPServers[1].Inline) != `{"command": "./srv"}` {
+		t.Errorf("--agents JSON: %+v, %v", defs, err)
+	}
+	if _, err := FromJSON(`{"tester": {"description": "Tests.", "prompt": "Test.", "mcpServers": "github"}}`); err == nil || !strings.Contains(err.Error(), "mcpServers is not a list") {
+		t.Errorf("mcpServers as a string: %v", err)
 	}
 }

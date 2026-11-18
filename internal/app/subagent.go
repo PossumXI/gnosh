@@ -378,6 +378,9 @@ type subSession struct {
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
+	// ownMCP are the MCP servers its definition writes itself, connected
+	// while it runs (agentmcp.go).
+	ownMCP []*mcpServer
 	closed sync.Once
 }
 
@@ -521,6 +524,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		}
 	}
 
+	l.connectAgentMCP(s)
 	tools, err := s.tools()
 	if err != nil {
 		return s, err
@@ -660,6 +664,9 @@ func (s *subSession) tools() ([]core.Tool, error) {
 	// The tools of the MCP servers connected when the sub-agent starts, as
 	// for the session: a kind that lists its tools has those it names.
 	all = append(all, l.mcpTools()...)
+	for _, t := range l.agentMCPTools(s) {
+		all = append(all, t)
+	}
 	if s.depth < maxAgentDepth && !s.background && l.engine.ToolEnabled(agentToolName) {
 		all = append(all, &agentTool{l: l, owner: s})
 	}
@@ -668,13 +675,13 @@ func (s *subSession) tools() ([]core.Tool, error) {
 	seen := map[string]bool{}
 	for _, t := range all {
 		name := t.Spec().Name
-		if seen[name] || slices.Contains(s.def.Disallowed, name) || name == shelltool.MonitorName {
+		if seen[name] || toolListed(s.def.Disallowed, name, true) || name == shelltool.MonitorName {
 			// (Monitor passes its lines on to the session the person is
 			// in, so a sub-agent has none: they would go to another
 			// conversation than the one that asked for them.)
 			continue
 		}
-		if s.def.ToolsSet && !slices.Contains(s.def.Tools, name) {
+		if s.def.ToolsSet && !toolListed(s.def.Tools, name, false) {
 			continue
 		}
 		seen[name] = true
@@ -989,6 +996,7 @@ func (s *subSession) close() {
 		if s.agent != nil {
 			_ = s.agent.Close()
 		}
+		l.closeAgentMCP(s)
 		if s.dropHooks != nil {
 			s.dropHooks()
 		}

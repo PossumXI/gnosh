@@ -108,7 +108,13 @@ func FromJSON(text string) ([]Def, error) {
 				if len(events) > 0 {
 					d.Hooks = val
 				}
-			case "mcpServers", "memory", "autoCompactWindow":
+			case "mcpServers":
+				servers, why := mcpServers(val)
+				if why != "" {
+					return nil, fmt.Errorf("the agent %q's mcpServers %s", name, why)
+				}
+				d.MCPServers = servers
+			case "memory", "autoCompactWindow":
 				if string(val) != "null" {
 					d.Other = append(d.Other, key)
 				}

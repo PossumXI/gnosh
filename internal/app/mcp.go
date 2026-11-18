@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -83,8 +84,39 @@ type mcpSet struct {
 	flows      map[string]*mcpFlow
 }
 
-// loadMCP reads which servers there are.
+// loadMCP reads which servers there are: the files', and those of the
+// agent the session runs as (agentmcp.go).
 func (l *live) loadMCP() *mcpSet {
+	// Servers from the command line are the person's word for this run:
+	// with --strict-mcp-config they are the only ones, and in safe mode
+	// they are all there is too, since safe mode turns off what files set
+	// up and not what was typed.
+	src := l.mcpSources()
+	src.User = filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json")
+	src.Project = filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json")
+	src.Trusted = l.st.trusted
+	src.Given, src.GivenFrom = l.inv.MCPConfigs, l.p.o.Cwd
+	src.Strict = l.inv.StrictMCPConfig || l.cfg.Switches.SafeMode.V
+	cfgs, probs := mcp.LoadConfig(src)
+	if l.asAgent != nil {
+		own, wrong := l.agentMCPConfigs(*l.asAgent, cfgs)
+		probs = append(probs, wrong...)
+		for _, c := range own {
+			cfgs = slices.DeleteFunc(cfgs, func(have mcp.Config) bool { return have.Name == c.Name })
+			cfgs = append(cfgs, c)
+		}
+	}
+	set := &mcpSet{probs: probs}
+	for _, c := range cfgs {
+		set.servers = append(set.servers, &mcpServer{cfg: c, status: "pending"})
+	}
+	return set
+}
+
+// mcpSources is what reading servers needs of the session: the
+// environment for ${VAR}, the project's root, and the variables gnosh's
+// own model keys came from, which a server at a URL is not sent either.
+func (l *live) mcpSources() mcp.Sources {
 	getenv := func(name string) (string, bool) {
 		for i := len(l.p.o.Environ) - 1; i >= 0; i-- {
 			if k, v, ok := strings.Cut(l.p.o.Environ[i], "="); ok && k == name {
@@ -93,31 +125,13 @@ func (l *live) loadMCP() *mcpSet {
 		}
 		return "", false
 	}
-	// The variables gnosh's own model keys came from are not sent to a
-	// server at a URL either.
 	var keys []string
 	for _, p := range l.cfg.Providers {
 		if v, ok := strings.CutPrefix(p.KeyFrom, "$"); ok {
 			keys = append(keys, v)
 		}
 	}
-	// Servers from the command line are the person's word for this run:
-	// with --strict-mcp-config they are the only ones, and in safe mode
-	// they are all there is too, since safe mode turns off what files set
-	// up and not what was typed.
-	cfgs, probs := mcp.LoadConfig(mcp.Sources{
-		User:    filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"),
-		Project: filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json"),
-		Root:    l.cfg.Paths.ProjectRoot, Trusted: l.st.trusted,
-		Getenv: getenv, Withheld: keys,
-		Given: l.inv.MCPConfigs, GivenFrom: l.p.o.Cwd,
-		Strict: l.inv.StrictMCPConfig || l.cfg.Switches.SafeMode.V,
-	})
-	set := &mcpSet{probs: probs}
-	for _, c := range cfgs {
-		set.servers = append(set.servers, &mcpServer{cfg: c, status: "pending"})
-	}
-	return set
+	return mcp.Sources{Root: l.cfg.Paths.ProjectRoot, Getenv: getenv, Withheld: keys}
 }
 
 // startMCP connects the session's servers: in the background, or, in a
