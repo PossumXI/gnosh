@@ -193,7 +193,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "release-notes", Summary: "The changes this build of gnosh was made from, newest first.", InRun: true, Run: l.slashReleaseNotes},
 		{Name: "theme", Args: "[auto|dark|light|ansi]", Summary: "The interface's colours: for the terminal's background, dark, light, or the terminal's own sixteen. Kept for every project.", InRun: true, Run: l.slashTheme},
 		{Name: "config", Args: "[key[=value] ...]", Summary: "gnosh's options and where each value comes from; key=value sets one for every project, from gnosh's next start, and key= takes it away.", InRun: true, Run: l.slashConfig},
-		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done.", Run: l.slashLoop},
+		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done; /loop 5m <prompt> sends a prompt every 5 minutes.", Run: l.slashLoop},
 		{Name: "noloop", Aliases: []string{"no_loop", "no-loop"}, Summary: "Turn /loop off.",
 			Run: func(ctx context.Context, c *SlashContext) error {
 				if !c.Agent.Loop() {
@@ -473,7 +473,7 @@ func (l *live) slashCompact(ctx context.Context, c *SlashContext) error {
 // slashLoop is /loop.
 func (l *live) slashLoop(ctx context.Context, c *SlashContext) error {
 	if c.Args != "" {
-		return errors.New("/loop takes nothing after it: it keeps the session working on the task it already has. Send the task as a prompt first, then /loop")
+		return l.slashLoopEvery(c)
 	}
 	if _, ok := l.modelRef(); !ok {
 		return errors.New("this session has no model, so there is nothing to keep working. Choose a model with /model")

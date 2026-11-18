@@ -75,6 +75,10 @@ Built:
   `.worktreeinclude` names (a `.env`, say). Asked to work in a worktree,
   the model moves a running session into one with `EnterWorktree`, and
   back with `ExitWorktree` (keep or remove).
+- **Scheduled prompts**, as Claude Code's: `/loop 5m <prompt>` sends a
+  prompt every five minutes between turns, and the model schedules,
+  lists and cancels prompts with `CronCreate`, `CronList` and
+  `CronDelete` ("remind me at 3pm", "check the build every 20 minutes").
 - **Deliverables:** the `Deliver` tool, by which the model names what was
   asked for, `/deliverables`, and each delivered file served at an address
   on this machine.

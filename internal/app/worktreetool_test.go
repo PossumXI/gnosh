@@ -67,6 +67,7 @@ func TestEnterAndExitWorktree(t *testing.T) {
 		o.Environ = append(slices.Clone(o.Environ), envs[0][len(envs[0])-2:]...)
 	}, started[0]...)
 	s.see("In the tree now.")
+	s.see("-- done in ")
 	// A /restart there carries the tree over, quietly: nothing moved.
 	s.typeLine("/restart")
 	s.see("gnosh starts again, in this session.")

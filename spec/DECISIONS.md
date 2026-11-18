@@ -1173,3 +1173,23 @@ or kept with the reason said (27).
     prompts wait, which the restart would lose. Unlike Claude Code's, a
     tree is named, never given as a path: a work tree made with git
     worktree add is worked in by starting gnosh there.
+
+81. **Scheduled prompts, as Claude Code's: CronCreate, CronList,
+    CronDelete, and /loop with an interval.** A session can schedule a
+    prompt to be sent later, on a five-field cron schedule in local time
+    (internal/cron, standard library only: lists, ranges, steps, 0 or 7
+    for Sunday, either day field matching when both are limited), once
+    or recurring. /loop 5m <prompt> (or <prompt> every 2 hours) schedules
+    its prompt with the interval rounded to a step cron can take, and
+    sends it at once. A prompt that comes due goes in between turns,
+    when the session is idle with nothing of the person's waiting, once
+    however many of its times passed meanwhile; a line says which task
+    runs. A recurring task goes after 7 days, after one last run; a
+    one-shot task goes when it has run; a session holds 50. Bare /loop
+    keeps its meaning (keep the session working on its task). The tools
+    are an attended session's, quiet in the permission engine, and
+    CLAUDE_CODE_DISABLE_CRON=1 takes them and the interval /loop away.
+    Not built yet: /loop <prompt> with no interval (the model choosing
+    when to come back, ScheduleWakeup), and bringing tasks back on
+    --resume. Not taken: the jitter Claude Code adds to spread its
+    fleet's requests, which a local model server does not need.
