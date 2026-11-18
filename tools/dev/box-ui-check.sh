@@ -261,7 +261,7 @@ focus)
 		screen | grep -q "done in" && break
 	done
 	tmux send-keys -t "$S" "/focus" Enter
-	done_when() { screen | grep -q "Read 1 file, ran 1 command" && screen | grep -q 'viewMode is "default" from now on'; }
+	done_when() { screen | grep -q "Read 1 file, ran 1 command" && screen | grep -q 'viewMode is "\{0,1\}default"\{0,1\} from now on'; }
 	;;
 mention)
 	tmux send-keys -t "$S" "What is the second line of @notes.txt? Answer with that one word and call no tool." Enter

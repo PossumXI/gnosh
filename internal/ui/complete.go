@@ -124,9 +124,16 @@ func (s *session) completeCommand(typed string) []editor.Candidate {
 
 // completeFile offers the entries of the directory that partial names so
 // far whose names begin with its last part. sigil is what stands before
-// the path in the box ("@"), and start where the word begins.
+// the path in the box ("@"), and start where the word begins. After a
+// mention's "@", the project's files and folders that match what was typed
+// anywhere in their paths follow (mention.go), as Claude Code's @ finds
+// them: "@focus" offers internal/ui/focus.go.
 func (s *session) completeFile(partial string, start int, sigil string) []editor.Candidate {
-	return s.completePath(partial, start, sigil, false)
+	out := s.completePath(partial, start, sigil, false)
+	if sigil == "@" && fuzzyWord(partial) && (len(out) == 0 || !strings.Contains(partial, "/")) {
+		out = append(out, s.fuzzyFiles(partial, start, sigil, out)...)
+	}
+	return out
 }
 
 // completePath is completeFile, or with folders completeFolder.

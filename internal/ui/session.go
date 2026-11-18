@@ -85,6 +85,9 @@ type config struct {
 	branch func(dir string) string
 	// list lists a directory for file completion.
 	files func(dir string) []fileEntry
+	// project lists the project in a directory for the fuzzy @ search
+	// (mention.go), or is nil for none.
+	project func(dir string) []string
 }
 
 // phase is what the session is doing, as the line above the prompt box
@@ -191,6 +194,10 @@ type session struct {
 	cwd, home  string
 	branchOf   func(string) string
 	listDir    func(string) []fileEntry
+	// listProject and index are the fuzzy @ search's lister and what it
+	// last listed (mention.go).
+	listProject func(string) []string
+	index       fileIndex
 
 	// pending are the lines that wait to be committed at the next frame,
 	// last is the kind of block the last of them ends, and dirty says
@@ -338,7 +345,7 @@ func newSession(cfg config) *session {
 		th: cfg.theme, profile: cfg.profile, light: cfg.light, themed: cfg.themed,
 		m: cfg.metrics, now: cfg.now, c: cfg.controls, r: cfg.renderer, inline: cfg.renderer, host: cfg.host,
 		cols: max(cfg.cols, 1), rows: max(cfg.rows, 1), termCols: max(cfg.cols, 1), home: cfg.home,
-		branchOf: cfg.branch, listDir: cfg.files, selectKey: cfg.selectKey,
+		branchOf: cfg.branch, listDir: cfg.files, listProject: cfg.project, selectKey: cfg.selectKey,
 		facts: map[string]string{},
 	}
 	if s.now == nil {
@@ -364,6 +371,8 @@ func (s *session) start() {
 	s.header()
 	// (What in the keybindings file cannot be used is said at once.)
 	s.keysNow()
+	// (The project is listed for the fuzzy @ search while nothing waits.)
+	s.indexed()
 	s.recap()
 	if h, ok := s.c.(historian); ok {
 		var drafts []editor.Draft

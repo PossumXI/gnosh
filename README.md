@@ -165,7 +165,9 @@ gnosh's log what went wrong) and `/doctor`, with gnosh's own `/mem`, `/goal`,
 modes, Esc stops a turn and Esc twice goes back to an earlier prompt, Ctrl+O
 shows the whole transcript (every thought, call and result) on the whole
 screen, Ctrl+B moves a running command to the background, `@path` in a prompt
-brings that file (or a directory's listing) along with it, and a line that
+brings that file (or a directory's listing) along with it (`@focus` offers
+the project's files whose paths hold the word, as Claude Code's `@` does),
+and a line that
 begins with `!` is a command of your own. With nothing after them, `/model`,
 `/effort`, `/config`, `/export`, `/memory`, `/mcp`, `/permissions` and
 `/skills` open pickers, and `/hooks` a browser of the hooks in force, as

@@ -1282,3 +1282,21 @@ or kept with the reason said (27).
     do in both. The person is told as the channel connects that whoever
     answers through it can allow or refuse calls, and each answer from it
     is said on the screen.
+
+86. **@ mentions search the whole project, as Claude Code's.** gnosh
+    completed a mention a folder at a time, by the start of a name;
+    Claude Code's @ finds a file anywhere in the project by what was
+    typed. Now, after the names in the session's folder that begin with
+    what follows the @, the project's files and folders whose paths hold
+    it are offered, best first: a name that begins with it, one that
+    holds it, a path that holds it, and a path that holds its letters in
+    order, the fewer pieces the better. The project is listed in the
+    background, by git in a repository (tracked files and the untracked
+    ones it does not ignore) and by a walk by the ignore rules elsewhere,
+    at most 50,000 paths in 3 seconds; a list is used for half a minute
+    and listed again after each turn. Hidden paths are left out, as the
+    folder-at-a-time completion leaves them out until a dot is typed.
+    Tab takes a match; Enter takes it only when it extends what was
+    typed or was chosen with the arrows, so a prompt is never sent with
+    a word replaced unasked.
+

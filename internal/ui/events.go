@@ -642,6 +642,9 @@ func (s *session) summary(ev *agent.SummaryEvent) {
 // turnEnd writes how a turn ended. Every way a turn can end is said in
 // plain words; a stopped turn says that the person stopped it.
 func (s *session) turnEnd(res agent.TurnResult) {
+	// (The model may have made or removed files: the fuzzy @ search lists
+	// the project again when it is next used.)
+	s.index.at = time.Time{}
 	s.endReply()
 	for _, c := range append([]*call(nil), s.calls...) {
 		s.cut(c, "no result: the turn ended first")
