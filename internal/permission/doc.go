@@ -423,9 +423,15 @@
 // ".." after a link is taken from where the link leads, so link/../x is
 // judged at both places. A file a test looks at counts as read, and git
 // is never handed an unquoted pattern (a file named like a flag would
-// reach it as one). diff, which reads the files of a directory it is
-// given and follows the links among them, has every entry of that
-// directory checked. A variable, a brace pattern or (with no
+// reach it as one). A repository's own settings can make even git status
+// run a program (core.fsmonitor, a filter, a diff driver), so git after a
+// cd in the line asks, and with Options.RepoOf every git command asks
+// while the shell's folder, moved there by an earlier command, is in a
+// repository that is not a working directory's own, nor a work tree or
+// submodule of one; Options.GitRunsPrograms makes git ask in an untrusted
+// folder whose own settings name such programs. diff, which reads the
+// files of a directory it is given and follows the links among them, has
+// every entry of that directory checked. A variable, a brace pattern or (with no
 // Options.Glob) a file name pattern cannot be checked ahead of time and
 // asks, and so does a file that an earlier cp, mv or ln of the same line
 // puts in place. A pattern that starts with a dot (.*) is taken to match

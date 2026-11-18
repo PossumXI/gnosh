@@ -94,6 +94,15 @@ type Options struct {
 	// programs that git would run (a file-system monitor, filters, diff
 	// drivers) and the folder is not trusted: git commands then ask.
 	GitRunsPrograms bool
+	// RepoOf returns the git directory of the repository a folder is in
+	// (its .git, or where a .git file points), cleaned and with its links
+	// followed, or "" for none. With it, git commands ask while the
+	// shell's folder is in a repository that is not one of the working
+	// directories' own, nor a work tree or submodule of one (whose git
+	// directories lie inside theirs): that repository's settings could
+	// name programs git runs, even for git status. Nil tells no
+	// repository apart.
+	RepoOf func(dir string) string
 }
 
 // layer is a Layer with its rules made ready.
@@ -124,6 +133,7 @@ type Engine struct {
 	resolve   func(string) (string, error)
 	glob      func(string) ([]string, error)
 	gitRuns   bool
+	repoOf    func(string) string
 	layers    []*layer
 	session   *layer
 	saved     *layer
@@ -170,6 +180,7 @@ func New(o Options) (*Engine, error) {
 		resolve:  o.Resolve,
 		glob:     o.Glob,
 		gitRuns:  o.GitRunsPrograms,
+		repoOf:   o.RepoOf,
 	}
 	e.cur = e.cwd
 	if e.home != "" {

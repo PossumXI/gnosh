@@ -1300,3 +1300,20 @@ or kept with the reason said (27).
     typed or was chosen with the arrows, so a prompt is never sent with
     a word replaced unasked.
 
+87. **git asks while the shell is in another repository.** Claude Code
+    2.1.325 made read-only git commands ask in a repository that is not
+    the project's or one you trust, since a repository's own settings
+    (core.fsmonitor, filters, diff drivers) can make even git status run
+    a program. gnosh already asked about git after a cd in the same line
+    and about git -C and --git-dir, and about every git command in an
+    untrusted folder whose settings name such programs. What was left:
+    the shell's folder persists between commands, so a cd in one
+    command and a bare git status in the next ran in the other
+    repository. Now the engine is told each folder's git directory
+    (Options.RepoOf: the nearest .git going up, a folder or the git
+    directory a .git file names), and while the shell's folder is in a
+    repository whose git directory is not, and does not lie inside, a
+    working directory's own (a work tree or submodule of the project lies
+    inside its .git), every git command asks, whatever rule allows it.
+    With permissions skipped nothing asks, as for the untrusted case.
+

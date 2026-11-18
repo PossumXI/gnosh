@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/user"
@@ -403,6 +404,7 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 		Resolve:         resolvePath,
 		Glob:            globPaths,
 		GitRunsPrograms: !cfg.Trusted && len(st.gitPrograms) > 0,
+		RepoOf:          repoGitDir,
 	}
 	// gnosh's own files are never changed without a question: its config,
 	// the data it keeps for the person (sessions among it), and whatever
@@ -632,6 +634,44 @@ func (st *startup) checkHooks(cfg *config.Config) []config.Problem {
 // returns where it really leads. For a path that does not exist yet it
 // resolves the part that does, and a link that points at nothing is
 // followed to where it points: a write through it would land there.
+// repoGitDir is the permission engine's RepoOf: the git directory of the
+// repository that holds dir, as git finds it going up from dir (a .git
+// folder, or the folder a .git file names), with its links followed; ""
+// when no folder above dir has a .git. A .git file that names nothing
+// readable stands for a repository of its own.
+func repoGitDir(dir string) string {
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		dotgit := filepath.Join(d, ".git")
+		li, err := os.Lstat(dotgit)
+		if err != nil {
+			if d == filepath.Dir(d) {
+				return ""
+			}
+			continue
+		}
+		gd := dotgit
+		if li.Mode().IsRegular() {
+			var head [4096]byte
+			n := 0
+			if f, err := os.Open(dotgit); err == nil {
+				n, _ = io.ReadFull(f, head[:])
+				f.Close()
+			}
+			line, _, _ := strings.Cut(string(head[:n]), "\n")
+			if named, ok := strings.CutPrefix(strings.TrimSpace(line), "gitdir:"); ok && strings.TrimSpace(named) != "" {
+				gd = strings.TrimSpace(named)
+				if !filepath.IsAbs(gd) {
+					gd = filepath.Join(d, gd)
+				}
+			}
+		}
+		if real, err := filepath.EvalSymlinks(gd); err == nil {
+			return real
+		}
+		return filepath.Clean(gd)
+	}
+}
+
 func resolvePath(p string) (string, error) {
 	return resolveDepth(filepath.Clean(p), 0)
 }

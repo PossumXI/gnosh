@@ -178,7 +178,36 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 			}
 		}
 	}
+	if e.repoOf != nil && req.view != nil {
+		if other := e.otherRepo(); other != "" {
+			for _, u := range req.view.units {
+				if len(u.cmd.words) > 0 {
+					if name, ok := e.progName(u.cmd.words[0]); ok && progKey(baseName(name)) == "git" {
+						return ask("The shell's folder, " + e.cur + ", is in another repository than the working directories' (its git directory is " + other + "), whose own git settings could name programs that git would run, so git commands there ask first.")
+					}
+				}
+			}
+		}
+	}
 	return Decision{}, false
+}
+
+// otherRepo returns the git directory of the repository the shell's
+// folder is in, when that is none of the working directories' own
+// repositories, nor a work tree or submodule of one of them (their git
+// directories lie inside the main one's); "" when it is one of theirs, or
+// the folder is in none.
+func (e *Engine) otherRepo() string {
+	gd := e.repoOf(e.cur)
+	if gd == "" {
+		return ""
+	}
+	for _, d := range e.workDirs() {
+		if own := e.repoOf(d); own != "" && inside(own, gd) {
+			return ""
+		}
+	}
+	return gd
 }
 
 // looseFields cuts a crude piece of a line into words the loosest way
