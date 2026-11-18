@@ -306,3 +306,33 @@ func TestAgentViewOverASessionKeepsItsMode(t *testing.T) {
 		r.wantCode(t, 0)
 	}
 }
+
+// The view's runs are looked for in the project folders as they are at
+// each look: a run started from the view in a folder no session ran in
+// before (@repo) makes a new one, and is listed (box 1's @repo check
+// never saw its run, the folders having been read once as the view
+// opened).
+func TestRunSourceSeesNewFolders(t *testing.T) {
+	root := t.TempDir()
+	src := &runSource{p: &program{now: time.Now}, dirs: func() []string {
+		dirs, _ := filepath.Glob(filepath.Join(root, "*"))
+		return dirs
+	}}
+	if runs := src.Runs(); len(runs) != 0 {
+		t.Fatalf("runs before any: %+v", runs)
+	}
+	const id = "01a1eea5-8888-7000-8000-000000000008"
+	dir := filepath.Join(root, "-home-jae-src-app-api")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	log := "gnosh: " + now + " the session " + id + " goes on in the background with: write it\nDone.\ngnosh: " + now + runDone + "\n"
+	if err := os.WriteFile(filepath.Join(dir, id+".background.log"), []byte(log), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runs := src.Runs()
+	if len(runs) != 1 || runs[0].ID != id || runs[0].State != "done" {
+		t.Errorf("the run in the new folder: %+v", runs)
+	}
+}

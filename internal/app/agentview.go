@@ -202,7 +202,7 @@ func (p *program) agentViewOn(st *startup, inv cli.Invocation, focus string) int
 		}
 	}
 	return p.o.AgentView(AgentViewInfo{
-		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs(), cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All},
+		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs, cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All},
 		Cwd:    cwd, Home: home, Scoped: inv.Cwd != "", All: inv.All, Flags: flags,
 		Notify: firstOf(st.cfg.Options.PreferredNotifChannel.V, "auto"),
 		Focus:  focus,
@@ -214,8 +214,11 @@ func (p *program) agentViewOn(st *startup, inv cli.Invocation, focus string) int
 // runSource is the AgentSource of gnosh agents: the runs whose logs are in
 // dirs, the folders of every project's sessions.
 type runSource struct {
-	p      *program
-	dirs   []string
+	p *program
+	// dirs lists the folders of every project's sessions, afresh at each
+	// look: a run started from the view in a folder no session ran in
+	// before makes a new one (box 1's @repo check never saw its run).
+	dirs   func() []string
 	cwd    string
 	home   string
 	scoped bool
@@ -245,7 +248,7 @@ func (s *runSource) Runs() []AgentRun {
 	}
 	listed := map[string]backgroundRun{}
 	var working, over []AgentRun
-	runs := runsIn(s.dirs, since)
+	runs := runsIn(s.dirs(), since)
 	if s.seen != nil {
 		s.seen(runs)
 	}
@@ -390,7 +393,7 @@ func (s *runSource) Forget(id string) error {
 	}
 	// A session sent off from two folders has a log in each.
 	var logs []string
-	for _, dir := range s.dirs {
+	for _, dir := range s.dirs() {
 		if log := filepath.Join(dir, id+".background.log"); fileExists(log) {
 			logs = append(logs, log)
 		}
@@ -578,7 +581,7 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		flags = append(flags, "--permission-mode="+m)
 	}
 	return AgentViewInfo{
-		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home, seen: seen},
+		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs, cwd: cwd, home: home, seen: seen},
 		Cwd:    cwd, Home: home, Flags: flags,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
 		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents).Names(),
