@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/config"
 )
 
 // This file is a run in the background whose permission questions a
@@ -49,7 +50,7 @@ func prepareRun(environ []string, log string) []string {
 	}
 	var b [16]byte
 	_, _ = rand.Read(b[:])
-	_ = writeFileAtomic(base+".token", []byte(hex.EncodeToString(b[:])+"\n"))
+	_ = config.WriteFileAtomic(base+".token", []byte(hex.EncodeToString(b[:])+"\n"), 0o600)
 	env := slices.DeleteFunc(slices.Clone(environ), func(kv string) bool { return strings.HasPrefix(kv, AsksEnv+"=") })
 	return append(env, AsksEnv+"="+base)
 }
@@ -57,20 +58,11 @@ func prepareRun(environ []string, log string) []string {
 // askLook is how often a run looks for the answer to its question.
 const askLook = 300 * time.Millisecond
 
-// runAsk is a question a run waits on, as its .ask file holds it.
+// runAsk is a question a run waits on, as its .ask file holds it: the
+// question the agent view shows, and the token its answer must give back.
 type runAsk struct {
-	ID      string      `json:"id"`
-	Token   string      `json:"token"`
-	Title   string      `json:"title"`
-	Text    string      `json:"text"`
-	Choices []askChoice `json:"choices"`
-	Since   time.Time   `json:"since"`
-}
-
-// askChoice is an answer a question offers.
-type askChoice struct {
-	Key   string `json:"key"`
-	Label string `json:"label"`
+	AgentQuestion
+	Token string
 }
 
 // runAnswer is the answer to it, as the .answer file holds it.
@@ -100,24 +92,6 @@ func fileKey(id string) string {
 // runBase is where the files of the run whose log is log begin.
 func runBase(log string) string { return strings.TrimSuffix(log, ".log") }
 
-// writeFileAtomic writes data to path in one step: a reader sees the old
-// file or the whole new one.
-func writeFileAtomic(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
-}
-
 // relayAsk puts the permission question q of the run whose files begin at
 // base in its .ask file, waits for the answer the agent view writes, and
 // hands it to answer. It returns when the question is answered or ctx
@@ -127,13 +101,10 @@ func writeFileAtomic(path string, data []byte) error {
 func relayAsk(ctx context.Context, base string, q agent.Question, now func() time.Time, answer func(agent.Answer) error) {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
-	ask := runAsk{ID: q.ID, Token: hex.EncodeToString(b[:]), Title: q.Title, Text: q.Text, Since: now().UTC()}
-	for _, c := range q.Choices {
-		ask.Choices = append(ask.Choices, askChoice{Key: c.Key, Label: c.Label})
-	}
+	ask := runAsk{AgentQuestion{ID: q.ID, Title: q.Title, Text: q.Text, Choices: q.Choices, Since: now().UTC()}, hex.EncodeToString(b[:])}
 	data, _ := json.Marshal(ask)
 	asks, answers := askPath(base, q.ID), answerPath(base, q.ID)
-	if err := writeFileAtomic(asks, data); err != nil {
+	if err := config.WriteFileAtomic(asks, data, 0o600); err != nil {
 		_ = answer(agent.Answer{Choice: "no", Text: fmt.Sprintf("(gnosh could not put the question to the agent view: %v. Nobody saw it.)", err)})
 		return
 	}
@@ -202,7 +173,7 @@ func answerAsk(log, id, choice, text string) error {
 		return fmt.Errorf("%q is not one of the question's answers", choice)
 	}
 	data, _ = json.Marshal(runAnswer{ID: a.ID, Token: a.Token, Choice: choice, Text: text})
-	return writeFileAtomic(answerPath(runBase(log), id), data)
+	return config.WriteFileAtomic(answerPath(runBase(log), id), data, 0o600)
 }
 
 // A run's inbox: words a person sends a working run from the agent view
@@ -245,7 +216,7 @@ func readInbox(ctx context.Context, base string, submit func(string) error) (<-c
 		var b [16]byte
 		_, _ = rand.Read(b[:])
 		token = hex.EncodeToString(b[:])
-		if err := writeFileAtomic(base+".token", []byte(token+"\n")); err != nil {
+		if err := config.WriteFileAtomic(base+".token", []byte(token+"\n"), 0o600); err != nil {
 			close(done)
 			return done, err
 		}
@@ -289,7 +260,7 @@ func tellRun(log, text string, now time.Time) error {
 		return fmt.Errorf("it reads no words: a gnosh from before the agent view's replies started it")
 	}
 	data, _ := json.Marshal(inboxMessage{Token: strings.TrimSpace(string(token)), Text: text})
-	return writeFileAtomic(fmt.Sprintf("%s.inbox-%020d.json", strings.TrimSuffix(log, ".log"), now.UnixNano()), data)
+	return config.WriteFileAtomic(fmt.Sprintf("%s.inbox-%020d.json", strings.TrimSuffix(log, ".log"), now.UnixNano()), data, 0o600)
 }
 
 // unreadWords takes back the words a run was told and did not read before

@@ -114,8 +114,8 @@ func TestBlockedRunInTheList(t *testing.T) {
 		t.Fatal(err)
 	}
 	has(t, "gnosh agents --json before", run(t, w, "agents", "--json").wantCode(t, 0).out, `"state": "working"`)
-	ask, _ := json.Marshal(runAsk{ID: "q1", Token: strings.Repeat("ab", 16), Title: "Allow Bash?", Text: "  $ rm -rf build",
-		Choices: []askChoice{{Key: "yes", Label: "Yes, this once"}, {Key: "no", Label: "No"}}})
+	ask, _ := json.Marshal(runAsk{AgentQuestion{ID: "q1", Title: "Allow Bash?", Text: "  $ rm -rf build",
+		Choices: []QuestionChoice{{Key: "yes", Label: "Yes, this once"}, {Key: "no", Label: "No"}}}, strings.Repeat("ab", 16)})
 	if err := os.WriteFile(askPath(runBase(log), "q1"), ask, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestSessionCountsRunsThatWait(t *testing.T) {
 	if err := os.WriteFile(pidFile(log), []byte(strconv.Itoa(proc.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ask, _ := json.Marshal(runAsk{ID: "q1", Token: strings.Repeat("ab", 16), Title: "Allow Bash?", Choices: []askChoice{{Key: "yes", Label: "Yes"}}})
+	ask, _ := json.Marshal(runAsk{AgentQuestion{ID: "q1", Title: "Allow Bash?", Choices: []QuestionChoice{{Key: "yes", Label: "Yes"}}}, strings.Repeat("ab", 16)})
 	if err := os.WriteFile(askPath(runBase(log), "q1"), ask, 0o600); err != nil {
 		t.Fatal(err)
 	}

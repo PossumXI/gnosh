@@ -63,15 +63,16 @@ type Options struct {
 // terminal is dumb. The app then uses its plain front end, which reads
 // lines and works anywhere.
 func New(o Options) func(app.FrontendInfo) app.Frontend {
-	if o.Open == nil {
-		if !term.IsTerminal(o.In) || !term.IsTerminal(o.Out) {
-			return nil
-		}
-		if o.Getenv != nil && strings.EqualFold(o.Getenv("TERM"), "dumb") {
-			return nil
-		}
+	if !canDraw(o) {
+		return nil
 	}
 	return func(info app.FrontendInfo) app.Frontend { return newUI(o, info) }
+}
+
+// canDraw reports whether this process has a terminal an interface could
+// draw on (see New).
+func canDraw(o Options) bool {
+	return o.Open != nil || term.IsTerminal(o.In) && term.IsTerminal(o.Out) && (o.Getenv == nil || !strings.EqualFold(o.Getenv("TERM"), "dumb"))
 }
 
 // UI is the interactive session a person sees and types into: gnosh's

@@ -145,7 +145,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 					c.Say("%s", strings.ToUpper(said[:1])+said[1:])
 					return nil
 				}
-				c.Say("The session %s was asked to stop; it ends what it was doing first (up to %s).", runShort(id), roundTime(stopWait))
+				c.Say("The session %s was asked to stop; it ends what it was doing first (up to %s).", RunShort(id), roundTime(stopWait))
 				l.background(func(ctx context.Context) {
 					if said, err := awaitStop(ctx, l.p.now, id, log, proc); err == nil {
 						l.notice(agent.LevelInfo, "tasks", strings.ToUpper(said[:1])+said[1:])
@@ -186,9 +186,9 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		if r.running {
 			state = "running for " + roundTime(l.p.now().Sub(r.started))
 		}
-		c.Say("%s  a session in the background, %s: %s", runShort(r.session), state, oneLine(firstOf(r.name, r.prompt, "(its prompt is not in its log)"), 100))
+		c.Say("%s  a session in the background, %s: %s", RunShort(r.session), state, oneLine(firstOf(r.name, r.prompt, "(its prompt is not in its log)"), 100))
 		if r.running {
-			c.Say("     what it prints: %s; /tasks stop %s stops it; gnosh -r %s opens it once it is done", l.tilde(r.log), runShort(r.session), r.session)
+			c.Say("     what it prints: %s; /tasks stop %s stops it; gnosh -r %s opens it once it is done", l.tilde(r.log), RunShort(r.session), r.session)
 		} else {
 			if e := runEnding(r); e != "" {
 				c.Say("     %s", e)

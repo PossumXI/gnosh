@@ -356,7 +356,7 @@ func (c *controls) resume(ctx context.Context, id string) (string, error) {
 		// likely), and one session has one writer: this one stays.
 		why := fmt.Sprintf("the session %s is open in another gnosh, and one session has one writer, so this one stays open", probe.ID())
 		if log := strings.TrimSuffix(probe.Path(), ".jsonl") + ".background.log"; fileExists(log) {
-			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done: /tasks stop %s stops it", runShort(probe.ID()))
+			why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done: /tasks stop %s stops it", RunShort(probe.ID()))
 		}
 		return "", errors.New(why)
 	}

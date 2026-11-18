@@ -137,22 +137,14 @@ func (s *session) closeAgents() {
 }
 
 // agentsInput gives what the terminal reported to the open view, and does
-// what the view then asks for.
+// what the view then asks for: to leave, to open a run that is over (in
+// place of this session), to stop the process (Ctrl+Z), or to draw the
+// screen afresh.
 func (s *session) agentsInput(ev term.Event) {
 	s.dirty = true
-	s.agents.v.input(ev)
-	s.afterAgents()
-}
-
-// afterAgents does what the open view asked for: to leave, to open a run
-// that is over (in place of this session), to stop the process (Ctrl+Z),
-// or to draw the screen afresh.
-func (s *session) afterAgents() {
 	o := s.agents
-	if o == nil {
-		return
-	}
 	v := o.v
+	v.input(ev)
 	switch {
 	case v.quit:
 		s.closeAgents()

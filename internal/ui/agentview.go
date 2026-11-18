@@ -74,13 +74,8 @@ const (
 // AgentView), or returns nil where there is no terminal to draw it on, as
 // New does.
 func NewAgentView(o Options) func(app.AgentViewInfo) int {
-	if o.Open == nil {
-		if !term.IsTerminal(o.In) || !term.IsTerminal(o.Out) {
-			return nil
-		}
-		if o.Getenv != nil && strings.EqualFold(o.Getenv("TERM"), "dumb") {
-			return nil
-		}
+	if !canDraw(o) {
+		return nil
 	}
 	return func(info app.AgentViewInfo) int { return runAgentView(o, info) }
 }
@@ -186,21 +181,15 @@ func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.Agent
 // is chosen, and watched if it works, its question shown if it waits on
 // one, opened (gnosh -r) if it is over.
 func (v *agentView) focusOn(id string) {
-	r, ok := v.byID(id)
+	_, ok := v.byID(id)
 	if !ok {
-		v.say("The run %s is not among the runs in the background.", runShortOf(id))
+		v.say("The run %s is not among the runs in the background.", app.RunShort(id))
 		return
 	}
 	v.sel = id
 	v.keepChoice()
-	switch {
-	case r.Question != nil:
-		v.peek = true
-	case running(r):
-		v.watch = &watching{id: id, end: true}
-	default:
-		v.open = id
-	}
+	// (Before any key: the box is empty, and nothing is peeked at.)
+	v.enter()
 }
 
 // refresh reads the list again, and what each working run is doing.
@@ -556,15 +545,19 @@ func (v *agentView) move(n int) {
 // groupOf is the group a run is listed under: its folder when the list is
 // grouped by folder, else Needs input, Working or Completed.
 func (v *agentView) groupOf(r app.AgentRun) string {
-	switch {
-	case v.byFolder:
+	if v.byFolder {
 		return runFolder(r)
-	case r.State == "blocked":
-		return "Needs input"
-	case running(r):
-		return "Working"
 	}
-	return "Completed"
+	return [...]string{"Needs input", "Working", "Completed"}[rank(r)]
+}
+
+// tally counts the runs of each rank: those that wait on the person, the
+// working ones, and those that are over.
+func (v *agentView) tally() (n [3]int) {
+	for _, r := range v.runs {
+		n[rank(r)]++
+	}
+	return n
 }
 
 // jumpGroup chooses the first run of the next group, or going back, the
@@ -576,26 +569,19 @@ func (v *agentView) jumpGroup(down bool) {
 		return
 	}
 	at := min(max(v.at, 0), len(shown)-1)
-	g := v.groupOf(shown[at])
-	if down {
-		for i := at + 1; i < len(shown); i++ {
-			if v.groupOf(shown[i]) != g {
-				v.move(i - v.at)
-				return
-			}
+	to := at
+	for i := range shown {
+		if i > 0 && v.groupOf(shown[i]) == v.groupOf(shown[i-1]) {
+			continue // (not the first of a group)
 		}
-		return
-	}
-	start := at
-	for start > 0 && v.groupOf(shown[start-1]) == g {
-		start--
-	}
-	if start == at && start > 0 {
-		start--
-		for g = v.groupOf(shown[start]); start > 0 && v.groupOf(shown[start-1]) == g; start-- {
+		if !down && i < at {
+			to = i
+		} else if down && i > at {
+			to = i
+			break
 		}
 	}
-	v.move(start - v.at)
+	v.move(to - v.at)
 }
 
 // key takes in a key while the list is on the screen.
@@ -865,7 +851,7 @@ func (v *agentView) dispatch(prompt string) {
 			v.refresh()
 			v.sel = id
 			v.keepChoice()
-			v.say("Started %s in %s: Enter watches it.", runShortOf(id), where)
+			v.say("Started %s in %s: Enter watches it.", app.RunShort(id), where)
 		}
 	})
 }
@@ -951,25 +937,11 @@ func (v *agentView) boxCommand(text string) bool {
 // title is the terminal's title while the view is open: how many runs
 // wait on the person, as Claude Code's tab title says.
 func (v *agentView) title() string {
-	n := 0
-	for _, r := range v.runs {
-		if r.State == "blocked" {
-			n++
-		}
-	}
+	n := v.tally()[0]
 	if n == 0 {
 		return "gnosh agents"
 	}
 	return fmt.Sprintf("%d awaiting input · gnosh agents", n)
-}
-
-// runShortOf is the start of a session's id that names its run, as the
-// app's list gives it.
-func runShortOf(id string) string {
-	if len(id) > 13 && id[8] == '-' {
-		return id[:13]
-	}
-	return id
 }
 
 // dispatchFolder is where a run started from the view works: the view's
@@ -1192,18 +1164,10 @@ func (v *agentView) render(cols, rows int) (body, live []string, crow, ccol int)
 	room := max(rows-len(live), 1)
 
 	shown := v.shown()
-	asking, working := 0, 0
-	for _, r := range v.runs {
-		switch {
-		case r.State == "blocked":
-			asking++
-		case running(r):
-			working++
-		}
-	}
-	counts := count(working, "working", "working") + th.Sep + count(len(v.runs)-working-asking, "completed", "completed")
-	if asking > 0 {
-		counts = count(asking, "needs input", "need input") + th.Sep + counts
+	n := v.tally()
+	counts := count(n[1], "working", "working") + th.Sep + count(n[2], "completed", "completed")
+	if n[0] > 0 {
+		counts = count(n[0], "needs input", "need input") + th.Sep + counts
 	}
 	title := th.Wordmark.Render("gnosh agents") + th.Quiet.Render(th.Sep+counts)
 	if v.info.Scoped {
@@ -1640,34 +1604,30 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 			}
 			return 1
 		}
-		if v.suspend {
-			v.suspend = false
+		if v.suspend || v.open != "" {
+			// The terminal goes to the shell (Ctrl+Z), or to gnosh -r on a
+			// run that is over, and the view takes it back after.
 			_, _ = p.Close()
-			if err := t.Suspend(); err != nil {
-				v.say("gnosh could not be suspended: %v.", err)
+			if v.suspend {
+				v.suspend = false
+				if err := t.Suspend(); err != nil {
+					v.say("gnosh could not be suspended: %v.", err)
+				}
+			}
+			if id := v.open; id != "" {
+				v.open = ""
+				_ = t.Release()
+				if err := info.Source.Open(id); err != nil {
+					v.say("gnosh -r %s: %v.", app.RunShort(id), err)
+				}
+				_ = t.Resume()
+				v.refresh()
 			}
 			cols, rows = size()
 			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
 				return 1
 			}
 			scr = &agentScreen{p: p}
-		}
-		if v.open != "" {
-			id := v.open
-			v.open = ""
-			_, _ = p.Close()
-			_ = t.Release()
-			err := info.Source.Open(id)
-			_ = t.Resume()
-			cols, rows = size()
-			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
-				return 1
-			}
-			scr = &agentScreen{p: p}
-			if err != nil {
-				v.say("gnosh -r %s: %v.", runShortOf(id), err)
-			}
-			v.refresh()
 		}
 	}
 	return 0

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -124,7 +125,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 		return cli.ExitFailure
 	}
 	writeRunPID(log, pid)
-	short := runShort(id)
+	short := RunShort(id)
 	fmt.Fprintf(p.stdout, "%s%s · process %d\n", bgStarted, id, pid)
 	hints := [][2]string{
 		{"gnosh agents", "lists the sessions in the background"},
@@ -194,11 +195,11 @@ func (p *program) bgSession(ctx context.Context, st *startup, inv cli.Invocation
 	return "", "", fmt.Errorf("%d sessions of this folder are named %q: give the ID of one", len(found), word)
 }
 
-// runShort is the start of a session's id that names its run in the
+// RunShort is the start of a session's id that names its run in the
 // folder's runs: up to the end of its second group, the time to the
 // millisecond in gnosh's ids, since two runs started within the same
 // minute share the first eight characters.
-func runShort(id string) string {
+func RunShort(id string) string {
 	if len(id) > 13 && id[8] == '-' {
 		return id[:13]
 	}
@@ -226,45 +227,23 @@ func findRun(dirs []string, word string) (id, log string, err error) {
 	if word == "" || strings.ContainsAny(word, `/\`) {
 		return "", "", fmt.Errorf("%q names no session", word)
 	}
-	logs := map[string][]string{} // the logs of each session whose id begins with word
-	var ids []string
-	for _, dir := range dirs {
-		paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
-		for _, p := range paths {
-			run := strings.TrimSuffix(filepath.Base(p), ".background.log")
-			if !strings.HasPrefix(run, word) {
-				continue
-			}
-			if logs[run] == nil {
-				ids = append(ids, run)
-			}
-			logs[run] = append(logs[run], p)
+	var ids, logs []string
+	for _, r := range runsIn(dirs, time.Time{}) {
+		if r.session == word {
+			return r.session, r.log, nil // the whole id: no other is meant
 		}
-	}
-	if len(logs[word]) > 0 {
-		ids = []string{word} // the whole id: no other is meant
+		if strings.HasPrefix(r.session, word) {
+			ids, logs = append(ids, r.session), append(logs, r.log)
+		}
 	}
 	switch len(ids) {
 	case 0:
 		return "", "", fmt.Errorf("no session ran in the background under the ID %s (gnosh agents lists them; gnosh --bg, /background and /fork start one)", word)
 	case 1:
-	default:
-		return "", "", fmt.Errorf("%s is the start of the IDs of %d sessions that ran in the background (%s): give more of it", word, len(ids), strings.Join(ids, ", "))
+		return ids[0], logs[0], nil
 	}
-	id = ids[0]
-	best := backgroundRun{}
-	for _, p := range logs[id] {
-		info, err := os.Stat(p)
-		if err != nil {
-			continue
-		}
-		r := readRunLog(p, id, info.ModTime())
-		r.running = runAlive(id, p, firstOf(r.file, filepath.Join(filepath.Dir(p), id+".jsonl")))
-		if best.log == "" || r.running && !best.running || r.running == best.running && r.started.After(best.started) {
-			best = r
-		}
-	}
-	return id, firstOf(best.log, logs[id][0]), nil
+	slices.Sort(ids)
+	return "", "", fmt.Errorf("%s is the start of the IDs of %d sessions that ran in the background (%s): give more of it", word, len(ids), strings.Join(ids, ", "))
 }
 
 // runSession is the session file a run's log names, or the one beside it.
@@ -361,7 +340,7 @@ func awaitStop(ctx context.Context, now func() time.Time, id, log string, proc *
 // the background: it lets go once it is done. (gnosh stop and /tasks stop
 // find a run of any folder.)
 func heldByRun(id string) string {
-	short := runShort(id)
+	short := RunShort(id)
 	return fmt.Sprintf("If it is a run in the background, it lets go of the session when it is done: gnosh logs -f %s follows it, and gnosh stop %s stops it", short, short)
 }
 
@@ -425,7 +404,7 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 		return code
 	}
 	if !inv.JSON && p.o.AgentView != nil {
-		return p.agentView(st, inv)
+		return p.agentViewOn(st, inv, "")
 	}
 	now := p.now()
 	since := now.Add(-runsKept)
@@ -498,7 +477,7 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 		if r.running {
 			state += " " + roundTime(now.Sub(r.started))
 		}
-		rows[i] = cells{runShort(r.session) + "  " + r.started.Local().Format("2006-01-02 15:04"), state,
+		rows[i] = cells{RunShort(r.session) + "  " + r.started.Local().Format("2006-01-02 15:04"), state,
 			homeTilde(st.cfg.Paths.Home, firstOf(r.cwd, "(folder not known)")), oneLine(firstOf(r.name, r.prompt, "(its prompt is not in its log)"), 80)}
 		wState, wDir = max(wState, utf8.RuneCountInString(state)), max(wDir, utf8.RuneCountInString(rows[i].dir))
 	}

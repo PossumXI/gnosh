@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
@@ -75,7 +76,7 @@ type AgentQuestion struct {
 
 // QuestionChoice is an answer a question offers: Key is what is answered,
 // Label what the person reads.
-type QuestionChoice struct{ Key, Label string }
+type QuestionChoice = agent.Choice
 
 // AgentRun is a run in the background as the agent view lists it.
 type AgentRun struct {
@@ -167,7 +168,7 @@ func (p *program) attachCommand(ctx context.Context, inv cli.Invocation) int {
 		return cli.ExitFailure
 	}
 	if p.o.AgentView == nil {
-		p.errf("gnosh attach opens the agent view, which needs a terminal: gnosh logs -f %s follows the run here.", runShort(id))
+		p.errf("gnosh attach opens the agent view, which needs a terminal: gnosh logs -f %s follows the run here.", RunShort(id))
 		return cli.ExitFailure
 	}
 	// (Every folder's runs, as gnosh agents lists them, however old.)
@@ -188,11 +189,6 @@ func runNamed(dirs []string, name string) string {
 		}
 	}
 	return found
-}
-
-// agentView opens the agent view for gnosh agents.
-func (p *program) agentView(st *startup, inv cli.Invocation) int {
-	return p.agentViewOn(st, inv, "")
 }
 
 // agentViewOn opens the agent view, on the run of the session focus when
@@ -258,13 +254,10 @@ func (s *runSource) Runs() []AgentRun {
 			continue
 		}
 		listed[r.session] = r
-		a := AgentRun{ID: r.session, Short: runShort(r.session), Name: r.name, State: runState(r), Ending: runEnding(r),
+		a := AgentRun{ID: r.session, Short: RunShort(r.session), Name: r.name, State: runState(r), Ending: runEnding(r),
 			Cwd: r.cwd, Folder: homeTilde(s.home, r.cwd), Prompt: r.prompt, Output: r.output, Started: r.started}
-		if q := r.asking; q != nil {
-			a.Question = &AgentQuestion{ID: q.ID, Title: q.Title, Text: q.Text, Since: q.Since}
-			for _, c := range q.Choices {
-				a.Question.Choices = append(a.Question.Choices, QuestionChoice{Key: c.Key, Label: c.Label})
-			}
+		if r.asking != nil {
+			a.Question = &r.asking.AgentQuestion
 		}
 		if r.running {
 			working = append(working, a)

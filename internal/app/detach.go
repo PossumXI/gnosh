@@ -176,9 +176,9 @@ func (l *live) watchRun(ctx context.Context, id, logPath, path string) {
 			case r.ended == "":
 				level, how = agent.LevelWarning, "ended without a word: it was killed, or its machine stopped"
 			}
-			l.notice(level, "fork", fmt.Sprintf("The fork %s %s (gnosh -r %s opens it).%s", runShort(id), how, id, said))
+			l.notice(level, "fork", fmt.Sprintf("The fork %s %s (gnosh -r %s opens it).%s", RunShort(id), how, id, said))
 		} else {
-			l.notice(agent.LevelWarning, "fork", fmt.Sprintf("The fork %s ended without taking its session (what it printed is in %s).%s", runShort(id), l.tilde(logPath), said))
+			l.notice(agent.LevelWarning, "fork", fmt.Sprintf("The fork %s ended without taking its session (what it printed is in %s).%s", RunShort(id), l.tilde(logPath), said))
 		}
 		return
 	}
@@ -432,39 +432,35 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			head = false
 		}
 		if rest, ok := strings.CutPrefix(line, "gnosh: "); ok {
+			// gnosh's own lines: the time, then what happened.
 			at, after, _ := strings.Cut(rest, " ")
 			t, terr := time.Parse(time.RFC3339, at)
-			if terr == nil && " "+after == runStopped {
+			after = " " + after
+			failure, failed := strings.CutPrefix(after, runFailed)
+			name, renamed := strings.CutPrefix(after, " "+id+runRenamed)
+			prompt, begun := strings.CutPrefix(after, " the session "+id+" goes on in the background with: ")
+			switch {
+			case terr != nil:
+			case after == runStopped:
 				r.stopped, r.endedAt = true, t
 				continue
-			}
-			if terr == nil {
-				ended, failure := "", ""
-				switch {
-				case " "+after == runDone:
-					ended = "done"
-				case strings.HasPrefix(" "+after, runFailed):
-					ended, failure = "failed", strings.TrimPrefix(" "+after, runFailed)
-				case strings.HasPrefix(" "+after, runSignalled):
-					ended = "stopped"
-				}
-				if ended != "" {
-					r.ended, r.failure, r.endedAt = ended, failure, t
-					continue
-				}
-			}
-			if name, ok := strings.CutPrefix(after, id+runRenamed); terr == nil && ok {
+			case after == runDone:
+				r.ended, r.failure, r.endedAt = "done", "", t
+				continue
+			case failed:
+				r.ended, r.failure, r.endedAt = "failed", failure, t
+				continue
+			case strings.HasPrefix(after, runSignalled):
+				r.ended, r.failure, r.endedAt = "stopped", "", t
+				continue
+			case renamed:
 				r.name = strings.TrimSpace(name)
 				continue
-			}
-			if terr == nil {
-				if p, ok := strings.CutPrefix(after, "the session "+id+" goes on in the background with: "); ok {
-					r.prompt, r.name, r.last, r.file, r.cwd, r.stopped, r.started = p, "", "", "", "", false, t
-					r.ended, r.failure, r.endedAt = "", "", time.Time{}
-					r.output = r.output[:0]
-					head = true
-					continue
-				}
+			case begun:
+				// A run of the session that went on again: all of it is
+				// this one's from here.
+				r, head = backgroundRun{log: path, prompt: prompt, started: t, output: r.output[:0]}, true
+				continue
 			}
 		}
 		if strings.TrimSpace(line) != "" {
