@@ -1776,3 +1776,13 @@ or kept with the reason said (27).
     give the person the command and stop. Tested with a stand-in gnokey
     and, where the machine has it, the real one (a key made offline, a
     wrong password reported, the right one signing).
+
+112. **A session /cd moved is given the new folder's first-prompt block.**
+    The box check of 18 November found that after /cd the model did not
+    know the moved-to folder's GNOSH.md: instruction files, kinds of
+    sub-agent, skills and the environment go with a session's first
+    prompt only, and since the fix of 104 a session opened again (as
+    the gnosh /cd starts is) has had its first prompt. On 17 November it
+    had worked only because a reopened session still counted as not yet
+    sent. The note that tells the model of the move is now followed by
+    that block for the folder the session came to.

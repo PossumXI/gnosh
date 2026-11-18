@@ -310,6 +310,16 @@ func (l *live) movedHere() {
 	to := l.cfg.Paths.Cwd
 	_ = l.agent.Tell(agent.Note{Source: "cd",
 		Text: prompt.Wrap(fmt.Sprintf("The user moved this session with /cd from %s to %s. The working directory is %s now: commands run there, relative paths start there, and the project's instructions, settings, skills and hooks are that folder's. mem is that folder's project memory: what mem held for this session in %s stays with that folder.", from, to, to, from))})
+	// The folder's instruction files, its kinds of sub-agent and skills,
+	// and its environment, as a first prompt carries them: the session's
+	// first prompt carried the old folder's, and a prompt of a session
+	// opened again is never a first one (the box check of 18 November:
+	// the model did not know the moved-to folder's GNOSH.md).
+	if parts, err := l.firstPromptLines(l.ctx, agent.LineInfo{First: true}); err == nil {
+		for _, p := range parts {
+			_ = l.agent.Tell(agent.Note{Source: p.Source, Text: p.Text})
+		}
+	}
 	if l.hooks.has(hooks.CwdChanged) {
 		l.background(func(ctx context.Context) {
 			if out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.CwdChanged, OldCwd: from, NewCwd: to, EnvFile: l.envFile()}); err == nil {

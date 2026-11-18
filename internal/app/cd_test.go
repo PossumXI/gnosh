@@ -31,8 +31,12 @@ func TestCd(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The lib's own settings wait for trust.
+	// The lib's own settings wait for trust; its instructions go to the
+	// model once the session is there.
 	if err := os.WriteFile(filepath.Join(lib, "gnosh.json"), []byte(`{"permissions": {"allow": ["Bash(make *)"]}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "GNOSH.md"), []byte("In this project the codeword is PERSIMMON.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	w.Deny("Cd(/" + secret + ")")
@@ -109,7 +113,8 @@ func TestCd(t *testing.T) {
 	s.exit()
 	reqs := w.Model.Requests()
 	has(t, "the request after the move", string(reqs[len(reqs)-1].Body),
-		"The user moved this session with /cd from "+w.Dir+" to "+lib+".", "working directory is "+lib)
+		"The user moved this session with /cd from "+w.Dir+" to "+lib+".", "working directory is "+lib,
+		"the codeword is PERSIMMON")
 	if strings.Contains(string(reqs[0].Body), "moved this session") {
 		t.Error("the model was told of a move before there was one")
 	}
