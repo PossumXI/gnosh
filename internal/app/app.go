@@ -524,7 +524,10 @@ func (p *program) runEnded(code int) {
 	case code != cli.ExitOK:
 		how = fmt.Sprintf("%sit ended with exit status %d.", runFailed, code)
 	}
-	fmt.Fprintf(f, "gnosh: %s%s\n", p.now().UTC().Format(time.RFC3339), how)
+	// (To the millisecond: a session's status line counts the runs that
+	// ended since it last looked, which it may have done in the same
+	// second. readRunLog's RFC3339 reads the fraction.)
+	fmt.Fprintf(f, "gnosh: %s%s\n", p.now().UTC().Format("2006-01-02T15:04:05.000Z07:00"), how)
 }
 
 // signalExit is the exit code of a program that a signal stopped: 130 for

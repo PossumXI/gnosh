@@ -226,6 +226,9 @@ type runSource struct {
 	// seen, when not nil, is told of the runs each time they are listed:
 	// the person sees them (a session's status line, agentsWord).
 	seen func([]backgroundRun)
+	// mode is the permission mode of the session the view was opened
+	// over, given to a run started in its folder with no mode named.
+	mode string
 
 	mu sync.Mutex
 	// runs are the runs as last listed, by session id, and convs what was
@@ -423,6 +426,12 @@ func (s *runSource) Dispatch(ctx context.Context, dir, prompt string, flags []st
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("%s is not a folder that is there", dir)
 	}
+	if s.mode != "" && filepath.Clean(dir) == filepath.Clean(s.cwd) &&
+		!slices.ContainsFunc(flags, func(f string) bool { return strings.HasPrefix(f, "--permission-mode") }) {
+		// (Only in the session's own folder: another's defaultMode
+		// stands, as Claude Code's comes first.)
+		flags = append(slices.Clone(flags), "--permission-mode="+s.mode)
+	}
 	return s.background(ctx, dir, flags, prompt)
 }
 
@@ -572,17 +581,18 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		l.agentsSeen.Store(now.UnixNano())
 		l.setStatus("agents", agentsWord(runs, now))
 	}
-	// The runs started from it work in this session's permission mode, as
-	// Claude Code's dispatched from a view opened with ← work in the
-	// source session's; in the default mode none is named, and a run reads
-	// its folder's defaultMode itself.
-	var flags []string
-	if m := string(l.engine.Mode()); m != "" && m != "default" {
-		flags = append(flags, "--permission-mode="+m)
+	// The runs started from it in this session's folder work in its
+	// permission mode, as Claude Code's dispatched from a view opened with
+	// ← work in the source session's when the folder names no defaultMode;
+	// in the default mode none is named, and a run reads its folder's
+	// defaultMode itself (runSource.Dispatch).
+	mode := string(l.engine.Mode())
+	if mode == "default" {
+		mode = ""
 	}
 	return AgentViewInfo{
-		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs, cwd: cwd, home: home, seen: seen},
-		Cwd:    cwd, Home: home, Flags: flags,
+		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs, cwd: cwd, home: home, seen: seen, mode: mode},
+		Cwd:    cwd, Home: home,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
 		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents).Names(),
 		Repos:  agentRepos(cwd),

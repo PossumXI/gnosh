@@ -284,11 +284,11 @@ func TestAgentRepos(t *testing.T) {
 func TestAgentViewOverASessionKeepsItsMode(t *testing.T) {
 	for _, c := range []struct {
 		args []string
-		want []string
+		want string
 	}{
-		{[]string{"-y"}, []string{"--permission-mode=bypassPermissions"}},
-		{[]string{"--permission-mode", "acceptEdits"}, []string{"--permission-mode=acceptEdits"}},
-		{nil, nil},
+		{[]string{"-y"}, "bypassPermissions"},
+		{[]string{"--permission-mode", "acceptEdits"}, "acceptEdits"},
+		{nil, ""},
 	} {
 		w := apptest.NewWorld(t)
 		_, r := attach(t, w, nil, func(ctx context.Context, sc SessionControls, f *scripted) int {
@@ -297,8 +297,9 @@ func TestAgentViewOverASessionKeepsItsMode(t *testing.T) {
 				t.Fatal("the session offers no agent view")
 			}
 			info, err := av.AgentView()
-			if err != nil || !slices.Equal(info.Flags, c.want) {
-				t.Errorf("%q: the view's flags are %q (%v), want %q", c.args, info.Flags, err, c.want)
+			src, _ := info.Source.(*runSource)
+			if err != nil || src == nil || src.mode != c.want {
+				t.Errorf("%q: the runs' mode is %+v (%v), want %q", c.args, src, err, c.want)
 			}
 			sc.Quit("prompt_input_exit")
 			return 0

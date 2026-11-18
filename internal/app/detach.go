@@ -464,6 +464,9 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			}
 		}
 		if strings.TrimSpace(line) != "" {
+			// A run's own end line is the last it writes: one with what it
+			// printed after it was printed, a quote of another's.
+			r.ended, r.failure, r.endedAt = "", "", time.Time{}
 			r.last = strings.TrimSpace(line)
 			if len(r.output) == runOutputKept {
 				r.output = append(r.output[:0], r.output[1:]...)

@@ -2191,3 +2191,21 @@ or kept with the reason said (27).
     (--permission-mode=<mode>); a session in the default mode names none,
     and the run reads its folder's defaultMode itself. gnosh agents keeps
     its own --permission-mode flag for the runs it starts.
+
+137. **After a review of the agent view's evening.** A second reviewer
+    read 963b235..d1eae3e and found five things; these were fixed. The
+    serious one, in the permission engine, is its own commit: a git -C
+    with a .. (git goes through a link before its ..) or a pattern is no
+    longer taken for the line's own folder, and the work-tree guard no
+    longer folds a .. in a git place. In the agent view: a question that
+    has just come takes no answer for a moment, as the session's own
+    questions do (guardShown since it was first listed, guardPause since
+    the key before); a digit typed in that moment is typing, and words
+    begun before the question was seen go to the run, which reads them
+    once it goes on, instead of answering it "no, with them". The
+    session's mode is given only to runs started in the session's own
+    folder (another folder's defaultMode stands, as Claude Code's comes
+    first). A run's end line is written to the millisecond, so that the
+    status line's count of runs done since a look in the same second
+    finds it; an end line followed by more of what the run printed is a
+    quote, not its end; and how a run ended is shown as one line.
