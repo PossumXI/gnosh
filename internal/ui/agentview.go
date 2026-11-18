@@ -671,19 +671,8 @@ func (v *agentView) key(k term.Key) {
 			v.reply(r, strings.TrimSpace(v.box.Text()))
 		}
 	case !empty && v.answering() && !v.viewWords() && k.IsKey(term.KeyEnter, 0):
-		// Words for the question: no, with them.
 		r, _ := v.chosen()
-		no := false
-		for _, c := range r.Question.Choices {
-			if c.Key == "no" {
-				no = true
-				v.answer(r, c, strings.TrimSpace(v.box.Text()))
-				v.box.Reset()
-			}
-		}
-		if !no {
-			v.say("This question takes no words: a number answers it.")
-		}
+		v.answerWords(r, strings.TrimSpace(v.box.Text()))
 	case empty && typedRune(k, ' '):
 		v.peek, v.help = !v.peek, false
 	case empty && typedRune(k, '?'):
@@ -768,6 +757,19 @@ func (v *agentView) answer(r app.AgentRun, c app.QuestionChoice, text string) {
 	v.peek = false
 	v.refresh()
 	v.say("Answered %s: %s.", runName(r), strings.TrimSuffix(said, "."))
+}
+
+// answerWords answers the question run r waits on no, with the person's
+// words, which the model reads and carries on with.
+func (v *agentView) answerWords(r app.AgentRun, text string) {
+	for _, c := range r.Question.Choices {
+		if c.Key == "no" {
+			v.answer(r, c, text)
+			v.box.Reset()
+			return
+		}
+	}
+	v.say("This question takes no words: a number answers it.")
 }
 
 // reply sends words to the run r peeked at: one that is over goes on with
@@ -1077,9 +1079,18 @@ func (v *agentView) watchInput(ev term.Event) {
 		case !empty && k.IsKey(term.KeyEnter, 0):
 			// Words for the run watched: a working one reads them between
 			// its steps, and one that is over goes on with them, as
-			// Claude Code's attached session takes a prompt.
-			if r, ok := v.byID(w.id); ok {
+			// Claude Code's attached session takes a prompt; one that
+			// waits on a question is answered no, with them.
+			if r, ok := v.byID(w.id); ok && r.Question != nil {
+				v.answerWords(r, strings.TrimSpace(v.box.Text()))
+			} else if ok {
 				v.reply(r, strings.TrimSpace(v.box.Text()))
+			}
+		case empty && k.Code == term.KeyRune && k.Rune >= '1' && k.Rune <= '9' && k.Mod&^term.ModShift == 0 && v.watchedAsks():
+			// The question of the run watched, answered by its number.
+			r, _ := v.byID(w.id)
+			if i := int(k.Rune - '1'); i < len(r.Question.Choices) {
+				v.answer(r, r.Question.Choices[i], "")
 			}
 		case k.IsKey(term.KeyUp, 0):
 			w.rows++
@@ -1111,6 +1122,13 @@ func (v *agentView) watchInput(ev term.Event) {
 			}
 		}
 	}
+}
+
+// watchedAsks reports whether the run watched waits on a question with
+// answers to choose from.
+func (v *agentView) watchedAsks() bool {
+	r, ok := v.byID(v.watch.id)
+	return ok && r.Question != nil && len(r.Question.Choices) > 0
 }
 
 // listPlaceholder and watchPlaceholder are what the box says while it is
@@ -1349,22 +1367,7 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 		out = append(out, wrap(v.m, mark+" "+oneLine(e), width, "", "  ")...)
 	}
 	if q := r.Question; q != nil {
-		// What it asks, and the answers, numbered for the keys. (Its
-		// lines wrap: why gnosh asks is read whole.)
-		out = append(out, fit(v.m, th.Ask.Render(th.AskMark)+" "+oneLine(q.Title), width))
-		var text []string
-		for _, l := range safeLines(q.Text) {
-			lead := "  " + strings.Repeat(" ", len(l)-len(strings.TrimLeft(l, " ")))
-			text = append(text, wrap(v.m, strings.TrimLeft(l, " "), width, lead, lead)...)
-		}
-		if len(text) > 2*peekRows {
-			text = append(text[:2*peekRows:2*peekRows], th.Quiet.Render(fit(v.m, fmt.Sprintf("  … %s", count(len(text)-2*peekRows, "more row", "more rows")), width)))
-		}
-		out = append(out, text...)
-		for i, c := range q.Choices {
-			out = append(out, fit(v.m, fmt.Sprintf("  %d. %s", i+1, oneLine(c.Label)), width))
-		}
-		return out
+		return append(out, v.questionLines(q, width, 2*peekRows)...)
 	}
 	var lines []string
 	none := "(it printed nothing)"
@@ -1383,6 +1386,27 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 		// (gnosh's own words, styled: not made safe as what a run said
 		// is, which would show their colours' codes.)
 		out = append(out, fit(v.m, "  "+th.Quiet.Render(none), width))
+	}
+	return out
+}
+
+// questionLines are what a run asks, and the answers, numbered for the
+// keys. Its lines wrap, since why gnosh asks is read whole, up to most
+// rows of them.
+func (v *agentView) questionLines(q *app.AgentQuestion, width, most int) []string {
+	th := &v.th
+	out := []string{fit(v.m, th.Ask.Render(th.AskMark)+" "+oneLine(q.Title), width)}
+	var text []string
+	for _, l := range safeLines(q.Text) {
+		lead := "  " + strings.Repeat(" ", len(l)-len(strings.TrimLeft(l, " ")))
+		text = append(text, wrap(v.m, strings.TrimLeft(l, " "), width, lead, lead)...)
+	}
+	if len(text) > most {
+		text = append(text[:most:most], th.Quiet.Render(fit(v.m, fmt.Sprintf("  … %s", count(len(text)-most, "more row", "more rows")), width)))
+	}
+	out = append(out, text...)
+	for i, c := range q.Choices {
+		out = append(out, fit(v.m, fmt.Sprintf("  %d. %s", i+1, oneLine(c.Label)), width))
 	}
 	return out
 }
@@ -1480,9 +1504,17 @@ func (v *agentView) renderWatch(cols int) (body, live []string, crow, ccol int) 
 			state = "stopping"
 		}
 		parts = []string{"watching " + runName(r), state + " " + v.age(r)}
-		if running(r) {
+		switch {
+		case r.Question != nil:
+			// What it asks stands above the box, as Claude Code's
+			// attached session shows its dialog.
+			live = v.questionLines(r.Question, max(cols, 10), watchQuestionRows)
+			if n := len(r.Question.Choices); n > 0 {
+				parts = append(parts, fmt.Sprintf("1-%d answers", n), "words and Enter: no, with them")
+			}
+		case running(r):
 			parts = append(parts, "Ctrl+X stops it")
-		} else {
+		default:
 			parts = append(parts, "Enter opens it")
 		}
 	}
@@ -1492,9 +1524,14 @@ func (v *agentView) renderWatch(cols int) (body, live []string, crow, ccol int) 
 	}
 	v.box.SetPlaceholder(watchPlaceholder)
 	view := v.box.Render(max(cols, 10))
-	live = append(append([]string(nil), view.Lines...), fit(v.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols))
-	return w.lines, live, view.CursorRow, view.CursorCol
+	crow, ccol = len(live)+view.CursorRow, view.CursorCol
+	live = append(append(live, view.Lines...), fit(v.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols))
+	return w.lines, live, crow, ccol
 }
+
+// watchQuestionRows is how many rows of a question's text the watch screen
+// shows; Esc and Space show it whole in the peek.
+const watchQuestionRows = 4
 
 // runAgentView runs the agent view until the person leaves it, and returns
 // the exit code.

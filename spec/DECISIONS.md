@@ -2156,3 +2156,13 @@ or kept with the reason said (27).
     does; Esc first empties the box, then goes back; ← on an empty box
     goes back too. q no longer goes back from a run watched, since it is a
     letter in the box (Esc, ← and Ctrl+C still do).
+
+134. **A run watched that asks shows its question.** A permission
+    question is not in a run's conversation (it waits in its .ask file),
+    so watching a run that came to one showed only "blocked", and the
+    person went back to the list to peek and answer. Claude Code's
+    attached session shows its dialog where the session is. The watch
+    screen now shows the question above the box (its title, up to four
+    rows of its text, its numbered answers): a number answers it, and
+    words with Enter answer no, with them, as in the peek (answerWords,
+    shared). The peek still shows the whole text.

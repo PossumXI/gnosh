@@ -487,6 +487,42 @@ func TestAgentViewWatch(t *testing.T) {
 	}
 }
 
+// A run watched that waits on a question shows it above the box, as
+// Claude Code's attached session shows its dialog: its number answers it,
+// and words with Enter answer no, with them.
+func TestAgentViewWatchAnswers(t *testing.T) {
+	g := newAgentRig(t)
+	ask := func() {
+		g.src.set(runDocs, func(r *app.AgentRun) {
+			r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q1", Title: "Allow Bash?", Text: "  $ rm -rf build",
+				Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes, this once"}, {Key: "no", Label: "No"}}}
+		})
+		g.v.refresh()
+	}
+	ask()
+	g.v.sel = runDocs
+	g.keys("<Enter> <Enter>")
+	if g.v.watch == nil || g.v.watch.id != runDocs {
+		t.Fatalf("Enter twice on the run that asks did not watch it")
+	}
+	_, live := g.screen()
+	all := strings.Join(live, "\n")
+	for _, want := range []string{"? Allow Bash?", "    $ rm -rf build", "  1. Yes, this once", "  2. No", "1-2 answers · words and Enter: no, with them"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("watching the run that asks does not show %q:\n%s", want, all)
+		}
+	}
+	g.keys(`"1"`)
+	if !slices.Equal(g.src.answered, []string{runDocs + " q1 yes "}) || g.v.watch == nil {
+		t.Fatalf("1 while watching: answered %q, watching %v", g.src.answered, g.v.watch != nil)
+	}
+	ask()
+	g.keys(`"not now, read the README first" <Enter>`)
+	if len(g.src.answered) != 2 || g.src.answered[1] != runDocs+" q1 no not now, read the README first" || len(g.src.told) != 0 {
+		t.Errorf("words while watching the run that asks: answered %q, told %q", g.src.answered, g.src.told)
+	}
+}
+
 // The view on a terminal: it takes the whole screen; Enter on a run that
 // is over gives the terminal to gnosh -r and takes it back after, the list
 // drawn again; Esc leaves, and the terminal is put back.
