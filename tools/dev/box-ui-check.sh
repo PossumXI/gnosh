@@ -135,9 +135,10 @@
 #   agents      a run in the background (gnosh --bg) asks before it runs a
 #               command; the session's status line counts it ("← 1 run
 #               needs input"), ← twice in the empty box opens the agent
-#               view over the session, Enter shows the question, 1 answers
-#               it, the run writes out/asked.txt and is done, and Esc comes
-#               back to the session
+#               view over the session, Enter shows the question, Enter
+#               again watches the run with its question above the box, 1
+#               answers it, the run writes out/asked.txt and is done, and
+#               Esc twice comes back to the session
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -357,10 +358,15 @@ agents)
 	sleep 1
 	tmux send-keys -t "$S" Left
 	sleep 2
+	# Enter shows the question in the peek, Enter again watches the run,
+	# whose question stands above the box there; 1 answers it.
 	tmux send-keys -t "$S" Enter
 	sleep 1
+	tmux send-keys -t "$S" Enter
+	sleep 2
+	echo "=== watching it: $(screen | grep -o '1-[0-9] answers[^·]*' | head -1)"
 	tmux send-keys -t "$S" 1
-	done_when() { [ -s "$T/work/out/asked.txt" ] && screen | grep -q "0 working · 1 completed"; }
+	done_when() { [ -s "$T/work/out/asked.txt" ] && screen | grep -q "done [0-9]"; }
 	;;
 basic)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
@@ -788,6 +794,8 @@ if [ "$scenario" = wtflag ]; then
 fi
 if [ "$scenario" = agents ]; then
 	echo "=== asked.txt: $(cat "$T/work/out/asked.txt" 2>/dev/null || echo none)"
+	tmux send-keys -t "$S" Escape
+	sleep 1
 	tmux send-keys -t "$S" Escape
 	sleep 2
 	echo "=== back in the session: $(screen | grep -v '^ *$' | tail -3 | tr '\n' '|')"
