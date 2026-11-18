@@ -272,6 +272,18 @@ func TestStdinOfEveryEvent(t *testing.T) {
 			in:   Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", CommandArgs: "staging", CommandSource: "project", Prompt: "Deploy to staging."},
 			want: with(common(UserPromptExpansion), map[string]any{"permission_mode": "default", "expansion_type": "slash_command", "command_name": "deploy", "command_args": "staging", "command_source": "project", "prompt": "Deploy to staging."}),
 		},
+		{
+			name: "Elicitation",
+			in: Input{Event: Elicitation, MCPServerName: "issue-tracker", Message: "Which project?", Mode: "form",
+				RequestedSchema: json.RawMessage(`{"type": "object", "properties": {"project_key": {"type": "string"}}}`)},
+			want: with(common(Elicitation), map[string]any{"mcp_server_name": "issue-tracker", "message": "Which project?", "mode": "form",
+				"requested_schema": map[string]any{"type": "object", "properties": map[string]any{"project_key": map[string]any{"type": "string"}}}}),
+		},
+		{
+			name: "ElicitationResult",
+			in:   Input{Event: ElicitationResult, MCPServerName: "issue-tracker", Action: "accept", Mode: "form", Content: json.RawMessage(`{"project_key":"WEB"}`)},
+			want: with(common(ElicitationResult), map[string]any{"mcp_server_name": "issue-tracker", "action": "accept", "mode": "form", "content": map[string]any{"project_key": "WEB"}}),
+		},
 	}
 	seen := map[Event]bool{}
 	for _, tt := range tests {
@@ -470,6 +482,8 @@ func TestEnvironmentOfEveryEvent(t *testing.T) {
 		{"PostModelSwitch", Input{Event: PostModelSwitch, FromModel: "local/a", ToModel: "local/b", Source: "command"}, always(PostModelSwitch)},
 		{"DirectoryAdded", Input{Event: DirectoryAdded, Directory: "/project/docs", Source: "slash_command"}, always(DirectoryAdded)},
 		{"UserPromptExpansion", Input{Event: UserPromptExpansion, ExpansionType: "slash_command", CommandName: "deploy", Prompt: "x"}, always(UserPromptExpansion)},
+		{"Elicitation", Input{Event: Elicitation, MCPServerName: "issue-tracker", Message: "Which project?"}, always(Elicitation)},
+		{"ElicitationResult", Input{Event: ElicitationResult, MCPServerName: "issue-tracker", Action: "decline"}, always(ElicitationResult)},
 		{"CwdChanged", Input{Event: CwdChanged, OldCwd: "/project", NewCwd: "/project/sub", EnvFile: "/state/gnosh/env/session-1.sh"},
 			with(always(CwdChanged), "GNOSH_ENV_FILE", "/state/gnosh/env/session-1.sh", "CLAUDE_ENV_FILE", "/state/gnosh/env/session-1.sh")},
 	}

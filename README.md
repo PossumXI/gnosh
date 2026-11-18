@@ -49,13 +49,13 @@ Built:
   too, http hooks, mcp_tool hooks and prompt hooks (a rule or a condition
   the model judges, `{"ok": false, "reason": ...}` blocking as a command
   hook's answer would), with Claude Code's `if` filters (one
-  permission rule each) and their status messages, on 23 of Claude Code's
+  permission rule each) and their status messages, on 25 of Claude Code's
   events: the tool and prompt events, Stop and SubagentStop, the session
   and summary events, PreModelSwitch and PostModelSwitch, ConfigChange,
-  PostToolBatch, CwdChanged, DirectoryAdded and FileChanged among them.
-  Not yet: WorktreeCreate, WorktreeRemove, MessageDisplay, Elicitation
-  and ElicitationResult; Setup, PermissionDenied, TaskCreated,
-  TaskCompleted and TeammateIdle belong to things gnosh does not have.
+  PostToolBatch, CwdChanged, DirectoryAdded, FileChanged, Elicitation and
+  ElicitationResult among them. Not yet: WorktreeCreate, WorktreeRemove
+  and MessageDisplay; Setup, PermissionDenied, TaskCreated, TaskCompleted
+  and TeammateIdle belong to things gnosh does not have.
 - **What the model is given:** instruction files, skills (with
   allowed-tools and disallowed-tools, effort, `context: fork` in a
   sub-agent, paths, hooks of their own, and commands run before the model

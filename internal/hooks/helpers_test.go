@@ -193,6 +193,12 @@ func input(event Event) Input {
 	case SubagentStart, SubagentStop:
 		in.AgentID = "agent-1"
 		in.AgentType = "Explore"
+	case Elicitation:
+		in.MCPServerName, in.Message, in.Mode = "issue-tracker", "Which project?", "form"
+		in.RequestedSchema = json.RawMessage(`{"type":"object","properties":{"project_key":{"type":"string","title":"Project key"}},"required":["project_key"]}`)
+	case ElicitationResult:
+		in.MCPServerName, in.Action, in.Mode = "issue-tracker", "accept", "form"
+		in.Content = json.RawMessage(`{"project_key":"WEB"}`)
 	}
 	return in
 }

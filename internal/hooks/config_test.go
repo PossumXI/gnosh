@@ -339,7 +339,7 @@ func TestCheckRefusesEventsThatAreNotFired(t *testing.T) {
 }
 
 func TestCanBlock(t *testing.T) {
-	blocking := map[Event]bool{PreToolUse: true, UserPromptSubmit: true, UserPromptExpansion: true, Stop: true, SubagentStop: true, PreModelSwitch: true, ConfigChange: true, PostToolBatch: true}
+	blocking := map[Event]bool{PreToolUse: true, UserPromptSubmit: true, UserPromptExpansion: true, Stop: true, SubagentStop: true, PreModelSwitch: true, ConfigChange: true, PostToolBatch: true, Elicitation: true, ElicitationResult: true}
 	for _, e := range Events() {
 		if e.CanBlock() != blocking[e] {
 			t.Errorf("%s.CanBlock() = %v, want %v", e, e.CanBlock(), blocking[e])
@@ -348,8 +348,8 @@ func TestCanBlock(t *testing.T) {
 	if Event("stop").CanBlock() {
 		t.Error(`Event("stop").CanBlock() is true for a name that is not an event`)
 	}
-	if n := len(Events()); n != 23 {
-		t.Errorf("Events() has %d events, want 23", n)
+	if n := len(Events()); n != 25 {
+		t.Errorf("Events() has %d events, want 25", n)
 	}
 }
 

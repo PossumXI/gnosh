@@ -179,6 +179,20 @@ type Input struct {
 	// the order the model wrote them ("tool_calls").
 	ToolCalls []BatchCall
 
+	// MCPServerName, Mode, RequestedSchema, Action and Content are, for
+	// Elicitation and ElicitationResult: the MCP server that asks (what
+	// the matchers are tested against, "mcp_server_name"); the kind of
+	// request, "form" ("mode"); the fields it asks for, as the JSON schema
+	// it sent ("requested_schema", Elicitation); and the person's answer,
+	// accept, decline or cancel ("action"), with the values when they
+	// accepted ("content", ElicitationResult). Message is the server's
+	// message (Elicitation).
+	MCPServerName   string
+	Mode            string
+	RequestedSchema json.RawMessage
+	Action          string
+	Content         json.RawMessage
+
 	// Extra holds further fields for stdin, by their JSON names, for
 	// things Claude Code documents that this package has no field for
 	// (such as "background_tasks" on Stop or "mcp_server" on a tool
@@ -229,6 +243,8 @@ func (in *Input) subject() string {
 		return in.Source
 	case FileChanged:
 		return filepath.Base(in.FilePath)
+	case Elicitation, ElicitationResult:
+		return in.MCPServerName
 	}
 	return ""
 }
@@ -394,6 +410,20 @@ func (in *Input) payload(info eventInfo, cwd string) ([]byte, error) {
 		m["command_args"] = in.CommandArgs
 		m["command_source"] = in.CommandSource
 		m["prompt"] = in.Prompt
+	case Elicitation:
+		m["mcp_server_name"] = in.MCPServerName
+		m["message"] = in.Message
+		set("mode", in.Mode)
+		if raw := bytes.TrimSpace(in.RequestedSchema); len(raw) > 0 && json.Valid(raw) {
+			m["requested_schema"] = json.RawMessage(raw)
+		}
+	case ElicitationResult:
+		m["mcp_server_name"] = in.MCPServerName
+		m["action"] = in.Action
+		set("mode", in.Mode)
+		if raw := bytes.TrimSpace(in.Content); len(raw) > 0 && json.Valid(raw) {
+			m["content"] = json.RawMessage(raw)
+		}
 	}
 
 	// Claude Code writes this JSON without escaping <, > and &, and a hook

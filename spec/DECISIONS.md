@@ -1404,3 +1404,25 @@ or kept with the reason said (27).
     is sent nothing. A server's form goes to the person only, never to a
     channel. Not built: later MCP versions' URL mode, field defaults
     filled in, and the Elicitation and ElicitationResult hooks.
+
+91. **The Elicitation and ElicitationResult hooks, as Claude Code's.** An
+    Elicitation hook runs before an MCP server's form is shown (its
+    matcher is held against the server's name; it is told the server,
+    the message, "mode": "form" and the requested_schema) and may answer
+    in the person's place with hookSpecificOutput "action": "accept" and
+    the values in "content", or "decline" or "cancel"; one that says
+    nothing leaves the form to the person. An ElicitationResult hook runs
+    on the person's answer (told the action and the content) and may put
+    another answer in its place; it does not run after an Elicitation
+    hook answered. Exit 2, a top-level "decision": "block" and a hook that
+    could not evaluate decline, and a decline wins over the other hooks'
+    answers, as in Claude Code; beyond it, a cancel wins over an accept,
+    two accepts with different values decline, and an answer counts only
+    from a hook that exits 0. Values a hook gives are held to the fields
+    as the person's are, and values that do not fit decline. A run
+    declares elicitation when an Elicitation hook is set, so that the
+    hook can answer there; what the hooks leave to the person is declined
+    in a run. Where an ElicitationResult hook cancels, the person's
+    values are not sent (Claude Code sends them with the cancel; MCP
+    sends content only with accept). Command, http and mcp_tool hooks
+    run on these events; prompt hooks do not, as in Claude Code.

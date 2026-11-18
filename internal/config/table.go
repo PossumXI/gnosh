@@ -257,6 +257,8 @@ var hookEvents = []hookEvent{
 	{"ConfigChange", "the source", true},
 	{"PostToolBatch", "", true},
 	{"FileChanged", "the file's name", false},
+	{"Elicitation", "the MCP server's name", true},
+	{"ElicitationResult", "the MCP server's name", true},
 }
 
 // HookEventNames returns the names of the hook events gnosh knows, in the

@@ -100,6 +100,18 @@ const (
 	// shown, it may write export lines to the session's environment file,
 	// and it may say which files are watched from then on (watchPaths).
 	FileChanged Event = "FileChanged"
+	// Elicitation fires when an MCP server asks the person for values in
+	// the middle of a call, before the form is shown. A hook can answer in
+	// the person's place ("action": "accept", with the values in
+	// "content"), decline or cancel; one that says nothing leaves the form
+	// to the person. A block, or a hook that could not evaluate, declines.
+	Elicitation Event = "Elicitation"
+	// ElicitationResult fires when the person has answered an MCP server's
+	// form, before the answer goes to the server. A hook can put other
+	// values in its place, or decline or cancel instead; one that says
+	// nothing lets the answer go as it is. A block, or a hook that could
+	// not evaluate, declines.
+	ElicitationResult Event = "ElicitationResult"
 )
 
 // Events returns the events gnosh has, in the order the specification
@@ -111,7 +123,7 @@ func Events() []Event {
 		PreCompact, PostCompact, SessionEnd, InstructionsLoaded,
 		PermissionRequest, Notification, PreModelSwitch, PostModelSwitch,
 		DirectoryAdded, CwdChanged, UserPromptExpansion, ConfigChange,
-		PostToolBatch, FileChanged,
+		PostToolBatch, FileChanged, Elicitation, ElicitationResult,
 	}
 }
 
@@ -336,6 +348,11 @@ func describe(e Event) (eventInfo, bool) {
 			mode: true, reads: true, plain: true, halts: true,
 			fields: []string{"additionalContext"},
 		}, true
+	case Elicitation, ElicitationResult:
+		return eventInfo{
+			class: gate, subject: ownValue, what: "the MCP server's name",
+			reads: true, fields: []string{"action", "content"},
+		}, true
 	}
 	return eventInfo{}, false
 }
@@ -362,7 +379,7 @@ func timeoutFor(e Event, own time.Duration) time.Duration {
 func claudeOnly(name string) (canBlock, ok bool) {
 	switch name {
 	case "WorktreeCreate", "WorktreeRemove", "TaskCreated", "TaskCompleted",
-		"TeammateIdle", "Elicitation", "ElicitationResult":
+		"TeammateIdle":
 		return true, true
 	case "PermissionDenied", "Setup", "MessageDisplay":
 		return false, true

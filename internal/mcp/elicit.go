@@ -21,6 +21,9 @@ type Elicitation struct {
 	Message string
 	// Fields are what it asks for, in the order its schema lists them.
 	Fields []ElicitField
+	// Schema is the schema of the fields as the server sent it (for the
+	// Elicitation hooks).
+	Schema json.RawMessage
 }
 
 // ElicitField is one value an Elicitation asks for.
@@ -67,9 +70,13 @@ func readElicitation(raw json.RawMessage) (Elicitation, error) {
 			Required   []string                   `json:"required"`
 		} `json:"requestedSchema"`
 	}
+	var whole struct {
+		Schema json.RawMessage `json:"requestedSchema"`
+	}
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return Elicitation{}, fmt.Errorf("the request cannot be read: %w", err)
 	}
+	_ = json.Unmarshal(raw, &whole)
 	if p.Schema.Type != "" && p.Schema.Type != "object" {
 		return Elicitation{}, fmt.Errorf("its schema is a %s, not an object of fields", p.Schema.Type)
 	}
@@ -85,7 +92,7 @@ func readElicitation(raw json.RawMessage) (Elicitation, error) {
 	for _, r := range p.Schema.Required {
 		required[r] = true
 	}
-	e := Elicitation{Message: p.Message}
+	e := Elicitation{Message: p.Message, Schema: whole.Schema}
 	for _, name := range order {
 		var f struct {
 			Type        string          `json:"type"`

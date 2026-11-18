@@ -22,6 +22,8 @@ type expect struct {
 	warnings []string // one part for each warning expected, in order
 	result   Result   // the hook's record; ResultNone when left empty
 	notes    []string // parts the record's notes must contain
+	action   string   // the answer to an MCP server's request
+	content  string   // its values, compacted
 }
 
 // check compares an Outcome of one hook with what is expected.
@@ -60,6 +62,9 @@ func check(t *testing.T, out Outcome, want expect) {
 	}
 	if string(out.UpdatedOutput) != want.output {
 		t.Errorf("UpdatedOutput = %s, want %s", out.UpdatedOutput, want.output)
+	}
+	if out.ElicitAction != want.action || string(out.ElicitContent) != want.content {
+		t.Errorf("ElicitAction %q with %s, want %q with %s", out.ElicitAction, out.ElicitContent, want.action, want.content)
 	}
 	if len(out.Warnings) != len(want.warnings) {
 		t.Errorf("got %d warnings, want %d: %q", len(out.Warnings), len(want.warnings), out.Warnings)
@@ -402,6 +407,39 @@ var answerForms = []struct {
 	{name: "a relative path to watch", event: FileChanged,
 		prints: `{"hookSpecificOutput": {"hookEventName": "FileChanged", "watchPaths": ["rel/.env"]}}`,
 		want:   expect{failed: true, warnings: []string{"not an absolute path"}, result: ResultCouldNotEvaluate}},
+
+	// ---- Elicitation: an answer in the person's place; a decline in any
+	// form wins.
+	{name: "accept", event: Elicitation,
+		prints: `{"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "accept", "content": {"project_key": "DOCS"}}}`,
+		want:   expect{action: "accept", content: `{"project_key":"DOCS"}`, result: ResultAnswered}},
+	{name: "cancel", event: Elicitation,
+		prints: `{"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "cancel"}}`,
+		want:   expect{action: "cancel", result: ResultAnswered}},
+	{name: "decline", event: Elicitation,
+		prints: `{"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "decline"}}`,
+		want:   expect{blocked: true, action: "decline", reason: "~blocked this and gave no reason", result: ResultBlocked}},
+	{name: "a block wins over an accept", event: Elicitation,
+		prints: `{"decision": "block", "reason": "not from this server", "hookSpecificOutput": {"hookEventName": "Elicitation", "action": "accept", "content": {}}}`,
+		want:   expect{blocked: true, action: "decline", reason: "not from this server", result: ResultBlocked}},
+	{name: "an action not known", event: Elicitation,
+		prints: `{"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "approve"}}`,
+		want:   expect{blocked: true, failed: true, action: "decline", reason: "~must be exactly", result: ResultCouldNotEvaluate}},
+	{name: "values without an accept", event: Elicitation,
+		prints: `{"hookSpecificOutput": {"hookEventName": "Elicitation", "content": {"project_key": "DOCS"}}}`,
+		want:   expect{notes: []string{"without \"action\": \"accept\""}}},
+	{name: "plain words are not read", event: Elicitation, prints: "fine by me", want: expect{}},
+
+	// ---- ElicitationResult: another answer in place of the person's.
+	{name: "other values", event: ElicitationResult,
+		prints: `{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "action": "accept", "content": {"project_key": "WEB-2"}}}`,
+		want:   expect{action: "accept", content: `{"project_key":"WEB-2"}`, result: ResultAnswered}},
+	{name: "block", event: ElicitationResult,
+		prints: `{"decision": "block", "reason": "no keys to this server"}`,
+		want:   expect{blocked: true, action: "decline", reason: "no keys to this server", result: ResultBlocked}},
+	{name: "nothing for the model", event: ElicitationResult,
+		prints: `{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "additionalContext": "x"}}`,
+		want:   expect{blocked: true, failed: true, action: "decline", reason: "~not something a ElicitationResult hook can say", result: ResultCouldNotEvaluate}},
 
 	// ---- ConfigChange: a block keeps the settings the session had.
 	{name: "block", event: ConfigChange,

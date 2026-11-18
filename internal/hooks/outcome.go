@@ -96,6 +96,18 @@ type Outcome struct {
 	// ("systemMessage"). They block nothing.
 	SystemMessages []string
 
+	// ElicitAction is the hooks' answer to an MCP server's request
+	// (Elicitation), or what they put in place of the person's answer
+	// (ElicitationResult): "accept", with ElicitContent, the values as a
+	// JSON object; "decline" (a hook declined or blocked, or could not
+	// evaluate, and Blocked is true; or two hooks answered with different
+	// values); "cancel"; or "", which leaves the form to the person
+	// (Elicitation) or lets their answer go as it is (ElicitationResult).
+	// A decline from one hook wins over the others' answers, and a cancel
+	// over an accept.
+	ElicitAction  string
+	ElicitContent json.RawMessage
+
 	// WatchPaths are the files to watch for FileChanged from now on, in
 	// place of the ones hooks named before ("watchPaths", from SessionStart,
 	// CwdChanged and FileChanged hooks): every hook's, in the order
@@ -148,6 +160,9 @@ const (
 	// ResultBackground: the hook was started in the background, and
 	// nothing waited for it ("async", "asyncRewake").
 	ResultBackground Result = "background"
+	// ResultAnswered: the hook answered an MCP server's request in the
+	// person's place, or put another answer in place of theirs.
+	ResultAnswered Result = "answered"
 )
 
 // Record is what one hook did on one occurrence of an event.
@@ -210,6 +225,7 @@ func (r Record) String() string {
 		ResultEndedTurn:        "ended the turn",
 		ResultCouldNotEvaluate: "could not evaluate",
 		ResultCancelled:        "was cancelled",
+		ResultAnswered:         "answered the MCP server",
 	}[r.Result]
 	if r.Result == ResultBackground {
 		return fmt.Sprintf("%s hook %s runs in the background", r.Event, who)
@@ -259,6 +275,10 @@ type verdict struct {
 	watchSet bool
 	// output is the hook's replacement for the tool's output.
 	output json.RawMessage
+	// action and content are the hook's answer to an MCP server's request
+	// (accept, with the values, or cancel).
+	action  string
+	content json.RawMessage
 	// notes says what else there is to know.
 	notes []string
 }
@@ -420,6 +440,20 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 	if a.input != nil && event == PreToolUse {
 		v.input = a.input
 	}
+	if a.action != "" {
+		switch {
+		case v.refused || v.failure != "":
+			// A block stands, and a hook that could not evaluate answers
+			// nothing.
+		case p.exit != 0:
+			v.notes = append(v.notes, fmt.Sprintf("its answer was not used, because it exited with status %d: an answer counts only from a hook that exits 0", p.exit))
+		default:
+			v.action, v.content = a.action, a.content
+			if v.action == "accept" && v.content == nil {
+				v.content = json.RawMessage("{}")
+			}
+		}
+	}
 	if a.approve {
 		switch {
 		case v.refused || v.failure != "":
@@ -487,6 +521,7 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		out                    Outcome
 		blocks, asks, approves []string
 		stops, contexts        []string
+		answerer, otherAnswer  string // (two Elicitation hooks' different values)
 	)
 	for i, v := range verdicts {
 		h, p := sel[i], procs[i]
@@ -536,6 +571,19 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		}
 		if v.context != "" {
 			contexts = append(contexts, v.context)
+		}
+		switch {
+		case v.action == "cancel":
+			rec.Result = ResultAnswered
+			out.ElicitAction, out.ElicitContent = "cancel", nil
+		case v.action == "accept" && out.ElicitAction == "":
+			rec.Result = ResultAnswered
+			out.ElicitAction, out.ElicitContent, answerer = "accept", v.content, h.label()
+		case v.action == "accept" && out.ElicitAction == "accept" && !bytes.Equal(out.ElicitContent, v.content) && otherAnswer == "":
+			rec.Result = ResultAnswered
+			otherAnswer = h.label()
+		case v.action == "accept":
+			rec.Result = ResultAnswered
 		}
 		switch {
 		case v.approved:
@@ -607,6 +655,13 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 	if clash != "" {
 		out.Blocked = true
 		blocks = append(blocks, fmt.Sprintf("The PreToolUse hooks %s and %s each changed the call's input, in different ways. gnosh cannot apply both, and a call whose hooks do not agree on what to run is not run. Have one hook make the change.", changer, clash))
+	}
+	if otherAnswer != "" && out.ElicitAction == "accept" {
+		out.Blocked = true
+		blocks = append(blocks, fmt.Sprintf("The %s hooks %s and %s answered the MCP server with different values. gnosh cannot send both, so the request was declined. Have one hook answer.", event, answerer, otherAnswer))
+	}
+	if out.Blocked && (event == Elicitation || event == ElicitationResult) {
+		out.ElicitAction, out.ElicitContent = "decline", nil
 	}
 	out.AdditionalContext = join(contexts)
 	out.StopReason = join(stops)

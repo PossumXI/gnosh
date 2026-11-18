@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -12,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/mcp"
 )
 
@@ -25,6 +28,12 @@ import (
 // server decides what follows), stopping the turn takes the form back (and
 // cancels it), and a run with nobody to ask declines it. The server's
 // message stands above the questions, under the server's name.
+//
+// The Elicitation hooks run first, and may answer in the person's place
+// (in a run too, which then declares the capability); the
+// ElicitationResult hooks run on the person's answer, and may put another
+// in its place. Values a hook gives are held to the fields as the
+// person's are.
 
 // elicitTries is how many times the form is put before a request whose
 // answers do not fit is declined.
@@ -33,7 +42,7 @@ const elicitTries = 3
 // mcpElicit is the elicitation handler of the server name.
 func (l *live) mcpElicit(name string) func(context.Context, mcp.Elicitation) (mcp.ElicitResult, error) {
 	return func(ctx context.Context, e mcp.Elicitation) (mcp.ElicitResult, error) {
-		if !l.interactive || l.agent == nil {
+		if l.agent == nil {
 			return mcp.ElicitResult{Action: "decline"}, nil
 		}
 		if turn := l.agent.TurnContext(); turn != nil {
@@ -44,40 +53,158 @@ func (l *live) mcpElicit(name string) func(context.Context, mcp.Elicitation) (mc
 			defer cancel()
 			defer context.AfterFunc(turn, cancel)()
 		}
-		form := elicitForm(e)
-		form.Lead = "The MCP server " + name + " asks: " + oneLine(e.Message, 600)
-		form.EscCancels = true
-		title := "The MCP server " + name + " asks for something"
-		if len(e.Fields) == 0 {
-			title = "The MCP server " + name + " asks you to confirm"
+		if res, done := l.elicitHooks(ctx, name, e); done {
+			return res, nil
 		}
-		for try := 1; ; try++ {
-			ans, err := l.agent.Ask(ctx, agent.Question{Kind: questionKind, Title: title, Text: oneLine(e.Message, 600), Data: form})
-			switch {
-			case errors.Is(err, agent.ErrNobodyToAsk):
-				return mcp.ElicitResult{Action: "decline"}, nil
-			case err != nil:
-				return mcp.ElicitResult{Action: "cancel"}, nil
-			}
-			if ans.Choice == "cancel" {
-				return mcp.ElicitResult{Action: "cancel"}, nil
-			}
-			values, _ := ans.Data.(map[string]string)
-			if len(values) == 0 && strings.TrimSpace(ans.Text) == "" && len(e.Fields) > 0 {
-				return mcp.ElicitResult{Action: "cancel"}, nil
-			}
-			content, why := elicitContent(e.Fields, form, values)
-			if why == "" {
-				l.flog.logf("mcp", "the MCP server %s was given what it asked for (%d fields)", name, len(content))
-				return mcp.ElicitResult{Action: "accept", Content: content}, nil
-			}
-			if try >= elicitTries {
-				l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("What the MCP server %s asked for was declined: %s.", name, why))
-				return mcp.ElicitResult{Action: "decline"}, nil
-			}
-			l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("That does not fit what the MCP server %s asked for: %s. It is asked again.", name, why))
+		if !l.interactive {
+			return mcp.ElicitResult{Action: "decline"}, nil
 		}
+		res := l.elicitPerson(ctx, name, e)
+		if ctx.Err() != nil {
+			// Taken back before it was answered: no answer to look over.
+			return res, nil
+		}
+		return l.elicitResultHooks(ctx, name, e, res), nil
 	}
+}
+
+// elicitPerson puts what the server name asks for to the person, until
+// ctx ends.
+func (l *live) elicitPerson(ctx context.Context, name string, e mcp.Elicitation) mcp.ElicitResult {
+	form := elicitForm(e)
+	form.Lead = "The MCP server " + name + " asks: " + oneLine(e.Message, 600)
+	form.EscCancels = true
+	title := "The MCP server " + name + " asks for something"
+	if len(e.Fields) == 0 {
+		title = "The MCP server " + name + " asks you to confirm"
+	}
+	for try := 1; ; try++ {
+		ans, err := l.agent.Ask(ctx, agent.Question{Kind: questionKind, Title: title, Text: oneLine(e.Message, 600), Data: form})
+		switch {
+		case errors.Is(err, agent.ErrNobodyToAsk):
+			return mcp.ElicitResult{Action: "decline"}
+		case err != nil:
+			return mcp.ElicitResult{Action: "cancel"}
+		}
+		if ans.Choice == "cancel" {
+			return mcp.ElicitResult{Action: "cancel"}
+		}
+		values, _ := ans.Data.(map[string]string)
+		if len(values) == 0 && strings.TrimSpace(ans.Text) == "" && len(e.Fields) > 0 {
+			return mcp.ElicitResult{Action: "cancel"}
+		}
+		content, why := elicitContent(e.Fields, form, values)
+		if why == "" {
+			l.flog.logf("mcp", "the MCP server %s was given what it asked for (%d fields)", name, len(content))
+			return mcp.ElicitResult{Action: "accept", Content: content}
+		}
+		if try >= elicitTries {
+			l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("What the MCP server %s asked for was declined: %s.", name, why))
+			return mcp.ElicitResult{Action: "decline"}
+		}
+		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("That does not fit what the MCP server %s asked for: %s. It is asked again.", name, why))
+	}
+}
+
+// elicitHooks runs the Elicitation hooks on what the server name asks
+// for. done says they settled it in the person's place: answered,
+// declined or cancelled.
+func (l *live) elicitHooks(ctx context.Context, name string, e mcp.Elicitation) (res mcp.ElicitResult, done bool) {
+	if !l.hooks.has(hooks.Elicitation) {
+		return mcp.ElicitResult{}, false
+	}
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.Elicitation, MCPServerName: name, Message: e.Message, Mode: "form", RequestedSchema: e.Schema})
+	if err != nil {
+		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("The Elicitation hooks could not be run (%v), so what the MCP server %s asked for was declined.", err, name))
+		return mcp.ElicitResult{Action: "decline"}, true
+	}
+	if out.ElicitAction == "" {
+		return mcp.ElicitResult{}, false
+	}
+	return l.elicitByHook(hooks.Elicitation, name, e, out), true
+}
+
+// elicitResultHooks runs the ElicitationResult hooks on the person's
+// answer res, and gives the answer that goes to the server name.
+func (l *live) elicitResultHooks(ctx context.Context, name string, e mcp.Elicitation, res mcp.ElicitResult) mcp.ElicitResult {
+	if !l.hooks.has(hooks.ElicitationResult) {
+		return res
+	}
+	var content json.RawMessage
+	if res.Action == "accept" {
+		content, _ = json.Marshal(res.Content)
+	}
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.ElicitationResult, MCPServerName: name, Action: res.Action, Mode: "form", Content: content})
+	switch {
+	case err != nil:
+		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("The ElicitationResult hooks could not be run (%v), so the answer to the MCP server %s was declined.", err, name))
+		return mcp.ElicitResult{Action: "decline"}
+	case out.ElicitAction == "":
+		return res
+	}
+	return l.elicitByHook(hooks.ElicitationResult, name, e, out)
+}
+
+// elicitByHook is the answer the hooks of the event gave to what the
+// server name asked for: their values are held to the fields, and one
+// that does not fit declines.
+func (l *live) elicitByHook(event hooks.Event, name string, e mcp.Elicitation, out hooks.Outcome) mcp.ElicitResult {
+	switch out.ElicitAction {
+	case "decline":
+		why := ""
+		if r := strings.TrimSpace(out.Reason); r != "" {
+			why = " " + oneLine(r, 300)
+		}
+		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("The %s hooks declined what the MCP server %s asked for.%s", event, name, why))
+		return mcp.ElicitResult{Action: "decline"}
+	case "cancel":
+		l.flog.logf("hooks", "the %s hooks cancelled what the MCP server %s asked for", event, name)
+		return mcp.ElicitResult{Action: "cancel"}
+	}
+	content, why := elicitHookValues(e, out.ElicitContent)
+	if why != "" {
+		l.notice(agent.LevelWarning, "hooks", fmt.Sprintf("The %s hooks answered the MCP server %s with values that do not fit what it asked for (%s), so the request was declined.", event, name, why))
+		return mcp.ElicitResult{Action: "decline"}
+	}
+	l.flog.logf("hooks", "the %s hooks answered the MCP server %s (%d fields)", event, name, len(content))
+	return mcp.ElicitResult{Action: "accept", Content: content}
+}
+
+// elicitHookValues holds the values a hook gave (a JSON object, by field
+// name) to the fields, as the person's answers are held, and gives them
+// in each field's kind; values for fields that were not asked for are
+// left out.
+func elicitHookValues(e mcp.Elicitation, raw json.RawMessage) (map[string]any, string) {
+	var given map[string]any
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&given); err != nil {
+		return nil, "they are not a JSON object"
+	}
+	if len(e.Fields) == 0 {
+		return map[string]any{}, ""
+	}
+	form := elicitForm(e)
+	values := map[string]string{}
+	for i, f := range e.Fields {
+		var s string
+		switch v := given[f.Name].(type) {
+		case nil:
+		case string:
+			s = v
+		case bool:
+			s = strconv.FormatBool(v)
+		case json.Number:
+			s = v.String()
+		default:
+			return nil, "the value of " + firstOf(f.Title, f.Name) + " is not one a form takes"
+		}
+		if s == "" && given[f.Name] != nil && f.Required {
+			return nil, firstOf(f.Title, f.Name) + " is needed"
+		}
+		values[form.Questions[i].Question] = s
+	}
+	return elicitContent(e.Fields, form, values)
 }
 
 // elicitForm is the form an elicitation is put as: one question for each

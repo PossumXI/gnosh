@@ -163,3 +163,49 @@ func TestMCPElicitationInThePlainSession(t *testing.T) {
 		t.Errorf("a run declared elicitation: %s", hello)
 	}
 }
+
+// An Elicitation hook may answer for the person, in a run too, which then
+// declares the capability; its values are held to the fields; and an
+// ElicitationResult hook may put other values in place of the person's.
+func TestMCPElicitationHooks(t *testing.T) {
+	call := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "mcp__asker__deploy", Args: `{}`}}}
+	w := apptest.NewWorld(t, call, apptest.Reply{Text: "Deployed."}, call, apptest.Reply{Text: "Refused."}, call, apptest.Reply{Text: "Deployed again."})
+	hellos := make(chan string, 8)
+	srv := askingMCP(t, hellos)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"asker": {"type": "http", "url": "`+srv.URL+`"}}}`)
+	// (One hook, whose script each part writes anew.)
+	hook := w.Home + "/hooks/elicit.sh"
+	w.Script(hook, `cat > /dev/null
+echo '{"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "accept", "content": {"region": "us-east", "sure": true}}}'`)
+	w.Settings(`{"hooks": {"Elicitation": [{"matcher": "asker", "hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
+	run(t, w, "-y", "-p", "deploy it").wantCode(t, 0)
+	has(t, "what the model read", toolResult(t, w, 1, "c1"), `told: {"action":"accept","content":{"region":"us-east","sure":true}}`)
+	if hello := <-hellos; !strings.Contains(hello, `"elicitation":{}`) {
+		t.Errorf("a run with an Elicitation hook did not declare elicitation: %s", hello)
+	}
+
+	// Values that do not fit the fields decline.
+	w.Script(hook, `cat > /dev/null
+echo '{"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "accept", "content": {"region": "mars", "sure": true}}}'`)
+	run(t, w, "-y", "-p", "deploy it").wantCode(t, 0)
+	has(t, "what the model read of a hook's wrong values", toolResult(t, w, 3, "c1"), `told: {"action":"decline"}`)
+	<-hellos
+
+	// The Elicitation hook leaves it to the person, who answers; an
+	// ElicitationResult hook changes the region.
+	w.Script(hook, `cat > /dev/null`)
+	change := w.Script(w.Home+"/hooks/change.sh", `cat > /dev/null
+echo '{"hookSpecificOutput": {"hookEventName": "ElicitationResult", "action": "accept", "content": {"region": "us-east", "sure": true}}}'`)
+	w.Settings(`{"hooks": {"ElicitationResult": [{"hooks": [{"type": "command", "command": "` + change + `"}]}]}}`)
+	s := sit(t, w, "--dangerously-skip-permissions")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("deploy it")
+	s.see("? The MCP server asker asks: Where should it go?")
+	s.typeLine("2")
+	s.see("Question 2 of 2 [sure]")
+	s.typeLine("1")
+	s.see("Deployed again.")
+	has(t, "what the model read after the change", toolResult(t, w, 5, "c1"), `told: {"action":"accept","content":{"region":"us-east","sure":true}}`)
+	s.typeLine("/exit")
+	s.exit()
+}

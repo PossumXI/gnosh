@@ -65,6 +65,11 @@ type answer struct {
 	// says it was given (an empty list clears the list).
 	watch    []string
 	watchSet bool
+	// action is an Elicitation or ElicitationResult hook's answer to an
+	// MCP server's request, "accept" or "cancel" (a "decline" is a
+	// refusal), and content the values that go with accept.
+	action  string
+	content json.RawMessage
 	// notes says, in plain words, what the hook asked for that gnosh does
 	// not act on and that is harmless to leave undone.
 	notes []string
@@ -242,6 +247,20 @@ func parseAnswer(event Event, info eventInfo, out []byte) answer {
 					if on, _ := a.flag(g); on {
 						a.note("it asked for skills to be loaded again, which gnosh does not do from a hook")
 					}
+				case g.key == "action":
+					if s, ok := a.str(g); ok {
+						if s == "accept" || s == "decline" || s == "cancel" {
+							a.action = s
+						} else {
+							a.fail("\"action\" is %s; it must be exactly \"accept\", \"decline\" or \"cancel\"", quote(s))
+						}
+					}
+				case g.key == "content":
+					if kindOf(g.value) != "an object" {
+						a.fail("\"content\" must be a JSON object holding the form's values by name; this one is %s", kindOf(g.value))
+						continue
+					}
+					a.content = compact(g.value)
 				case g.key == "watchPaths":
 					var paths []string
 					if kindOf(g.value) != "a list" || json.Unmarshal(g.value, &paths) != nil {
@@ -278,6 +297,20 @@ func parseAnswer(event Event, info eventInfo, out []byte) answer {
 		case top != "":
 			a.refuse, a.approve = top == "block", top == "approve"
 			a.reason = topReason
+		}
+	case Elicitation, ElicitationResult:
+		// A decline in any form is a refusal, and wins over an answer in
+		// the same output, as a top-level block does in Claude Code.
+		switch {
+		case top == "block" || a.action == "decline" || permission == "deny":
+			a.refuse, a.action, a.content = true, "", nil
+			a.reason = topReason
+		case a.content != nil && a.action != "accept":
+			a.note("it gave \"content\" without \"action\": \"accept\", so its values were not used")
+			a.content = nil
+		}
+		if top == "approve" {
+			a.note("it said \"decision\": \"approve\", which answers nothing here; a hook answers a server's form with hookSpecificOutput.action")
 		}
 	case PermissionRequest:
 		switch {
