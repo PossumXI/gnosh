@@ -191,6 +191,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "model", Args: "[provider/model [level]]", Summary: "List the models, or switch to one. The choice is saved.", InRun: true, Run: l.slashModel},
 		{Name: "status", Summary: "What this session is, what it is doing, and every setting with where it came from.", InRun: true, Run: l.slashStatus},
 		{Name: "release-notes", Summary: "The changes this build of gnosh was made from, newest first.", InRun: true, Run: l.slashReleaseNotes},
+		{Name: "focus", Args: "[on|off]", Summary: "Focus view: each run of tool calls folded into one line that sums it up, with what the edits changed; the prompts and the model's words as they are. A bare /focus turns it over. Kept for every project.", InRun: true, Run: l.slashFocus},
 		{Name: "theme", Args: "[auto|dark|light|ansi]", Summary: "The interface's colours: for the terminal's background, dark, light, or the terminal's own sixteen. Kept for every project.", InRun: true, Run: l.slashTheme},
 		{Name: "config", Args: "[key[=value] ...]", Summary: "gnosh's options and where each value comes from; key=value sets one for every project, from gnosh's next start, and key= takes it away.", InRun: true, Run: l.slashConfig},
 		{Name: "loop", Summary: "Keep the session working, turn after turn, until the model shows the task is done; /loop 5m <prompt> sends a prompt every 5 minutes.", Run: l.slashLoop},

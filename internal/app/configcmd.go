@@ -131,7 +131,7 @@ func (l *live) slashAutocompact(ctx context.Context, c *SlashContext) error {
 
 // liveOptions are the options a running session can change: /config puts
 // them in force at once.
-var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true, "theme": true}
+var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true, "theme": true, "viewMode": true}
 
 // applyOption puts what /config set in force in the running session, for
 // an option that can be (liveOptions), and reports whether it was.
@@ -153,9 +153,9 @@ func (l *live) applyOption(key string, raw json.RawMessage) bool {
 		l.notifMu.Lock()
 		l.notif = channel
 		l.notifMu.Unlock()
-	case "editorMode", "theme":
-		// (The interface's to put in force, as verbose is: the box and
-		// its colours are its own.)
+	case "editorMode", "theme", "viewMode":
+		// (The interface's to put in force, as verbose is: the box, its
+		// colours and how it shows the conversation are its own.)
 	case "promptSuggestionEnabled":
 		var on bool
 		if json.Unmarshal(raw, &on) != nil {
@@ -360,6 +360,52 @@ func configArgs(s string) ([]string, error) {
 // slashTheme is /theme: the theme option, which /config sets as well. With
 // a name it is /config theme=<name>; with none it says which is in force.
 // (The full interface opens a picker for it instead.)
+// slashFocus is /focus: focus view, in which each run of tool calls is
+// folded into one line that sums it up. /focus on and /focus off set the
+// viewMode option, kept for every project, and a bare /focus turns it
+// over (the interface sends it as one of the two, by what it shows).
+func (l *live) slashFocus(ctx context.Context, c *SlashContext) error {
+	var mode string
+	switch arg := strings.ToLower(strings.TrimSpace(c.Args)); arg {
+	case "on":
+		mode = "focus"
+	case "off":
+		mode = "default"
+	case "":
+		mode = "focus"
+		if l.viewModeNow() == "focus" {
+			mode = "default"
+		}
+	default:
+		return fmt.Errorf("/focus takes on or off, or nothing to turn focus view over; %q is neither", c.Args)
+	}
+	set := *c
+	set.Args = "viewMode=" + mode
+	return l.slashConfig(ctx, &set)
+}
+
+// viewModeNow is the viewMode option in force: what /config set in this
+// session, else what the configuration gives.
+func (l *live) viewModeNow() string {
+	l.configMu.Lock()
+	raw, ok := l.configNow["viewMode"]
+	l.configMu.Unlock()
+	var mode string
+	if ok && json.Unmarshal(raw, &mode) == nil && mode != "" {
+		return mode
+	}
+	return firstOf(l.cfg.Options.ViewMode.V, "default")
+}
+
+// viewModeSet is the viewMode option for the interface: "" when nothing
+// set it, so that the verbose option decides.
+func (l *live) viewModeSet() string {
+	if !l.cfg.Options.ViewMode.Set {
+		return ""
+	}
+	return l.cfg.Options.ViewMode.V
+}
+
 func (l *live) slashTheme(ctx context.Context, c *SlashContext) error {
 	name := strings.ToLower(strings.TrimSpace(c.Args))
 	if name == "" {

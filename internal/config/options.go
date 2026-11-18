@@ -73,6 +73,11 @@ type Options struct {
 	// Verbose shows the model's reasoning and the calls' whole output in
 	// the conversation as they come (Claude Code's verbose).
 	Verbose Value[bool]
+	// ViewMode is how an interactive session shows the conversation as it
+	// starts: "default", "verbose" (as Verbose, over which it wins when
+	// both are set) or "focus" (each run of tool calls folded into one
+	// line that sums it up). Claude Code's viewMode; /focus sets it.
+	ViewMode Value[string]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 
@@ -239,6 +244,10 @@ var optionDefs = []optionDef{
 	{key: "verbose", kind: oBool, def: "false",
 		what: "show the model's reasoning and every call's whole output in the conversation as they come, not folded or cut short (the transcript view, Ctrl+O, shows them whole either way)", from: fromClaudeCode + ": the settings key",
 		truth: func(o *Options) *Value[bool] { return &o.Verbose }},
+	{key: "viewMode", kind: oEnum, def: "default",
+		what: "how the conversation is shown as an interactive session starts: \"default\", \"verbose\" (as the verbose option, over which this one wins when both are set) or \"focus\" (each run of tool calls folded into one line that sums it up, with the lines each edit added and took out; /focus turns it on and off); not from a project's file",
+		from: fromClaudeCode + ": the settings key and /focus", enum: []string{"default", "verbose", "focus"}, ownOnly: true,
+		text: func(o *Options) *Value[string] { return &o.ViewMode }},
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
 		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},

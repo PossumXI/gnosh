@@ -263,6 +263,9 @@ func (s *session) streamLines(width int) []string {
 	if rp.md != nil {
 		out = append(out, rp.md.Live()...)
 	}
+	if s.focus && s.fold.calls > 0 {
+		out = append(out, fit(s.m, s.foldLine(true), width))
+	}
 	shown := s.calls
 	const most = 4
 	if len(shown) > most {

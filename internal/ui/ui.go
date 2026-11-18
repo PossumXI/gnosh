@@ -641,8 +641,9 @@ func (u *UI) Run(ctx context.Context, c app.Controls) (code int) {
 	})
 	u.s = s
 	s.start()
-	// The verbose option: reasoning and whole outputs as they come.
-	s.detail = s.info.Verbose
+	// The viewMode and verbose options: reasoning and whole outputs as
+	// they come, or focus view.
+	s.setView(viewOf(s.info))
 	// The theme option: the interface's colours.
 	s.setTheme(s.info.Theme)
 	// The editorMode and vimInsertModeRemaps options: vim's keys.

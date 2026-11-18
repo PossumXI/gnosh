@@ -174,7 +174,10 @@ or off, Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents
 in the background. `/panel` (or the `sidePanel` option) draws the session on
 the whole screen beside a side panel of the files it changed and its
 deliverables, with their addresses; `/panel` again gives the screen back, with
-all that was said in the scrollback.
+all that was said in the scrollback. `/focus` (or the `viewMode` option,
+`"focus"`) folds each run of tool calls into one line that sums it up (files
+read, files edited with the lines added and taken out, commands run, how many
+failed), as Claude Code's focus view does; `/focus` again turns it off.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
 `headers`), and a WebSearch tool of gnosh's own (a search engine's MCP

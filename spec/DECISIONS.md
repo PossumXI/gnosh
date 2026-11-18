@@ -1242,3 +1242,21 @@ or kept with the reason said (27).
     loses its control characters (a terminal acts on an escape or a
     bell) and the marks that turn text around. Offered in attended
     sessions, quiet in the permission engine.
+
+84. **Focus view, as Claude Code's /focus, in the scrollback.** Claude
+    Code's focus view (fullscreen rendering only) shows the last prompt,
+    a one-line summary of the tool calls with edit diffstats, and the
+    final response; /focus turns it over and the choice persists, and
+    the viewMode setting (default, verbose, focus) starts a session in
+    one view, winning over verbose. gnosh has the same command and
+    option (viewMode is kept in the state file, not from a project's
+    file). gnosh writes into the terminal's scrollback, where nothing
+    written can be taken back, so its focus view folds what can be
+    held: each run of tool calls becomes one line when something else is
+    written ("Read 3 files, searched for 1 pattern, edited 2 files +40
+    -12, ran 4 commands · 1 failed · Ctrl+O shows them"), and the
+    model's thinking time goes into that line. The model's words between
+    calls stay where they were written. A call in flight shows in the
+    live region under a "so far" line, questions show as always, and a
+    deliverable stands on its own. Ctrl+O's transcript view shows every
+    call whole either way.

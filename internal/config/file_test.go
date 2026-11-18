@@ -290,7 +290,8 @@ func TestOptions(t *testing.T) {
     "preferredNotifChannel": "terminal_bell",
     "vimInsertModeRemaps": ["jj", "jk"],
     "promptSuggestionEnabled": true,
-    "theme": "light"
+    "theme": "light",
+    "viewMode": "focus"
   }
 }`
 	cfg := mustLoad(t, withConfig(text))
@@ -334,6 +335,7 @@ func TestOptions(t *testing.T) {
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 	check("promptSuggestionEnabled", o.PromptSuggestionEnabled.V, true)
 	check("theme", o.Theme.V, "light")
+	check("viewMode", o.ViewMode.V, "focus")
 
 	// The table lists every key exactly once, All reports each, and the
 	// file above sets every one of them.

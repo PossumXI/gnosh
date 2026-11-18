@@ -112,7 +112,7 @@ var atOnce = map[string]bool{
 	"help": true, "hooks": true, "context": true, "doctor": true, "mem": true,
 	"cost": true, "usage": true, "stats": true, "agents": true, "memory": true, "bashes": true, "diff": true, "mcp": true, "copy": true,
 	"think": true, "no_think": true, "nothink": true, "no-think": true, "effort": true, "btw": true, "recap": true, "reload-skills": true, "skills": true,
-	"loop": true, "noloop": true, "no_loop": true, "no-loop": true,
+	"loop": true, "noloop": true, "no_loop": true, "no-loop": true, "focus": true,
 	"exit": true, "quit": true,
 }
 
@@ -501,6 +501,15 @@ var ownCommands = []struct {
 	{permissionsWords, func(s *session, line string) bool { return s.q == nil && s.choosePermissions(line) }},
 	{skillsWords, func(s *session, line string) bool { return s.q == nil && s.chooseSkills(line) }},
 	{effortWords, func(s *session, line string) bool { return s.q == nil && s.chooseEffort(line) }},
+	{focusWords, func(s *session, line string) bool {
+		// Turned over by what the screen shows.
+		arg := "on"
+		if s.focus {
+			arg = "off"
+		}
+		s.run(line + " " + arg)
+		return true
+	}},
 	{panelWords, func(s *session, line string) bool {
 		s.ed.AddHistory(editor.Draft{Text: line})
 		s.togglePanel()
@@ -633,7 +642,23 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		if on, ok := verboseSet(line); ok && err == nil && res.Name == "config" {
 			// The verbose option is the interface's own: what /config set
 			// is in force here at once.
-			s.detail = on
+			if on {
+				s.setView("verbose")
+			} else {
+				s.detail = false
+			}
+		}
+		if mode, ok := configSet(line, "viewMode"); ok && err == nil && res.Name == "config" {
+			// So is the viewMode option, and /focus, which sets it.
+			s.setView(mode)
+		}
+		if on, ok := focusSet(line); ok && err == nil && res.Name == "focus" {
+			switch {
+			case on:
+				s.setView("focus")
+			case s.focus:
+				s.setView("default")
+			}
 		}
 		if mode, ok := configSet(line, "editorMode"); ok && mode != "" && err == nil && res.Name == "config" {
 			// So is the editorMode option.
@@ -660,6 +685,7 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			// was under way is any more.
 			s.busy, s.stopping, s.ph = false, false, phIdle
 			s.reply, s.calls, s.queue, s.sending = reply{}, nil, nil, nil
+			s.fold = fold{}
 			s.q, s.qwait = nil, nil
 			s.loop = false
 			s.closeView()

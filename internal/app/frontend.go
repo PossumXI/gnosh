@@ -367,6 +367,10 @@ type SessionInfo struct {
 	// Verbose says the interface shows the model's reasoning and the
 	// calls' whole output as they come (the verbose option).
 	Verbose bool
+	// ViewMode is the viewMode option, when something set it: "default",
+	// "verbose" or "focus" (each run of tool calls folded into one line).
+	// It wins over Verbose; "" leaves Verbose to decide.
+	ViewMode string
 	// SidePanel says the session starts with the side panel on (the
 	// sidePanel option).
 	SidePanel bool

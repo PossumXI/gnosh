@@ -1281,6 +1281,7 @@ func (l *live) info() SessionInfo {
 		Interactive:    l.interactive,
 		SidePanel:      l.cfg.Options.SidePanel.V,
 		Verbose:        l.cfg.Options.Verbose.V,
+		ViewMode:       l.viewModeSet(),
 		Vim:            l.cfg.Options.EditorMode.V == "vim",
 		Theme:          l.cfg.Options.Theme.V,
 		OutputStyle:    l.styleNow(),

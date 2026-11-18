@@ -291,6 +291,10 @@ type session struct {
 	branch string
 	facts  map[string]string
 	detail bool
+	// focus is focus view (focus.go): each run of tool calls is written
+	// as one line, fold, when something else is written.
+	focus bool
+	fold  fold
 	// vimSaid is the mode of the box's vim keys the session was last told
 	// (reportVim).
 	vimSaid string
@@ -430,6 +434,10 @@ func (s *session) header() {
 // empty lines".) The empty lines of the model's own answer, between its
 // paragraphs, are the answer's and stay.
 func (s *session) begin(kind blockKind) {
+	if !s.fold.empty() {
+		// (Focus view: the run of calls before this block is one line.)
+		s.writeFold()
+	}
 	s.last = kind
 }
 

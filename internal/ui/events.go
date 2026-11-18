@@ -395,8 +395,12 @@ func (s *session) endThinking() {
 	}
 	// Folded: one line says that the model thought and for how long. The
 	// words are in the session's file, where the transcript view (Ctrl+O)
-	// shows them.
+	// shows them. In focus view, the time goes into the run's fold line.
 	rp.thinkRest = ""
+	if s.focus {
+		s.fold.thought += took
+		return
+	}
 	said := s.th.ThinkMark + " thought for " + span(took)
 	if s.thoughtToBudget() {
 		// The server cut the thought at its budget and put gnosh's note
@@ -497,6 +501,12 @@ func (s *session) replied(ev *agent.ReplyEvent) {
 // cut writes a call that never got a result into the scrollback, with the
 // reason, and takes it out of the calls in flight.
 func (s *session) cut(c *call, why string) {
+	if s.focus {
+		s.fold.add(&agent.ToolEndEvent{CallID: c.id, Name: c.name, Denied: true})
+		s.drop(c)
+		s.dirty = true
+		return
+	}
 	var action *core.Action
 	if c.started {
 		action = &c.action
@@ -556,13 +566,18 @@ func (s *session) toolEnd(ev *agent.ToolEndEvent) {
 		s.drop(c)
 	}
 	s.noteChange(ev)
-	rows, compact := s.endBlock(c, ev)
-	kind := blkTool
-	if compact {
-		kind = blkToolLine
+	if s.foldsCall(ev) {
+		s.fold.add(ev)
+		s.dirty = true
+	} else {
+		rows, compact := s.endBlock(c, ev)
+		kind := blkTool
+		if compact {
+			kind = blkToolLine
+		}
+		s.begin(kind)
+		s.put(rows...)
 	}
-	s.begin(kind)
-	s.put(rows...)
 	started := false
 	for _, x := range s.calls {
 		started = started || x.started

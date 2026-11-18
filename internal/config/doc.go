@@ -130,6 +130,10 @@
 //	  sidePanel                start with the side panel on (/panel)
 //	  verbose                  reasoning and whole outputs in the conversation
 //	                           as they come (Claude Code's verbose)
+//	  viewMode                 "default", "verbose" or "focus": how the
+//	                           conversation is shown as a session starts;
+//	                           focus folds each run of tool calls into one
+//	                           line (/focus; not from a project's file)
 //	  projectDataDir           the name of the project's data folder
 //	  outputStyle              how the model replies: "Concise", say, or a
 //	                           style of your own (/output-style)
