@@ -39,9 +39,11 @@ Built:
   Space peeks at one, Enter watches a working one's conversation or opens
   one that is over, Ctrl+X stops one, a prompt typed at the bottom starts
   another, a run that waits on a permission question is listed under
-  Needs input, to be answered with a number, and words typed while
-  peeking at one that is over send it back to work on them (`gnosh --bg
-  -r <session> "go on"` does that from a shell); `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
+  Needs input, to be answered with a number (the view says so by your
+  preferredNotifChannel, and in the title), and words typed while
+  peeking at a working one reach it between its steps, or send one that
+  is over back to work on them (`gnosh --bg -r <session> "go on"` does
+  that from a shell); `gnosh logs <session>` shows (or follows) what one printed, `gnosh stop
   <session>` stops one, and `gnosh session list` marks the sessions open
   now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small

@@ -31,7 +31,24 @@ type fakeRuns struct {
 	opened      []string
 	answered    []string
 	resumed     []string
+	told        []string
+	unread      map[string][]string
 	now         func() time.Time
+}
+
+func (f *fakeRuns) Tell(id, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.told = append(f.told, id+" "+text)
+	return nil
+}
+
+func (f *fakeRuns) Unread(id string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	words := f.unread[id]
+	delete(f.unread, id)
+	return words
 }
 
 func (f *fakeRuns) Resume(_ context.Context, id, prompt string) error {
@@ -540,7 +557,8 @@ func TestAgentViewNeedsInput(t *testing.T) {
 
 // Words typed while peeking at a run that is over, and Enter, send it back
 // to work on them (gnosh --bg -r), where without the peek they would start
-// a new run; a working run takes none yet, and says so.
+// a new run; a working run is told them, and if it ends before it reads
+// them it is sent back to work on them.
 func TestAgentViewReply(t *testing.T) {
 	g := newAgentRig(t)
 	g.v.sel = runFlaky
@@ -557,8 +575,75 @@ func TestAgentViewReply(t *testing.T) {
 		t.Errorf("after the reply:\n%s\n%s", strings.Join(body, "\n"), live[len(live)-1])
 	}
 	g.v.sel = runTests
-	g.keys(`"stop and test again" <Enter>`)
-	if _, live = g.screen(); live[len(live)-1] != "01a1eea5-1111 is working: it takes words once it is done (Ctrl+X stops it)." || len(g.src.resumed) != 1 {
-		t.Errorf("a reply to a working run: %q, resumed %q", live[len(live)-1], g.src.resumed)
+	g.keys(`"stop and test again"`)
+	if _, live = g.screen(); live[len(live)-1] != "Enter sends your words to 01a1eea5-1111 · Esc empties the box" {
+		t.Errorf("the keys line while telling a working run: %q", live[len(live)-1])
+	}
+	g.keys("<Enter>")
+	if _, live = g.screen(); live[len(live)-1] != "Sent to 01a1eea5-1111: it reads your words between its steps." ||
+		!slices.Equal(g.src.told, []string{runTests + " stop and test again"}) || len(g.src.resumed) != 1 {
+		t.Fatalf("a reply to a working run: %q, told %q, resumed %q", live[len(live)-1], g.src.told, g.src.resumed)
+	}
+	// It ends before it reads them: it goes on with them.
+	g.src.unread = map[string][]string{runTests: {"stop and test again"}}
+	g.src.set(runTests, func(r *app.AgentRun) { r.State, r.Ended = "done", g.clk.Now() })
+	g.v.refresh()
+	if _, live = g.screen(); live[len(live)-1] != "01a1eea5-1111 ended before it read your words, and goes on with them in the background." ||
+		!slices.Equal(g.src.resumed[1:], []string{runTests + " stop and test again"}) {
+		t.Errorf("words a run did not read: %q, resumed %q", live[len(live)-1], g.src.resumed)
+	}
+}
+
+// The view tells the person of what changed since its last look, as
+// Claude Code's notifies: a run that needs input, and one that is done;
+// not of what was there as it opened. The title counts the runs that
+// wait on the person. On a terminal the notes go by the notification
+// channel (here the bell).
+func TestAgentViewTells(t *testing.T) {
+	g := newAgentRig(t)
+	if len(g.v.notes) != 0 || g.v.title() != "gnosh agents" {
+		t.Fatalf("as the view opened: notes %q, title %q", g.v.notes, g.v.title())
+	}
+	g.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q1", Title: "Allow Bash?", Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}}}
+	})
+	g.src.set(runTests, func(r *app.AgentRun) { r.State, r.Ended, r.Output = "done", g.clk.Now(), []string{"All tests pass."} })
+	g.v.refresh()
+	if want := []string{"docs needs input: Allow Bash?", "01a1eea5-1111 is done: All tests pass."}; !slices.Equal(g.v.notes, want) {
+		t.Errorf("the notes: %q, want %q", g.v.notes, want)
+	}
+	if g.v.title() != "1 awaiting input · gnosh agents" {
+		t.Errorf("the title: %q", g.v.title())
+	}
+	g.v.notes = nil
+	g.v.refresh()
+	if len(g.v.notes) != 0 {
+		t.Errorf("nothing changed, and the notes are %q", g.v.notes)
+	}
+
+	h := newAgentRig(t)
+	ft := newFakeTerm(100, 20, vtest.AllAnswers)
+	open := NewAgentView(Options{Open: func(TerminalHooks) (Terminal, error) { return ft, nil }, Now: h.clk.Now})
+	done := make(chan int, 1)
+	go func() {
+		done <- open(app.AgentViewInfo{Source: h.src, Cwd: "/home/jae/src/app", Home: "/home/jae", Notify: "terminal_bell"})
+	}()
+	l := &loop{t: t, ft: ft}
+	l.has("gnosh agents · 2 working")
+	h.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q1", Title: "Allow Bash?", Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}}}
+	})
+	h.clk.add(agentLook)
+	l.has("1 needs input")
+	l.eventually("the bell rang and the title says so", func(string) bool {
+		ok := false
+		ft.look(func(scr *vtest.Screen) { ok = scr.Bells() == 1 && scr.Title() == "1 awaiting input · gnosh agents" })
+		return ok
+	})
+	l.keys("<Esc>")
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Esc did not leave the view")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -120,9 +121,19 @@ type agentView struct {
 	armed      string
 	armedUntil time.Time
 	// stopping are the runs asked to stop, and starting how many runs are
-	// being started.
+	// being started. told are the working runs sent words, which are sent
+	// back to work on them if they end before they read them.
 	stopping map[string]bool
 	starting int
+	told     map[string]bool
+
+	// prev is how each run stood when the list was last read, and seen
+	// says it was read before; notes are what the person is to be told of
+	// the changes since (a run needs input, or is done), for the loop to
+	// send by their notification channel.
+	prev  map[string]string
+	seen  bool
+	notes []string
 
 	watch *watching
 	// open is the run whose session is to be opened (gnosh -r), and
@@ -148,7 +159,7 @@ type watching struct {
 
 func newAgentView(th Theme, m text.Metrics, now func() time.Time, info app.AgentViewInfo) *agentView {
 	v := &agentView{th: th, m: m, now: now, info: info, src: info.Source,
-		doing: map[string][]string{}, status: map[string]string{}, stopping: map[string]bool{}}
+		doing: map[string][]string{}, status: map[string]string{}, stopping: map[string]bool{}, told: map[string]bool{}}
 	v.async = func(work func() func(*agentView)) { work()(v) }
 	v.box = editor.New(editor.Options{
 		Theme:       th.Editor,
@@ -177,6 +188,37 @@ func (v *agentView) refresh() {
 		doing[r.ID], status[r.ID] = v.activity(r, v.src.Conversation(r.ID))
 	}
 	v.doing, v.status = doing, status
+	// What changed since the last look that the person is told of, as
+	// Claude Code's view notifies: a run that needs input, and one that
+	// is done. (Not what was there as the view opened.)
+	states := make(map[string]string, len(v.runs))
+	for _, r := range v.runs {
+		states[r.ID] = r.State
+		was, known := v.prev[r.ID]
+		switch {
+		case !v.seen || r.State == was:
+		case r.State == "blocked" && r.Question != nil:
+			v.notes = append(v.notes, runName(r)+" needs input: "+oneLine(r.Question.Title))
+		case r.State == "done" && (!known || was == "working" || was == "blocked"):
+			last := "it printed nothing"
+			if len(r.Output) > 0 {
+				last = oneLine(r.Output[len(r.Output)-1])
+			}
+			v.notes = append(v.notes, runName(r)+" is done: "+last)
+		}
+	}
+	v.prev, v.seen = states, true
+	// Words a run ended before it read go to it again, as a reply to a
+	// run that is over does.
+	for _, r := range v.runs {
+		if !v.told[r.ID] || running(r) {
+			continue
+		}
+		delete(v.told, r.ID)
+		if unread := v.src.Unread(r.ID); len(unread) > 0 {
+			v.resume(r, strings.Join(unread, "\n\n"), "ended before it read your words, and goes on with them in the background")
+		}
+	}
 	v.keepChoice()
 }
 
@@ -576,10 +618,23 @@ func (v *agentView) answer(r app.AgentRun, c app.QuestionChoice, text string) {
 func (v *agentView) reply(r app.AgentRun, text string) {
 	name := runName(r)
 	if running(r) {
-		v.say("%s is working: it takes words once it is done (Ctrl+X stops it).", name)
+		if err := v.src.Tell(r.ID, text); err != nil {
+			v.say("%s was not told: %v.", name, err)
+			return
+		}
+		v.box.Reset()
+		v.told[r.ID] = true
+		v.say("Sent to %s: it reads your words between its steps.", name)
 		return
 	}
 	v.box.Reset()
+	v.resume(r, text, "goes on in the background: Enter watches it")
+}
+
+// resume sends run r, which is over, back to work on text, away from the
+// loop, and says what came of it.
+func (v *agentView) resume(r app.AgentRun, text, done string) {
+	name := runName(r)
 	v.starting++
 	v.say("Sending %s back to work …", name)
 	src := v.src
@@ -594,7 +649,7 @@ func (v *agentView) reply(r app.AgentRun, text string) {
 				return
 			}
 			v.refresh()
-			v.say("%s goes on in the background: Enter watches it.", name)
+			v.say("%s %s.", name, done)
 		}
 	})
 }
@@ -625,6 +680,21 @@ func (v *agentView) dispatch(prompt string) {
 			v.say("Started %s: Enter watches it.", runShortOf(id))
 		}
 	})
+}
+
+// title is the terminal's title while the view is open: how many runs
+// wait on the person, as Claude Code's tab title says.
+func (v *agentView) title() string {
+	n := 0
+	for _, r := range v.runs {
+		if r.State == "blocked" {
+			n++
+		}
+	}
+	if n == 0 {
+		return "gnosh agents"
+	}
+	return fmt.Sprintf("%d awaiting input · gnosh agents", n)
 }
 
 // runShortOf is the start of a session's id that names its run, as the
@@ -1045,7 +1115,11 @@ func (v *agentView) hintLine() string {
 		parts = []string{"Enter opens the run chosen", "Esc empties the box"}
 	case text != "" && v.peek && !v.help && !v.answering():
 		r, _ := v.chosen()
-		parts = []string{"Enter sends " + runName(r) + " back to work on it", "Esc empties the box"}
+		send := "Enter sends " + runName(r) + " back to work on it"
+		if running(r) {
+			send = "Enter sends your words to " + runName(r)
+		}
+		parts = []string{send, "Esc empties the box"}
 	case text != "":
 		start := "Enter starts a run in " + v.folder()
 		if len(v.info.Flags) > 0 {
@@ -1209,6 +1283,30 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 	for _, ev := range ahead {
 		v.input(ev)
 	}
+	// The title says how many runs wait on the person; the one the
+	// terminal had comes back as the view closes.
+	shownTitle := ""
+	defer func() {
+		if shownTitle != "" {
+			_, _ = io.WriteString(t, term.TitlePop)
+		}
+	}()
+	tell := func() {
+		if title := v.title(); title != shownTitle {
+			seq := term.SetTitle(title)
+			if shownTitle == "" {
+				seq = term.TitlePush + seq
+			}
+			_, _ = io.WriteString(t, seq)
+			shownTitle = title
+		}
+		for _, note := range v.notes {
+			if seq := noteSeq(info.Notify, note, env); seq != "" {
+				_, _ = io.WriteString(t, seq)
+			}
+		}
+		v.notes = v.notes[:0]
+	}
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	var err2 error
@@ -1218,6 +1316,7 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 			_ = p.Clear()
 		}
 		draw()
+		tell()
 		select {
 		case ev, ok := <-events:
 			if !ok {

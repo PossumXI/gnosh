@@ -72,7 +72,9 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 	ended := func(r agent.TurnResult) bool {
 		return r.Reason == agent.EndCompleted || r.Reason == agent.EndModelStopped
 	}
-	if _, ever := b.BackgroundWork(); !ever {
+	if _, ever := b.BackgroundWork(); !ever && f.inboxed.Load() == 0 {
+		// (A prompt that came while the turn ran, from the agent view's
+		// inbox, is waited for as background work is.)
 		left := b.LeftRunning()
 		if len(left) == 0 || !ended(res) || !b.TellLeftRunning(left) {
 			return res, nil, agent.State{}

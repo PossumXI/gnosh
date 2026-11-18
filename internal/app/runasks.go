@@ -166,3 +166,92 @@ func answerAsk(log, id, choice, text string) error {
 	data, _ := json.Marshal(runAnswer{ID: a.ID, Token: a.Token, Choice: choice, Text: text})
 	return writeFileAtomic(answerFile(log), data)
 }
+
+// A run's inbox: words a person sends a working run from the agent view
+// (typed while peeking at it, as Claude Code's peek replies), which it
+// reads between its steps as prompts of the person's. Each message is a
+// file of its own, <base>.inbox-<time>.json, and carries the run's token,
+// which the run writes to <base>.token as it starts: a message without it
+// is not heard. What a run did not read before it ended stays in its
+// inbox, for the view to send it back to work on (unreadWords).
+
+// inboxLook is how often a run reads its inbox.
+const inboxLook = time.Second
+
+// inboxMessage is one message in a run's inbox.
+type inboxMessage struct {
+	Token string `json:"token"`
+	Text  string `json:"text"`
+}
+
+// tokenFile is where the run whose log is log keeps its token.
+func tokenFile(log string) string { return strings.TrimSuffix(log, ".log") + ".token" }
+
+// inboxMessages are the files of the messages in the inbox of the run
+// whose files begin at base, oldest first.
+func inboxMessages(base string) []string {
+	paths, _ := filepath.Glob(base + ".inbox-*.json")
+	slices.Sort(paths)
+	return paths
+}
+
+// readInbox makes the run's token, writes it down, and hands submit each
+// message its inbox gets, until ctx ends.
+func readInbox(ctx context.Context, base string, submit func(string) error) error {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	token := hex.EncodeToString(b[:])
+	if err := writeFileAtomic(base+".token", []byte(token+"\n")); err != nil {
+		return err
+	}
+	go func() {
+		tick := time.NewTicker(inboxLook)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+			for _, path := range inboxMessages(base) {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					continue
+				}
+				var m inboxMessage
+				if json.Unmarshal(data, &m) != nil || m.Token != token {
+					_ = os.Remove(path) // not heard
+					continue
+				}
+				if strings.TrimSpace(m.Text) == "" || submit(m.Text) == nil {
+					_ = os.Remove(path)
+				}
+			}
+		}
+	}()
+	return nil
+}
+
+// tellRun puts words in the inbox of the run whose log is log.
+func tellRun(log, text string, now time.Time) error {
+	token, err := os.ReadFile(tokenFile(log))
+	if err != nil {
+		return fmt.Errorf("it reads no words: a gnosh from before the agent view's replies started it")
+	}
+	data, _ := json.Marshal(inboxMessage{Token: strings.TrimSpace(string(token)), Text: text})
+	return writeFileAtomic(fmt.Sprintf("%s.inbox-%020d.json", strings.TrimSuffix(log, ".log"), now.UnixNano()), data)
+}
+
+// unreadWords takes back the words a run was told and did not read before
+// it ended: what its inbox holds, which is emptied.
+func unreadWords(log string) []string {
+	var out []string
+	for _, path := range inboxMessages(strings.TrimSuffix(log, ".log")) {
+		var m inboxMessage
+		if data, err := os.ReadFile(path); err == nil && json.Unmarshal(data, &m) == nil && strings.TrimSpace(m.Text) != "" {
+			out = append(out, m.Text)
+		}
+		_ = os.Remove(path)
+	}
+	return out
+}

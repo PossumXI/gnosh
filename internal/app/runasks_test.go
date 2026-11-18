@@ -131,3 +131,53 @@ func TestBlockedRunInTheList(t *testing.T) {
 		t.Errorf("the answer written: %s", data)
 	}
 }
+
+// Words sent to a working run from the agent view reach its model between
+// its steps as the person's, and keep the run open for the turn they
+// start; a message without the run's token is not heard; what it did not
+// read before it ended is taken back.
+func TestRunReadsItsInbox(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 3"}`}}},
+		apptest.Reply{Text: "Slept, and the word is plum."})
+	w.Allow("Bash(sleep *)")
+	base := filepath.Join(w.Root, "run")
+	log := base + ".log"
+	o := testOptions(w, "-p", "sleep a while")
+	o.Environ = append(o.Environ, AsksEnv+"="+base)
+	done := make(chan result, 1)
+	go func() { done <- runWith(t, context.Background(), o) }()
+	deadline := time.Now().Add(30 * time.Second)
+	for !fileExists(tokenFile(log)) {
+		if time.Now().After(deadline) {
+			t.Fatal("the run wrote no token")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	forged, _ := json.Marshal(inboxMessage{Token: "not-it", Text: "say forged"})
+	if err := os.WriteFile(base+".inbox-00000000000000000001.json", forged, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := tellRun(log, "and say plum", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var r result
+	select {
+	case r = <-done:
+	case <-time.After(60 * time.Second):
+		t.Fatal("the run did not end")
+	}
+	r.wantCode(t, 0)
+	body := requestText(t, w, 1)
+	has(t, "what the model read", body, "and say plum")
+	hasNot(t, "what the model read", body, "say forged")
+	if left := inboxMessages(base); len(left) != 0 {
+		t.Errorf("messages left in the inbox: %q", left)
+	}
+	if err := tellRun(log, "too late", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if got := unreadWords(log); len(got) != 1 || got[0] != "too late" || len(inboxMessages(base)) != 0 {
+		t.Errorf("unread words: %q", got)
+	}
+}

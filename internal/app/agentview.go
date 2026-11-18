@@ -47,6 +47,11 @@ type AgentSource interface {
 	// Resume sends a run that is over back to work on the prompt, as gnosh
 	// --bg -r does: its session goes on, in its folder, as a run again.
 	Resume(ctx context.Context, id, prompt string) error
+	// Tell sends words to a working run, which it reads between its steps
+	// as the person's (runasks.go); Unread takes back what a run that has
+	// ended did not read of them.
+	Tell(id, text string) error
+	Unread(id string) []string
 	// Answer answers the question a run waits on (AgentRun.Question):
 	// question is its ID, choice the key of the answer chosen, and text
 	// words that go with it ("no" with words lets the model carry on).
@@ -101,6 +106,9 @@ type AgentViewInfo struct {
 	// prompt: the permission mode, model and effort gnosh agents was
 	// given for them, as Claude Code's dispatch defaults.
 	Flags []string
+	// Notify is how the view tells the person that a run needs input or
+	// is done: the preferredNotifChannel option ("auto" when not set).
+	Notify string
 }
 
 // agentView opens the agent view for gnosh agents.
@@ -115,6 +123,7 @@ func (p *program) agentView(st *startup, inv cli.Invocation) int {
 	return p.o.AgentView(AgentViewInfo{
 		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs(), cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All, flags: flags},
 		Cwd:    cwd, Home: home, Scoped: inv.Cwd != "", All: inv.All, Flags: flags,
+		Notify: firstOf(st.cfg.Options.PreferredNotifChannel.V, "auto"),
 	})
 }
 
@@ -307,6 +316,22 @@ const bgStarted = "gnosh: backgrounded · "
 
 func (s *runSource) Dispatch(ctx context.Context, prompt string) (string, error) {
 	return s.background(ctx, s.cwd, nil, prompt)
+}
+
+func (s *runSource) Tell(id, text string) error {
+	r, err := s.run(id)
+	if err != nil {
+		return err
+	}
+	return tellRun(r.log, text, s.p.now())
+}
+
+func (s *runSource) Unread(id string) []string {
+	r, err := s.run(id)
+	if err != nil {
+		return nil
+	}
+	return unreadWords(r.log)
 }
 
 func (s *runSource) Resume(ctx context.Context, id, prompt string) error {

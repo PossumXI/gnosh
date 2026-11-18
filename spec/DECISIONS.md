@@ -1960,3 +1960,30 @@ or kept with the reason said (27).
     they start a new run, as Claude Code's do). A working run takes no
     words yet: that needs a way into a run's queue, which is left for
     later. --fork-session does not go with --bg.
+
+120. **Words sent to a working run reach it between its steps.** Claude
+    Code's peek replies to a working session join its message queue.
+    A run in the background (one that was given GNOSH_RUN_ASKS, 118) now
+    writes a random token to <base>.token once its prompt is in, and reads
+    <base>.inbox-<time>.json files every second while it works: each
+    message that carries the token is submitted as the person's prompt,
+    which the model gets between two rounds, and the run stays open for a
+    turn such a prompt starts; one without the token is thrown away
+    unheard. The agent view writes them (words typed while peeking at a
+    working run, and Enter). The run stops reading once it has nothing
+    left to do, and what it did not read stays in its inbox: the view,
+    seeing the run over, takes the words back and sends the run back to
+    work on them (119), so no reply is lost to a run that ended first.
+
+121. **The agent view tells the person when a run needs input or is
+    done.** Claude Code's view sends a notification through
+    preferredNotifChannel when a session needs input, finishes or fails,
+    and its tab title counts the sessions awaiting input. gnosh's view now
+    does both: a run that comes to need input, or comes to be done, since
+    the last look is said by the person's channel (the same notes the
+    session sends a person who seems away: a desktop note where the
+    terminal takes one, the bell with terminal_bell, nothing in tmux with
+    auto), and the title reads "N awaiting input · gnosh agents" while
+    any wait, the terminal's own title coming back as the view closes.
+    What was there as the view opened is not told. A run stopped by the
+    person is not told either: they know.

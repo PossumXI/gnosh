@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -106,6 +107,8 @@ type printer struct {
 	// show (ToolName.NoLogArgs).
 	noArgs  map[string]bool
 	results chan agent.TurnResult
+	// inboxed counts the prompts the run's inbox handed it (runasks.go).
+	inboxed atomic.Int64
 }
 
 // newPrinter makes the front end of a run.
@@ -162,6 +165,23 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 			return cli.ExitFailure
 		}
 	}
+	stopInbox := func() {}
+	if f.p.runAsks != "" {
+		// A run in the background reads the words sent to it from the
+		// agent view as it works (runasks.go), once its prompt is in, and
+		// until it has nothing left to do: what comes after stays in its
+		// inbox, for the view to send it back to work on.
+		inbox, stop := context.WithCancel(ctx)
+		defer stop()
+		stopInbox = stop
+		_ = readInbox(inbox, f.p.runAsks, func(text string) error {
+			_, err := c.Submit(agent.Prompt{Text: text})
+			if err == nil {
+				f.inboxed.Add(1)
+			}
+			return err
+		})
+	}
 	res, sig, st := f.await(ctx, c, id)
 	if sig != nil {
 		return f.stoppedBySignal(c, id, sig, st)
@@ -171,7 +191,9 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	}
 	// The background work the turn started is waited for, and the turns
 	// its ends start are the run's too (printwait.go).
-	if res, sig, st = f.awaitBackground(ctx, c, res, false); sig != nil {
+	res, sig, st = f.awaitBackground(ctx, c, res, false)
+	stopInbox()
+	if sig != nil {
 		return f.stoppedBySignal(c, "", sig, st)
 	}
 	if ctx.Err() != nil {
