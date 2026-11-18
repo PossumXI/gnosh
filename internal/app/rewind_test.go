@@ -387,3 +387,27 @@ func TestRewindToAPromptThatWaited(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 }
+
+// With fileCheckpointingEnabled false, nothing is kept, and a rewind of the
+// files says why it cannot be done.
+func TestRewindWithoutCheckpoints(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+	)
+	w.Settings(`{"options": {"fileCheckpointingEnabled": false}}`)
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("/rewind 1 files")
+	s.see("fileCheckpointingEnabled is false")
+	s.typeLine("/exit")
+	s.exit()
+	if !w.Exists("notes.txt") {
+		t.Error("a rewind with nothing kept took a file away")
+	}
+	if kept, _ := filepath.Glob(filepath.Join(w.DataDir(), "projects", "*", "*", "checkpoints", "index.jsonl")); len(kept) != 0 {
+		t.Errorf("copies were kept: %q", kept)
+	}
+}

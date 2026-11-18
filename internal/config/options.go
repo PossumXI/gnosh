@@ -113,6 +113,9 @@ type Options struct {
 	// session, the session's model is asked for the person's likely next
 	// prompt, which the box shows until they type (Tab takes it).
 	PromptSuggestionEnabled Value[bool]
+	// FileCheckpointingEnabled says what Write and Edit change is kept, so
+	// that /rewind can put it back.
+	FileCheckpointingEnabled Value[bool]
 }
 
 // ServerOff is the value of an option that names where a server of gnosh's
@@ -130,6 +133,7 @@ func defaultOptions() Options {
 	o.MaxBackgroundTasks.V = 50
 	o.MemReviewCloses.V = true
 	o.RespondToBashCommands.V = true
+	o.FileCheckpointingEnabled.V = true
 	o.MemoryText.V = "lean"
 	o.DeliverablesServer.V = DefaultDeliverablesServer
 	o.ProjectDataDir.V = ".gnosh"
@@ -211,6 +215,10 @@ var optionDefs = []optionDef{
 		what:  "the model answers what a command you ran behind ! printed, as soon as it ends; false puts the command and its output in front of the model with your next prompt instead",
 		from:  fromClaudeCode + ": the settings key",
 		truth: func(o *Options) *Value[bool] { return &o.RespondToBashCommands }},
+	{key: "fileCheckpointingEnabled", kind: oBool, def: "true",
+		what:  "what Write and Edit change is kept beside the session, for /rewind to put back (the copies of your 100 most recent prompts); false keeps nothing, and a rewind takes the conversation alone",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.FileCheckpointingEnabled }},
 
 	// What the model reads.
 	{key: "userInstructionFiles", kind: oPathList, def: "none beyond your GNOSH.md and AGENTS.md",

@@ -213,7 +213,9 @@ copy of the conversation works on the prompt in the background while this
 session goes on), `/subtask` (as `/fork`, and what the copy answers comes
 back to this conversation when it is done), `/compact`, `/resume` (by number, id, name, or words from
 a session's name or first prompt), `/branch`, `/rewind` (the
-conversation, the files Write and Edit changed, or both), `/model`, `/effort`,
+conversation, the files Write and Edit changed, or both; what a file holds
+is kept before it is put back, and the copies of your 100 most recent
+prompts are kept), `/model`, `/effort`,
 `/config`, `/plan`, `/permissions`, `/add-dir`, `/cd` (the session moves to
 another folder and goes on there, with that folder's settings, instructions
 and skills; Cd rules say where it may go), `/status`, `/context`, `/btw`

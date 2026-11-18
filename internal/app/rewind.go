@@ -48,8 +48,10 @@ type RewindPoint struct {
 	Time time.Time
 	// Files are the files Write and Edit changed from this prompt on: what
 	// a rewind to before it can put back, as they were before the first of
-	// those changes.
-	Files []string
+	// those changes. FilesGone says the copies from before it were let go
+	// (only the most recent prompts' are kept), so none can be.
+	Files     []string
+	FilesGone bool
 }
 
 // rewindGroup finds the person's prompts in what is left of the
@@ -111,7 +113,8 @@ func (l *live) rewindPoints() []RewindPoint {
 	points, _, _ := l.rewindGroup()
 	order := l.promptsInOrder()
 	for i := range points {
-		points[i].Files = filePaths(l.filesSince(order, points[i].ID))
+		cps, gone := l.filesSince(order, points[i].ID)
+		points[i].Files, points[i].FilesGone = filePaths(cps), gone
 	}
 	return points
 }
@@ -151,7 +154,9 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 	}
 	var restore []fileCheckpoint
 	if files {
-		restore = old.rewindFiles(point)
+		if restore, err = old.rewindFiles(point); err != nil {
+			return "", "", fmt.Errorf("%v. Nothing was changed: /rewind N takes the conversation alone", err)
+		}
 	}
 	if _, err := old.ts.Append(transcript.RewindEntry(to)); err != nil {
 		return "", "", fmt.Errorf("the rewind could not be written into the session's file (%v), so nothing was changed", err)
@@ -199,7 +204,10 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 		c.Say("Your prompts in this conversation:")
 		for i, p := range points {
 			files := ""
-			if len(p.Files) > 0 {
+			switch {
+			case p.FilesGone:
+				files = "  (the copies of the files from before it were let go)"
+			case len(p.Files) > 0:
 				files = fmt.Sprintf("  (%s changed since)", countWords(len(p.Files), "file", "files"))
 			}
 			c.Say("  %d. %s  %s%s", i+1, p.Time.Local().Format("15:04"), oneLine(p.Text, 100), files)
@@ -229,7 +237,11 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 		if bg := l.backgroundAgents(); len(bg) > 0 {
 			return fmt.Errorf("%s in the background, and could change the files again: wait for it, or stop it (Ctrl+X Ctrl+K), then put the files back", countWords(len(bg), "sub-agent is working", "sub-agents are working"))
 		}
-		done, failed := l.checks.restore(l.rewindFiles(point.ID))
+		cps, ferr := l.rewindFiles(point.ID)
+		if ferr != nil {
+			return ferr
+		}
+		done, failed := l.checks.restore(cps)
 		l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point.ID, len(done), len(failed))
 		if len(done) > 0 {
 			c.Say("The files are back as they were before your prompt: %s", oneLine(point.Text, 100))

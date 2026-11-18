@@ -118,6 +118,8 @@
 //	                           with no key for that long closes by itself
 //	  respondToBashCommands    the model answers a command run behind !
 //	                           when it ends; false waits for the next prompt
+//	  fileCheckpointingEnabled what Write and Edit change is kept for
+//	                           /rewind (true); false keeps nothing
 //	  userInstructionFiles     more instruction files of the person's own
 //	  projectInstructionFiles  more instruction files of the project
 //	  hiddenSkills             skills to hide from the model

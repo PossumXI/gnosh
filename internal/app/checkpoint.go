@@ -45,6 +45,12 @@ import (
 // noted, and a rewind says it cannot put it back.
 const checkpointMax = 32 << 20
 
+// checkpointPrompts is how many of the most recent prompts' copies a
+// session keeps, as Claude Code keeps those of its 100 most recent
+// checkpoints. The copies of older prompts are let go, and a rewind of the
+// files to before one of those says it cannot be done.
+const checkpointPrompts = 100
+
 // fileCheckpoint is one file as it was before its first change after one
 // prompt.
 type fileCheckpoint struct {
@@ -78,17 +84,32 @@ type checkpoints struct {
 	// taken are the copies of the sessions this one was branched from,
 	// by their folder, read when first needed.
 	taken map[string][]fileCheckpoint
+	// pruned are the prompts whose copies were let go, here and in the
+	// sessions this one was branched from.
+	pruned map[string]bool
 }
 
 // openCheckpoints opens the store in dir, reading what an earlier run of
 // the session kept there. A store that cannot be read is an empty one.
 func openCheckpoints(dir string, now func() time.Time) *checkpoints {
-	c := &checkpoints{dir: dir, now: now, kept: map[string]bool{}, taken: map[string][]fileCheckpoint{}}
+	c := &checkpoints{dir: dir, now: now, kept: map[string]bool{}, taken: map[string][]fileCheckpoint{}, pruned: map[string]bool{}}
 	c.list = readCheckpoints(dir)
 	for _, cp := range c.list {
 		c.kept[cp.Prompt+"\x00"+cp.Path] = true
 	}
+	readPruned(dir, c.pruned)
 	return c
+}
+
+// readPruned adds the prompts whose copies were let go in dir to set.
+func readPruned(dir string, set map[string]bool) {
+	data, err := os.ReadFile(filepath.Join(dir, "pruned"))
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Fields(string(data)) {
+		set[line] = true
+	}
 }
 
 // readCheckpoints reads the index of the copies kept in dir.
@@ -148,12 +169,89 @@ func (c *checkpoints) keep(prompt, path string) error {
 	if err != nil {
 		cp.Failed, cp.Blob = true, ""
 	}
+	fresh := !slices.ContainsFunc(c.list, func(o fileCheckpoint) bool { return o.Prompt == prompt })
 	c.list = append(c.list, cp)
 	c.kept[key] = true
 	if ierr := c.index(cp); err == nil {
 		err = ierr
 	}
+	if fresh {
+		if perr := c.prune(); err == nil {
+			err = perr
+		}
+	}
 	return err
+}
+
+// prune lets go of the copies of all but the checkpointPrompts most recent
+// prompts: their files are removed, the index is written again without
+// them, and the prompts are noted in the file "pruned". The caller holds
+// the lock.
+func (c *checkpoints) prune() error {
+	var order []string
+	seen := map[string]bool{}
+	for _, cp := range c.list {
+		if !seen[cp.Prompt] {
+			seen[cp.Prompt] = true
+			order = append(order, cp.Prompt)
+		}
+	}
+	if len(order) <= checkpointPrompts {
+		return nil
+	}
+	drop := map[string]bool{}
+	for _, p := range order[:len(order)-checkpointPrompts] {
+		drop[p] = true
+	}
+	var keep []fileCheckpoint
+	var lines []byte
+	for _, cp := range c.list {
+		if !drop[cp.Prompt] {
+			keep = append(keep, cp)
+			line, err := json.Marshal(cp)
+			if err != nil {
+				return err
+			}
+			lines = append(append(lines, line...), '\n')
+		}
+	}
+	// The prompts are noted first: a rewind must never take what is left
+	// for all there was.
+	var names []byte
+	for p := range drop {
+		names = append(append(names, p...), '\n')
+	}
+	f, err := os.OpenFile(filepath.Join(c.dir, "pruned"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	_, werr := f.Write(names)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return werr
+	}
+	for p := range drop {
+		c.pruned[p] = true
+	}
+	if err := putBack(filepath.Join(c.dir, "index.jsonl"), lines, 0o600); err != nil {
+		return err
+	}
+	for _, cp := range c.list {
+		if drop[cp.Prompt] && cp.Blob != "" {
+			_ = os.Remove(filepath.Join(c.dir, cp.Blob))
+		}
+	}
+	c.list = keep
+	return nil
+}
+
+// gone reports whether the copies of one of the prompts were let go.
+func (c *checkpoints) gone(prompts []string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.ContainsFunc(prompts, func(p string) bool { return c.pruned[p] })
 }
 
 // write puts data into a new file of the store, in its folder sub, and
@@ -215,6 +313,7 @@ func (c *checkpoints) inherit(dir string) {
 	}
 	if _, ok := c.taken[dir]; !ok {
 		c.taken[dir] = readCheckpoints(dir)
+		readPruned(dir, c.pruned)
 	}
 }
 
@@ -277,6 +376,11 @@ func (c *checkpoints) restore(cps []fileCheckpoint) (done, failed []string) {
 			continue
 		case there && !info.Mode().IsRegular():
 			failed = append(failed, cp.Path+": something other than a file is there now, and is left alone")
+			continue
+		case there && hardLinked(cp.Path):
+			// Put back by a new file in its place, it would no longer be
+			// the file its other names (as pnpm makes them) stand for.
+			failed = append(failed, cp.Path+": it is hard-linked under another name, which putting it back would cut it off from, so it is left as it is")
 			continue
 		}
 		saved := ""
@@ -360,7 +464,7 @@ func putBack(path string, data []byte, mode fs.FileMode) error {
 // that cannot be made does not stop the change; the person is told once
 // that files may not all be put back.
 func (l *live) keepFile(env *core.ToolEnv, path string) error {
-	if l.checks == nil || l.log == nil || env != nil && env.ParentSessionID != "" {
+	if l.checks == nil || l.log == nil || env != nil && env.ParentSessionID != "" || !l.cfg.Options.FileCheckpointingEnabled.V {
 		return nil
 	}
 	if err := l.checks.keep(l.log.lastPrompt(), path); err != nil {
@@ -400,27 +504,45 @@ func (l *live) promptsInOrder() []string {
 
 // filesSince returns what a rewind to before the prompt in the session's
 // file entry point would put back, given the prompts in the file's order:
-// every file changed from that prompt on.
-func (l *live) filesSince(order []string, point string) []fileCheckpoint {
+// every file changed from that prompt on. gone says the copies of one of
+// those prompts were let go, so the files cannot be put back as they were
+// then, and nothing is offered.
+func (l *live) filesSince(order []string, point string) (cps []fileCheckpoint, gone bool) {
 	if l.checks == nil {
-		return nil
+		return nil, false
 	}
 	at := slices.Index(order, point)
 	if at < 0 {
-		return nil
+		return nil, false
+	}
+	if l.checks.gone(order[at:]) {
+		return nil, true
 	}
 	prompts := map[string]bool{}
 	for _, p := range order[at:] {
 		prompts[p] = true
 	}
-	return l.checks.since(prompts)
+	return l.checks.since(prompts), false
 }
 
 // rewindFiles returns what a rewind to before the prompt in the session's
-// file entry point would put back.
-func (l *live) rewindFiles(point string) []fileCheckpoint {
-	return l.filesSince(l.promptsInOrder(), point)
+// file entry point would put back, and an error that says why none can be.
+func (l *live) rewindFiles(point string) ([]fileCheckpoint, error) {
+	cps, gone := l.filesSince(l.promptsInOrder(), point)
+	if gone {
+		return nil, errFilesGone
+	}
+	if !l.cfg.Options.FileCheckpointingEnabled.V && len(cps) == 0 {
+		return nil, errNoCheckpoints
+	}
+	return cps, nil
 }
+
+// errFilesGone and errNoCheckpoints say why a rewind cannot put files back.
+var (
+	errFilesGone     = fmt.Errorf("the copies of what the files held before that prompt were let go: gnosh keeps those of your %d most recent prompts", checkpointPrompts)
+	errNoCheckpoints = errors.New("what Write and Edit change is not kept here (fileCheckpointingEnabled is false), so no file can be put back")
+)
 
 // filePaths lists the paths of checkpoints.
 func filePaths(cps []fileCheckpoint) []string {

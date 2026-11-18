@@ -291,6 +291,7 @@ func TestOptions(t *testing.T) {
     "vimInsertModeRemaps": ["jj", "jk"],
     "promptSuggestionEnabled": true,
     "respondToBashCommands": false,
+    "fileCheckpointingEnabled": false,
     "askUserQuestionTimeout": "5m",
     "theme": "light",
     "viewMode": "focus"
@@ -337,6 +338,7 @@ func TestOptions(t *testing.T) {
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 	check("promptSuggestionEnabled", o.PromptSuggestionEnabled.V, true)
 	check("respondToBashCommands", o.RespondToBashCommands.V, false)
+	check("fileCheckpointingEnabled", o.FileCheckpointingEnabled.V, false)
 	check("askUserQuestionTimeout", o.AskUserQuestionTimeout.V, "5m")
 	check("theme", o.Theme.V, "light")
 	check("viewMode", o.ViewMode.V, "focus")

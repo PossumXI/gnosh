@@ -2393,3 +2393,19 @@ or kept with the reason said (27).
     background work is stopped; and the menu is worked out from one read
     of the session's file. Not changed yet: copies are never pruned, and
     fileCheckpointingEnabled is not built.
+
+144. **File copies: the 100 most recent prompts, hard links, and
+    fileCheckpointingEnabled.** As Claude Code keeps the file snapshots of
+    its 100 most recent checkpoints, a session keeps the copies of its 100
+    most recent prompts (checkpointPrompts): when a new prompt's first copy
+    is made, the copies of older prompts are deleted, the index is written
+    again without them, and the prompts are noted first in the store's file
+    "pruned". A rewind of the files to before one of those (or to before a
+    prompt of a branch's origin whose copies were let go) is refused, and
+    the list says so: putting back what is left would be wrong, not just
+    short. A file with another name (a hard link, as pnpm makes them) is
+    not put back, as in Claude Code: a new file in its place would cut it
+    off from its other names. "options": {"fileCheckpointingEnabled": false}
+    keeps nothing; a rewind of the files then says why it cannot be done.
+    Not built: Claude Code's retention sweep (cleanupPeriodDays): gnosh
+    keeps a session's copies as long as its file.
