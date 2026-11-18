@@ -209,7 +209,8 @@ In a session, Claude Code's commands work as there: `/help`, `/clear`,
 build is installed, which the session says), `/background` (the session goes
 on without the terminal, as a run of its own on the prompt given), `/fork` (a
 copy of the conversation works on the prompt in the background while this
-session goes on), `/compact`, `/resume` (by number, id, name, or words from
+session goes on), `/subtask` (as `/fork`, and what the copy answers comes
+back to this conversation when it is done), `/compact`, `/resume` (by number, id, name, or words from
 a session's name or first prompt), `/branch`, `/rewind` (the
 conversation, the files Write and Edit changed, or both), `/model`, `/effort`,
 `/config`, `/plan`, `/permissions`, `/add-dir`, `/cd` (the session moves to

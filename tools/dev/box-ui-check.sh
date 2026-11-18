@@ -152,6 +152,10 @@
 #   fallback    the session's model is on a server that is not there (port
 #               9) and "fallbackModel" names the box's Qwen: the turn says
 #               it goes on with the fallback, at once, and Qwen answers
+#   subtask     (-y) after a first turn, /subtask sets a copy of the
+#               conversation to work in the background; when it is done its
+#               answer comes back, and the model tells it in a turn of its
+#               own
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -177,7 +181,7 @@ secreview) flags="--trust-folder" ;;
 simplify) flags="--permission-mode acceptEdits --trust-folder" ;;
 agent) flags="--agent Explore" ;;
 plan) flags="--permission-mode plan" ;;
-background | btw | monitor | panel | cd | leftover | elicit | agentmcp) flags="-y" ;;
+background | btw | monitor | panel | cd | leftover | elicit | agentmcp | subtask) flags="-y" ;;
 agenthook)
 	flags="-y"
 	hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"agent\", \"prompt\": \"Check whether the file done.txt exists in the working folder and holds the word done. \$ARGUMENTS\", \"timeout\": 600 } ] } ] },"
@@ -190,7 +194,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask)" >&2
 	exit 2
 	;;
 esac
@@ -739,6 +743,12 @@ invisible)
 failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
+	;;
+subtask)
+	tmux send-keys -t "$S" "Say hi in two words." Enter
+	for i in $(seq 1 180); do sleep 1; screen | grep -q "done in" && break; done
+	tmux send-keys -t "$S" "/subtask Reply with exactly the word forty-two and nothing else." Enter
+	done_when() { screen | grep -q "answered is in front of the model" && [ "$(screen | grep -c 'done in')" -ge 2 ]; }
 	;;
 fallback)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter

@@ -69,6 +69,7 @@ const (
 	textInterrupted      = "interrupted"
 	textBackgroundEnded  = "background-ended"
 	textAgentEnded       = "agent-ended"
+	textSubtaskEnded     = "subtask-ended"
 	textMonitorLines     = "monitor-lines"
 	textBtw              = "btw"
 	textRecap            = "recap"
@@ -202,6 +203,9 @@ func specs() []spec {
 		{name: textAgentEnded, kind: KindLine, need: []string{"description", "id"},
 			may:  []string{"finished", "failed", "stopped", "why", "caution", "report", "output"},
 			when: "When a sub-agent the model started in the background ends, between rounds or as a turn of its own."},
+		{name: textSubtaskEnded, kind: KindLine, need: []string{"task", "id"},
+			may:  []string{"finished", "failed", "stopped", "why", "report"},
+			when: "When a copy of the conversation the person set to work in the background with /subtask ends, between rounds or as a turn of its own."},
 		{name: textBtw, kind: KindLine,
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,

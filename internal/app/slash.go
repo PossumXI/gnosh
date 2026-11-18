@@ -224,6 +224,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "color", Args: "[" + strings.Join(PromptColors, "|") + "|default]", Summary: "Give this session's prompt mark a colour, to tell it from other sessions; with none named, one at random. It is kept with the session.", InRun: true, Run: l.slashColor},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id, name or words]", Summary: "Open another session of this folder in place of this one, which is kept. Words find the session whose name or first prompt has them.", Run: l.slashResume},
 		{Name: "fork", Args: "<prompt>", Summary: "Copy the conversation into a new session that works on the prompt in the background, as a run of its own, while this one goes on here.", Run: l.slashFork},
+		{Name: "subtask", Args: "<task>", Summary: "Copy the conversation into a run in the background that works on the task while this session goes on; what it answers comes back here when it is done.", Run: l.slashSubtask},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},

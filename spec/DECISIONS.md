@@ -2304,3 +2304,20 @@ or kept with the reason said (27).
     one is waited for as any model is. Not built: a fallback chain for
     the small model's side jobs (they fall back to the session's model
     already).
+
+141. **/subtask, as Claude Code's.** `/subtask <task>` copies the
+    conversation into a run in the background that works on the task, as
+    /fork does, and when the run ends what it printed comes back to this
+    conversation: a task notification (prompt text subtask-ended, the
+    answer marked as the run's own words and defused) that starts a turn
+    of its own when the session is idle, so the model tells the person
+    what came of it. The run is named after the task's first words (six
+    at most), as Claude Code names its fork. In Claude Code /subtask is an
+    in-session forked sub-agent with a panel under the prompt; gnosh's is
+    a run of its own (its questions wait in the agent view, ← ← shows it
+    meanwhile), because gnosh's background runs are where its agent view
+    already lives, and a fork in the same process would take turns with
+    the session on one model server and push its cache out. A report is
+    the last 40 lines the run printed, and says so when it was cut. As
+    with /fork, a running turn must end first. Not built: the model
+    starting a fork of its own (Claude Code's fork mode).

@@ -551,6 +551,39 @@ func (s *Set) AgentEnded(a AgentEnd) string {
 	return s.fill(textAgentEnded, vals)
 }
 
+// SubtaskEnd is how a run the person started with /subtask ended: a copy
+// of the conversation that worked on a task in the background.
+type SubtaskEnd struct {
+	// ID is the copy's session, and Task what the person set it to do.
+	ID, Task string
+	// State says how it ended, and Why says more of a failure.
+	State AgentState
+	Why   string
+	// Report is the answer it printed, which is its own words: Defuse has
+	// been applied to it.
+	Report string
+}
+
+// SubtaskEnded returns the notice that a run started with /subtask has
+// ended, with its answer. Nobody typed it, and it says so.
+func (s *Set) SubtaskEnded(e SubtaskEnd) string {
+	vals := values{
+		"task":   oneLine(e.Task, maxQuote),
+		"id":     oneLine(e.ID, maxName),
+		"report": strings.TrimSpace(e.Report),
+		"why":    strings.TrimRight(oneLine(e.Why, maxQuote), ". "),
+	}
+	switch e.State {
+	case AgentFailed:
+		vals.flag("failed", true)
+	case AgentStopped:
+		vals.flag("stopped", true)
+	default:
+		vals.flag("finished", true)
+	}
+	return s.fill(textSubtaskEnded, vals)
+}
+
 // Btw returns the line that stands before a side question the person asks
 // with /btw: answer from the conversation, call no tool, keep nothing.
 // The question follows it, in the person's own words.

@@ -269,6 +269,10 @@
 //     command a Monitor watched has ended.
 //   - agent-ended (AgentEnded) says the same of a sub-agent the model
 //     started in the background, with its report, marked as its own words.
+//   - subtask-ended (SubtaskEnded) says the same of a copy of the
+//     conversation the person set to work in the background with
+//     /subtask, with the answer it printed, marked as its own words: the
+//     model is to tell the person what came of it.
 //   - btw (Btw) stands before a side question the person asks with /btw,
 //     in a request beside the session's own that is not kept: answer in
 //     words from the conversation, call no tool, start on nothing.
