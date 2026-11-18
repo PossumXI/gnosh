@@ -29,6 +29,8 @@ type builder struct {
 	// before the state file's were put on top, to fall back on when the
 	// state file's choice turns out to be stale.
 	largeBefore, smallBefore Value[ModelRef]
+	// fallback is "fallbackModel" or --fallback-model.
+	fallback Value[[]ModelRef]
 
 	hosts    []Host
 	hooks    []Hook

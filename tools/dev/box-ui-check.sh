@@ -149,6 +149,9 @@
 #   repo        gnosh agents (acceptEdits) in a folder that holds the git
 #               repository api/: "@api" and a prompt start a run there,
 #               which writes api/where.txt, and the list shows it done
+#   fallback    the session's model is on a server that is not there (port
+#               9) and "fallbackModel" names the box's Qwen: the turn says
+#               it goes on with the fallback, at once, and Qwen answers
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -162,7 +165,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
@@ -187,7 +190,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback)" >&2
 	exit 2
 	;;
 esac
@@ -230,6 +233,20 @@ if [ "$scenario" = channel ] || [ "$scenario" = relay ]; then
 	asked=""
 	[ "$scenario" = relay ] && asked=", \"$T/questions.log\""
 	printf '{"mcpServers": {"hook": {"command": "python3", "args": ["%s", "18788", "%s"%s]}}}\n' "$HOME/newgnosh-test/channel-webhook.py" "$T/replies.log" "$asked" > "$T/config/gnosh/mcp.json"
+fi
+if [ "$scenario" = fallback ]; then
+	# The session's model is on a server that is not there; the fallback
+	# is the box's own Qwen.
+	python3 - "$T/config/gnosh/gnosh.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+c = json.load(open(p))
+c["providers"]["gone"] = {"type": "llamacpp", "baseUrl": "http://127.0.0.1:9", "listModels": False}
+c["models"]["gone/qwen3.8-27b"] = {"name": "Qwen on a box that is down", "contextWindow": 262144}
+c["model"]["id"] = "gone/qwen3.8-27b"
+c["fallbackModel"] = "qwen/qwen3.8-27b"
+json.dump(c, open(p, "w"), indent=2)
+PY
 fi
 if [ "$scenario" = elicit ]; then
 	[ -f "$HOME/newgnosh-test/elicit-server.py" ] || { echo "box-ui-check: copy tools/dev/elicit-server.py to ~/newgnosh-test first" >&2; exit 2; }
@@ -722,6 +739,10 @@ invisible)
 failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
+	;;
+fallback)
+	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
+	done_when() { [ "$(screen | grep -c -i "all is well")" -ge 2 ] && screen | grep -q "goes on with the fallback model"; }
 	;;
 cache)
 	for w in one two three; do

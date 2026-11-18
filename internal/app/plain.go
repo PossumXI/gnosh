@@ -1096,6 +1096,10 @@ func (f *plain) Event(ev any) {
 		f.fresh()
 	case *agent.RetryEvent:
 		f.stopWaiting()
+		if ev.FellBack != "" {
+			f.say("%s", visible(ev.Message))
+			break
+		}
 		f.say("waiting: %s", visible(ev.Message))
 	case *agent.PromptEvent:
 		// One of gnosh's own prompts says why a turn started in a notice

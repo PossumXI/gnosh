@@ -164,6 +164,17 @@
 // "thinking" is true, false, or one of the model's own levels, such as
 // "low".
 //
+// "fallbackModel" is one model, or a list of up to three, that a turn goes
+// on with, in order, when the session's model cannot answer: its server
+// cannot be reached, is not ready or is too busy, does not have the model,
+// or keeps failing until the wait for it runs out. A limit on the
+// person's requests is waited out as always. The switch holds for the rest
+// of the turn, and the next turn asks the session's model first again; a
+// fallback whose context window is smaller than the session model's is
+// passed over. --fallback-model outranks it:
+//
+//	"fallbackModel": ["box2/qwen3.8-27b", "studio/glm-5.3-flash"]
+//
 // A provider's "type" names the server where gnosh treats that server in
 // a way of its own: llamacpp, anthropic, openai. Every other server that
 // speaks OpenAI's chat-completions format is openai-compatible, whatever

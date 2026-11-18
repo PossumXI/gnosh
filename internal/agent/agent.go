@@ -64,6 +64,13 @@ type Options struct {
 	// names a model the person did not choose.
 	Model Model
 	Small *Model
+	// Fallbacks are the models a turn goes on with, in this order, when
+	// Model cannot answer (Claude Code's fallbackModel): its server cannot
+	// be reached or is not ready, says it is too busy, does not have the
+	// model, or keeps failing until the wait for it runs out. The switch
+	// holds for the rest of the turn; the next turn asks Model first
+	// again. Sub-agents are given the same list.
+	Fallbacks []Fallback
 	// System is the system prompt, in parts ordered from the part that
 	// changes least to the part that changes most.
 	System []string
@@ -241,6 +248,9 @@ type Agent struct {
 	sent       bool // a prompt has gone out in this session, now or before
 	model      Model
 	small      *Model
+	fell       *Model          // the fallback the turn goes on with, or nil (fallback.go)
+	fellName   string          // its name in Options.Fallbacks
+	fellOut    map[string]bool // the models and fallbacks that failed in this turn
 	tools      []core.Tool
 	index      map[string]core.Tool
 	specs      []core.ToolSpec
@@ -765,7 +775,8 @@ func (a *Agent) SetModel(m Model) error {
 		return err
 	}
 	a.mu.Lock()
-	a.model = m
+	// A model chosen by hand outranks a fallback the turn went on with.
+	a.model, a.fell = m, nil
 	a.mu.Unlock()
 	return nil
 }
@@ -869,8 +880,12 @@ type setup struct {
 func (a *Agent) setup() setup {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	model := a.model
+	if a.fell != nil {
+		model = *a.fell
+	}
 	return setup{
-		model:     a.model,
+		model:     model,
 		small:     a.small,
 		tools:     a.tools,
 		index:     a.index,

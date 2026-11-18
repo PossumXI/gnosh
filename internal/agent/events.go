@@ -430,6 +430,10 @@ type RetryEvent struct {
 	// Discarded says a reply had begun to arrive and is thrown away: the
 	// next try writes it afresh.
 	Discarded bool
+	// FellBack names the fallback model the turn goes on with, at once and
+	// for the rest of the turn (Options.Fallbacks), or is empty when the
+	// same model is asked again after Wait.
+	FellBack string
 }
 
 // ToolStartEvent says a tool call is about to be put to the gate and run.

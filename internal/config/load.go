@@ -79,6 +79,9 @@ type Flags struct {
 	Model string
 	// SmallModel is --small-model: the model for the short side jobs.
 	SmallModel string
+	// FallbackModel is --fallback-model: the models a turn goes on with
+	// when the session's model cannot answer, separated by commas.
+	FallbackModel string
 	// ReasoningEffort is --reasoning-effort / --effort: the thinking level.
 	ReasoningEffort string
 	// PermissionMode is --permission-mode.

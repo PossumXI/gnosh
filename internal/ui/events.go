@@ -549,6 +549,12 @@ func (s *session) retry(ev *agent.RetryEvent) {
 	} else {
 		s.endThinking()
 	}
+	if ev.FellBack != "" {
+		// Not a wait: the fallback model is asked at once.
+		s.notice(agent.LevelWarning, ev.Message)
+		s.retries, s.retryKind = 0, ""
+		return
+	}
 	kind := fmt.Sprintf("%s/%d", ev.Kind, ev.Status)
 	if s.retries == 0 {
 		s.retrySince = now

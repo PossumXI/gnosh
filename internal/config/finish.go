@@ -93,6 +93,7 @@ func (ld *loader) finish() *Config {
 		cfg.Models = append(cfg.Models, *m)
 	}
 	cfg.Large, cfg.Small = b.large, b.small
+	cfg.Fallback = b.fallback
 	cfg.Options = b.opts
 	cfg.Hosts = b.hosts
 	ld.probs.list = append(ld.probs.list, checkHosts(cfg.Hosts)...)
@@ -302,6 +303,42 @@ func (ld *loader) models() {
 		}
 		if !sl.Thinking.Set {
 			sl.Thinking.V = "on"
+		}
+	}
+	ld.fallbacks()
+}
+
+// fallbacks settles "fallbackModel", which --fallback-model outranks, and
+// checks that each model it names is on a provider that is configured.
+func (ld *loader) fallbacks() {
+	in, b := ld.in, ld.b
+	if text := strings.TrimSpace(in.Flags.FallbackModel); text != "" {
+		o := flagOrigin("--fallback-model")
+		var refs []ModelRef
+		ok := true
+		for name := range strings.SplitSeq(text, ",") {
+			ref, good := ld.modelFlag("--fallback-model", name)
+			ok = ok && good
+			if good && !slices.Contains(refs, ref) {
+				refs = append(refs, ref)
+			}
+		}
+		if len(refs) > MaxFallbacks {
+			ld.probs.at(Error, o, "--fallback-model names %d models, and a turn falls back to %d at most. Keep the ones to try first.", len(refs), MaxFallbacks)
+			ok = false
+		}
+		if ok {
+			b.fallback.put(refs, o)
+		}
+	}
+	for _, ref := range b.fallback.V {
+		p := b.provider(ref.Provider)
+		switch {
+		case ref.Provider == "":
+		case p == nil:
+			ld.probs.at(Error, b.fallback.Origin, "the fallback model %s is on a provider that is not configured. The providers are: %s.%s", ref, b.providerIDs(), ld.heldNote())
+		case p.ListModels.Set && !p.ListModels.V && b.model(ref) == nil:
+			ld.probs.at(Error, b.fallback.Origin, "the fallback model %s is not one provider %s lists, and that provider is set not to ask its server (\"listModels\": false). Register the model under \"models\", as %q: {}, or name another.", ref, ref.Provider, ref.String())
 		}
 	}
 }

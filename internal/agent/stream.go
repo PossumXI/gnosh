@@ -304,6 +304,12 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		if pe.Kind == core.ErrContextTooLong {
 			return rep, &tooLongError{cause: pe}
 		}
+		// A server that is down, not ready or too busy is not waited for
+		// while there is a fallback to go on with.
+		if a.fellBack(ctx, t, purpose, m, pe, false, rep) {
+			a.rs = retryState{}
+			return rep, errFellBack
+		}
 		if !pe.Retryable() {
 			return rep, &failure{
 				msg:  fmt.Sprintf("%s %s.%s", m.label(), whatHappened(pe), a.turnEndedWords()),
@@ -316,6 +322,9 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		if step.giveUp {
 			waited := now.Sub(a.rs.since)
 			a.rs = retryState{}
+			if a.fellBack(ctx, t, purpose, m, pe, true, rep) {
+				return rep, errFellBack
+			}
 			msg := fmt.Sprintf("%s did not come back within %s: it %s.", m.label(), span(waited), whatHappened(pe))
 			if step.notRunning {
 				other := "pick another model with /model"

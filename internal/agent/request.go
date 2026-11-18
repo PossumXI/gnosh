@@ -403,6 +403,11 @@ func (a *Agent) fit(ctx context.Context, t *turn, moment RoomMoment, extra int) 
 			continue
 		case ctx.Err() != nil:
 			return fitted{}, errStopped
+		case errors.Is(err, errFellBack):
+			// The turn goes on with a fallback model, which room is made
+			// for afresh.
+			slid, slideSpent, before = false, false, -1
+			continue
 		case errors.Is(err, errNothingToSummarize):
 			// The model has said nothing yet: what is long is what the
 			// person sent, and a summary of that alone would only put the

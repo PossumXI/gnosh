@@ -121,6 +121,7 @@ func (a *Agent) runTurn(ctx context.Context, t *turn) {
 
 	out := a.guarded(ctx, t)
 	res := a.finishTurn(t, out)
+	a.fellBackEnds()
 
 	a.turnNow.Store("")
 	a.mu.Lock()
@@ -295,6 +296,10 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 		switch {
 		case err == nil:
 			a.cacheSeen(fr.req, rep.usage, a.clock.Now())
+		case errors.Is(err, errFellBack):
+			// Asked again of the fallback model, for which the request is
+			// made afresh. What arrived of the failed try is not kept.
+			continue
 		case errors.Is(err, errStopped):
 			if serr := a.storePartial(t, rep, fr.su.model, core.StopCancelled); serr != nil {
 				return nil, failedOutcome(serr)

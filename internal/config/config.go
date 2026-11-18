@@ -37,6 +37,11 @@ type Config struct {
 	// slot whose Model is not set has no choice made for it: Small then
 	// follows Large, and Large is asked for.
 	Large, Small Slot
+	// Fallback are the models a turn goes on with, in order, when the
+	// session's model cannot answer ("fallbackModel", --fallback-model; at
+	// most MaxFallbacks). A model named without its provider by the flag
+	// has an empty Provider, which the app settles as it does for -m.
+	Fallback Value[[]ModelRef]
 
 	// Options are the settings of the "options" object.
 	Options Options

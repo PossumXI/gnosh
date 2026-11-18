@@ -582,7 +582,7 @@ func TestFileRefusals(t *testing.T) {
 		pieces []string
 	}{
 		// The top of the file.
-		{"an unknown key", "{\n  \"provders\": {}\n}", "provders", []string{`"provders"`, "not a key gnosh knows", "providers, models, model, smallModel, hosts, options, permissions, hooks, env, disableAllHooks"}},
+		{"an unknown key", "{\n  \"provders\": {}\n}", "provders", []string{`"provders"`, "not a key gnosh knows", "providers, models, model, smallModel, fallbackModel, hosts, options, permissions, hooks, env, disableAllHooks"}},
 		{"an option at the top", "{\n  \"requestTimeout\": 900\n}", "requestTimeout", []string{`"requestTimeout" is one of gnosh's options`, `"options": {"requestTimeout": …}`}},
 		{"a Claude Code option at the top", `{"autoCompactWindow": 200000}`, "", []string{`"autoCompactWindow" is one of gnosh's options`, `inside "options"`}},
 		{"a setting Claude Code has and gnosh has not built", "{\n  \"spinnerVerbs\": {\"mode\": \"append\", \"verbs\": [\"Pondering\"]}\n}", "spinnerVerbs", []string{`"spinnerVerbs" is a setting Claude Code has and gnosh has not built`, "would do nothing here", "Take it out"}},

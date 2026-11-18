@@ -252,6 +252,7 @@ func (st *startup) load(trusted bool) {
 	flags := config.Flags{
 		Model:           inv.Model,
 		SmallModel:      inv.SmallModel,
+		FallbackModel:   inv.FallbackModel,
 		ReasoningEffort: inv.Effort,
 		PermissionMode:  inv.PermissionMode,
 		AllowedTools:    inv.AllowedTools,

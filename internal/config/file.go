@@ -45,7 +45,7 @@ func readFile(s *source, data []byte) {
 		}
 		given[f.key] = f
 	}
-	for _, key := range []string{"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "agent", "skillOverrides"} {
+	for _, key := range []string{"providers", "models", "model", "smallModel", "fallbackModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "agent", "skillOverrides"} {
 		f, ok := given[key]
 		if !ok {
 			continue
@@ -57,6 +57,8 @@ func readFile(s *source, data []byte) {
 			s.models(f)
 		case "model", "smallModel":
 			s.slot(f)
+		case "fallbackModel":
+			s.fallbackModel(f)
 		case "hosts":
 			s.hosts(f)
 		case "options":
@@ -659,6 +661,57 @@ func (s *source) slot(f jfield) {
 		return
 	}
 	s.add(op{kind: KindModel, text: text, origin: o, apply: func(b *builder) { b.setSlot(which, ch, o) }})
+}
+
+// MaxFallbacks is how many models "fallbackModel" may name, as in Claude
+// Code.
+const MaxFallbacks = 3
+
+// fallbackShapes says the shapes "fallbackModel" takes, for a message.
+const fallbackShapes = `one model as "<provider>/<model id>", or a list of up to three, tried in order`
+
+// fallbackModel reads "fallbackModel": the models a turn goes on with when
+// the session's model cannot answer. null, or an empty list, takes away
+// what a weaker file named.
+func (s *source) fallbackModel(f jfield) {
+	mark := len(s.probs.list)
+	o := s.at(f.line)
+	var items []*jnode
+	switch f.val.kind {
+	case jNull:
+	case jString:
+		items = []*jnode{f.val}
+	case jArray:
+		items = f.val.items
+	default:
+		s.errorf(f.line, "\"fallbackModel\" is %s. Here it is %s.", fallbackShapes, shown(f.val))
+		return
+	}
+	var refs []ModelRef
+	for _, it := range items {
+		if it.kind != jString {
+			s.errorf(f.line, "\"fallbackModel\" is %s, and an item of it here is %s.", fallbackShapes, shown(it))
+			continue
+		}
+		if ref, ok := s.modelRef(f.line, it.str, "\"fallbackModel\""); ok && !slices.Contains(refs, ref) {
+			refs = append(refs, ref)
+		}
+	}
+	if len(refs) > MaxFallbacks {
+		s.errorf(f.line, "\"fallbackModel\" names %d models, and a turn falls back to %d at most. Keep the ones to try first.", len(refs), MaxFallbacks)
+	}
+	if s.failed(mark) {
+		return
+	}
+	text := "fallbackModel: null (takes the fallback models away)"
+	if len(refs) > 0 {
+		names := make([]string, len(refs))
+		for i, r := range refs {
+			names[i] = r.String()
+		}
+		text = "fallbackModel: " + strings.Join(names, ", ")
+	}
+	s.add(op{kind: KindModel, text: text, origin: o, apply: func(b *builder) { b.fallback.put(refs, o) }})
 }
 
 // hosts reads the "hosts" object. Each declaration is checked by itself

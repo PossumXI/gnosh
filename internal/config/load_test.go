@@ -795,6 +795,64 @@ func TestModelFlags(t *testing.T) {
 	wantProblem(t, problems, Error, userJSON, 1, "the model chosen here, p/unlisted, is not one provider p lists", `"listModels": false`, `Register the model under "models", as "p/unlisted": {}`)
 }
 
+// "fallbackModel" names the models a turn goes on with when the session's
+// model cannot answer: one, or a list of up to three, and
+// --fallback-model outranks it.
+func TestFallbackModel(t *testing.T) {
+	const providers = `"providers": {"q": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1"}, "g": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:2"}},
+  "models": {"q/qwen": {}, "g/oss": {}, "g/other": {}}`
+	file := func(fallback string) Inputs {
+		return withConfig("{" + providers + ",\n  \"model\": \"q/qwen\",\n  \"fallbackModel\": " + fallback + "\n}")
+	}
+	refs := func(cfg *Config) string {
+		var names []string
+		for _, r := range cfg.Fallback.V {
+			names = append(names, r.String())
+		}
+		return strings.Join(names, " ")
+	}
+	if cfg := mustLoad(t, file(`"g/oss"`)); refs(cfg) != "g/oss" || cfg.Fallback.Origin.File != userJSON || cfg.Fallback.Origin.Line != 4 {
+		t.Errorf("one model: %q from %+v", refs(cfg), cfg.Fallback.Origin)
+	}
+	if cfg := mustLoad(t, file(`["g/oss", "q/qwen", "g/oss", "g/other"]`)); refs(cfg) != "g/oss q/qwen g/other" {
+		t.Errorf("a list, with a name twice: %q", refs(cfg))
+	}
+	if cfg := mustLoad(t, file(`null`)); cfg.Fallback.Set && len(cfg.Fallback.V) != 0 {
+		t.Errorf("null: %+v", cfg.Fallback)
+	}
+	if cfg := mustLoad(t, withConfig("{"+providers+", \"model\": \"q/qwen\"}")); len(cfg.Fallback.V) != 0 {
+		t.Errorf("none named: %+v", cfg.Fallback)
+	}
+
+	_, problems := load(t, file(`["g/oss", "g/other", "q/qwen", "q/more"]`))
+	wantProblem(t, problems, Error, userJSON, 4, `"fallbackModel" names 4 models, and a turn falls back to 3 at most`)
+	_, problems = load(t, file(`{"id": "g/oss"}`))
+	wantProblem(t, problems, Error, userJSON, 4, `"fallbackModel" is one model as "<provider>/<model id>", or a list of up to three`)
+	_, problems = load(t, file(`["g/oss", 7]`))
+	wantProblem(t, problems, Error, userJSON, 4, "an item of it here is 7")
+	_, problems = load(t, file(`"oss"`))
+	wantProblem(t, problems, Error, userJSON, 4, `"oss" has no provider in front`)
+	_, problems = load(t, file(`"nobody/oss"`))
+	wantProblem(t, problems, Error, userJSON, 4, "the fallback model nobody/oss is on a provider that is not configured", "q, g")
+
+	// The flag outranks the file, takes bare names as -m does, and is held
+	// to three as well.
+	in := file(`"g/oss"`)
+	in.Flags.FallbackModel = "other, q/qwen"
+	cfg := mustLoad(t, in)
+	if refs(cfg) != "g/other q/qwen" || cfg.Fallback.Origin.Name != "--fallback-model" {
+		t.Errorf("--fallback-model: %q from %+v", refs(cfg), cfg.Fallback.Origin)
+	}
+	in.Flags.FallbackModel = "g/oss,g/other,q/qwen,q/x"
+	_, problems = load(t, in)
+	wantProblem(t, problems, Error, "--fallback-model", 0, "names 4 models")
+	in.Flags.FallbackModel = "g/oss,,q/qwen"
+	_, problems = load(t, in)
+	wantProblem(t, problems, Error, "--fallback-model", 0, "needs a model after it")
+	// (A project's fallback models wait for trust as its model does:
+	// untrustedProject names some.)
+}
+
 func TestPermissionFlags(t *testing.T) {
 	mode := func(change func(*Flags)) (Permissions, []Problem) {
 		in := inputs(newFS())
@@ -1021,6 +1079,7 @@ func untrustedProject() *memFS {
   "models": {"evil/m": {"contextWindow": 1000}, "mine/m": {"contextWindow": 5}, "evil/n": {}},
   "model": "evil/m",
   "smallModel": {"thinking": true},
+  "fallbackModel": "evil/m",
   "hosts": {"h": {"ssh": "a@203.0.113.6"}},
   "options": {
     "hiddenSkills": ["pdf"],
@@ -1052,6 +1111,7 @@ var heldByAnUntrustedFolder = []string{
 	"model: model evil/n",
 	"model: model: evil/m",
 	"model: smallModel: thinking on",
+	"model: fallbackModel: evil/m",
 	"host: host h → a@203.0.113.6",
 	"extra-path: options.userInstructionFiles: /outside/notes",
 	"address: options.memEmbeddingsUrl: https://203.0.113.5/embed",
@@ -1102,8 +1162,8 @@ func TestUntrustedFolderOnlyRestricts(t *testing.T) {
 	if len(cfg.Models) != 1 || cfg.Models[0].ContextWindow.V != 262144 {
 		t.Errorf("an untrusted folder added, changed or took away a model: %+v", cfg.Models)
 	}
-	if cfg.Large.Model.V.String() != "mine/m" || cfg.Large.Thinking.V != "off" || cfg.Small.Thinking.Set {
-		t.Errorf("an untrusted folder chose the model or how it is asked: %+v %+v", cfg.Large, cfg.Small)
+	if cfg.Large.Model.V.String() != "mine/m" || cfg.Large.Thinking.V != "off" || cfg.Small.Thinking.Set || cfg.Fallback.Set {
+		t.Errorf("an untrusted folder chose the model or how it is asked: %+v %+v %+v", cfg.Large, cfg.Small, cfg.Fallback)
 	}
 	if len(cfg.Hooks) != 1 || cfg.Hooks[0].Command != "/mine/gate.sh" || cfg.HooksOff != "" {
 		t.Errorf("an untrusted folder added a hook, or switched hooks off: %+v (off: %q)", cfg.Hooks, cfg.HooksOff)

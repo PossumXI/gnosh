@@ -182,6 +182,15 @@ Built:
   {"thinkingBudget": N}}` sets a model's own (0 for no cap), and Claude
   Code's `MAX_THINKING_TOKENS` sets it for every model (0 turns thinking
   off).
+- **Fallback models**, as Claude Code's `fallbackModel`: `"fallbackModel":
+  ["box2/qwen3.8-27b"]` (up to three; `--fallback-model` for one run).
+  When the model's server cannot be reached, is not ready or too busy,
+  does not have the model, or keeps failing until the wait for it runs
+  out, the turn goes on with the first fallback that answers, at once and
+  with a line that says so; the next turn asks the model first again. A
+  limit on your requests is waited out as always, and a fallback with a
+  smaller context window, or on the same model server of your own, is
+  passed over.
 - **No invisible characters in a prompt**, as in Claude Code: Enter takes
   out what a terminal draws as nothing (tag characters, the controls of
   the drawing order, zero-width spaces), keeping what Persian, the

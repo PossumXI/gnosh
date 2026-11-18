@@ -2272,3 +2272,35 @@ or kept with the reason said (27).
     interface too. gnovm_list ends with gnovm.AttributionNotice, whose
     words it already printed. Asked by Jae on 18 November 2026: "make sure
     the new gnosh license is good, strong attribution too".
+
+140. **Fallback models, as Claude Code's fallbackModel.** `"fallbackModel"`
+    in gnosh.json (one "<provider>/<model id>", or a list of up to three;
+    a project's waits for trust as its "model" does) and `--fallback-model`
+    (comma-separated, bare names as -m takes them) name the models a turn
+    goes on with, in order, when the session's model cannot answer. What
+    hands a turn on: a server that cannot be reached or says it is not
+    ready (gateway errors, a connect timeout), one that says it is too
+    busy (overloaded), one that does not have the model (404), at once
+    and with no wait; and any other trouble that may pass, once the retry
+    policy's wait for it runs out. A limit on the person's requests, a key
+    that is refused, and a request too long or that no model would take
+    are not: another model would meet them too. Claude Code leaves
+    "transport errors" out; gnosh counts a server that cannot be reached
+    as unavailable, since each model of gnosh's lives on a server of its
+    own. The switch holds for the rest of the turn (its sub-agents start on
+    the fallback, and keep the list), and the next turn asks the session's
+    model first again; a model chosen with /model outranks it. A fallback
+    is made (its client, its window) only when a turn first needs it, so
+    that one whose server is down costs nothing until then; one that
+    cannot be made, whose context window is smaller than the session
+    model's (the conversation would be cut to fit it), or that is on the
+    same model server of one's own as the model that failed (no help when
+    that server is down or busy, and a router that holds one model at a
+    time would unload the one in use to load it), is passed over with a
+    warning. The session's thinking level carries over where the
+    fallback has it. The person is told in one line, as a retry event that
+    names the fallback (RetryEvent.FellBack), not counted as a retry.
+    Summaries fall back too. When every fallback fails as well, the last
+    one is waited for as any model is. Not built: a fallback chain for
+    the small model's side jobs (they fall back to the session's model
+    already).
