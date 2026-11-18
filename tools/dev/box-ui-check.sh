@@ -31,6 +31,8 @@
 #	ssh ai-remote bash -s -- simplify < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- askaway < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- agents < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- bgfail < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- repo < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -139,6 +141,14 @@
 #               again watches the run with its question above the box, 1
 #               answers it, the run writes out/asked.txt and is done, and
 #               Esc twice comes back to the session
+#   bgfail      gnosh agents lists three runs started with --bg -y: one
+#               that ends well (done), one killed with SIGKILL in its
+#               command (failed, "ended without a word", marked ✗) and one
+#               sent SIGTERM (stopped by a signal); every sleep 37 the runs
+#               started ends before the check removes its folder
+#   repo        gnosh agents (acceptEdits) in a folder that holds the git
+#               repository api/: "@api" and a prompt start a run there,
+#               which writes api/where.txt, and the list shows it done
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -153,6 +163,8 @@ opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
 basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents) ;;
+bgfail) flags="agents" ;;
+repo) flags="agents --permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
@@ -175,7 +187,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo)" >&2
 	exit 2
 	;;
 esac
@@ -295,6 +307,9 @@ func Thumb(w http.ResponseWriter, r *http.Request) {
 EOF
 	g add handler.go && g commit -q -m "thumbnails" || exit 1
 fi
+if [ "$scenario" = repo ]; then
+	mkdir -p api && git -C api init -q || exit 1
+fi
 if [ "$scenario" = simplify ]; then
 	# A helper on main, and a branch that clamps by hand beside it: the
 	# one thing for /simplify to find.
@@ -347,6 +362,27 @@ echo "=== before"
 tmux capture-pane -p -t "$S"
 screen() { tmux capture-pane -p -S -80 -t "$S"; }
 case "$scenario" in
+bgfail)
+	# (The view is on: it finds the runs as they start.)
+	bg() { $envs TERM=dumb "$bin" --bg -y --name "$1" "$2" < /dev/null 2>&1 | sed -n 's/^gnosh: backgrounded · \([^ ]*\) .*/\1/p'; }
+	pidof_run() { $envs TERM=dumb "$bin" agents --json < /dev/null 2>/dev/null | python3 -c "import sys,json; print(next((r.get('pid',0) for r in json.load(sys.stdin) if r['id']=='$1'), 0))"; }
+	bg fine "Say only the word ok." > /dev/null
+	killed=$(bg killed "Run exactly this with the Bash tool, in the foreground: sleep 37. Then say done.")
+	termed=$(bg termed "Run exactly this with the Bash tool, in the foreground: sleep 37. Then say done.")
+	for i in $(seq 1 180); do
+		sleep 1
+		[ "$(ps -eo args | grep -c '^sleep 37$')" -ge 2 ] && break
+	done
+	kill -9 "$(pidof_run "$killed")"
+	kill -TERM "$(pidof_run "$termed")"
+	done_when() { screen | grep -q "✗ killed .*failed · it ended without a word" && screen | grep -q "termed .*stopped · it was stopped by a signal" && screen | grep -q "0 working · 3 completed"; }
+	;;
+repo)
+	tmux send-keys -t "$S" "@api Write the one word api into a file named where.txt in the current folder, with the Write tool. Then say done."
+	sleep 1
+	tmux send-keys -t "$S" Enter
+	done_when() { [ -s "$T/work/api/where.txt" ] && [ ! -e "$T/work/where.txt" ] && screen | grep -q "0 working · 1 completed"; }
+	;;
 agents)
 	$envs TERM=dumb "$bin" --bg --name asker "Run exactly this with the Bash tool: mkdir -p out && date > out/asked.txt. Then say done." < /dev/null > "$T/bg.out" 2>&1
 	for i in $(seq 1 120); do
@@ -791,6 +827,17 @@ if [ "$scenario" = wtflag ]; then
 	echo "=== notes.txt in the work tree: $(tr '\n' ' ' < "$T/work/.gnosh/worktrees/demo/notes.txt" 2>/dev/null || echo none)"
 	echo "=== .env in the work tree: $(cat "$T/work/.gnosh/worktrees/demo/.env" 2>/dev/null || echo none)"
 	echo "=== branches: $(git -C "$T/work" branch --list | tr '\n' ' ')"
+fi
+if [ "$scenario" = bgfail ]; then
+	for i in $(seq 1 60); do [ "$(ps -eo args | grep -c '^sleep 37$')" -eq 0 ] && break; sleep 1; done
+	echo "=== sleeps left: $(ps -eo args | grep -c '^sleep 37$')"
+	tmux send-keys -t "$S" Escape
+	sleep 1
+fi
+if [ "$scenario" = repo ]; then
+	echo "=== api/where.txt: $(cat "$T/work/api/where.txt" 2>/dev/null || echo none); work/where.txt: $(cat "$T/work/where.txt" 2>/dev/null || echo none)"
+	tmux send-keys -t "$S" Escape
+	sleep 1
 fi
 if [ "$scenario" = agents ]; then
 	echo "=== asked.txt: $(cat "$T/work/out/asked.txt" 2>/dev/null || echo none)"
