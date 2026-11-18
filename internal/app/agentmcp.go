@@ -90,9 +90,28 @@ func (l *live) connectAgentMCP(s *subSession) {
 	}
 }
 
-// closeAgentMCP closes the servers of a sub-agent's own.
+// runningAgentServers are the own servers of the sub-agents that run now,
+// for /mcp.
+func (l *live) runningAgentServers() []*mcpServer {
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	var out []*mcpServer
+	for s := range l.subs {
+		out = append(out, s.ownMCP...)
+	}
+	slices.SortFunc(out, func(a, b *mcpServer) int { return strings.Compare(a.own+"/"+a.cfg.Name, b.own+"/"+b.cfg.Name) })
+	return out
+}
+
+// closeAgentMCP closes the servers of a sub-agent's own. (The list is
+// taken under subMu, which /mcp reads it under; the two locks are never
+// held together.)
 func (l *live) closeAgentMCP(s *subSession) {
-	for _, srv := range s.ownMCP {
+	l.subMu.Lock()
+	servers := s.ownMCP
+	s.ownMCP = nil
+	l.subMu.Unlock()
+	for _, srv := range servers {
 		l.mcp.mu.Lock()
 		srv.gen++
 		c := srv.client
@@ -102,7 +121,6 @@ func (l *live) closeAgentMCP(s *subSession) {
 			_ = c.Close()
 		}
 	}
-	s.ownMCP = nil
 }
 
 // agentMCPTools are the tools of a sub-agent's own servers that the

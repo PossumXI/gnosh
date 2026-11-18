@@ -440,7 +440,8 @@ func (l *live) mcpStatus() []MCPServerStatus {
 // connected and with what tools, or why not. With reconnect, enable or
 // disable and a server's name (or all) after it, it does that first.
 func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
-	if l.mcp == nil || len(l.mcp.servers) == 0 && len(l.mcp.probs) == 0 {
+	agents := l.runningAgentServers()
+	if l.mcp == nil || len(l.mcp.servers) == 0 && len(l.mcp.probs) == 0 && len(agents) == 0 {
 		c.Say("No MCP server is configured. From a shell, gnosh mcp add <name> -- <command> [args...] adds one gnosh starts, and gnosh mcp add -t http <name> <url> one at a URL; they are kept in %s, and a project's in .mcp.json at its root (read once the folder is trusted).", filepath.Join(l.cfg.Paths.ConfigDir, "mcp.json"))
 		return nil
 	}
@@ -451,6 +452,10 @@ func (l *live) slashMCP(ctx context.Context, c *SlashContext) error {
 	defer l.mcp.mu.Unlock()
 	for _, s := range l.mcp.servers {
 		c.Say("%s", l.mcpLine(s))
+	}
+	for _, s := range agents {
+		// A running sub-agent's own: only it has the tools.
+		c.Say("%s (the sub-agent %s's own, while it runs)", l.mcpLine(s), s.own)
 	}
 	for _, p := range l.mcp.probs {
 		c.Say("not in force: %s", p.String())
