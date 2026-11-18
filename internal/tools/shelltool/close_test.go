@@ -616,7 +616,29 @@ func TestLeftoversThatEndedAreForgotten(t *testing.T) {
 	for range 5 {
 		bash(t, m, env, `sleep 0.05 >/dev/null 2>&1 &`)
 	}
-	time.Sleep(400 * time.Millisecond)
+	// (Until their processes have ended, however busy the machine.)
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		m.mu.Lock()
+		sids := make([]int, 0, len(m.detached))
+		for sid := range m.detached {
+			sids = append(sids, sid)
+		}
+		m.mu.Unlock()
+		alive := 0
+		for _, sid := range sids {
+			if ps, err := m.procs(sid); err == nil && len(ps) > 0 {
+				alive++
+			}
+		}
+		if alive == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d sessions still have a process after 20 s", alive)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	bash(t, m, env, `sleep 0.05 >/dev/null 2>&1 &`)
 	m.mu.Lock()
 	n := len(m.detached)
