@@ -573,6 +573,12 @@ func TestShellAttacks(t *testing.T) {
 		{"the file is written onto a flag, beside a variable nobody set", ModeBypass, attackGuards, "sort -o${X:-.env} a.txt", Deny},
 		{"the file is written onto a flag, beside a variable nobody set", ModeBypass, attackGuards, "awk -rf$X.env a.txt", Deny},
 		{"the file is written after the = of a flag, beside a variable nobody set", ModeBypass, attackGuards, "mytool --config=${X:-.env}", Deny},
+		// (Oracle seed 150: the default is a word with a variable of its
+		// own, which nobody set either.)
+		{"the file is written onto a flag, in a default with a variable in it", ModeBypass, attackGuards, "watch env link-in -o${X:-$x.env}", Deny},
+		{"the file is written onto a flag, in a default with a variable in it", ModeBypass, attackGuards, "sort -o${X:-$x.env} a.txt", Deny},
+		{"the file is written onto a flag, in a default with a variable in it", ModeBypass, attackGuards, "awk -f${X:-${Y:-.e}nv} a.txt", Deny},
+		{"the file is named in a default with a variable in it", ModeBypass, attackGuards, "cat ${X:-$x.env}", Deny},
 		{"the file is written onto a flag, in a variable the line set", ModeBypass, attackGuards, "x=.env; awk -f$x a.txt", Deny},
 		{"the file is written onto a flag, after a variable nobody set", ModeBypass, attackGuards, "awk $x-f.env a.txt", Deny},
 		{"the braces are taken apart before the variable is looked at", ModeBypass, attackGuards, "F=.env; cat {$F,x}", Deny},

@@ -338,7 +338,9 @@ func (w word) joined() string {
 func (w word) unset() string { return w.unsetIn("") }
 
 // unsetIn is unset with the ~ that opens a ${name:-~/text} turned into
-// the home directory, as the shell does (when home is known).
+// the home directory, as the shell does (when home is known). A default
+// that is not plain text is a word of its own, with no variable in it set
+// either: "-o${X:-$x.env}" is -o.env (oracle seed 150).
 func (w word) unsetIn(home string) string {
 	var b strings.Builder
 	for _, p := range w.parts {
@@ -347,6 +349,8 @@ func (w word) unsetIn(home string) string {
 			b.WriteString(p.lit)
 		case p.kind == partVar && p.hasDef:
 			b.WriteString(p.defIn(home))
+		case p.kind == partVar && p.body != nil && (p.op == ":-" || p.op == "-" || p.op == ":=" || p.op == "="):
+			b.WriteString(p.body.unsetIn(home))
 		}
 	}
 	return b.String()
