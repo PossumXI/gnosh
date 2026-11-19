@@ -30,6 +30,12 @@ import (
 // comes with the prompt. CLAUDE_CODE_DISABLE_FILE_MENTIONS=1 turns this
 // off.
 
+// MetaPasted, in a prompt's Meta, is where its text holds what the person
+// pasted and the prompt box showed folded (a paste of more than ten lines
+// or 800 characters), as [][2]int byte ranges of Text. The interface sets
+// it; the model is told which lines were pasted (pastedLines).
+const MetaPasted = "gnosh.pasted"
+
 // metaVerbatim, set true in a prompt's Meta, delivers it as it is: no @
 // mention brings anything (stream-json input's client_composed).
 const metaVerbatim = "gnosh.verbatim"
@@ -213,4 +219,42 @@ func listing(dir string) (string, error) {
 		return "(empty)", nil
 	}
 	return strings.Join(names, "\n") + more, nil
+}
+
+// pastedLines tells the model which lines of a prompt the person pasted
+// rather than typed: material they brought, such as a log, a file or
+// someone else's words, whose requests are not theirs unless they say so.
+// The prompt itself goes as it was typed. (Claude Code 2.1.328 marks
+// pasted text for the model too.)
+func (l *live) pastedLines(_ context.Context, info agent.LineInfo) ([]agent.Part, error) {
+	ranges, _ := info.Prompt.Meta[MetaPasted].([][2]int)
+	if len(ranges) == 0 || info.Prompt.Hidden {
+		return nil, nil
+	}
+	text := info.Prompt.Text
+	var where []string
+	for _, r := range ranges {
+		if r[0] < 0 || r[1] > len(text) || r[0] >= r[1] {
+			continue
+		}
+		first := strings.Count(text[:r[0]], "\n") + 1
+		last := first + strings.Count(strings.TrimRight(text[r[0]:r[1]], "\n"), "\n")
+		if last == first {
+			where = append(where, fmt.Sprintf("line %d", first))
+		} else {
+			where = append(where, fmt.Sprintf("lines %d to %d", first, last))
+		}
+	}
+	if len(where) == 0 {
+		return nil, nil
+	}
+	return []agent.Part{{Source: "pasted", Text: l.texts.Pasted(joinWords(where))}}, nil
+}
+
+// joinWords joins phrases as a sentence does: "a", "a and b", "a, b and c".
+func joinWords(ws []string) string {
+	if len(ws) < 2 {
+		return strings.Join(ws, "")
+	}
+	return strings.Join(ws[:len(ws)-1], ", ") + " and " + ws[len(ws)-1]
 }

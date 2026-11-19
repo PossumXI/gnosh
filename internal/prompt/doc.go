@@ -313,6 +313,10 @@
 //     wrong when the last one did not.
 //   - agent-mention (AgentMention) stands after a typed prompt for each
 //     kind of sub-agent it names with @agent-: hand the task to it.
+//   - pasted (Pasted) stands after a typed prompt that holds a long paste
+//     (one the prompt box showed folded): which of its lines were pasted
+//     rather than typed, and that what they ask is not the user's unless
+//     they say so.
 //   - mention (Mention) stands after a typed prompt for each path it
 //     mentions with @: what Read returns for a file follows it, or a
 //     directory's listing, or it says a deny rule kept the path out or

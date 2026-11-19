@@ -523,10 +523,7 @@ func (s *session) box(ev term.Event, k *term.Key) {
 // queues it. Either way it shows as queued until it is seen going out,
 // so it is never out of sight.
 func (s *session) send(d editor.Draft) {
-	p := agent.Prompt{Text: d.Text, Attachments: s.attach}
-	if len(d.Pastes) > 0 {
-		p.Meta = map[string]any{metaPastes: d.Pastes}
-	}
+	p := agent.Prompt{Text: d.Text, Attachments: s.attach, Meta: pastedMeta(d.Pastes)}
 	id, err := s.c.Submit(p)
 	if err != nil {
 		s.restore(d)
@@ -861,8 +858,7 @@ func (s *session) takeBack() {
 		}
 	}
 	for _, p := range s.c.TakeQueued() {
-		spans, _ := p.Meta[metaPastes].([]editor.Span)
-		add(p.Text, spans)
+		add(p.Text, pastesOf(p.Meta))
 		s.attach = append(s.attach, p.Attachments...)
 		for i, x := range s.sending {
 			if x.draft.Text == p.Text {
@@ -1387,10 +1383,7 @@ func (s *session) withdrawLast() {
 			// It went out to the model in the meantime.
 			continue
 		}
-		d := editor.Draft{Text: p.Text}
-		if spans, ok := p.Meta[metaPastes].([]editor.Span); ok {
-			d.Pastes = spans
-		}
+		d := editor.Draft{Text: p.Text, Pastes: pastesOf(p.Meta)}
 		s.attach = append(s.attach, p.Attachments...)
 		for j, x := range s.sending {
 			if x.id == queued[i].ID {

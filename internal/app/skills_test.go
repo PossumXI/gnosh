@@ -664,3 +664,29 @@ func TestSkillNamedLikeABuiltinIsSaidSo(t *testing.T) {
 	has(t, "/skills", out, "(the model may load it; typing /help runs gnosh's own command of that name)",
 		"(nobody can run it: typing /clear runs gnosh's own command of that name, and the model may not load it)")
 }
+
+// A prompt with long pastes in it goes as it was typed, and a line after
+// it tells the model which lines were pasted rather than typed (Claude
+// Code 2.1.328 marks pasted text too).
+func TestPastedLinesAreSaidToBePasted(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Read."}, apptest.Reply{Text: "Typed."})
+	text := "here is the log:\n" + strings.Repeat("ERROR db down\n", 12) + "what broke?"
+	start := strings.Index(text, "ERROR")
+	end := strings.LastIndex(text, "\n") + 1
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		if _, err := c.Submit(agent.Prompt{Text: text, Meta: map[string]any{MetaPasted: [][2]int{{start, end}}}}); err != nil {
+			return 1
+		}
+		_ = c.Wait(ctx)
+		if _, err := c.Submit(agent.Prompt{Text: "and now?"}); err != nil {
+			return 1
+		}
+		_ = c.Wait(ctx)
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	first := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
+	has(t, "the first prompt", first, text, "The prompt above holds text the user pasted rather than typed (lines 2 to 13)")
+	hasNot(t, "the second prompt", lastUser(t, w.Model.Requests()[1]), "pasted")
+}

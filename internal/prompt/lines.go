@@ -657,6 +657,13 @@ func (s *Set) AgentMention(name string) string {
 	return s.fill(textAgentMention, values{"name": oneLine(name, maxName)})
 }
 
+// Pasted returns the line after a prompt that holds a long paste: which
+// of its lines were pasted (where, such as "lines 3 to 122"), and that
+// they are material the user brought.
+func (s *Set) Pasted(where string) string {
+	return s.fill(textPasted, values{"where": oneLine(where, maxQuote)})
+}
+
 // Recap returns the question of /recap: the session in one line, for the
 // person, in a request beside the session's that is not kept.
 func (s *Set) Recap() string {

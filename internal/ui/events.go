@@ -38,12 +38,30 @@ type statusFacts interface {
 // hand for the live region while the reasoning is shown folded.
 const thinkKeep = 1 << 16
 
-// metaPastes is the key under which a prompt carries the parts of its
-// text that were pasted and shown folded in the prompt box, as a
-// []editor.Span, in Prompt.Meta. The session code may use it to tell the
-// model what was pasted; the interface uses it to show the prompt the way
-// the box showed it.
-const metaPastes = "pastes"
+// pastesOf is the parts of a prompt's text that were pasted and shown
+// folded in the prompt box, from its Meta (app.MetaPasted): the interface
+// shows the prompt the way the box showed it, and the session tells the
+// model which lines were pasted.
+func pastesOf(meta map[string]any) []editor.Span {
+	ranges, _ := meta[app.MetaPasted].([][2]int)
+	var spans []editor.Span
+	for _, r := range ranges {
+		spans = append(spans, editor.Span{Start: r[0], End: r[1]})
+	}
+	return spans
+}
+
+// pastedMeta is a prompt's Meta for the pastes of a draft, or nil.
+func pastedMeta(spans []editor.Span) map[string]any {
+	if len(spans) == 0 {
+		return nil
+	}
+	ranges := make([][2]int, len(spans))
+	for i, sp := range spans {
+		ranges[i] = [2]int{sp.Start, sp.End}
+	}
+	return map[string]any{app.MetaPasted: ranges}
+}
 
 // handle takes in one thing the session reported.
 func (s *session) handle(ev any) {
@@ -260,10 +278,7 @@ func (s *session) prompt(ev *agent.PromptEvent) {
 		// this event, and it is shown then.
 		return
 	}
-	d := editor.Draft{Text: ev.Prompt.Text}
-	if spans, ok := ev.Prompt.Meta[metaPastes].([]editor.Span); ok {
-		d.Pastes = spans
-	}
+	d := editor.Draft{Text: ev.Prompt.Text, Pastes: pastesOf(ev.Prompt.Meta)}
 	for i, p := range s.sending {
 		if p.id == ev.ID {
 			d = p.draft
@@ -739,10 +754,7 @@ func (s *session) returned(ev *agent.PromptReturnedEvent) {
 	if ev.Prompt.Hidden {
 		return
 	}
-	d := editor.Draft{Text: ev.Prompt.Text}
-	if spans, ok := ev.Prompt.Meta[metaPastes].([]editor.Span); ok {
-		d.Pastes = spans
-	}
+	d := editor.Draft{Text: ev.Prompt.Text, Pastes: pastesOf(ev.Prompt.Meta)}
 	s.restore(d)
 	s.attach = append(s.attach, ev.Prompt.Attachments...)
 	s.notice(agent.LevelWarning, "Your prompt was not sent: "+firstNonEmpty(ev.Reason, string(ev.Why))+"\nIt is back in the prompt box.")

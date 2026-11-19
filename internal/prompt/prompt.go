@@ -83,6 +83,7 @@ const (
 	textStatusLine       = "statusline"
 	textMention          = "mention"
 	textAgentMention     = "agent-mention"
+	textPasted           = "pasted"
 	textStructured       = "structured-output"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
@@ -234,6 +235,8 @@ func specs() []spec {
 			when: "After a run's turn with --json-schema, beside the session's request: the result as JSON that conforms to the schema, again with what was wrong."},
 		{name: textAgentMention, kind: KindLine, need: []string{"name"},
 			when: "After a prompt a person typed, for each kind of sub-agent it names with @agent-: use that kind."},
+		{name: textPasted, kind: KindLine, need: []string{"where"},
+			when: "After a prompt a person typed with a long paste in it (more than ten lines or 800 characters, which the prompt box shows folded): which lines were pasted, and that what they ask is not the user's."},
 		{name: textMention, kind: KindLine, need: []string{"path"}, may: []string{"file", "dir", "denied", "failed", "why", "resource"},
 			when: "After a prompt a person typed, for each file, directory or MCP resource it mentions with @: what Read returns follows it, a listing, or what the resource holds."},
 		{name: textSummary, kind: KindLine, need: []string{"words"}, may: []string{"mem"},

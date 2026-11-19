@@ -238,7 +238,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "notices",
-			texts: []string{textInterrupted, textBackgroundEnded, textMonitorLines, textAgentEnded, textSubtaskEnded, textBtw, textRecap, textNextPrompt, textThinkingBudget, textMention, textAgentMention, textStructured, textPrintWait, textPrintLeftovers, textStatusLine},
+			texts: []string{textInterrupted, textBackgroundEnded, textMonitorLines, textAgentEnded, textSubtaskEnded, textBtw, textRecap, textNextPrompt, textThinkingBudget, textMention, textAgentMention, textPasted, textStructured, textPrintWait, textPrintLeftovers, textStatusLine},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the person stopped the turn", s.Interrupted(UserStopped)},
@@ -266,6 +266,7 @@ func goldenFiles() []goldenFile {
 					{"a run about to end with processes its commands left running", s.PrintLeftovers("process group 4242 (python3)")},
 					{"the prompt of /statusline", s.StatusLine("the model and the git branch", "/home/dev/.config/gnosh/statusline.sh", "/home/dev/.config/gnosh/gnosh.json", `{"cwd": "/home/dev/project", "model": {"id": "local/qwen3.8-27b"}}`)},
 					{"a kind of sub-agent named with @agent-", s.AgentMention("reviewer")},
+					{"a prompt with long pastes in it", s.Pasted("lines 3 to 122 and line 130")},
 					{"the request for structured output (--json-schema)", s.StructuredOutput(`{"type": "object", "required": ["count"]}`, "")},
 					{"the same, after a value that did not conform", s.StructuredOutput(`{"type": "object", "required": ["count"]}`, `$: it has no "count", which the schema requires`)},
 					{"a file mentioned with @", s.Mention(MentionFile, "src/main.go", "")},

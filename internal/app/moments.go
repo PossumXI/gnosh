@@ -183,7 +183,7 @@ func (l *live) moments() agent.Moments {
 	}
 	// (The paths a prompt mentions come before what the features add, so
 	// that mem's line stays the last a prompt carries.)
-	m.PromptLines = append(m.PromptLines, l.firstPromptLines, l.mentionLines)
+	m.PromptLines = append(m.PromptLines, l.firstPromptLines, l.mentionLines, l.pastedLines)
 	m.BeforeRequest = append(m.BeforeRequest, l.turnCap, l.settingsChanged)
 	m.MoreRounds = l.moreRounds
 	var busy []func(context.Context) func()

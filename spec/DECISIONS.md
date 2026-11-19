@@ -3836,3 +3836,14 @@ or kept with the reason said (27).
     it was kept, and nothing bounded how many (the deliverables review of
     2026-11-19). A 65th now waits until one closes; with the idle timeout
     and the header timeout, a held connection is let go in time.
+
+258. **The model is told which lines of a prompt were pasted.** A paste of
+    more than ten lines or 800 characters is shown folded in the prompt
+    box, and the interface knew where it was, but the model read it as
+    the person's own words: a pasted log, mail or transcript could ask for
+    things the person never did. A gnosh line after such a prompt now
+    says which lines were pasted rather than typed, that they are material
+    the user brought, and that what they ask is not asked by the user
+    unless they say so; the prompt itself goes as it was typed. Claude
+    Code 2.1.328 marks pasted text too. (The interface and the session
+    now carry the pastes under one key, app.MetaPasted.)
