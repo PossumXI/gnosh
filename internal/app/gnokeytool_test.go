@@ -100,7 +100,14 @@ func TestGnokeyToolSigns(t *testing.T) {
 	has(t, "the query", toolResult(t, w, 1, "c1"), "args: query vm/qrender -data gno.land/r/demo/counter:")
 	got := toolResult(t, w, 2, "c2")
 	has(t, "what the model read", got, "args: maketx call -insecure-password-stdin -pkgpath gno.land/r/demo/counter", "-chainid dev -remote 127.0.0.1:26657 testkey", "read: [the password]")
-	has(t, "maketx run", toolResult(t, w, 3, "c3"), "args: maketx run -insecure-password-stdin -gas-fee 1ugnot -gas-wanted 1 -chainid gnoland1 mainkey script.gno")
+	// gnokey reads a private copy of the script the question showed.
+	has(t, "maketx run", toolResult(t, w, 3, "c3"), "args: maketx run -insecure-password-stdin -gas-fee 1ugnot -gas-wanted 1 -chainid gnoland1 mainkey /")
+	if !regexp.MustCompile(`mainkey /\S*gnosh-gnokey-\S*/script\.gno`).MatchString(toolResult(t, w, 3, "c3")) {
+		t.Errorf("maketx run was not handed a private copy: %s", toolResult(t, w, 3, "c3"))
+	}
+	if !strings.Contains(secrets[1].Text, "It signs what script.gno holds") || !strings.Contains(secrets[1].Text, "  package main") {
+		t.Errorf("the run's question does not show the script: %s", secrets[1].Text)
+	}
 	for i := range w.Model.Requests() {
 		if strings.Contains(string(w.Model.Requests()[i].Body), "hunter22") {
 			t.Errorf("request %d holds the password", i)
@@ -114,6 +121,51 @@ func TestGnokeyToolSigns(t *testing.T) {
 		if strings.Contains(string(data), "hunter22") {
 			t.Errorf("the session's file %s holds the password", filepath.Base(path))
 		}
+	}
+}
+
+// The question that asks for the password shows all of what is signed:
+// what the command sends, pays and calls first, then the whole command,
+// never cut. It cut the command at 600 bytes, so a long -args hid the
+// -send after it (the gno review of 2026-11-19). A character drawn as
+// nothing, a command too long to read and a script too long to show are
+// refused, and nothing is signed.
+func TestGnokeyToolShowsWhatItSigns(t *testing.T) {
+	long := strings.Repeat("x", 580)
+	hidden := "gnokey maketx call -pkgpath gno.land/r/demo/counter -func Set -args 'a\u202eb' -chainid dev k"
+	w := gnokeyWorld(t,
+		apptest.Reply{Calls: []apptest.Call{
+			gnokeyCallOf("c1", "gnokey maketx call -pkgpath gno.land/r/demo/counter -func Set -args "+long+" -send 5000000000ugnot -gas-fee 1ugnot -gas-wanted 1 -chainid dev k"),
+			gnokeyCallOf("c2", hidden),
+			gnokeyCallOf("c3", "gnokey maketx call -pkgpath gno.land/r/demo/counter -func Set -args "+strings.Repeat("y", 2100)+" -chainid dev k"),
+			gnokeyCallOf("c4", "gnokey maketx run -gas-fee 1ugnot -gas-wanted 1 -chainid dev k long.gno"),
+		}},
+		apptest.Reply{Text: "Done."})
+	w.Write(w.Dir+"/long.gno", "package main\n"+strings.Repeat("// a line\n", 100))
+	questions := gnokeySession(t, w, "set it", "hunter22", "-y")
+	var secrets []agent.Question
+	for _, q := range questions {
+		if q.Kind == secretKind {
+			secrets = append(secrets, q)
+		}
+	}
+	if len(secrets) != 1 {
+		t.Fatalf("%d masked questions, want 1: %+v", len(secrets), secrets)
+	}
+	q := secrets[0].Text
+	for _, want := range []string{"What it sends, pays and calls:", "  -send 5000000000ugnot", "  -gas-fee 1ugnot", "  -func Set", "The whole command:", long + " -send 5000000000ugnot -gas-fee 1ugnot"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("the question does not show %q:\n%s", clip(want), q)
+		}
+	}
+	for id, want := range map[string]string{
+		"c2": "holds U+202E, a character a terminal draws as nothing",
+		"c3": "characters long, more than the user can read",
+		"c4": "long.gno has 101 lines, more than the question that asks for the password can show",
+	} {
+		got := toolResult(t, w, 1, id)
+		has(t, id, got, want)
+		hasNot(t, id, got, "args:")
 	}
 }
 

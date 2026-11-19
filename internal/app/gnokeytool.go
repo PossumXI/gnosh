@@ -13,10 +13,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
+	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
 // This file is the gnokey tool (spec/gnosh/harness-tools.md, TOOL-40 and
@@ -114,6 +117,47 @@ type gnokeyCall struct {
 	mainnet     bool
 	dir         string
 	description string
+	// flags are the command's flags, by name, with their values.
+	flags map[string][]string
+	// fileAt is where in args the file or folder the transaction is made
+	// of is named (maketx run's script, sign's -tx-path, addpkg's
+	// -pkgdir), or -1; fileEq is the "-flag=" before it when flag and
+	// value are one word.
+	fileAt int
+	fileEq string
+}
+
+// gnokeyFacts are the flags of a command that signs that say what it
+// moves, pays and calls: the signing question lists them first, whole,
+// whatever the command's length.
+var gnokeyFacts = []string{"send", "to", "max-deposit", "deposit", "gas-fee", "gas-wanted", "pkgpath", "func", "args", "chainid", "remote"}
+
+const (
+	// gnokeyLineMax is the longest command that signs which the question
+	// asking for the password shows: the person reads all of it.
+	gnokeyLineMax = 2000
+	// gnokeyFileMax and gnokeyFileLines bound the file a transaction is
+	// made of, which the question shows whole.
+	gnokeyFileMax   = 64 << 10
+	gnokeyFileLines = 80
+)
+
+// hiddenIn returns the first character of w that a terminal draws as
+// nothing or that changes what is drawn around it: a control character, a
+// format character (the bidi controls, the zero-width ones, tags), or one
+// text.CleanInvisible takes out.
+func hiddenIn(w string) (rune, bool) {
+	for _, r := range w {
+		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 || unicode.Is(unicode.Cf, r) {
+			return r, true
+		}
+		if r >= 0x80 {
+			if s := string(r); func() bool { cleaned, _ := text.CleanInvisible(s); return cleaned != s }() {
+				return r, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func (t *gnokeyTool) Spec() core.ToolSpec {
@@ -139,9 +183,16 @@ func (t *gnokeyTool) read(input json.RawMessage, cwd string) (gnokeyCall, string
 		return gnokeyCall{}, `the command must begin with gnokey: give the gnokey command line as it would be typed ("gnokey query auth/accounts/g1...")`
 	}
 	c := gnokeyCall{args: words[1:], description: strings.TrimSpace(in.Description), dir: cwd}
+	c.fileAt = -1
 	for _, w := range c.args {
 		if strings.ContainsAny(w, "\n\r") {
 			return c, "a word of the command holds a line break, which the user would not be shown as one command: write the command on one line"
+		}
+		// A character drawn as nothing, or one that turns what is drawn
+		// around, would let the question show the person a command other
+		// than the one signed (the gno review of 2026-11-19).
+		if r, hidden := hiddenIn(w); hidden {
+			return c, fmt.Sprintf("a word of the command holds %U, a character a terminal draws as nothing or that changes what is drawn around it: the user would not read what is signed. Write the command without it", r)
 		}
 	}
 	if len(c.args) == 0 || strings.HasPrefix(c.args[0], "-") {
@@ -165,26 +216,37 @@ func (t *gnokeyTool) read(input json.RawMessage, cwd string) (gnokeyCall, string
 		}
 	}
 	// The flags and their values, and the words that are neither.
+	// (With where each value stands in args.)
 	flags := map[string][]string{}
+	valAt, valEq := map[string][]int{}, map[string][]string{}
 	var positional []string
+	var posAt []int
 	rest := c.args[c.head:]
 	for i := 0; i < len(rest); i++ {
 		w := rest[i]
 		if w == "--" {
-			positional = append(positional, rest[i+1:]...)
+			for k := i + 1; k < len(rest); k++ {
+				positional, posAt = append(positional, rest[k]), append(posAt, c.head+k)
+			}
 			break
 		}
 		if !strings.HasPrefix(w, "-") || w == "-" {
-			positional = append(positional, w)
+			positional, posAt = append(positional, w), append(posAt, c.head+i)
 			continue
 		}
 		fname, value, set := strings.Cut(strings.TrimLeft(w, "-"), "=")
+		at, eq := c.head+i, ""
+		if set {
+			eq = w[:strings.IndexByte(w, '=')+1]
+		}
 		if !set && !slices.Contains(gnokeyBools, fname) && i+1 < len(rest) {
 			i++
-			value = rest[i]
+			value, at = rest[i], c.head+i
 		}
 		flags[fname] = append(flags[fname], value)
+		valAt[fname], valEq[fname] = append(valAt[fname], at), append(valEq[fname], eq)
 	}
+	c.flags = flags
 	switch {
 	case flags["insecure-password-stdin"] != nil:
 		return c, "the command passes gnokey's " + gnokeyPasswordFlag + " itself, which only gnosh may do: leave it out. When the command signs, gnosh asks the user for the key's password and hands it to gnokey itself"
@@ -211,6 +273,27 @@ func (t *gnokeyTool) read(input json.RawMessage, cwd string) (gnokeyCall, string
 		c.key = positional[0]
 		if m := flags["master"]; len(m) > 0 {
 			c.master = m[len(m)-1]
+		}
+		// What the transaction is made of, when that is a file: the
+		// question shows it, and gnokey reads a copy of what was shown.
+		// (gnokey takes a flag's last value.)
+		last := func(name string) {
+			if at := valAt[name]; len(at) > 0 {
+				c.fileAt, c.fileEq = at[len(at)-1], valEq[name][len(at)-1]
+			}
+		}
+		switch c.command {
+		case "maketx run":
+			if len(posAt) >= 2 {
+				c.fileAt = posAt[1]
+			}
+		case "sign":
+			last("tx-path")
+		case "maketx addpkg":
+			last("pkgdir")
+		}
+		if n := len(c.line()); n > gnokeyLineMax {
+			return c, fmt.Sprintf("the command is %d characters long, more than the user can read in the question that asks for the key's password (%d at most): make it shorter, or tell the user the command to run in their own terminal", n, gnokeyLineMax)
 		}
 	}
 	for _, v := range flags["chainid"] {
@@ -287,6 +370,10 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 	}
 	args := c.args
 	var password string
+	// signedBack is where gnokey sign's signed transaction goes when gnokey
+	// signed a private copy (from), and from is that copy.
+	var signedBack, from string
+	var shownData []byte
 	if c.signs {
 		a := agent.FromContext(ctx)
 		if a == nil {
@@ -300,7 +387,23 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		if c.master != "" {
 			who += ", for the account " + c.master
 		}
-		body = append(body, "gnokey is to sign with "+who+":", "  "+oneLine(c.line(), 600))
+		shown, data, name, why := c.signedFile()
+		if why != "" {
+			return core.ErrorResult("gnokey was not run: " + why + "."), nil
+		}
+		shownData = data
+		// The question shows all of what is signed: what it sends, pays
+		// and calls first, then the whole command, then the file it is
+		// made of. It cut the command at 600 bytes, so a long -args hid a
+		// -send after it (the gno review of 2026-11-19).
+		body = append(body, "gnokey is to sign with "+who+":")
+		if facts := c.factLines(); len(facts) > 0 {
+			body = append(body, "What it sends, pays and calls:")
+			body = append(body, facts...)
+			body = append(body, "The whole command:")
+		}
+		body = append(body, "  "+c.line())
+		body = append(body, shown...)
 		if c.dir != env.Cwd {
 			body = append(body, "It runs in "+t.l.tilde(c.dir)+".")
 		}
@@ -314,6 +417,31 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		}
 		if password = ans.Text; password == "" {
 			return core.ErrorResult("gnokey was not run: no password was given, so nothing was signed. Say so, and stop."), nil
+		}
+		if data != nil {
+			// gnokey reads a copy of what the question showed, which
+			// nothing else can change: the file itself could be changed
+			// after it was shown (a command left running in the
+			// background), and what is signed is what was read.
+			dir, err := os.MkdirTemp("", "gnosh-gnokey-")
+			if err != nil {
+				return core.ErrorResult("gnokey was not run: a private copy of " + name + " could not be made (" + err.Error() + "), so nothing was signed."), nil
+			}
+			defer os.RemoveAll(dir)
+			copyPath := filepath.Join(dir, filepath.Base(name))
+			if err := os.WriteFile(copyPath, data, 0o600); err != nil {
+				return core.ErrorResult("gnokey was not run: a private copy of " + name + " could not be written (" + err.Error() + "), so nothing was signed."), nil
+			}
+			args = slices.Clone(args)
+			args[c.fileAt] = c.fileEq + copyPath
+			if c.command == "sign" {
+				// gnokey sign writes the signed transaction into the file
+				// it read: it goes to the person's file after.
+				signedBack, from = name, copyPath
+				if !filepath.IsAbs(signedBack) {
+					signedBack = filepath.Join(c.dir, signedBack)
+				}
+			}
 		}
 		// The flag goes right after the command's name, before its other
 		// flags, where gnokey reads every flag.
@@ -333,6 +461,17 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	runErr := cmd.Run()
+	if runErr == nil && signedBack != "" {
+		if signed, err := os.ReadFile(from); err == nil && !bytes.Equal(signed, shownData) {
+			mode := os.FileMode(0o600)
+			if info, err := os.Stat(signedBack); err == nil {
+				mode = info.Mode().Perm()
+			}
+			if err := os.WriteFile(signedBack, signed, mode); err != nil {
+				out.WriteString("\ngnosh could not write the signed transaction to " + signedBack + ": " + err.Error())
+			}
+		}
+	}
 	text := scrubPassword(out.String(), password)
 	password = ""
 	if len(text) > gnokeyOutput {
@@ -364,6 +503,77 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		return core.ToolResult{}, ctx.Err()
 	}
 	return core.ErrorResult("gnokey could not be run: " + runErr.Error() + "."), nil
+}
+
+// factLines are the flags of the command that say what it sends, pays and
+// calls, one to a line, whole.
+func (c gnokeyCall) factLines() []string {
+	var out []string
+	for _, f := range gnokeyFacts {
+		for _, v := range c.flags[f] {
+			out = append(out, "  -"+f+" "+shellquote.Words([]string{v}))
+		}
+	}
+	return out
+}
+
+// signedFile is what the question shows of the file or folder a
+// transaction is made of; for a file, data is all of it, which gnokey is
+// handed a copy of. why, when not empty, says why the command cannot be
+// shown, and so is not signed.
+func (c gnokeyCall) signedFile() (shown []string, data []byte, name, why string) {
+	if c.fileAt < 0 {
+		return nil, nil, "", ""
+	}
+	name = strings.TrimPrefix(c.args[c.fileAt], c.fileEq)
+	p := name
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(c.dir, p)
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		return nil, nil, name, fmt.Sprintf("%s cannot be read (%v), and the user must be shown what is signed", name, err)
+	}
+	if info.IsDir() {
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			return nil, nil, name, fmt.Sprintf("the folder %s cannot be read (%v), and the user must be shown what is signed", name, err)
+		}
+		shown = append(shown, "It signs the package in "+name+", which the model may have written: read its files before you type the password:")
+		for i, e := range entries {
+			if i == 40 {
+				shown = append(shown, fmt.Sprintf("  and %d more", len(entries)-40))
+				break
+			}
+			if fi, err := e.Info(); err == nil && fi.Mode().IsRegular() {
+				shown = append(shown, fmt.Sprintf("  %s (%d bytes)", e.Name(), fi.Size()))
+			} else {
+				shown = append(shown, "  "+e.Name())
+			}
+		}
+		return shown, nil, name, ""
+	}
+	if info.Size() > gnokeyFileMax {
+		return nil, nil, name, fmt.Sprintf("%s is %d bytes, more than the question that asks for the password can show (%d at most), and the user must read what is signed: tell them the command to run in their own terminal", name, info.Size(), gnokeyFileMax)
+	}
+	if data, err = os.ReadFile(p); err != nil {
+		return nil, nil, name, fmt.Sprintf("%s cannot be read (%v), and the user must be shown what is signed", name, err)
+	}
+	if !utf8.Valid(data) {
+		return nil, nil, name, name + " is not text the question that asks for the password can show, and the user must read what is signed: tell them the command to run in their own terminal"
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > gnokeyFileLines {
+		return nil, nil, name, fmt.Sprintf("%s has %d lines, more than the question that asks for the password can show (%d at most), and the user must read what is signed: tell them the command to run in their own terminal", name, len(lines), gnokeyFileLines)
+	}
+	shown = append(shown, "It signs what "+name+" holds, which the model may have written. This is all of it, and gnokey reads a copy of just this:")
+	for _, l := range lines {
+		if r, hidden := hiddenIn(strings.ReplaceAll(strings.TrimSuffix(l, "\r"), "\t", "    ")); hidden {
+			return nil, nil, name, fmt.Sprintf("%s holds %U, a character a terminal draws as nothing or that changes what is drawn around it: the user would not read what is signed", name, r)
+		}
+		shown = append(shown, "  "+l)
+	}
+	return shown, data, name, ""
 }
 
 // scrubPassword takes a password out of what gnokey printed: as typed, and

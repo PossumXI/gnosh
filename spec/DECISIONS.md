@@ -3535,3 +3535,20 @@ or kept with the reason said (27).
     2026-11-19). The run now fails on the cap only when the turn it
     reports is the one the cap stopped; a woken turn the cap stopped
     keeps the answer before it as the result.
+
+227. **The question that asks for a key's password shows all of what is
+    signed.** It cut the command at 600 bytes, so a long -args hid a
+    -send after it; a run script, a transaction file or a package was
+    named and not shown, though the model may have written it, and could
+    be changed after the question; and a character drawn as nothing in an
+    argument showed the person something other than what was signed (the
+    gno review of 2026-11-19). Now the question lists what the command
+    sends, pays and calls first (-send, -to, -max-deposit, -deposit,
+    -gas-fee, -gas-wanted, -pkgpath, -func, -args, -chainid, -remote),
+    then the whole command; it shows the whole of maketx run's script and
+    sign's transaction, and gnokey reads a private copy of what was shown
+    (sign's signed transaction is written back to the person's file); it
+    lists an addpkg folder's files. An argument holding a control or
+    format character, a command over 2000 characters, and a file over 80
+    lines or 64 KiB are refused: nothing is signed, and the model is told
+    to hand the person the command for their own terminal.
