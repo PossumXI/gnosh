@@ -2017,8 +2017,17 @@ func (e *Engine) addScript(v *bashView, text string, nest nesting, depth int, ho
 	sub := parseScript(text)
 	if !sub.ok {
 		crude := crudeFragments(text)
-		if how == scriptText || how == scriptOperand || how == scriptValue {
+		switch how {
+		case scriptText, scriptOperand, scriptValue:
 			v.setOpaque("a script inside the command could not be read: " + sub.why)
+			v.unread = append(v.unread, crude...)
+		case scriptArith:
+			// A plain sh runs the text of (( )) as commands, and what it
+			// runs cannot be told when that text cannot be read as
+			// commands: "(( <<$X git * ))" ran git under dash, with its
+			// here-document ended by the end of the line (oracle seed
+			// 162). Then the guards cannot be checked against it.
+			v.setOpaque("the text of (( )), which a plain sh runs as commands, could not be read as commands: " + sub.why)
 			v.unread = append(v.unread, crude...)
 		}
 		v.frags = append(v.frags, crude...)

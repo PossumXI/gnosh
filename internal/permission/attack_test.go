@@ -164,6 +164,8 @@ func TestShellAttacks(t *testing.T) {
 		{"sh runs rm x in two subshells", ModeBypass, attackGuards, "((rm x))", Deny},
 		{"sh runs what the variable holds", ModeBypass, attackGuards, "x=rm; (( $x -rf y ))", Deny},
 		{"sh runs the word after a variable that holds nothing", ModeBypass, attackGuards, "(( $X rm x ))", Deny},
+		{"sh ends a here-document at the end of the text, and runs the command (oracle seed 162)", ModeBypass, attackGuards, "(( <<$X rm x ))", Ask},
+		{"the same with a command no guard names", ModeBypass, attackGuards, "(( <<$X git * ))", Ask},
 		{"sh runs the word after two variables that hold nothing", ModeBypass, attackGuards, "(($X $Y git push origin))", Deny},
 		{"sh runs the first file a * names, after a variable that holds nothing", ModeBypass, attackGuards, "(( $a * $b ))", Ask},
 		{"sh runs rm y after the &>", "", rules{allow: []string{"Bash(ls *)"}}, "ls &>/dev/null rm y", Ask},

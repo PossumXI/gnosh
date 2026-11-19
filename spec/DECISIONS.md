@@ -3888,3 +3888,12 @@ or kept with the reason said (27).
     uses it (a person may keep the data elsewhere on purpose), but says at
     the start where it leads, and that projectDataDir set to an absolute
     path is the way to keep it elsewhere on purpose.
+
+263. **The text of (( )) that a plain sh cannot be read as commands is
+    unreadable.** A shell with no (( )) runs its text as commands in two
+    subshells, and the engine reads it so too; where that reading failed
+    it was dropped, so "(( <<$X git * ))", which dash runs as git with
+    its here-document ended by the end of the line, was let run past the
+    guards with permissions skipped (oracle seed 162). The Bash tool runs
+    /bin/sh where there is no bash. Such text now makes the line one that
+    cannot be read ahead of time, so the deny and ask rules ask about it.
