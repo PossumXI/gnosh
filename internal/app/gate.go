@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -91,8 +92,12 @@ func criticalTimeout(why string) string {
 }
 
 // Check decides about one call.
-func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision, error) {
+func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Decision, err error) {
 	l := g.l
+	// What a PreToolUse hook added for the model goes with the call's
+	// result, whatever is decided.
+	var added []agent.Part
+	defer func() { dec.Context = append(dec.Context, added...) }()
 	call, action, cannot := req.Call, req.Action, req.CannotRun
 	cwd := l.cwd()
 	if req.Env != nil && req.Env.Cwd != "" {
@@ -109,6 +114,9 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			AgentID: req.AgentID, AgentType: req.AgentType,
 			IfMatch: l.hookIf(cwd, call, action),
 		})
+		if strings.TrimSpace(out.AdditionalContext) != "" {
+			added = append(added, agent.Part{Source: "hook:PreToolUse", Text: hookWords(hooks.PreToolUse, call.Name, out.AdditionalContext)})
+		}
 		switch {
 		case err != nil && ctx.Err() != nil:
 			return agent.Decision{}, ctx.Err()
@@ -123,10 +131,11 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			// The rules judge the arguments the tool will run with.
 			changed = out.UpdatedInput
 			call.Input = changed
-			if call.Name == askToolName {
+			if call.Name == askToolName && answersChanged(req.Call.Input, changed) {
 				// A hook may answer the model's questions in the
-				// person's place; the tool is told that these arguments
-				// are a hook's.
+				// person's place; the tool is told that these answers
+				// are a hook's. Answers the model wrote and the hook
+				// left as they were are not.
 				l.hookChanged.Store(call.ID, true)
 			}
 			act, err := describe(req.Tool, call, req.Env)
@@ -510,6 +519,23 @@ func escapeKeepingTabs(line string) string {
 		parts[i] = trust.Escape(p)
 	}
 	return strings.Join(parts, "\t")
+}
+
+// answersChanged says a hook's rewrite of a question call gave it answers
+// the model's call did not have.
+func answersChanged(model, hook json.RawMessage) bool {
+	var a, b struct {
+		Answers json.RawMessage `json:"answers"`
+	}
+	if json.Unmarshal(hook, &b) != nil || len(b.Answers) == 0 || string(b.Answers) == "null" {
+		return false
+	}
+	_ = json.Unmarshal(model, &a)
+	var ca, cb bytes.Buffer
+	if json.Compact(&cb, b.Answers) != nil {
+		return true
+	}
+	return json.Compact(&ca, a.Answers) != nil || !bytes.Equal(ca.Bytes(), cb.Bytes())
 }
 
 // hookPathKeys are the arguments of the file tools that name a path.

@@ -138,3 +138,52 @@ func TestHookToolInputPaths(t *testing.T) {
 		}
 	}
 }
+
+// What a PreToolUse hook adds for the model (additionalContext) reaches it
+// with the call's result.
+func TestPreToolUseAddedContextReachesTheModel(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo hi"}`}}},
+		apptest.Reply{Text: "Done."})
+	note := w.Script(w.Home+"/hooks/note.sh", `echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"NOTE-FROM-THE-HOOK-31"}}'`)
+	w.Hook("PreToolUse", "Bash", note)
+	run(t, w, "-y", "-p", "say hi").wantCode(t, 0)
+	has(t, "what the model read next", requestText(t, w, 1), "NOTE-FROM-THE-HOOK-31")
+}
+
+// Answers in a question call are a hook's only when the hook changed them:
+// the model's own, echoed back unchanged, are not the person's.
+func TestAnswersChanged(t *testing.T) {
+	model := json.RawMessage(`{"questions":[{"question":"Which?"}],"answers":{"Which?":"A"}}`)
+	for _, tt := range []struct {
+		hook string
+		want bool
+	}{
+		{`{"questions":[{"question":"Which?"}],"answers":{"Which?":"A"}}`, false},
+		{`{"questions": [{"question": "Which?"}], "answers": {"Which?": "A"}}`, false},
+		{`{"questions":[{"question":"Which?"}],"answers":{"Which?":"B"}}`, true},
+		{`{"questions":[{"question":"Which?"}]}`, false},
+	} {
+		if got := answersChanged(model, json.RawMessage(tt.hook)); got != tt.want {
+			t.Errorf("%s: %v, want %v", tt.hook, got, tt.want)
+		}
+	}
+	if !answersChanged(json.RawMessage(`{"questions":[]}`), json.RawMessage(`{"questions":[],"answers":{"q":"x"}}`)) {
+		t.Error("answers a hook added were not counted as the hook's")
+	}
+}
+
+// "once" is a skill's: an agent definition's hook with it runs every time,
+// as in Claude Code, so that an agent's guard is not gone after its first
+// run.
+func TestOnceIsNotReadInAnAgentDefinition(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo one"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"echo two"}`}}},
+		apptest.Reply{Text: "Done."})
+	w.Write(w.ConfigDir()+"/agents/counted.md", "---\nname: counted\ndescription: Counted.\nhooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: echo checked >> checks.txt\n          once: true\n---\nWork.\n")
+	run(t, w, "--agent", "counted", "-y", "-p", "go").wantCode(t, 0)
+	if got := strings.Count(w.Read("checks.txt"), "checked"); got != 2 {
+		t.Errorf("the agent's hook ran %d times for two calls", got)
+	}
+}

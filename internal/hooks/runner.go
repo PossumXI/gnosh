@@ -906,9 +906,10 @@ func program(name string, env []string, dir string) (string, error) {
 	}
 	for _, d := range filepath.SplitList(path) {
 		if !filepath.IsAbs(d) {
-			// (An empty or relative entry is the hook's own directory, or
-			// under it.)
-			d = filepath.Join(dir, d)
+			// An empty or relative entry would be the folder the hook
+			// works in, which a repository fills: it is passed over, as Go's
+			// own lookup does.
+			continue
 		}
 		p := filepath.Join(d, name)
 		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {

@@ -61,3 +61,36 @@ func TestOwnHookOfAProjectProgramWaitsForTrust(t *testing.T) {
 		t.Errorf("in a trusted folder the hook did not run: %v", err)
 	}
 }
+
+// A tool matcher that names an MCP server alone fits none of its tools,
+// and the check says so with the matcher that would.
+func TestBareServerMatcherIsWarned(t *testing.T) {
+	problems := Check(Config{Hooks: []Hook{{Event: PreToolUse, Matcher: "mcp__memory", Command: "true"}}}, options(t))
+	if len(problems) != 1 || !problems[0].Warning {
+		t.Fatalf("problems: %+v", problems)
+	}
+	contains(t, "the warning", problems[0].Message, `"mcp__memory__.*"`)
+	if p := Check(Config{Hooks: []Hook{{Event: PreToolUse, Matcher: "mcp__memory__.*", Command: "true"}}}, options(t)); len(p) != 0 {
+		t.Errorf("a matcher of the server's tools was warned about: %+v", p)
+	}
+}
+
+// The exec form looks its program up in the absolute folders of PATH
+// alone: an empty or relative entry would be the folder the hook works
+// in, which a repository fills.
+func TestExecFormSkipsRelativePathEntries(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "planted"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := program("planted", []string{"PATH=:.:bin"}, dir); err == nil {
+		t.Errorf("the program was found in the hook's folder: %s", p)
+	}
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "tool"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := program("tool", []string{"PATH=.:" + bin}, dir); err != nil || p != filepath.Join(bin, "tool") {
+		t.Errorf("program on an absolute PATH entry: %q, %v", p, err)
+	}
+}

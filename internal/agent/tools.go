@@ -271,6 +271,7 @@ func (r *round) group(g []*callState) {
 			continue
 		}
 		dec := r.ask(c)
+		c.parts = append(c.parts, dec.Context...)
 		if why, over := r.over(); over {
 			r.skip(c, why)
 			continue

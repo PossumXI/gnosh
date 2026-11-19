@@ -420,6 +420,9 @@ type Decision struct {
 	Halt bool
 	// Unattended marks a refusal made only because nobody could be asked.
 	Unattended bool
+	// Context is what the model reads about the call beside its result,
+	// whatever was decided: a PreToolUse hook's added text.
+	Context []Part
 }
 
 // Concurrent is a Tool that can say whether one of its calls may run beside

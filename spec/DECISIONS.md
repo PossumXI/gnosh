@@ -2570,3 +2570,33 @@ or kept with the reason said (27).
       check.sh) ran whatever a repository just cloned put there. It is not
       run there now, and counts as a hook that could not start: a guard of
       that kind blocks what it would have checked.
+
+152. **The security review of the hooks core: the low findings.**
+    - What a PreToolUse hook adds for the model (additionalContext) was
+      read and never given to it. It goes with the call's result now,
+      whatever was decided (agent.Decision.Context).
+    - "once" in an agent's definition took the agent's guard away after
+      its first run; Claude Code reads "once" in skills alone, and so does
+      gnosh now.
+    - A hook's rewrite of a question call made the answers in it the
+      person's, even answers the model wrote itself and the hook left as
+      they were. Only answers the hook changed or added are.
+    - A tool matcher that names an MCP server alone ("mcp__memory") fits
+      none of its tools; the check at startup says so, and names the one
+      that would ("mcp__memory__.*").
+    - The exec form ("args") looked its program up in the empty and
+      relative entries of PATH too, which are the folder the hook works
+      in; they are passed over, as Go's own lookup does.
+    - The package's docs said the hook types other than "command", "args"
+      and background hooks stop startup; they no longer do.
+    Left for a pass of its own: "continue": false on SessionStart,
+    SubagentStart and PostCompact is read as the hooks package means it
+    (Claude Code: "stops processing entirely"), and the record says the
+    turn ended, but the session does not act on it yet: the prompt goes
+    out, the sub-agent runs, the turn goes on after a summary.
+    Not changed: the shell command of a call is also given to hooks as
+    GNOSH_TOOL_INPUT_COMMAND, and one past 128 KiB is more than Linux lets
+    a program be given in its environment, so no hook can start for it
+    and a guard blocks the call. To leave the variable out would let a
+    command padded past the limit by those hooks that read it; a call
+    that big is better put another way (a file the model writes first).
