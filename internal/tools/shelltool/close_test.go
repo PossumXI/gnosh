@@ -597,11 +597,31 @@ func TestLeftoversThatOutliveTheLauncherAreStopped(t *testing.T) {
 		t.Errorf("Close: %v", err)
 	}
 	if marks && alive(server) {
-		t.Errorf("the server the launcher started is still there after Close")
+		t.Errorf("the server the launcher started is still there after Close (%s)", leftNote(m, server))
 	}
 	if alive(late) {
-		t.Errorf("the process that let go of the output late is still there after Close")
+		t.Errorf("the process that let go of the output late is still there after Close (%s)", leftNote(m, late))
 	}
+}
+
+// leftNote says what a process still there after Close looks like: its
+// state, its session and group, and whether it carries the manager's
+// mark. (A clean-copy CI on a busy machine once saw the launcher's server
+// outlive Close, and nothing said why: 2026-11-19, d95e509's first run.)
+func leftNote(m *Manager, pid int) string {
+	if runtime.GOOS != "linux" {
+		return "pid " + strconv.Itoa(pid)
+	}
+	stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return "its stat could not be read: " + err.Error()
+	}
+	st, ok := parseStat(stat)
+	if !ok {
+		return "its stat could not be read"
+	}
+	marked, merr := m.envHas(pid, m.markEntry())
+	return fmt.Sprintf("pid %d %s, state %c, session %d, group %d, marked %v (%v)", pid, st.name, st.state, st.session, st.pgid, marked, merr)
 }
 
 // The books of what let go of a command's output forget a session whose
