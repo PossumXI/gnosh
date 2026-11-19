@@ -354,7 +354,8 @@ func untrustedRootNote(root string) string {
 	if agents+skills == 0 {
 		return ""
 	}
-	return fmt.Sprintf("The added folder %s defines %d kind(s) of sub-agent and %d skill(s) of its own (in .gnosh or .claude), which are not read: that folder is not trusted, and what it defines can run commands as you. To use them, trust it: gnosh trust, run in that folder.", root, agents, skills)
+	what, verb := heldDefsText(agents, skills)
+	return fmt.Sprintf("The added folder %s defines %s of its own (in .gnosh or .claude), which %s not read: that folder is not trusted, and what it defines can run commands as you. To use what it defines, trust it: gnosh trust, run in that folder.", root, what, verb)
 }
 
 // agentNotices says, once at the start of a session, what of the agent
@@ -366,8 +367,9 @@ func (l *live) agentNotices() {
 	}
 	if !l.st.trusted {
 		if agents, skills := heldDefs(l.cfg, l.moreRoots()); agents+skills > 0 {
+			heldWhat, heldVerb := heldDefsText(agents, skills)
 			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
-				"This folder defines %d kind(s) of sub-agent and %d skill(s) of its own (in .gnosh or .claude), which are not read because the folder is not trusted. To use them: gnosh trust, or --trust-folder for this one run.", agents, skills))
+				"This folder defines %s of its own (in .gnosh or .claude), which %s not read because the folder is not trusted. To use what it defines: gnosh trust, or --trust-folder for this one run.", heldWhat, heldVerb))
 		}
 	}
 	if l.st.trusted {

@@ -53,7 +53,7 @@ func TestDefinitionsOfAnAddedFolder(t *testing.T) {
 	w.Write(other+"/.gnosh/agents/fixer.md", "---\nname: fixer\ndescription: The other folder's fixer.\n---\nFix.\n")
 	w.Write(other+"/.claude/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploys the other folder.\n---\nDeploy.\n")
 	r := run(t, w, "--trust-folder", "--add-dir", "../other", "-p", "hello").wantCode(t, 0)
-	has(t, "stderr", r.err, "The added folder", "defines 1 kind(s) of sub-agent and 1 skill(s) of its own", "not trusted")
+	has(t, "stderr", r.err, "The added folder", "defines 1 kind of sub-agent and 1 skill of its own", "not trusted")
 	said := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
 	hasNot(t, "the first prompt", said, "fixer", "Deploys the other folder")
 

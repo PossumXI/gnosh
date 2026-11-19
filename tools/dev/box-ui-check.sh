@@ -180,7 +180,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
@@ -207,7 +207,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp)" >&2
 	exit 2
 	;;
 esac
@@ -242,6 +242,16 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = trustmcp ]; then
+	# A folder whose only own content is an MCP server and a skill that
+	# lets a command run without asking: the trust question names both
+	# (DECISIONS 201), and a No starts neither.
+	cat > "$T/work/.mcp.json" <<'JSON'
+{"mcpServers": {"helper": {"command": "sh", "args": ["-c", "touch helper-ran"]}}}
+JSON
+	mkdir -p "$T/work/.claude/skills/deploy"
+	printf -- '---\nname: deploy\ndescription: Deploys the site.\nallowed-tools: Bash(make deploy)\n---\nDeploy it.\n' > "$T/work/.claude/skills/deploy/SKILL.md"
+fi
 if [ "$scenario" = filesuggest ]; then
 	# The person's own @ search: what was typed, as two paths, after a
 	# second, so that the list fills in when it answers.
@@ -767,6 +777,12 @@ invisible)
 failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
+	;;
+trustmcp)
+	# (The question is on the screen above, under "before".)
+	tmux send-keys -t "$S" "1"
+	sleep 2
+	done_when() { tmux capture-pane -p -t "$S" | grep -q "Ask for something" && [ ! -e "$T/work/helper-ran" ]; }
 	;;
 filesuggest)
 	tmux send-keys -t "$S" "look at @comp"
