@@ -3661,3 +3661,12 @@ or kept with the reason said (27).
     still hold the old content, and nothing said so (the Edit/Write
     review of 2026-11-19). The result now says how many other names the
     file had and that they hold the old content.
+
+239. **A leftover told to stop is waited for until it is gone.** When the
+    processes a command left behind are no longer the ones seen as it
+    ended, only those carrying gnosh's mark are stopped; but Linux hides
+    the environment of a process on its way out, so the mark could not be
+    read while it was dying, the sweep took it for not gnosh's, and Close
+    returned with the process still there (the clean-copy CI of aadc511
+    caught it). A process once seen with the mark now stays gnosh's, by
+    its pid and start time, until it has left the session.

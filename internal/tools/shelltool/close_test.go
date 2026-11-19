@@ -748,6 +748,41 @@ func TestSweepStopsOnlyMarkedProcesses(t *testing.T) {
 	}
 }
 
+// A marked process told to stop is waited for until it has left the
+// session, though its mark can no longer be read: Linux hides the
+// environment of a process on its way out, and Close used to return while
+// such a process was still there.
+func TestSweepWaitsForAProcessThatHidesItsMarkAsItEnds(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{TermGrace: 5 * time.Second, KillWait: 5 * time.Second})
+	m.signal = func(int, syscall.Signal) error { return nil }
+	var mu sync.Mutex
+	looks := 0
+	m.procs = func(int) ([]procInfo, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		looks++
+		if looks > 4 {
+			return nil, nil
+		}
+		return []procInfo{{pid: 4002, pgid: 4002, start: 9, image: "b"}}, nil
+	}
+	m.envHas = func(int, string) (bool, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if looks > 1 {
+			return false, syscall.ESRCH
+		}
+		return true, nil
+	}
+	m.sweep(4000, []procInfo{{pid: 3999, pgid: 4000, start: 1}})
+	mu.Lock()
+	defer mu.Unlock()
+	if looks <= 4 {
+		t.Errorf("the sweep ended after %d looks, with the process it told to stop still there", looks)
+	}
+}
+
 // Every command's environment carries the manager's mark, last, where the
 // settings' own env cannot take it out.
 func TestCommandsCarryTheMark(t *testing.T) {

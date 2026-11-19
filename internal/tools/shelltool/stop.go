@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -199,8 +200,20 @@ func (m *Manager) sweep(sid int, then []procInfo) {
 	}
 	var only func([]procInfo) []procInfo
 	if !sameProcess(now, then) {
-		only = m.marked
-		if now = m.marked(now); len(now) == 0 {
+		// A process once seen with the mark stays the command's until it
+		// is gone: Linux stops showing the environment of a process on its
+		// way out, and one told to stop is not stopped until it has left.
+		ours := make(map[procKey]bool)
+		only = func(ps []procInfo) []procInfo {
+			return slices.DeleteFunc(ps, func(p procInfo) bool {
+				key := procKey{p.pid, p.start}
+				if !ours[key] && len(m.marked([]procInfo{p})) == 1 {
+					ours[key] = true
+				}
+				return !ours[key]
+			})
+		}
+		if now = only(now); len(now) == 0 {
 			return
 		}
 	}
