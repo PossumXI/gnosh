@@ -357,7 +357,7 @@ func (ld *loader) providers(limits Limits) {
 		for i := range p.Endpoints {
 			e := &p.Endpoints[i]
 			e.URL = apiRoot(e.Given, t)
-			e.Display = displayURL(e.URL)
+			e.Display = DisplayURL(e.URL)
 			if u, err := url.Parse(e.URL); err == nil {
 				e.Local = IsLocal(u.Hostname())
 			}

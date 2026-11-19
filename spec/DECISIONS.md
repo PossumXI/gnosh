@@ -2434,3 +2434,29 @@ or kept with the reason said (27).
       text's folder. It now resolves the link's folder first.
     Not changed: Write and Edit say that a file outside the project exists
     when they cannot run (its content is not shown).
+
+146. **The security review of the web tools.** A fresh-eyes review of
+    WebFetch and WebSearch found the fetching sound (addresses checked
+    after DNS on every connection, redirects on the same host only, domain
+    rules matched label by label, everything a page says marked untrusted)
+    and two things to change:
+    - Turning a page into Markdown had no bound of its own: the download
+      is cut at 10 MiB, but every paragraph mark copied all that was
+      written so far, and every list item was indented by every list left
+      open, so a page of about 8 MB grew to gigabytes or kept a core busy
+      for many minutes, after Esc too. The converter now ends a line and a
+      link in place, keeps at most 16 lists and 64 links open, and stops
+      at 4 MiB of text, many times what a model is given of a page, saying
+      so at the end ("The page went on past what gnosh turns into text").
+      A page made to blow up now costs what its size does: under a second.
+    - The WebSearch question showed webSearchUrl as written, password and
+      all, and only the first 80 bytes of the query. It now shows the
+      server as the rest of gnosh shows an address (no user name,
+      password or query string), and the whole query; a query longer than
+      the question shows (2000 bytes) is refused with the reason, so
+      nothing sent is hidden from the person asked.
+    Not security, but found there: a self-closing <svg/>, <iframe/> or
+    <button/> opened an element to skip that never closed, and the rest of
+    the page was lost. Not changed: the addresses the fetcher refuses leave
+    out a few rare ranges (198.18/15, 192.0.0.0/24, NAT64); every fetch is
+    https with a certificate checked against the name asked for.

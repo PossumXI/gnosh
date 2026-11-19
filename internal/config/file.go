@@ -298,7 +298,7 @@ func (s *source) provider(id string, m jfield) {
 					// stranger's file could have chosen.
 					addresses = append(addresses, "an address filled in from the environment")
 				} else {
-					addresses = append(addresses, displayURL(got.text))
+					addresses = append(addresses, DisplayURL(got.text))
 				}
 			}
 		case "apiKey":
@@ -831,7 +831,7 @@ func (s *source) options(f jfield) {
 				s.errorf(m.line, "the address given in %q cannot be used: %s.%s", key, why, hint)
 				continue
 			}
-			s.add(op{kind: def.trustKind(), text: key + ": " + displayURL(address), origin: o, apply: func(b *builder) { def.text(&b.opts).put(address, o) }})
+			s.add(op{kind: def.trustKind(), text: key + ": " + DisplayURL(address), origin: o, apply: func(b *builder) { def.text(&b.opts).put(address, o) }})
 		case oListen:
 			if v.kind != jString {
 				s.errorf(m.line, "%q is an address of this machine with a port, as a string, such as %q, or %q; here it is %s.", key, DefaultDeliverablesServer, ServerOff, shown(v))
