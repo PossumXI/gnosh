@@ -427,6 +427,55 @@ func TestWriteLeavesNothingBehindWhenItFails(t *testing.T) {
 	})
 }
 
+// A rename refused for want of space is not got around by writing the file
+// in place, which fails as well, after cutting the file short; and a write
+// in place that fails puts the old content back. A full disk left the file
+// empty, or holding the start of the new text (the Edit/Write review of
+// 2026-11-19).
+func TestWriteInPlaceNeverLosesTheFile(t *testing.T) {
+	f := newFixture(t, Options{})
+	sys := f.write.(*writeTool).sys
+	sys.rename = func(oldpath, newpath string) error {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.ENOSPC}
+	}
+	p := f.file("full.txt", "the old content\n")
+	f.ok(f.read, in{"file_path": p})
+	f.fails(f.write, in{"file_path": p, "content": "a longer new content\n"}, "could not be written", "no space left on device")
+	if got := f.content(p); got != "the old content\n" {
+		t.Errorf("after a full disk the file holds %q", got)
+	}
+	noTempFiles(t, f.dir)
+
+	// A rename refused where writing in place gets around it, and the
+	// write in place failing half way.
+	sys.rename = func(oldpath, newpath string) error {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EBUSY}
+	}
+	failed := false
+	sys.writeAt = func(file *os.File, b []byte, off int64) (int, error) {
+		if !failed {
+			failed = true
+			n, _ := file.WriteAt(b[:len(b)/2], off)
+			return n, syscall.ENOSPC
+		}
+		return file.WriteAt(b, off)
+	}
+	f.fails(f.write, in{"file_path": p, "content": "a much longer new content than before\n"}, "could not be written", "no space left on device", "the file holds its old content")
+	if got := f.content(p); got != "the old content\n" {
+		t.Errorf("after a failed write in place the file holds %q", got)
+	}
+	// And one that works says why it was done.
+	sys.writeAt = (*os.File).WriteAt
+	res := f.run(f.write, in{"file_path": p, "content": "new\n"})
+	if res.IsError {
+		t.Fatalf("failed: %s", core.TextOf(res.Content))
+	}
+	mustContain(t, core.TextOf(res.Content), "overwritten where it is, because it could not be replaced in one step: device or resource busy")
+	if got := f.content(p); got != "new\n" {
+		t.Errorf("file holds %q", got)
+	}
+}
+
 func TestWriteGuardsDamagedText(t *testing.T) {
 	f := newFixture(t, Options{})
 	p := f.file("latin1.txt", "caf\xe9\n")

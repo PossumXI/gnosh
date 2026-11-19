@@ -152,20 +152,20 @@ func (o *Options) beforeChange(env *core.ToolEnv, c *change) *failure {
 }
 
 // commit makes a change: it writes the file and takes back whatever it
-// had made if the write fails. It returns the info of the written file and
-// whether it had to be written in place.
-func commit(sys *fileOps, c *change) (fs.FileInfo, bool, *failure) {
+// had made if the write fails. It returns the info of the written file and,
+// when it had to be written in place, why.
+func commit(sys *fileOps, c *change) (fs.FileInfo, string, *failure) {
 	var made []string
 	if c.old == nil {
 		var err error
 		if made, err = makeParents(filepath.Dir(c.loc.real)); err != nil {
-			return nil, false, failf("%s could not be written: %v. Nothing was written.", c.loc.abs, err)
+			return nil, "", failf("%s could not be written: %v. Nothing was written.", c.loc.abs, err)
 		}
 	}
 	info, inPlace, err := sys.replaceFile(c.loc.real, []byte(c.after), c.old)
 	if err != nil {
 		removeDirs(made)
-		return nil, false, failf("%s could not be written: %v.", c.loc.abs, err)
+		return nil, "", failf("%s could not be written: %v.", c.loc.abs, err)
 	}
 	return info, inPlace, nil
 }
@@ -393,8 +393,8 @@ func (t *writeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	default:
 		text = fmt.Sprintf("Wrote %s%s (%s), replacing its %s.", c.loc.abs, c.loc.viaLink(), size, byteSize(c.old.Size()))
 	}
-	if inPlace {
-		text += " The file was overwritten where it is, because its directory did not allow replacing it in one step."
+	if inPlace != "" {
+		text += " The file was overwritten where it is, because " + inPlace + "."
 		meta["inPlace"] = true
 	}
 	res := core.TextResult(text)

@@ -3612,3 +3612,16 @@ or kept with the reason said (27).
     2026-11-19). It now also takes out $(...), ${...}, $NAME and `...`,
     and looks for the flag's letters in order, in either case. A shell
     can build any word; this keeps the plain ways from working.
+
+234. **A file written in place is never left empty by a failed write.**
+    When a temporary file could not be made beside a file, or the rename
+    over it was refused, Edit and Write wrote it in place for any reason,
+    a full disk or quota included, and that write opened the file cut to
+    nothing: a write that then failed left it empty or holding the start
+    of the new text (the Edit/Write review of 2026-11-19). The file is
+    now written in place only where that gets around the refusal (the
+    folder may not be written in, the file is a mount point or on another
+    device, or busy as a program); the new content goes over the old
+    from the start and the file is cut to length after; a write that
+    fails puts the old content back and says so; and the result says why
+    the file was written in place.

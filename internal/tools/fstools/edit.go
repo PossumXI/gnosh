@@ -358,8 +358,8 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 
 	var text strings.Builder
 	fmt.Fprintf(&text, "Edited %s%s: %s, at %s", c.loc.abs, c.loc.viaLink(), countOf(c.count, "replacement", "replacements"), newLines(c.lines))
-	if inPlace {
-		text.WriteString(". The file was overwritten where it is, because its directory did not allow replacing it in one step")
+	if inPlace != "" {
+		text.WriteString(". The file was overwritten where it is, because " + inPlace)
 	}
 	if snippet := t.snippet(c); snippet != "" {
 		text.WriteString(". ")
@@ -378,7 +378,7 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	if c.loc.real != c.loc.abs {
 		res.Meta["realPath"] = c.loc.real
 	}
-	if inPlace {
+	if inPlace != "" {
 		res.Meta["inPlace"] = true
 	}
 	return res, nil

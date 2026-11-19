@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 )
 
 // fileOps is the file-system calls Write and Edit make that a test needs
@@ -16,6 +17,8 @@ import (
 type fileOps struct {
 	// rename puts a finished temporary file in the place of the real one.
 	rename func(oldpath, newpath string) error
+	// writeAt writes into a file written in place.
+	writeAt func(f *os.File, b []byte, off int64) (int, error)
 	// judged are the real paths of Write and Edit calls as they were
 	// described, by call id: what the permission layer judged, which a run
 	// is held to.
@@ -42,7 +45,17 @@ func (s *fileOps) judgedElsewhere(id, real string) (string, bool) {
 }
 
 func newFileOps() *fileOps {
-	return &fileOps{rename: os.Rename}
+	return &fileOps{rename: os.Rename, writeAt: (*os.File).WriteAt}
+}
+
+// inPlaceHelps reports whether writing a file where it is can do what
+// making a temporary file beside it or the rename could not: the folder
+// may not be written in, or the file is a mount point or on another
+// device than its folder. Not a full disk or quota, where writing in
+// place fails too, and after cutting the file short (the Edit/Write review
+// of 2026-11-19).
+func inPlaceHelps(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EBUSY) || errors.Is(err, syscall.EXDEV) || errors.Is(err, syscall.ETXTBSY)
 }
 
 // keptModeBits are the parts of a file's mode a rewrite keeps.
@@ -60,12 +73,13 @@ const keptModeBits = fs.ModePerm | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky
 // gives any new file.
 //
 // When the directory will not take a temporary file, or the rename is
-// refused, but the file itself exists and can be written, the content is
-// written into the file in place. That is not atomic, and inPlace reports
-// it. No temporary file is left behind either way.
+// refused, for a reason writing in place gets around (inPlaceHelps), and
+// the file itself exists and can be written, the content is written into
+// the file in place. That is not atomic: inPlace says why it was done. No
+// temporary file is left behind either way.
 //
 // The returned info is that of the new content's file.
-func (ops *fileOps) replaceFile(path string, data []byte, old fs.FileInfo) (info fs.FileInfo, inPlace bool, err error) {
+func (ops *fileOps) replaceFile(path string, data []byte, old fs.FileInfo) (info fs.FileInfo, inPlace string, err error) {
 	dir := filepath.Dir(path)
 	perm := fs.FileMode(0o666)
 	if old != nil {
@@ -73,32 +87,32 @@ func (ops *fileOps) replaceFile(path string, data []byte, old fs.FileInfo) (info
 	}
 	tmp, f, err := createTemp(dir, perm)
 	if err != nil {
-		if old == nil {
-			return nil, false, fmt.Errorf("make a temporary file in %s: %w", dir, underlying(err))
+		if old == nil || !inPlaceHelps(err) {
+			return nil, "", fmt.Errorf("make a temporary file in %s: %w", dir, underlying(err))
 		}
-		info, err2 := writeInPlace(path, data)
+		info, err2 := ops.writeInPlace(path, data)
 		if err2 != nil {
-			return nil, false, fmt.Errorf("make a temporary file in %s: %w; writing the file in place failed too: %w", dir, underlying(err), err2)
+			return nil, "", fmt.Errorf("make a temporary file in %s: %w; writing the file in place failed too: %w", dir, underlying(err), err2)
 		}
-		return info, true, nil
+		return info, "a temporary file could not be made beside it: " + underlying(err).Error(), nil
 	}
 	info, err = fillTemp(f, data, old)
 	if err != nil {
 		os.Remove(tmp)
-		return nil, false, err
+		return nil, "", err
 	}
 	if err := ops.rename(tmp, path); err != nil {
 		os.Remove(tmp)
-		if old == nil {
-			return nil, false, fmt.Errorf("put the new file in place: %w", underlying(err))
+		if old == nil || !inPlaceHelps(err) {
+			return nil, "", fmt.Errorf("put the new content in place: %w", underlying(err))
 		}
-		info, err2 := writeInPlace(path, data)
+		info, err2 := ops.writeInPlace(path, data)
 		if err2 != nil {
-			return nil, false, fmt.Errorf("put the new content in place: %w; writing the file in place failed too: %w", underlying(err), err2)
+			return nil, "", fmt.Errorf("put the new content in place: %w; writing the file in place failed too: %w", underlying(err), err2)
 		}
-		return info, true, nil
+		return info, "it could not be replaced in one step: " + underlying(err).Error(), nil
 	}
-	return info, false, nil
+	return info, "", nil
 }
 
 // createTemp makes a new, empty file in dir under a name no other file
@@ -150,15 +164,34 @@ func fillTemp(f *os.File, data []byte, old fs.FileInfo) (fs.FileInfo, error) {
 	return info, nil
 }
 
-// writeInPlace overwrites the content of an existing file where it is.
-func writeInPlace(path string, data []byte) (fs.FileInfo, error) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0)
+// writeInPlace overwrites the content of an existing file where it is: the
+// new content over the old from the start, and then the file cut to its
+// length. A write that fails puts the old content back: the file was
+// opened cut to nothing, and a full disk then left it empty or holding the
+// start of the new text (the Edit/Write review of 2026-11-19).
+func (ops *fileOps) writeInPlace(path string, data []byte) (fs.FileInfo, error) {
+	before, err := os.ReadFile(path)
 	if err != nil {
 		return nil, underlying(err)
 	}
-	if _, err := f.Write(data); err != nil {
-		f.Close()
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
 		return nil, underlying(err)
+	}
+	put := func(b []byte) error {
+		if _, err := ops.writeAt(f, b, 0); err != nil {
+			return err
+		}
+		return f.Truncate(int64(len(b)))
+	}
+	if err := put(data); err != nil {
+		if back := put(before); back != nil {
+			f.Close()
+			return nil, fmt.Errorf("%w; and the old content could not be put back (%v): the file may be damaged", underlying(err), underlying(back))
+		}
+		f.Sync()
+		f.Close()
+		return nil, fmt.Errorf("%w; the file holds its old content", underlying(err))
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
