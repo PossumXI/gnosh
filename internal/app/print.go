@@ -471,7 +471,11 @@ func (f *printer) Event(ev any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.finished {
-		// The result is the last thing a run prints.
+		// The result is the last thing a run prints. A notice of its
+		// closing (a hook's, the memory's) still goes to standard error.
+		if ev, ok := ev.(*agent.NoticeEvent); ok {
+			f.stderr("%s", ev.Text)
+		}
 		return
 	}
 	switch ev := ev.(type) {
@@ -1243,6 +1247,10 @@ func (f *printer) report(c Controls, res agent.TurnResult) int {
 			fmt.Fprintln(f.p.stdout)
 		}
 	}
+	// What the session's closing says after this goes to standard error
+	// alone: a stream-json line after the result was taken for part of a
+	// next one.
+	f.finished = true
 	return code
 }
 
@@ -1282,6 +1290,7 @@ func (f *printer) reportCommand(c Controls, res CommandResult, err error) int {
 		}
 		f.encode(obj)
 	}
+	f.finished = true
 	if err != nil {
 		return cli.ExitFailure
 	}

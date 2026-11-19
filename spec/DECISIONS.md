@@ -3166,3 +3166,10 @@ or kept with the reason said (27).
     place (the print mode review's note). It stops the running turn as it
     is read now. The person's messages before it stay in line and are
     answered first: Interrupt drops only gnosh's own queued prompts.
+
+192. **The result is the last line a run writes.** After the result line,
+    the session goes on closing (SessionEnd hooks, the memory, what is
+    left running), and what it said went out as before: in stream-json a
+    notice became a system line after the result, which a reader takes
+    for the start of another (the print mode review's note). Once the
+    result is written, notices go to standard error alone.
