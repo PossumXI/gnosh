@@ -110,3 +110,53 @@ func TestResultIsCutToAQuarterOfTheWindow(t *testing.T) {
 		t.Errorf("the result kept is %d bytes and ends %q", len(text), text[max(0, len(text)-200):])
 	}
 }
+
+// What goes out with a prompt (an @-mentioned file) is counted when room
+// is made for the prompt: counted after, it made the first round's summary
+// take the new prompt, unanswered, with the rest (the compaction review of
+// 2026-11-19). The summary comes before the prompt now. (On an 8,000-token
+// window the point is 6,400: a first answer of about 4,000 tokens is under
+// it alone, and over it with 3,500 of the prompt's lines, more than a
+// summary of both could fit.)
+func TestPromptLinesAreCountedBeforeThePromptGoesOut(t *testing.T) {
+	r := newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 8000
+		o.Moments.PromptLines = []func(context.Context, LineInfo) ([]Part, error){
+			func(_ context.Context, info LineInfo) ([]Part, error) {
+				if info.Prompt.Text != "fix the nil deref" {
+					return nil, nil
+				}
+				return []Part{{Source: "mention", Text: strings.Repeat("the mentioned file\n", 737)}}, nil
+			},
+		}
+	})
+	r.model.honest = true
+	r.model.window = 8000
+	r.model.answer(func(req *core.Request, _ int) step {
+		if isSummaryAsk(req) {
+			return say("SUMMARY: a long answer was given.")
+		}
+		if strings.Contains(lastUserText(req), "tell me a long story") {
+			return say(strings.Repeat("a long answer goes on\n", 727))
+		}
+		return say("fixed")
+	})
+	if res := r.run("tell me a long story"); res.Reason != EndCompleted {
+		t.Fatalf("first turn: %+v", res)
+	}
+	if res := r.run("fix the nil deref"); res.Reason != EndCompleted || res.Text != "fixed" {
+		t.Fatalf("second turn: %+v", res)
+	}
+	summary, prompt := -1, -1
+	for i, e := range r.log.all() {
+		switch {
+		case e.Kind == EntrySummary:
+			summary = i
+		case e.Kind == EntryPrompt && core.TextOf(e.Blocks) == "fix the nil deref":
+			prompt = i
+		}
+	}
+	if summary < 0 || prompt < 0 || summary > prompt {
+		t.Errorf("the summary is entry %d and the prompt entry %d: the summary must come before the prompt", summary, prompt)
+	}
+}

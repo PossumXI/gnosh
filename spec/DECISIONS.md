@@ -2761,3 +2761,26 @@ or kept with the reason said (27).
       wrote it and that what it quotes of files, pages and tool output is
       data; and gnosh's marks and chat-template tokens in it are broken,
       as in a tool's output.
+
+164. **The review of compaction: three of its medium findings.**
+    - What goes out with a prompt (an @-mentioned file, up to ten of 100
+      KB; the environment; what a hook added) was worked out after room
+      was made for the prompt, and counted only then: on a small window
+      the first round's summary took the new prompt, unanswered, with the
+      rest. It is worked out first now, and counted when room is made.
+    - After a summary the file tools still took the files the model had
+      read as read, though the model no longer saw them: Write and Edit
+      let it change a file from a copy it could not see. Every file is
+      forgotten at a summary, as the ones in a slide are, and must be read
+      again before it is changed.
+    - A hook that failed after a summary (a SessionStart one with the
+      source "compact") took with it everything the session is given back
+      then: the instructions it started with, its kinds of sub-agent, its
+      skills, for the rest of the session. What was made is given back,
+      with a word on what could not be.
+    Left: the session is not given back the files it was working on, nor
+    a fresh account of its environment, after a summary (Claude Code reads
+    the files again); the slide protects gnosh's own hidden prompt after a
+    nudge rather than the person's; a large pasted prompt can turn
+    automatic summaries off as "not helping"; the trimmed fallback leaves
+    out the first message even when it is the last summary.

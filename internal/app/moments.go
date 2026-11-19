@@ -748,6 +748,10 @@ func (l *live) beforeSummary(ctx context.Context, info agent.SummaryInfo) (strin
 // "compact".
 func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agent.Part, error) {
 	var parts []agent.Part
+	// The model no longer sees any file it read: Edit and Write refuse to
+	// change one until Read has shown it again, as after a slide, so that
+	// no file is written from a copy the model can no longer see.
+	fstools.ForgetAll(l.env())
 	if l.instr != nil {
 		// The files given along the way are forgotten, so that each is
 		// given again when the model next works where it applies; the

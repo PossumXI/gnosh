@@ -431,3 +431,20 @@ func Forget(env *core.ToolEnv, paths ...string) []string {
 	sort.Strings(dropped)
 	return dropped
 }
+
+// ForgetAll forgets every file the session has read or written, as Forget
+// forgets some: for a summary, which takes the whole conversation out of
+// the model's view, with every copy of a file it held. It returns the
+// files whose record it dropped, sorted.
+func ForgetAll(env *core.ToolEnv) []string {
+	s := sessionOf(env)
+	s.mu.Lock()
+	dropped := make([]string, 0, len(s.files))
+	for real := range s.files {
+		dropped = append(dropped, real)
+	}
+	clear(s.files)
+	s.mu.Unlock()
+	sort.Strings(dropped)
+	return dropped
+}

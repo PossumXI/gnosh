@@ -199,10 +199,14 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 			// runs, and there is nothing to end.)
 			t.halt = firstNonEmpty(h.Reason, "the end of the summary stopped the turn")
 		}
+		if ferr != nil && !halted && ok && ctx.Err() == nil {
+			// What could not be made is said; what was made is still
+			// given back below (the instructions the session started with,
+			// its skills: lost, they stayed lost for the session).
+			a.notice(LevelWarning, "summary", fmt.Sprintf("Not all of what the session is given back after a summary could be put together (%v).", ferr))
+		}
 		switch {
 		case !ok || ctx.Err() != nil:
-		case ferr != nil && !halted:
-			a.notice(LevelWarning, "summary", fmt.Sprintf("What the session is given back after a summary could not be put together (%v).", ferr))
 		default:
 			var notes []Entry
 			for _, p := range parts {

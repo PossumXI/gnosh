@@ -181,10 +181,17 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 	// Before the prompt goes out, the conversation is brought under what
 	// the model can hold. It matters after a switch to a model with a
 	// smaller window, and in a resumed session.
+	// What goes out with the prompt (an @-mentioned file, the
+	// environment) is worked out first and counted too: counted after, it
+	// made the first round's summary take the new prompt with the rest.
+	ready := a.preparePrompts(ctx, t, t.subs, false)
 	extra, typed := 0, false
-	for _, s := range t.subs {
-		extra += a.estBlocks(s.prompt.blocks(), true)
-		typed = typed || !s.prompt.Hidden
+	for _, r := range ready {
+		extra += a.estBlocks(r.s.prompt.blocks(), true)
+		for _, p := range r.parts {
+			extra += a.est(p.Text) + a.estBlocks(p.Images, true)
+		}
+		typed = typed || !r.s.prompt.Hidden
 	}
 	moment := RoomBeforeOwnPrompt
 	if typed {
@@ -194,7 +201,7 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 
 	// The prompt is kept whatever happened: stopped here, it is a stopped
 	// turn, and a summary that failed sends it as it is.
-	if err := a.sendPrompts(ctx, t, t.subs, false); err != nil {
+	if err := a.appendPrompts(t, ready, false); err != nil {
 		return failedOutcome(err)
 	}
 	if ctx.Err() != nil {
@@ -459,6 +466,20 @@ func (a *Agent) remind(ctx context.Context, t *turn) error {
 // lines, which are worked out now: a prompt that waited in the queue tells
 // of things as they stand when it goes out.
 func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, folded bool) error {
+	return a.appendPrompts(t, a.preparePrompts(ctx, t, subs, folded), folded)
+}
+
+// readyPrompt is a prompt with the hidden lines that go out with it.
+type readyPrompt struct {
+	s     *submission
+	parts []Part
+}
+
+// preparePrompts works out the hidden lines of prompts about to go out:
+// what the session's start added, what the prompt's check added, and the
+// lines of the moment (an @-mentioned file, the environment).
+func (a *Agent) preparePrompts(ctx context.Context, t *turn, subs []*submission, folded bool) []readyPrompt {
+	var out []readyPrompt
 	for _, s := range subs {
 		a.mu.Lock()
 		first := !a.sent
@@ -482,7 +503,15 @@ func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, fo
 			}
 			parts = append(parts, more...)
 		}
+		out = append(out, readyPrompt{s: s, parts: parts})
+	}
+	return out
+}
 
+// appendPrompts puts prompts made ready into the conversation.
+func (a *Agent) appendPrompts(t *turn, ready []readyPrompt, folded bool) error {
+	for _, r := range ready {
+		s, parts := r.s, r.parts
 		var entries []Entry
 		var sentParts []Part
 		note := func(p Part) {
