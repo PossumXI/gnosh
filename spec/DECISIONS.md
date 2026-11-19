@@ -3961,7 +3961,8 @@ or kept with the reason said (27).
     the person typed again. A layer of the permission engine can now be
     kept to one agent (Layer.Agent, DecideFor): a skill's grant is for the
     agent that runs it, a forked skill's for the sub-agent it runs in,
-    from its start to its end. The skill's own commands (!`command`), and
+    from its start to its end. (A skill the session's own agent runs is
+    leave for its sub-agents too, as it was: they work for it.) The skill's own commands (!`command`), and
     those of the skills a kind of sub-agent preloads, are judged as calls
     of the agent they are for, and run where it works: in its work tree,
     when it has one (they ran in the session's folder).
@@ -3975,3 +3976,33 @@ or kept with the reason said (27).
     destroying command's name on cannot be read either, its words are now
     taken as they are written, and a <(...) or >(...) among them stands
     for whatever a command prints.
+
+272. **What a far machine copies goes on this one's clipboard as plain
+    text.** gnosh ssh put whatever an OSC 52 write held on the Mac's
+    clipboard: from a file a remote shell printed, an escape that ends a
+    terminal's bracketed paste and a command after it (the relay review of
+    2026-11-19); and pbcopy keeps text that begins as rich text or
+    PostScript as that. The relay now copies as /copy does, without the
+    control characters but tabs and line breaks (clipboard.Plain); pbcopy
+    is never given text that begins as rich text or PostScript; and ssh's
+    -o ForkAfterAuthentication=true is known for the -f it is.
+
+273. **A run in the background cannot speak for gnosh in its log.** What a
+    run printed went into its log beside gnosh's own lines about it, and a
+    reply that wrote such lines was taken at its word: a folder line had
+    "go on" resume the run in the home folder, and a stop line hid that it
+    was done (the relay review of 2026-11-19). A line of the run's own
+    output that begins as gnosh's do now gets a space before it. And: a
+    log not named after a session is no run's (".background.log" stood
+    for any process), ps is asked for the whole command line, a run still
+    working is listed however old its log, the list gnosh agents prints
+    is plain on a terminal, and gnosh --bg -r takes only gnosh's own
+    session files.
+
+274. **The agent view shows a question whole, however it is indented.** A
+    line indented past the screen's width wrapped to a character a row and
+    was drawn blank, so a script could be approved unseen (the relay
+    review of 2026-11-19): a line now keeps at most a quarter of the width
+    of its indent, and what is not shown is not wrapped. A run started from
+    the box is chosen only if the person has chosen no other run and typed
+    nothing since.

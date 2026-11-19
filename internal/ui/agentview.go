@@ -871,7 +871,7 @@ func (v *agentView) dispatch(prompt string) {
 	v.box.Reset()
 	v.starting++
 	v.say("Starting a run in %s …", where)
-	src := v.src
+	src, sel := v.src, v.sel
 	v.async(func() func(*agentView) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -883,6 +883,14 @@ func (v *agentView) dispatch(prompt string) {
 				return
 			}
 			v.refresh()
+			// The new run is chosen only if the person has chosen no other
+			// and typed nothing since: words typed for the run they peek
+			// at went, with Enter, to the new one (the relay review of
+			// 2026-11-19).
+			if v.sel != sel || v.box.Text() != "" {
+				v.say("Started %s in %s.", app.RunShort(id), where)
+				return
+			}
 			v.sel = id
 			v.keepChoice()
 			v.say("Started %s in %s: Enter watches it.", app.RunShort(id), where)
@@ -1457,12 +1465,28 @@ func (v *agentView) questionLines(q *app.AgentQuestion, width, most int) []strin
 	th := &v.th
 	out := []string{fit(v.m, th.Ask.Render(th.AskMark)+" "+oneLine(q.Title), width)}
 	var text []string
-	for _, l := range safeLines(q.Text) {
-		lead := "  " + strings.Repeat(" ", len(l)-len(strings.TrimLeft(l, " ")))
+	lines, left := safeLines(q.Text), 0
+	for i, l := range lines {
+		if len(text) > most {
+			// (What is not shown is not wrapped: the text may be long,
+			// and this is drawn several times a second.)
+			left = len(lines) - i
+			break
+		}
+		// A line keeps at most a quarter of the width of its indent:
+		// with all of it, a line indented past the width wrapped to a
+		// character a row, or none, and was drawn blank (the relay
+		// review of 2026-11-19).
+		pad := min(len(l)-len(strings.TrimLeft(l, " ")), width/4)
+		lead := "  " + strings.Repeat(" ", pad)
 		text = append(text, wrap(v.m, strings.TrimLeft(l, " "), width, lead, lead)...)
 	}
 	if len(text) > most {
-		text = append(text[:most:most], th.Quiet.Render(fit(v.m, fmt.Sprintf("  … %s", count(len(text)-most, "more row", "more rows")), width)))
+		more := count(len(text)-most, "more row", "more rows")
+		if left > 0 {
+			more += " and " + count(left, "more line", "more lines")
+		}
+		text = append(text[:most:most], th.Quiet.Render(fit(v.m, "  … "+more, width)))
 	}
 	out = append(out, text...)
 	for i, c := range q.Choices {
