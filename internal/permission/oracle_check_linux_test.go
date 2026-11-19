@@ -207,6 +207,14 @@ func (j *jail) ran(r shellRun) []ranCmd {
 		case "((", "for", "case", "select":
 			continue
 		}
+		if strings.Contains(w0, "/") {
+			// A name with a slash is run by its path, never as a builtin
+			// or a function: a program that ran has a record of its own,
+			// and one that has none was not there to run. (Oracle seed
+			// 161: bash tried 'evalalias@BIN@/0/rm x', which is not a
+			// file, and the trace's name ended in "rm x".)
+			continue
+		}
 		if names[baseName(w0)] && !shellBuiltins[w0] {
 			continue // a stub wrote this one down, with more detail
 		}
