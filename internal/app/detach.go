@@ -505,7 +505,7 @@ func runsIn(dirs []string, since time.Time) []backgroundRun {
 			if !transcript.ValidID(id) || info.ModTime().Before(since) && !runAlive(id, p, "") {
 				continue
 			}
-			r := readRunLog(p, id, info.ModTime())
+			r := readRunLogKept(p, id, info)
 			r.session = id
 			r.file = firstOf(r.file, filepath.Join(dir, id+".jsonl"))
 			r.running = runAlive(id, p, r.file)
@@ -565,6 +565,46 @@ const runLogRead = 1 << 20
 // line of this session's, the lines that follow it at once, and gnosh
 // stop's line with its time; the run's output, which may quote any of
 // them, is not.
+// runLogsRead keeps, by its path, what readRunLog read of each log, while
+// the log stays as it was: the agent view lists the runs every second,
+// and read every log again each time, up to runLogRead of each (the relay
+// review of 2026-11-19).
+var runLogsRead struct {
+	sync.Mutex
+	m map[string]keptRunLog
+}
+
+type keptRunLog struct {
+	id   string
+	info os.FileInfo
+	run  backgroundRun
+}
+
+// readRunLogKept is readRunLog of the log at path, whose file is info,
+// from what was read of it before when it is the same file, of the same
+// size and time, as then. (A log is only ever added to, or started
+// afresh.)
+func readRunLogKept(path, id string, info os.FileInfo) backgroundRun {
+	runLogsRead.Lock()
+	k, ok := runLogsRead.m[path]
+	runLogsRead.Unlock()
+	if ok && k.id == id && os.SameFile(k.info, info) && k.info.Size() == info.Size() && k.info.ModTime().Equal(info.ModTime()) {
+		r := k.run
+		r.output = slices.Clone(r.output)
+		return r
+	}
+	r := readRunLog(path, id, info.ModTime())
+	k = keptRunLog{id: id, info: info, run: r}
+	k.run.output = slices.Clone(r.output)
+	runLogsRead.Lock()
+	if runLogsRead.m == nil || len(runLogsRead.m) >= 4096 {
+		runLogsRead.m = map[string]keptRunLog{}
+	}
+	runLogsRead.m[path] = k
+	runLogsRead.Unlock()
+	return r
+}
+
 func readRunLog(path, id string, started time.Time) backgroundRun {
 	r := backgroundRun{log: path, started: started}
 	f, err := os.Open(path)

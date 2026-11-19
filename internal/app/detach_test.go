@@ -412,3 +412,36 @@ func TestRunOutputCannotSpeakForGnosh(t *testing.T) {
 		}
 	}
 }
+
+// What was read of a run's log is kept while the log is unchanged, and
+// read again once it is added to; what a caller does with a run it was
+// handed is not kept.
+func TestRunLogReadKept(t *testing.T) {
+	const id = "01a1f4b6-d5a7-7d61-90ef-c98fab80b3ea"
+	log := filepath.Join(t.TempDir(), id+".background.log")
+	p := &program{now: func() time.Time { return time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC) }}
+	p.logHead(log, id, "", "/work/proj", "", "fix the tests")
+	stat := func() os.FileInfo {
+		info, err := os.Stat(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info
+	}
+	first := readRunLogKept(log, id, stat())
+	first.output = append(first.output, "changed by its caller")
+	first.cwd = "/elsewhere"
+	again := readRunLogKept(log, id, stat())
+	if again.cwd != "/work/proj" || len(again.output) != 0 || again.prompt != "fix the tests" {
+		t.Errorf("read again unchanged: %+v", again)
+	}
+	f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("all 42 tests pass\n")
+	f.Close()
+	if after := readRunLogKept(log, id, stat()); after.last != "all 42 tests pass" {
+		t.Errorf("after the log grew, its last line was read as %q", after.last)
+	}
+}
