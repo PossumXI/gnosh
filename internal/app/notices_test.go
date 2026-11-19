@@ -207,6 +207,20 @@ func TestRunWaitCheckpointWithItsTurnsSpent(t *testing.T) {
 	}
 }
 
+// A turn that the end of background work woke, and the turn cap stopped
+// before the model was asked anything, leaves the run's result as it was:
+// the answer stands and the run succeeded. It was reported as
+// error_max_turns (the print review of 2026-11-19).
+func TestCappedWakeKeepsTheAnswer(t *testing.T) {
+	start := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 0.5; echo ok","run_in_background":true}`}}}
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	w := apptest.NewWorld(t, start, apptest.Reply{Text: "Started."})
+	r := runWith(t, ctx, testOptions(w, "-y", "-p", "--max-turns", "2", "--output-format", "json", "start it")).wantCode(t, 0)
+	has(t, "the JSON result", r.out, `"result":"Started."`, `"subtype":"success"`)
+	w.Model.Done()
+}
+
 // A ceiling set with CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS stops what is
 // left once the run has waited that long, and the run ends.
 func TestRunWaitCeiling(t *testing.T) {

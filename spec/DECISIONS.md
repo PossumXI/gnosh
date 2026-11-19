@@ -3526,3 +3526,12 @@ or kept with the reason said (27).
     159). A line the reader cannot finish is read again as the shells
     read it, for the checks no rule passes; that reading now takes such a
     backslash as a backslash, and the line asks.
+
+226. **A turn the cap stopped after the answer leaves the answer as the
+    run's result.** In gnosh -p with --max-turns, background work that
+    ended after the answer woke the model, the turn cap stopped that turn
+    before anything was asked, and the run reported error_max_turns with
+    exit 1 for an answer that was finished (the print review of
+    2026-11-19). The run now fails on the cap only when the turn it
+    reports is the one the cap stopped; a woken turn the cap stopped
+    keeps the answer before it as the result.

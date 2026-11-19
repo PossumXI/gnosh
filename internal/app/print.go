@@ -1181,9 +1181,12 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 			reason = "aborted_tools"
 		}
 		fail("error_during_execution", reason, fmt.Sprintf("the run was stopped by %s after %d turns of the model", signalWord(f.signal), obj.NumTurns))
-	case f.capped && (f.inv.InputFormat != cli.FormatStreamJSON || res.Turn == f.cappedTurn):
-		// (With stream-json input the cap is a turn's own: a later
-		// message's turn has a fresh count.)
+	case f.capped && res.Turn == f.cappedTurn:
+		// (The run failed when the turn it reports is the one the cap
+		// stopped. With stream-json input the cap is a turn's own, and a
+		// later message's turn has a fresh count; a turn background work
+		// woke after the answer, stopped by the cap, leaves the answer as
+		// the run's result: cappedWake.)
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) && f.structuredErr != "":
 		fail("error_max_structured_output_retries", "structured_output_retry_exhausted", f.structuredErr)

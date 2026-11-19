@@ -62,6 +62,16 @@ const (
 // (a variable for the tests).
 var waitCheckpoint = 10 * time.Minute
 
+// cappedWake reports whether r is a turn that background work woke and the
+// turn cap stopped before the model was asked anything, after res had
+// answered: the run's result stays res. The finished answer was reported
+// as error_max_turns (the print review of 2026-11-19).
+func (f *printer) cappedWake(r, res agent.TurnResult) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.capped && r.Turn == f.cappedTurn && (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped)
+}
+
 // awaitBackground keeps the run open for the background work its turns
 // started, and returns the last turn's result. In stream-json output each
 // turn's result line is written as the turn ends; written says the line
@@ -109,7 +119,7 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			if f.format == cli.FormatStreamJSON {
 				f.emitResult(c, r)
 			}
-			if !woken {
+			if !woken && !f.cappedWake(r, res) {
 				// (The turn the model was told what the end stops in is
 				// gnosh's own: the run's result stays the answer to the
 				// prompt, which that turn's reply ("Restarted the server
