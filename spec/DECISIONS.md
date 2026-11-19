@@ -4034,3 +4034,37 @@ or kept with the reason said (27).
     (the hosts review of 2026-11-19). The file is now 0600, without
     control characters but tabs and line breaks, and a folder named gets
     the file of the usual name inside it.
+
+278. **A suggested next prompt is a prompt.** One that began with ! ran as
+    a shell line, with no rule looked at, when the person took it with Tab
+    and Enter; one with / ran a command; exit or quit ended the session
+    (the status line review of 2026-11-19: a page the model had read could
+    have it suggest "!curl … | sh"). Such a suggestion is not offered.
+
+279. **The person's own commands that may call git run where git is safe.**
+    The status line and the @ file suggestion command were held in a folder
+    whose repository's own git settings name programs only as the session
+    began; once the shell had gone into an unpacked repository inside the
+    project, they ran git there (the status line review of 2026-11-19).
+    Where they run is now looked at each time: a repository other than the
+    start folder's has its own settings checked, and the command waits
+    while they name programs. The status line runs in a process group of
+    its own, which a timeout stops whole; a repository's .git, commondir
+    and config are read only when they are regular files, so a named pipe
+    there no longer hangs it, nor gnosh's exit; and a link in its output
+    holding a control character, or a mark that turns the text around, is
+    not drawn.
+
+280. **A project's output style is read as its skills are.** Style files
+    were read through links, whatever they were, whole before their size
+    was checked, and a repository's style of the same name, in another
+    case, stood in for the person's own (the status line review of
+    2026-11-19). A project's style that leads out of the project, or is
+    not a file, is not read; no more is read than a style may hold; the
+    person's own come first; and a project's style text goes to the model
+    as text from outside, as its GNOSH.md does.
+
+281. **The keybindings file is read only when it is a file, and made new.**
+    A named pipe in its place stopped the keys, and /keybindings wrote its
+    template through a link left where the file was (the status line
+    review of 2026-11-19).

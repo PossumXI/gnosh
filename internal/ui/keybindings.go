@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -267,7 +268,7 @@ func (s *session) keysNow() {
 		return
 	}
 	f.mod, f.size = info.ModTime(), info.Size()
-	data, err := os.ReadFile(path)
+	data, err := readKeyFile(path, info)
 	if err != nil {
 		s.keys = f
 		return
@@ -402,6 +403,25 @@ var keybindingsWords = map[string]bool{"/keybindings": true}
 // openKeybindings is /keybindings typed alone: the person's keybindings
 // file, made with nothing bound when it is not there, opens in their
 // editor, and is read again as they leave it.
+// keyFileMost is the most of the keybindings file that is read.
+const keyFileMost = 1 << 20
+
+// readKeyFile reads the keybindings file, which info describes: only a
+// regular file, and at most keyFileMost of it. It is read as keys come,
+// and a named pipe in its place stopped the keys (the status line review
+// of 2026-11-19).
+func readKeyFile(path string, info os.FileInfo) ([]byte, error) {
+	if !info.Mode().IsRegular() {
+		return nil, errors.New(path + " is not a file")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, keyFileMost))
+}
+
 func (s *session) openKeybindings(line string) bool {
 	path := s.info.Keybindings
 	if path == "" {
@@ -411,7 +431,15 @@ func (s *session) openKeybindings(line string) bool {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return false
 		}
-		if err := os.WriteFile(path, []byte(app.KeybindingsTemplate), 0o600); err != nil {
+		// Made new or not at all: a link left where the file was is not
+		// followed to write the template somewhere else (the status line
+		// review of 2026-11-19).
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return false
+		}
+		_, werr := f.WriteString(app.KeybindingsTemplate)
+		if cerr := f.Close(); werr != nil || cerr != nil {
 			return false
 		}
 	}

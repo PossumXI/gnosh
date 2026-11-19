@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -232,4 +233,24 @@ func TestKeyBindingsProblemsAtStart(t *testing.T) {
 	}
 	g := newRig(t, 100, 24, text.NoColor, func(c *controls) { c.info.Keybindings = path })
 	g.committedHas(`"ctl" is no modifier`)
+}
+
+// A named pipe where the keybindings file should be is not read: the keys
+// were stopped waiting on it (the status line review of 2026-11-19).
+func TestKeyBindingsFileThatIsAPipe(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		g := newRig(t, 100, 24, text.NoColor, func(c *controls) { c.info.Keybindings = path })
+		g.keys(`"hi"`)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the session waited on a named pipe for its keybindings")
+	}
 }
