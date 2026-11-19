@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -26,6 +27,12 @@ import (
 type slashSet struct {
 	l    *live
 	cmds []SlashCommand
+	// running counts the commands being run. The session's scheduled
+	// prompts wait while one is (fireDue): a turn one started would come
+	// under a question the command asks, or between the summary
+	// "/rewind N summarize" waits for and its rewind, which would then be
+	// refused.
+	running atomic.Int32
 }
 
 // slashName is what a command's name and its aliases look like.
@@ -104,6 +111,8 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 	if i := strings.IndexFunc(word, unicode.IsSpace); i >= 0 {
 		word, args = word[:i], strings.TrimSpace(word[i:])
 	}
+	s.running.Add(1)
+	defer s.running.Add(-1)
 	cmd := s.find(strings.ToLower(word))
 	if cmd == nil {
 		// Not a command of gnosh's or of a feature: it may be a skill of

@@ -162,12 +162,12 @@ func (l *live) runCron(ctx context.Context) {
 }
 
 // fireDue sends the prompt of the task most overdue, when the session is
-// idle with nothing of the person's waiting: one at a time, so that each
-// is a turn of its own. A recurring task's next run is the first after now
+// idle with nothing of the person's waiting and no command of theirs
+// running: one at a time, so that each is a turn of its own. A recurring task's next run is the first after now
 // (none is made up for times missed); one past its 7 days, and a one-shot
 // task, goes after this run.
 func (l *live) fireDue() {
-	if l.agent == nil || l.closing.Load() {
+	if l.agent == nil || l.closing.Load() || l.slash != nil && l.slash.running.Load() > 0 {
 		return
 	}
 	if st := l.agent.State(); st.Busy || st.Queued > 0 {

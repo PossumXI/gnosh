@@ -4201,3 +4201,11 @@ or kept with the reason said (27).
     what the summary is to keep, as /compact's are. The line before every
     summary had been put in gnosh's marker twice, so the model was shown
     the inner marker broken by a zero-width space; it is marked once.
+
+293. **A scheduled prompt waits for the person's command.** A cron task or
+    the self-paced /loop came due whenever no turn ran and nothing was
+    queued, so one could fire while a command of the person's waited:
+    under /cd's trust question, whose move then refused (the cd review of
+    2026-11-19), or between the summary "/rewind N summarize" waits for
+    and its rewind, which a running turn refuses. The slash commands are
+    now counted while they run, and the schedule waits for none to be.
