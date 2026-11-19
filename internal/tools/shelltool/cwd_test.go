@@ -199,14 +199,16 @@ func TestStoppedCommandDoesNotMoveTheSession(t *testing.T) {
 	t.Parallel()
 	m := newManager(t, Options{})
 	env, _, _ := project(t)
-	res := run(t, t.Context(), m, BashName, env, args{argCommand: "cd sub; echo ready; sleep 300", argTimeout: 500})
+	res := run(t, t.Context(), m, BashName, env, args{argCommand: "cd sub; echo ready; sleep 300", argTimeout: 2000})
 	if res.Cwd != "" {
 		t.Errorf("Cwd = %q after a timeout, want none", res.Cwd)
 	}
 	// A recent bash says where it was even when it is terminated; other
-	// shells may not, and then there is nothing to say.
-	if runtime.GOOS == "linux" && filepath.Base(m.shell) == "bash" && !hasNote(res, "its change of directory is not kept") {
-		_, _, notes := parts(res)
+	// shells may not, and then there is nothing to say. Nor is there when
+	// the timeout came before the cd ran (a box under load can take that
+	// long to start the shell): "ready" says it ran.
+	_, body, notes := parts(res)
+	if runtime.GOOS == "linux" && filepath.Base(m.shell) == "bash" && strings.Contains(body, "ready") && !hasNote(res, "its change of directory is not kept") {
 		t.Errorf("notes = %q, want word that the session did not move", notes)
 	}
 }
