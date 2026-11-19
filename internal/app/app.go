@@ -52,6 +52,11 @@ type Options struct {
 	// the session's front end decides; once the program has begun to shut
 	// down, another one calls Exit at once. Nil means no signals arrive.
 	Signals <-chan os.Signal
+	// AnswerWait, when not nil, is how long after the plain front end puts
+	// a question a line typed is still taken for one typed before the
+	// question could be read (the default is answerWait; the tests, which
+	// type at once, set none).
+	AnswerWait *time.Duration
 	// Exit, when not nil, ends the process at once with the code it is
 	// given. It is called for a second signal, when the first is already
 	// being acted on, and for nothing else.

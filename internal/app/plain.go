@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
@@ -57,9 +58,17 @@ type plain struct {
 	// in hands out the lines a person types, or is nil when nobody can
 	// type. piped is standard input when it is not a terminal, and term
 	// the terminal that was opened to type at in its place.
-	in    *lineReader
-	piped io.Reader
-	term  io.Closer
+	in *lineReader
+	// askedAt is when the question that waits was put, and answerWait how
+	// long after it a line is still taken for one typed before it was
+	// read (answerAfter).
+	askedAt    time.Time
+	answerWait time.Duration
+	// heldSignal is a signal that came while a command ran, other than
+	// Ctrl+C, which the loop acts on once the command has stopped.
+	heldSignal os.Signal
+	piped      io.Reader
+	term       io.Closer
 	// inputFd is the terminal the lines are typed at, as a file
 	// descriptor, or -1 when it is not known to be one. restoreEcho, when
 	// not nil, puts back the showing of what is typed, which is off while
@@ -109,7 +118,13 @@ type plain struct {
 type lineReader struct {
 	once  sync.Once
 	r     io.Reader
-	lines chan string
+	lines chan typedLine
+}
+
+// typedLine is a line of input and when it was read.
+type typedLine struct {
+	text string
+	at   time.Time
 }
 
 // start begins reading, the first time a line is wanted.
@@ -121,7 +136,7 @@ func (lr *lineReader) start() {
 			for {
 				s, err := br.ReadString('\n')
 				if s != "" {
-					lr.lines <- strings.TrimRight(s, "\r\n")
+					lr.lines <- typedLine{strings.TrimRight(s, "\r\n"), time.Now()}
 				}
 				if err != nil {
 					return
@@ -146,21 +161,43 @@ func newPlain(p *program, inv cli.Invocation) *plain {
 	switch {
 	case p.o.StdinIsTerminal:
 		typed = p.o.Stdin
-		f.in = &lineReader{r: p.o.Stdin, lines: make(chan string)}
+		f.in = &lineReader{r: p.o.Stdin, lines: make(chan typedLine)}
 	default:
 		f.piped = p.o.Stdin
 		if p.o.OpenTerminal != nil {
 			if term, err := p.o.OpenTerminal(); err == nil {
 				typed = term
 				f.term = term
-				f.in = &lineReader{r: term, lines: make(chan string)}
+				f.in = &lineReader{r: term, lines: make(chan typedLine)}
 			}
 		}
 	}
 	if file, ok := typed.(interface{ Fd() uintptr }); ok {
 		f.inputFd = int(file.Fd())
 	}
+	f.answerWait = answerWait
+	if p.o.AnswerWait != nil {
+		f.answerWait = *p.o.AnswerWait
+	}
 	return f
+}
+
+// answerWait is how long after a question is put a line is still taken
+// for one typed before the question could be read, and not as its answer:
+// the full interface waits as long before a key answers.
+const answerWait = 400 * time.Millisecond
+
+// answerAfter reports whether a line can be the answer to the question
+// that waits, by when it was read: a line typed before the question came,
+// or as it came, was taken as its answer, so that a "2" typed for the
+// model's own list picked "Yes, and don't ask again" (the cd review of
+// 2026-11-19). It says so when it cannot. The caller holds f.mu.
+func (f *plain) answerAfter(l typedLine) bool {
+	if l.at.IsZero() || !l.at.Before(f.askedAt.Add(f.answerWait)) {
+		return true
+	}
+	f.say("%s", "That line was typed before the question could be read, so it is not taken as the answer: answer it now.")
+	return false
 }
 
 // secretKind is the kind of a question whose answer is a secret: a
@@ -210,27 +247,35 @@ const (
 // control characters other than the line break and the tab are written as
 // visible escapes, so that nothing printed can act as a control sequence.
 func visible(s string) string {
-	clean := true
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; (c < 0x20 && c != '\n' && c != '\t') || c == 0x7f || c == 0xc2 && i+1 < len(s) && s[i+1] >= 0x80 && s[i+1] <= 0x9f {
-			clean = false
-			break
-		}
+	bad := func(r rune) bool {
+		return (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f || r >= 0x80 && r <= 0x9f || turnsText(r)
 	}
-	if clean {
+	// (A byte that is no UTF-8 is written as U+FFFD: alone, 0x9b is the
+	// 8-bit CSI to a terminal that is not set for UTF-8. The cd review of
+	// 2026-11-19.)
+	if utf8.ValidString(s) && !strings.ContainsFunc(s, bad) {
 		return s
 	}
 	var b strings.Builder
 	for _, r := range s {
-		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f || r >= 0x80 && r <= 0x9f {
+		switch {
+		case turnsText(r):
+			// (A mark that turns the order text is drawn in.)
+			fmt.Fprintf(&b, `\u%04x`, r)
+		case bad(r):
 			// (The C1 controls, from U+0080, some terminals read as the
 			// escape sequences they stand for.)
 			fmt.Fprintf(&b, `\x%02x`, r)
-			continue
+		default:
+			b.WriteRune(r)
 		}
-		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// turnsText reports whether r changes the order text is drawn in.
+func turnsText(r rune) bool {
+	return r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069 || r == 0x200e || r == 0x200f || r == 0x061c
 }
 
 // fresh ends whatever was being written as it arrived, so that the next
@@ -299,12 +344,13 @@ func (f *plain) AskBefore(q agent.Question) (agent.Answer, error) {
 		return agent.Answer{}, errors.New("nobody can be asked: there is no terminal to type an answer at")
 	}
 	f.mu.Lock()
+	f.askedAt = time.Now()
 	f.printQuestion(q)
 	f.mu.Unlock()
 	f.in.start()
 	signals := f.p.o.Signals
 	for {
-		var line string
+		var line typedLine
 		select {
 		case l, ok := <-f.in.lines:
 			if !ok {
@@ -315,7 +361,11 @@ func (f *plain) AskBefore(q agent.Question) (agent.Answer, error) {
 			return agent.Answer{}, errors.New("stopped before the question was answered")
 		}
 		f.mu.Lock()
-		ans, good := f.parseAnswer(q, line)
+		if !f.answerAfter(line) {
+			f.mu.Unlock()
+			continue
+		}
+		ans, good := f.parseAnswer(q, line.text)
 		if !good {
 			f.say("%s", f.answerHint(q))
 		}
@@ -576,7 +626,7 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 		}
 		first = joinPrompt(piped, first)
 	}
-	var lines <-chan string
+	var lines <-chan typedLine
 	ending := false
 	if f.in != nil {
 		f.in.start()
@@ -624,6 +674,15 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 				recheck = time.NewTicker(250 * time.Millisecond)
 			}
 			again = recheck.C
+		}
+		f.mu.Lock()
+		held := f.heldSignal
+		f.heldSignal = nil
+		f.mu.Unlock()
+		if held != nil {
+			c.Interrupt()
+			c.Quit("other")
+			return f.leave(c, signalExit(held))
 		}
 		f.prompt()
 		select {
@@ -674,7 +733,7 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 // put puts a question to the person: the one being answered from now on.
 // The caller holds f.mu.
 func (f *plain) put(q agent.Question) {
-	f.question = &q
+	f.question, f.askedAt = &q, time.Now()
 	if form, ok := q.Data.(QuestionForm); ok && q.Kind == questionKind && len(form.Questions) > 0 {
 		f.form = &plainForm{form: form, answers: map[string]string{}}
 		f.fresh()
@@ -731,19 +790,19 @@ func (f *plain) setNobody(c Controls) {
 	}
 }
 
-// refuse answers a question that nobody can answer.
+// refuse answers a question that nobody can answer: no, where no is a
+// choice, with the reason. A question with no such choice is left
+// unanswered: the reason as its answer's text was taken for what was
+// typed, and gnokey was handed it as the key's password (the cd review of
+// 2026-11-19). The model's own questions are left unanswered too, which
+// the tool that put them says in its own words.
 func (f *plain) refuse(c Controls, q agent.Question) {
 	const why = "nobody is at the keyboard to answer (the input has ended), so this was not approved"
-	ans := agent.Answer{Text: why}
+	ans := agent.Answer{}
 	for _, ch := range q.Choices {
-		if ch.Key == "no" {
-			ans.Choice = "no"
+		if ch.Key == "no" && q.Kind != questionKind {
+			ans = agent.Answer{Choice: "no", Text: why}
 		}
-	}
-	if q.Kind == questionKind {
-		// The model's own questions: they are left unanswered, which the
-		// tool that put them says in its own words.
-		ans = agent.Answer{}
 	}
 	_ = c.Answer(q.ID, ans)
 }
@@ -786,12 +845,17 @@ func (f *plain) interrupted() {
 
 // line acts on one line of input, and reports whether the person asked
 // to leave.
-func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
+func (f *plain) line(ctx context.Context, c Controls, typed typedLine) (quit bool) {
+	line := typed.text
 	f.mu.Lock()
 	q := f.question
 	f.mu.Unlock()
 	if q != nil {
 		f.mu.Lock()
+		if !f.answerAfter(typed) {
+			f.mu.Unlock()
+			return false
+		}
 		var ans agent.Answer
 		var good bool
 		if f.form != nil {
@@ -880,21 +944,29 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 // Lines are read only then: a question put before a session exists
 // (AskBefore: which model, after /clear) reads its own, and the rest wait
 // for the command to be done.
+//
+// Ctrl+C stops the command, as Esc does in the full interface: it was not
+// looked at until the command was done, and two pressed meanwhile then
+// quit the session (the cd review of 2026-11-19). Another signal stops
+// it too, and is handled once it has.
 func (f *plain) command(ctx context.Context, c Controls, text string) (CommandResult, error) {
 	type result struct {
 		res CommandResult
 		err error
 	}
+	cmdCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	done := make(chan result, 1)
 	go func() {
-		res, err := c.Command(ctx, text)
+		res, err := c.Command(cmdCtx, text)
 		done <- result{res, err}
 	}()
+	signals := c.Signals()
 	for {
 		f.mu.Lock()
 		asked, nobody := f.question != nil, f.nobody
 		f.mu.Unlock()
-		var lines <-chan string
+		var lines <-chan typedLine
 		if asked && f.in != nil && !nobody {
 			lines = f.in.lines
 		}
@@ -903,6 +975,16 @@ func (f *plain) command(ctx context.Context, c Controls, text string) (CommandRe
 			return r.res, r.err
 		case <-f.wake:
 			// (A question was put or taken back: look again.)
+		case sig := <-signals:
+			signals = nil
+			cancel()
+			f.note("Stopping /%s.", strings.Fields(strings.TrimPrefix(text, "/") + " ")[0])
+			if sig != os.Interrupt {
+				// (Handled by the loop once the command has stopped.)
+				f.mu.Lock()
+				f.heldSignal = sig
+				f.mu.Unlock()
+			}
 		case line, ok := <-lines:
 			if !ok {
 				// The input ended: the question that waits is answered
