@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
@@ -179,6 +180,78 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.w.Write(p)
+}
+
+// printsFromOutside reports whether a command prints text that comes in
+// part from outside gnosh, to be made plain on a terminal. Sessions draw
+// through their own renderer, and the agent view and attach take the
+// terminal over.
+func printsFromOutside(c cli.Command) bool {
+	switch c {
+	case cli.CmdInteractive, cli.CmdPrint, cli.CmdAgents, cli.CmdAttach, cli.CmdSSH, cli.CmdHelp, cli.CmdVersion:
+		return false
+	}
+	return true
+}
+
+// plainWriter writes what it is given with every control character but
+// the line break and the tab, every C1 control, and every mark that
+// turns the order text is drawn in written out as its escape (\x1b,
+// \u202e), so that nothing printed acts on the terminal: a cloned
+// repository's .mcp.json naming a server with an escape sequence in it
+// moved the cursor, set the title or wrote the clipboard when gnosh mcp
+// list printed it (the terminal review of 2026-11-19).
+type plainWriter struct{ w io.Writer }
+
+func (pw plainWriter) Write(b []byte) (int, error) {
+	if _, err := io.WriteString(pw.w, plainText(string(b))); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+// plainText is s with what would act on a terminal written as escapes.
+func plainText(s string) string {
+	clean := true
+	for _, r := range s {
+		if actsOnTerminal(r) || r == utf8.RuneError {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+		case r < 0x80 && actsOnTerminal(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case actsOnTerminal(r):
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
+// actsOnTerminal reports whether r, printed, could act on a terminal or
+// change how the text around it is drawn.
+func actsOnTerminal(r rune) bool {
+	switch {
+	case r == '\n', r == '\t':
+		return false
+	case r < 0x20, r == 0x7f, r >= 0x80 && r < 0xa0:
+		return true
+	case r == 0x200e, r == 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0xfeff:
+		return true
+	}
+	return false
 }
 
 // Main runs gnosh and returns the process's exit code. It is the whole
@@ -376,6 +449,12 @@ func (p *program) run(ctx context.Context) int {
 		return cli.ExitFailure
 	}
 
+	if p.o.StdoutIsTerminal && printsFromOutside(inv.Command) {
+		// What these print comes in part from outside gnosh (a server's
+		// name, a session's title, a fact mem keeps, a path in a cloned
+		// repository's files): to a terminal it goes plain.
+		p.stdout.w, p.stderr.w = plainWriter{p.stdout.w}, plainWriter{p.stderr.w}
+	}
 	switch inv.Command {
 	case cli.CmdHelp:
 		text, err := table.Help(inv.HelpFor...)

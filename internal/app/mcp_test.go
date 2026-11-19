@@ -569,3 +569,23 @@ func TestMCPWithOnlyServersOutsideTheirPlace(t *testing.T) {
 	has(t, "/mcp frob", r.out+r.err, "has no MCP server of its own to act on")
 	hasNot(t, "/mcp frob", r.out+r.err, "crashed")
 }
+
+// What gnosh mcp list and get print to a terminal is plain: a server whose
+// entry holds an escape sequence gets the sequence written out, and the
+// terminal is not acted on (the terminal review of 2026-11-19).
+func TestMCPListPrintsPlainToATerminal(t *testing.T) {
+	w := apptest.NewWorld(t)
+	run(t, w, "mcp", "add-json", "-s", "user", "evil", `{"command": "true", "args": ["\u001b]0;pwned\u0007\u202e"]}`).wantCode(t, 0)
+	for _, args := range [][]string{{"mcp", "list"}, {"mcp", "get", "evil"}} {
+		o := testOptions(w, args...)
+		o.StdoutIsTerminal = true
+		r := runWith(t, context.Background(), o)
+		has(t, strings.Join(args, " ")+" at a terminal", r.out+r.err, `\x1b]0;pwned\x07\u202e`)
+		if strings.ContainsAny(r.out+r.err, "\x1b\x07\u202e") {
+			t.Errorf("%s wrote control characters to the terminal: %q", args, r.out+r.err)
+		}
+	}
+	if got, want := plainText("a\tb\nc\rd\u0085e\xff"), "a\tb\nc\\x0dd\\u0085e\\xff"; got != want {
+		t.Errorf("plainText: %q, want %q", got, want)
+	}
+}

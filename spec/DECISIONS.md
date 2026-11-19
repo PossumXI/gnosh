@@ -3847,3 +3847,16 @@ or kept with the reason said (27).
     unless they say so; the prompt itself goes as it was typed. Claude
     Code 2.1.328 marks pasted text too. (The interface and the session
     now carry the pastes under one key, app.MetaPasted.)
+
+259. **What gnosh's subcommands print to a terminal is plain.** gnosh mcp
+    list and get, doctor, sessions, mem and the rest print text that
+    comes in part from outside (a server's name or error, a session's
+    title, a fact mem keeps, a path in a cloned repository's files), and
+    nothing stood between it and the terminal: an escape sequence in a
+    server's entry moved the cursor, set the title or wrote the clipboard
+    (the terminal review of 2026-11-19). On a terminal their output now
+    has every control character but the line break and the tab, every C1
+    control and every mark that turns text around written out as its
+    escape (\x1b, ‮). Sessions draw through their own renderer, and
+    the agent view and attach take the terminal over; a pipe gets the
+    output as it is.
