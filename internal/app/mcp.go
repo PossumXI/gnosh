@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -388,20 +389,52 @@ func mcpConnect(ctx context.Context, c mcp.Config, root string, environ, roots [
 func (l *live) mcpToolsOf(s *mcpServer, tools []mcp.Tool) []*mcpTool {
 	var made []*mcpTool
 	seen := map[string]bool{}
-	var twice []string
+	var twice, unfit []string
 	for _, t := range tools {
 		name := mcp.FitToolName(mcp.ToolName(s.cfg.Name, t.Name))
 		if seen[name] {
 			twice = append(twice, t.Name)
 			continue
 		}
+		schema, ok := objectSchema(t.InputSchema)
+		if !ok {
+			unfit = append(unfit, t.Name)
+			continue
+		}
 		seen[name] = true
-		made = append(made, &mcpTool{l: l, server: s, tool: t, name: name})
+		made = append(made, &mcpTool{l: l, server: s, tool: t, name: name, schema: schema})
 	}
 	if len(twice) > 0 {
 		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s lists tools whose names come to one another's (%s): the first of each is offered.", s.cfg.Name, strings.Join(twice, ", ")))
 	}
+	if len(unfit) > 0 {
+		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s lists tools whose input is not described as an object (%s), which the model's APIs refuse: they are not offered.", s.cfg.Name, strings.Join(unfit, ", ")))
+	}
 	return made
+}
+
+// objectSchema is a tool's input schema as the model's APIs take it: an
+// object schema, with "type": "object" put in where the server left the
+// type out. ok is false for a schema that is not an object at all, or of
+// another type: every request offering the tool was refused for it, and
+// so was the session's every turn (Claude Code 2.1.328 left such a tool
+// out the same way).
+func objectSchema(raw json.RawMessage) (json.RawMessage, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return json.RawMessage(`{"type":"object"}`), true
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return nil, false
+	}
+	typ, has := fields["type"]
+	if !has {
+		fields["type"] = json.RawMessage(`"object"`)
+		out, err := json.Marshal(fields)
+		return out, err == nil
+	}
+	return raw, string(bytes.TrimSpace(typ)) == `"object"`
 }
 
 // refreshMCP reads a server's tool list again when the server has said it
@@ -662,6 +695,9 @@ type mcpTool struct {
 	server *mcpServer
 	tool   mcp.Tool
 	name   string
+	// schema is the tool's input schema as the model's APIs take it
+	// (objectSchema).
+	schema json.RawMessage
 }
 
 func (t *mcpTool) Spec() core.ToolSpec {
@@ -672,15 +708,11 @@ func (t *mcpTool) Spec() core.ToolSpec {
 	if utf8.RuneCountInString(desc) > mcpDescriptionMax {
 		desc = clipChars(desc, 0, mcpDescriptionMax) + "…"
 	}
-	schema := t.tool.InputSchema
-	if len(schema) == 0 || string(schema) == "null" {
-		schema = json.RawMessage(`{"type":"object"}`)
-	}
 	// The server's words, not the person's or gnosh's: gnosh's own tags in
 	// the description or the schema's reach the model broken, as in what
 	// the tool returns. (The mark goes inside JSON strings, where a "<"
 	// can stand; the schema stays JSON.)
-	return core.ToolSpec{Name: t.name, Description: prompt.Untrusted(desc), InputSchema: json.RawMessage(prompt.Untrusted(string(schema)))}
+	return core.ToolSpec{Name: t.name, Description: prompt.Untrusted(desc), InputSchema: json.RawMessage(prompt.Untrusted(string(t.schema)))}
 }
 
 // Parallel says a call may run beside others when the server says its

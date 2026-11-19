@@ -105,3 +105,31 @@ func TestMCPLongToolName(t *testing.T) {
 	}
 	has(t, "what the model read", toolResult(t, w, 1, "c1"), "called "+long)
 }
+
+// A tool whose input is not described as an object (a schema of another
+// type, or no schema object at all) is not offered, and the person is
+// told; one whose schema leaves the type out is offered with "type":
+// "object". Offered as it was, the model's API refused every request
+// (Claude Code 2.1.328 leaves such a tool out the same way).
+func TestMCPToolsWhoseInputIsNotAnObject(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
+	srv := w.Script(w.Home+"/bin/s.sh", fakeMCPTools(`[{"name":"good","inputSchema":{"type":"object","properties":{"a":{"type":"string"}}}},{"name":"list","inputSchema":{"type":"array"}},{"name":"words","inputSchema":"a string"},{"name":"untyped","inputSchema":{"properties":{"b":{"type":"number"}}}}]`))
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"s": {"command": "`+srv+`"}}}`)
+	r := run(t, w, "-y", "-p", "hi").wantCode(t, 0)
+	has(t, "stderr", r.err, "The MCP server s lists tools whose input is not described as an object (list, words)")
+	req := w.Model.Requests()[0]
+	names := toolNamesOf(req)
+	for name, want := range map[string]bool{"mcp__s__good": true, "mcp__s__untyped": true, "mcp__s__list": false, "mcp__s__words": false} {
+		if slices.Contains(names, name) != want {
+			t.Errorf("%s offered: %v, want %v (the tools: %v)", name, !want, want, names)
+		}
+	}
+	list, _ := req.JSON["tools"].([]any)
+	for _, tl := range list {
+		if f, ok := tl.(map[string]any)["function"].(map[string]any); ok && f["name"] == "mcp__s__untyped" {
+			if params, _ := f["parameters"].(map[string]any); params["type"] != "object" || params["properties"] == nil {
+				t.Errorf("the untyped tool's parameters: %v", params)
+			}
+		}
+	}
+}

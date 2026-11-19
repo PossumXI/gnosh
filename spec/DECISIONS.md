@@ -3232,3 +3232,14 @@ or kept with the reason said (27).
     refusal sends only the newest 20 images whole, the older ones as a
     line that says so, then and from then on. The conversation keeps
     every picture.
+
+197. **An MCP tool whose input is not described as an object is not
+    offered.** The model's APIs take a tool's input schema only as an
+    object schema. A server that listed a tool with another type
+    ({"type": "array"}) or a schema that is no object at all had every
+    request of the session refused while the tool was offered, until the
+    server was disabled. Such a tool is now left out, with a warning that
+    names it; a schema that only leaves the type out gets "type":
+    "object". As in Claude Code 2.1.328 ("an MCP tool with an invalid
+    input schema ... is now left out and Claude is told why", changelog
+    read 2026-11-19).
