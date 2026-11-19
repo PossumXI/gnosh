@@ -3407,3 +3407,9 @@ or kept with the reason said (27).
     waiting until its check ended (the agent loop review of 2026-11-19).
     Taken prompts are passed over now, and the queue is told again when
     the last one is dropped.
+
+214. **End writes off the prompts it returns.** A prompt written down as
+    queued and handed back by End (the session closed, or /clear opened a
+    new one) had no record that it was handed back, so the session opened
+    again returned it a second time (the agent loop review of
+    2026-11-19). End writes it off as it returns it.

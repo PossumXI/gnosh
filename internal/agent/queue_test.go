@@ -833,3 +833,30 @@ func TestTakeBackDuringItsCheck(t *testing.T) {
 		t.Errorf("the prompt taken back went out: %d requests", n)
 	}
 }
+
+// A prompt End returns that was written down as queued is written off as
+// well, so that the session opened again does not return it a second time
+// (the agent loop review of 2026-11-19: after /clear, the prompts it
+// returned came back again when the old session was resumed).
+func TestEndWritesOffWhatItReturns(t *testing.T) {
+	reached := make(chan struct{})
+	r := newRig(t, nil)
+	r.model.push(step{at: once(reached), stall: true})
+	go r.run("first")
+	<-reached
+	r.a.Submit(Prompt{Text: "waiting"})
+	q := waitQueue(t, r, "waiting")
+	r.a.End("clear")
+	off := false
+	for _, e := range r.log.all() {
+		if e.Kind == EntryUnqueued && e.Prompt == q.Queued[0].ID {
+			off = true
+		}
+	}
+	if !off {
+		t.Errorf("the prompt End returned was not written off")
+	}
+	if ret := eventsOf[*PromptReturnedEvent](r.rec); len(ret) != 1 || ret[0].Why != ReturnClosed {
+		t.Errorf("returned = %+v", ret)
+	}
+}

@@ -1486,6 +1486,10 @@ func (a *Agent) End(reason string) error {
 		a.mu.Lock()
 		left := append(slices.Clone(a.queue), a.intake...)
 		a.queue, a.intake = nil, nil
+		written := make([]bool, len(left))
+		for i, s := range left {
+			written[i] = s.persisted
+		}
 		had := a.sent
 		recorded := a.takeRecordedLocked()
 		a.mu.Unlock()
@@ -1493,7 +1497,13 @@ func (a *Agent) End(reason string) error {
 		for _, n := range recorded {
 			_ = a.writeNote(n)
 		}
-		for _, s := range left {
+		for i, s := range left {
+			if written[i] {
+				// Written down as queued, it is written off too: a session
+				// opened again (one /clear left) returned it a second time
+				// (the agent loop review of 2026-11-19).
+				_ = a.appendLog(Entry{Kind: EntryUnqueued, Prompt: s.id, Text: "the session was closed before it went out"})
+			}
 			a.emit(&PromptReturnedEvent{ID: s.id, Prompt: s.prompt, Why: ReturnClosed, Reason: "the session was closed before this prompt went out"})
 			s.resolve(TurnResult{Prompts: []string{s.id}, Reason: EndWithdrawn, Detail: "the session was closed before the prompt went out"})
 		}
