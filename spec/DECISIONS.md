@@ -3824,3 +3824,9 @@ or kept with the reason said (27).
     delivered unjudged (the deliverables review of 2026-11-19). The run
     now refuses when the target, its links followed, is not the file that
     was judged, as Edit and Write do.
+
+256. **Esc typed with a key straight after it declines a question.** Many
+    terminals send Alt as Esc and the key, so an Esc followed at once by
+    a key reaches gnosh as that key with Alt, which a question had no use
+    for, and the Esc was lost. At a question, such an unused Alt key, or
+    Alt+Esc, now declines as Esc does, as Claude Code 2.1.328 has it.

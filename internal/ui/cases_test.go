@@ -1433,3 +1433,19 @@ func TestPasswordTypedEarly(t *testing.T) {
 		t.Fatalf("the password is on the screen\n%s", g.dump())
 	}
 }
+
+// Esc with a key typed straight after it arrives from many terminals as
+// that key with Alt: at a question with no use for it, it declines as the
+// Esc it began with (Claude Code 2.1.328); before, it was lost.
+func TestEscTypedWithAKeyDeclines(t *testing.T) {
+	for _, keys := range []string{`<Alt+x>`, `<Alt+Esc>`} {
+		g := newRig(t, 80, 30, text.NoColor)
+		g.keys(`"go" <Enter>`).start()
+		g.ev(&agent.QuestionEvent{Question: permission("q1")})
+		g.liveHas("Allow Bash?")
+		g.wait(time.Second).keys(keys)
+		if len(g.c.answers) != 1 || g.c.answers[0].ans.Choice != "no" {
+			t.Errorf("%s at a question answered %+v, want no", keys, g.c.answers)
+		}
+	}
+}

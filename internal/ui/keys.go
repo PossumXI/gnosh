@@ -262,6 +262,14 @@ func (s *session) typed(ev term.Event, k *term.Key) {
 		return
 	}
 	res := q.ui.Handle(ev)
+	if k != nil && !res.Handled && k.Mod&term.ModAlt != 0 && (k.Code == term.KeyRune || k.Code == term.KeyEscape) {
+		// Esc with a key typed straight after it reaches gnosh, from a
+		// terminal that sends Alt as Esc and the key, as that key with
+		// Alt: a key the question has no use for, it is the Esc it began
+		// with, which was lost (Claude Code 2.1.328 declines with such a
+		// key too).
+		res = q.ui.Handle(term.Key{Code: term.KeyEscape})
+	}
 	if k == nil && !res.Handled {
 		// A paste the question has no field open for goes into the
 		// prompt box, in sight under the question, instead of nowhere
