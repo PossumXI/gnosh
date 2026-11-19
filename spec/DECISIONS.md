@@ -3252,3 +3252,12 @@ or kept with the reason said (27).
     command now turns that off in zsh (setopt no_equals) and is nothing
     to the other shells. As in Claude Code 2.1.328 (changelog read
     2026-11-19). Commands on this machine run in /bin/bash, as before.
+
+199. **/review marks its findings as Claude Code 2.1.328's /code-review
+    does.** It reviews for bugs and now also for what goes against the
+    project's instruction files (GNOSH.md, CLAUDE.md, AGENTS.md); each
+    finding is marked Important (the changes bring it), Pre-existing (it
+    was there, in code the changes touch) or Nit, and ends with the fix
+    suggested; a review that finds nothing says "Code review found no
+    issues." (changelog read 2026-11-19). Reuse, simplification and
+    efficiency stay /simplify's.
