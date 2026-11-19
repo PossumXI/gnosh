@@ -193,6 +193,12 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if strings.TrimSpace(in.Isolation) == "worktree" {
 		def.Isolation = "worktree"
 	}
+	if def.Isolation == "worktree" && l.engine.Mode() == permission.ModePlan {
+		// While planning nothing is changed, a work tree and its git
+		// branch among it: the sub-agent, which plans too, works without
+		// one (the plan review of 2026-11-19).
+		def.Isolation = ""
+	}
 	if e := strings.TrimSpace(in.Effort); e != "" {
 		def.Effort = e
 	}

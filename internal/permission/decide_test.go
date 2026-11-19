@@ -40,7 +40,9 @@ func TestModes(t *testing.T) {
 		{"stop a task", func(e *Engine) Decision { return other(e, "TaskStop", "task_id", "1") }, [5]Behavior{Allow, Allow, Allow, Allow, Allow}},
 		{"question to the person", func(e *Engine) Decision { return other(e, "AskUserQuestion") }, [5]Behavior{Allow, Allow, Allow, Deny, Allow}},
 		{"enter plan mode", func(e *Engine) Decision { return other(e, "EnterPlanMode") }, [5]Behavior{Allow, Allow, Allow, Allow, Allow}},
-		{"present the plan", func(e *Engine) Decision { return other(e, "ExitPlanMode") }, [5]Behavior{Ask, Ask, Ask, Deny, Allow}},
+		// (Outside plan mode there is no plan to present: the plan review
+		// of 2026-11-19.)
+		{"present the plan", func(e *Engine) Decision { return other(e, "ExitPlanMode") }, [5]Behavior{Deny, Deny, Ask, Deny, Allow}},
 	}
 	for i, mode := range Modes {
 		o := testOptions(mode, rules{})
@@ -498,7 +500,7 @@ func TestSuggestions(t *testing.T) {
 	}
 	// Approving a plan may switch to acceptEdits; it keeps no rule, so
 	// each plan is asked about.
-	if got := suggested(other(e, "ExitPlanMode")); strings.Join(got, "|") != "mode:acceptEdits" {
+	if got := suggested(other(engine(t, ModePlan, rules{}), "ExitPlanMode")); strings.Join(got, "|") != "mode:acceptEdits" {
 		t.Errorf("the plan is approved each time: %q", got)
 	}
 	// Nothing is suggested for what an ask rule or a safety check asks
@@ -538,7 +540,9 @@ func TestHooks(t *testing.T) {
 		{"dontAsk, lets it run", ModeDontAsk, rules{}, mk("ls"), [4]Behavior{Allow, Allow, Deny, Deny}},
 		{"plan, an edit", ModePlan, rules{}, ed("/proj/a.go"), [4]Behavior{Deny, Deny, Deny, Deny}},
 		{"plan, a command that changes things", ModePlan, rules{}, mk("make"), [4]Behavior{Ask, Ask, Ask, Deny}},
-		{"plan, presenting the plan", ModePlan, rules{}, func(e *Engine) Decision { return other(e, "ExitPlanMode") }, [4]Behavior{Ask, Allow, Ask, Deny}},
+		// (A hook's allow does not approve a plan: the person does. The
+		// plan review of 2026-11-19.)
+		{"plan, presenting the plan", ModePlan, rules{}, func(e *Engine) Decision { return other(e, "ExitPlanMode") }, [4]Behavior{Ask, Ask, Ask, Deny}},
 		{"plan, a web fetch", ModePlan, rules{}, func(e *Engine) Decision { return fetch(e, "https://example.com") }, [4]Behavior{Ask, Allow, Ask, Deny}},
 	} {
 		d := tt.do(engine(t, tt.mode, tt.r))

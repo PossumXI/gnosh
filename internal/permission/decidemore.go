@@ -683,24 +683,35 @@ func (e *Engine) decideFetch(req *request) Decision {
 // unless an allow rule names the tool.
 func (e *Engine) decideOther(req *request) Decision {
 	plan := e.mode == ModePlan
+	if req.canon == "ExitPlanMode" {
+		// The plan is the person's alone to approve: no allow rule, no
+		// hook and no channel approves a plan nobody has read, and the
+		// session leaves plan mode only on their yes (the plan review of
+		// 2026-11-19). Approving it can also accept the edits that carry
+		// it out. Outside plan mode there is no plan to approve, and its
+		// yes switched the mode whatever the session was in.
+		if !plan {
+			return Decision{Behavior: Deny, Stage: StageMode,
+				Reason: "ExitPlanMode is for plan mode, and the session is in the " + string(e.mode) + " mode: there is no plan to present. Carry the task out, or switch to plan mode with EnterPlanMode first."}
+		}
+		return Decision{Behavior: Ask, Stage: StageMode, PersonOnly: true,
+			Reason:      "The plan is ready; a person approves it or asks for more.",
+			Suggestions: []Suggestion{{Mode: ModeAcceptEdits}}}
+	}
 	// While planning, an approval reaches only what does not change
-	// anything: searching the web, and presenting the plan.
-	holds := plan && req.canon != toolWebSearch && req.canon != "ExitPlanMode"
+	// anything: searching the web.
+	holds := plan && req.canon != toolWebSearch
 	if !holds {
 		if c := e.match(ListAllow, req); c != nil {
 			return allowedBy(c)
 		}
 	}
-	d := Decision{Behavior: Ask, Stage: StageMode, hookAllow: !holds, Reason: req.canon + " asks first unless an allow rule names it."}
+	d := Decision{Behavior: Ask, Stage: StageMode, hookAllow: !holds, PersonOnly: holds, Reason: req.canon + " asks first unless an allow rule names it."}
 	if holds {
 		d.Reason = "Plan mode: " + req.canon + " may change things, so a person decides."
 		return d
 	}
 	switch {
-	case req.canon == "ExitPlanMode":
-		// Approving the plan can also accept the edits that carry it out.
-		d.Reason = "The plan is ready; a person approves it or asks for more."
-		d.Suggestions = []Suggestion{{Mode: ModeAcceptEdits}}
 	case req.canon == toolWebSearch:
 		d.Suggestions = []Suggestion{{Rules: []string{toolWebSearch}, Scope: GrantLocal}}
 	case req.info.class == classSkill:

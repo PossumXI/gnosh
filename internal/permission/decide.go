@@ -25,6 +25,12 @@ type Decision struct {
 	// one; in ModeBypass the caller asks with a time limit, and refuses
 	// where nobody can answer.
 	Critical bool
+	// PersonOnly marks a call only a person may approve, though it is no
+	// danger: what plan mode holds (a call that may change something while
+	// the session plans, and the plan itself, ExitPlanMode). No rule and
+	// no hook approves it, and no channel is asked (the plan review of
+	// 2026-11-19: a hook's allow approved a plan nobody had read).
+	PersonOnly bool
 	// Suggestions are the choices a "yes, and don't ask again" answer
 	// could make, narrowest first. It is empty when no rule could cover
 	// the call, and then only a one-time yes is offered.
@@ -759,6 +765,12 @@ func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) De
 	case classFetch:
 		return e.decideFetch(req)
 	case classAgent, classQuiet:
+		if e.mode == ModePlan && (canon == "EnterWorktree" || canon == "ExitWorktree") {
+			// A work tree is made or removed with git: while planning, a
+			// person decides (the plan review of 2026-11-19).
+			return Decision{Behavior: Ask, Stage: StageMode, PersonOnly: true,
+				Reason: "Plan mode: " + canon + " makes or removes a git work tree and its branch, so a person decides."}
+		}
 		return Decision{Behavior: Allow, Stage: StageMode, Reason: canon + " never needs approval; what it starts is judged call by call."}
 	}
 	return e.decideOther(req)

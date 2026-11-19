@@ -1903,7 +1903,7 @@ func (e *Engine) decideShell(req *request) Decision {
 		if plan {
 			reason = "Plan mode: " + reason
 		}
-		return Decision{Behavior: Ask, Stage: StageMode, Reason: reason, hookAllow: !plan}
+		return Decision{Behavior: Ask, Stage: StageMode, Reason: reason, hookAllow: !plan, PersonOnly: plan}
 	}
 	if !plan {
 		if c := e.match(ListAllow, req); c != nil {

@@ -23,8 +23,8 @@ func TestPlanApproval(t *testing.T) {
 	s.see("Type a prompt and Enter.")
 	s.typeLine("write x")
 	s.see("? Carry out this plan?")
-	s.see("1. Write x.txt.")
-	s.see("  2. Yes, carry it out, and accept its edits without asking")
+	s.see("│ 1. Write x.txt.")
+	s.see("  2. Yes, and switch the session to acceptEdits")
 	s.typeLine("2")
 	s.see("Done.")
 	s.see("permission mode acceptEdits")
@@ -87,4 +87,39 @@ func TestSessionStartEnvFile(t *testing.T) {
 	w.Settings(`{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "` + hook + `"}]}]}}`)
 	run(t, w, "-y", "-p", "say the greeting").wantCode(t, 0)
 	has(t, "what the command printed", toolResult(t, w, 1, "c1"), "greeting=hello-from-the-hook")
+}
+
+// The plan is the person's alone to approve: an allow rule and a hook's
+// allow do not approve ExitPlanMode, and outside plan mode it is refused
+// without a question, where its yes switched the mode whatever the
+// session was in (the plan review of 2026-11-19).
+func TestPlanIsThePersonsAlone(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "ExitPlanMode", Args: `{"plan":"Write x.txt."}`}}},
+		apptest.Reply{Text: "Waiting."},
+	)
+	allow := w.Script(w.Home+"/hooks/allow.sh", `echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'`)
+	w.Hook("PermissionRequest", "*", allow)
+	run(t, w, "-p", "--permission-mode", "plan", "--allowedTools", "ExitPlanMode", "--", "plan it").wantCode(t, 0)
+	got := toolResult(t, w, 1, "c1")
+	hasNot(t, "the plan nobody saw", got, "The user approved the plan")
+
+	w = apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "ExitPlanMode", Args: `{"plan":"Fix the README."}`}}},
+		apptest.Reply{Text: "Fine."},
+	)
+	run(t, w, "-p", "--permission-mode", "acceptEdits", "--", "fix it").wantCode(t, 0)
+	has(t, "ExitPlanMode outside plan mode", toolResult(t, w, 1, "c1"), "ExitPlanMode is for plan mode, and the session is in the acceptEdits mode")
+
+	// And what plan mode holds, a hook does not let through either.
+	w = apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Held."},
+	)
+	allow = w.Script(w.Home+"/hooks/allow.sh", `echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'`)
+	w.Hook("PermissionRequest", "*", allow)
+	run(t, w, "-p", "--permission-mode", "plan", "--", "make it").wantCode(t, 0)
+	if w.Exists("made.txt") {
+		t.Error("a PermissionRequest hook let a command run while planning")
+	}
 }

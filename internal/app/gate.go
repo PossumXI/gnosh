@@ -208,7 +208,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		}
 		return agent.Decision{Reason: l.unattended(d), Unattended: true}, nil
 	}
-	if !confirm && l.hooks.has(hooks.PermissionRequest) {
+	if !confirm && !d.PersonOnly && l.hooks.has(hooks.PermissionRequest) {
 		out, err := l.hooks.run(ctx, hooks.Input{
 			Event: hooks.PermissionRequest, Cwd: cwd,
 			ToolName: call.Name, ToolInput: hookToolInput(call, cwd, l.cfg.Paths.Home),
@@ -272,7 +272,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		act := action
 		q.Action = &act
 	}
-	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical, Stops: stops}
+	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical || d.PersonOnly, Stops: stops}
 	for i, s := range d.Suggestions {
 		if s.Mode != "" {
 			data.Modes["always:"+strconv.Itoa(i)] = string(s.Mode)
@@ -686,17 +686,28 @@ func (l *live) planQuestion(call core.ToolCall, d permission.Decision) agent.Que
 	if plan == "" {
 		plan = "(The model gave no plan.)"
 	}
-	choices := []agent.Choice{{Key: "yes", Label: "Yes, carry it out, asking about each edit"}}
+	// What each yes switches the session to, said in the choice (the plan
+	// review of 2026-11-19: the second one switched it to acceptEdits for
+	// good, and said neither).
+	choices := []agent.Choice{{Key: "yes", Label: "Yes, carry it out in the default mode, asking about each edit"}}
 	for i, s := range d.Suggestions {
 		if s.Mode == permission.ModeAcceptEdits {
-			choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: "Yes, carry it out, and accept its edits without asking"})
+			choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: "Yes, and switch the session to acceptEdits: edits, and commands that make, move or remove files in the working folders, run without asking until you change the mode"})
 		}
 	}
 	choices = append(choices, agent.Choice{Key: "no", Label: "No, keep planning (say what to change after it; alone it stops the turn)"})
+	// The plan as the model wrote it, each line set apart from the choices
+	// below it (a plan ending "2. No, keep planning" passed for one); the
+	// screen makes each line safe, and tabs and backslashes stay as they
+	// are (they were shown as \x09 and \\).
+	lines := strings.Split(plan, "\n")
+	for i, line := range lines {
+		lines[i] = "│ " + line
+	}
 	return agent.Question{
 		Kind:    "permission",
 		Title:   "Carry out this plan?",
-		Text:    showLines(plan),
+		Text:    strings.Join(lines, "\n"),
 		Choices: choices,
 	}
 }

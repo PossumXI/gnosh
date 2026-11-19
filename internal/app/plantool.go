@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/permission"
@@ -49,8 +50,13 @@ func (t *enterPlanTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	return core.TextResult("Plan mode is on: read, search and think, and change nothing. When the plan is ready, present it with ExitPlanMode; the user approves it or asks for changes."), nil
 }
 
-// exitPlanTool is ExitPlanMode.
-type exitPlanTool struct{ l *live }
+// exitPlanTool is ExitPlanMode. planned holds the calls that were made
+// in plan mode, as Describe saw them: the approval may have switched the
+// mode before Run (acceptEdits), so Run cannot look at the mode itself.
+type exitPlanTool struct {
+	l       *live
+	planned sync.Map
+}
 
 func (t *exitPlanTool) Spec() core.ToolSpec {
 	return core.ToolSpec{
@@ -60,12 +66,30 @@ func (t *exitPlanTool) Spec() core.ToolSpec {
 	}
 }
 
+// notPlanning is ExitPlanMode's refusal outside plan mode: it asked, and
+// its yes switched the mode, whatever the session was in (a "yes, asking
+// about each edit" left acceptEdits on, and a plan never planned could
+// switch the session to acceptEdits; the plan review of 2026-11-19).
+func (t *exitPlanTool) notPlanning() error {
+	return fmt.Errorf("ExitPlanMode is for plan mode, and the session is in the %s mode: there is no plan to present. Carry the task out, or switch to plan mode with EnterPlanMode first", t.l.engine.Mode())
+}
+
 func (t *exitPlanTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
-	return core.Action{Kind: core.ActionOther, Summary: "Present the plan for approval"}, nil
+	action := core.Action{Kind: core.ActionOther, Summary: "Present the plan for approval"}
+	if t.l.engine.Mode() != permission.ModePlan {
+		return action, t.notPlanning()
+	}
+	if call.ID != "" {
+		t.planned.Store(call.ID, true)
+	}
+	return action, nil
 }
 
 func (t *exitPlanTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
 	l := t.l
+	if _, ok := t.planned.LoadAndDelete(call.ID); !ok && l.engine.Mode() != permission.ModePlan {
+		return core.ErrorResult(t.notPlanning().Error() + "."), nil
+	}
 	// The person said yes. Accepting the edits has switched the mode
 	// already; a plain yes goes back to the default mode.
 	if l.engine.Mode() == permission.ModePlan {
