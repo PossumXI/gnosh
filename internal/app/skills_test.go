@@ -652,3 +652,15 @@ func TestSkillArgumentsAddNoCommands(t *testing.T) {
 		t.Error("an argument ran a command")
 	}
 }
+
+// A skill named as one of gnosh's own commands is said to be so: typing
+// the name runs gnosh's command, and only the model can load the skill
+// (the skills review of 2026-11-19).
+func TestSkillNamedLikeABuiltinIsSaidSo(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/skills/help/SKILL.md", "---\ndescription: My help.\n---\nHelp.\n")
+	w.Write(w.ConfigDir()+"/skills/clear/SKILL.md", "---\ndescription: My clear.\ndisable-model-invocation: true\n---\nClear.\n")
+	out := run(t, w, "-p", "/skills").wantCode(t, 0).out
+	has(t, "/skills", out, "(the model may load it; typing /help runs gnosh's own command of that name)",
+		"(nobody can run it: typing /clear runs gnosh's own command of that name, and the model may not load it)")
+}

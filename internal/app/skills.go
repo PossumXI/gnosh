@@ -988,6 +988,13 @@ func (l *live) skillWho(sk skill.Skill) string {
 		return "cannot be run by this gnosh: it asks for " + strings.Join(sk.Unbuilt, ", ")
 	case sk.NoUser:
 		return "for the model alone"
+	case l.slash != nil && l.slash.find(strings.ToLower(sk.Name)) != nil:
+		// Typed, the name runs gnosh's own command (the skills review of
+		// 2026-11-19: nothing said so).
+		if sk.NoModel || sk.Over == "user-invocable-only" || l.skillHidden(sk.Name) {
+			return "nobody can run it: typing /" + sk.Name + " runs gnosh's own command of that name, and the model may not load it"
+		}
+		return "the model may load it; typing /" + sk.Name + " runs gnosh's own command of that name"
 	case sk.Over == "user-invocable-only":
 		return "you type /" + sk.Name + "; your settings keep it from the model (skillOverrides)"
 	case sk.NoModel:

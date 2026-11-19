@@ -3758,3 +3758,9 @@ or kept with the reason said (27).
     arguments go into each piece, and nothing put in is read again: an
     argument that holds !`...` stays text. An argument put into a command
     of the file's own is still checked with it against the rules.
+
+249. **A skill named as one of gnosh's own commands is said to be so.**
+    Typed, the name runs gnosh's command, so such a skill could only be
+    loaded by the model, and one kept from the model by nobody, with
+    nothing said (the skills review of 2026-11-19). /skills now says
+    which it is.
