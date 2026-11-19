@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -496,6 +497,54 @@ func TestStreamJSONResultAfterAForegroundCommand(t *testing.T) {
 	}
 	if out, ok := last["structured_output"].(map[string]any); !ok || fmt.Sprint(out["count"]) != "3" {
 		t.Errorf("the result line holds no structured output: %v", last)
+	}
+}
+
+// A message with priority "now" stops the turn that runs when it arrives,
+// though a message sent before it still waits in line: it was acted on
+// only once that one's turn had started, so the turn it was sent to stop
+// ran on (here, for ever), and the next one was stopped in its place (the
+// print mode review of 2026-11-19). The message before it is answered, and
+// so is it.
+func TestStreamJSONPriorityNowStopsWhatRuns(t *testing.T) {
+	hold := make(chan struct{})
+	t.Cleanup(func() { close(hold) })
+	arrived := make(chan struct{}, 1)
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "A long answer that never ends", Hold: hold, Arrived: func() { arrived <- struct{}{} }},
+		apptest.Reply{Text: "The second answer."},
+		apptest.Reply{Text: "The urgent answer."})
+	o := testOptions(w, "-y", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
+	pr, pw := io.Pipe()
+	o.Stdin, o.StdinIsTerminal = pr, false
+	message := func(text, priority string) string {
+		return `{"type":"user","message":{"role":"user","content":"` + text + `"},"priority":"` + priority + `"}` + "\n"
+	}
+	go func() {
+		_, _ = io.WriteString(pw, message("the long one", "next"))
+		<-arrived
+		_, _ = io.WriteString(pw, message("the second", "next"))
+		time.Sleep(200 * time.Millisecond)
+		_, _ = io.WriteString(pw, message("the urgent one", "now"))
+		pw.Close()
+	}()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o)
+	var results []map[string]any
+	for _, l := range jsonLines(t, r.out) {
+		if l["type"] == "result" {
+			results = append(results, l)
+		}
+	}
+	if len(results) != 3 {
+		t.Fatalf("%d result lines: %v", len(results), results)
+	}
+	if results[0]["is_error"] != true {
+		t.Errorf("the long one's result: %v", results[0])
+	}
+	if results[1]["result"] != "The second answer." || results[2]["result"] != "The urgent answer." {
+		t.Errorf("the other results: %v, %v", results[1], results[2])
 	}
 }
 

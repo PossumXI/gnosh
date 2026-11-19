@@ -3156,3 +3156,13 @@ or kept with the reason said (27).
     stream-json with --include-partial-messages its message was closed
     half written (the print mode review's note). Only the session's own
     main request's retry throws its reply away now.
+
+191. **A stream-json message with priority "now" stops what runs when it
+    arrives.** Messages are sent one at a time, each once the one before
+    it has started its turn; the "now" message stopped the running turn
+    only when its own turn came to be sent. With a message before it still
+    waiting, the turn it was sent to stop ran on (a long one to its end),
+    and the turn after, which started after it came, was stopped in its
+    place (the print mode review's note). It stops the running turn as it
+    is read now. The person's messages before it stay in line and are
+    answered first: Interrupt drops only gnosh's own queued prompts.
