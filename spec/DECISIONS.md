@@ -3216,3 +3216,19 @@ or kept with the reason said (27).
     no cap of its own asks for at most what the model writes in one
     answer, as listed: the default of 64000 is above the 32000 of the
     older Opus models (the model client review of 2026-11-19).
+
+196. **An image the model's server will not take for its size no longer
+    wedges the session.** A conversation keeps the pictures its tools
+    read, so a request a server refused for one was refused again on
+    every later turn, until /rewind (the model client review of
+    2026-11-19). Anthropic's API refuses an image over 8000 pixels a side,
+    and holds every image of a request with more than 20 to a lower limit
+    (its message names "many-image requests"), which screenshots it took
+    before can be over: a session that read many was refused from its
+    21st on (limits read 2026-11-19 at platform.claude.com, vision). The
+    image fallback that leaves out what a server could not read now also
+    leaves out, as too large, the images a refusal for size can be about
+    (those the server has not taken before), and after a many-image
+    refusal sends only the newest 20 images whole, the older ones as a
+    line that says so, then and from then on. The conversation keeps
+    every picture.
