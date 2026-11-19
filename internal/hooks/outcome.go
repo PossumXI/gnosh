@@ -439,7 +439,13 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 		v.say(reason)
 	}
 	if a.input != nil && event == PreToolUse {
-		v.input = a.input
+		if h.asBash {
+			// (As in Claude Code: the hook saw Monitor's command as a Bash
+			// call, and what it wrote is a Bash call's input.)
+			v.notes = append(v.notes, fmt.Sprintf("its changed input was not used: it is written for %s and ran here only as a guard of the command Monitor starts", quote(h.Matcher)))
+		} else {
+			v.input = a.input
+		}
 	}
 	if a.action != "" {
 		switch {

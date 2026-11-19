@@ -2503,3 +2503,32 @@ or kept with the reason said (27).
     /config last set it (liveBool), and the interface reads the info
     again after every command; the picker lists the project again when
     the setting changes.
+
+150. **The security review of the hooks core: the three high findings.**
+    A fresh-eyes review of the hooks and their callers found that a
+    hook's approval cannot override a deny or ask rule, a protected path,
+    a safety check, plan mode or a tool's own confirmation; the holes
+    were around that.
+    - Monitor runs any shell command, and hooks are matched by the tool's
+      name, so a Bash hook never saw Monitor's commands: a hook refusing
+      `git push --force` let Monitor run it. As in Claude Code (its hooks
+      page), a Bash hook now guards the commands Monitor starts, on
+      PreToolUse and PermissionRequest: it is given each as a Bash call
+      (tool_name Bash, the command and its description), it can refuse or
+      ask, and its approval and changed input count for nothing there.
+      After the command (PostToolUse) it does not run for Monitor. The
+      other guards (MultiEdit for Edit, gnosh's own tools for Claude
+      Code's) keep their rule: their changed input is used.
+    - A PermissionRequest hook's approval ran a call the engine marks as
+      critical (a removal that may take what cannot be got back), with
+      no person there under -p. Only the person approves one, as no rule
+      does; the hook's refusal still stands, and its approval puts the
+      question to the person with a line that says why.
+    - The folders added to a session (--add-dir, /add-dir,
+      additionalDirectories) were searched for sub-agents, skills,
+      commands and output styles once the main folder was trusted, and
+      their hooks and tool grants went live with nobody asked. A folder
+      is added for its files; its definitions are now read only when it
+      is trusted itself (gnosh trust, run there) or lies in the trusted
+      project, and the session says what it leaves out. Claude Code runs
+      an agent file's hooks only once the folder it came from is trusted.

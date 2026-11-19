@@ -211,6 +211,11 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			return agent.Decision{}, ctx.Err()
 		case err != nil:
 			l.notice(agent.LevelWarning, "hook:PermissionRequest", fmt.Sprintf("The PermissionRequest hooks could not be run (%v), so the question is put to you.", err))
+		case out.PermissionDecision == hooks.Allow && d.Critical:
+			// A call that may remove what cannot be got back is the
+			// person's alone to approve: no rule and no hook does
+			// (permission.Decision.Critical). A hook's refusal stands.
+			l.notice(agent.LevelWarning, "hook:PermissionRequest", "A PermissionRequest hook approved a call that may remove what cannot be got back. Only you can approve that, so the question is put to you.")
 		case out.PermissionDecision == hooks.Allow:
 			return agent.Decision{Allow: true, Input: changed}, nil
 		case out.PermissionDecision == hooks.Deny:

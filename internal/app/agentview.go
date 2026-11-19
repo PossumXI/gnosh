@@ -594,7 +594,7 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs, cwd: cwd, home: home, seen: seen, mode: mode},
 		Cwd:    cwd, Home: home,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
-		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents).Names(),
+		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.defRoots()), l.st.agents).Names(),
 		Repos:  agentRepos(cwd),
 	}, nil
 }

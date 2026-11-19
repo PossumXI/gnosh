@@ -14,6 +14,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
+	"github.com/gnosh-ai/gnosh/internal/app/skill"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
@@ -22,6 +23,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
+	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
 // This file is the Agent tool: how a session hands a task to a sub-agent.
@@ -197,7 +199,7 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 // definition is a stranger's instructions for an agent that acts with the
 // person's permissions. Safe mode reads none but gnosh's own.
 func (l *live) agentDefs() *agentdef.Set {
-	set := agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents)
+	set := agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.defRoots()), l.st.agents)
 	if l.p.env["CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS"] == "1" {
 		// Claude Code's switch for its two looking kinds: gnosh's own go.
 		set = set.WithoutBuiltin("Explore", "Plan")
@@ -236,6 +238,67 @@ func (l *live) moreRoots() []string {
 	return l.roots[1:]
 }
 
+// defRoots are the added folders whose own sub-agents, skills and
+// commands are read: those trusted in their own right, or in the project
+// of the folder the session trusts. A folder is added to a session for
+// its files; its definitions carry hooks and tool grants, which run as the
+// person, so the main folder's trust does not reach them (Claude Code runs
+// an agent file's hooks only once the folder it came from is trusted).
+func (l *live) defRoots() []string {
+	var out []string
+	for _, r := range l.moreRoots() {
+		if l.rootTrusted(r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// rootTrusted says whether an added folder's own definitions are read.
+func (l *live) rootTrusted(root string) bool {
+	l.rootTrustMu.Lock()
+	defer l.rootTrustMu.Unlock()
+	if ok, seen := l.rootTrust[root]; seen {
+		return ok
+	}
+	ok := false
+	if l.st != nil {
+		if f, err := trust.Resolve(root, l.p.home); err == nil {
+			ok = l.st.trusted && f.Key == l.st.folder.Key || l.st.trustStore().Check(f).Trusted
+		}
+	}
+	if l.rootTrust == nil {
+		l.rootTrust = map[string]bool{}
+	}
+	l.rootTrust[root] = ok
+	return ok
+}
+
+// rootDefs counts what one folder defines of its own, in .gnosh or
+// .claude: its kinds of sub-agent and its skills and commands.
+func rootDefs(root string) (agents, skills int) {
+	dirs := func(kind string) []string {
+		return []string{filepath.Join(root, ownDir, kind), filepath.Join(root, theirDir, kind)}
+	}
+	for _, d := range agentdef.LoadFrom(nil, dirs("agents")).All() {
+		if d.Scope == "project" {
+			agents++
+		}
+	}
+	held := skill.Load(skill.Dirs{}, skill.Dirs{Skills: dirs("skills"), Commands: dirs("commands")})
+	return agents, len(held.All())
+}
+
+// untrustedRootNote says what an added folder that is not trusted defines
+// and is not read, or "".
+func untrustedRootNote(root string) string {
+	agents, skills := rootDefs(root)
+	if agents+skills == 0 {
+		return ""
+	}
+	return fmt.Sprintf("The added folder %s defines %d kind(s) of sub-agent and %d skill(s) of its own (in .gnosh or .claude), which are not read: that folder is not trusted, and what it defines can run commands as you. To use them, trust it: gnosh trust, run in that folder.", root, agents, skills)
+}
+
 // agentNotices says, once at the start of a session, what of the agent
 // definitions and the skills is not in force: a project's, in a folder
 // that is not trusted, and files that hold nothing usable.
@@ -247,6 +310,13 @@ func (l *live) agentNotices() {
 		if agents, skills := heldDefs(l.cfg, l.moreRoots()); agents+skills > 0 {
 			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
 				"This folder defines %d kind(s) of sub-agent and %d skill(s) of its own (in .gnosh or .claude), which are not read because the folder is not trusted. To use them: gnosh trust, or --trust-folder for this one run.", agents, skills))
+		}
+	}
+	if l.st.trusted {
+		for _, r := range l.moreRoots() {
+			if note := untrustedRootNote(r); note != "" && !l.rootTrusted(r) {
+				l.notice(agent.LevelWarning, "agents", note)
+			}
 		}
 	}
 	for _, sk := range l.agentDefs().Skipped() {

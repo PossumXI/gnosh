@@ -216,7 +216,7 @@ func (l *live) skills() *skill.Set {
 // puts the person's settings of how far each is seen over them: no reading
 // leaves a skill switched off seen, even for a moment.
 func (l *live) readSkillsLocked() {
-	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
+	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.defRoots()), time.Now()
 	l.skillSet.Override(l.skillOverridesLocked())
 }
 

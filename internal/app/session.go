@@ -83,6 +83,10 @@ type live struct {
 	own        []core.Tool // gnosh's own tools that are offered, without the Agent tool
 	toolStore  *sync.Map
 	roots      []string
+	// rootTrust says, of each added folder looked at, whether its own
+	// agents, skills and commands are read (defRoots).
+	rootTrustMu sync.Mutex
+	rootTrust   map[string]bool
 	// addedDirs are the folders /add-dir added, which a new start of the
 	// session (/restart, /cd) is given as --add-dir.
 	addedDirs []string

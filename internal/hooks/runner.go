@@ -183,7 +183,11 @@ type selected struct {
 	// guardOnly says the hook fits the tool only as a guard for another
 	// tool's name.
 	guardOnly bool
-	id        int
+	// asBash says the hook is a Bash hook that guards a Monitor command:
+	// it is given the command as a Bash call, and what it changes of that
+	// is not Monitor's input.
+	asBash bool
+	id     int
 }
 
 // NewRunner makes a Runner for a configuration. It refuses, with a
@@ -396,6 +400,24 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 		return r.refuse(in.Event, nil, fmt.Errorf("the %s hooks were not run: %w", in.Event, err))
 	}
 	env := in.environ(info, base, dir, r.projectDir, r.memStatus)
+	// A Bash hook that guards a Monitor command gets it as a Bash call, as
+	// in Claude Code: a hook written for Bash reads Bash's input.
+	feed := func(selected) ([]byte, []string) { return stdin, env }
+	if slices.ContainsFunc(sel, func(h selected) bool { return h.asBash }) {
+		asBash := in
+		asBash.ToolName, asBash.ToolInput = "Bash", bashOfMonitor(in.ToolInput)
+		bashIn, err := asBash.payload(info, in.Cwd)
+		if err != nil {
+			return r.refuse(in.Event, nil, fmt.Errorf("the %s hooks were not run: %w", in.Event, err))
+		}
+		bashEnv := asBash.environ(info, base, dir, r.projectDir, r.memStatus)
+		feed = func(h selected) ([]byte, []string) {
+			if h.asBash {
+				return bashIn, bashEnv
+			}
+			return stdin, env
+		}
+	}
 
 	// The hooks that run in the background are started, and nothing
 	// waits for them.
@@ -411,7 +433,8 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 				ExitCode: -1, Result: ResultCancelled, Background: true, Reason: "the session is ending, and no hook starts in the background now."})
 			continue
 		}
-		started = append(started, r.background(&in, info, h, stdin, env, dir))
+		hStdin, hEnv := feed(h)
+		started = append(started, r.background(&in, info, h, hStdin, hEnv, dir))
 	}
 	if sel = waited; len(sel) == 0 {
 		return Outcome{Records: started}, nil
@@ -420,6 +443,7 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	procs := make([]proc, len(sel))
 	var all sync.WaitGroup
 	for i, h := range sel {
+		stdin, env := feed(h)
 		all.Go(func() {
 			if h.URL != "" {
 				procs[i] = r.post(ctx, h.Hook, stdin, env, timeoutFor(h.Event, h.Timeout))
@@ -453,6 +477,26 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 		return r.refuse(in.Event, out.Records, stopped(ctx, in.Event))
 	}
 	return out, nil
+}
+
+// monitorTool is the tool whose commands Bash hooks guard.
+const monitorTool = "Monitor"
+
+// bashOfMonitor is a Monitor call's input as a Bash call's: its command
+// and its description. What cannot be read is passed on as it is.
+func bashOfMonitor(input json.RawMessage) json.RawMessage {
+	var m struct {
+		Command     *string `json:"command"`
+		Description *string `json:"description,omitempty"`
+	}
+	if json.Unmarshal(input, &m) != nil || m.Command == nil {
+		return input
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return input
+	}
+	return out
 }
 
 // refuse returns what Run returns when it has no answer from the hooks:
@@ -501,7 +545,9 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		case ownValue:
 			matched = h.m.matchesAny(in.subjects())
 		}
-		if !matched {
+		if !matched || guardOnly && in.ToolName == monitorTool && in.Event != PreToolUse && in.Event != PermissionRequest {
+			// (A Bash hook guards a Monitor command before it runs; after
+			// it, as in Claude Code, it has nothing to do with it.)
 			continue
 		}
 		// An "if" filter: on a tool event the hook runs for the calls the
@@ -511,11 +557,13 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		}
 		// The same command configured twice runs once. It is a guard
 		// only if every hook that brought it here is one.
+		asBash := guardOnly && in.ToolName == monitorTool
 		if i := slices.IndexFunc(out, func(s selected) bool { return s.CommandLine() == h.CommandLine() && (s.Args == nil) == (h.Args == nil) }); i >= 0 {
 			out[i].guardOnly = out[i].guardOnly && guardOnly
+			out[i].asBash = out[i].asBash && asBash
 			continue
 		}
-		out = append(out, selected{Hook: h.Hook, guardOnly: guardOnly, id: h.id})
+		out = append(out, selected{Hook: h.Hook, guardOnly: guardOnly, asBash: asBash, id: h.id})
 	}
 	return out
 }
