@@ -179,12 +179,19 @@ func newJail(stub string, idx int) (*jail, error) {
 			}
 		}
 	}
+	// The jail's user writes the log, and cannot read it: a line that
+	// reads the folder above the work folder ("diff -yr .. src") printed
+	// the trace it was writing, and dash's trace, which is read from what
+	// it prints, then held commands that line never ran (oracle seed 159).
+	if err := os.Chmod(j.logDir, 0o711); err != nil {
+		return fail(err)
+	}
 	for _, f := range []string{"stubs", "trace", "out", "err", "cwd"} {
 		p := filepath.Join(j.logDir, f)
-		if err := os.WriteFile(p, nil, 0o666); err != nil {
+		if err := os.WriteFile(p, nil, 0o622); err != nil {
 			return fail(err)
 		}
-		os.Chmod(p, 0o666)
+		os.Chmod(p, 0o622)
 	}
 	if err := j.writeTemplate(); err != nil {
 		return fail(err)
