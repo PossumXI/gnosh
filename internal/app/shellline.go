@@ -41,6 +41,12 @@ func (l *live) shellLine(command string) error {
 	if l.shell == nil || l.closing.Load() {
 		return errors.New("the session is closing")
 	}
+	if shelltool.GnokeyPassword(command) {
+		// Caught before anything keeps the line: the session's file, the
+		// history Up brings back, and what the model is sent would each
+		// hold the password.
+		return errors.New("the command gives gnokey a password on its standard input, and what is typed here is kept in the session's file and shown to the model: it was not run, and not kept. Sign in a terminal of your own")
+	}
 	bash := l.shell.PersonsBash()
 	l.shellMu.Lock()
 	if l.shellStop != nil {
@@ -88,6 +94,13 @@ func (l *live) shellLine(command string) error {
 		}
 		res = cleanResult(call, res)
 		stopped := ctx.Err() != nil
+		if res.Cwd != "" && !stopped && l.agent != nil {
+			// Their cd moves the session, as one in the model's own calls
+			// does (the shell tool checked it against the session's
+			// folders), and the result tells the model so.
+			l.agent.SetCwd(res.Cwd)
+			l.cwdMoved(l.ctx, res.Cwd)
+		}
 		ended()
 		l.deliver(&agent.ToolEndEvent{
 			Meta: meta(), CallID: call.ID, Name: call.Name, Input: input,

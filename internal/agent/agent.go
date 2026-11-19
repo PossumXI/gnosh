@@ -746,6 +746,19 @@ func (a *Agent) Context() ContextStatus {
 	return a.context
 }
 
+// SetCwd moves the session's working directory, as a command's cd does in
+// the model's own calls: for a command the person ran themselves. dir is
+// where the command ended, which the tool that ran it has checked against
+// the session's folders.
+func (a *Agent) SetCwd(dir string) {
+	if dir == "" {
+		return
+	}
+	a.mu.Lock()
+	a.cwd = dir
+	a.mu.Unlock()
+}
+
 // Cwd returns the session's working directory.
 func (a *Agent) Cwd() string {
 	a.mu.Lock()

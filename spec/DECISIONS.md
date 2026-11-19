@@ -3013,3 +3013,35 @@ or kept with the reason said (27).
     nothing; call the tool, or answer in words. No count gives up, and
     the person is told at every third in a row. A reply that only speaks
     of the markup is an answer.
+
+180. **The review of the shell tool.** A fresh-eyes review (2026-11-19)
+    found no hole in where commands may run or what reaches other
+    machines, and these:
+    - A command of the person's (!) that gives gnokey a password on its
+      standard input was refused, but only after the line was kept in the
+      session's file (and so in the history Up brings back, in later
+      sessions too) and sent to the model with what it printed: the
+      refusal's own reason had already come true. It is refused before
+      any of that now.
+    - A working directory taken away (a checkout without the folder, a
+      clean) kept every command from running, the model's and the
+      person's own cd alike, with nothing to get out by. A command now
+      runs in the nearest folder above it that is there, inside the
+      session's folders, and the session moves there; a command that
+      takes its own working directory away moves the session up as well,
+      where the result said the shell had replaced itself.
+    - The person's own !cd told the model the working directory had
+      moved, and the session had not: the next command ran where it was.
+      Their cd moves the session now, as one in the model's own calls
+      does, with the CwdChanged hooks.
+    - The file in which the shell says where it ended is read without
+      following a link and without waiting on a pipe, only when it is a
+      plain file, and only so much of it: a command that put a pipe in
+      its place held the result up for ever, and a link to /dev/zero
+      filled memory.
+    - Folder names in the notes under a result are written as the
+      stamp's are: a name with a line break in it could pass for a note
+      of gnosh's.
+    Left: background commands' output files and ended tasks are kept
+    until the session ends, and a process left running after its
+    command is not held to the output limit.
