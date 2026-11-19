@@ -265,19 +265,22 @@ func Escape(s string) string {
 	return b.String()
 }
 
-// LeadsOut reports whether a path inside a folder really leads out of it,
-// once the links on the way are followed, and where it leads. A project's
-// skills folder that is a link to somewhere else is left out of an
-// untrusted folder for this reason: the agent reads a skill's files
-// without asking. A path that cannot be followed counts as leading out.
-func LeadsOut(root, path string) (target string, out bool) {
-	realRoot, err := filepath.EvalSymlinks(root)
+// LeadsOut reports whether a path really leads out of every one of the
+// folders given, once the links on the way are followed, and where it
+// leads. A project's skill, command or kind of sub-agent whose file is a
+// link out of the project is not read for this reason: what the file
+// holds goes to the model with no question asked (a commands file linked
+// to ~/.npmrc had its first line sent as the command's description). A
+// path that cannot be followed counts as leading out, with no target.
+func LeadsOut(path string, roots ...string) (target string, out bool) {
+	target, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return "", true
 	}
-	target, err = filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", true
+	for _, root := range roots {
+		if real, err := filepath.EvalSymlinks(root); err == nil && (target == real || holds(real, target)) {
+			return target, false
+		}
 	}
-	return target, target != realRoot && !holds(realRoot, target)
+	return target, true
 }

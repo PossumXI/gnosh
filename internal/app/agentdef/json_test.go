@@ -48,7 +48,7 @@ func TestFromJSON(t *testing.T) {
 // A definition given with --agents is used in place of one of the same
 // name from a file or gnosh's own, and listed after them.
 func TestOver(t *testing.T) {
-	base := LoadFrom(nil, nil)
+	base := LoadFrom(nil, nil, nil)
 	defs, err := FromJSON(`{"Explore": {"description": "My own explorer."}, "extra": {"description": "One more."}}`)
 	if err != nil {
 		t.Fatal(err)

@@ -187,3 +187,60 @@ func TestLoad(t *testing.T) {
 		t.Errorf("skipped: %v", reasons)
 	}
 }
+
+// A project's skill or command file that is a link out of the project is
+// not read: its first line would go to the model as a description, with
+// no question (the skills review of 2026-11-19). One that leads to
+// another place in the project is read, and so is the person's own.
+func TestProjectLinksOutAreNotRead(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := func(parts ...string) string { return filepath.Join(append([]string{root}, parts...)...) }
+	write := func(path, text string) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := func(target, path string) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, path); err != nil {
+			t.Skip("no links here:", err)
+		}
+	}
+	write(p("secret.txt"), "TOKEN=npm_secret\n")
+	write(p("elsewhere", "skill", "SKILL.md"), "Kept outside.\n")
+	write(p("elsewhere", "skills", "far", "SKILL.md"), "Far away.\n")
+	write(p("proj", "docs", "ok.md"), "Kept inside.\n")
+	link("../../../secret.txt", p("proj", ".claude", "commands", "setup.md"))
+	link(p("elsewhere", "skill"), p("proj", ".claude", "skills", "ext"))
+	link("../../docs/ok.md", p("proj", ".claude", "commands", "ok.md"))
+	link(p("elsewhere"), p("proj", ".gnosh"))
+	link(p("secret.txt"), p("home", "commands", "mine.md"))
+	s := Load(
+		Dirs{Commands: []string{p("home", "commands")}},
+		Dirs{Skills: []string{p("proj", ".gnosh", "skills"), p("proj", ".claude", "skills")}, Commands: []string{p("proj", ".claude", "commands")}, Inside: []string{p("proj")}},
+	)
+	var got []string
+	for _, sk := range s.All() {
+		got = append(got, sk.Name+"="+sk.Scope+":"+sk.Description)
+	}
+	if want := []string{"mine=user:TOKEN=npm_secret", "ok=project:Kept inside."}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the skills:\n%q\nwant\n%q", got, want)
+	}
+	reasons := map[string]string{}
+	for _, sk := range s.Skipped() {
+		reasons[sk.Path] = sk.Reason
+	}
+	for _, path := range []string{p("proj", ".claude", "commands", "setup.md"), p("proj", ".claude", "skills", "ext", "SKILL.md"), p("proj", ".gnosh", "skills", "far", "SKILL.md")} {
+		if !strings.Contains(reasons[path], "it leads out of the project, to "+root) {
+			t.Errorf("%s: skipped because %q", path, reasons[path])
+		}
+	}
+}

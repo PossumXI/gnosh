@@ -555,3 +555,22 @@ func TestUntrustedFolderNamesItsServers(t *testing.T) {
 		t.Errorf("two servers are named %q", got)
 	}
 }
+
+// A trusted project's command file that is a link out of the project is
+// not read: the person's ~/.npmrc does not go to the model as a command's
+// description, and /skills says why the file is not used (the skills
+// review of 2026-11-19).
+func TestProjectCommandLinkedOutIsNotRead(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hello."})
+	w.Write(w.Home+"/.npmrc", "//registry.example.com/:_authToken=gnosh-test-token-123\n")
+	w.Write(".claude/commands/fine.md", "Say that all is fine.\n")
+	if err := os.Symlink(w.Home+"/.npmrc", w.Path(".claude/commands/setup.md")); err != nil {
+		t.Skip("no links here:", err)
+	}
+	run(t, w, "--trust-folder", "-p", "hello").wantCode(t, 0)
+	body := string(w.Model.Requests()[0].Body)
+	has(t, "what the model read", body, "Say that all is fine.")
+	hasNot(t, "what the model read", body, "gnosh-test-token-123", "registry.example.com")
+	has(t, "/skills", run(t, w, "--trust-folder", "-p", "/skills").wantCode(t, 0).out,
+		"not a skill: "+w.Path(".claude/commands/setup.md")+" (it leads out of the project, to "+w.Home+"/.npmrc")
+}

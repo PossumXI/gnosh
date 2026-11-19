@@ -175,6 +175,43 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+// A project's agent file that is a link out of the project is not read;
+// one that leads to another place in the project is (the skills review of
+// 2026-11-19).
+func TestProjectAgentLinkedOutIsNotRead(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := "---\nname: %s\ndescription: what %s is for\n---\nDo it.\n"
+	write(t, filepath.Join(root, "elsewhere", "spy.md"), fmt.Sprintf(def, "spy", "spy"))
+	write(t, filepath.Join(root, "proj", "docs", "helper.md"), fmt.Sprintf(def, "helper", "helper"))
+	agents := filepath.Join(root, "proj", ".claude", "agents")
+	if err := os.MkdirAll(agents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "elsewhere", "spy.md"), filepath.Join(agents, "spy.md")); err != nil {
+		t.Skip("no links here:", err)
+	}
+	if err := os.Symlink("../../docs/helper.md", filepath.Join(agents, "helper.md")); err != nil {
+		t.Fatal(err)
+	}
+	s := LoadFrom(nil, []string{agents}, []string{filepath.Join(root, "proj")})
+	if _, ok := s.Get("spy"); ok {
+		t.Error("an agent file linked out of the project was read")
+	}
+	if _, ok := s.Get("helper"); !ok {
+		t.Error("an agent file linked to another place in the project was not read")
+	}
+	if sk := s.Skipped(); len(sk) != 1 || !strings.Contains(sk[0].Reason, "it leads out of the project, to "+filepath.Join(root, "elsewhere", "spy.md")) {
+		t.Errorf("skipped: %+v", sk)
+	}
+	// Without the project's folders given, the loader reads what it finds.
+	if _, ok := LoadFrom(nil, []string{agents}, nil).Get("spy"); !ok {
+		t.Error("with no folders given, the linked file was not read")
+	}
+}
+
 // An agent's mcpServers: names of the session's servers and servers of its
 // own, in a block, as a flow list, and in --agents JSON; mcp__ entries in
 // its tools are kept whole.

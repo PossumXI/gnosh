@@ -36,6 +36,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
 // Def is one kind of sub-agent.
@@ -225,9 +227,9 @@ func (s *Set) WithoutBuiltin(names ...string) *Set {
 // or none when userDir is empty.
 func Load(userDir string, projectDirs []string) *Set {
 	if userDir == "" {
-		return LoadFrom(nil, projectDirs)
+		return LoadFrom(nil, projectDirs, nil)
 	}
-	return LoadFrom([]string{userDir}, projectDirs)
+	return LoadFrom([]string{userDir}, projectDirs, nil)
 }
 
 // LoadFrom puts the definitions together, the more specific over the more
@@ -239,8 +241,11 @@ func Load(userDir string, projectDirs []string) *Set {
 // folder is only a way to keep files apart, and the name in the file is
 // what counts. A directory that is not there holds nothing. Two files of
 // one directory tree with the same name: the first by path is the one
-// that is used, and the other is listed as skipped.
-func LoadFrom(userDirs, projectDirs []string) *Set {
+// that is used, and the other is listed as skipped. A project's file that
+// is not really inside one of the folders inside names, once the links on
+// the way to it are followed, is skipped too: what it holds would go to
+// the model unasked. With no folders given, every file is read.
+func LoadFrom(userDirs, projectDirs, inside []string) *Set {
 	s := &Set{}
 	have := map[string]bool{}
 	add := func(dir, scope string) {
@@ -263,6 +268,12 @@ func LoadFrom(userDirs, projectDirs []string) *Set {
 		sort.Strings(files)
 		inTree := map[string]string{}
 		for _, path := range files {
+			if scope == "project" && len(inside) > 0 {
+				if target, out := trust.LeadsOut(path, inside...); out && target != "" {
+					s.skipped = append(s.skipped, Skipped{path, "it leads out of the project, to " + target + ", and a project's kinds of sub-agent are read only from inside it"})
+					continue
+				}
+			}
 			data, err := readSmall(path)
 			if err != nil {
 				s.skipped = append(s.skipped, Skipped{path, err.Error()})

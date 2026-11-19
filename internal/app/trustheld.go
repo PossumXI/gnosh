@@ -41,7 +41,7 @@ func projectHoldings(cfg *config.Config) []trust.Holding {
 		return nil
 	}
 	out := mcpFileHoldings(filepath.Join(cfg.Paths.ProjectRoot, ".mcp.json"))
-	skills := skill.Load(skill.Dirs{}, skill.Dirs{Skills: projectDefDirs(cfg, "skills", nil), Commands: projectDefDirs(cfg, "commands", nil)})
+	skills := skill.Load(skill.Dirs{}, skill.Dirs{Skills: projectDefDirs(cfg, "skills", nil), Commands: projectDefDirs(cfg, "commands", nil), Inside: projectInside(cfg, nil)})
 	for _, s := range skills.All() {
 		if s.Scope != "project" {
 			continue
@@ -60,7 +60,7 @@ func projectHoldings(cfg *config.Config) []trust.Holding {
 			out = append(out, trust.Holding{Kind: trust.KindAllowRule, Text: what + " lets these run without asking while it is used: " + strings.Join(s.AllowedTools, ", "), File: s.Source})
 		}
 	}
-	for _, d := range agentdef.LoadFrom(nil, projectDefDirs(cfg, "agents", nil)).All() {
+	for _, d := range agentdef.LoadFrom(nil, projectDefDirs(cfg, "agents", nil), projectInside(cfg, nil)).All() {
 		if d.Scope != "project" {
 			continue
 		}

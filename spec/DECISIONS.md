@@ -3680,3 +3680,13 @@ or kept with the reason said (27).
     a command outside quotes and nesting, each piece kept as written, and
     from each destroying command's name on it is read as a line of its
     own, past a word of the shell's own before it ("do", "coproc", "{").
+
+241. **A project's skill, command or agent file is read only from inside
+    the project.** The loaders followed links: a trusted repository's
+    .claude/commands/setup.md linked to ~/.npmrc sent the file's first line
+    to the model as the command's description, with no question, and the
+    trust question never said a file led out (the skills review of
+    2026-11-19). A project's file that, once the links on the way are
+    followed, is not inside the project or one of its added folders is
+    now not read, and /skills, gnosh doctor and the log say where it
+    leads. The person's own skills may still be links to anywhere.

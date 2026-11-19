@@ -30,6 +30,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
+	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
 // Skill is one skill, as its file gives it.
@@ -109,9 +110,12 @@ type Set struct {
 
 // Dirs are the directories of one scope, the ones that win first: each of
 // Skills holds a folder for each skill, each of Commands holds Markdown
-// files.
+// files. Inside, when it is set (a project's), is where those files must
+// really be: one reached through a link that leads anywhere else is not
+// read, since what a skill's file holds goes to the model unasked.
 type Dirs struct {
 	Skills, Commands []string
+	Inside           []string
 }
 
 // Load puts the skills together. Where two share a name, the person's own
@@ -145,6 +149,10 @@ func Load(user, project Dirs) *Set {
 					continue
 				}
 				path := filepath.Join(dir, e.Name(), "SKILL.md")
+				if why := leadsOut(path, scope.dirs.Inside); why != "" {
+					s.skipped = append(s.skipped, Skipped{path, why})
+					continue
+				}
 				data, err := readSmall(path)
 				if err != nil {
 					if !os.IsNotExist(err) {
@@ -173,6 +181,10 @@ func Load(user, project Dirs) *Set {
 			})
 			sort.Strings(files)
 			for _, path := range files {
+				if why := leadsOut(path, scope.dirs.Inside); why != "" {
+					s.skipped = append(s.skipped, Skipped{path, why})
+					continue
+				}
 				data, err := readSmall(path)
 				if err != nil {
 					s.skipped = append(s.skipped, Skipped{path, err.Error()})
@@ -198,6 +210,20 @@ func Load(user, project Dirs) *Set {
 
 // maxFile is the largest skill file that is read.
 const maxFile = 1 << 20
+
+// leadsOut says why a project's skill file is not read when, once the
+// links on the way to it are followed, it is not inside any of the
+// folders given (inside), or "". With no folders given, every file is
+// read; a file that is not there is left for readSmall to find so.
+func leadsOut(path string, inside []string) string {
+	if len(inside) == 0 {
+		return ""
+	}
+	if target, out := trust.LeadsOut(path, inside...); out && target != "" {
+		return "it leads out of the project, to " + target + ", and a project's skills and commands are read only from inside it"
+	}
+	return ""
+}
 
 func readSmall(path string) (string, error) {
 	info, err := os.Stat(path)

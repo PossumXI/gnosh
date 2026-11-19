@@ -298,12 +298,16 @@ func TestLeadsOut(t *testing.T) {
 		outside:                                true,
 		filepath.Join(proj, "..", "elsewhere"): true,
 	} {
-		target, out := LeadsOut(proj, path)
+		target, out := LeadsOut(path, proj)
 		if out != want {
 			t.Errorf("LeadsOut(%s) = %v (%s), want %v", path, out, target, want)
 		}
 	}
-	if target, _ := LeadsOut(proj, filepath.Join(proj, "linked-out")); target != outside {
+	if target, _ := LeadsOut(filepath.Join(proj, "linked-out"), proj); target != outside {
 		t.Errorf("where the link leads is said: %q", target)
+	}
+	// Inside any one of the folders given is inside.
+	if _, out := LeadsOut(filepath.Join(proj, "linked-out"), proj, filepath.Join(tmp, "elsewhere")); out {
+		t.Error("a link into the second folder given leads out")
 	}
 }

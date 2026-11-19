@@ -339,12 +339,12 @@ func rootDefs(root string) (agents, skills int) {
 	dirs := func(kind string) []string {
 		return []string{filepath.Join(root, ownDir, kind), filepath.Join(root, theirDir, kind)}
 	}
-	for _, d := range agentdef.LoadFrom(nil, dirs("agents")).All() {
+	for _, d := range agentdef.LoadFrom(nil, dirs("agents"), []string{root}).All() {
 		if d.Scope == "project" {
 			agents++
 		}
 	}
-	held := skill.Load(skill.Dirs{}, skill.Dirs{Skills: dirs("skills"), Commands: dirs("commands")})
+	held := skill.Load(skill.Dirs{}, skill.Dirs{Skills: dirs("skills"), Commands: dirs("commands"), Inside: []string{root}})
 	return agents, len(held.All())
 }
 

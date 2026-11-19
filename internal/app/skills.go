@@ -107,18 +107,34 @@ func projectDefDirs(cfg *config.Config, kind string, more []string) []string {
 	return dirs
 }
 
+// projectInside is where a project's own definitions must really be,
+// once the links on the way to them are followed: in the project, or in
+// one of the added folders whose definitions are read (more). A skill,
+// command or kind of sub-agent whose file leads anywhere else is not read
+// (the skills review of 2026-11-19).
+func projectInside(cfg *config.Config, more []string) []string {
+	root := cfg.Paths.ProjectRoot
+	if root == "" {
+		root = cfg.Paths.Cwd
+	}
+	if root == "" {
+		return nil
+	}
+	return append([]string{root}, more...)
+}
+
 // loadAgentDefs reads the kinds of sub-agent there are in a folder: the
 // person's, the project's when the folder is trusted, and gnosh's own.
 // Safe mode reads none but gnosh's own.
 func loadAgentDefs(cfg *config.Config, trusted bool, more []string) *agentdef.Set {
 	if cfg.Switches.SafeMode.V {
-		return agentdef.LoadFrom(nil, nil)
+		return agentdef.LoadFrom(nil, nil, nil)
 	}
 	var project []string
 	if trusted {
 		project = projectDefDirs(cfg, "agents", more)
 	}
-	return agentdef.LoadFrom(userDefDirs(cfg, "agents"), project)
+	return agentdef.LoadFrom(userDefDirs(cfg, "agents"), project, projectInside(cfg, more))
 }
 
 // loadSkills reads the skills there are in a folder: the person's, and
@@ -130,7 +146,7 @@ func loadSkills(cfg *config.Config, trusted bool, more []string) *skill.Set {
 	user := skill.Dirs{Skills: userDefDirs(cfg, "skills"), Commands: userDefDirs(cfg, "commands")}
 	var project skill.Dirs
 	if trusted {
-		project = skill.Dirs{Skills: projectDefDirs(cfg, "skills", more), Commands: projectDefDirs(cfg, "commands", more)}
+		project = skill.Dirs{Skills: projectDefDirs(cfg, "skills", more), Commands: projectDefDirs(cfg, "commands", more), Inside: projectInside(cfg, more)}
 	}
 	return skill.Load(user, project)
 }
@@ -141,12 +157,12 @@ func heldDefs(cfg *config.Config, more []string) (agents, skills int) {
 	if cfg.Switches.SafeMode.V {
 		return 0, 0
 	}
-	for _, d := range agentdef.LoadFrom(nil, projectDefDirs(cfg, "agents", more)).All() {
+	for _, d := range agentdef.LoadFrom(nil, projectDefDirs(cfg, "agents", more), projectInside(cfg, more)).All() {
 		if d.Scope == "project" {
 			agents++
 		}
 	}
-	held := skill.Load(skill.Dirs{}, skill.Dirs{Skills: projectDefDirs(cfg, "skills", more), Commands: projectDefDirs(cfg, "commands", more)})
+	held := skill.Load(skill.Dirs{}, skill.Dirs{Skills: projectDefDirs(cfg, "skills", more), Commands: projectDefDirs(cfg, "commands", more), Inside: projectInside(cfg, more)})
 	return agents, len(held.All())
 }
 
