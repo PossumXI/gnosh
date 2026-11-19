@@ -165,6 +165,8 @@
 #   compact     (acceptEdits) the model reads notes.txt, /compact gives it
 #               back ("Given back after the summary, as they now are:
 #               notes.txt."), and the model edits it after the summary
+#   filesuggest a fileSuggestion command offers the paths for "@comp": the
+#               list shows them once it answers, with no key pressed
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -202,9 +204,10 @@ relay) flags="--channels server:hook" ;;
 entertree) flags="--trust-folder" ;;
 wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
+filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest)" >&2
 	exit 2
 	;;
 esac
@@ -239,6 +242,17 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = filesuggest ]; then
+	# The person's own @ search: what was typed, as two paths, after a
+	# second, so that the list fills in when it answers.
+	cat > "$T/config/gnosh/files.sh" <<'SH'
+#!/bin/sh
+q=$(cat | sed -n 's/.*"query":"\([^"]*\)".*/\1/p')
+sleep 1
+printf 'src/%s-one.go\nsrc/%s-two.go\n' "$q" "$q"
+SH
+	chmod 755 "$T/config/gnosh/files.sh"
+fi
 if [ "$scenario" = channel ] || [ "$scenario" = relay ]; then
 	# The webhook channel (tools/dev/channel-webhook.py), copied to
 	# ~/newgnosh-test before this runs; for relay it takes the permission
@@ -754,6 +768,10 @@ failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
 	;;
+filesuggest)
+	tmux send-keys -t "$S" "look at @comp"
+	done_when() { screen | grep -q "src/comp-one.go" && screen | grep -q "src/comp-two.go"; }
+	;;
 compact)
 	tmux send-keys -t "$S" "Read notes.txt with the Read tool, then say read." Enter
 	for i in $(seq 1 240); do sleep 1; screen | grep -q "done in" && break; done
@@ -893,6 +911,10 @@ if [ "$scenario" = bgfail ]; then
 	for i in $(seq 1 60); do [ "$(ps -eo args | grep -c '^sleep 37$')" -eq 0 ] && break; sleep 1; done
 	echo "=== sleeps left: $(ps -eo args | grep -c '^sleep 37$')"
 	tmux send-keys -t "$S" Escape
+	sleep 1
+fi
+if [ "$scenario" = filesuggest ]; then
+	tmux send-keys -t "$S" C-u
 	sleep 1
 fi
 if [ "$scenario" = compact ]; then

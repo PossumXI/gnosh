@@ -283,14 +283,19 @@ func (st *Store) open(ctx context.Context, path, id string, write bool) (*Sessio
 	if write {
 		flag = os.O_RDWR | os.O_APPEND
 	}
-	f, err := os.OpenFile(path, flag, 0)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("transcript: opening session %s: %w: %w", id, ErrNotFound, err)
+	var f *os.File
+	for try := 0; ; try++ {
+		var err error
+		f, err = os.OpenFile(path, flag, 0)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, fmt.Errorf("transcript: opening session %s: %w: %w", id, ErrNotFound, err)
+			}
+			return nil, fmt.Errorf("transcript: opening session %s: %w", id, err)
 		}
-		return nil, fmt.Errorf("transcript: opening session %s: %w", id, err)
-	}
-	if write {
+		if !write {
+			break
+		}
 		ok, err := lockFile(f)
 		if err != nil {
 			f.Close()
@@ -300,6 +305,16 @@ func (st *Store) open(ctx context.Context, path, id string, write bool) (*Sessio
 			f.Close()
 			return nil, &LockedError{ID: id, Path: path}
 		}
+		// A redaction puts a new file in the old one's place (redact.go):
+		// one that did so between the open and the lock leaves the lock on
+		// a file that is no longer there, which may hold what was redacted
+		// and loses what is written to it. The one there now is opened.
+		held, herr := f.Stat()
+		still, serr := os.Stat(path)
+		if herr != nil || serr != nil || os.SameFile(held, still) || try >= 4 {
+			break
+		}
+		f.Close()
 	}
 	ld, err := load(ctx, f, path)
 	if err != nil {
@@ -463,7 +478,9 @@ type Info struct {
 	// FirstPrompt is the first line of the first prompt the person typed
 	// in this session, cut to 256 characters.
 	FirstPrompt string
-	// Created and Modified are the times of the first and last entries.
+	// Created is the time of the first entry, and Modified of the last
+	// prompt, reply or summary, or else of the last entry: a name given to
+	// an old session does not make it the newest, which -c goes on with.
 	Created  time.Time
 	Modified time.Time
 	// Entries counts the file's entries, Messages its user and assistant
@@ -556,7 +573,9 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 	info.Size = fi.Size()
 	s := newScanner(f, path, nil)
 	var autoTitle string
-	var last time.Time
+	// last is the time of the last entry, talked of the last prompt,
+	// reply or summary.
+	var last, talked time.Time
 	for {
 		if err := ctx.Err(); err != nil {
 			return info, err
@@ -582,6 +601,10 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 		t, terr := time.Parse(time.RFC3339Nano, le.Timestamp)
 		if terr == nil {
 			last = t.UTC()
+			switch le.Type {
+			case TypeUser, TypeAssistant, TypeSummary:
+				talked = last
+			}
 		}
 		if le.Type == TypeMeta && le.Key == MovedKey && filepath.IsAbs(le.Value) {
 			info.Cwd = filepath.Clean(le.Value)
@@ -619,7 +642,7 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 	if info.Title == "" {
 		info.Title = autoTitle
 	}
-	info.Modified = last
+	info.Modified = cmp.Or(talked, last)
 	if info.Created.IsZero() {
 		if t, ok := idTime(id); ok {
 			info.Created = t

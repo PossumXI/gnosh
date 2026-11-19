@@ -112,3 +112,19 @@ func TestImport(t *testing.T) {
 		t.Errorf("the copy holds %q", got)
 	}
 }
+
+// The newest session, which -c goes on with, is the one talked in last: a
+// name given to an older one afterwards does not make it the newest (the
+// session store review of 2026-11-19: gnosh session rename did).
+func TestLatestIsTheOneTalkedInLast(t *testing.T) {
+	st, _ := newStore(t)
+	old, _ := st.Create(cwd)
+	mustAppend(t, old, PromptEntry("one"), AssistantEntry(core.AssistantText("answer one"), core.StopEndTurn))
+	recent, _ := st.Create(cwd)
+	mustAppend(t, recent, PromptEntry("two"), AssistantEntry(core.AssistantText("answer two"), core.StopEndTurn))
+	mustAppend(t, old, TitleEntry("the old one, named later", SourceUser))
+	info, ok, err := st.Latest(context.Background(), cwd)
+	if err != nil || !ok || info.ID != recent.ID() {
+		t.Errorf("Latest = %s (%v, %v), want %s, the one talked in last", info.ID, ok, err, recent.ID())
+	}
+}

@@ -2983,3 +2983,21 @@ or kept with the reason said (27).
     nothing when opened again). The person is told. A checkpoints index
     is read only with whole paths and plain names for its copies, and a
     session's id is checked before it names a folder.
+
+178. **The session store review's smaller findings.**
+    - A redaction puts a new file in a session file's place. One that
+      did so between another gnosh's open and its lock left that gnosh
+      holding the old file: what was redacted, and every entry it wrote
+      lost. The file at the path is checked to be the one locked, and
+      opened again when it is not.
+    - A write that failed partway (a full disk) left the whole lines
+      before the tear in the file, where they came back as entries the
+      session never had: the file is cut back to its size before the
+      write, and only when that fails is the torn line left to be passed
+      over.
+    - The newest session, which -c goes on with, is the one talked in
+      last: a name given to an old session later (gnosh session rename)
+      made it the newest.
+    Left as they are: a kill between /cd's move of the file and its note
+    of where to (the session is then found by its id alone), /resume N
+    listing again as it is typed, and sessions read whole.
