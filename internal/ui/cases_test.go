@@ -617,6 +617,15 @@ func TestLeaving(t *testing.T) {
 		t.Fatal("Ctrl+D Ctrl+D did not leave gnosh")
 	}
 
+	// With commands running in the background, the first press says they
+	// stop with gnosh.
+	g = newRig(t, 100, 24, text.NoColor)
+	g.ev(facts{"background": "2"})
+	g.keys(`<Ctrl+D>`).liveHas("Ctrl+D again to leave gnosh: 2 commands running in the background stop with it")
+	g = newRig(t, 100, 24, text.NoColor)
+	g.ev(facts{"background": "1"})
+	g.keys(`<Ctrl+C>`).liveHas("Ctrl+C again to leave gnosh: 1 command running in the background stops with it")
+
 	g = newRig(t, 80, 24, text.NoColor)
 	g.keys(`"/exit" <Enter>`)
 	if !g.s.done {

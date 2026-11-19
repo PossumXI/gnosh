@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -451,6 +452,13 @@ func (s *session) hintLines(width int, now time.Time) []string {
 		words = s.hint
 	case s.q == nil || s.q.guarded:
 		words = s.ed.Hint().String()
+		if h := s.ed.Hint(); h == editor.HintCtrlCExit || h == editor.HintCtrlDExit {
+			// Leaving stops what runs in the background: said before the
+			// second press, not found out after it.
+			if n, err := strconv.Atoi(oneLine(s.facts["background"])); err == nil && n > 0 {
+				words += ": " + count(n, "command running in the background stops", "commands running in the background stop") + " with it"
+			}
+		}
 	}
 	if words == "" {
 		return nil

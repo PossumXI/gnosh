@@ -3913,3 +3913,9 @@ or kept with the reason said (27).
     file and copies of files from other machines written wherever it led
     (the deliverables review of 2026-11-19). A folder on the way that is a
     link now stops the write, and says so.
+
+266. **The first press that would leave says what stops with gnosh.**
+    Leaving stops the commands running in the background, and Ctrl+C or
+    Ctrl+D pressed twice left with nothing said of them; Claude Code says
+    what running work there is as it is left. The first press's line now
+    names how many commands running in the background stop with gnosh.
