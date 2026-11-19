@@ -3879,3 +3879,12 @@ or kept with the reason said (27).
     said nothing. At the start, files that come to more than 40,000
     characters are now named as long in a notice, with /memory to list
     them.
+
+262. **A project data folder that leads out of the project is said to.**
+    The data folder is found by following links, so a cloned repository's
+    .gnosh linked elsewhere had gnosh write the project's saved approvals,
+    work trees and delivered files wherever it pointed, with nothing said
+    (found weighing the deliverables review of 2026-11-19). gnosh still
+    uses it (a person may keep the data elsewhere on purpose), but says at
+    the start where it leads, and that projectDataDir set to an absolute
+    path is the way to keep it elsewhere on purpose.

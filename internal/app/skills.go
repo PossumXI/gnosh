@@ -21,6 +21,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
+	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
 // This file is skills in a session, and the folders that agent
@@ -105,6 +106,21 @@ func projectDefDirs(cfg *config.Config, kind string, more []string) []string {
 		add(r)
 	}
 	return dirs
+}
+
+// dataDirLeadsOut is where the project's data folder really is when it is
+// a link that leads out of the project, or "": what gnosh writes there
+// (saved approvals, work trees, delivered files) would land wherever a
+// cloned repository's link points. A data folder the person named by an
+// absolute path (projectDataDir) is theirs, wherever it is.
+func dataDirLeadsOut(cfg *config.Config) string {
+	if filepath.IsAbs(cfg.Options.ProjectDataDir.V) || cfg.Paths.DataDir == "" || cfg.Paths.ProjectRoot == "" {
+		return ""
+	}
+	if target, out := trust.LeadsOut(cfg.Paths.DataDir, cfg.Paths.ProjectRoot); out && target != "" {
+		return target
+	}
+	return ""
 }
 
 // projectInside is where a project's own definitions must really be,

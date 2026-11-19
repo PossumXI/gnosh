@@ -495,6 +495,11 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		return l, err
 	}
 	l.agentNotices()
+	if target := dataDirLeadsOut(l.cfg); target != "" {
+		l.notice(agent.LevelWarning, "data", fmt.Sprintf(
+			"The project's data folder %s is a link to %s, outside the project: gnosh keeps this project's saved approvals, work trees and delivered files there. If you did not make that link (a repository can carry one), remove it; to keep the data elsewhere on purpose, set projectDataDir to that folder's absolute path.",
+			l.cfg.Paths.DataDir, target))
+	}
 	l.loadStyles()
 	system, err := l.systemPrompt()
 	l.systemMu.Lock()

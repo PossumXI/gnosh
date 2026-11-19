@@ -690,3 +690,19 @@ func TestPastedLinesAreSaidToBePasted(t *testing.T) {
 	has(t, "the first prompt", first, text, "The prompt above holds text the user pasted rather than typed (lines 2 to 13)")
 	hasNot(t, "the second prompt", lastUser(t, w.Model.Requests()[1]), "pasted")
 }
+
+// A project data folder that is a link out of the project is said to be
+// one at the start: what gnosh writes there would land where a cloned
+// repository's link points.
+func TestDataFolderLinkedOutIsSaidToBe(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
+	outside := w.Root + "/elsewhere"
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, w.Path(".gnosh")); err != nil {
+		t.Skip("no links here:", err)
+	}
+	r := run(t, w, "-p", "hello").wantCode(t, 0)
+	has(t, "stderr", r.err, "The project's data folder "+w.Path(".gnosh")+" is a link to "+outside+", outside the project")
+}
