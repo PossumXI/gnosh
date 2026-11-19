@@ -2818,3 +2818,24 @@ or kept with the reason said (27).
     after it ("Part of this conversation is left out here…"); only when
     no asking with it fits, a first message too big to keep (a long
     paste), is it left out as well (the compaction review's note).
+
+168. **A summary gives back the files the model was working on.** A
+    summary takes every copy of a file out of the model's view, and since
+    the compaction review no file counts as read after one: the work went
+    on with a Read of each file it had in hand. As Claude Code does after
+    compacting, the files the session read or wrote last (up to five, the
+    most recent first) are read again as they now are and given back
+    after the summary, and count as read, so that an Edit of one needs no
+    Read first. They keep to a tenth of the model's window (at most 50K
+    tokens, 5K for one), so that what the summary made room for is not
+    filled again at once; a file too long, a picture, or one the budget
+    has no room left for is named instead, to be read again before it is
+    changed. Read deny rules hold, and a file that is gone is passed
+    over. The person reads which files were given back.
+    - What the after-summary step made is kept when the turn is stopped
+      while it runs, as the summary is, with which it goes; it was
+      dropped, with the instructions and skills given back. When the step
+      is stopped, the files it read again do not count as read, since a
+      step that does not finish in time is gone on without.
+    - A sub-agent forgets what it read at its own summary, as the
+      session does: it kept counting files as read after it lost them.

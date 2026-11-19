@@ -22,6 +22,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 	"github.com/gnosh-ai/gnosh/internal/trust"
@@ -965,6 +966,9 @@ func (s *subSession) afterTool(ctx context.Context, done agent.ToolDone) (agent.
 // was summarized.
 func (s *subSession) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agent.Part, error) {
 	var parts []agent.Part
+	// As in the session: no file is written from a copy the sub-agent can
+	// no longer see.
+	fstools.ForgetAll(s.env())
 	s.instr.Forget()
 	if !s.def.OmitInstructions {
 		if text := prompt.Wrap(s.instr.Render()); text != "" {

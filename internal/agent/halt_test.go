@@ -53,6 +53,44 @@ func TestAfterSummaryHalt(t *testing.T) {
 	r.checkLog()
 }
 
+// What the after-summary moment gave back is kept even when the turn was
+// stopped while it ran, as the summary is: it finished, and the files it
+// read again count as read (only a moment that does not finish in time is
+// gone on without).
+func TestAfterSummaryPartsAreKeptWhenStopped(t *testing.T) {
+	j := &job{want: 14}
+	var r *rig
+	r = newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 8000
+		o.System = []string{"You are gnosh."}
+		o.Tools = []core.Tool{fileTool(600)}
+		o.Moments.AfterSummary = func(ctx context.Context, _ SummaryInfo) ([]Part, error) {
+			r.a.Interrupt()
+			<-ctx.Done()
+			return []Part{{Source: "files", Text: "given back after the summary"}}, nil
+		}
+	})
+	r.model.honest = true
+	r.model.window = 8000
+	r.model.answer(j.respond)
+	if res := r.run("read fourteen files"); res.Reason != EndStopped {
+		t.Fatalf("result = %+v", res)
+	}
+	if j.summaryCount() == 0 {
+		t.Fatal("no summary was made")
+	}
+	kept := false
+	for _, e := range r.log.of(EntryNote) {
+		if e.Source == "files" && strings.Contains(core.TextOf(e.Blocks), "given back after the summary") {
+			kept = true
+		}
+	}
+	if !kept {
+		t.Error("what the after-summary moment gave back was dropped when the turn was stopped")
+	}
+	r.checkLog()
+}
+
 // A reply to the summary request that begins a tool call ("Let me check
 // the test first." and a Read) is no summary, which would stand for the
 // whole conversation: the model is asked again without tools, and that

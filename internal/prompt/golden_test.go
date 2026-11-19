@@ -274,7 +274,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "summary",
-			texts: []string{textSummary, textSummaryExtra, textSummaryIntro, textAfterSummary, textEarlierLeftOut},
+			texts: []string{textSummary, textSummaryExtra, textSummaryIntro, textAfterSummary, textEarlierLeftOut, textFilesBack},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the request", s.Summary(SummaryInput{})},
@@ -283,6 +283,8 @@ func goldenFiles() []goldenFile {
 					{"before the summary", s.SummaryIntro()},
 					{"after the summary", s.AfterSummary("/home/dev/project/.gnosh/sessions/before-summary-3.jsonl")},
 					{"after the summary, nothing kept", s.AfterSummary("")},
+					{"a file given back after the summary", s.FileShownBack("/home/dev/project/main.go")},
+					{"files not given back", s.FilesNotShownBack([]string{"/home/dev/project/big.log", "/home/dev/project/shot.png"})},
 				}
 			},
 		},

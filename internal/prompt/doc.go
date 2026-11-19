@@ -321,8 +321,12 @@
 //     user asked to be told or asked, and otherwise without asking. (A
 //     plain "carry on without asking" took the model past such a stop:
 //     Claude Code's own summary line did, on 16 November 2026.)
-//     earlier-left-out (EarlierLeftOut) opens a summary request whose
-//     earliest turns did not fit.
+//     earlier-left-out (EarlierLeftOut) stands where part of a summary
+//     request did not fit: after its first message, or at its start.
+//   - files-back (FileShownBack, FilesNotShownBack) gives back after a
+//     summary the files the model read or changed last, as Read returns
+//     them now, and names those too long to give back, to be read again
+//     before they are changed (as Claude Code does after compacting).
 //
 // # Notes inside tool results
 //

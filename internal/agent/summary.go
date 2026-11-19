@@ -44,7 +44,7 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 	lim := a.limits(su)
 	full := a.assemble(su, v.Messages)
 	pre := a.predict(a.estimate(full, su.model), su.model)
-	info := SummaryInfo{Trigger: trigger, Instructions: instructions, PreTokens: pre}
+	info := SummaryInfo{Trigger: trigger, Instructions: instructions, PreTokens: pre, Window: lim.window}
 
 	// The request is gnosh's own line: the asking, then on lines of their
 	// own what the person and their hooks want of the summary, and the
@@ -217,9 +217,10 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 			// its skills: lost, they stayed lost for the session).
 			a.notice(LevelWarning, "summary", fmt.Sprintf("Not all of what the session is given back after a summary could be put together (%v).", ferr))
 		}
-		switch {
-		case !ok || ctx.Err() != nil:
-		default:
+		// What the moment made is kept even when the turn is being stopped,
+		// as the summary is, with which it goes; only a moment that did not
+		// finish gives nothing back.
+		if ok {
 			var notes []Entry
 			for _, p := range parts {
 				if strings.TrimSpace(p.Text) != "" {

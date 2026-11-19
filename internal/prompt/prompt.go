@@ -83,6 +83,7 @@ const (
 	textStructured       = "structured-output"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
+	textFilesBack        = "files-back"
 	textSummary          = "summary"
 	textSummaryExtra     = "summary-extra"
 	textSummaryIntro     = "summary-intro"
@@ -236,6 +237,8 @@ func specs() []spec {
 			when: "Just before a summary, where it stands in place of the conversation it replaced."},
 		{name: textAfterSummary, kind: KindLine, may: []string{"path"},
 			when: "Just after that summary: carry on, keeping every stop the user set."},
+		{name: textFilesBack, kind: KindLine, need: []string{"path"}, may: []string{"shown", "named"},
+			when: "After a summary, for each file the model read or changed last that is given back: what Read returns for it follows; and once, the ones that are not given back."},
 
 		{name: textPopNote, kind: KindResult, may: []string{"messages", "one_message", "calls", "one_call", "tools"},
 			when: "Appended to the answer of the call that entered a todo, once the todo is popped: what came between was removed."},

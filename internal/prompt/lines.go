@@ -699,6 +699,22 @@ func (s *Set) AfterSummary(path string) string {
 	return s.fill(textAfterSummary, values{"path": oneLine(path, maxName)})
 }
 
+// FileShownBack returns the line before a file given back after a summary,
+// which what Read returns for it follows.
+func (s *Set) FileShownBack(path string) string {
+	vals := values{"path": oneLine(path, maxName)}
+	vals.flag("shown", true)
+	return s.fill(textFilesBack, vals)
+}
+
+// FilesNotShownBack returns the line that names the files read or changed
+// before a summary that are not given back after it.
+func (s *Set) FilesNotShownBack(paths []string) string {
+	vals := values{"path": oneLine(strings.Join(paths, ", "), maxQuote)}
+	vals.flag("named", true)
+	return s.fill(textFilesBack, vals)
+}
+
 // EarlierLeftOut returns the note that opens a summary request whose
 // earliest turns had to be left out for the request to fit.
 func (s *Set) EarlierLeftOut() string {

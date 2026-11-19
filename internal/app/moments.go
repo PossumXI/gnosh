@@ -750,7 +750,9 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	var parts []agent.Part
 	// The model no longer sees any file it read: Edit and Write refuse to
 	// change one until Read has shown it again, as after a slide, so that
-	// no file is written from a copy the model can no longer see.
+	// no file is written from a copy the model can no longer see. The ones
+	// it read or changed last are read again and given back below.
+	recent := fstools.Recent(l.env(), backFiles)
 	fstools.ForgetAll(l.env())
 	if l.instr != nil {
 		// The files given along the way are forgotten, so that each is
@@ -775,6 +777,16 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	} else {
 		parts = append(parts, pre...)
 	}
+	back, given := l.filesBack(ctx, recent, info.Window)
+	parts = append(parts, back...)
+	defer func() {
+		if ctx.Err() != nil {
+			// Stopped: what this gives back may not reach the model (a
+			// moment that does not finish in time is gone on without), so
+			// the files it read again do not count as read.
+			fstools.Forget(l.env(), given...)
+		}
+	}()
 	if l.shell != nil {
 		var running []string
 		for _, t := range l.shell.Tasks() {

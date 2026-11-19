@@ -689,6 +689,9 @@ type SummaryInfo struct {
 	Summary string
 	// PreTokens is about how long the conversation was before it.
 	PreTokens int
+	// Window is the model's window as the loop believes it: what is given
+	// back after the summary keeps to a small share of it.
+	Window int
 }
 
 // EndInfo is what SessionEnd is told.
