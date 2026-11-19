@@ -3791,3 +3791,15 @@ or kept with the reason said (27).
     review of 2026-11-19). A link, a folder, a pipe or a file over 16 MiB
     is now refused unread, with what it is said; the file is read only
     while it is the one looked at, and its cache knows it by its inode too.
+
+253. **The deliverables server keeps what it serves from its origin.**
+    127.0.0.1:7777 is the same site as every service on the machine's
+    loopback, and one origin for every project's files, so a delivered
+    page with a script could reach the others (the deliverables review of
+    2026-11-19). Pages, SVG and XML are now served under a sandbox policy
+    that gives them an origin of their own (scripts still run); a service
+    worker is never served, and the token alone is no longer an address,
+    so none could claim every address; only a request that names this
+    machine (a loopback address or localhost) is answered, which a page
+    that rebinds its own name to 127.0.0.1 does not; idle connections
+    close; and nothing is kept in the browser's cache.

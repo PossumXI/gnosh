@@ -58,6 +58,9 @@ func serve(reg *register, addr string) (*server, error) {
 	s.srv = &http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: 10 * time.Second,
+		// A connection kept open with nothing asked of it is closed: each
+		// held a goroutine and a descriptor for as long as it was kept.
+		IdleTimeout: 2 * time.Minute,
 		// What the server has to say of a broken connection goes
 		// nowhere: its own log would write into the terminal the
 		// interface draws on.
@@ -80,16 +83,33 @@ func (s *server) address(rec record) string {
 	return s.base + "/" + rec.Token + "/" + url.PathEscape(rec.Name)
 }
 
-// ServeHTTP answers one request. The path is /<token> or
-// /<token>/<name>, where the name is the one the file was delivered
-// under; anything else, and a token that is not in the register, is not
-// found, in the same words, so that an answer never says how close a
-// guess was.
+// ServeHTTP answers one request. The path is /<token>/<name>, where the
+// name is the one the file was delivered under; anything else, and a
+// token that is not in the register, is not found, in the same words, so
+// that an answer never says how close a guess was.
+//
+// The server shares its origin with every service of this machine's
+// loopback, and every project's files share it with each other, so what
+// it serves is kept from that origin: a page or a picture that can run a
+// script runs it sandboxed, with an origin of its own; a service worker
+// is never served, which could take every later address on the origin
+// (and without the token alone as a path, none could claim all of it);
+// and only a request for this machine by name is answered, which a page
+// of another site that rebinds its name to 127.0.0.1 is not (the
+// deliverables review of 2026-11-19).
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
-	h.Set("Cache-Control", "no-cache")
+	h.Set("Cache-Control", "no-store")
+	if !loopbackHost(r.Host) {
+		http.Error(w, "gnosh serves delivered files at the addresses of this machine (127.0.0.1, localhost) alone.", http.StatusMisdirectedRequest)
+		return
+	}
+	if r.Header.Get("Service-Worker") != "" {
+		http.Error(w, "gnosh does not serve a delivered file as a service worker.", http.StatusForbidden)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		h.Set("Allow", "GET, HEAD")
 		http.Error(w, "gnosh serves delivered files to be read: only GET and HEAD are answered here.", http.StatusMethodNotAllowed)
@@ -102,7 +122,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, ok := s.reg.byToken(token)
-	if !ok || (name != "" && name != rec.Name) {
+	if !ok || name != rec.Name {
 		http.Error(w, none, http.StatusNotFound)
 		return
 	}
@@ -113,23 +133,37 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	h.Set("Content-Type", mediaType(rec.Name))
+	if scripted(rec.Name) {
+		h.Set("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads")
+	}
 	// ServeContent answers ranges, which a browser needs to play and to
 	// seek in a video, and conditional requests; it writes no body for
 	// HEAD, and guesses no type, because one is set.
 	http.ServeContent(w, r, "", st.ModTime(), f)
 }
 
-// splitPath reads a request's path as a token and a name. The name is
-// empty when the path is the token alone.
+// splitPath reads a request's path as a token and a name.
 func splitPath(p string) (token, name string, ok bool) {
 	parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
-	switch {
-	case !strings.HasPrefix(p, "/") || parts[0] == "" || len(parts) > 2:
+	if !strings.HasPrefix(p, "/") || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", false
-	case len(parts) == 2:
-		name = parts[1]
 	}
-	return parts[0], name, true
+	return parts[0], parts[1], true
+}
+
+// loopbackHost reports whether a request's Host names this machine: a
+// loopback address, or localhost, on any port (a forward from another
+// machine may use another).
+func loopbackHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // openRegular opens a file to serve it, and returns it with what the
