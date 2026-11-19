@@ -46,7 +46,7 @@ const pastedSettings = `{
     ],
     "Stop": [
       { "hooks": [ { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh" },
-                   { "type": "command", "command": "./second.sh" } ] }
+                   { "type": "command", "command": "./second.sh", "onFailure": "block" } ] }
     ]
   },
   "env": { "NODE_ENV": "test", "EMPTY": "" },
@@ -166,7 +166,7 @@ func TestSettingsRefusals(t *testing.T) {
 		{"a background hook that is not true or false", `{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "x", "async": "yes"}]}]}}`, 1, []string{`a hook's "async" is true or false`, "a string"}},
 		{"a hook that wakes the model, written as a number", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "asyncRewake": 1}]}]}}`, 1, []string{`a hook's "asyncRewake" is true or false`}},
 		{"a powershell hook", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "shell": "powershell"}]}]}}`, 1, []string{`this hook sets "shell"`, `"bash"`}},
-		{"a hook with another failure rule", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "onFailure": "block"}]}]}}`, 1, []string{`this hook sets "onFailure"`, `"continue"`}},
+		{"a hook with another failure rule", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "onFailure": "retry"}]}]}}`, 1, []string{`this hook sets "onFailure"`, `"continue" or "block"`}},
 		{"a hook field gnosh does not know", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "retries": 3}]}]}}`, 1, []string{`"retries"`, "not a field of a hook handler"}},
 		{"a timeout that is not a number", `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x", "timeout": "10"}]}]}}`, 1, []string{`"timeout" is a number of seconds above zero`}},
 	}

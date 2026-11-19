@@ -323,8 +323,8 @@ func (s *source) settingsHandler(e *hookEvent, matcher string, n *jnode) {
 			if m.val.kind == jBool {
 				got = strconv.FormatBool(m.val.b)
 			}
-			if (m.val.kind != jString && m.val.kind != jBool) || got != want {
-				bad(m.line, "this hook sets \"%s\", and gnosh can only run a hook with \"%s\": %s (which is what leaving it out means). A hook it cannot run as written is not run some other way: take the field out, or the hook.", m.key, m.key, want)
+			if (m.val.kind != jString && m.val.kind != jBool) || !slices.Contains(want, got) {
+				bad(m.line, "this hook sets \"%s\", and gnosh can only run a hook with \"%s\": %s (which changes nothing in gnosh). A hook it cannot run as written is not run some other way: take the field out, or the hook.", m.key, m.key, strings.Join(want, " or "))
 			}
 		default:
 			bad(m.line, "this hook has \"%s\". %s, or take the hook out.", m.key, how)

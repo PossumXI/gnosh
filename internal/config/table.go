@@ -327,10 +327,14 @@ var hookFields = map[string]string{
 	"continueOnBlock": "",
 }
 
-// hookFieldSame is the one value each "same" field may have.
-var hookFieldSame = map[string]string{
-	"shell":     `"bash"`,
-	"onFailure": `"continue"`,
+// hookFieldSame is the values each "same" field may have: what gnosh does
+// anyway. A hook that fails blocks in gnosh, whatever "onFailure" says:
+// "block" says just that, and "continue", Claude Code's default, is taken
+// as leaving the field out. ("block" stopped startup, though Claude Code's
+// command, http and mcp_tool hooks take it: Claude Code 2.1.328.)
+var hookFieldSame = map[string][]string{
+	"shell":     {`"bash"`},
+	"onFailure": {`"continue"`, `"block"`},
 }
 
 // permissionModes is every mode a session can start in. "manual" is

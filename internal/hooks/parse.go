@@ -35,15 +35,16 @@ import (
 //     the two, so a list of hooks would vanish);
 //   - a hook type other than "command", "http", "mcp_tool", "prompt" and
 //     "agent";
-//   - a shell other than bash, an "onFailure" other than "continue", an
+//   - a shell other than bash, an "onFailure" other than "continue" or
+//     "block", an
 //     "if" that is not a string, "args" that are not a list of strings,
 //     "async" or "asyncRewake" that is not true or false;
 //   - any field gnosh does not know;
 //   - a matcher on an event that takes none, or one that cannot be read;
 //   - no command, or a timeout that is not a number of seconds above zero.
 //
-// Accepted, and changing nothing: "once", and the default values "shell":
-// "bash" and "onFailure": "continue". (gnosh blocks when a
+// Accepted, and changing nothing: "once", the default value "shell":
+// "bash", and "onFailure": "continue" or "block". (gnosh blocks when a
 // hook fails, whatever "onFailure" says.)
 //
 // When anything is wrong the error is a *ConfigError listing every
@@ -279,11 +280,13 @@ func (p *blockParser) handler(event Event, pattern, place string, raw json.RawMe
 			}
 		case "onFailure":
 			switch s, ok := asString(f.value); {
-			case ok && s == "continue":
-			case ok && s == "block":
-				p.fail(place, "the hook has \"onFailure\": \"block\". gnosh does not take this setting, and does not need it: a hook that fails already blocks, on every event that can block. Remove \"onFailure\".")
+			case ok && (s == "continue" || s == "block"):
+				// A hook that fails blocks, on every event that can block,
+				// whatever this says: "block" says just that. It stopped
+				// startup, though Claude Code's command, http and mcp_tool
+				// hooks take it (Claude Code 2.1.328).
 			default:
-				p.fail(place, "the hook has \"onFailure\": %s, which gnosh does not know. Remove it: a hook that fails blocks, on every event that can block.", written)
+				p.fail(place, "the hook has \"onFailure\": %s, which gnosh does not know (it takes \"continue\" or \"block\"). Remove it: a hook that fails blocks, on every event that can block.", written)
 			}
 		case "if":
 			s, ok := asString(f.value)

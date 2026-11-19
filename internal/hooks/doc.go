@@ -261,7 +261,7 @@
 // (Options.Fires); a hook type gnosh does not have (it has "command",
 // "http", "mcp_tool", "prompt" and "agent"); an "if" that is not a string;
 // "args" that are not a list of strings; "onFailure" other than
-// "continue"; any field gnosh does not know; a name written twice in one JSON object; a matcher
+// "continue" or "block"; any field gnosh does not know; a name written twice in one JSON object; a matcher
 // on an event that takes none, or one that cannot be read; a missing
 // command; a timeout that is not above zero; and, in the user's own
 // configuration, a command that starts with a relative path.
@@ -288,7 +288,8 @@
 //     Code does.)
 //   - A hook's answer is read strictly, as above, and text that is too
 //     long is cut rather than saved to a file.
-//   - "onFailure" may only say "continue", which changes nothing.
+//   - "onFailure" may say "continue" or "block", and changes nothing: a
+//     hook that fails blocks either way.
 //
 // # What the agent loop does around this package
 //

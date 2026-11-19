@@ -3488,3 +3488,13 @@ or kept with the reason said (27).
     anew on resume. In the transcript view Ctrl+Z, Ctrl+T, Alt+T and
     Ctrl+B do what they do everywhere else, and Ctrl+L draws the view
     again; they did nothing there.
+
+222. **A hook's "onFailure": "block" is taken, and changes nothing.** A
+    hook that fails blocks in gnosh, on every event that can block,
+    whatever "onFailure" says. "continue", Claude Code's default, was
+    taken as leaving the field out, but "block", which says just what
+    gnosh does, stopped startup: Claude Code's command and http hooks take
+    it, and its mcp_tool hooks too since 2.1.328, so a settings file
+    written for Claude Code kept gnosh from starting. Both are taken now,
+    by the hooks parser and the settings check; any other value still
+    stops startup.

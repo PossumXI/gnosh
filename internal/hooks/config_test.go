@@ -66,7 +66,7 @@ func TestParseConfigAcceptsWhatChangesNothing(t *testing.T) {
 	    "type": "command", "command": "true",
 	    "statusMessage": "Checking", "once": true, "shell": "bash",
 	    "async": false, "asyncRewake": false, "onFailure": "continue", "timeout": null
-	  } ] } ],
+	  }, { "type": "command", "command": "true", "onFailure": "block" } ] } ],
 	  "UserPromptSubmit": [ { "matcher": "*", "hooks": [ { "type": "command", "command": "true" } ] } ],
 	  "SubagentStop": [ { "matcher": null, "hooks": [ { "type": "command", "command": "true" } ] } ],
 	  "PostToolUse": [ { "hooks": [] } ]
@@ -75,8 +75,8 @@ func TestParseConfigAcceptsWhatChangesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
 	}
-	if len(cfg.Hooks) != 3 {
-		t.Errorf("got %d hooks, want 3: %+v", len(cfg.Hooks), cfg.Hooks)
+	if len(cfg.Hooks) != 4 {
+		t.Errorf("got %d hooks, want 4: %+v", len(cfg.Hooks), cfg.Hooks)
 	}
 }
 
@@ -137,7 +137,6 @@ func TestParseConfigRefuses(t *testing.T) {
 		{"an argument with a NUL in it", hook(`"type": "command", "command": "check", "args": ["a\u0000b"]`), []string{"an argument of the hook holds a NUL character"}},
 		{"async that is not true or false", hook(`"type": "command", "command": "true", "async": "no"`), []string{`"async": "no"`}},
 		{"another shell", hook(`"type": "command", "command": "true", "shell": "powershell"`), []string{`"shell": "powershell"`, "POSIX shell"}},
-		{"onFailure block", hook(`"type": "command", "command": "true", "onFailure": "block"`), []string{`"onFailure": "block"`, "already blocks", `Remove "onFailure"`}},
 		{"an onFailure gnosh does not know", hook(`"type": "command", "command": "true", "onFailure": "retry"`), []string{`"onFailure": "retry"`, "does not know"}},
 		{"a field gnosh does not know", hook(`"type": "command", "command": "true", "retries": 3`), []string{`"retries"`, "does not know"}},
 		{"a field written twice", hook(`"type": "command", "command": "true", "command": "false"`), []string{`"command" is written twice`}},
