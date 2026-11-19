@@ -2032,3 +2032,34 @@ func TestStatusLine(t *testing.T) {
 		t.Errorf("the project's status line is not held: %+v", cfg.Held)
 	}
 }
+
+// fileSuggestion is Claude Code's: a command that offers the paths an @
+// mention completes to. A program to run, so a project's waits for trust,
+// and disableAllHooks and safe mode turn it off, as the status line's.
+func TestFileSuggestion(t *testing.T) {
+	cfg := mustLoad(t, withConfig(`{"fileSuggestion": {"type": "command", "command": "~/bin/files.sh"}}`))
+	if fs := cfg.FileSuggestion; fs == nil || fs.Command != "~/bin/files.sh" || fs.Origin.File != userJSON {
+		t.Errorf("FileSuggestion = %+v", cfg.FileSuggestion)
+	}
+
+	cfg = mustLoad(t, withConfig(`{"fileSuggestion": {"type": "command", "command": "x"}, "disableAllHooks": true}`))
+	if cfg.FileSuggestion != nil || !strings.Contains(cfg.FileSuggestionOff, "disableAllHooks") {
+		t.Errorf("with disableAllHooks: %+v, %q", cfg.FileSuggestion, cfg.FileSuggestionOff)
+	}
+
+	fs := newFS().
+		put(userJSON, `{"fileSuggestion": {"type": "command", "command": "mine"}}`).
+		put(projJSON, `{"fileSuggestion": {"type": "command", "command": "theirs"}}`)
+	in := inputs(fs)
+	if cfg := mustLoad(t, in); cfg.FileSuggestion == nil || cfg.FileSuggestion.Command != "theirs" {
+		t.Errorf("trusted: the project's file is the later one, and wins: %+v", cfg.FileSuggestion)
+	}
+	in.Trusted = false
+	cfg = mustLoad(t, in)
+	if cfg.FileSuggestion == nil || cfg.FileSuggestion.Command != "mine" {
+		t.Errorf("not trusted: the user's own stays: %+v", cfg.FileSuggestion)
+	}
+	if !slices.ContainsFunc(cfg.Held, func(h Held) bool { return h.Kind == KindFileSuggest && strings.Contains(h.Text, "theirs") }) {
+		t.Errorf("the project's file suggestion is not held: %+v", cfg.Held)
+	}
+}

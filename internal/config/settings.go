@@ -423,6 +423,49 @@ func (s *source) statusLine(f jfield) {
 		apply: func(b *builder) { b.statusLine.put(sl, sl.Origin) }})
 }
 
+// fileSuggestion reads the fileSuggestion object: {"type": "command",
+// "command": "..."}.
+func (s *source) fileSuggestion(f jfield) {
+	if f.val.kind != jObject {
+		s.errorf(f.line, "\"fileSuggestion\" is an object such as {\"type\": \"command\", \"command\": \"~/.config/gnosh/file-suggestion.sh\"}, and here it is %s.", f.val.kind.word())
+		return
+	}
+	fs := FileSuggestion{Origin: s.at(f.line)}
+	typ, good := "", true
+	bad := func(line int, format string, a ...any) {
+		s.errorf(line, format, a...)
+		good = false
+	}
+	for _, m := range s.unique(f.val, "fileSuggestion.") {
+		switch m.key {
+		case "type":
+			if m.val.kind != jString || m.val.str != "command" {
+				bad(m.line, "the file suggestion's \"type\" is \"command\", the one kind there is.")
+			}
+			typ = "command"
+		case "command":
+			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
+				bad(m.line, "the file suggestion's \"command\" is the command line to run, as a string that is not empty.")
+				break
+			}
+			fs.Command = m.val.str
+		default:
+			bad(m.line, "the file suggestion has no field %s; its fields are type and command.", showName(m.key))
+		}
+	}
+	if good && typ == "" {
+		bad(f.line, "the file suggestion has no \"type\". Add \"type\": \"command\".")
+	}
+	if good && fs.Command == "" {
+		bad(f.line, "the file suggestion has no \"command\", so it would run nothing.")
+	}
+	if !good {
+		return
+	}
+	s.add(op{kind: KindFileSuggest, text: "fileSuggestion: " + fs.Command, origin: fs.Origin, what: "a command that offers the paths for @",
+		apply: func(b *builder) { b.fileSuggestion.put(fs, fs.Origin) }})
+}
+
 // settingsEnv reads the env object: variables for the commands and hooks
 // gnosh starts.
 // SkillVisibilities are the values of skillOverrides, as Claude Code's,

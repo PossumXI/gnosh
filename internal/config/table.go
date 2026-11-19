@@ -95,6 +95,7 @@ var topKeys = []keyDef{
 	{"disableAllHooks", "", "switch every hook off", fromClaudeCode + ": the settings key"},
 	{"agent", "", "the kind of agent the session runs as: its prompt, its tools and its model", fromClaudeCode + ": the settings key"},
 	{"statusLine", "", "a command whose output is the status line under the prompt", fromClaudeCode + ": the settings key"},
+	{"fileSuggestion", "", "a command that offers the paths an @ mention completes to, in place of gnosh's own search", fromClaudeCode + ": the settings key"},
 	{"skillOverrides", "", "how far each skill is seen, by its name: on, name-only, user-invocable-only or off", fromClaudeCode + ": the settings key"},
 	{"$schema", "", "accepted and not read", fromClaudeCode + ": the settings key"},
 }
@@ -153,7 +154,6 @@ var permissionKeys = []keyDef{
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
 	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy",
-	"fileSuggestion",
 	"spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",

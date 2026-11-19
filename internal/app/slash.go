@@ -887,6 +887,9 @@ func (l *live) switchedOff(m agent.Model) []string {
 	if l.cfg.StatusLineOff != "" {
 		off = append(off, "the status line ("+l.cfg.StatusLineOff+")")
 	}
+	if l.cfg.FileSuggestionOff != "" {
+		off = append(off, "the fileSuggestion command, so @ offers gnosh's own search ("+l.cfg.FileSuggestionOff+")")
+	}
 	return off
 }
 

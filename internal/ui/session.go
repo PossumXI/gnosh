@@ -217,9 +217,11 @@ type session struct {
 	progAt      time.Time
 	progLoading bool
 	// listProject and index are the fuzzy @ search's lister and what it
-	// last listed (mention.go).
+	// last listed (mention.go); suggest is what the person's own @ search
+	// command answered (filesuggest.go).
 	listProject func(dir string, ignored bool) []string
 	index       fileIndex
+	suggest     suggested
 
 	// pending are the lines that wait to be committed at the next frame,
 	// last is the kind of block the last of them ends, and dirty says

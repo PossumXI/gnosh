@@ -70,6 +70,11 @@
 //	                 "refreshInterval": ...}: a command whose output is the
 //	                 status line under the prompt; a program to run, so a
 //	                 project's waits for trust, as a hook does
+//	fileSuggestion   {"type": "command", "command": ...}: a command that
+//	                 offers the paths an @ mention completes to, in place
+//	                 of gnosh's own search; it is given {"query": what was
+//	                 typed} on its standard input and prints a path a line
+//	                 (15 are shown); a project's waits for trust
 //	model            the session's model
 //	skillOverrides   how far each skill is seen, by its name: "on" (as its
 //	                 file says), "name-only", "user-invocable-only" or

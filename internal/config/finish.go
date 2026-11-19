@@ -120,6 +120,17 @@ func (ld *loader) finish() *Config {
 			cfg.StatusLine = &sl
 		}
 	}
+	if b.fileSuggestion.Set {
+		switch {
+		case cfg.Switches.SafeMode.V:
+			cfg.FileSuggestionOff = "safe mode"
+		case b.hooksOff.V:
+			cfg.FileSuggestionOff = "disableAllHooks in " + b.hooksOff.Origin.String()
+		default:
+			fs := b.fileSuggestion.V
+			cfg.FileSuggestion = &fs
+		}
+	}
 	for _, name := range slices.Sorted(maps.Keys(b.env)) {
 		cfg.Env = append(cfg.Env, b.env[name])
 	}

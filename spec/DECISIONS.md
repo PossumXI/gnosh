@@ -2923,3 +2923,20 @@ or kept with the reason said (27).
       reach the model with gnosh's own tags broken, as what the tool
       returns does.
     - The own servers of sub-agents still running end with the session.
+
+174. **Claude Code's fileSuggestion.** A command of the person's own
+    offers the paths an @ mention completes to, in place of gnosh's own
+    search (for a big repository with an index of its own):
+    {"type": "command", "command": ...}. As Claude Code runs it, it is
+    given {"query": what was typed after the @} on its standard input
+    and the variables a hook has (CLAUDE_PROJECT_DIR among them), prints
+    a path a line, of which fifteen are offered in its order, and is
+    given five seconds; what it started ends with it (its process
+    group). It runs in the background, one at a time: until it answers,
+    the last answer's paths that still hold what was typed are offered,
+    and the list fills in when it answers, with no key pressed; what was
+    typed meanwhile goes to it next, the latest only. Answers are kept
+    until a turn ends (a turn may make files), and a failure is told
+    once. It is a program to run, so a project's waits for trust, as a
+    hook's and the status line's do, and safe mode and disableAllHooks
+    turn it off, which /status says.

@@ -70,6 +70,13 @@ type Config struct {
 	// says why.
 	StatusLine    *StatusLine
 	StatusLineOff string
+	// FileSuggestion is the command that offers the paths an @ mention
+	// completes to, in place of gnosh's own search (Claude Code's
+	// fileSuggestion), or nil. It is nil in safe mode and when
+	// disableAllHooks is set, as the status line is; FileSuggestionOff
+	// then says why.
+	FileSuggestion    *FileSuggestion
+	FileSuggestionOff string
 	// Permissions are the permission rules, the starting mode and the
 	// extra directories.
 	Permissions Permissions
@@ -140,6 +147,7 @@ const (
 	KindHiddenSkill = "hidden-skill"
 	KindRemoval     = "removal" // taking away a provider, a model or a host a weaker file declared
 	KindStatusLine  = "status-line"
+	KindFileSuggest = "file-suggestion"
 )
 
 // StatusLine is a command whose output takes the place of the status line
@@ -153,6 +161,16 @@ type StatusLine struct {
 	// Refresh is how often it is run again besides the moments it runs at
 	// (Claude Code's refreshInterval); zero means at those moments alone.
 	Refresh time.Duration
+	// Origin is the line that sets it.
+	Origin Origin
+}
+
+// FileSuggestion is a command that offers the paths an @ mention completes
+// to: Claude Code's fileSuggestion setting, of type "command".
+type FileSuggestion struct {
+	// Command is the command line, run by sh with {"query": what was typed
+	// after the @} on its standard input; it prints a path a line.
+	Command string
 	// Origin is the line that sets it.
 	Origin Origin
 }

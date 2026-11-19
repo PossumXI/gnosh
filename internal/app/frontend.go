@@ -383,6 +383,10 @@ type SessionInfo struct {
 	// ListIgnored says the @ file picker lists what git ignores too (the
 	// respectGitignore option off, as the session has it now).
 	ListIgnored bool
+	// FileSuggestion says a command of the person's offers the paths an @
+	// mention completes to (Claude Code's fileSuggestion), which the
+	// controls' SuggestFiles runs, in place of the picker's own search.
+	FileSuggestion bool
 	// SidePanel says the session starts with the side panel on (the
 	// sidePanel option).
 	SidePanel bool

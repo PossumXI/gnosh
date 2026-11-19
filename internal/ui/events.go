@@ -662,6 +662,7 @@ func (s *session) turnEnd(res agent.TurnResult) {
 	// (The model may have made or removed files: the fuzzy @ search lists
 	// the project again when it is next used.)
 	s.index.stale = true
+	s.suggest.answers = nil
 	s.endReply()
 	for _, c := range append([]*call(nil), s.calls...) {
 		s.cut(c, "no result: the turn ended first")

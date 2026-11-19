@@ -39,6 +39,8 @@ type builder struct {
 	agent Value[string]
 	// statusLine is the status line command; a later file wins.
 	statusLine Value[StatusLine]
+	// fileSuggestion is the @ file suggestion command; a later file wins.
+	fileSuggestion Value[FileSuggestion]
 
 	layers []*RuleLayer
 	mode   Value[string]
@@ -439,6 +441,10 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 	if !ok(KindHookOff) && b.hooksOff.Set && from(b.hooksOff.Origin) {
 		note("disableAllHooks")
 		b.hooksOff = Value[bool]{}
+	}
+	if !ok(KindFileSuggest) && b.fileSuggestion.Set && from(b.fileSuggestion.Origin) {
+		note("fileSuggestion")
+		b.fileSuggestion = Value[FileSuggestion]{}
 	}
 	if !ok(KindStatusLine) && b.statusLine.Set && from(b.statusLine.Origin) {
 		note("statusLine")

@@ -1318,6 +1318,7 @@ func (l *live) info() SessionInfo {
 		ViewMode:         l.viewModeSet(),
 		HideTurnDuration: !l.liveBool("showTurnDuration", l.cfg.Options.ShowTurnDuration.V),
 		ListIgnored:      !l.liveBool("respectGitignore", l.cfg.Options.RespectGitignore.V),
+		FileSuggestion:   l.cfg.FileSuggestion != nil,
 		Vim:              l.cfg.Options.EditorMode.V == "vim",
 		Theme:            l.cfg.Options.Theme.V,
 		OutputStyle:      l.styleNow(),
