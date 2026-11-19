@@ -53,6 +53,9 @@
 #               and its read-only tools
 #   fork        a skill with context: fork, typed: a sub-agent counts the
 #               lines of notes.txt, and the model answers its report
+#   forkgrant   a forked skill whose allowed-tools let its sub-agent touch
+#               stamped.txt: the sub-agent runs it without a question
+#               (DECISIONS 270), and the file is there
 #   monitor     the model watches a command with Monitor: its lines come as
 #               notes, then the news that it ended (permissions skipped, in
 #               the scratch folder)
@@ -186,7 +189,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype) ;;
+basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
@@ -213,7 +216,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp, trusttype)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp, trusttype)" >&2
 	exit 2
 	;;
 esac
@@ -326,6 +329,18 @@ description: Counts the lines of a file in a sub-agent.
 context: fork
 ---
 Count the lines of the file notes.txt in the working directory. Report the count as one number.
+EOF
+fi
+if [ "$scenario" = forkgrant ]; then
+	mkdir -p "$T/config/gnosh/skills/stamp"
+	cat > "$T/config/gnosh/skills/stamp/SKILL.md" <<'EOF'
+---
+description: Stamps the working directory, in a sub-agent.
+context: fork
+allowed-tools: Bash(touch stamped.txt)
+---
+Run exactly this one command with your Bash tool, and nothing else: touch stamped.txt
+Then report the one word: stamped.
 EOF
 fi
 cd "$T/work" || exit 1
@@ -557,6 +572,10 @@ agent)
 	;;
 fork)
 	tmux send-keys -t "$S" "/countlines" Enter
+	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
+	;;
+forkgrant)
+	tmux send-keys -t "$S" "/stamp" Enter
 	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
 	;;
 model)
@@ -970,6 +989,9 @@ if [ "$scenario" = agents ]; then
 	tmux send-keys -t "$S" Escape
 	sleep 2
 	echo "=== back in the session: $(screen | grep -v '^ *$' | tail -3 | tr '\n' '|')"
+fi
+if [ "$scenario" = forkgrant ]; then
+	echo "=== stamped.txt: $([ -e "$T/work/stamped.txt" ] && echo there || echo none)"
 fi
 if [ "$scenario" = plan ]; then
 	echo "=== hello.txt: $(cat "$T/work/hello.txt" 2>/dev/null || echo none)"
