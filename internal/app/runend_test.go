@@ -138,6 +138,14 @@ func TestRunIsFor(t *testing.T) {
 	if !runIsFor(pid, id) || runIsFor(pid, "01a1eea5-7777-7000-8000-000000000007") {
 		t.Errorf("the process of the run: for its session %v, for another %v", runIsFor(pid, id), runIsFor(pid, "01a1eea5-7777-7000-8000-000000000007"))
 	}
+	// An id that names no session is no run's, though every command line
+	// holds "" (the relay review of 2026-11-19: ".background.log" was the
+	// log of any process its pid file named).
+	for _, bad := range []string{"", "sh", "01a1eea5"} {
+		if runIsFor(pid, bad) {
+			t.Errorf("the process was taken for the run of %q", bad)
+		}
+	}
 	_ = cmd.Process.Kill()
 	_ = cmd.Wait()
 	if runIsFor(pid, id) {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -292,6 +293,75 @@ func (l *live) copySession(what string) (id, path string, err error) {
 	return id, path, err
 }
 
+// runMark begins every line gnosh writes into a run's log about the run.
+const runMark = "gnosh: "
+
+// runOutput is what a run in the background prints, on its way into its
+// log: a line of it that begins as gnosh's own lines about the run do
+// (runMark) gets a space before it, so that nothing the run prints, a
+// model's reply among it, is taken for gnosh's word about the run: the
+// folder it works in, its session, that it was stopped (the relay review
+// of 2026-11-19: a reply that wrote them had "go on" resume the run in
+// the home folder). gnosh's own lines go into the log the other way:
+// logHead, runEnded, stopping and renaming a run. The run's standard
+// output and its standard error are one file, so they go through one
+// runOutput, which knows where its lines begin.
+type runOutput struct {
+	mu      sync.Mutex
+	w       io.Writer // where flush writes
+	mid     bool      // within a line
+	pending []byte    // the start of a line, while it may be runMark
+}
+
+// to is a writer to w through o.
+func (o *runOutput) to(w io.Writer) io.Writer { return runOutputTo{o, w} }
+
+type runOutputTo struct {
+	o *runOutput
+	w io.Writer
+}
+
+func (t runOutputTo) Write(b []byte) (int, error) {
+	o := t.o
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	out := make([]byte, 0, len(b)+len(o.pending)+1)
+	for _, c := range b {
+		if o.mid {
+			out = append(out, c)
+			o.mid = c != '\n'
+			continue
+		}
+		o.pending = append(o.pending, c)
+		mark := string(o.pending) == runMark
+		if mark || !strings.HasPrefix(runMark, string(o.pending)) {
+			if mark {
+				out = append(out, ' ')
+			}
+			out = append(out, o.pending...)
+			o.mid = c != '\n'
+			o.pending = o.pending[:0]
+		}
+	}
+	if _, err := t.w.Write(out); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+// flush writes what is held of the start of a line: the run is ending.
+func (o *runOutput) flush() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if len(o.pending) > 0 {
+		_, _ = o.w.Write(o.pending)
+		o.pending, o.mid = o.pending[:0], true
+	}
+}
+
 // logHead begins a run's log with what it is: when it started, the
 // session it goes on with, its prompt, its name when it has one, the
 // folder it works in, and the session's file (which the run holds while
@@ -423,10 +493,18 @@ func runsIn(dirs []string, since time.Time) []backgroundRun {
 		paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
 		for _, p := range paths {
 			info, err := os.Stat(p)
-			if err != nil || info.ModTime().Before(since) {
+			if err != nil {
 				continue
 			}
+			// gnosh names a run's log after its session, so a log named
+			// otherwise is no run's (".background.log" would be the run
+			// of every process: the relay review of 2026-11-19). And an
+			// old log is left out unless its run still works: one that
+			// waits on a question for more than a week is still there.
 			id := strings.TrimSuffix(filepath.Base(p), ".background.log")
+			if !transcript.ValidID(id) || info.ModTime().Before(since) && !runAlive(id, p, "") {
+				continue
+			}
 			r := readRunLog(p, id, info.ModTime())
 			r.session = id
 			r.file = firstOf(r.file, filepath.Join(dir, id+".jsonl"))

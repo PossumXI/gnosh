@@ -138,8 +138,10 @@ type program struct {
 
 	// runAsks is the base of the files the permission questions of this
 	// run in the background go through to the agent view (runasks.go), or
-	// "" when there is nobody to ask.
+	// "" when there is nobody to ask. runOut, for such a run, is what it
+	// prints on its way into its log.
 	runAsks string
+	runOut  *runOutput
 
 	// started is the program file as gnosh started from it (nil when it
 	// is not known), and restart the command line /restart asked to start
@@ -328,6 +330,8 @@ func newProgram(o Options) *program {
 		// (runasks.go), as /restart's is.
 		if filepath.IsAbs(base) {
 			p.runAsks = filepath.Clean(base)
+			p.runOut = &runOutput{w: p.stdout.w}
+			p.stdout.w, p.stderr.w = p.runOut.to(p.stdout.w), p.runOut.to(p.stderr.w)
 		}
 		delete(p.env, AsksEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, AsksEnv+"=") })
@@ -591,6 +595,7 @@ func (p *program) runEnded(code int) {
 	if p.runAsks == "" {
 		return
 	}
+	p.runOut.flush()
 	f, err := os.OpenFile(p.runAsks+".log", os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		return
