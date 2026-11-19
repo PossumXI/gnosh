@@ -612,9 +612,15 @@ func (a *Agent) exec(stopped, ctx context.Context, turn string, idx int, tool co
 		}
 		if r := d.verdict.Replace; r != nil {
 			// What the model reads, and what is kept, in place of what
-			// the tool returned.
-			r.Content = sayable(r.Content)
-			d.res = *r
+			// the tool returned: through the same filter (gnosh's own
+			// marks broken, the size cut), as a hook's text is a page's
+			// text passed on.
+			rep := *r
+			if f := a.opts.CleanResult; f != nil {
+				rep = cleanResult(f, call, rep)
+			}
+			rep.Content = sayable(rep.Content)
+			d.res = rep
 		}
 	}
 

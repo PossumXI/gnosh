@@ -416,7 +416,7 @@ func (l *live) afterRound(ctx context.Context, done agent.RoundDone) (agent.Tool
 	if !l.hooks.has(hooks.PostToolBatch) {
 		return agent.ToolVerdict{}, nil
 	}
-	in := hooks.Input{Event: hooks.PostToolBatch, AgentID: done.AgentID, AgentType: done.AgentType}
+	in := hooks.Input{Event: hooks.PostToolBatch, Cwd: l.subStart(done.AgentID), AgentID: done.AgentID, AgentType: done.AgentType}
 	for _, c := range done.Calls {
 		in.ToolCalls = append(in.ToolCalls, hooks.BatchCall{ToolName: c.Call.Name, ToolUseID: c.Call.ID, ToolInput: c.Call.Input, ToolResponse: core.TextOf(c.Result.Content)})
 	}
@@ -501,6 +501,13 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 	return v, errors.Join(errs...)
 }
 
+// withheld is a call's result with its output withheld, for the reason
+// given.
+func withheld(res core.ToolResult, why string) *core.ToolResult {
+	res.Content = []core.Block{core.Text("[The output of this call is withheld: " + why + ".]")}
+	return &res
+}
+
 // postToolHooks runs the PostToolUse hooks on a call that succeeded, or
 // the PostToolUseFailure hooks on one that returned an error. The call has
 // run, so a block is feedback: its reason goes to the model after the
@@ -513,11 +520,16 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 	if !l.hooks.has(event) {
 		return agent.ToolVerdict{}, nil
 	}
+	dir := l.cwd()
+	if e := env(); e != nil && e.Cwd != "" {
+		dir = e.Cwd
+	}
 	in := hooks.Input{
 		Event:     event,
+		Cwd:       dir,
 		ToolName:  done.Call.Name,
 		ToolUseID: done.Call.ID,
-		ToolInput: done.Call.Input,
+		ToolInput: hookToolInput(done.Call, dir, l.cfg.Paths.Home),
 		Duration:  done.Duration,
 		AgentID:   done.AgentID,
 		AgentType: done.AgentType,
@@ -564,12 +576,20 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 
 	out, err := l.hooks.run(ctx, in)
 	if err != nil {
+		// The hooks did not finish: what the call returned is withheld,
+		// since one of them may have been there to hide part of it.
+		v := agent.ToolVerdict{Replace: withheld(done.Result, "the "+string(event)+" hooks the user set up were stopped before they finished, and one of them may have been there to hide part of it")}
 		if ctx.Err() != nil {
-			return agent.ToolVerdict{}, nil
+			return v, nil
 		}
-		return agent.ToolVerdict{}, err
+		return v, err
 	}
 	var v agent.ToolVerdict
+	if out.CutShort && out.UpdatedOutput == nil && !out.OutputClash {
+		// So with a hook that ran out of time or was killed: a slip of
+		// one that hides a key must not show the key.
+		v.Replace = withheld(done.Result, "a "+string(event)+" hook the user set up did not finish, and it may have been there to hide part of it")
+	}
 	if out.UpdatedOutput != nil || out.OutputClash {
 		// What the model reads in place of what the tool returned. One
 		// that cannot be read, or two that differ, withhold the output:

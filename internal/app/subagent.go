@@ -238,6 +238,23 @@ func (l *live) moreRoots() []string {
 	return l.roots[1:]
 }
 
+// subStart is the folder the sub-agent with this id starts in, when it
+// has a work tree of its own, or "": its hooks run there, not in the
+// session's folder.
+func (l *live) subStart(id string) string {
+	if id == "" {
+		return ""
+	}
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	for s := range l.subs {
+		if s.id == id {
+			return s.start
+		}
+	}
+	return ""
+}
+
 // defRoots are the added folders whose own sub-agents, skills and
 // commands are read: those trusted in their own right, or in the project
 // of the folder the session trusts. A folder is added to a session for
@@ -846,7 +863,7 @@ func (s *subSession) sessionStart(ctx context.Context, info agent.StartInfo) ([]
 	if !l.hooks.has(hooks.SubagentStart) {
 		return nil, nil
 	}
-	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SubagentStart, AgentID: s.id, AgentType: s.def.Name})
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SubagentStart, Cwd: s.start, AgentID: s.id, AgentType: s.def.Name})
 	if err != nil {
 		return nil, err
 	}
@@ -945,6 +962,7 @@ func (s *subSession) stopHooks(ctx context.Context, end agent.TurnEnd) (agent.Ve
 	}
 	out, err := l.hooks.run(ctx, hooks.Input{
 		Event:                hooks.SubagentStop,
+		Cwd:                  s.start,
 		AgentID:              s.id,
 		AgentType:            s.def.Name,
 		StopHookActive:       end.Streak > 0,

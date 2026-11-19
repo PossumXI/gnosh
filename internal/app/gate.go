@@ -105,7 +105,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	if l.hooks.has(hooks.PreToolUse) {
 		out, err := l.hooks.run(ctx, hooks.Input{
 			Event: hooks.PreToolUse, Cwd: cwd,
-			ToolName: call.Name, ToolUseID: call.ID, ToolInput: call.Input,
+			ToolName: call.Name, ToolUseID: call.ID, ToolInput: hookToolInput(call, cwd, l.cfg.Paths.Home),
 			AgentID: req.AgentID, AgentType: req.AgentType,
 			IfMatch: l.hookIf(cwd, call, action),
 		})
@@ -202,7 +202,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	if !confirm && l.hooks.has(hooks.PermissionRequest) {
 		out, err := l.hooks.run(ctx, hooks.Input{
 			Event: hooks.PermissionRequest, Cwd: cwd,
-			ToolName: call.Name, ToolInput: call.Input,
+			ToolName: call.Name, ToolInput: hookToolInput(call, cwd, l.cfg.Paths.Home),
 			AgentID: req.AgentID, AgentType: req.AgentType,
 			IfMatch: l.hookIf(cwd, call, action),
 		})
@@ -231,6 +231,12 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	}
 	askCtx := ctx
 	q := l.permissionQuestion(call, action, d)
+	if changed != nil {
+		// A hook changed the call: the question shows what will run, not
+		// what the model wrote (its diff, its command).
+		act := action
+		q.Action = &act
+	}
 	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical}
 	for i, s := range d.Suggestions {
 		if s.Mode != "" {
@@ -504,6 +510,45 @@ func escapeKeepingTabs(line string) string {
 		parts[i] = trust.Escape(p)
 	}
 	return strings.Join(parts, "\t")
+}
+
+// hookPathKeys are the arguments of the file tools that name a path.
+var hookPathKeys = map[string]string{"Read": "file_path", "Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path",
+	"NotebookEdit": "notebook_path", "Glob": "path", "Grep": "path"}
+
+// hookToolInput is a call's arguments as hooks are given them: the path a
+// file tool is given made absolute and clean, from the call's folder and
+// with ~ the home folder, as Claude Code gives them. A hook that guards
+// $CLAUDE_PROJECT_DIR/secrets sees "secrets/key" and "~/x" for the files
+// they are. (The tool reads the same file from the path as written.)
+func hookToolInput(call core.ToolCall, cwd, home string) json.RawMessage {
+	key, ok := hookPathKeys[call.Name]
+	if !ok {
+		return call.Input
+	}
+	var m map[string]json.RawMessage
+	var p string
+	if json.Unmarshal(call.Input, &m) != nil || json.Unmarshal(m[key], &p) != nil || p == "" {
+		return call.Input
+	}
+	abs := p
+	switch {
+	case home != "" && p == "~":
+		abs = home
+	case home != "" && strings.HasPrefix(p, "~/"):
+		abs = filepath.Join(home, p[2:])
+	case !filepath.IsAbs(p) && filepath.IsAbs(cwd) && !strings.HasPrefix(p, "~"):
+		abs = filepath.Join(cwd, p)
+	}
+	if !filepath.IsAbs(abs) || filepath.Clean(abs) == p {
+		return call.Input
+	}
+	m[key], _ = json.Marshal(filepath.Clean(abs))
+	out, err := json.Marshal(m)
+	if err != nil {
+		return call.Input
+	}
+	return out
 }
 
 // permissionQuestion writes the question about one call: exactly what

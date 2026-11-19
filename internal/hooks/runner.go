@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -42,6 +43,14 @@ type Options struct {
 	// StartDir is the directory the session started in. Hooks start
 	// there when the session's working directory no longer exists.
 	StartDir string
+
+	// Untrusted says the project's folder is not trusted. A hook of the
+	// person's own (Hook.Global) whose command runs a program in the
+	// project, as "$CLAUDE_PROJECT_DIR"/.claude/hooks/check.sh does, is
+	// then not run: a repository just cloned could have put anything
+	// there. It counts as a hook that could not be started, so a guard of
+	// that kind blocks what it would have checked.
+	Untrusted bool
 
 	// Shell is the shell that runs hook commands: a program that takes
 	// -c and a command line. Empty means /bin/bash when that file exists
@@ -146,6 +155,7 @@ type Runner struct {
 	now        func() time.Time
 	projectDir string
 	startDir   string
+	untrusted  bool
 	memStatus  string
 	killGrace  time.Duration
 	pipeWait   time.Duration
@@ -213,6 +223,7 @@ func NewRunner(cfg Config, opts Options) (*Runner, error) {
 		now:        opts.Now,
 		projectDir: opts.ProjectDir,
 		startDir:   opts.StartDir,
+		untrusted:  opts.Untrusted,
 		memStatus:  opts.MemStatus,
 		killGrace:  opts.KillGrace,
 		pipeWait:   opts.PipeWait,
@@ -479,6 +490,38 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	return out, nil
 }
 
+// runsInProject says a hook's command names a program in the project's
+// folder: by the variable the project's folder is given in, or by its
+// path.
+func runsInProject(h Hook, projectDir string) bool {
+	for _, w := range append([]string{h.Command}, h.Args...) {
+		for _, v := range []string{"$CLAUDE_PROJECT_DIR", "${CLAUDE_PROJECT_DIR", "$GNOSH_PROJECT_DIR", "${GNOSH_PROJECT_DIR"} {
+			if strings.Contains(w, v) {
+				return true
+			}
+		}
+		if projectDir != "" && strings.Contains(w, strings.TrimSuffix(projectDir, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// sameHandler says two hooks are one handler configured twice: the same
+// command, address with its headers, question, or MCP tool with its input,
+// run the same way (in the background or not, with the same time). Such a
+// hook runs once, as in Claude Code. The line a person reads of a hook
+// (CommandLine) cannot tell: it cuts a question short and leaves out an
+// MCP tool's input and an address's headers, and two hooks that differ in
+// how they run are two guards.
+func sameHandler(a, b Hook) bool {
+	return a.Command == b.Command && slices.Equal(a.Args, b.Args) && (a.Args == nil) == (b.Args == nil) &&
+		a.URL == b.URL && maps.Equal(a.Headers, b.Headers) && slices.Equal(a.AllowedEnvVars, b.AllowedEnvVars) &&
+		a.Server == b.Server && a.Tool == b.Tool && bytes.Equal(a.Input, b.Input) &&
+		a.Prompt == b.Prompt && a.Model == b.Model && a.Agent == b.Agent && a.ContinueOnBlock == b.ContinueOnBlock &&
+		a.Async == b.Async && a.AsyncRewake == b.AsyncRewake && a.Timeout == b.Timeout
+}
+
 // monitorTool is the tool whose commands Bash hooks guard.
 const monitorTool = "Monitor"
 
@@ -555,10 +598,10 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		if h.If != "" && (info.subject != toolName || in.IfMatch != nil && !in.IfMatch(h.If)) {
 			continue
 		}
-		// The same command configured twice runs once. It is a guard
+		// The same handler configured twice runs once. It is a guard
 		// only if every hook that brought it here is one.
 		asBash := guardOnly && in.ToolName == monitorTool
-		if i := slices.IndexFunc(out, func(s selected) bool { return s.CommandLine() == h.CommandLine() && (s.Args == nil) == (h.Args == nil) }); i >= 0 {
+		if i := slices.IndexFunc(out, func(s selected) bool { return sameHandler(s.Hook, h.Hook) }); i >= 0 {
 			out[i].guardOnly = out[i].guardOnly && guardOnly
 			out[i].asBash = out[i].asBash && asBash
 			continue
@@ -673,6 +716,10 @@ func (r *Runner) exec(ctx context.Context, h Hook, stdin []byte, env []string, d
 	began := r.now()
 	defer func() { p.took = r.now().Sub(began) }()
 
+	if r.untrusted && h.Global && runsInProject(h, r.projectDir) {
+		p.startErr = errors.New("its program is in this folder, which is not trusted, and a repository could have put anything there. gnosh trust (or --trust-folder for one run) lets it run")
+		return p
+	}
 	cmd := exec.Command(r.shell, "-c", h.Command)
 	if h.Args != nil {
 		// The exec form: the program and its arguments as they are, with

@@ -2532,3 +2532,41 @@ or kept with the reason said (27).
       is trusted itself (gnosh trust, run there) or lies in the trusted
       project, and the session says what it leaves out. Claude Code runs
       an agent file's hooks only once the folder it came from is trusted.
+
+151. **The security review of the hooks core: the medium findings.**
+    - Hooks configured twice were run once by the line a person reads of
+      them, which cuts a question short and leaves out an MCP tool's
+      input and an address's headers, and the first copy's way of running
+      won: an async copy listed first turned the blocking guard into one
+      that decided nothing. One handler now runs once only when it is the
+      same in all of that, and runs the same way.
+    - The file tools' paths reached hooks as the model wrote them, so a
+      hook guarding $CLAUDE_PROJECT_DIR/secrets let "secrets/key" through.
+      Hooks are now given the path absolute and clean, from the call's
+      folder and with ~ the home folder, as Claude Code gives them; the
+      tool reads the same file from the path as written.
+    - A PermissionRequest hook's approval stood though another hook could
+      not check, while the warning said the question went to the person.
+      A hook that could not check now leaves the question to the person.
+    - The SubagentStart, SubagentStop, PostToolUse and PostToolBatch hooks
+      of a sub-agent with a work tree ran in the session's folder: a "the
+      tests must pass" hook tested the person's checkout. They run in the
+      sub-agent's.
+    - A PostToolUse hook's replacement of a call's output skipped the
+      filter every result goes through (gnosh's own marks broken, the size
+      cut). It goes through it now.
+    - A PostToolUse hook that did not finish (it ran out of time, was
+      killed, printed past the cap, or was cut short when the turn
+      stopped) left the output as the tool gave it, so a hook there to
+      hide a key showed the key when it slipped. Such output is withheld
+      now, with a line that says why. A hook that ends with a status of
+      trouble on purpose leaves it as it is: a formatter that fails on a
+      file must not hide every result.
+    - The question about a call a hook changed showed the call as the
+      model wrote it (its diff, its command); it shows the call as it
+      will run.
+    - In a folder that is not trusted, a hook of the person's own that
+      runs a program in the project ("$CLAUDE_PROJECT_DIR"/.claude/hooks/
+      check.sh) ran whatever a repository just cloned put there. It is not
+      run there now, and counts as a hook that could not start: a guard of
+      that kind blocks what it would have checked.
