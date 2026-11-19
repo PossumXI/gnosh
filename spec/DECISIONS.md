@@ -3919,3 +3919,17 @@ or kept with the reason said (27).
     Ctrl+D pressed twice left with nothing said of them; Claude Code says
     what running work there is as it is left. The first press's line now
     names how many commands running in the background stop with gnosh.
+
+267. **A "don't ask again" never offers more than the person can see it
+    gives.** Three rules it offered reached further than they read (the
+    approvals review of 2026-11-19): a command that began "cd .." from the
+    project's root offered, and kept on disk, read access to the folder
+    that holds every project of the person's, "cd ~" to the home and
+    "cd /" to everything; PYTHON3 or GIT in capitals, which a Mac runs as
+    python3 and git, got the prefix rule those never get; and a * in a
+    fetched URL's host became a wildcard, so an answer for
+    https://*.com/x would let every .com be fetched. No Read rule is now
+    offered for a cd into the root, a top-level folder, the home or a
+    folder that holds the project; a program's name is looked up as the
+    system finds it; and a host with a wildcard is refused, and never
+    makes a rule.

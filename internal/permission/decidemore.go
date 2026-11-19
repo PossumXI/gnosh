@@ -619,7 +619,12 @@ func (e *Engine) decideFetch(req *request) Decision {
 		return d
 	}
 	d.Reason = "Fetching from " + req.host + " asks first."
-	d.Suggestions = []Suggestion{{Rules: []string{"WebFetch(domain:" + req.host + ")"}, Scope: GrantLocal}}
+	if !strings.Contains(req.host, "*") {
+		// (A * in a host is a wildcard in the rule it would make: an
+		// answer for https://*.com/x would let every .com be fetched
+		// unasked; the approvals review of 2026-11-19.)
+		d.Suggestions = []Suggestion{{Rules: []string{"WebFetch(domain:" + req.host + ")"}, Scope: GrantLocal}}
+	}
 	return d
 }
 

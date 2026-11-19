@@ -105,6 +105,11 @@ func Check(raw string, allowPrivate bool) (*url.URL, error) {
 		}
 		return u, nil
 	}
+	if strings.ContainsAny(host, "*?[]{}") {
+		// No name on the web holds one, and a rule made from such a host
+		// would stand for many.
+		return nil, fmt.Errorf("%w: %s is not a host name: it holds a wildcard", ErrRefused, host)
+	}
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") || !strings.Contains(host, ".") {
 		return nil, fmt.Errorf("%w: %s is not a host on the open web (it is localhost, or a name without a dot); use curl through the shell for those", ErrRefused, host)
 	}

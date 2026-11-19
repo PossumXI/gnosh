@@ -4109,7 +4109,7 @@ func prefixOnlyExact(ws []word) bool {
 	if len(ws) == 0 {
 		return false
 	}
-	switch baseName(ws[0].lit()) {
+	switch progKey(baseName(ws[0].lit())) {
 	case "watch", "setsid", "ionice", "flock":
 		return true
 	case "find":

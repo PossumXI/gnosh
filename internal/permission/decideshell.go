@@ -2052,7 +2052,12 @@ var noPrefix = map[string]bool{
 // that directory.
 func (e *Engine) suggestRules(c *simpleCmd, f cmdFacts, st *lineState) (exact, prefix string) {
 	if f.name == "cd" && f.cd != nil {
-		if abs, _, ok := e.absAll(*f.cd, st.dirs); ok && len(abs) == 1 {
+		// Not for a folder the Read tool would offer no such rule for
+		// either: the root, a top-level folder, the home, a folder that
+		// holds the project. "cd .. && ls" from the project's root offered
+		// Read(//<all the person's projects>/**), kept on disk (the
+		// approvals review of 2026-11-19).
+		if abs, _, ok := e.absAll(*f.cd, st.dirs); ok && len(abs) == 1 && abs[0] != "/" && e.criticalDir(abs[0]) == "" {
 			return "Read(/" + EscapePath(abs[0]) + "/**)", ""
 		}
 		return "", ""
@@ -2076,7 +2081,11 @@ func (e *Engine) suggestRules(c *simpleCmd, f cmdFacts, st *lineState) (exact, p
 		return "", ""
 	}
 	name := c.words[0].joined()
-	if noPrefix[baseName(name)] || strings.Contains(name, "/") || prefixOnlyExact(c.words) || len(c.words) == 1 {
+	// The program as a system that does not tell capitals apart finds
+	// it: PYTHON3 runs python3 on a Mac, and Bash(PYTHON3 *) would let
+	// any script run (the approvals review of 2026-11-19).
+	key := progKey(baseName(name))
+	if noPrefix[key] || strings.Contains(name, "/") || prefixOnlyExact(c.words) || len(c.words) == 1 {
 		return exact, ""
 	}
 	head := name
@@ -2085,7 +2094,7 @@ func (e *Engine) suggestRules(c *simpleCmd, f cmdFacts, st *lineState) (exact, p
 		if len(c.words) == 2 {
 			return exact, ""
 		}
-	} else if needsSubcommand[name] {
+	} else if needsSubcommand[key] {
 		return exact, ""
 	}
 	if prefix = "Bash(" + head + " *)"; !covers(prefix) {

@@ -412,6 +412,19 @@ func TestSuggestions(t *testing.T) {
 		{"npm ci && npm test -- x", []string{"Bash(npm ci) + Bash(npm test -- x)", "Bash(npm ci) + Bash(npm test *)"}},
 		// A cd out of the working directories yields a Read rule.
 		{"cd /opt/data", []string{"Read(//opt/data/**)"}},
+		// But not for the root, a top-level folder, the home or a folder
+		// that holds the project: "cd .." from the project's root kept
+		// read access to every project beside it (the approvals review of
+		// 2026-11-19).
+		{"cd .. && ls", nil},
+		{"cd / && ls", nil},
+		{"cd /opt && ls", nil},
+		{"cd ~ && ls", nil},
+		// A program written in capitals is the program a Mac runs: no
+		// prefix rule for it where there would be none in lower case.
+		{"PYTHON3 -c 'print(1)'", []string{"Bash(PYTHON3 -c 'print(1)')"}},
+		{"GIT -c x=y log", []string{"Bash(GIT -c x=y log)"}},
+		{"FIND . -name x", []string{"Bash(FIND . -name x)"}},
 		// More than five parts, or a part no rule could cover: a one-time
 		// yes only.
 		{"a1; a2; a3; a4; a5; a6", nil},
@@ -449,6 +462,14 @@ func TestSuggestions(t *testing.T) {
 		if d2 := bash(e2, tt.cmd+" && touch /tmp/pwned"); d2.Behavior != Ask {
 			t.Errorf("%q: the granted rule let more through: %+v", tt.cmd, d2)
 		}
+	}
+
+	// A * in a host would be a wildcard in the rule: no rule is offered.
+	if d := fetch(e, "https://*.com/x"); len(d.Suggestions) != 0 {
+		t.Errorf("a host with a *: %q", suggested(d))
+	}
+	if d := fetch(e, "https://docs.example.org/x"); strings.Join(suggested(d), " | ") != "WebFetch(domain:docs.example.org)" {
+		t.Errorf("a plain host: %q", suggested(d))
 	}
 
 	// File tools.

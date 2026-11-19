@@ -54,6 +54,7 @@ func TestCheckRefusesWhatIsNotTheOpenWeb(t *testing.T) {
 		"https://127.0.0.1/", "https://10.0.0.5/", "https://192.168.1.91:8080/", "https://[::1]/", "https://169.254.169.254/latest",
 		"https://100.64.1.2/", "ftp://example.org/x", "file:///etc/passwd", "https://user:pw@example.org/", "not a url",
 		"https://example.org/" + strings.Repeat("a", MaxURL),
+		"https://*.com/x", "https://pypi*.org/simple", // a wildcard is no host
 	} {
 		if _, err := Check(raw, false); !errors.Is(err, ErrRefused) {
 			t.Errorf("%q: got %v, want a refusal", raw, err)
