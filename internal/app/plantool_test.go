@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -31,7 +33,17 @@ func TestPlanApproval(t *testing.T) {
 	s.typeLine("/exit")
 	s.exit()
 	has(t, "the edit made while planning", toolResult(t, w, 1, "c1"), "Plan mode is on", "Present the plan with ExitPlanMode")
-	has(t, "what the model read of the approval", toolResult(t, w, 2, "c2"), "The user approved the plan", "acceptEdits")
+	approval := toolResult(t, w, 2, "c2")
+	has(t, "what the model read of the approval", approval, "The user approved the plan", "acceptEdits", "The plan as approved is kept in ")
+	// (Kept for the person and the model, the person's alone: the plan
+	// review of 2026-11-19.)
+	if m := regexp.MustCompile(`kept in (\S+\.md),`).FindStringSubmatch(approval); m == nil {
+		t.Errorf("no plan file named in %q", approval)
+	} else if info, err := os.Stat(m[1]); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the kept plan %s: %v %v", m[1], info, err)
+	} else if data, _ := os.ReadFile(m[1]); !strings.Contains(string(data), "1. Write x.txt.") {
+		t.Errorf("the kept plan holds %q", data)
+	}
 	if data := w.Read("x.txt"); data != "planned\n" {
 		t.Errorf("x.txt holds %q", data)
 	}

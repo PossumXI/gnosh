@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -97,5 +99,37 @@ func (t *exitPlanTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 			return core.ErrorResult("The plan was approved, and plan mode could not be left: " + strings.TrimRight(err.Error(), ".") + "."), nil
 		}
 	}
-	return core.TextResult(fmt.Sprintf("The user approved the plan. The session is in the %s mode now: carry the plan out.", l.engine.Mode())), nil
+	text := fmt.Sprintf("The user approved the plan. The session is in the %s mode now: carry the plan out.", l.engine.Mode())
+	if path := l.keepPlan(call); path != "" {
+		text += " The plan as approved is kept in " + path + ", for when it is no longer in front of you."
+	}
+	return core.TextResult(text), nil
+}
+
+// keepPlan writes an approved plan to a file of the session's own, the
+// person's alone (0600), and returns its path, or "" when it could not be
+// kept: it was kept nowhere, so that after a summary neither the person
+// nor the model could look at it again (the plan review of 2026-11-19).
+func (l *live) keepPlan(call core.ToolCall) string {
+	var in struct {
+		Plan string `json:"plan"`
+	}
+	if json.Unmarshal(call.Input, &in) != nil || strings.TrimSpace(in.Plan) == "" || l.ts == nil {
+		return ""
+	}
+	dir := filepath.Join(l.st.dirs(l.ts.ID()).Session, "plans")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	path := filepath.Join(dir, l.p.now().UTC().Format("20060102-150405")+".md")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return ""
+	}
+	_, werr := f.WriteString(strings.TrimSpace(in.Plan) + "\n")
+	if cerr := f.Close(); werr != nil || cerr != nil {
+		_ = os.Remove(path)
+		return ""
+	}
+	return path
 }

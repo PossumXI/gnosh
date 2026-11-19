@@ -4138,3 +4138,10 @@ or kept with the reason said (27).
     pasted (the plan review of 2026-11-19). Such a GNOSH.md is no longer
     offered, folders made for the person's files are 0700, and the draft
     gets a folder of its own, removed whole after.
+
+289. **An approved plan is kept.** Once answered, the plan was kept
+    nowhere: the scrollback held the question's answer, and after a
+    summary neither the person nor the model could look at the plan again
+    (the plan review of 2026-11-19). An approved plan is now written to a
+    file of the session's own, plans/<time>.md in its folder, the person's
+    alone, and the model is told where it is.
