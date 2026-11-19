@@ -7,6 +7,10 @@ import (
 	"os"
 )
 
+// replaceLoses says what a new file in the place of the one old describes
+// would lose: nothing known here.
+func replaceLoses(old fs.FileInfo) string { return "" }
+
 // keepOwner does nothing on systems without Unix file ownership.
 func keepOwner(f *os.File, old fs.FileInfo) {}
 

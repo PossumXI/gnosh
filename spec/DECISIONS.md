@@ -3764,3 +3764,12 @@ or kept with the reason said (27).
     loaded by the model, and one kept from the model by nobody, with
     nothing said (the skills review of 2026-11-19). /skills now says
     which it is.
+
+250. **A file with other names, or of an owner or group a new file could
+    not have, is written where it is.** Edit and Write put a new file in
+    a file's place, so its hard links went on holding the old content
+    (238 only said so), and a file of another user or group became the
+    editor's (the Edit/Write review of 2026-11-19). As editors do, such a
+    file is now written where it is: its other names see the new content
+    and it stays whose it was, and the result says why it was written so.
+    One the process may not write so is replaced as any other.

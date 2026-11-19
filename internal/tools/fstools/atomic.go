@@ -80,6 +80,25 @@ const keptModeBits = fs.ModePerm | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky
 //
 // The returned info is that of the new content's file.
 func (ops *fileOps) replaceFile(path string, data []byte, old fs.FileInfo) (info fs.FileInfo, inPlace string, err error) {
+	if old != nil {
+		// A file with other names, or of an owner or group a new file
+		// could not have, is written where it is: its other names see the
+		// new content, and it stays whose it was (the Edit/Write review of
+		// 2026-11-19). One that may not be written so is replaced, as any
+		// other.
+		if why := replaceLoses(old); why != "" {
+			if changed := changedSince(path, old); changed != "" {
+				return nil, "", errors.New(changed + ": nothing was written; read it again")
+			}
+			info, err := ops.writeInPlace(path, data)
+			if err == nil {
+				return info, why, nil
+			}
+			if !errors.Is(err, fs.ErrPermission) {
+				return nil, "", fmt.Errorf("write it where it is, since %s: %w", why, err)
+			}
+		}
+	}
 	dir := filepath.Dir(path)
 	perm := fs.FileMode(0o666)
 	if old != nil {
