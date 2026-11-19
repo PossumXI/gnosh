@@ -3109,3 +3109,17 @@ or kept with the reason said (27).
     cannot be asked (its turns are spent, or the session is closing),
     the run says so on stderr, stops what is left, as Claude Code's wait
     does, and ends with the last turn's result.
+
+186. **An MCP server's name keeps its tools apart from another's.** Tools
+    are named mcp__<server>__<tool>, and a rule for a server's tools
+    (mcp__github) reads as mcp__github__*: it covered the tools of a
+    server named github__x or github_ too, so an allow for one server
+    reached another that a project's .mcp.json added (the MCP review's
+    note). And FitToolName, shortening a name to the 64 characters the
+    model's APIs take, could cut through a long server name, so that a
+    deny rule for that server covered none of its tools. A server whose
+    name, as its tools' names write it, holds "__", ends in "_" or is
+    longer than 48 characters is not used now: the configuration's
+    problem says why and to rename it, and gnosh mcp add refuses the
+    name. Two servers whose names come to one (a.b and a_b) still have
+    the first one's tools offered.
