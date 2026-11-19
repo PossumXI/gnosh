@@ -3421,3 +3421,11 @@ or kept with the reason said (27).
     and was lost, against Tell's promise that stopping never loses a note
     (the agent loop review of 2026-11-19). It is kept as a note now, and
     goes with the next request.
+
+216. **With two questions open, the session says it waits on the one
+    left.** Parallel sub-agents can each ask at once. The answer to the
+    first put back the phase from before it, so the session read as
+    working while the second question still waited, and the second's end
+    put back the first's "waiting for an answer" (the agent loop review of
+    2026-11-19). What the session did before the first question is put
+    back when the last one closes; until then it waits on one still open.

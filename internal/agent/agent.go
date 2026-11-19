@@ -269,11 +269,17 @@ type Agent struct {
 	tree       *core.WorkTree // its work tree (Options.Tree, SubOptions.Tree), or its parent's
 	loop       loopState
 	questions  map[string]chan Answer
-	state      State
-	running    []RunningCall
-	totals     Totals
-	cachePrev  cachePrint // the last main request, for Totals.Cache
-	context    ContextStatus
+	// asking is what each open question waits for, in words, and
+	// beforeAsk the state before the first of them was put: with two open
+	// (parallel sub-agents), the first answer put the phase back while the
+	// second still waited (the agent loop review of 2026-11-19).
+	asking    map[string]string
+	beforeAsk State
+	state     State
+	running   []RunningCall
+	totals    Totals
+	cachePrev cachePrint // the last main request, for Totals.Cache
+	context   ContextStatus
 
 	// The rest belongs to the session's goroutine alone.
 	settled      bool
@@ -393,6 +399,7 @@ func newAgent(opts Options, parent *Agent, sub SubOptions) (*Agent, error) {
 		roots:     slices.Clone(opts.Roots),
 		tree:      opts.Tree,
 		questions: make(map[string]chan Answer),
+		asking:    make(map[string]string),
 		calib:     1,
 	}
 	if a.store == nil {
@@ -979,10 +986,14 @@ func (a *Agent) ask(ctx context.Context, q Question, who Meta) (Answer, error) {
 		a.mu.Unlock()
 		return Answer{}, ErrClosed
 	}
+	if len(a.questions) == 0 {
+		a.beforeAsk = a.state
+	}
 	a.questions[q.ID] = ch
-	prev := a.state
+	waiting := "waiting for the person to answer: " + oneLine(firstNonEmpty(q.Title, q.Text, q.Kind))
+	a.asking[q.ID] = waiting
 	a.state.Phase = PhaseQuestion
-	a.state.Waiting = "waiting for the person to answer: " + oneLine(firstNonEmpty(q.Title, q.Text, q.Kind))
+	a.state.Waiting = waiting
 	a.state.Since = a.clock.Now()
 	a.mu.Unlock()
 
@@ -1000,8 +1011,16 @@ func (a *Agent) ask(ctx context.Context, q Question, who Meta) (Answer, error) {
 
 	a.mu.Lock()
 	delete(a.questions, q.ID)
+	delete(a.asking, q.ID)
 	if a.state.Phase == PhaseQuestion {
-		a.state.Phase, a.state.Waiting, a.state.Since = prev.Phase, prev.Waiting, a.clock.Now()
+		if len(a.questions) == 0 {
+			a.state.Phase, a.state.Waiting, a.state.Since = a.beforeAsk.Phase, a.beforeAsk.Waiting, a.clock.Now()
+		} else {
+			for _, w := range a.asking {
+				a.state.Waiting = w // one that still waits
+				break
+			}
+		}
 	}
 	a.mu.Unlock()
 	a.emit(&AnswerEvent{Meta: who, ID: q.ID, Answer: ans, Withdrawn: err != nil})

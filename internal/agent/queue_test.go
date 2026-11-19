@@ -896,3 +896,39 @@ func TestNoteStoppedInItsCheckIsKept(t *testing.T) {
 		t.Errorf("the note was lost: the request held %q", sent.String())
 	}
 }
+
+// With two questions open at once (parallel sub-agents), the first answer
+// leaves the session waiting on the second, and says which; the last one
+// puts back what the session was doing: the first answer put the phase
+// back while the second still waited (the agent loop review of
+// 2026-11-19).
+func TestTwoQuestionsAtOnce(t *testing.T) {
+	r := newRig(t, func(o *Options) { o.Interactive = true })
+	before := r.a.State().Phase
+	done := make(chan error, 2)
+	for _, title := range []string{"first?", "second?"} {
+		go func() {
+			_, err := r.a.Ask(context.Background(), Question{Kind: "confirm", Title: title})
+			done <- err
+		}()
+		waitEvent(t, r.rec, func(e *QuestionEvent) bool { return e.Question.Title == title })
+	}
+	qs := eventsOf[*QuestionEvent](r.rec)
+	if len(qs) != 2 {
+		t.Fatalf("%d questions", len(qs))
+	}
+	if err := r.a.Answer(qs[0].Question.ID, Answer{Choice: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if st := r.a.State(); st.Phase != PhaseQuestion || !strings.Contains(st.Waiting, "second?") {
+		t.Errorf("with one question still open: %+v", st)
+	}
+	if err := r.a.Answer(qs[1].Question.ID, Answer{Choice: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if st := r.a.State(); st.Phase != before {
+		t.Errorf("after both: phase %v, want %v", st.Phase, before)
+	}
+}
