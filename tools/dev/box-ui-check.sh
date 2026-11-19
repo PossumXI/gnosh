@@ -33,6 +33,7 @@
 #	ssh ai-remote bash -s -- agents < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- bgfail < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- repo < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- trusttype < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -167,6 +168,11 @@
 #               notes.txt."), and the model edits it after the summary
 #   filesuggest a fileSuggestion command offers the paths for "@comp": the
 #               list shows them once it answers, with no key pressed
+#   trustmcp    a folder with only an MCP server and a skill's allowed
+#               tools is asked about; 1 (No) starts neither
+#   trusttype   "fix the 2 failing tests" typed as the trust question comes
+#               up does not answer it; 1 (No) after a pause, and the words
+#               are in the prompt box (no model)
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -180,7 +186,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
@@ -207,7 +213,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp, trusttype)" >&2
 	exit 2
 	;;
 esac
@@ -242,7 +248,7 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
-if [ "$scenario" = trustmcp ]; then
+if [ "$scenario" = trustmcp ] || [ "$scenario" = trusttype ]; then
 	# A folder whose only own content is an MCP server and a skill that
 	# lets a command run without asking: the trust question names both
 	# (DECISIONS 201), and a No starts neither.
@@ -412,6 +418,16 @@ if [ "$scenario" = restart ]; then
 fi
 envs="env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8"
 tmux new-session -d -s "$S" -x 110 -y 40 "$envs $bin $flags"
+if [ "$scenario" = trusttype ]; then
+	# Someone types their first prompt as gnosh starts, a key every tenth
+	# of a second: the trust question waits for a pause, and the 2 in it
+	# does not pick "Yes" (DECISIONS 217).
+	for i in $(seq 1 100); do tmux capture-pane -p -t "$S" | grep -q "Trust this folder?" && break; sleep 0.1; done
+	for c in f i x ' ' t h e ' ' 2 ' ' f a i l i n g ' ' t e s t s; do
+		tmux send-keys -t "$S" -l "$c"
+		sleep 0.1
+	done
+fi
 sleep 4
 echo "=== before"
 tmux capture-pane -p -t "$S"
@@ -778,6 +794,11 @@ failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
 	;;
+trusttype)
+	# (Under "before": the question, still up after the typing.)
+	tmux send-keys -t "$S" "1"
+	done_when() { tmux capture-pane -p -t "$S" | grep -q "> fix the 2 failing tests" && screen | grep -q "Trust this folder? No"; }
+	;;
 trustmcp)
 	# (The question is on the screen above, under "before".)
 	tmux send-keys -t "$S" "1"
@@ -929,7 +950,7 @@ if [ "$scenario" = bgfail ]; then
 	tmux send-keys -t "$S" Escape
 	sleep 1
 fi
-if [ "$scenario" = filesuggest ]; then
+if [ "$scenario" = filesuggest ] || [ "$scenario" = trusttype ]; then
 	tmux send-keys -t "$S" C-u
 	sleep 1
 fi
