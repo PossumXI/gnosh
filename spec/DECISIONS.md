@@ -2717,3 +2717,21 @@ or kept with the reason said (27).
     a sub-agent's TaskStop refuses a command it did not start, and refuses
     every background sub-agent (a sub-agent starts none). The session's
     own TaskStop is as it was.
+
+161. **The "No" of a background sub-agent's question says what it stops.**
+    The screen sets a permission question's bare "no" out as its own row,
+    "the call does not run, and the turn stops". For a sub-agent in the
+    background it stops that sub-agent alone (157), and the row said the
+    turn. The question's data now says what a bare "no" stops when it is
+    not the turn (QuestionData.Stops), and the row says it. Also a new
+    box check, subask: the model has a sub-agent run a command, and the
+    question says which sub-agent asks (passed on box 1 with Qwen,
+    a4ef214).
+
+162. **The sign-in's listener is shut down gently.** An MCP server's
+    sign-in waits for the browser to come back with a code; the code goes
+    to the sign-in before the page "Signed in" is written, and the sign-in
+    then closed the listener at once. A CI run under load saw the browser
+    get nothing (EOF): the person would have seen an error in the tab of
+    a sign-in that worked. The listener now shuts down gracefully, with
+    what does not finish in two seconds closed.

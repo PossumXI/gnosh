@@ -523,11 +523,17 @@ type QuestionData struct {
 	// the engine found could destroy what has to be kept. No channel is
 	// sent it.
 	PersonOnly bool
+	// Stops is what a bare "no" stops, when it is not the turn: "that
+	// sub-agent", for a question of a sub-agent in the background.
+	Stops string
 }
 
 // Deadline is when the question is taken back unanswered, or the zero
 // time.
 func (d QuestionData) Deadline() time.Time { return d.Until }
+
+// NoStops is what a bare "no" stops, or "" for the turn.
+func (d QuestionData) NoStops() string { return d.Stops }
 
 // TasksEvent says the session's task list has changed, and carries all of
 // it: the list a front end shows under the prompt, in order. An empty list

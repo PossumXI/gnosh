@@ -240,6 +240,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 	}
 	askCtx := ctx
 	q := l.permissionQuestion(call, action, d)
+	stops := ""
 	if req.AgentID != "" {
 		// A sub-agent asks: the question says which, and a background
 		// one's says what it was started for, so that it is never taken
@@ -247,6 +248,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		asker := "The sub-agent " + trust.Escape(firstOf(req.AgentType, "of this session"))
 		if b, ok := l.backgroundAgent(req.AgentID); ok {
 			asker = fmt.Sprintf("The background sub-agent %s (%s)", trust.Escape(b.kind), trust.Escape(oneLine(b.desc, 80)))
+			stops = "that sub-agent"
 			for i := range q.Choices {
 				if q.Choices[i].Key == "no" {
 					q.Choices[i].Label = "No (alone it stops that sub-agent; with words after it, it reads them and carries on)"
@@ -261,7 +263,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		act := action
 		q.Action = &act
 	}
-	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical}
+	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical, Stops: stops}
 	for i, s := range d.Suggestions {
 		if s.Mode != "" {
 			data.Modes["always:"+strconv.Itoa(i)] = string(s.Mode)

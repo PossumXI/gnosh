@@ -159,6 +159,9 @@
 #   rewind      (acceptEdits) the model writes note.txt, the person changes
 #               it by hand, and /rewind 1 files takes it away again, keeping
 #               what the person wrote beside the session
+#   subask      the model has a sub-agent run a command; the sub-agent's
+#               question says which sub-agent asks ("The sub-agent
+#               general-purpose asks: Allow Bash?")
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -172,7 +175,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback) ;;
+basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind) flags="--permission-mode acceptEdits" ;;
@@ -754,6 +757,11 @@ rewind)
 	echo "by hand" > "$T/work/note.txt"
 	tmux send-keys -t "$S" "/rewind 1 files" Enter
 	done_when() { [ ! -e "$T/work/note.txt" ] && screen | grep -q "what it held is kept at"; }
+	;;
+subask)
+	# A sub-agent's question names the sub-agent that asks (a4ef214).
+	tmux send-keys -t "$S" "Use the Agent tool with subagent_type general-purpose to have a sub-agent run this shell command: touch made-by-sub.txt" Enter
+	done_when() { screen | grep -q "sub-agent general-purpose asks: Allow Bash"; }
 	;;
 subtask)
 	tmux send-keys -t "$S" "Say hi in two words." Enter
