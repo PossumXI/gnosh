@@ -551,6 +551,20 @@ func TestWriteKeepsTheFilesLineEndings(t *testing.T) {
 	}
 }
 
+// An old_string found again where it overlaps itself ("aba" in "ababa") is
+// found more than once: the edit is refused, as for two places apart. It
+// went to the first place unasked (the Edit/Write review of 2026-11-19).
+func TestEditRefusesAnOverlappingRepeat(t *testing.T) {
+	f := newFixture(t, Options{})
+	p := f.file("pattern.txt", "x ababa y\n")
+	f.ok(f.read, in{"file_path": p})
+	f.fails(f.edit, in{"file_path": p, "old_string": "aba", "new_string": "ABA"}, "found more than once", "overlap")
+	if got := f.content(p); got != "x ababa y\n" {
+		t.Errorf("the file holds %q", got)
+	}
+	f.ok(f.edit, in{"file_path": p, "old_string": "x aba", "new_string": "x ABA"})
+}
+
 func TestWriteGuardsDamagedText(t *testing.T) {
 	f := newFixture(t, Options{})
 	p := f.file("latin1.txt", "caf\xe9\n")

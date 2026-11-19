@@ -245,6 +245,14 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 		return c, failf("old_string is found %d times in %s (at %s). Nothing was changed. Add more of the surrounding text to old_string so that it picks out one place, or set replace_all to true to change every one.",
 			len(starts), loc.abs, editLines(c.edits, false))
 	}
+	if len(starts) == 1 && !all && strings.Contains(view.text[starts[0]+1:], oldLF) {
+		// It is found once more where it overlaps the first place ("aba"
+		// in "ababa"), which findAll steps over: that is two places too,
+		// and the edit would have gone to the first unasked (the
+		// Edit/Write review of 2026-11-19).
+		return c, failf("old_string is found more than once in %s, at places that overlap (from %s on). Nothing was changed. Add more of the surrounding text to old_string so that it picks out one place.",
+			loc.abs, editLines(c.edits, false))
+	}
 	var unseen []lineEdit
 	for _, e := range c.edits {
 		if !rec.sees(span{e.first, e.last}) {

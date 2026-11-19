@@ -3647,3 +3647,10 @@ or kept with the reason said (27).
     begins with a byte order mark, and the content given has neither,
     Write gives it the file's own, says so, and the diff to approve shows
     the real change. A file whose endings are mixed is written as given.
+
+237. **An old_string found again where it overlaps itself is found more
+    than once.** Edit counted the places old_string is found without
+    overlap, so "aba" in "ababa" was one place, and the edit went to the
+    first unasked, where the rule is to refuse a text found more than once
+    (the Edit/Write review of 2026-11-19). It is now refused, as two places
+    apart are, and the model is told to add more of the text around it.
