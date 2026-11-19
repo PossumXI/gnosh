@@ -3574,3 +3574,14 @@ or kept with the reason said (27).
     review of 2026-11-19). A mem call now keeps 64 KiB of what it prints,
     with a line saying how much more there was, and the worker answers a
     reply it cannot send with an error saying the call ran.
+
+230. **A fmt or mem native looks at the call's wall clock, and for a stop,
+    before it does anything.** A native costs a flat amount of gas
+    whatever it does, and the meter looks at the clock and for a stop
+    only every million gas: a loop of mem.Find calls, each reading every
+    row and waiting up to half a second on an embedding server, ran for
+    minutes past the call's limit while it held mem's lock, so every
+    session on the project waited, and Esc was not seen (the gno review
+    of 2026-11-19). Each fmt and mem native now polls the meter first.
+    Left: the client's 15-minute backstop, and gas charged by what a
+    native does.
