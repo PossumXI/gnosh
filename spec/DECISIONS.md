@@ -2600,3 +2600,13 @@ or kept with the reason said (27).
     and a guard blocks the call. To leave the variable out would let a
     command padded past the limit by those hooks that read it; a call
     that big is better put another way (a file the model writes first).
+
+153. **What a command leaves running is looked at twice.** When a Bash
+    command ends, the processes still in its session that let go of its
+    output (a server started with cmd >log 2>&1 &) are kept on the books
+    and reported. A clean-copy CI run on a busy devbox reported
+    `(sleep 0.1; echo late) &` as left running: the subshell had closed
+    the output as it ended and was seen before it was gone. As the
+    pruning of the books already does (DECISIONS 140's note on 7fd75ab),
+    the session is looked at again 50 ms later, and only what is there
+    both times, with the same start, was left running.

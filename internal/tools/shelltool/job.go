@@ -493,9 +493,14 @@ func (j *job) finish(why endReason, limit time.Duration) {
 		// holds the output is. One that started a session of its own
 		// (setsid) is not in it, and is left alone.
 		if left, err := m.procs(j.pid); err == nil && len(left) > 0 {
-			e.detached = left
-			if !m.keepDetached(j.pid, left) {
-				m.sweep(j.pid, left) // (the manager is closing)
+			// A process that let go of the output as it ended may not have
+			// gone at that look: it was left running only if it is still
+			// there a moment later.
+			if left = m.stillThere(j.pid, left); len(left) > 0 {
+				e.detached = left
+				if !m.keepDetached(j.pid, left) {
+					m.sweep(j.pid, left) // (the manager is closing)
+				}
 			}
 		}
 	}

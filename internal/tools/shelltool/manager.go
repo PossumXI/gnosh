@@ -679,6 +679,26 @@ func (m *Manager) pruneDetached() {
 	}
 }
 
+// stillThere looks at a session again, pruneRecheck later, and keeps of
+// left the processes that are still in it. A look at a session is not one
+// moment: a process that closed the output as it ended may be seen before
+// it is gone (a CI run on a busy machine saw `(sleep 0.1; echo late) &`
+// reported as left running).
+func (m *Manager) stillThere(sid int, left []procInfo) []procInfo {
+	time.Sleep(pruneRecheck)
+	again, err := m.procs(sid)
+	if err != nil {
+		return left
+	}
+	var out []procInfo
+	for _, p := range left {
+		if slices.ContainsFunc(again, func(q procInfo) bool { return q.pid == p.pid && q.start == p.start }) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // pruneRecheck is how long pruneDetached waits before it looks again at a
 // session that looked empty.
 const pruneRecheck = 50 * time.Millisecond

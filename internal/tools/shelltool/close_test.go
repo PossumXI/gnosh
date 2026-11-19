@@ -874,3 +874,26 @@ func TestLingerAfterTheOutputClosed(t *testing.T) {
 		t.Errorf("close did not stop what the command left: signalled %v", sent)
 	}
 }
+
+// What a command seems to leave running is looked at again before it is
+// said to be: a process that closed the output as it ended may still be
+// seen at the first look. One whose pid now has another start is another
+// process.
+func TestLeftRunningIsLookedAtTwice(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	first := []procInfo{{pid: 6001, pgid: 6000, start: 9, image: "bash"}, {pid: 6002, pgid: 6000, start: 9, image: "server"}}
+	m.procs = func(int) ([]procInfo, error) {
+		return []procInfo{{pid: 6002, pgid: 6000, start: 9, image: "server"}, {pid: 6003, pgid: 6000, start: 10, image: "new"}}, nil
+	}
+	got := m.stillThere(6000, first)
+	if len(got) != 1 || got[0].pid != 6002 {
+		t.Errorf("still there: %+v, want the server alone", got)
+	}
+	m.procs = func(int) ([]procInfo, error) {
+		return []procInfo{{pid: 6002, pgid: 6000, start: 11, image: "server"}}, nil
+	}
+	if got := m.stillThere(6000, first); len(got) != 0 {
+		t.Errorf("a pid that changed hands counted as still there: %+v", got)
+	}
+}
