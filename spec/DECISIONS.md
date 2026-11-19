@@ -3054,3 +3054,22 @@ or kept with the reason said (27).
     kept; an older one is let go of, and its output file with it, unless
     something it left running still writes there. The model is told of
     each as it ends, with its file.
+
+182. **The review of print mode.** A fresh-eyes review (2026-11-19) of -p
+    and the stream-json protocol:
+    - A stream-json message that begins with "/" and names no command
+      ("/etc/nginx/nginx.conf fails to load, why?", or any "/" message
+      with slash commands off) waited under no id: nothing was answered,
+      no result line was written, and the run never ended. It is a
+      prompt like any other now, as in the text path.
+    - Every run that used Bash was taken for one with work in the
+      background (a command that ended in the foreground counted), so
+      in stream-json its result line was written before the structured
+      output was asked for: --json-schema never reached the result, a run
+      whose structured output failed exited 1 under a "success" line, and
+      each such run waited a second more. Only work that went to the
+      background counts now.
+    - The turn the model is given when a run's end would stop what it
+      left running (DECISIONS 117) is gnosh's own: its reply ("Restarted
+      the server with setsid") took the place of the answer to the
+      prompt as the run's result. The answer stays the result.

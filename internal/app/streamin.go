@@ -120,15 +120,20 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 		}
 		if !m.u.ClientComposed && strings.HasPrefix(strings.TrimSpace(text), "/") {
 			res, err := c.Command(ctx, strings.TrimSpace(text))
-			if (res.Handled && res.Prompt == "") || err != nil {
+			switch {
+			case err != nil || res.Handled && res.Prompt == "":
 				if f.streamCommand(c, res, err, m.u.UUID) {
 					code = cli.ExitFailure
 				}
 				return
+			case res.Handled:
+				pending[res.Prompt] = waiting{since: f.p.now(), uuid: m.u.UUID}
+				unstarted[res.Prompt] = true
+				return
 			}
-			pending[res.Prompt] = waiting{since: f.p.now(), uuid: m.u.UUID}
-			unstarted[res.Prompt] = true
-			return
+			// Not a command ("/etc/nginx.conf fails to load", or slash
+			// commands are off): a prompt like any other, as in the text
+			// path. (It waited under no id, and the run never ended.)
 		}
 		if m.u.Priority == "now" {
 			c.Interrupt()

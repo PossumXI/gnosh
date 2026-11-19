@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -447,5 +448,53 @@ func TestRunSeveralCallsInOrder(t *testing.T) {
 	}
 	for i, want := range []string{"ONE", "TWO", "THREE", "FOUR"} {
 		has(t, "the result of "+got[i], texts[i], want)
+	}
+}
+
+// A stream-json message that begins with "/" and names no command ("/etc
+// ... fails to load") is a prompt like any other, as in the text path: it
+// is answered, its result line written, and the run ends. (The print mode
+// review of 2026-11-19: it waited under no id, and the run never ended.)
+func TestStreamJSONInputSlashThatIsNoCommand(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Look at line 3."})
+	o := testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json")
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"/etc/nginx/nginx.conf fails to load, why?"}}` + "\n")
+	o.StdinIsTerminal = false
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o).wantCode(t, 0)
+	lines := jsonLines(t, r.out)
+	last := lines[len(lines)-1]
+	if last["type"] != "result" || last["result"] != "Look at line 3." {
+		t.Errorf("the last line: %v", last)
+	}
+	has(t, "what the model read", requestText(t, w, 0), "/etc/nginx/nginx.conf fails to load")
+}
+
+// A run in stream-json whose turn ran a command in the foreground writes
+// its result line once, last, with the structured output in it: such a run
+// was taken for one with work in the background, its line written before
+// the structured output was asked for. (The print mode review of
+// 2026-11-19.)
+func TestStreamJSONResultAfterAForegroundCommand(t *testing.T) {
+	schema := `{"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}`
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"ls | wc -l"}`}}},
+		apptest.Reply{Text: "There are three files."},
+		apptest.Reply{Text: `{"count": 3}`})
+	r := run(t, w, "-y", "-p", "how many files?", "--output-format", "stream-json", "--verbose", "--json-schema", schema).wantCode(t, 0)
+	lines := jsonLines(t, r.out)
+	results := 0
+	for _, l := range lines {
+		if l["type"] == "result" {
+			results++
+		}
+	}
+	last := lines[len(lines)-1]
+	if results != 1 || last["type"] != "result" {
+		t.Fatalf("%d result lines, the last line %v", results, last)
+	}
+	if out, ok := last["structured_output"].(map[string]any); !ok || fmt.Sprint(out["count"]) != "3" {
+		t.Errorf("the result line holds no structured output: %v", last)
 	}
 }

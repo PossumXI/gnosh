@@ -106,9 +106,11 @@ func TestRunTellsWhatItsEndStops(t *testing.T) {
 		apptest.Reply{Text: "Done."},
 		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"if kill -0 $(cat server.pid) 2>/dev/null; then echo running > before.txt; else echo stopped > before.txt; fi; setsid nohup sleep 301 > kept.log 2>&1 < /dev/null & echo $! > kept.pid"}`}}},
 		apptest.Reply{Text: "Kept the server."})
-	r := run(t, w, "-y", "-p", "start the server").wantCode(t, 0)
-	if r.out != "Done.\n\nKept the server.\n" {
-		t.Errorf("the run printed %q", r.out)
+	r := run(t, w, "-y", "-p", "start the server", "--output-format", "json").wantCode(t, 0)
+	// The run's result is the answer to the prompt: the reply to gnosh's
+	// own note took its place (the print mode review of 2026-11-19).
+	if obj := jsonLines(t, r.out)[0]; obj["result"] != "Done." || obj["subtype"] != "success" {
+		t.Errorf("the run's result: %v", obj)
 	}
 	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) is about to end, and what your commands left running was stopped: process group", "(sleep)", "setsid nohup <command>")
 	// (Stopped before the model's turn: a server started again finds its

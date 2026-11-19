@@ -1017,15 +1017,24 @@ func (l *live) statusFacts() map[string]string {
 // noteBackground keeps the count of commands that run in the background
 // among the facts for a status line.
 func (l *live) noteBackground() {
-	l.bgEver.Store(true)
 	// The commands and the sub-agents that run in the background.
 	running := len(l.backgroundAgents())
+	tasks := 0
 	if l.shell != nil {
-		for _, t := range l.shell.Tasks() {
+		all := l.shell.Tasks()
+		tasks = len(all)
+		for _, t := range all {
 			if t.Running {
 				running++
 			}
 		}
+	}
+	if running > 0 || tasks > 0 {
+		// Only work that went to the background counts: every Bash call
+		// that ended in the foreground did, and a run then waited as for
+		// background work, its result line written before the structured
+		// output and the end's checks.
+		l.bgEver.Store(true)
 	}
 	value := ""
 	if running > 0 {

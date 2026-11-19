@@ -104,9 +104,12 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			if f.format == cli.FormatStreamJSON {
 				f.emitResult(c, r)
 			}
-			if !woken || ended(r) {
+			if !woken {
 				// (The turn the model was told what the end stops in is
-				// no reason for the run to fail.)
+				// gnosh's own: the run's result stays the answer to the
+				// prompt, which that turn's reply ("Restarted the server
+				// with setsid") had taken the place of, and its end is no
+				// reason for the run to fail.)
 				res = r
 			}
 			idleSince, quietSince, woken = time.Now(), time.Time{}, false
