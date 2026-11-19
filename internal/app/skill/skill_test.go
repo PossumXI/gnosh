@@ -29,10 +29,19 @@ func TestParse(t *testing.T) {
 	if reason != "" || sk.Name != "review" || sk.Description != "Review a change" || sk.NoModel {
 		t.Errorf("a file without settings: %+v, %q", sk, reason)
 	}
-	// Settings that cannot be read are no settings.
-	sk, reason = Parse("---\n  : : bad\n---\nDo it.\n", "broken")
-	if reason != "" || sk.Name != "broken" || sk.Body != "Do it." {
+	// Settings that cannot be read keep the skill from being used at all:
+	// one of them may have kept it from the model (the skills review of
+	// 2026-11-19).
+	sk, reason = Parse("---\n  : : bad\ndisable-model-invocation: true\n---\nDo it.\n", "broken")
+	if !strings.Contains(reason, "its settings cannot be read (line 2 is indented") || sk.Name != "broken" {
 		t.Errorf("a file whose settings cannot be read: %+v, %q", sk, reason)
+	}
+	// The forms of YAML a settings block may take that were refused once:
+	// list entries at the start of the line, a list in brackets over
+	// lines, and a name in quotes.
+	sk, reason = Parse("---\ndisable-model-invocation: true\nallowed-tools:\n- Bash(make deploy)\n- Read\narguments: [env,\n  region]\n\"argument-hint\": \"[env]\"\n---\nDeploy.\n", "deploy")
+	if reason != "" || !sk.NoModel || !reflect.DeepEqual(sk.AllowedTools, []string{"Bash(make deploy)", "Read"}) || !reflect.DeepEqual(sk.Arguments, []string{"env", "region"}) || sk.ArgumentHint != "[env]" {
+		t.Errorf("the YAML forms: %+v, %q", sk, reason)
 	}
 	sk, _ = Parse("---\nuser-invocable: false\n---\nOnly for the model.\n", "quiet")
 	if !sk.NoUser {

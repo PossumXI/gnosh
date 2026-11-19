@@ -3690,3 +3690,14 @@ or kept with the reason said (27).
     followed, is not inside the project or one of its added folders is
     now not read, and /skills, gnosh doctor and the log say where it
     leads. The person's own skills may still be links to anywhere.
+
+242. **A skill whose settings cannot be read is not used.** Claude Code
+    loads such a skill with no settings, and so did gnosh; but a setting
+    lost that way may be the one that kept the skill from the model
+    (disable-model-invocation) or took tools away for its turn, and a
+    deploy skill was offered to the model because its allowed-tools list
+    began at the start of the line (the skills review of 2026-11-19). It
+    is now listed as not a skill, with the line that could not be read.
+    And the settings reader takes three forms of YAML it refused: a
+    list's entries at the start of the line, a list in brackets over
+    several lines, and a setting's name in quotes.

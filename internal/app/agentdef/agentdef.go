@@ -632,14 +632,19 @@ func frontmatter(lines []string) ([]field, error) {
 		}
 		key, value, ok := strings.Cut(line, ":")
 		key = strings.TrimSpace(key)
+		if len(key) >= 2 && (key[0] == '"' || key[0] == '\'') {
+			key = unquote(key) // a name in quotes, "description": ...
+		}
 		if !ok || key == "" || strings.ContainsAny(key, " \t\"'{}[]") {
 			return nil, fmt.Errorf("line %d is not a setting of the form \"name: value\"", i+2)
 		}
 		f := field{key: key}
 		value = strings.TrimSpace(value)
-		// The lines that belong to this key: the indented ones that follow.
+		// The lines that belong to this key: the indented ones that follow,
+		// and under a key with no value the entries of a list that begin
+		// at the start of the line, as YAML allows.
 		var under []string
-		for i+1 < len(lines) && (strings.TrimSpace(lines[i+1]) == "" || lines[i+1][0] == ' ' || lines[i+1][0] == '\t') {
+		for i+1 < len(lines) && (strings.TrimSpace(lines[i+1]) == "" || lines[i+1][0] == ' ' || lines[i+1][0] == '\t' || value == "" && dashEntry(lines[i+1])) {
 			i++
 			under = append(under, lines[i])
 		}
@@ -658,6 +663,13 @@ func frontmatter(lines []string) ([]field, error) {
 			}
 			f.scalar = strings.TrimSpace(strings.Join(parts, sep))
 		case strings.HasPrefix(value, "["):
+			if !strings.HasSuffix(value, "]") && len(under) > 0 {
+				// A list in brackets that goes on over the lines below.
+				for _, u := range under {
+					value += " " + strings.TrimSpace(u)
+				}
+				value = strings.TrimSpace(value)
+			}
 			if !strings.HasSuffix(value, "]") {
 				return nil, fmt.Errorf("the list of %q on line %d is not closed", key, i+2-len(under))
 			}
@@ -695,6 +707,12 @@ func frontmatter(lines []string) ([]field, error) {
 		out = append(out, f)
 	}
 	return out, nil
+}
+
+// dashEntry reports whether a line is an entry of a list: "- " and the
+// entry, or a "-" alone.
+func dashEntry(line string) bool {
+	return line == "-" || strings.HasPrefix(line, "- ")
 }
 
 // stripComment takes a trailing " # ..." off a plain value.

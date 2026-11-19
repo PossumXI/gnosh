@@ -301,12 +301,15 @@ const MaxDescription = 1536
 // it could be read, and otherwise says why the file is skipped.
 func Parse(text, fallback string) (sk Skill, reason string) {
 	fields, body, err := agentdef.Split(text)
-	if err != nil {
-		// Settings that cannot be read are no settings: the skill loads
-		// with none, as Claude Code loads it.
-		fields = nil
-	}
 	sk.Name, sk.Body = fallback, body
+	if err != nil {
+		// Claude Code loads such a skill with no settings at all. But what
+		// they said is not known, and one of them may keep the skill from
+		// the model (disable-model-invocation) or take tools away for its
+		// turn (disallowed-tools): run without them it would be another
+		// skill than the one its author wrote.
+		return sk, "its settings cannot be read (" + err.Error() + "), and it is not run without them: one of them may keep it from the model or take tools away"
+	}
 	when, context, shell, model := "", "", "", ""
 	for _, f := range fields {
 		switch f.Key {
