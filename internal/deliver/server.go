@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -55,6 +56,7 @@ func serve(reg *register, addr string) (*server, error) {
 		ln.Close()
 		return nil, fmt.Errorf("%s is not an address of this machine alone, and delivered files are served to this machine only", ln.Addr())
 	}
+	ln = &capped{Listener: ln, slots: make(chan struct{}, maxConns), done: make(chan struct{})}
 	s := &server{reg: reg, ln: ln, base: "http://" + ln.Addr().String(), asked: addr, moved: moved}
 	s.srv = &http.Server{
 		Handler:           s,
@@ -201,4 +203,49 @@ func openRegular(path string) (*os.File, os.FileInfo, error) {
 		return nil, nil, errors.New("not the regular file that was there a moment ago")
 	}
 	return f, st, nil
+}
+
+// maxConns is how many connections the server holds open at once: more
+// wait until one closes. Each held a goroutine and a descriptor for as
+// long as it was kept (the deliverables review of 2026-11-19).
+var maxConns = 64
+
+// capped is a listener that holds at most cap(slots) connections open at
+// once.
+type capped struct {
+	net.Listener
+	slots chan struct{}
+	done  chan struct{}
+	once  sync.Once
+}
+
+func (c *capped) Accept() (net.Conn, error) {
+	select {
+	case c.slots <- struct{}{}:
+	case <-c.done:
+		return nil, net.ErrClosed
+	}
+	conn, err := c.Listener.Accept()
+	if err != nil {
+		<-c.slots
+		return nil, err
+	}
+	return &slotConn{Conn: conn, free: sync.OnceFunc(func() { <-c.slots })}, nil
+}
+
+func (c *capped) Close() error {
+	c.once.Do(func() { close(c.done) })
+	return c.Listener.Close()
+}
+
+// slotConn gives its slot back when it is closed.
+type slotConn struct {
+	net.Conn
+	free func()
+}
+
+func (s *slotConn) Close() error {
+	err := s.Conn.Close()
+	s.free()
+	return err
 }

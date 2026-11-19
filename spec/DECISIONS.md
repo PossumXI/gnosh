@@ -3830,3 +3830,9 @@ or kept with the reason said (27).
     a key reaches gnosh as that key with Alt, which a question had no use
     for, and the Esc was lost. At a question, such an unused Alt key, or
     Alt+Esc, now declines as Esc does, as Claude Code 2.1.328 has it.
+
+257. **The deliverables server holds at most 64 connections at once.**
+    Each open connection held a goroutine and a descriptor for as long as
+    it was kept, and nothing bounded how many (the deliverables review of
+    2026-11-19). A 65th now waits until one closes; with the idle timeout
+    and the header timeout, a held connection is let go in time.

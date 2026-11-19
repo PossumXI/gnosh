@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // started is a server for a test: a register with one video and one
@@ -400,4 +401,41 @@ func TestServerRefusesAPathThatLeadsElsewhereNow(t *testing.T) {
 	if status, _, body := fetch(t, http.MethodGet, s.srv.address(rec)); status != http.StatusNotFound || strings.Contains(body, "not the report") {
 		t.Errorf("after its folder became a link: %d %q", status, body)
 	}
+}
+
+// The server holds a fixed number of connections at once: one more waits
+// until one closes, and is then answered.
+func TestServerHoldsSoManyConnections(t *testing.T) {
+	defer func(n int) { maxConns = n }(maxConns)
+	maxConns = 2
+	s := startServer(t)
+	addr := strings.TrimPrefix(s.srv.base, "http://")
+	var held []net.Conn
+	for range 2 {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		held = append(held, c)
+	}
+	got := make(chan int, 1)
+	go func() {
+		status, _, _ := fetch(t, http.MethodGet, s.srv.address(s.image))
+		got <- status
+	}()
+	select {
+	case status := <-got:
+		t.Fatalf("a third connection was answered (%d) while two were held", status)
+	case <-time.After(300 * time.Millisecond):
+	}
+	held[0].Close()
+	select {
+	case status := <-got:
+		if status != http.StatusOK {
+			t.Errorf("once a slot was free: %d", status)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the waiting connection was never answered")
+	}
+	held[1].Close()
 }
