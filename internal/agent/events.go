@@ -163,6 +163,13 @@ type Prompt struct {
 	// Later holds a prompt sent while a turn runs until that turn has
 	// ended, instead of handing it to the model between two rounds.
 	Later bool
+	// Own marks a prompt gnosh sends for itself (/loop's next prompt, the
+	// "go on" after the session moved): stopping a turn drops it, or the
+	// work would start again. A hidden prompt the person caused (a
+	// !command's output, a skill, /review) is theirs and stays in line;
+	// stopping dropped every hidden prompt, and a !command's output never
+	// reached the model (the agent loop review of 2026-11-19).
+	Own bool
 	// Meta travels with the prompt into its events.
 	Meta map[string]any
 }

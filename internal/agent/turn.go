@@ -240,6 +240,13 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 			case ro.halt != "":
 				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy}
 			}
+			if ctx.Err() != nil {
+				// Stopped as the round's tools ended: the turn ends as
+				// stopped, and what the person sent meanwhile stays in line
+				// for the next turn instead of going into this one (the
+				// agent loop review of 2026-11-19).
+				return stoppedOutcome()
+			}
 			if f := a.opts.Moments.MoreRounds; f != nil {
 				if more, why := f(t.id, t.requests); !more {
 					return &outcome{reason: EndHalted, detail: why, driver: "max-turns"}
@@ -576,6 +583,12 @@ func (a *Agent) appendPrompts(t *turn, ready []readyPrompt, folded bool) error {
 func (a *Agent) foldQueued(ctx context.Context, t *turn) error {
 	a.waitAdmitting(ctx)
 	a.mu.Lock()
+	if ctx.Err() != nil {
+		// Stopped while it waited (Interrupt cancels under this lock): the
+		// queue is the next turn's.
+		a.mu.Unlock()
+		return nil
+	}
 	var take []*submission
 	keep := a.queue[:0:0]
 	for _, s := range a.queue {

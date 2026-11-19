@@ -278,8 +278,11 @@ func TestInterruptKeepsThePersonsQueue(t *testing.T) {
 	go func() { first <- r.run("first") }()
 	<-reached
 	r.a.Submit(Prompt{Text: "next"})
-	r.a.Submit(Prompt{Text: "<job>ended</job>", Hidden: true, Source: "task-notification"})
-	waitQueue(t, r, "next", "<job>ended</job>")
+	r.a.Submit(Prompt{Text: "<job>ended</job>", Hidden: true, Own: true, Source: "task-notification"})
+	// A hidden prompt the person caused (a !command's output) is theirs:
+	// it stays too (the agent loop review of 2026-11-19).
+	r.a.Submit(Prompt{Text: "$ npm test: ok", Hidden: true, Source: "shell"})
+	waitQueue(t, r, "next", "<job>ended</job>", "$ npm test: ok")
 	r.a.Interrupt()
 	if res := <-first; res.Reason != EndStopped {
 		t.Fatalf("first turn = %+v", res)
@@ -294,8 +297,13 @@ func TestInterruptKeepsThePersonsQueue(t *testing.T) {
 	if len(ends) != 2 || ends[0].Result.Reason != EndStopped || ends[1].Result.Reason != EndCompleted {
 		t.Fatalf("turn ends = %+v", ends)
 	}
-	second := r.model.requests()[1]
-	if text := lastUserText(second); !strings.Contains(text, "next") || strings.Contains(text, "ended") {
+	var sent strings.Builder
+	for _, m := range r.model.requests()[1].Messages {
+		if m.Role == core.RoleUser {
+			sent.WriteString(m.Text() + "\n")
+		}
+	}
+	if text := sent.String(); !strings.Contains(text, "next") || strings.Contains(text, "ended") || !strings.Contains(text, "npm test: ok") {
 		t.Errorf("the second turn was sent %q", text)
 	}
 	r.checkLog()
@@ -681,6 +689,56 @@ func TestWithdrawOneQueuedPrompt(t *testing.T) {
 	}
 	if last := r.model.requests(); !strings.Contains(lastUserText(last[len(last)-1]), "b") {
 		t.Errorf("the prompt that stayed did not go out")
+	}
+	r.checkLog()
+}
+
+// A stop at the end of a round, while a prompt the person sent is still in
+// its check and another waits in line, leaves the one in line for a turn
+// of its own: it was folded into the stopped turn and never answered (the
+// agent loop review of 2026-11-19).
+func TestStopBetweenRoundsKeepsTheQueue(t *testing.T) {
+	toolRan, finish := make(chan struct{}), make(chan struct{})
+	inCheck, release := make(chan struct{}), make(chan struct{})
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{tool("Bash", func(ctx context.Context, _ core.ToolCall, _ *core.ToolEnv) (core.ToolResult, error) {
+			close(toolRan)
+			<-finish
+			return core.TextResult("ran"), nil
+		})}
+		o.Moments.PromptSubmit = func(ctx context.Context, p Prompt) (Admission, error) {
+			if p.Text == "B" {
+				close(inCheck)
+				select {
+				case <-release:
+				case <-ctx.Done():
+				}
+			}
+			return Admission{}, nil
+		}
+	})
+	r.model.push(use(tc("c1", "Bash", `{}`)), say("A answered"))
+	first := make(chan TurnResult, 1)
+	go func() { first <- r.run("first") }()
+	<-toolRan
+	r.a.Submit(Prompt{Text: "A"})
+	waitQueue(t, r, "A")
+	r.a.Submit(Prompt{Text: "B"})
+	<-inCheck
+	close(finish)
+	// (The round's end waits up to admitWait for B's check.)
+	time.Sleep(300 * time.Millisecond)
+	r.a.Interrupt()
+	close(release)
+	if res := <-first; res.Reason != EndStopped {
+		t.Fatalf("the first turn = %+v", res)
+	}
+	r.idle()
+	if n := r.model.count(); n != 2 {
+		t.Fatalf("%d requests: the prompt in line was not answered in a turn of its own", n)
+	}
+	if text := lastUserText(r.model.requests()[1]); !strings.Contains(text, "A") {
+		t.Errorf("the next turn was sent %q", text)
 	}
 	r.checkLog()
 }

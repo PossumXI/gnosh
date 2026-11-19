@@ -3354,3 +3354,20 @@ or kept with the reason said (27).
     loader refuses, with a mistake) lost its first copy unseen at the next
     save (the config review of 2026-11-19). The file is left as it is now,
     and the message names the key (config.DuplicateKey).
+
+209. **The agent loop review's fixes (2026-11-19).** A fresh-eyes review of
+    internal/agent:
+    - Stopping a turn drops only the prompts gnosh queued for itself
+      (Prompt.Own: /loop's next prompt, the "go on" after the session
+      moved, and notes that were to start a turn, which stay as notes).
+      It dropped every hidden prompt, among them the person's own: the
+      output of a !command they ran while a turn worked, a skill, /review.
+      Esc lost that output, and nobody was told.
+    - A stop as a round's tools end ends the turn as stopped at once, and
+      the fold of what the person sent meanwhile checks for a stop under
+      the lock Interrupt cancels under. A prompt in line was folded into
+      the stopped turn and never answered when Esc came while another
+      prompt was still in its check.
+    - /loop goes off when its prompt is refused (a session start that said
+      stop): it sent the next one at once, refused the same way, until
+      Esc.

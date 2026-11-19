@@ -313,6 +313,10 @@ type submission struct {
 	result    chan TurnResult
 }
 
+// own reports whether gnosh queued the prompt for itself: one stopping a
+// turn drops (dropOwnLocked).
+func (s *submission) own() bool { return s.prompt.Own || s.note }
+
 // resolve says how the prompt ended. Only the first call counts.
 func (s *submission) resolve(r TurnResult) {
 	s.once.Do(func() { s.result <- r })

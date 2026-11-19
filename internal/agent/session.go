@@ -355,6 +355,12 @@ func (a *Agent) admitLoop() {
 				end = EndRefused
 			}
 			s.resolve(TurnResult{Prompts: []string{s.id}, Reason: end, Detail: reason})
+			if why == ReturnRefused && s.prompt.Own && s.prompt.Source == "loop" {
+				// Its next prompt would be refused the same way: it sent
+				// one at once, again and again, until Esc (the agent loop
+				// review of 2026-11-19).
+				a.loopOff("its prompt was refused: " + reason)
+			}
 		case wait:
 			// It waits behind a turn or behind other prompts, and is
 			// shown as waiting.
