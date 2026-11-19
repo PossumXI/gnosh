@@ -3243,3 +3243,12 @@ or kept with the reason said (27).
     "object". As in Claude Code 2.1.328 ("an MCP tool with an invalid
     input schema ... is now left out and Claude is told why", changelog
     read 2026-11-19).
+
+198. **A host whose login shell is zsh runs "[ a == b ]" as written.** A
+    command on a declared host is eval'd by that account's login shell,
+    which on a Mac is zsh, and zsh takes a word that begins with "=" for
+    a command's path: "[ a == b ]", the usual bash test, and "echo ===="
+    failed with "= not found". The line gnosh puts in front of a host
+    command now turns that off in zsh (setopt no_equals) and is nothing
+    to the other shells. As in Claude Code 2.1.328 (changelog read
+    2026-11-19). Commands on this machine run in /bin/bash, as before.
