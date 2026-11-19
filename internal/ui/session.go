@@ -504,16 +504,18 @@ func (th *Theme) credits() string {
 		th.Profile.Hyperlink(gnoURL, gnoURL) + th.Quiet.Render(")"+th.Sep+"/license")
 }
 
-// begin starts a block of the given kind in the scrollback. No blank line
-// stands between blocks: each begins with a mark of its own, and the
-// screen is for what was said and done. (Jae, 14 November 2026: "remove
-// the newline after prompt and before done etc, in general don't print
-// empty lines".) The empty lines of the model's own answer, between its
-// paragraphs, are the answer's and stay.
+// begin starts a block of the given kind in the scrollback: a blank line
+// goes first where the block before it should stand apart. (Jae, 19
+// November 2026: "put the blank lines back into gnosh...", after his 14
+// November "in general don't print empty lines".)
 func (s *session) begin(kind blockKind) {
 	if !s.fold.empty() {
 		// (Focus view: the run of calls before this block is one line.)
 		s.writeFold()
+	}
+	packed := kind == s.last && (kind == blkNotice || kind == blkToolLine || kind == blkAsk)
+	if s.last != blkNone && !packed {
+		s.pending = append(s.pending, "")
 	}
 	s.last = kind
 }

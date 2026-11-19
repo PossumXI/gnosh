@@ -810,9 +810,8 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 }
 
 // nonBlank drops the blank lines of a result: its first lines under a
-// call are a few rows, none to spare for nothing (Jae, 14 November 2026:
-// "in general don't print empty lines"). The whole is still shown, as
-// it was, when more is asked for.
+// call are a few rows, none to spare for an empty one. The whole is still
+// shown, blank lines and all, when more is asked for.
 func nonBlank(lines []string) []string {
 	var out []string
 	for _, l := range lines {

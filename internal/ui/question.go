@@ -153,6 +153,9 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 		// hunk, drawn to the width the question has for its body, so that
 		// its numbers and signs stay in their columns.
 		if a := q.Action; a != nil && a.Preview != nil && a.Preview.Kind == "diff" {
+			if len(out) > 0 {
+				out = append(out, "")
+			}
 			out = append(out, diff.Render(*a.Preview, diff.RenderOptions{
 				Width: max(width-menuGutter(th, m), 8), Profile: th.Profile, Theme: &th.Diff, Metrics: m, MaxLines: 1000,
 			})...)

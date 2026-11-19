@@ -194,7 +194,7 @@ func (s *statusLiner) run() {
 }
 
 // statusLines are the lines a status line command printed, as many as are
-// shown: blank ones are left out, as gnosh shows no empty lines.
+// shown: blank ones are left out, as the status line has no row to spare.
 func statusLines(out string) []string {
 	var lines []string
 	for _, line := range strings.Split(out, "\n") {

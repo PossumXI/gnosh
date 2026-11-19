@@ -216,6 +216,17 @@ session's header), the words of `/license`, and making it the licence's
 "Appropriate Legal Notices" so that a work made from gnosh must show them
 too.
 
+19 November 2026, of the empty lines he had asked on 14 November to take
+out ("in general don't print empty lines"):
+
+> put the blank lines back into gnosh...
+
+Set: the interface puts its empty lines back where they stood before 14
+November: a blank line between the blocks of the scrollback (one-line tool
+calls, notices and questions still stand under each other), a blank row
+above and below what is still being written, and one before the change a
+question shows.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
