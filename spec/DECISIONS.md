@@ -4006,3 +4006,31 @@ or kept with the reason said (27).
     of its indent, and what is not shown is not wrapped. A run started from
     the box is chosen only if the person has chosen no other run and typed
     nothing since.
+
+275. **A command on another machine borrows nothing of the person's ssh
+    but the login.** It ran with whatever the person's ssh configuration
+    lends: their agent, with which a command there could log in with their
+    keys to machines nobody declared; forwards that open a way back into
+    this machine; a shared connection gnosh's ssh could become, outliving
+    the command or ending the person's own sessions with it (the hosts
+    review of 2026-11-19). gnosh now runs ssh with no agent, X display or
+    forward, no local command, and as no shared connection's master (it
+    still uses one the person has). And a host given a new address under
+    the same name while the session runs is reached there from then on,
+    by Bash and Deliver alike: only the names had been compared.
+
+276. **Monitor is judged as the background command it is, and paced.** A
+    Monitor's command always runs in the background, but a rule about
+    Bash's run_in_background, and a Bash hook that looks at it, did not
+    see so (the hosts review of 2026-11-19). Both now judge a Monitor call
+    as the Bash call that runs its command, in the background, with its
+    time. And one Monitor passes its lines on at most every 15 seconds,
+    its first and its last at once: a command that printed every few
+    seconds woke the model for each line, for up to half an hour.
+
+277. **/export writes a file for the person alone, as plain text.** It
+    was readable by everyone, held the escape sequences commands printed,
+    which cat then played, and `/export ~/Desktop` wrote ~/Desktop.txt
+    (the hosts review of 2026-11-19). The file is now 0600, without
+    control characters but tabs and line breaks, and a folder named gets
+    the file of the usual name inside it.
