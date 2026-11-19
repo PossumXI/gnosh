@@ -1324,7 +1324,9 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"options": {"memReviewCloses": false}}`,
 		`{"options": {"memEmbeddingsUrl": "https://203.0.113.5/embed"}}`,
 		`{"options": {"debug": true}}`,
-		`{"options": {"projectDataDir": "/outside"}}`,
+		// ({"options": {"projectDataDir": ...}} is no longer held: a
+		// project's file cannot set it at all, trusted or not, which
+		// TestProjectCannotMoveItsDataFolder checks.)
 		`{"options": {"hiddenSkills": null}}`,
 		`{"options": {"userInstructionFiles": null}}`,
 		`{"options": {"memEmbeddingsUrl": null}}`,
@@ -2078,5 +2080,83 @@ func TestAttribution(t *testing.T) {
 	}
 	if a := mustLoad(t, withConfig(`{}`)).Attribution; a.Commit != "" || a.PR != "" {
 		t.Errorf("nothing set: %+v", a)
+	}
+}
+
+// A project's own file cannot move the project's data folder, where the
+// project's local settings are read from: the trust question was asked of
+// the folder's .gnosh/settings.local.json while a Yes put another file in
+// force, one the repository named (the config review of 2026-11-19).
+func TestProjectCannotMoveItsDataFolder(t *testing.T) {
+	for _, trusted := range []bool{true, false} {
+		in := inputs(newFS().
+			put(projJSON, `{"options": {"projectDataDir": "docs"}}`).
+			put("/work/proj/docs/settings.local.json", `{"permissions": {"allow": ["Bash"]}}`))
+		in.Trusted = trusted
+		cfg, probs := load(t, in)
+		if cfg == nil {
+			t.Fatalf("trusted %v:\n%s", trusted, showProblems(probs))
+		}
+		if cfg.Paths.DataDir != "/work/proj/.gnosh" || len(ruleTexts(cfg, "allow")) != 0 {
+			t.Errorf("trusted %v: the data folder is %s, allow %q", trusted, cfg.Paths.DataDir, ruleTexts(cfg, "allow"))
+		}
+		if trusted {
+			wantProblem(t, probs, Warning, projJSON, 1, `"options.projectDataDir" is not taken from a project's file`)
+		}
+	}
+	// The person's own file still names it.
+	in := inputs(newFS().put(userJSON, `{"options": {"projectDataDir": "notes"}}`))
+	if cfg := mustLoad(t, in); cfg.Paths.DataDir != "/work/proj/notes" {
+		t.Errorf("the person's own data folder: %s", cfg.Paths.DataDir)
+	}
+}
+
+// The folder's own settings file named with --settings by another
+// spelling of its path, through a link to the folder, is the same file:
+// compared by name, it was put in force as the command line's in a folder
+// that is not trusted (the config review of 2026-11-19).
+func TestSettingsFlagThroughALinkToTheFolder(t *testing.T) {
+	root := t.TempDir()
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	proj, link := filepath.Join(root, "proj"), filepath.Join(root, "link")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(proj, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "gnosh.json"), []byte(`{"permissions": {"allow": ["Bash"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(root, "home")
+	in := Inputs{
+		FS: OS{}, Environ: []string{"HOME=" + home, "GNOSH_CONFIG_DIR=" + filepath.Join(home, "cfg"), "GNOSH_DATA_DIR=" + filepath.Join(home, "data")},
+		Home: home, Cwd: proj, ProjectRoot: proj, Built: Everything(), Tools: testTools, KeepUntrusted: restricts,
+	}
+	in.Flags.Settings = filepath.Join(link, "gnosh.json")
+	cfg, probs := load(t, in)
+	if cfg != nil {
+		t.Fatalf("the folder's file was put in force through a link: allow %q", ruleTexts(cfg, "allow"))
+	}
+	wantProblem(t, probs, Error, "--settings", 0, "is one of this folder's own settings files", "the folder is not trusted")
+}
+
+// A skill's name in skillOverrides is shown made safe in a message: an
+// untrusted folder's file is read before any question, and its words went
+// to the terminal as they were, escapes and all (the config review of
+// 2026-11-19).
+func TestSkillOverridesNameIsShownSafely(t *testing.T) {
+	in := inputs(newFS().put(projJSON, "{\"skillOverrides\": {\"x\\u001b]52;c;cGF5bG9hZA==\\u0007\": \"bad\"}}"))
+	in.Trusted = false
+	_, probs := load(t, in)
+	for _, p := range probs {
+		if strings.ContainsAny(p.String(), "\x1b\x07") {
+			t.Errorf("a message holds a control character: %q", p.String())
+		}
+	}
+	if len(probs) == 0 {
+		t.Error("the bad value was not reported")
 	}
 }

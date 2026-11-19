@@ -315,8 +315,12 @@ var optionDefs = []optionDef{
 		what:  "leave the files git ignores (and, outside a repository, those the ignore files name) out of the @ file picker; false lists them too, which in a big build folder can crowd out the rest",
 		from:  fromClaudeCode + ": the settings key",
 		truth: func(o *Options) *Value[bool] { return &o.RespectGitignore }},
+	// (A project's own file cannot move it: the folder is where gnosh
+	// reads the project's local settings from, and the trust question was
+	// asked of the one a repository had not moved (the config review of
+	// 2026-11-19).)
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
-		what: "the name of the project's data folder", from: fromPlain,
+		what: "the name of the project's data folder", from: fromPlain, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},
 
 	// How the model replies.

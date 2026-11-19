@@ -525,7 +525,7 @@ func (s *source) settingsSkillOverrides(f jfield) {
 	}
 	for _, m := range s.unique(f.val, "skillOverrides.") {
 		if m.val.kind != jString || !slices.Contains(SkillVisibilities, m.val.str) {
-			s.errorf(m.line, "the value of \"skillOverrides.%s\" is one of %s, and here it is %s.", m.key, strings.Join(SkillVisibilities, ", "), shown(m.val))
+			s.errorf(m.line, "the value of %s is one of %s, and here it is %s.", showName("skillOverrides."+m.key), strings.Join(SkillVisibilities, ", "), shown(m.val))
 			continue
 		}
 		name, v := m.key, Value[string]{V: m.val.str, Set: true, Origin: s.at(m.line)}

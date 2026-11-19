@@ -3261,3 +3261,22 @@ or kept with the reason said (27).
     suggested; a review that finds nothing says "Code review found no
     issues." (changelog read 2026-11-19). Reuse, simplification and
     efficiency stay /simplify's.
+
+200. **The config review's quick fixes (2026-11-19).** A fresh-eyes review
+    of the settings loader and the folder-trust gate:
+    - A project's own file cannot set options.projectDataDir. The data
+      folder is where the project's local settings are read from; the
+      trust question was asked of .gnosh/settings.local.json while a Yes
+      put in force the file of a folder the repository had named (with
+      a hook and an allow rule in it). Only the person's own files, /config
+      and --settings move it now, like the other options a repository must
+      not change.
+    - --settings naming the folder's own settings file is refused in an
+      untrusted folder by what the file is, not by how its path is spelled:
+      through a link (/tmp on a Mac) or in another case on a disk that
+      ignores case, it was read as the command line's file.
+    - A skill's name in skillOverrides is shown made safe in a message,
+      as every other key is: the file is read before any question, and an
+      escape in it reached the terminal.
+    - A named pipe where a repository's git settings would be is refused
+      before it is opened: gnosh hung at start in such a folder.
