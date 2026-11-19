@@ -1018,7 +1018,8 @@ func (l *live) slashSkills(ctx context.Context, c *SlashContext) error {
 	}
 	if !l.st.trusted {
 		if _, held := heldDefs(l.cfg, l.moreRoots()); held > 0 {
-			c.Say("This folder has %d skill(s) of its own, which are not read because the folder is not trusted (gnosh trust).", held)
+			what, verb := heldDefsText(0, held)
+			c.Say("This folder has %s of its own, which %s not read because the folder is not trusted (gnosh trust).", what, verb)
 		}
 	}
 	return nil
