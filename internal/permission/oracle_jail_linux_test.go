@@ -758,7 +758,13 @@ func parseTrace(text string, glue bool) []traceCmd {
 			// oracle seed 109) hands it a word that holds this line.
 			continue
 		}
-		if r.raw == "command pwd -P" || r.level == 1 && r.raw == ":" {
+		if first := strings.Fields(strings.SplitN(r.raw, "\n", 2)[0]); r.raw == "command pwd -P" || len(first) > 0 && first[0] == ":" {
+			// (A ":" runs nothing, whatever stands after it. And what
+			// stands after it may not be its own: the stages of a
+			// pipeline trace to one file at once, and a line another
+			// stage wrote in the middle of a word of its own, held
+			// together with this one by glue, read as ":"'s words. Oracle
+			// seed 156: "then :;" beside "export $(set)" in a pipeline.)
 			continue
 		}
 		out = append(out, traceCmd{level: r.level, words: words, raw: r.raw})
