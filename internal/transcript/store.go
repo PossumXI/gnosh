@@ -94,6 +94,50 @@ func (st *Store) ProjectDir(cwd string) string {
 	return filepath.Join(st.projects(), Slug(cwd))
 }
 
+// Holds reports whether path is a session file of the store's own: under
+// its folder of projects, with links followed on both sides. A file
+// elsewhere (one -r was given by its path) was not written by this store,
+// and is copied in before it is gone on with (Import).
+func (st *Store) Holds(path string) bool {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	root, err := filepath.EvalSymlinks(st.projects())
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, real)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// Import copies the entries of src, a session file that is not the
+// store's own, into a new session of the store for the folder cwd: src is
+// never written, and nothing beside it is used. clean is given each entry,
+// inherited ones first, with the fields this version does not know taken
+// out, and returns the entry to copy, or false to leave it out. The copy
+// holds every entry itself: it does not point back at src.
+func (st *Store) Import(src *Session, cwd string, clean func(Entry) (Entry, bool)) (*Session, error) {
+	var out []Entry
+	for _, e := range src.Entries() {
+		e.Extra, e.kept = nil, nil
+		if e, ok := clean(e); ok {
+			out = append(out, e)
+		}
+	}
+	s, err := st.Create(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) > 0 {
+		if _, err := s.AppendAll(out...); err != nil {
+			_ = s.Close()
+			return nil, fmt.Errorf("transcript: copying %s into the store: %w", src.Path(), err)
+		}
+	}
+	return s, nil
+}
+
 // ProjectDirs are the directories that hold sessions: one for each
 // working directory a session was started in.
 func (st *Store) ProjectDirs() []string {

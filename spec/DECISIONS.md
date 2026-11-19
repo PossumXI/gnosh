@@ -2962,3 +2962,24 @@ or kept with the reason said (27).
     of the whole, so that two long names that begin alike stay apart;
     the server is still called by its own name. A rule for that tool
     names it as offered, which the permission question shows.
+
+177. **A session file from outside gnosh's folder goes on as a copy.** -r
+    takes a session file by its path, and opened it where it was, for
+    writing, with its checkpoints taken from beside it. A fresh-eyes
+    review of the session store (2026-11-19) found what that let a
+    shared file do: a checkpoints index beside it could make /rewind
+    write, delete or copy any file the person can (its entries were not
+    checked, and a copy's name could climb out of the folder); its tool
+    results, summaries and notes reached the model as gnosh's own words,
+    its prompts as the person's standing rules; its scheduled tasks came
+    back and fired; and the person's own conversation was then written
+    into the file. Now a file outside gnosh's folder (links followed) is
+    copied into a new session of gnosh's own and gone on with there: the
+    file is never written, nothing beside it is used, what would steer
+    the session (scheduled tasks, goal, todos, the kind it runs as) is
+    left out, and every word in it but the model's replies is read as
+    data. The copy holds the whole conversation itself, so a /fork of it
+    or -c later keeps it (a copy that pointed back at such a file found
+    nothing when opened again). The person is told. A checkpoints index
+    is read only with whole paths and plain names for its copies, and a
+    session's id is checked before it names a folder.

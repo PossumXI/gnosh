@@ -20,6 +20,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
 // This file keeps what the files the model changes held, so that a rewind
@@ -124,7 +125,10 @@ func readCheckpoints(dir string) []fileCheckpoint {
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	for sc.Scan() {
 		var cp fileCheckpoint
-		if json.Unmarshal(sc.Bytes(), &cp) != nil || cp.Prompt == "" || cp.Path == "" {
+		if json.Unmarshal(sc.Bytes(), &cp) != nil || cp.Prompt == "" || !filepath.IsAbs(cp.Path) ||
+			cp.Blob != "" && (cp.Blob != filepath.Base(cp.Blob) || cp.Blob == "." || cp.Blob == "..") {
+			// (A copy is a file of the folder, kept for a file named in
+			// full: an entry that says otherwise was not written here.)
 			continue
 		}
 		cp.dir = dir
@@ -497,7 +501,7 @@ func (l *live) promptsInOrder() []string {
 				continue
 			}
 			out = append(out, e.UUID)
-			if l.checks != nil && e.SessionID != "" && e.SessionID != own {
+			if l.checks != nil && transcript.ValidID(e.SessionID) && e.SessionID != own {
 				l.checks.inherit(filepath.Join(dir, e.SessionID, "checkpoints"))
 			}
 			break

@@ -729,7 +729,16 @@ func (l *live) openTranscript(ctx context.Context) error {
 		}
 		return l.store.OpenReadOnly(ctx, id)
 	}
-	ts, err := open(!inv.ForkSession)
+	// A file -r named by its path that is not one of gnosh's own is gone
+	// on with as a copy in gnosh's folder (importSession).
+	foreign := path != "" && !l.store.Holds(path)
+	var ts *transcript.Session
+	var err error
+	if foreign {
+		ts, err = l.importSession(ctx, path, cwd)
+	} else {
+		ts, err = open(!inv.ForkSession)
+	}
 	if err != nil {
 		var locked *transcript.LockedError
 		switch {
@@ -746,7 +755,7 @@ func (l *live) openTranscript(ctx context.Context) error {
 		return fmt.Errorf("the session could not be opened: %w", err)
 	}
 	l.source = "resume"
-	if inv.ForkSession {
+	if inv.ForkSession && !foreign {
 		copied, err := l.store.Branch(ts, "")
 		ts.Close()
 		if err != nil {
@@ -763,6 +772,64 @@ func (l *live) openTranscript(ctx context.Context) error {
 	// screen already.)
 	l.showPast = l.source == "resume" && !l.p.restarted
 	return l.nameSession()
+}
+
+// importSession opens a session file from outside gnosh's folder, which
+// -r named by its path (a file someone shared, one a repository holds), as
+// a copy in gnosh's own folder, and goes on in the copy. The file itself
+// is never written, and nothing kept beside it is used: its checkpoints,
+// which /rewind would restore files from, are not gnosh's. What would
+// steer the session is left out of the copy (its scheduled tasks, goal,
+// todos, the kind it runs as), and every word in it but the model's own
+// is read as data, gnosh's own tags in it broken: the file was not
+// written by this gnosh, and its tool results or notes could pass for
+// gnosh's words, or its prompts for the person's standing rules.
+func (l *live) importSession(ctx context.Context, path, cwd string) (*transcript.Session, error) {
+	src, err := l.store.OpenPath(ctx, path, true)
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+	ts, err := l.store.Import(src, cwd, importedEntry)
+	if err != nil {
+		return nil, err
+	}
+	l.notice(agent.LevelInfo, "session", fmt.Sprintf("%s is not one of gnosh's own session files, so it goes on as a copy in gnosh's folder (%s): the file is not written to, what it holds besides the model's replies is read as data, and its scheduled tasks, goal and todos are not brought back.", path, shortID(ts.ID())))
+	return ts, nil
+}
+
+// importedEntry is an entry of a session file from outside gnosh's folder
+// as it is copied in (importSession): a note that steers the session, a
+// branch's pointer or a count is left out, and every word but the model's
+// replies is made data.
+func importedEntry(e transcript.Entry) (transcript.Entry, bool) {
+	switch e.Type {
+	case transcript.TypeMeta, transcript.TypeBranch, transcript.TypeUsage:
+		return e, false
+	case transcript.TypeAssistant:
+		return e, true
+	}
+	m := e.Message
+	m.Blocks = untrustedBlocks(m.Blocks)
+	e.Message = m
+	e.Summary = prompt.Untrusted(e.Summary)
+	e.Label, e.Result, e.Title = prompt.Untrusted(e.Label), prompt.Untrusted(e.Result), prompt.Untrusted(e.Title)
+	return e, true
+}
+
+// untrustedBlocks is a copy of blocks with gnosh's own tags broken in
+// every text, a tool result's too.
+func untrustedBlocks(blocks []core.Block) []core.Block {
+	if blocks == nil {
+		return nil
+	}
+	out := make([]core.Block, len(blocks))
+	for i, b := range blocks {
+		b.Text = prompt.Untrusted(b.Text)
+		b.Content = untrustedBlocks(b.Content)
+		out[i] = b
+	}
+	return out
 }
 
 // nameSession gives the session the name -n asks for. A name the person
