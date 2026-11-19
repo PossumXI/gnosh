@@ -2659,3 +2659,33 @@ or kept with the reason said (27).
       at startup, in a folder nobody trusted (the count of what an
       untrusted folder holds reads them). Only plain files are read, and
       never past the size cap.
+
+157. **The security review of sub-agents: the rest of its medium findings
+    and one low.**
+    - A sub-agent's permission question looked like one of the
+      conversation the person is in ("Allow Bash?"), though a background
+      sub-agent may have read a hostile page. It now says who asks: "The
+      sub-agent Explore asks: Allow Bash?", and for one in the background
+      what it was started for. Its bare "No" says that it stops that
+      sub-agent. In the plain front end a second question took the place
+      of the one being answered, which then waited for good, and the
+      answer typed for it went to the other; questions wait their turn
+      there now.
+    - A background command a sub-agent started announced its end to the
+      session's model, in gnosh's words, with what the sub-agent wrote of
+      it (its description) in them, and the sub-agent, told it would hear,
+      never did. The command now knows the sub-agent that started it: while
+      that sub-agent works, the news is its own; once it has ended, the
+      session's model is told the command ended, by its id and output
+      file, without the sub-agent's words.
+    - The MCP tools --agent's list leaves out were left out of the
+      session's tools, and given to its sub-agents all the same. They are
+      left out of both.
+    Not changed yet: a skill's allowed-tools hold in the shared engine
+    until the person's next prompt, for a sub-agent running then too (a
+    sub-agent's own preloaded skills take the same path, so the grant
+    cannot simply be refused to sub-agents); and an Agent call's model may
+    name a model of another provider the person set up. TaskStop in a
+    sub-agent can stop any background command of the session, and
+    definition files pass over keys they do not know (a "disallowedtools"
+    typo is lost without a word).

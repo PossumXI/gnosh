@@ -250,11 +250,16 @@ func (l *live) toolNames() []string {
 // those of the MCP servers that are connected, as far as the rules let it
 // have them.
 func (l *live) offeredTools() []core.Tool {
-	out := append([]core.Tool(nil), l.tools...)
+	return append(append([]core.Tool(nil), l.tools...), l.allowedMCPTools()...)
+}
+
+// allowedMCPTools are the tools of the MCP servers connected now that the
+// session may offer, and its sub-agents with it: the session that runs as
+// an agent (--agent) has the MCP tools its definition lists, by name or by
+// server, and not the ones it takes away; its sub-agents have no others.
+func (l *live) allowedMCPTools() []core.Tool {
+	var out []core.Tool
 	for _, t := range l.mcpTools() {
-		// The session that runs as an agent (--agent) has the MCP tools
-		// its definition lists, by name or by server, and not the ones
-		// it takes away.
 		if def := l.asAgent; def != nil {
 			name := t.Spec().Name
 			if def.ToolsSet && strings.HasPrefix(name, "mcp__") && !toolListed(def.Tools, name, false) || toolListed(def.Disallowed, name, true) {

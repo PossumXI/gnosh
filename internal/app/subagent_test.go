@@ -630,7 +630,8 @@ func TestSubAgentAsksThePersonAndTakesAModel(t *testing.T) {
 	s.typeLine("have the file made")
 	s.see("* Agent: make the file")
 	s.see("  * Bash: touch made.txt")
-	s.see("? Allow Bash?")
+	// (The question names the sub-agent that asks.)
+	s.see("? The sub-agent general-purpose asks: Allow Bash?")
 	s.see("$ touch made.txt")
 	if w.Exists("made.txt") {
 		t.Fatalf("the sub-agent's command ran before the person answered")

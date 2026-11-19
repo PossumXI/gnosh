@@ -104,8 +104,11 @@ type job struct {
 	callID      string // the tool call waiting for it, if it started in the foreground
 	command     string
 	description string
-	dir         string // the directory it started in, on this machine
-	started     time.Time
+	// owner is the sub-agent that started it, by its session id, or ""
+	// for the session's own command.
+	owner   string
+	dir     string // the directory it started in, on this machine
+	started time.Time
 
 	host *Host        // the machine the command is for; nil for this one
 	ssh  string       // the ssh program that carries it there

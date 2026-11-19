@@ -240,6 +240,21 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 	}
 	askCtx := ctx
 	q := l.permissionQuestion(call, action, d)
+	if req.AgentID != "" {
+		// A sub-agent asks: the question says which, and a background
+		// one's says what it was started for, so that it is never taken
+		// for a question of the conversation the person is in.
+		asker := "The sub-agent " + trust.Escape(firstOf(req.AgentType, "of this session"))
+		if b, ok := l.backgroundAgent(req.AgentID); ok {
+			asker = fmt.Sprintf("The background sub-agent %s (%s)", trust.Escape(b.kind), trust.Escape(oneLine(b.desc, 80)))
+			for i := range q.Choices {
+				if q.Choices[i].Key == "no" {
+					q.Choices[i].Label = "No (alone it stops that sub-agent; with words after it, it reads them and carries on)"
+				}
+			}
+		}
+		q.Title = asker + " asks: " + q.Title
+	}
 	if changed != nil {
 		// A hook changed the call: the question shows what will run, not
 		// what the model wrote (its diff, its command).

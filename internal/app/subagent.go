@@ -749,8 +749,9 @@ func (s *subSession) tools() ([]core.Tool, error) {
 		}
 	}
 	// The tools of the MCP servers connected when the sub-agent starts, as
-	// for the session: a kind that lists its tools has those it names.
-	all = append(all, l.mcpTools()...)
+	// far as the session may have them (--agent's list holds for its
+	// sub-agents too): a kind that lists its tools has those it names.
+	all = append(all, l.allowedMCPTools()...)
 	for _, t := range l.agentMCPTools(s) {
 		all = append(all, t)
 	}

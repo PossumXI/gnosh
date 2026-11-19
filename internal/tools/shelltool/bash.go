@@ -101,6 +101,10 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 	}
 	j := newJob(m, a, env.Cwd)
 	j.ssh = ssh
+	if env.ParentSessionID != "" {
+		// A sub-agent's: the news of its end is the sub-agent's.
+		j.owner = env.SessionID
+	}
 	name, err := m.admit(j, a.background, callID)
 	if err != nil {
 		return nil, err

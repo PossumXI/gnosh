@@ -59,6 +59,19 @@ func (l *live) backgroundOff(owner *subSession) string {
 	return ""
 }
 
+// backgroundAgent returns the sub-agent with this id that runs in the
+// background, if one does.
+func (l *live) backgroundAgent(id string) (*bgAgent, bool) {
+	l.bgMu.Lock()
+	defer l.bgMu.Unlock()
+	for _, b := range l.bgAgents {
+		if b.id == id {
+			return b, true
+		}
+	}
+	return nil, false
+}
+
 // startBackground runs a sub-agent that is ready to start in the
 // background, and returns what the Agent call returns: that it started.
 func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
