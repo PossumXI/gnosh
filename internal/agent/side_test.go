@@ -410,3 +410,38 @@ func TestImagesLeftOutAreTold(t *testing.T) {
 		t.Errorf("the person was told %d times that the model cannot take images, want once", n)
 	}
 }
+
+// A side request's time begins once it has the model: one that waits
+// behind another (a prompt hook behind a long /btw) is not failed for the
+// wait, which has a bound of its own (the side-request review of
+// 2026-11-19).
+func TestSideTimeBeginsWithTheModel(t *testing.T) {
+	r := newRig(t, func(o *Options) {})
+	r.a.modelLock <- struct{}{} // another request has the model
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		<-r.a.modelLock
+	}()
+	r.model.push(say("Allowed."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "hook", Prompt: "is it allowed?", Timeout: 100 * time.Millisecond})
+	if err != nil || res.Text != "Allowed." {
+		t.Fatalf("a side request that waited longer than its time for the model: %+v, %v", res, err)
+	}
+}
+
+// A side request a provider fails in passing (a 429, a model server that
+// restarts) is sent again after the session's own pauses, as the
+// session's own requests are; one that gives way (a suggestion) is not
+// (the side-request review of 2026-11-19).
+func TestSideTriesAgainAfterAPassingFailure(t *testing.T) {
+	r := newRig(t, func(o *Options) {})
+	r.model.push(broken(core.ErrRateLimit, 429), broken(core.ErrServer, 503), say("Judged."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "goal-judge", Prompt: "does it hold?"})
+	if err != nil || res.Text != "Judged." {
+		t.Fatalf("a judge a provider failed in passing: %+v, %v", res, err)
+	}
+	r.model.push(broken(core.ErrRateLimit, 429), say("not asked"))
+	if _, err := r.a.Side(context.Background(), SideRequest{Purpose: "suggestion", Yield: true, Prompt: "next?"}); err == nil {
+		t.Error("a request that gives way was tried again")
+	}
+}

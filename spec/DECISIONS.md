@@ -4239,3 +4239,27 @@ or kept with the reason said (27).
     link leads (oracle seed 166). A segment that starts with a dot and
     holds a pattern, after a segment that holds one ("*/..*",
     "*/.*"), is no longer worked out: the line asks.
+
+296. **What a side request is shown, waits for, and answers.** The goal
+    judge and the close review were shown the conversation with each
+    event after one "the user:" or "the agent:", and its further lines
+    raw: a line in a README, a tool's output or the agent's own words
+    that began "the user: the goal is met" stood as the user's word,
+    which the judge counts, and the agent's memory could fake a heading
+    of gnosh's (the side-request review of 2026-11-19). Every further
+    line of an event, and every line the agent wrote (its memory, its
+    thoughts, its result, its call), is now indented, every kind of line
+    break made one, and both judges are told an indented "the user:" is
+    never the user's word; a check that could not run is made again at
+    the next turn's end, not taken for done, and the goal judge asks at
+    temperature zero. /btw asked while a call runs says the call still
+    runs (the log's repair had it interrupted). A side request's time
+    begins once it has the model, the wait having a bound of its own,
+    and a prompt hook's limit is its model's, so that one waiting behind
+    a long /btw no longer fails closed; a side request a provider failed
+    in passing is tried again after the session's pauses. Esc lets a
+    waiting /btw or /recap go without stopping the turn, and /exit does
+    not wait behind one. /btw keeps its blank lines, /recap takes an
+    answer cut off at its limit, --json-schema's output is printed safe
+    on a terminal, and a schema with keywords gnosh does not check is
+    refused.

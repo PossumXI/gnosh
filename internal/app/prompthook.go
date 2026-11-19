@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 )
 
 // promptHookSystem is what the model is told as it judges a prompt hook
@@ -29,7 +30,9 @@ func (l *live) promptHookAsk(ctx context.Context, model, text string) (string, e
 		return "", errors.New("the session has no model to ask yet")
 	}
 	limit := 2 * time.Minute
-	if dl, ok := ctx.Deadline(); ok {
+	if d, ok := hooks.AnswerLimit(ctx); ok {
+		limit = d
+	} else if dl, ok := ctx.Deadline(); ok {
 		limit = time.Until(dl)
 	}
 	zero := 0.0

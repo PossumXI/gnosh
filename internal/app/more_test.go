@@ -175,10 +175,8 @@ func TestBtwSideQuestion(t *testing.T) {
 	run(t, w, "-p", "remember the number seven").wantCode(t, 0)
 	w.Model.Add(apptest.Reply{Text: "It was seven.\n\nNothing else was said."})
 	r := run(t, w, "-c", "-p", "/btw which number was it?").wantCode(t, 0)
-	has(t, "the answer", r.out, "It was seven.", "Nothing else was said.")
-	if strings.Contains(r.out, "\n\n") {
-		t.Errorf("the answer kept an empty line: %q", r.out)
-	}
+	// (Its blank line stays: Jae put them back on 2026-11-19.)
+	has(t, "the answer", r.out, "It was seven.\n\nNothing else was said.")
 	reqs := w.Model.Requests()
 	sent := string(reqs[len(reqs)-1].Body)
 	has(t, "the side question's request", sent, "remember the number seven", "Noted: seven.", "which number was it?", "side question", `"name":"Bash"`)
@@ -197,6 +195,34 @@ func TestBtwSideQuestion(t *testing.T) {
 	has(t, "the recap request", string(reqs[len(reqs)-1].Body), "remember the number seven", "In one line")
 	data, _ = os.ReadFile(w.Sessions()[0])
 	hasNot(t, "the session's file after /recap", string(data), "In one line", "I did.")
+}
+
+// /btw asked while a command runs says the command still runs: the
+// session's own log gives a call with no result yet one that says it was
+// interrupted, and the side question was sent that (the side-request
+// review of 2026-11-19).
+func TestBtwWhileACommandRuns(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 4"}`}}},
+		apptest.Reply{Text: "It is still sleeping."},
+		apptest.Reply{Text: "Slept."},
+	)
+	s := sit(t, w, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("run the slow thing")
+	s.see("sleep 4")
+	s.typeLine("/btw what is it doing?")
+	s.see("It is still sleeping.")
+	s.see("Slept.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := w.Model.Requests()
+	if len(reqs) < 2 {
+		t.Fatalf("the model was asked %d times", len(reqs))
+	}
+	side := string(reqs[1].Body)
+	has(t, "the side question", side, "Still running: nobody interrupted this call", "what is it doing?")
+	hasNot(t, "the side question", side, "interrupted before it finished")
 }
 
 // /recap with no conversation yet says so, and asks no model.

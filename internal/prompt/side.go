@@ -148,12 +148,12 @@ func (s *Set) CloseReview(in CloseReviewInput) SideRequest {
 	files, moreFiles := keepFiles(in.Files, in.Result)
 	vals := values{
 		"todo":       oneLine(in.Todo, maxTitle),
-		"thoughts":   lines(in.Thoughts, maxBlock),
+		"thoughts":   Indented(lines(in.Thoughts, maxBlock)),
 		"ask":        clipChars(strings.TrimSpace(in.Ask), 2000),
 		"files":      strings.Join(files, ", "),
 		"commands":   strings.Join(cmds, "\n"),
-		"result":     strings.TrimSpace(in.Result),
-		"code":       clipChars(strings.TrimSpace(in.Code), 4000),
+		"result":     Indented(in.Result),
+		"code":       Indented(clipChars(strings.TrimSpace(in.Code), 4000)),
 		"transcript": strings.TrimSpace(in.Transcript),
 	}
 	for _, name := range []string{"thoughts", "files", "commands", "result", "transcript"} {
@@ -289,7 +289,7 @@ type GoalJudgeInput struct {
 func (s *Set) GoalJudge(in GoalJudgeInput) SideRequest {
 	vals := values{
 		"condition":    strings.TrimSpace(in.Condition),
-		"mem":          strings.TrimSpace(in.Mem),
+		"mem":          Indented(in.Mem),
 		"conversation": strings.TrimSpace(in.Conversation),
 	}
 	vals.flag("no_mem", vals["mem"] == "")

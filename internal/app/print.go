@@ -1244,9 +1244,16 @@ func (f *printer) report(c Controls, res agent.TurnResult) int {
 			f.encode(obj)
 		}
 	case f.inv.JSONSchema != "":
-		// The text format prints the structured output alone.
+		// The text format prints the structured output alone: on a
+		// terminal, with what its strings hold (a model's words) unable to
+		// do more than colour themselves, as a command's report is (the
+		// side-request review of 2026-11-19).
 		if f.structured != nil {
-			fmt.Fprintln(f.p.stdout, string(f.structured))
+			out := string(f.structured)
+			if f.live {
+				out = strings.TrimRight(text.Safe(out), "\n")
+			}
+			fmt.Fprintln(f.p.stdout, out)
 		} else if f.structuredErr != "" {
 			f.stderr("%s", f.structuredErr)
 		}

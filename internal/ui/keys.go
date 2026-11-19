@@ -663,6 +663,16 @@ func shownCommand(line string) (shown string, held bool) {
 // and Esc stops it.
 func (s *session) run(line string) {
 	if s.cmdRun != "" {
+		if sideCommand(s.cmdRun) && exitCommand(line) {
+			// /exit does not wait behind a side question, which may take
+			// minutes: that is let go, and /exit is next.
+			if s.cmdStop != nil {
+				s.cmdStop()
+			}
+			s.cmdq = append([]string{line}, s.cmdq...)
+			s.queued()
+			return
+		}
 		s.cmdq = append(s.cmdq, line)
 		s.queued()
 		return
@@ -684,6 +694,26 @@ func (s *session) run(line string) {
 			s.ran(line, res, err)
 		}
 	})
+}
+
+// sideCommand reports whether line is a side question's command: /btw or
+// /recap, which only wait for the model's answer.
+func sideCommand(line string) bool {
+	word, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "/"), " ")
+	switch strings.ToLower(word) {
+	case "btw", "recap":
+		return true
+	}
+	return false
+}
+
+// exitCommand reports whether line ends the session: /exit or /quit.
+func exitCommand(line string) bool {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "/exit", "/quit":
+		return true
+	}
+	return false
 }
 
 // isCommand reports whether line names one of the session's commands, by
@@ -863,6 +893,14 @@ func (s *session) nextCommand() {
 // slash command that is running. The line above the box says so until
 // the turn's end arrives.
 func (s *session) interrupt() {
+	if s.cmdStop != nil && sideCommand(s.cmdRun) {
+		// A side question (/btw, /recap) waits: Esc lets it go, and the
+		// turn goes on; Esc again stops the turn (the side-request review
+		// of 2026-11-19).
+		s.cmdStop()
+		s.dirty = true
+		return
+	}
 	if s.cmdStop != nil {
 		s.cmdStop()
 	}

@@ -58,6 +58,28 @@ func oneLine(s string, max int) string {
 	return clip(strings.Join(strings.Fields(s), " "), max)
 }
 
+// Lines makes every line break in s a line feed: a carriage return (alone
+// or before a line feed), the next-line character, and the line and
+// paragraph separators, which a model may read as breaks of their own.
+func Lines(s string) string {
+	if !strings.ContainsAny(s, "\r\u0085\u2028\u2029") {
+		return s
+	}
+	return strings.NewReplacer("\r\n", "\n", "\r", "\n", "\u0085", "\n", "\u2028", "\n", "\u2029", "\n").Replace(s)
+}
+
+// Indented is s with every line set two spaces in: a block of what the
+// agent wrote, put under a heading of gnosh's in a judge's request, where
+// no line of it may stand as a line of gnosh's own ("The end of the
+// conversation:", "the user: …").
+func Indented(s string) string {
+	s = strings.TrimSpace(Lines(s))
+	if s == "" {
+		return ""
+	}
+	return "  " + strings.ReplaceAll(s, "\n", "\n  ")
+}
+
 // lines takes the blank lines off both ends of s and the blanks off its
 // end, and cuts what is longer than max bytes, ending the cut in "…". The
 // line ends inside s stay, and so does the indent of its first line, which

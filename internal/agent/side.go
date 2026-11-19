@@ -110,17 +110,54 @@ func (a *Agent) Side(ctx context.Context, sr SideRequest) (SideResult, error) {
 	var res SideResult
 	var err error
 	for i, m := range models {
-		res, err = a.sideOnce(ctx, sr, purpose, m, timeout)
-		res.Fallback = i > 0
-		a.emit(&SideEvent{
-			Purpose: purpose, Provider: res.Provider, Model: res.Model,
-			Usage: res.Usage, Duration: res.Duration, Fallback: res.Fallback, Err: err,
-		})
+		res, err = a.sideTries(ctx, sr, purpose, m, timeout, i > 0, i == len(models)-1)
 		if err == nil || ctx.Err() != nil || errors.Is(err, ErrYielded) {
 			break
 		}
 	}
 	return res, err
+}
+
+// sideTries asks one model, and again after a failure that can pass, as
+// the session's own requests are: a provider that asks for a pause, or a
+// model server that restarts, failed a judge, a hook or a structured
+// answer at once (the side-request review of 2026-11-19). The tries end
+// with the request's own time, counted from the first failure; one that
+// gives way (a suggestion) is not tried again, nor one with another model
+// left to ask (last is false): that model is asked instead.
+func (a *Agent) sideTries(ctx context.Context, sr SideRequest, purpose string, m Model, timeout time.Duration, fallback, last bool) (SideResult, error) {
+	var failed time.Time
+	for n := 0; ; n++ {
+		res, err := a.sideOnce(ctx, sr, purpose, m, timeout)
+		res.Fallback = fallback
+		a.emit(&SideEvent{
+			Purpose: purpose, Provider: res.Provider, Model: res.Model,
+			Usage: res.Usage, Duration: res.Duration, Fallback: res.Fallback, Err: err,
+		})
+		var pe *core.ProviderError
+		if err == nil || !last || sr.Yield || ctx.Err() != nil || a.root.Err() != nil || !errors.As(err, &pe) || !pe.Retryable() {
+			return res, err
+		}
+		if failed.IsZero() {
+			failed = a.clock.Now()
+		}
+		// (The pauses are the session's own, RetryPolicy.)
+		p := a.retry.fill()
+		wait := p.Pauses[min(n, len(p.Pauses)-1)]
+		if pe.RetryAfter > 0 {
+			wait = min(pe.RetryAfter, p.BusyMax)
+		}
+		if a.clock.Now().Add(wait).Sub(failed) > timeout {
+			return res, err
+		}
+		select {
+		case <-ctx.Done():
+			return res, ctx.Err()
+		case <-a.root.Done():
+			return res, ErrClosed
+		case <-a.clock.After(wait):
+		}
+	}
 }
 
 // giveWay registers a side request that yields (SideRequest.Yield) and
@@ -169,6 +206,11 @@ func (a *Agent) makeWay() {
 	}
 }
 
+// sideWaitMost is how long a side request that does not give way waits
+// for a model busy with other requests before it is said not to have been
+// sent: as long as a /btw may hold it.
+const sideWaitMost = 10 * time.Minute
+
 // sideOnce asks one model.
 func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m Model, timeout time.Duration) (SideResult, error) {
 	res := SideResult{Provider: m.Provider.Name(), Model: m.Info.ID}
@@ -177,10 +219,22 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 		defer done()
 		ctx = yctx
 	}
-	tctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	stop := context.AfterFunc(a.root, cancel) // a closed session asks nothing more
-	defer stop()
+	// The time a request is given begins once it has the model: one that
+	// waits behind another (a prompt hook behind a long /btw) spent it
+	// waiting, and a check failed closed for want of a turn at the model
+	// (the side-request review of 2026-11-19). The wait has a bound of its
+	// own; a suggestion, which gives way, gives up within its time as ever.
+	var tctx context.Context
+	var cancel context.CancelFunc
+	wctx, wcancel := context.WithTimeout(ctx, sideWaitMost)
+	defer wcancel()
+	if sr.Yield {
+		tctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+		wctx = tctx
+	}
+	stopWait := context.AfterFunc(a.root, wcancel) // a closed session asks nothing more
+	defer stopWait()
 
 	fail := func(what string, err error) error {
 		switch {
@@ -190,8 +244,10 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 			return ctx.Err()
 		case a.root.Err() != nil:
 			return ErrClosed
-		case tctx.Err() != nil:
-			return fmt.Errorf("%s did not answer the %s request within %s", m.label(), purpose, span(timeout))
+		case tctx != nil && tctx.Err() != nil:
+			return fmt.Errorf("%s did not answer the %s request within %s: %w", m.label(), purpose, span(timeout), context.DeadlineExceeded)
+		case wctx.Err() != nil:
+			return fmt.Errorf("%s was busy with other requests for %s, so the %s request was not sent: %w", m.label(), span(sideWaitMost), purpose, context.DeadlineExceeded)
 		}
 		return fmt.Errorf("%s %s the %s request: %w", m.label(), what, purpose, err)
 	}
@@ -202,12 +258,18 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 		case <-tctx.Done():
 			return res, fail("could not be sent", tctx.Err())
 		}
-	} else if err := a.takeModel(tctx); err != nil {
+	} else if err := a.takeModel(wctx); err != nil {
 		// (One that does not give way, /btw say, makes a suggestion give
 		// way to it as the session's own requests do.)
 		return res, fail("could not be sent", err)
 	}
 	defer func() { <-a.modelLock }()
+	if tctx == nil {
+		tctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	stop := context.AfterFunc(a.root, cancel)
+	defer stop()
 
 	var req *core.Request
 	if sr.Session {
@@ -328,6 +390,33 @@ func (a *Agent) asideRequest(sr SideRequest, m Model) (*core.Request, error) {
 			if b.Type == core.BlockToolUse {
 				blocks = append(blocks, core.ToolResultBlock(b.ID, core.TextResult(a.texts.AsideRunning)))
 			}
+		}
+	}
+	// A session's own log gives a call that has no result yet one that
+	// says it was interrupted, so that the view reads as a conversation:
+	// a call that still runs is said to run (the side-request review of
+	// 2026-11-19).
+	a.mu.Lock()
+	running := map[string]bool{}
+	for _, rc := range a.running {
+		running[rc.CallID] = true
+	}
+	a.mu.Unlock()
+	for i := range msgs {
+		if msgs[i].Role != core.RoleUser || len(running) == 0 {
+			continue
+		}
+		var swapped []core.Block
+		for j, b := range msgs[i].Blocks {
+			if b.Type == core.BlockToolResult && running[b.ToolUseID] {
+				if swapped == nil {
+					swapped = slices.Clone(msgs[i].Blocks)
+				}
+				swapped[j] = core.ToolResultBlock(b.ToolUseID, core.TextResult(a.texts.AsideRunning))
+			}
+		}
+		if swapped != nil {
+			msgs[i].Blocks = swapped
 		}
 	}
 	msgs = withQuestion(msgs, append(blocks, core.Text(sr.Prompt))...)

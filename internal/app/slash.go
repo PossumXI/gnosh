@@ -397,10 +397,10 @@ func (l *live) slashBtw(ctx context.Context, c *SlashContext) error {
 	case err != nil:
 		return fmt.Errorf("the side question was not answered: %w", err)
 	}
-	for _, line := range strings.Split(res.Text, "\n") {
-		if strings.TrimSpace(line) != "" {
-			c.Say("%s", line)
-		}
+	// (Its blank lines stay, as everywhere on gnosh's screen since Jae put
+	// them back on 2026-11-19; only those at its ends go.)
+	for _, line := range strings.Split(strings.Trim(res.Text, "\n"), "\n") {
+		c.Say("%s", strings.TrimRight(line, " \t\r"))
 	}
 	return nil
 }
@@ -413,7 +413,9 @@ func (l *live) slashRecap(ctx context.Context, c *SlashContext) error {
 		return nil
 	}
 	res, err := c.Agent.Side(ctx, agent.SideRequest{Purpose: "recap", Session: true, Prompt: l.texts.Recap(), MaxTokens: 512, Timeout: btwWait})
-	if err != nil {
+	if err != nil && !(errors.Is(err, agent.ErrCutOff) && strings.TrimSpace(res.Text) != "") {
+		// (A recap cut off at its limit still has its first line, which
+		// is all that is shown.)
 		return fmt.Errorf("no recap was made: %w", err)
 	}
 	for _, line := range strings.Split(res.Text, "\n") {
