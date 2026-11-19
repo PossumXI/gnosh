@@ -273,6 +273,7 @@ func TestOptions(t *testing.T) {
     "autoCompactWindow": 200000,
     "loopMaxTurns": 25,
     "maxBackgroundTasks": 7,
+    "bashOutputMaxChars": 12000,
     "userInstructionFiles": ["~/notes", "/etc/gnosh/RULES.md", "rules"],
     "projectInstructionFiles": ["docs/AGENT-NOTES.md"],
     "hiddenSkills": ["pdf", "xlsx", "pdf"],
@@ -325,6 +326,7 @@ func TestOptions(t *testing.T) {
 	check("autoCompactWindow", o.AutoCompactWindow.V, 200000)
 	check("loopMaxTurns", o.LoopMaxTurns.V, 25)
 	check("maxBackgroundTasks", o.MaxBackgroundTasks.V, 7)
+	check("bashOutputMaxChars", o.BashOutputMaxChars.V, 12000)
 	check("userInstructionFiles", items(o.UserInstructionFiles), []string{testHome + "/notes", "/etc/gnosh/RULES.md", userDir + "/rules"})
 	check("projectInstructionFiles", items(o.ProjectInstructionFiles), []string{testCwd + "/docs/AGENT-NOTES.md"})
 	check("hiddenSkills", items(o.HiddenSkills), []string{"pdf", "xlsx"})
@@ -694,6 +696,7 @@ func TestFileRefusals(t *testing.T) {
 		{"a timeout with a fraction", `{"options": {"requestTimeout": 1.5}}`, "", []string{"written with digits alone", "1.5"}},
 		{"a window out of range", `{"options": {"autoCompactWindow": 5000}}`, "", []string{`"options.autoCompactWindow" is a whole number from 100000 to 1000000`, "5000"}},
 		{"no background tasks", `{"options": {"maxBackgroundTasks": 0}}`, "", []string{"a whole number from 1 to"}},
+		{"more output than Claude Code allows", `{"options": {"bashOutputMaxChars": 200000}}`, "", []string{"a whole number from 1 to 128000"}},
 		{"a switch in quotes", `{"options": {"debug": "true"}}`, "", []string{`"options.debug" is true or false`, "a string"}},
 		{"a switch as a number", `{"options": {"autoCompactEnabled": 1}}`, "", []string{`"options.autoCompactEnabled" is true or false`, "and here it is 1"}},
 		{"a text gnosh does not have", `{"options": {"memoryText": "long"}}`, "", []string{`"options.memoryText" is one of "lean", "full"`, `"long"`}},

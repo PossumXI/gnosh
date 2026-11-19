@@ -154,7 +154,7 @@ var permissionKeys = []keyDef{
 var claudeCodeKeys = []string{
 	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy",
 	"fileSuggestion",
-	"bashOutputMaxChars", "spinnerVerbs", "spinnerTipsEnabled",
+	"spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
 	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "enabledMcpjsonServers",

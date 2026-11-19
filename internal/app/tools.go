@@ -73,7 +73,7 @@ func (l *live) buildTools() error {
 		TimeoutToBackground: true,
 		NoBackground:        l.inv.Bare || l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1",
 		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
-		MaxOutputChars:      limits.BashMaxOutput.V,
+		MaxOutputChars:      bashOutputChars(l.cfg),
 		NoOutputTool:        true,
 		// The machines the config declares, and this one as every result
 		// names it. A folder's own hosts are among them only once the
@@ -198,6 +198,16 @@ func (l *live) buildTools() error {
 		}
 	}
 	return nil
+}
+
+// bashOutputChars is how many characters of a command's output the model
+// reads: BASH_MAX_OUTPUT_LENGTH when it is set, as the environment
+// outranks the files, else the bashOutputMaxChars option.
+func bashOutputChars(cfg *config.Config) int {
+	if cfg.Limits.BashMaxOutput.Set {
+		return cfg.Limits.BashMaxOutput.V
+	}
+	return cfg.Options.BashOutputMaxChars.V
 }
 
 // shellHosts turns the hosts the configuration holds in force into the

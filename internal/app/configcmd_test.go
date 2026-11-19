@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -138,4 +139,27 @@ func TestLanguageAndGitInstructions(t *testing.T) {
 	second := requestText(t, w, 1)
 	has(t, "the second session's request", second, "Reply to the user in japanese", "Working directory: ")
 	hasNot(t, "the second session's request", second, "- Git: ")
+}
+
+// bashOutputMaxChars, Claude Code's settings key, bounds the part of a
+// command's output the model reads; BASH_MAX_OUTPUT_LENGTH, when set,
+// wins, as the environment outranks the files.
+func TestBashOutputMaxChars(t *testing.T) {
+	count := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"seq 1 3000"}`}}}
+	w := apptest.NewWorld(t, count, apptest.Reply{Text: "Counted."}, count, apptest.Reply{Text: "Counted again."})
+	w.Settings(`{"options": {"bashOutputMaxChars": 2000}}`)
+	run(t, w, "-y", "-p", "count").wantCode(t, 0)
+	// seq 1 3000 prints 13,893 characters: the start and the end of them
+	// are shown, 2,000 in all.
+	cut := toolResult(t, w, 1, "c1")
+	has(t, "the cut output", cut, "1\n2\n3\n", "3000")
+	if len(cut) > 4000 {
+		t.Errorf("the model read %d characters of the output, with bashOutputMaxChars 2000", len(cut))
+	}
+	o := testOptions(w, "-y", "-p", "count again")
+	o.Environ = append(o.Environ, "BASH_MAX_OUTPUT_LENGTH=20000")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	if whole := toolResult(t, w, 3, "c1"); !strings.Contains(whole, "\n1500\n") {
+		t.Errorf("with BASH_MAX_OUTPUT_LENGTH 20000 the middle of the output was still cut")
+	}
 }

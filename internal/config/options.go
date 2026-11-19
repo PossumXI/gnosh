@@ -45,6 +45,10 @@ type Options struct {
 	LoopMaxTurns Value[int]
 	// MaxBackgroundTasks is how many background commands may run at once.
 	MaxBackgroundTasks Value[int]
+	// BashOutputMaxChars is how many characters of a command's output the
+	// model reads (Claude Code's bashOutputMaxChars). BASH_MAX_OUTPUT_LENGTH
+	// outranks it, as the environment outranks the files.
+	BashOutputMaxChars Value[int]
 	// MemReviewCloses switches the review of a closed todo.
 	MemReviewCloses Value[bool]
 	// RespondToBashCommands says the model answers what a command the
@@ -147,6 +151,7 @@ func defaultOptions() Options {
 	var o Options
 	o.AutoCompactEnabled.V = true
 	o.MaxBackgroundTasks.V = 50
+	o.BashOutputMaxChars.V = 30000
 	o.MemReviewCloses.V = true
 	o.RespondToBashCommands.V = true
 	o.FileCheckpointingEnabled.V = true
@@ -226,6 +231,11 @@ var optionDefs = []optionDef{
 		what: "background commands that may run at once", from: fromPlain + ", with Claude Code's word for them (background tasks)",
 		bounded: true, min: 1, max: 100000,
 		num: func(o *Options) *Value[int] { return &o.MaxBackgroundTasks }},
+	{key: "bashOutputMaxChars", kind: oInt, def: "30000",
+		what:    "characters of a command's output the model reads (a longer output is shown as its start and its end around a line that says what was left out, and is kept whole in a file); BASH_MAX_OUTPUT_LENGTH, when set, wins",
+		from:    fromClaudeCode + ": the settings key",
+		bounded: true, min: 1, max: 128000,
+		num: func(o *Options) *Value[int] { return &o.BashOutputMaxChars }},
 	{key: "askUserQuestionTimeout", kind: oEnum, def: "unset (a question waits for its answer)",
 		what: "how long a question the model asks (AskUserQuestion) may go without a key before it closes by itself, with what was picked by then, and the model goes on on its own judgment: 60s, 5m or 10m; permission questions never close so; not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"60s", "5m", "10m"}, ownOnly: true,

@@ -114,6 +114,8 @@
 //	  autoCompactWindow        tokens of context before room is made
 //	  loopMaxTurns             an optional cap on /loop
 //	  maxBackgroundTasks       background commands that may run at once
+//	  bashOutputMaxChars       characters of a command's output the model
+//	                           reads (30000; BASH_MAX_OUTPUT_LENGTH wins)
 //	  askUserQuestionTimeout   60s, 5m or 10m: a question of the model's
 //	                           with no key for that long closes by itself
 //	  respondToBashCommands    the model answers a command run behind !

@@ -2862,3 +2862,12 @@ or kept with the reason said (27).
     folder is a repository and its branch, read from files, and has no
     commit or pull request instructions to leave out besides. Both are
     read as a session starts.
+
+171. **Claude Code's bashOutputMaxChars.** The characters of a command's
+    output the model reads, which BASH_MAX_OUTPUT_LENGTH already set:
+    from 1 to 128,000 as Claude Code takes it (the variable goes to
+    150,000), 30,000 when neither is set. A longer output is shown as its
+    start and its end around a line that says what was left out, and is
+    kept whole in a file. The variable, when set, wins, as the
+    environment outranks the files; a failed command's output keeps its
+    own bound (10,000), never more than this.
