@@ -34,8 +34,12 @@ type ViewOptions struct {
 	// SummaryLead is put in front of a summary's text when it becomes the
 	// first message of the view, in place of SummaryPrefix: the caller's
 	// own words, such as a line in its marks that says whose the summary
-	// is. Empty means SummaryPrefix.
+	// is. Empty means SummaryPrefix. PartLead is put in front of the text
+	// of a summary of part of the conversation (one that Covers an entry,
+	// with what came after that entry going on after it), in place of
+	// SummaryLead; empty means SummaryLead.
 	SummaryLead string
+	PartLead    string
 }
 
 // ViewInfo says what a view left out, and why.
@@ -507,8 +511,10 @@ type conv struct {
 	session string
 	// trace says the caller wants to know what each cut took.
 	trace bool
-	// lead is what stands before a summary's text (ViewOptions.SummaryLead).
-	lead string
+	// lead is what stands before a summary's text (ViewOptions.SummaryLead),
+	// and partLead before that of a summary of part of the conversation
+	// (ViewOptions.PartLead).
+	lead, partLead string
 	// halts are the places, each as the number of rows before it, of
 	// replies that hold nothing and were cancelled or failed. Such a reply
 	// is not a row, since the model is not sent it, but it ended its turn.
@@ -535,7 +541,7 @@ type conv struct {
 
 // newConv lays the entries out as rows.
 func newConv(entries []Entry, opts ViewOptions, info *ViewInfo) *conv {
-	c := &conv{entries: entries, summary: -1, est: opts.Estimate, session: opts.Session, trace: opts.Trace, lead: opts.SummaryLead}
+	c := &conv{entries: entries, summary: -1, est: opts.Estimate, session: opts.Session, trace: opts.Trace, lead: opts.SummaryLead, partLead: opts.PartLead}
 	if c.est == nil {
 		c.est = EstimateTokens
 	}
@@ -706,6 +712,9 @@ func (c *conv) total() int {
 // summaryMessage is the message the summary becomes.
 func (c *conv) summaryMessage() core.Message {
 	lead := c.lead
+	if c.partLead != "" && c.entries[c.summary].Covers != "" {
+		lead = c.partLead
+	}
 	if lead == "" {
 		lead = SummaryPrefix
 	}

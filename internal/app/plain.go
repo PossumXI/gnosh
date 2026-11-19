@@ -1359,10 +1359,18 @@ func (f *plain) Event(ev any) {
 		}
 	case *agent.SummaryEvent:
 		switch {
+		case ev.Phase == "start" && ev.Part == "before":
+			f.say("Summarizing the conversation before your prompt; what followed it stays. This can take minutes on a local model; Ctrl+C stops it.")
+		case ev.Phase == "start" && ev.Part == "after":
+			f.say("Summarizing what followed your prompt, to go back to before it. This can take minutes on a local model; Ctrl+C stops it.")
 		case ev.Phase == "start":
 			f.say("Summarizing the conversation to make room (%s). This can take minutes on a local model; Ctrl+C stops it.", ev.Trigger)
 		case ev.Err != nil:
 			f.say("No summary was made: %v", ev.Err)
+		case ev.Part == "after":
+			// (The rewind that follows says what became of it.)
+		case ev.Part == "before":
+			f.say("The conversation before your prompt was summarized: about %s tokens before, about %s after.", tokenCount(ev.PreTokens), tokenCount(ev.PostTokens))
 		default:
 			f.say("The conversation was summarized: about %s tokens before, about %s after.", tokenCount(ev.PreTokens), tokenCount(ev.PostTokens))
 		}

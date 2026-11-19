@@ -91,6 +91,10 @@ const (
 	textSummary          = "summary"
 	textSummaryExtra     = "summary-extra"
 	textSummaryIntro     = "summary-intro"
+	textSummaryPart      = "summary-part"
+	textSummaryFrom      = "summary-from"
+	textSummaryPartIntro = "summary-part-intro"
+	textSummaryFromNote  = "summary-from-note"
 	textPopNote          = "pop-note"
 	textSlideNote        = "slide-note"
 	textPopReceipt       = "pop-receipt"
@@ -249,6 +253,14 @@ func specs() []spec {
 			when: "Just before a summary, where it stands in place of the conversation it replaced."},
 		{name: textAfterSummary, kind: KindLine, may: []string{"path"},
 			when: "Just after that summary: carry on, keeping every stop the user set."},
+		{name: textSummaryPart, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
+			when: "At the end of a request that holds the conversation up to one of the person's prompts, when they chose \"Summarize up to here\": that part is to be replaced by a summary, and the rest stays."},
+		{name: textSummaryFrom, kind: KindLine, need: []string{"words", "prompt"}, may: []string{"mem"},
+			when: "At the end of the session's own request, when the person chose \"Summarize from here\": the conversation goes back to before that prompt, and a summary of what followed is kept in its place."},
+		{name: textSummaryPartIntro, kind: KindLine,
+			when: "Just before a summary of the part of the conversation before one of the person's prompts, which the rest follows as it was."},
+		{name: textSummaryFromNote, kind: KindLine, need: []string{"prompt"},
+			when: "After the conversation went back to before one of the person's prompts with \"Summarize from here\": the summary of what followed it comes next."},
 		{name: textFilesBack, kind: KindLine, need: []string{"path"}, may: []string{"shown", "named"},
 			when: "After a summary, for each file the model read or changed last that is given back: what Read returns for it follows; and once, the ones that are not given back."},
 

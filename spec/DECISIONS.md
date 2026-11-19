@@ -4184,3 +4184,20 @@ or kept with the reason said (27).
     copy among them is kept as what it held as the oldest prompt kept went
     out. A file only shell commands changed is still not followed, nor
     are a sub-agent's.
+
+292. **The rewind can keep a summary, as Claude Code's does.** Claude
+    Code's rewind offers, beside the conversation and the files, "Summarize
+    from here" and "Summarize up to here"; gnosh had neither. /rewind N
+    summarize (Esc Esc: "Summarize from here") has the model write a
+    summary of what followed prompt N, from the session's own request so
+    that a model server reads only the asking anew, and then goes back to
+    before the prompt, with the summary kept in the conversation after a
+    line of gnosh's that says what it is, and the prompt back in the box;
+    the files stay. /rewind N summarize-before ("Summarize up to here")
+    has the model summarize the conversation before prompt N from that
+    part alone, and the summary takes that part's place (a summary entry
+    that covers the entry before the prompt), with what followed going on
+    after it as it was; not for the first prompt. Words after either are
+    what the summary is to keep, as /compact's are. The line before every
+    summary had been put in gnosh's marker twice, so the model was shown
+    the inner marker broken by a zero-width space; it is marked once.

@@ -153,6 +153,8 @@ var budgets = map[string]int{
 	textMemLine:        75,
 	textFrameLine:      110,
 	textSummary:        220,
+	textSummaryPart:    220,
+	textSummaryFrom:    220,
 	textCloseReview:    760,
 	textGoalJudge:      490,
 	textCloseRequest:   190, // with the counts of what a long todo leaves out

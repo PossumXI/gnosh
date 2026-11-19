@@ -43,6 +43,33 @@ func (s *Set) Summary(in SummaryInput) string {
 	return Wrap(ask)
 }
 
+// SummaryPart returns the request for a summary of the conversation up to
+// one of the person's prompts, which the summary is to take the place of,
+// while what follows it stays (the rewind's "Summarize up to here"). It
+// goes at the end of a request that holds that part alone. It is not in
+// the marker: the loop puts it there, with the person's instructions.
+func (s *Set) SummaryPart(words int, mem bool) string {
+	if words <= 0 {
+		words = SummaryWords
+	}
+	vals := values{"words": strconv.Itoa(words)}
+	vals.flag("mem", mem)
+	return s.bare(textSummaryPart, vals)
+}
+
+// SummaryFrom returns the request for a summary of the conversation from
+// the person's prompt that begins with prompt on, which they are setting
+// aside (the rewind's "Summarize from here"). It goes at the end of the
+// session's own request; the loop puts it in the marker.
+func (s *Set) SummaryFrom(prompt string, words int, mem bool) string {
+	if words <= 0 {
+		words = SummaryWords
+	}
+	vals := values{"words": strconv.Itoa(words), "prompt": oneLine(prompt, maxQuote)}
+	vals.flag("mem", mem)
+	return s.bare(textSummaryFrom, vals)
+}
+
 // SideRequest is a small request gnosh makes for itself, to a model that
 // sees nothing else of the session: no tools, and as little thinking as
 // the model allows.

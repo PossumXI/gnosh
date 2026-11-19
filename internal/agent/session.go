@@ -248,6 +248,45 @@ func (a *Agent) Compact(instructions string) error {
 	return nil
 }
 
+// SummaryPart is a summary the person asks for of part of the
+// conversation, in place of one of all of it: the rewind's "Summarize up
+// to here" and "Summarize from here".
+type SummaryPart struct {
+	// Messages are what the model is sent ahead of the request: the part
+	// to summarize, or the whole conversation when Ask says which part.
+	Messages []core.Message
+	// Ask is the request for the summary, and Intro the line that stands
+	// before it where it is kept. Empty, they are the usual ones.
+	Ask, Intro string
+	// Covers names the session-file entry the summary stands in for, up to
+	// and including it: the summary is kept in the log, the view starts
+	// with it and goes on after that entry, and the event says "before".
+	// Empty, the summary is not kept: Done is given its text, and the
+	// event says "after".
+	Covers string
+	// Done, when set, is told the summary's text, or why none was made.
+	Done func(text string, err error)
+}
+
+// CompactPart asks for a summary of part of the conversation, with the
+// person's instructions for it. It runs when the turn in hand has ended,
+// as Compact does; how it went arrives as SummaryEvents, and in part.Done.
+func (a *Agent) CompactPart(instructions string, part SummaryPart) error {
+	if len(part.Messages) == 0 {
+		return errNothingToSummarize
+	}
+	a.mu.Lock()
+	if a.closing {
+		a.mu.Unlock()
+		return ErrClosed
+	}
+	a.commands = append(a.commands, &command{compact: true, instructions: instructions, part: &part})
+	a.markBusyLocked()
+	a.mu.Unlock()
+	a.kick()
+	return nil
+}
+
 // runCommand does one thing that is not a turn.
 func (a *Agent) runCommand(c *command) {
 	ctx, cancel := context.WithCancel(a.root)
@@ -269,13 +308,31 @@ func (a *Agent) runCommand(c *command) {
 	if !c.compact {
 		return
 	}
-	if err := a.settleOnce(); err != nil {
+	var err error
+	if c.part != nil && c.part.Done != nil {
+		// Done is told once, whatever happens: the summary tells it what
+		// it made, and anything else is told here.
+		told, done := false, c.part.Done
+		c.part.Done = func(text string, err error) {
+			told = true
+			done(text, err)
+		}
+		defer func() {
+			if !told {
+				if err == nil {
+					err = errors.New("no summary was made")
+				}
+				done("", err)
+			}
+		}()
+	}
+	if err = a.settleOnce(); err != nil {
 		a.notice(LevelError, "summary", fmt.Sprintf("No summary was made: %v.", err))
 		return
 	}
 	// A summary the person asks for by hand lets automatic ones run again.
 	a.summariesOff = false
-	err := a.summarize(ctx, nil, "manual", c.instructions)
+	err = a.summarize(ctx, nil, "manual", c.instructions, c.part)
 	switch {
 	case err == nil:
 	case ctx.Err() != nil:

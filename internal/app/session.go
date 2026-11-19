@@ -182,8 +182,10 @@ type live struct {
 	reopen   string
 	rewindTo string
 	// rewindAll says /rewind asked for the files to be put back with the
-	// conversation.
-	rewindAll bool
+	// conversation, and rewindKept is the summary of what followed the
+	// prompt that /rewind N summarize asked to keep in its place.
+	rewindAll  bool
+	rewindKept string
 	// checks keeps what the files the model changes held, for a rewind,
 	// and checkWarn says once that one could not be kept.
 	checks    *checkpoints
@@ -1608,9 +1610,9 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 		}
 	}
 	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
-		all := l.rewindAll
-		l.rewindTo, l.rewindAll = "", false
-		text, files, rerr := c.rewindWith(ctx, point, all)
+		all, kept := l.rewindAll, l.rewindKept
+		l.rewindTo, l.rewindAll, l.rewindKept = "", false, ""
+		text, files, rerr := c.rewindWith(ctx, point, all, kept)
 		if rerr != nil {
 			if files != "" {
 				return res, fmt.Errorf("%s But the session could not be opened again: %w", files, rerr)
@@ -1619,6 +1621,9 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 		}
 		res.Reset, res.Draft = true, text
 		res.Text = "The conversation is back to before this prompt of yours, which you can send again or change:\n" + text
+		if kept != "" {
+			res.Text += "\nWhat followed it is kept as a summary, which the model reads with your next prompt."
+		}
 		if files != "" {
 			res.Text += "\n" + files
 		} else {

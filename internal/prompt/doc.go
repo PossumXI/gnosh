@@ -339,6 +339,12 @@
 //     user asked to be told or asked, and otherwise without asking. (A
 //     plain "carry on without asking" took the model past such a stop:
 //     Claude Code's own summary line did, on 16 November 2026.)
+//     summary-part and summary-from (SummaryPart, SummaryFrom) ask for a
+//     summary of part of the conversation, for the rewind's "Summarize up
+//     to here" and "Summarize from here"; summary-part-intro
+//     (SummaryPartIntro) stands before the first, which the rest of the
+//     conversation follows, and summary-from-note (SummaryFromNote)
+//     before the second, once the conversation went back.
 //     earlier-left-out (EarlierLeftOut) stands where part of a summary
 //     request did not fit: after its first message, or at its start.
 //   - files-back (FileShownBack, FilesNotShownBack) gives back after a

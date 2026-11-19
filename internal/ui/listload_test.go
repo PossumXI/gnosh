@@ -110,6 +110,12 @@ func TestRewindConfirmation(t *testing.T) {
 	g.keys(`"an earlier prompt" <Enter>`)
 	g.keys(`<Esc> <Esc>`)
 	g.keys(`<Down> <Enter>`)
-	g.liveHas("Go back to before: the first prompt", "No file can be put back: the copies of what the files held before that prompt were let go.")
-	g.liveLacks("put the files back")
+	g.liveHas("Go back to before: the first prompt", "No file can be put back: the copies of what the files held before that prompt were let go.",
+		"Summarize from here")
+	// (Nothing came before the first prompt to summarize.)
+	g.liveLacks("put the files back", "Summarize up to here")
+	g.keys(`<Esc>`)
+	g.keys(`<Esc> <Esc>`)
+	g.keys(`<Enter>`)
+	g.liveHas("Go back to before: the second prompt", "Summarize from here", "Summarize up to here")
 }

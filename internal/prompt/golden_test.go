@@ -279,7 +279,7 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "summary",
-			texts: []string{textSummary, textSummaryExtra, textSummaryIntro, textAfterSummary, textEarlierLeftOut, textFilesBack},
+			texts: []string{textSummary, textSummaryExtra, textSummaryIntro, textAfterSummary, textEarlierLeftOut, textFilesBack, textSummaryPart, textSummaryFrom, textSummaryPartIntro, textSummaryFromNote},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"the request", s.Summary(SummaryInput{})},
@@ -290,6 +290,10 @@ func goldenFiles() []goldenFile {
 					{"after the summary, nothing kept", s.AfterSummary("")},
 					{"a file given back after the summary", s.FileShownBack("/home/dev/project/main.go")},
 					{"files not given back", s.FilesNotShownBack([]string{"/home/dev/project/big.log", "/home/dev/project/shot.png"})},
+					{"the request for a summary up to a prompt, with mem", s.SummaryPart(0, true)},
+					{"before that summary", s.SummaryPartIntro()},
+					{"the request for a summary from a prompt on", s.SummaryFrom("fix the flaky test in auth/session_test.go", 0, false)},
+					{"before that summary, once the conversation went back", s.SummaryFromNote("fix the flaky test in auth/session_test.go")},
 				}
 			},
 		},

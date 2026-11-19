@@ -1319,8 +1319,10 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		number := len(points) - res.Index
 		point := points[number-1]
 		// The choices, as Claude Code offers them: the conversation and the
-		// files, the conversation alone, or the files alone; the ones about
-		// files only where one of the files followed changed since.
+		// files, the conversation alone, or the files alone (the ones about
+		// files only where one of the files followed changed since); and a
+		// summary of what followed the prompt, gone back from, or of what
+		// came before it (not for the first prompt).
 		// (A long prompt, pasted, would take the rows the files and the
 		// choices need.)
 		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + fit(s.m, oneLine(point.Text), rewindTitleMost)}}
@@ -1354,6 +1356,12 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		if len(point.Files) > 0 {
 			opts = append(opts, menu.Option{Label: "Put the files back only", Description: "the conversation stays as it is"})
 			commands = append(commands, fmt.Sprintf("/rewind %d files", number))
+		}
+		opts = append(opts, menu.Option{Label: "Summarize from here", Description: "go back to before it, keeping a summary of what followed; the files stay"})
+		commands = append(commands, fmt.Sprintf("/rewind %d summarize", number))
+		if number > 1 {
+			opts = append(opts, menu.Option{Label: "Summarize up to here", Description: "what came before it becomes a summary; it and what followed stay"})
+			commands = append(commands, fmt.Sprintf("/rewind %d summarize-before", number))
 		}
 		opts = append(opts, menu.Option{Label: "Never mind"})
 		sure.ui = menu.NewSelect(menu.SelectOptions{

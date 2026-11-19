@@ -163,15 +163,18 @@ func (c *controls) RewindPoints() []RewindPoint { return c.cur().rewindPoints() 
 // Rewind takes the conversation back to before the prompt that point
 // names, and returns the prompt's text. The session must be idle.
 func (c *controls) Rewind(ctx context.Context, point string) (string, error) {
-	text, _, err := c.rewindWith(ctx, point, false)
+	text, _, err := c.rewindWith(ctx, point, false, "")
 	return text, err
 }
 
 // rewindWith is Rewind, which with files puts back what Write and Edit
 // changed too, and says how that went. The files are put back only once
 // the rewind is in the session's file, and once the session has stopped
-// what it ran in the background, which could change them again.
-func (c *controls) rewindWith(ctx context.Context, point string, files bool) (text, filesSaid string, err error) {
+// what it ran in the background, which could change them again. kept,
+// when not empty, is the model's summary of what followed the prompt
+// (/rewind N summarize), which goes into the conversation after the
+// rewind, for the model to read with the next prompt.
+func (c *controls) rewindWith(ctx context.Context, point string, files bool, kept string) (text, filesSaid string, err error) {
 	old := c.cur()
 	if old.busy(ctx) {
 		return "", "", errors.New("a turn is running. Stop it first (Esc, or Ctrl+C in the plain session), then go back")
@@ -200,6 +203,13 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 	}
 	if _, err := old.ts.Append(transcript.RewindEntry(to)); err != nil {
 		return "", "", fmt.Errorf("the rewind could not be written into the session's file (%v), so nothing was changed", err)
+	}
+	if kept != "" {
+		note := agent.Entry{Kind: agent.EntryNote, Source: "rewind", Blocks: []core.Block{
+			core.Text(old.texts.SummaryFromNote(text)), core.Text(prompt.Untrusted(kept))}}
+		if err := old.log.Append(ctx, note); err != nil {
+			old.flog.logf("turn", "the summary of what followed the rewound prompt could not be kept: %v", err)
+		}
 	}
 	if id := queued[point]; id != "" {
 		// The prompt waited in the queue while a turn ran: its record of
@@ -255,6 +265,7 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 			c.Say("  %d. %s  %s%s", i+1, p.Time.Local().Format("15:04"), oneLine(p.Text, 100), files)
 		}
 		c.Say("/rewind N takes the conversation back to before prompt N, which you can then send again or change; /rewind N all puts the files back too, and /rewind N files the files alone. %s", rewindNote)
+		c.Say("/rewind N summarize goes back to before prompt N and keeps a summary of what followed it; /rewind N summarize-before makes everything before prompt N a summary, and what followed stays. Words after either say what the summary is to keep.")
 		if !l.cfg.Options.FileCheckpointingEnabled.V {
 			c.Say("No file can be put back in this session: %s.", strings.TrimSuffix(errNoCheckpoints.Error(), ", so no file can be put back"))
 		}
@@ -264,17 +275,25 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 	if err != nil || n < 1 || n > len(points) {
 		return fmt.Errorf("%q is not the number of one of your prompts: /rewind lists them, 1 to %d", oneLine(args[0], 40), len(points))
 	}
-	how := ""
+	how, guide := "", ""
 	if len(args) > 1 {
-		how = args[1]
+		how, guide = args[1], strings.Join(args[2:], " ")
 	}
-	if len(args) > 2 || how != "" && how != "all" && how != "files" {
-		return errors.New("/rewind takes the number of one of your prompts, and then all (the files too) or files (the files alone), or nothing")
+	switch {
+	case how == "summarize" || how == "summarize-before":
+	case guide != "" || how != "" && how != "all" && how != "files":
+		return errors.New("/rewind takes the number of one of your prompts, and then all (the files too), files (the files alone), summarize or summarize-before (with what the summary is to keep), or nothing")
 	}
 	if l.busy(ctx) {
 		return errors.New("a turn is running. Stop it first, then go back")
 	}
 	point := points[n-1]
+	switch how {
+	case "summarize-before":
+		return l.summarizeBefore(c, point, guide)
+	case "summarize":
+		return l.summarizeAfter(ctx, c, point, guide)
+	}
 	if how == "files" {
 		// The files alone: the conversation stays where it is, and the
 		// session is not opened again. What works in the background could
@@ -299,6 +318,74 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 	}
 	l.rewindTo, l.rewindAll = point.ID, how == "all"
 	return nil
+}
+
+// summarizeBefore is /rewind N summarize-before, the rewind's "Summarize up
+// to here": the conversation before the prompt becomes a summary, and what
+// came after it stays as it was. The summary is made as /compact's is, and
+// its events say how it went.
+func (l *live) summarizeBefore(c *SlashContext, point RewindPoint, guide string) error {
+	_, before, _ := l.rewindGroup()
+	covers, ok := before[point.ID]
+	msgs := l.log.viewUpTo(covers)
+	if !ok || !slices.ContainsFunc(msgs, func(m core.Message) bool { return m.Role == core.RoleAssistant }) {
+		return errors.New("there is nothing before that prompt to summarize: the model had not answered yet")
+	}
+	intro, err := l.texts.Format("summary-part-intro", nil)
+	if err != nil {
+		return err
+	}
+	part := agent.SummaryPart{Messages: msgs, Ask: l.texts.SummaryPart(prompt.SummaryWords, l.hasGno()), Intro: intro, Covers: covers}
+	if err := c.Agent.CompactPart(guide, part); err != nil {
+		return fmt.Errorf("no summary was asked for: %w", err)
+	}
+	return nil
+}
+
+// summarizeAfter is /rewind N summarize, the rewind's "Summarize from here":
+// a summary is made of what followed the prompt, and the conversation goes
+// back to before it, with the summary kept in its place (rewindKept) and
+// the prompt back in the box. The files stay as they are.
+func (l *live) summarizeAfter(ctx context.Context, c *SlashContext, point RewindPoint, guide string) error {
+	if held := l.rewindHeldBy(false); len(held) > 0 {
+		return rewindWaits(held)
+	}
+	v, err := l.log.View(ctx)
+	if err != nil {
+		return err
+	}
+	type made struct {
+		text string
+		err  error
+	}
+	done := make(chan made, 1)
+	part := agent.SummaryPart{Messages: v.Messages, Ask: l.texts.SummaryFrom(point.Text, prompt.SummaryWords, l.hasGno()),
+		Done: func(text string, err error) { done <- made{text, err} }}
+	if err := c.Agent.CompactPart(guide, part); err != nil {
+		return fmt.Errorf("no summary was asked for: %w", err)
+	}
+	var r made
+	select {
+	case r = <-done:
+	case <-ctx.Done():
+		return errors.New("the summary was let go, and the conversation is as it was")
+	}
+	if r.err != nil {
+		return fmt.Errorf("no summary was made (%v), so the conversation is as it was", r.err)
+	}
+	// (Until the summary's command has ended: a rewind waits for an idle
+	// session.)
+	if err := c.Agent.Wait(ctx); err != nil {
+		return err
+	}
+	l.rewindTo, l.rewindAll, l.rewindKept = point.ID, false, r.text
+	return nil
+}
+
+// hasGno says the session's model runs Gno (mem), whose summary leaves out
+// what mem hands back.
+func (l *live) hasGno() bool {
+	return slices.Contains(l.toolNames(), gnoRunTool)
 }
 
 // countWords counts things in words: "1 file", "3 files".

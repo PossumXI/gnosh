@@ -572,6 +572,11 @@ type SummaryEvent struct {
 	Phase string
 	// Trigger is "auto" or "manual".
 	Trigger string
+	// Part says which part of the conversation the summary is of, when it
+	// is not all of it: "before" a prompt of the person's, which the
+	// summary takes the place of, or "after" one, whose summary goes to
+	// the person's command and is not kept (SummaryPart).
+	Part string
 	// PreTokens and PostTokens are about how long the conversation was
 	// before and after.
 	PreTokens  int

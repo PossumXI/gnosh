@@ -710,6 +710,21 @@ func (s *Set) SummaryIntro() string {
 	return s.fill(textSummaryIntro, nil)
 }
 
+// SummaryPartIntro returns the line that stands just before a summary of
+// the part of the conversation before one of the person's prompts, which
+// what came after follows as it was.
+func (s *Set) SummaryPartIntro() string {
+	return s.fill(textSummaryPartIntro, nil)
+}
+
+// SummaryFromNote returns the line that stands before the summary of what
+// followed the person's prompt that begins with prompt, once the
+// conversation went back to before it; the summary follows, outside the
+// marker.
+func (s *Set) SummaryFromNote(prompt string) string {
+	return s.fill(textSummaryFromNote, values{"prompt": oneLine(prompt, maxQuote)})
+}
+
 // AfterSummary returns what the model is told right after a summary: carry
 // on from it, without asking. path is the file the replaced conversation
 // was written to, if it was.

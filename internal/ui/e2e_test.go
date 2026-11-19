@@ -659,8 +659,8 @@ func TestRewindWithTheProgram(t *testing.T) {
 	p.keys(`<Esc> <Esc>`)
 	p.has("Go back to before which prompt?")
 	p.keys(`<Down> <Enter>`)
-	p.has("Go back to before: the second prompt", "has changed since then", "Go back, the conversation only")
-	p.keys(`<Down> <Enter>`)
+	p.has("Go back to before: the second prompt", "has changed since then", "Go back, the conversation only", "Summarize from here", "Summarize up to here")
+	p.keys(`<Esc>`)
 
 	// And for real: the second prompt, the middle of the three.
 	p.keys(`"/rewind" <Enter>`)

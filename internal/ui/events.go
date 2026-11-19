@@ -659,13 +659,27 @@ func (s *session) hooks(ev *app.HookEvent) {
 func (s *session) summary(ev *agent.SummaryEvent) {
 	switch {
 	case ev.Phase == "start":
-		s.say(fmt.Sprintf("Summarizing the conversation to make room (%s). On a local model this can take minutes; Esc stops it.", ev.Trigger))
+		switch ev.Part {
+		case "before":
+			s.say("Summarizing the conversation before your prompt; what followed it stays. On a local model this can take minutes; Esc stops it.")
+		case "after":
+			s.say("Summarizing what followed your prompt, to go back to before it. On a local model this can take minutes; Esc stops it.")
+		default:
+			s.say(fmt.Sprintf("Summarizing the conversation to make room (%s). On a local model this can take minutes; Esc stops it.", ev.Trigger))
+		}
 		s.setPhase(phSummary)
 	case ev.Err != nil:
 		s.notice(agent.LevelWarning, fmt.Sprintf("No summary was made: %v", ev.Err))
 		s.setPhase(phWorking)
+	case ev.Part == "after":
+		// (The rewind that follows says what became of it.)
+		s.setPhase(phWorking)
 	default:
-		s.say(fmt.Sprintf("The conversation was summarized: about %s tokens before, about %s after.", tokens(ev.PreTokens), tokens(ev.PostTokens)))
+		what := "The conversation was summarized"
+		if ev.Part == "before" {
+			what = "The conversation before your prompt was summarized"
+		}
+		s.say(fmt.Sprintf("%s: about %s tokens before, about %s after.", what, tokens(ev.PreTokens), tokens(ev.PostTokens)))
 		s.setPhase(phWorking)
 		s.ctxs = s.c.Context()
 	}

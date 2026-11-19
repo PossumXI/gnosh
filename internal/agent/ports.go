@@ -345,9 +345,13 @@ type Entry struct {
 	Reason EndReason
 
 	// Trigger is "auto" or "manual" for an EntrySummary, and PreTokens is
-	// about how long the conversation was before it.
+	// about how long the conversation was before it. Covers names the
+	// session-file entry a summary of part of the conversation stands in
+	// for, up to and including it (SummaryPart); empty, the summary stands
+	// in for everything before it.
 	Trigger   string
 	PreTokens int
+	Covers    string
 }
 
 // Gate answers one question: may this tool call run? Behind it are the

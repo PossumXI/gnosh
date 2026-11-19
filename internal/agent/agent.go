@@ -338,6 +338,9 @@ func (s *submission) resolve(r TurnResult) {
 type command struct {
 	compact      bool
 	instructions string
+	// part is the part of the conversation a summary is of, or nil for
+	// all of it.
+	part *SummaryPart
 }
 
 type ctxKey struct{}

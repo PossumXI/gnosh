@@ -402,7 +402,7 @@ func (a *Agent) fit(ctx context.Context, t *turn, moment RoomMoment, extra int) 
 			}
 			return fitted{}, cannot("Automatic summaries are off for this session because the last one did not help.")
 		}
-		err = a.summarize(ctx, t, "auto", "")
+		err = a.summarize(ctx, t, "auto", "", nil)
 		switch {
 		case err == nil:
 			summarized = true
