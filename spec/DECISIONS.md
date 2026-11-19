@@ -4230,3 +4230,12 @@ or kept with the reason said (27).
     a rewind of the files still waits for them, and a /subtask's answer
     still comes back. Ctrl+C in the line-mode front end stops the
     summary a command waits for, not only the command.
+
+295. **A dot pattern after a pattern asks.** Expanding "*/..*" itself,
+    the engine took "*/.." out as the text does and read the working
+    directory, while dash matches ".." with "..*" and so ran
+    "cat -R/.. link-dir/.. …": a match beginning with a dash, which cat
+    reads as a flag, and through a link the directory above where the
+    link leads (oracle seed 166). A segment that starts with a dot and
+    holds a pattern, after a segment that holds one ("*/..*",
+    "*/.*"), is no longer worked out: the line asks.

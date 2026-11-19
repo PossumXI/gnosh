@@ -981,6 +981,12 @@ func TestPatternThatClimbs(t *testing.T) {
 		"cat l*/../secret.txt":              Ask,
 		"cat sr*/../a.go":                   Allow, // a match that is no link: the project's own a.go
 		"cat src/*/../../a.go":              Allow,
+		// A dot pattern after a pattern: dash matches ".." with "..*",
+		// so "cat */..*" ran "cat -R/.. link-dir/.. …", a flag and the
+		// directory above a link's target, while the text took "*/.."
+		// for the working directory (oracle seed 166).
+		"cat */..*":  Ask,
+		"ls -d */.*": Ask,
 	} {
 		if d := bash(e, cmd); d.Behavior != want {
 			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)

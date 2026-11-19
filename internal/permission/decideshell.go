@@ -380,6 +380,15 @@ func (e *Engine) dotMatches(pattern string) (out []string, ok bool) {
 		if !strings.HasPrefix(seg, ".") || !hasPathMagic(seg) {
 			continue
 		}
+		if hasPathMagic(strings.Join(segs[:i], "/")) {
+			// "*/..*": each match of what comes before is a name of its
+			// own, which the text would take out with the "..": a match
+			// may begin with a dash and reach the command as a flag
+			// ("-R/.."), and through a link its ".." is the directory
+			// above where the link leads (oracle seed 166). It is not
+			// worked out: the caller asks.
+			return nil, false
+		}
 		for _, name := range []string{".", ".."} {
 			if !segMatch(seg, name) {
 				continue
