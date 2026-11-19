@@ -394,10 +394,15 @@ func (l *live) refreshMCP(s *mcpServer, client *mcp.Client) {
 
 // offerMCPTools gives the model the session's own tools and every tool of
 // the servers that are connected, as far as the rules let it have them.
+// One offer is made at a time, each of the list as it stands then: a
+// server marks itself connected before it offers, so the last offer holds
+// every server connected by then.
 func (l *live) offerMCPTools() {
 	if l.agent == nil {
 		return
 	}
+	l.offerMu.Lock()
+	defer l.offerMu.Unlock()
 	if err := l.agent.SetTools(l.offeredTools()); err != nil {
 		l.notice(agent.LevelWarning, "mcp", "The tools of the MCP servers could not be offered to the model: "+err.Error())
 	}

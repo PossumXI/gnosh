@@ -129,6 +129,10 @@ type live struct {
 	// /model one switch at a time.
 	modelMu  sync.Mutex
 	switchMu sync.Mutex
+	// offerMu makes taking the list of tools and offering it one step, so
+	// that two servers that connect at once cannot have the older list
+	// offered last, in place of the newer (mcp.go offerMCPTools).
+	offerMu sync.Mutex
 
 	// lastSummary is how the last summary ended.
 	lastSummary atomic.Pointer[agent.SummaryEvent]

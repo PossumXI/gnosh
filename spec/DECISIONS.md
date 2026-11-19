@@ -2839,3 +2839,13 @@ or kept with the reason said (27).
       step that does not finish in time is gone on without.
     - A sub-agent forgets what it read at its own summary, as the
       session does: it kept counting files as read after it lost them.
+
+169. **Two MCP servers that connect at once no longer lose one's tools.**
+    Each server, once connected, offers the model the tools of every
+    server connected by then, and the list was taken and offered in two
+    steps: two servers connecting together could have the older list
+    offered last, in place of the newer, and one server's tools were gone
+    until the next change of tools. A session running as an agent with a
+    server of its own beside a file's lost the agent's in one run in 300
+    (the clean-copy CI caught it twice; with the fix 1000 runs in 1000
+    kept both). Taking the list and offering it are one step now.
