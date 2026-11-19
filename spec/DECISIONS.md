@@ -3413,3 +3413,11 @@ or kept with the reason said (27).
     new one) had no record that it was handed back, so the session opened
     again returned it a second time (the agent loop review of
     2026-11-19). End writes it off as it returns it.
+
+215. **A note stopped in its check is kept.** A note that was to start a
+    turn (a background task's end, a channel's event) passes the session's
+    start like a prompt; stopped there (Esc while the SessionStart hook
+    ran for it), it came back as a hidden prompt that no front end shows,
+    and was lost, against Tell's promise that stopping never loses a note
+    (the agent loop review of 2026-11-19). It is kept as a note now, and
+    goes with the next request.

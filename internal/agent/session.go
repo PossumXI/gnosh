@@ -349,6 +349,16 @@ func (a *Agent) admitLoop() {
 				_ = a.appendLog(Entry{Kind: EntryUnqueued, Prompt: s.id, Text: "taken back"})
 			}
 			a.emitQueue()
+		case !ok && s.note && why == ReturnStopped:
+			// A note that was to start a turn, stopped in its check (Esc
+			// as the session's start ran for it), is still a note: it goes
+			// with the next request, as Tell promises. It came back as a
+			// hidden prompt nobody shows, and was lost (the agent loop
+			// review of 2026-11-19).
+			a.mu.Lock()
+			a.notes = append(a.notes, Note{Text: s.prompt.Text, Source: s.prompt.Source, Notice: s.prompt.Notice})
+			a.mu.Unlock()
+			s.resolve(TurnResult{Prompts: []string{s.id}, Reason: EndWithdrawn, Detail: reason})
 		case !ok:
 			a.emit(&PromptReturnedEvent{ID: s.id, Prompt: s.prompt, Why: why, Reason: reason})
 			end := EndWithdrawn

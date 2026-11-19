@@ -860,3 +860,39 @@ func TestEndWritesOffWhatItReturns(t *testing.T) {
 		t.Errorf("returned = %+v", ret)
 	}
 }
+
+// A note that was to start a turn and is stopped in its check (Esc while
+// the session's start runs for it) is kept as a note, and goes with the
+// next request: it came back as a hidden prompt nobody shows, and was
+// lost (the agent loop review of 2026-11-19).
+func TestNoteStoppedInItsCheckIsKept(t *testing.T) {
+	inStart := make(chan struct{}, 1)
+	var starts atomic.Int32
+	r := newRig(t, func(o *Options) {
+		o.Moments.SessionStart = func(ctx context.Context, _ StartInfo) ([]Part, error) {
+			if starts.Add(1) == 1 {
+				inStart <- struct{}{}
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
+			return nil, nil
+		}
+	})
+	r.model.push(say("hello"))
+	if err := r.a.Tell(Note{Text: "the build failed", Source: "task-notification", Wake: true}); err != nil {
+		t.Fatal(err)
+	}
+	<-inStart
+	r.a.Interrupt()
+	r.idle()
+	if res := r.run("what happened?"); res.Reason != EndCompleted {
+		t.Fatalf("the next turn = %+v", res)
+	}
+	var sent strings.Builder
+	for _, m := range r.model.requests()[0].Messages {
+		sent.WriteString(m.Text() + "\n")
+	}
+	if !strings.Contains(sent.String(), "the build failed") {
+		t.Errorf("the note was lost: the request held %q", sent.String())
+	}
+}
