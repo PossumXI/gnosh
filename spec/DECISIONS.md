@@ -3933,3 +3933,15 @@ or kept with the reason said (27).
     folder that holds the project; a program's name is looked up as the
     system finds it; and a host with a wildcard is refused, and never
     makes a rule.
+
+268. **The project's local settings file is the truth about what was
+    kept.** A change the person made by hand while a question waited (a
+    deny rule added) went into the file with gnosh's save, which marked the
+    file as taken in, so their rule was never put in force; and an
+    approval they took out of the file by hand stayed in force until the
+    session ended (the approvals review of 2026-11-19). gnosh's own write
+    now counts as taken in only when the file stood as gnosh last took it
+    in, and reading the file again drops the approvals it no longer holds;
+    one that could not be written down holds for the session alone. And a
+    sub-agent's question says that a yes that keeps a rule keeps it for
+    the whole session and all its agents.

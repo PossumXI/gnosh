@@ -256,6 +256,15 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 			}
 		}
 		q.Title = asker + " asks: " + q.Title
+		// What a yes keeps holds for the whole session, its conversation
+		// and every agent of it, not for the asking one alone: said, where
+		// the title invites reading it as that agent's (the approvals
+		// review of 2026-11-19).
+		for i := range q.Choices {
+			if strings.HasPrefix(q.Choices[i].Key, "always:") {
+				q.Choices[i].Label = strings.Replace(q.Choices[i].Label, "Yes, and ", "Yes, for the whole session and all its agents, and ", 1)
+			}
+		}
 	}
 	if changed != nil {
 		// A hook changed the call: the question shows what will run, not
@@ -725,6 +734,12 @@ func (l *live) keepApproval(s permission.Suggestion) {
 		return
 	}
 	if err := l.saveRules(kept); err != nil {
+		// Held for the session alone: the rules kept for the project are
+		// what its file holds, which a later reading of it puts back.
+		for _, rule := range kept {
+			l.engine.Unkeep(rule, permission.ListAllow)
+			_ = l.engine.Grant(rule, permission.GrantSession)
+		}
 		l.notice(agent.LevelWarning, "permission", fmt.Sprintf("The approval holds for this session, but it could not be written down (%v), so gnosh will ask again next time.", err))
 	}
 }
@@ -811,6 +826,7 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 		return fmt.Errorf("the settings file is being written by another gnosh: %w", err)
 	}
 	defer release()
+	before := stampOf(path)
 
 	doc := map[string]json.RawMessage{}
 	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) > 0 {
@@ -842,8 +858,9 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if err := config.WriteFileAtomic(path, content, 0o600); err != nil {
 		return err
 	}
-	// (What gnosh writes it has put in force already.)
-	l.sawOwnWrite(path)
+	// (What gnosh writes it has put in force already, unless the file
+	// held a change of the person's that was not yet taken in.)
+	l.sawOwnWrite(path, before)
 	return nil
 }
 

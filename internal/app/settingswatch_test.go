@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -167,5 +168,41 @@ func TestSettingsFlagFileWatchedWithCwd(t *testing.T) {
 	has(t, "the rule added to the --settings file", toolResult(t, w, 2, "c2"), "This call did not run", "Bash(rm *)")
 	if !w.Exists("sub/a.txt") {
 		t.Errorf("the rm ran past the deny rule added to the --settings file")
+	}
+}
+
+// A settings file gnosh writes is taken as taken in only when it stood as
+// gnosh last took it in: a change of the person's made meanwhile (a deny
+// rule added while a question waited) is in the write too, and is taken in
+// as any change is (the approvals review of 2026-11-19).
+func TestOwnWriteLeavesAHandEditToBeTakenIn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.local.json")
+	write := func(s string) {
+		if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("{}")
+	l := &live{}
+	l.settings.stamps, l.settings.accepted = map[string]fileStamp{}, map[string]fileStamp{}
+	taken := stampOf(path)
+	l.settings.stamps[path], l.settings.accepted[path] = taken, taken
+
+	// Over the file as it was taken in: gnosh's own, taken in already.
+	write(`{"permissions": {"allow": ["Bash(make)"]}}`)
+	l.sawOwnWrite(path, taken)
+	if l.settings.accepted[path] != stampOf(path) {
+		t.Error("gnosh's own write over an unchanged file was not marked as taken in")
+	}
+
+	// The person changed the file first: what gnosh then writes is left to
+	// be taken in.
+	write(`{"permissions": {"allow": ["Bash(make)"], "deny": ["Bash(rm *)"]}}`)
+	before := stampOf(path)
+	write(`{"permissions": {"allow": ["Bash(make)", "Bash(ls)"], "deny": ["Bash(rm *)"]}}`)
+	accepted := l.settings.accepted[path]
+	l.sawOwnWrite(path, before)
+	if l.settings.accepted[path] != accepted {
+		t.Error("a write over a hand edit not yet taken in was marked as taken in")
 	}
 }

@@ -96,12 +96,17 @@ func (l *live) settingsPaths() []string {
 
 // sawOwnWrite notes a settings file gnosh itself just wrote (saved
 // approvals, /permissions, /skills): what it put in force already is not
-// a change to take in again.
-func (l *live) sawOwnWrite(path string) {
+// a change to take in again. before is how the file stood when gnosh read
+// it to write it: when that is not how gnosh last took it in, the person
+// changed it by hand meanwhile, the write holds their change too, and it
+// is taken in as any change is; marked as gnosh's own, a deny rule they
+// added while a question waited was never put in force (the approvals
+// review of 2026-11-19).
+func (l *live) sawOwnWrite(path string, before fileStamp) {
 	w := &l.settings
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.stamps != nil {
+	if w.stamps != nil && w.accepted[path] == before {
 		s := stampOf(path)
 		w.stamps[path], w.accepted[path] = s, s
 	}
@@ -274,6 +279,7 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 	for _, sc := range []permission.Scope{permission.ScopeUser, permission.ScopeProject, permission.ScopeLocal, permission.ScopeSettingsFlag} {
 		l.engine.RemoveLayers(sc)
 	}
+	held := map[permission.List][]string{}
 	for _, ly := range cfg.Permissions.Layers {
 		layer := ruleLayer(ly)
 		switch layer.Scope {
@@ -282,7 +288,15 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 				l.notice(agent.LevelWarning, "settings", fmt.Sprintf("A rule of %s could not be put in force (%v).", layer.Name, err))
 			}
 		}
+		if layer.Scope == permission.ScopeLocal {
+			held[permission.ListAllow] = append(held[permission.ListAllow], layer.Allow...)
+			held[permission.ListAsk] = append(held[permission.ListAsk], layer.Ask...)
+			held[permission.ListDeny] = append(held[permission.ListDeny], layer.Deny...)
+		}
 	}
+	// The approvals kept at a prompt are what the local file holds: one
+	// taken out of it by hand is no longer in force.
+	l.engine.KeepOnly(held)
 	done = append(done, "its permission rules")
 	l.flog.logf("settings", "%s changed: %s in force", which, strings.Join(done, " and "))
 	l.notice(agent.LevelInfo, "settings", fmt.Sprintf("%s changed: %s are in force now; the rest of what it says (hooks, env, options, the model) takes effect in a new session.", which, strings.Join(done, " and ")))

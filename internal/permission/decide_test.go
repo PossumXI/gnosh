@@ -710,3 +710,25 @@ func TestDecideAt(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// The approvals kept for the project are what its local file holds: one the
+// file no longer holds, taken out by hand, is no longer in force once the
+// file is read again (the approvals review of 2026-11-19).
+func TestKeepOnlyDropsWhatTheFileNoLongerHolds(t *testing.T) {
+	e := engine(t, ModeDefault, rules{})
+	for _, r := range []string{"Bash(make deploy)", "Bash(make test)"} {
+		if err := e.Grant(r, GrantLocal); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if d := bash(e, "make deploy"); d.Behavior != Allow {
+		t.Fatalf("a kept approval: %s", d.Behavior)
+	}
+	e.KeepOnly(map[List][]string{ListAllow: {"Bash(make test)"}})
+	if d := bash(e, "make deploy"); d.Behavior != Ask {
+		t.Errorf("an approval the file no longer holds is still in force: %s", d.Behavior)
+	}
+	if d := bash(e, "make test"); d.Behavior != Allow {
+		t.Errorf("an approval the file still holds was dropped: %s", d.Behavior)
+	}
+}

@@ -456,6 +456,37 @@ func (e *Engine) Unkeep(rule string, list List) {
 	e.saved.drop(rule, list)
 }
 
+// KeepOnly drops from the rules kept for the project every one that the
+// project's local settings file no longer holds (held: its rules, by list),
+// as that file is read again: a rule the person took out of it by hand
+// stayed in force until the session ended (the approvals review of
+// 2026-11-19).
+func (e *Engine) KeepOnly(held map[List][]string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, list := range []List{ListAllow, ListAsk, ListDeny} {
+		cs, _ := e.saved.list(list)
+		if cs == nil {
+			continue
+		}
+		in := map[string]bool{}
+		for _, rule := range held[list] {
+			if r, err := ParseRule(rule); err == nil {
+				in[r.String()] = true
+			}
+		}
+		var gone []string
+		for _, c := range *cs {
+			if !in[c.Rule.String()] {
+				gone = append(gone, c.Rule.String())
+			}
+		}
+		for _, rule := range gone {
+			e.saved.drop(rule, list)
+		}
+	}
+}
+
 // keepIn adds rule to the list of the layer ly, once; added is false when
 // it was there already.
 func (e *Engine) keepIn(ly *layer, rule string, list List) (added bool, err error) {
