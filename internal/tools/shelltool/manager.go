@@ -65,10 +65,13 @@ type Manager struct {
 	detached  map[int][]procInfo  // sessions of ended commands where something that let go of their output runs on, with those processes
 	tasks     map[string]*job     // background commands by id; ended ones stay
 	order     []string            // the ids in tasks, oldest first
-	calls     map[string]*job     // foreground commands by the id of the call that waits for them
-	pending   map[string]bool     // calls about to start a foreground command, by id: true once asked to go to the background as it starts
-	kept      []keptFile          // output files of finished foreground commands, oldest first
-	keptBytes int64               // how much disk those files take
+	// ended are the ids of the background commands that have ended, in
+	// the order they ended: maxEndedTasks of them are kept.
+	ended     []string
+	calls     map[string]*job // foreground commands by the id of the call that waits for them
+	pending   map[string]bool // calls about to start a foreground command, by id: true once asked to go to the background as it starts
+	kept      []keptFile      // output files of finished foreground commands, oldest first
+	keptBytes int64           // how much disk those files take
 
 	wg sync.WaitGroup // every goroutine the manager has started
 
@@ -738,14 +741,43 @@ func (m *Manager) settle(j *job) {
 	}
 }
 
+// maxEndedTasks is how many ended background commands are kept, each with
+// its output's start and end in memory and its output file on disk.
+var maxEndedTasks = 100
+
 // release takes a command that has ended off the list of running ones. It
-// is called once for each command that started.
+// is called once for each command that started, its ending recorded.
+//
+// A long session (a /loop, say) runs many background commands: of those
+// that ended, the last maxEndedTasks are kept, and an older one is let go
+// of, its output file with it unless something it left running still
+// writes there. They all stayed until the session ended, in memory and on
+// disk.
 func (m *Manager) release(j *job) {
+	var drop []*job
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	delete(m.running, j)
-	if j.taskID() != "" {
+	if id := j.taskID(); id != "" {
 		m.bgRunning--
+		m.ended = append(m.ended, id)
+		for len(m.ended) > maxEndedTasks {
+			old := m.ended[0]
+			m.ended = m.ended[1:]
+			if oj := m.tasks[old]; oj != nil {
+				delete(m.tasks, old)
+				m.order = slices.DeleteFunc(m.order, func(x string) bool { return x == old })
+				drop = append(drop, oj)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, oj := range drop {
+		oj.mu.Lock()
+		held := oj.end != nil && oj.end.held
+		oj.mu.Unlock()
+		if !held && oj.out != nil {
+			os.Remove(oj.out.path)
+		}
 	}
 }
 

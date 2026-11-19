@@ -897,3 +897,37 @@ func TestLeftRunningIsLookedAtTwice(t *testing.T) {
 		t.Errorf("a pid that changed hands counted as still there: %+v", got)
 	}
 }
+
+// Of the background commands that ended, the last maxEndedTasks are kept:
+// an older one is let go of, and its output file with it. (The shell tool
+// review of 2026-11-19: a long session kept every ended one, in memory and
+// on disk, until it ended.)
+func TestEndedTasksAreLetGoOf(t *testing.T) {
+	defer func(was int) { maxEndedTasks = was }(maxEndedTasks)
+	maxEndedTasks = 2
+	m := newManager(t, Options{})
+	env := newEnv(t)
+	for i := range 3 {
+		run(t, t.Context(), m, BashName, env, args{argCommand: fmt.Sprintf("echo task %d", i), argBackground: true})
+		for deadline := time.Now().Add(20 * time.Second); ; {
+			tasks := m.Tasks()
+			if len(tasks) > 0 && !tasks[len(tasks)-1].Running {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("task %d did not end", i)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	tasks := m.Tasks()
+	if len(tasks) != 2 {
+		t.Fatalf("%d ended tasks kept, want 2: %+v", len(tasks), tasks)
+	}
+	files, _ := filepath.Glob(filepath.Join(filepath.Dir(tasks[0].OutputFile), "*"))
+	for _, f := range files {
+		if data, _ := os.ReadFile(f); strings.Contains(string(data), "task 0") {
+			t.Errorf("the output file of the task let go of is still there: %s", f)
+		}
+	}
+}

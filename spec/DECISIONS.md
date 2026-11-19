@@ -3045,3 +3045,12 @@ or kept with the reason said (27).
     Left: background commands' output files and ended tasks are kept
     until the session ends, and a process left running after its
     command is not held to the output limit.
+
+181. **A long session lets go of old ended background commands.** Every
+    background command that ended was kept until the session ended: its
+    output's start and end in memory (some 120 KiB) and its output file
+    on disk (up to 64 MiB), so that a /loop running for hours built up
+    both (the shell tool review's note). The last 100 that ended are
+    kept; an older one is let go of, and its output file with it, unless
+    something it left running still writes there. The model is told of
+    each as it ends, with its file.
