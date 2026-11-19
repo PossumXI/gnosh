@@ -160,3 +160,33 @@ func TestPromptLinesAreCountedBeforeThePromptGoesOut(t *testing.T) {
 		t.Errorf("the summary is entry %d and the prompt entry %d: the summary must come before the prompt", summary, prompt)
 	}
 }
+
+// A summary is judged by what it left: a long pasted prompt about to go
+// out, which no summary makes shorter, does not turn automatic summaries
+// off for the session (the compaction review of 2026-11-19).
+func TestLongPasteDoesNotTurnSummariesOff(t *testing.T) {
+	r := newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 8000
+	})
+	r.model.honest = true
+	r.model.window = 8000
+	r.model.answer(func(req *core.Request, _ int) step {
+		switch {
+		case isSummaryAsk(req):
+			return say("SUMMARY: a long answer was given.")
+		case strings.Contains(lastUserText(req), "tell me a long story"):
+			return say(strings.Repeat("a long answer goes on\n", 727))
+		}
+		return say("read it")
+	})
+	if res := r.run("tell me a long story"); res.Reason != EndCompleted {
+		t.Fatalf("first turn: %+v", res)
+	}
+	if res := r.run(strings.Repeat("a long pasted log line\n", 830)); res.Reason != EndCompleted {
+		t.Fatalf("the paste: %+v", res)
+	}
+	r.idle()
+	if r.a.summariesOff {
+		t.Error("a long paste turned automatic summaries off")
+	}
+}

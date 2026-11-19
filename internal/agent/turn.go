@@ -27,11 +27,15 @@ type turn struct {
 	usage    core.Usage
 	denials  []Denial
 
-	last     *reply       // the last reply stored
-	open     []core.Block // tool calls of the last reply that have no stored result yet
-	newest   string       // the id of the turn's newest prompt, which a slide must keep
-	empties  int          // empty replies in a row
-	sentBack bool         // a driver has sent the model back
+	last   *reply       // the last reply stored
+	open   []core.Block // tool calls of the last reply that have no stored result yet
+	newest string       // the id of the turn's newest prompt
+	// sent is the id of the newest prompt of the turn that came through the
+	// queue (the person's, or a /loop's), not one of gnosh's own: a slide
+	// keeps it and all after it.
+	sent     string
+	empties  int  // empty replies in a row
+	sentBack bool // a driver has sent the model back
 	drv      []driverState
 	cp       *checkpoint // a checkpoint whose reply is awaited
 	chosen   *stopChoice // the model's choice to stop, made in reply to a checkpoint
@@ -541,7 +545,7 @@ func (a *Agent) appendPrompts(t *turn, ready []readyPrompt, folded bool) error {
 		a.mu.Lock()
 		a.sent = true
 		a.mu.Unlock()
-		t.newest = s.id
+		t.newest, t.sent = s.id, s.id
 		a.emit(&PromptEvent{ID: s.id, Prompt: s.prompt, Folded: folded, Parts: sentParts})
 		if s.prompt.Hidden && s.prompt.Notice != "" {
 			a.notice(LevelInfo, firstNonEmpty(s.prompt.Source, "loop"), s.prompt.Notice)

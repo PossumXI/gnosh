@@ -2784,3 +2784,17 @@ or kept with the reason said (27).
     nudge rather than the person's; a large pasted prompt can turn
     automatic summaries off as "not helping"; the trimmed fallback leaves
     out the first message even when it is the last summary.
+
+165. **The review of compaction: two more of its findings.**
+    - A slide keeps the prompt the model is answering and all after it.
+      After a nudge, a driver's objection or a checkpoint, the newest
+      prompt is gnosh's own, and a slide that kept only that one took the
+      person's words before it with the rest ("handle the error case;
+      don't touch the tests"). It keeps the turn's newest prompt that
+      came through the queue, the person's (or a /loop's), and what follows.
+    - A summary that left the conversation over the point turns automatic
+      summaries off for the session, since another would not help. What
+      was over could be the prompt about to go out, a long paste no
+      summary makes shorter, and then summaries went off for good though
+      the next one would have helped. A summary is now judged by what it
+      left, without the prompt about to go out.
