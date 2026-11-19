@@ -498,3 +498,35 @@ func TestStreamJSONResultAfterAForegroundCommand(t *testing.T) {
 		t.Errorf("the result line holds no structured output: %v", last)
 	}
 }
+
+// With stream-json input each message starts a turn with a fresh count
+// under --max-turns, as Claude Code's: one turn that reached the cap does
+// not stop the next message's. (The print mode review of 2026-11-19:
+// every later message was stopped before its first request.)
+func TestStreamJSONMaxTurnsPerMessage(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo one"}`}}},
+		apptest.Reply{Text: "Second answer."})
+	o := testOptions(w, "-y", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--max-turns", "1")
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"run echo one"}}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":"and now just answer"}}` + "\n")
+	o.StdinIsTerminal = false
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o)
+	var results []map[string]any
+	for _, l := range jsonLines(t, r.out) {
+		if l["type"] == "result" {
+			results = append(results, l)
+		}
+	}
+	if len(results) != 2 {
+		t.Fatalf("%d result lines: %v", len(results), results)
+	}
+	if results[0]["subtype"] != "error_max_turns" {
+		t.Errorf("the first message's result: %v", results[0])
+	}
+	if results[1]["subtype"] != "success" || results[1]["result"] != "Second answer." || results[1]["is_error"] != false {
+		t.Errorf("the second message's result: %v", results[1])
+	}
+}

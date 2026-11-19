@@ -508,6 +508,14 @@ type Moments struct {
 	// without that provider's lines.
 	PromptLines []func(ctx context.Context, info LineInfo) ([]Part, error)
 
+	// MoreRounds, when set, is asked after a round's tool calls, before
+	// what the person queued meanwhile is handed to the turn and the model
+	// asked again, with the number of requests the turn has made: false
+	// ends the turn there, halted, with why as its detail, and what was
+	// queued goes out as a turn of its own. (The cap on a run's replies,
+	// --max-turns: one that stopped the next request instead had the
+	// queued words handed to a turn that never answered them.)
+	MoreRounds func(turn string, rounds int) (more bool, why string)
 	// BeforeRequest are asked, in order, before every request of a turn
 	// for reminders to put in front of the model. An error is a warning.
 	BeforeRequest []func(ctx context.Context, info RequestInfo) ([]Part, error)

@@ -240,6 +240,11 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 			case ro.halt != "":
 				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy}
 			}
+			if f := a.opts.Moments.MoreRounds; f != nil {
+				if more, why := f(t.id, t.requests); !more {
+					return &outcome{reason: EndHalted, detail: why, driver: "max-turns"}
+				}
+			}
 			// The model will be asked again, so this is where it is told
 			// that it repeats itself, and where what the person sent
 			// meanwhile is handed to it.

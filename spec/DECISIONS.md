@@ -3073,3 +3073,16 @@ or kept with the reason said (27).
       left running (DECISIONS 117) is gnosh's own: its reply ("Restarted
       the server with setsid") took the place of the answer to the
       prompt as the run's result. The answer stays the result.
+
+183. **--max-turns with stream-json input counts each message's turn
+    afresh.** As Claude Code's: "a message still queued when the cap ends
+    a turn starts a new turn with a fresh count". The count ran over the
+    whole run, so after one turn reached the cap every later message was
+    stopped before its first request (the print mode review's note). And
+    the cap was asked before each request, after what the person had
+    queued meanwhile was handed to the turn: the next message went into
+    a turn the cap then stopped, and was never answered. The cap is
+    asked after a round now, before anything queued is handed over (the
+    agent's MoreRounds moment): the turn ends there, and the queued
+    message goes out as a turn of its own. With text input the count is
+    still the run's.

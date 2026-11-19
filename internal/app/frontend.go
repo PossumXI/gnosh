@@ -551,6 +551,8 @@ type TasksEvent struct {
 // CapEvent says a non-interactive run reached the number of replies it was
 // given with --max-turns, and its turn is being stopped there.
 type CapEvent struct {
-	// Turns is the number that was given.
+	// Turns is the number that was given, and Turn the turn that reached
+	// it.
 	Turns int
+	Turn  string
 }

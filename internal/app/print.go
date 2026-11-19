@@ -88,6 +88,8 @@ type printer struct {
 	structuredErr string
 
 	capped bool
+	// cappedTurn is the turn that reached the cap.
+	cappedTurn string
 	// resultsOut says each turn's result line was written as its turn
 	// ended (stream-json output with background work, printwait.go): the
 	// last is not written again.
@@ -577,7 +579,7 @@ func (f *printer) Event(ev any) {
 			}
 		}
 	case *CapEvent:
-		f.capped = true
+		f.capped, f.cappedTurn = true, ev.Turn
 		f.stderr("the run has had its %d turns of the model (--max-turns) and stops here.", ev.Turns)
 	case *agent.TurnEndEvent:
 		f.offer(ev.Result)
@@ -1128,7 +1130,9 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 			reason = "aborted_tools"
 		}
 		fail("error_during_execution", reason, fmt.Sprintf("the run was stopped by %s after %d turns of the model", signalWord(f.signal), obj.NumTurns))
-	case f.capped:
+	case f.capped && (f.inv.InputFormat != cli.FormatStreamJSON || res.Turn == f.cappedTurn):
+		// (With stream-json input the cap is a turn's own: a later
+		// message's turn has a fresh count.)
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) && f.structuredErr != "":
 		fail("error_max_structured_output_retries", "structured_output_retry_exhausted", f.structuredErr)

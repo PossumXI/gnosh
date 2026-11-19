@@ -172,6 +172,9 @@ type live struct {
 	capMu        sync.Mutex
 	roundsBefore int
 	capped       bool
+	// capKey is the turn the cap was reached in, with stream-json input,
+	// where each turn has a count of its own.
+	capKey string
 
 	// reopen is the id of the session this one opens again, after a
 	// rewind; rewindTo is the point /rewind asked to go back to, which

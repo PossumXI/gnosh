@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
@@ -184,6 +185,7 @@ func (l *live) moments() agent.Moments {
 	// that mem's line stays the last a prompt carries.)
 	m.PromptLines = append(m.PromptLines, l.firstPromptLines, l.mentionLines)
 	m.BeforeRequest = append(m.BeforeRequest, l.turnCap, l.settingsChanged)
+	m.MoreRounds = l.moreRounds
 	var busy []func(context.Context) func()
 	for _, c := range l.contribs {
 		m.PromptLines = append(m.PromptLines, c.c.PromptLines...)
@@ -256,19 +258,54 @@ func (l *live) turnCap(ctx context.Context, info agent.RequestInfo) ([]agent.Par
 		return nil, nil
 	}
 	l.capMu.Lock()
-	over := l.roundsBefore+info.Round > l.maxTurns
-	first := over && !l.capped
+	before, key := l.roundsBefore, ""
+	if l.inv.InputFormat == cli.FormatStreamJSON {
+		// Each message of a stream starts a turn with a fresh count, as in
+		// Claude Code: after one turn reached the cap, every later message
+		// was stopped before its first request.
+		before, key = 0, info.Turn
+	}
+	over := before+info.Round > l.maxTurns
+	first := over && (!l.capped || l.capKey != key)
 	if over {
-		l.capped = true
+		l.capped, l.capKey = true, key
 	}
 	l.capMu.Unlock()
 	if first {
-		l.deliver(&CapEvent{Turns: l.maxTurns})
+		l.deliver(&CapEvent{Turns: l.maxTurns, Turn: info.Turn})
 	}
 	if over {
 		l.agent.Interrupt()
 	}
 	return nil, nil
+}
+
+// moreRounds is turnCap asked after a round, before what the person queued
+// meanwhile is handed to the turn: a turn that has had its replies ends
+// there, and the queued words go out as a turn of their own (with stream-
+// json input, with a fresh count) instead of into a turn the cap stops.
+func (l *live) moreRounds(turn string, rounds int) (bool, string) {
+	if l.maxTurns <= 0 {
+		return true, ""
+	}
+	l.capMu.Lock()
+	before, key := l.roundsBefore, ""
+	if l.inv.InputFormat == cli.FormatStreamJSON {
+		before, key = 0, turn
+	}
+	over := before+rounds >= l.maxTurns
+	first := over && (!l.capped || l.capKey != key)
+	if over {
+		l.capped, l.capKey = true, key
+	}
+	l.capMu.Unlock()
+	if first {
+		l.deliver(&CapEvent{Turns: l.maxTurns, Turn: turn})
+	}
+	if over {
+		return false, fmt.Sprintf("the run has had its %d turns of the model (--max-turns)", l.maxTurns)
+	}
+	return true, ""
 }
 
 // sessionStart runs the SessionStart hooks, once, before the first prompt
