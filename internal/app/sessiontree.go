@@ -111,11 +111,16 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	if t.includeErr != nil {
 		fmt.Fprintf(p.stderr, "gnosh: %v\n", t.includeErr)
 	}
-	if p.treeMove.Entered == t.path {
+	switch t.path {
+	case p.treeMove.Entered:
 		// EnterWorktree made it, or opened it again, a moment ago for this
 		// session: as one made here it goes at the end when it was left as
 		// made and nobody named it, and ExitWorktree may take it back.
 		t.reused, t.named, t.entered = false, p.treeMove.Named, true
+	case p.treeMove.Made:
+		// The gnosh before made it under a made-up name, and /restart
+		// found it by that name: it is still one made here, nobody named.
+		t.reused, t.named = false, false
 	}
 	folder, err := trust.Resolve(start, p.home)
 	if err != nil {

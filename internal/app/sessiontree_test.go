@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -252,5 +253,48 @@ func TestWorktreeFlagInclude(t *testing.T) {
 	has(t, "stderr", r.err, "the work tree "+m[1]+" was left as it was made, and is removed with its branch")
 	if fileExists(m[1]) {
 		t.Errorf("the work tree %s is left", m[1])
+	}
+}
+
+// /restart in a work tree --worktree made under a made-up name starts
+// again in it, and it is still one made here: left as it was made, it goes
+// when the session ends (the cd review of 2026-11-19: found again by its
+// name, it was taken for one named and kept for good).
+func TestRestartKeepsAMadeUpTreeOneMadeHere(t *testing.T) {
+	w := repoWorld(t)
+	var started, envs []string
+	s := sitWith(t, w, func(o *Options) {
+		o.Relaunch = func(args, env []string) error {
+			started, envs = args, env
+			return os.ErrPermission
+		}
+	}, "--trust-folder", "--worktree")
+	s.see("Type a prompt and Enter.")
+	m := regexp.MustCompile(`work tree (\S+), made, on the branch`).FindStringSubmatch(s.errs.String() + s.out.String())
+	if m == nil {
+		t.Fatalf("no work tree was made:\n%s%s", s.errs.String(), s.out.String())
+	}
+	tree := strings.TrimSuffix(m[1], ",")
+	s.typeLine("/restart")
+	s.see("gnosh starts again")
+	s.exit()
+	if !fileExists(tree) {
+		t.Fatalf("the work tree %s went at the restart", tree)
+	}
+	var markers []string
+	for _, kv := range envs {
+		if strings.HasPrefix(kv, RestartedEnv+"=") || strings.HasPrefix(kv, TreeMoveEnv+"=") {
+			markers = append(markers, kv)
+		}
+	}
+	if !slices.ContainsFunc(markers, func(kv string) bool { return strings.Contains(kv, `"made"`) }) {
+		t.Fatalf("the start /restart makes is not told the tree was made here: %q", markers)
+	}
+	s = sitWith(t, w, func(o *Options) { o.Environ = append(slices.Clone(o.Environ), markers...) }, started...)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/exit")
+	s.exit()
+	if fileExists(tree) {
+		t.Errorf("the work tree %s, made under a made-up name and left as made, is kept after the restarted session", tree)
 	}
 }

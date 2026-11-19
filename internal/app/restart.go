@@ -109,10 +109,16 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 	p := l.p
 	p.restartMu.Lock()
 	p.restart = args
-	if t := l.st.tree; t != nil && t.entered {
+	switch t := l.st.tree; {
+	case t != nil && t.entered:
 		// A tree EnterWorktree moved the session into stays one in the
 		// new start: ExitWorktree may take the session back out.
 		move, _ := json.Marshal(treeMove{Entered: t.path, Named: t.named, Carried: true})
+		p.treeMoving = string(move)
+	case t != nil && !t.named && !t.reused:
+		// One --worktree made under a made-up name stays one that goes at
+		// the end when left as made (treeMove.Made).
+		move, _ := json.Marshal(treeMove{Made: t.path, Carried: true})
 		p.treeMoving = string(move)
 	}
 	p.restartMu.Unlock()

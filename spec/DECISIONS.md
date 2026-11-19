@@ -4108,3 +4108,10 @@ or kept with the reason said (27).
     the PATH names only when that is the very file running: a launcher
     that ran another gnosh under the same name had /restart start the
     PATH's (the cd review of 2026-11-19).
+
+286. **/restart keeps a made-up work tree one made here.** A --worktree
+    session's tree made under a made-up name, and left as it was made,
+    goes when the session ends; after /restart, whose new start finds the
+    tree by its name, it was taken for one named and opened again, and
+    kept for good (the cd review of 2026-11-19). /restart now tells the
+    new start the tree was made here and nobody named it (treeMove.Made).

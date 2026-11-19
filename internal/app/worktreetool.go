@@ -66,12 +66,18 @@ type treeMove struct {
 	// it into starts again there (/restart), and the tree stays one
 	// ExitWorktree may take it back from. Nothing is said of it.
 	Carried bool `json:"carried,omitempty"`
+	// Made is the tree of a --worktree session that the gnosh before made
+	// and nobody named, which /restart starts again in: it stays one made
+	// here, which goes at the end when it is left as made, though the new
+	// start finds it by the name (the cd review of 2026-11-19: it was kept
+	// for good, as one named and opened again).
+	Made string `json:"made,omitempty"`
 }
 
 // readTreeMove reads TreeMoveEnv's value; what cannot be read is no move.
 func readTreeMove(s string) treeMove {
 	var m treeMove
-	if json.Unmarshal([]byte(s), &m) != nil || m.Entered != "" && !filepath.IsAbs(m.Entered) || m.Left != "" && !filepath.IsAbs(m.Left) {
+	if json.Unmarshal([]byte(s), &m) != nil || m.Entered != "" && !filepath.IsAbs(m.Entered) || m.Left != "" && !filepath.IsAbs(m.Left) || m.Made != "" && !filepath.IsAbs(m.Made) {
 		return treeMove{}
 	}
 	return m
