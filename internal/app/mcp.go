@@ -306,13 +306,26 @@ func (l *live) connectMCP(s *mcpServer, gen int) {
 		_ = client.Close()
 		return
 	}
-	s.status, s.client, s.tools, s.prompts, s.since = "connected", client, made, prompts, l.p.now()
+	s.client, s.tools, s.prompts, s.since = client, made, prompts, l.p.now()
 	l.mcp.mu.Unlock()
+	// Its tools are offered before it is said to be connected, so that a
+	// prompt typed once /mcp says so finds them (a CI run of 19 November
+	// typed one between the two, and the model's call of the tool found
+	// none of that name).
+	l.offerMCPTools()
+	l.mcp.mu.Lock()
+	connected := s.client == client && s.gen == gen && s.status != "disabled"
+	if connected {
+		s.status = "connected"
+	}
+	l.mcp.mu.Unlock()
+	if !connected {
+		return
+	}
 	l.flog.logf("mcp", "the MCP server %s is connected (%d tools)", s.cfg.Name, len(made))
 	if info := client.Info(); l.channelNamed(s.cfg.Name) && s.cfg.Type != "http" && info.Channel && info.ChannelPermission {
 		l.channelRelays(s.cfg.Name)
 	}
-	l.offerMCPTools()
 	// It may have said its tools changed while they were being listed.
 	l.refreshMCP(s, client)
 }

@@ -3123,3 +3123,10 @@ or kept with the reason said (27).
     problem says why and to rename it, and gnosh mcp add refuses the
     name. Two servers whose names come to one (a.b and a_b) still have
     the first one's tools offered.
+
+187. **An MCP server is said to be connected once its tools are
+    offered.** Its status read "connected" a moment before the model was
+    given its tools, and a prompt typed in between went without them (a
+    CI run under load: /mcp said connected, and the model's call found no
+    tool of that name). The tools are offered first now; /mcp says
+    connected after, and a disable in between still wins.
