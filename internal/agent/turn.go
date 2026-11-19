@@ -33,14 +33,17 @@ type turn struct {
 	// sent is the id of the newest prompt of the turn that came through the
 	// queue (the person's, or a /loop's), not one of gnosh's own: a slide
 	// keeps it and all after it.
-	sent     string
-	empties  int  // empty replies in a row
-	sentBack bool // a driver has sent the model back
-	drv      []driverState
-	cp       *checkpoint // a checkpoint whose reply is awaited
-	chosen   *stopChoice // the model's choice to stop, made in reply to a checkpoint
-	guard    repeatGuard
-	ended    bool // its TurnEndEvent has been sent
+	sent    string
+	empties int // empty replies in a row
+	// textCalls counts replies in a row that were a tool call written out
+	// as text.
+	textCalls int
+	sentBack  bool // a driver has sent the model back
+	drv       []driverState
+	cp        *checkpoint // a checkpoint whose reply is awaited
+	chosen    *stopChoice // the model's choice to stop, made in reply to a checkpoint
+	guard     repeatGuard
+	ended     bool // its TurnEndEvent has been sent
 	// halt is why a moment ended the turn where it stood (a summary's end
 	// said stop, Halt).
 	halt string
@@ -258,6 +261,13 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 			continue
 		}
 		t.empties = 0
+		if rep.callAsText() && rep.stop != core.StopMaxTokens && rep.stop != core.StopRefusal {
+			if err := a.nudgeTextCall(t); err != nil {
+				return failedOutcome(err)
+			}
+			continue
+		}
+		t.textCalls = 0
 		a.noteCutReply(rep)
 
 		if c := t.chosen; c != nil {
@@ -635,6 +645,17 @@ func (a *Agent) nudgeEmpty(t *turn) error {
 		a.notice(LevelWarning, "empty-reply", fmt.Sprintf(a.texts.EmptyNotice, t.empties))
 	}
 	return a.ownPrompt(t, "nudge:empty", a.mark(a.texts.EmptyNudge))
+}
+
+// nudgeTextCall tells a model whose reply was a tool call written out as
+// text that nothing ran, and asks it again. As with an empty reply, no
+// count gives up: at every third in a row the person is told.
+func (a *Agent) nudgeTextCall(t *turn) error {
+	t.textCalls++
+	if t.textCalls%3 == 0 {
+		a.notice(LevelWarning, "text-call", fmt.Sprintf(a.texts.TextCallNotice, t.textCalls))
+	}
+	return a.ownPrompt(t, "nudge:text-call", a.mark(a.texts.TextCallNudge))
 }
 
 // storeReply puts a finished reply into the log and counts it.

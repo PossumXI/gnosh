@@ -202,9 +202,9 @@ func goldenFiles() []goldenFile {
 		},
 		{
 			file:  "empty-reply",
-			texts: []string{textEmptyReply},
+			texts: []string{textEmptyReply, textTextCall},
 			cases: func(s *Set) []goldenCase {
-				return []goldenCase{{"the question", s.EmptyReply()}}
+				return []goldenCase{{"the question", s.EmptyReply()}, {"a call written out as text", s.TextCall()}}
 			},
 		},
 		{

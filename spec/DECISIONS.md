@@ -3001,3 +3001,15 @@ or kept with the reason said (27).
     Left as they are: a kill between /cd's move of the file and its note
     of where to (the session is then found by its id alone), /resume N
     listing again as it is typed, and sessions read whole.
+
+179. **A tool call written out as text is told so.** Qwen on llama.cpp
+    now and then writes a tool call in its template's markup that the
+    server does not take as a call, or leaves only the closing tag (a
+    ship's smoke test ended on "</tool_call>"): the reply calls no tool,
+    and the turn ended on it with nothing run; in a run (-p) the task was
+    lost. A reply that calls no tool and begins with "<tool_call>" or
+    ends with "</tool_call>" now gets a line of gnosh's own, as an empty
+    reply does: it held a tool call written out as text, which runs
+    nothing; call the tool, or answer in words. No count gives up, and
+    the person is told at every third in a row. A reply that only speaks
+    of the markup is an answer.

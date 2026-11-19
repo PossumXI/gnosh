@@ -36,6 +36,7 @@ func loopTexts(set *prompt.Set, mem bool, path string) (agent.Texts, error) {
 	yes := "yes"
 
 	format(&t.EmptyNudge, "empty-reply", nil)
+	format(&t.TextCallNudge, "text-call", nil)
 	// The loop gives: how many rounds were the same, how many were looked
 	// at, and the calls.
 	format(&t.RepeatNudge, "repeat", map[string]string{"calls": "%[3]s"})

@@ -256,6 +256,19 @@ func (r *reply) silent() bool {
 	return len(r.msg.ToolUses()) == 0 && strings.TrimSpace(r.msg.Text()) == ""
 }
 
+// callAsText reports whether a reply that calls no tool is a tool call
+// written out as text, which runs nothing: a chat template's markup that
+// the model's server did not take as a call, which the reply begins or
+// ends with (Qwen on llama.cpp now and then leaves one, or only its
+// closing tag).
+func (r *reply) callAsText() bool {
+	if len(r.msg.ToolUses()) > 0 {
+		return false
+	}
+	text := strings.TrimSpace(r.msg.Text())
+	return strings.HasPrefix(text, "<tool_call>") || strings.HasSuffix(text, "</tool_call>")
+}
+
 // exchange sends req and returns the reply, trying again for as long as
 // the retry policy says when the provider fails in a way that may pass.
 // What the person sees meanwhile is a RetryEvent for every wait, with the

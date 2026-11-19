@@ -242,6 +242,10 @@
 //     refused; it quotes the refusal and says the work is still to do. A
 //     model once sent one refused close three hundred times through thirty
 //     nudges that said only "do not repeat".
+//   - text-call (TextCall) tells a model whose reply is a tool call written
+//     out as text (a chat template's <tool_call> markup that its server did
+//     not take as a call) that nothing ran: Qwen on llama.cpp does this
+//     now and then, and the turn ended on it.
 //   - empty-reply (EmptyReply) asks again after a reply with no text and
 //     no tool call.
 //   - stop-hook (StopHook) carries a Stop hook's reason, and says the hook

@@ -24,6 +24,11 @@ import (
 type Texts struct {
 	// EmptyNudge is sent when the model answered with nothing.
 	EmptyNudge string
+	// TextCallNudge is sent when the model's reply is a tool call written
+	// out as text, and TextCallNotice tells the person at every third in a
+	// row.
+	TextCallNudge  string
+	TextCallNotice string
 	// EmptyNotice tells the person about it at every third empty reply in
 	// a row. It is given the count.
 	EmptyNotice string
@@ -128,6 +133,9 @@ const (
 var defaultTexts = Texts{
 	EmptyNudge: "Your last reply was empty: it held no text and no tool call. " +
 		"If there is more to do, go on and do it now. If you are done, say what you did or found.",
+	TextCallNudge: "Your last reply held a tool call written out as text, which runs nothing. " +
+		"To use a tool, call it; otherwise answer in words.",
+	TextCallNotice: "The model has written a tool call out as text, which runs nothing, %d times in a row. gnosh keeps telling it so; Esc stops the turn.",
 	EmptyNotice: "The model has answered with nothing %d times in a row. gnosh keeps asking. " +
 		"A lower thinking level usually fixes this (/no_think, or pick a level in /model); Esc stops the turn.",
 
@@ -205,6 +213,7 @@ func (t Texts) fill() Texts {
 		}
 	}
 	set(&d.EmptyNudge, t.EmptyNudge)
+	set(&d.TextCallNudge, t.TextCallNudge)
 	set(&d.EmptyNotice, t.EmptyNotice)
 	set(&d.RepeatNudge, t.RepeatNudge)
 	set(&d.RepeatPair, t.RepeatPair)
@@ -240,7 +249,7 @@ func (t Texts) fill() Texts {
 	// The texts that are given nothing are read as the formats they are,
 	// once, here; the loop then uses them as they stand.
 	for _, p := range []*string{
-		&d.EmptyNudge, &d.StoppedBefore, &d.StoppedDuring, &d.HaltedDuring, &d.ReplyCut, &d.Killed, &d.AsideRunning,
+		&d.EmptyNudge, &d.TextCallNudge, &d.StoppedBefore, &d.StoppedDuring, &d.HaltedDuring, &d.ReplyCut, &d.Killed, &d.AsideRunning,
 		&d.Denied, &d.Unattended, &d.SummaryRequest, &d.SummaryIntro, &d.SummaryAfter,
 		&d.TrimNote, &d.LoopContinue, &d.LoopQuestion,
 	} {

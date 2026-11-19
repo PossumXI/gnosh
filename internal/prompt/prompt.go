@@ -59,6 +59,7 @@ const (
 	textRepeat           = "repeat"
 	textRepeatClose      = "repeat-refused-close"
 	textEmptyReply       = "empty-reply"
+	textTextCall         = "text-call"
 	textStopHook         = "stop-hook"
 	textContinuation     = "continuation"
 	textCheckFailed      = "check-could-not-run"
@@ -181,6 +182,8 @@ func specs() []spec {
 			when: "When the call being repeated is a close that mem or the check refuses."},
 		{name: textEmptyReply, kind: KindLine,
 			when: "When a reply ended with no text and no tool call."},
+		{name: textTextCall, kind: KindLine,
+			when: "When a reply calls no tool and its text is a tool call written out in a chat template's markup, which the model's server did not take as a call."},
 		{name: textStopHook, kind: KindLine, need: []string{"reason"},
 			when: "When a Stop hook refuses to let the turn end, carrying the hook's reason."},
 		{name: textContinuation, kind: KindLine, need: []string{"reason"},

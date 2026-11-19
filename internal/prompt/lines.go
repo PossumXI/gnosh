@@ -290,6 +290,12 @@ func (s *Set) EmptyReply() string {
 	return s.fill(textEmptyReply, nil)
 }
 
+// TextCall returns what a model is told after a reply whose text is a tool
+// call written out as text, which runs nothing.
+func (s *Set) TextCall() string {
+	return s.fill(textTextCall, nil)
+}
+
 // StopHook returns what the model reads when a Stop hook, or a
 // SubagentStop hook, will not let the turn end. reason is what the hook
 // said.
