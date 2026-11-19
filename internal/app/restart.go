@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -46,6 +47,17 @@ const RestartedEnv = "GNOSH_RESTARTED"
 // relaunch starts gnosh again with args, in place of this process. It
 // returns only when that could not be done, with the exit code.
 func (p *program) relaunch(args []string) int {
+	if _, err := os.Getwd(); err != nil {
+		// The folder this gnosh was started in is gone, and a start in it
+		// would not know where it is (gnosh never leaves it, and a /cd
+		// before named the session's folder with --cwd): it starts in that
+		// one instead (the cd review of 2026-11-19).
+		for _, a := range args {
+			if dir, ok := strings.CutPrefix(a, "--cwd="); ok && filepath.IsAbs(dir) {
+				_ = os.Chdir(dir)
+			}
+		}
+	}
 	env := append(slices.Clone(p.o.Environ), RestartedEnv+"="+firstOf(buildinfo.BuildID, "1"))
 	err := p.o.Relaunch(args, append(env, p.movingEnv()...))
 	p.errf("gnosh could not start again (%v). The session is kept: gnosh %s opens it again.", err, shellquote.Words(args))
