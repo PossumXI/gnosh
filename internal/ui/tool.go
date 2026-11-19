@@ -504,8 +504,7 @@ func (s *session) headRows(h head, failed bool, summary string) []string {
 		first += th.Quiet.Render(th.Sep + summary)
 	}
 	rows := wrap(s.m, first, s.cols, "", "  ")
-	// (A heredoc's blank lines are left out: no empty row is printed.)
-	body := nonBlank(h.body)
+	body := h.body
 	limit, style := s.limit(commandLines), th.ToolArg
 	if h.code {
 		// A Gno call is headed by its code, whole.
@@ -584,8 +583,7 @@ func (s *session) liveRows(c *call) []string {
 		// has written of a command or of code, and how much there is.
 		written := count(len(c.input), "byte", "bytes") + " written"
 		if n := len(h.body); n > 0 {
-			shown := nonBlank(h.body)
-			tail = shown[max(len(shown)-liveTail, 0):]
+			tail = h.body[max(n-liveTail, 0):]
 			written = count(n+1, "line", "lines") + " written"
 		}
 		first += s.th.Quiet.Render(s.th.Sep + written)
@@ -847,12 +845,8 @@ func outputLines(s string) []string {
 }
 
 // clipTail draws the last n of lines under a call, with a line before
-// them that says how many were left out. Blank lines are left out and not
-// counted: no empty row is printed (Jae, 14 November 2026); the blank rows
-// between the entries of git log's output reached the scrollback (the TUI
-// review of 2026-11-19).
+// them that says how many were left out.
 func (s *session) clipTail(lines []string, n int) []string {
-	lines = nonBlank(lines)
 	var rows []string
 	if left := len(lines) - n; left > 0 {
 		rows = append(rows, s.note(count(left, "earlier line", "earlier lines")+" not shown"+s.detailTip()))
@@ -864,7 +858,6 @@ func (s *session) clipTail(lines []string, n int) []string {
 // clipHead draws the first n of lines under a call, with a line after
 // them that says how many were left out.
 func (s *session) clipHead(lines []string, n int) []string {
-	lines = nonBlank(lines)
 	left := len(lines) - n
 	if left > 0 {
 		lines = lines[:n]
