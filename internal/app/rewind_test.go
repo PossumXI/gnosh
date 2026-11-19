@@ -33,7 +33,7 @@ func TestRewindInThePlainSession(t *testing.T) {
 	s.see("the first prompt")
 	s.see("the third prompt")
 	s.see("/rewind N takes the conversation back to before prompt N")
-	s.see("what a file holds when it is put back is kept first")
+	s.see("What a file holds when it is put back is kept first")
 	s.typeLine("/rewind 9")
 	s.see("is not the number of one of your prompts")
 	s.typeLine("/rewind 2")
@@ -112,7 +112,7 @@ func TestRewindPutsFilesBack(t *testing.T) {
 	// The files alone, back to before the second prompt: notes.txt as the
 	// first prompt left it, keep.txt as it was; the conversation stays.
 	s.typeLine("/rewind 2 files")
-	s.see("The files are back as they were before your prompt: change both files")
+	s.see("The files that Write and Edit changed are back as they were before your prompt: change both files")
 	s.see("Put back 2 files")
 	if got := w.Read("notes.txt") + w.Read("keep.txt"); got != "first\nkept\n" {
 		t.Errorf("after /rewind 2 files the files hold %q", got)
@@ -327,7 +327,7 @@ func TestRewindLeavesWhatASubAgentChanged(t *testing.T) {
 		t.Fatal("the sub-agent wrote nothing")
 	}
 	s.typeLine("/rewind 1 files")
-	s.see("No file was changed by Write or Edit since then")
+	s.see("This session's own Write and Edit changed no file since then")
 	s.typeLine("/exit")
 	s.exit()
 	if !w.Exists("sub.txt") {
@@ -409,5 +409,83 @@ func TestRewindWithoutCheckpoints(t *testing.T) {
 	}
 	if kept, _ := filepath.Glob(filepath.Join(w.DataDir(), "projects", "*", "*", "checkpoints", "index.jsonl")); len(kept) != 0 {
 		t.Errorf("copies were kept: %q", kept)
+	}
+}
+
+// A rewind waits while work runs in the background: opening the session
+// again would stop it, unasked, and it could change the files again as
+// they are put back (the rewind review of 2026-11-19).
+func TestRewindWaitsForTheBackground(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"sleep 60","run_in_background":true}`}}},
+		apptest.Reply{Text: "It sleeps."},
+		apptest.Reply{Text: "Noted that it was stopped."},
+	)
+	s := sit(t, w, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("start a long job")
+	s.see("It sleeps.")
+	for _, line := range []string{"/rewind 1", "/rewind 1 all", "/rewind 1 files"} {
+		s.typeLine(line)
+		s.see("this is still running, and going back now would stop it, or it could change the files again: bg1 (sleep 60)")
+	}
+	if !w.Exists("notes.txt") {
+		t.Fatal("a rewind that waited took the file away")
+	}
+	s.typeLine("/tasks stop bg1")
+	s.see("bg1 is stopped")
+	s.see("Noted that it was stopped.")
+	s.see("-- done in ")
+	s.typeLine("/rewind 1 files")
+	s.see("taken away: it was not there")
+	s.typeLine("/exit")
+	s.exit()
+	if w.Exists("notes.txt") {
+		t.Error("notes.txt is there after the rewind")
+	}
+}
+
+// A branch finds the copies its origin kept wherever that session is now:
+// /cd and a work tree move one session to another folder's sessions and
+// leave the other where it was (the rewind review of 2026-11-19).
+func TestRewindInABranchOfAMovedSession(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+	)
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("/branch")
+	s.see("You are in a copy of the conversation")
+	origin := ""
+	for _, f := range w.Sessions() {
+		if b, _ := os.ReadFile(f); !strings.Contains(strings.SplitN(string(b), "\n", 2)[0], `"type":"branch"`) {
+			origin = f
+		}
+	}
+	if origin == "" {
+		t.Fatalf("no origin among %q", w.Sessions())
+	}
+	elsewhere := filepath.Join(w.DataDir(), "projects", "-elsewhere")
+	if err := os.MkdirAll(elsewhere, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, from := range []string{origin, strings.TrimSuffix(origin, ".jsonl")} {
+		if err := os.Rename(from, filepath.Join(elsewhere, filepath.Base(from))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.typeLine("/rewind 1 files")
+	s.see("taken away: it was not there")
+	s.typeLine("/exit")
+	s.exit()
+	if w.Exists("notes.txt") {
+		t.Error("the branch's rewind did not find the copy its moved origin kept")
 	}
 }

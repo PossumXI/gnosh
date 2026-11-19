@@ -151,6 +151,7 @@ func (l *live) forkRun(ctx context.Context, c *SlashContext, subtask bool) error
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}
 	writeRunPID(log, pid)
+	l.runs.Store(id, what)
 	if t := l.st.tree; t != nil {
 		// The run works in this session's work tree, which must outlive
 		// this session.
@@ -191,6 +192,7 @@ func firstWords(text string, n int) string {
 // task is what a run /subtask started was set to do, empty for /fork's:
 // what such a run printed goes to the model when it ends.
 func (l *live) watchRun(ctx context.Context, id, logPath, path, task string) {
+	defer l.runs.Delete(id)
 	started := l.p.now()
 	what := "fork"
 	if task != "" {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -65,4 +66,50 @@ func TestRewindListIsReadAwayFromTheLoop(t *testing.T) {
 	if reads != 3 {
 		t.Fatalf("the list was read %d times, want 3", reads)
 	}
+}
+
+// The confirmation of a rewind takes no key typed before it could be
+// seen: Esc Esc Enter Enter, typed while the list was read, picks the
+// newest prompt and must not put the files back unseen. A long prompt is cut in its title, so
+// the files and the choices keep their rows; the files are shown by their
+// paths, with marks that turn text around written out; and a prompt whose
+// files cannot be put back says why (the rewind review of 2026-11-19).
+func TestRewindConfirmation(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	reads := 0
+	long := strings.Repeat("a long pasted prompt ", 150)
+	g.s.c = rewindControls{g.c, []app.RewindPoint{
+		{ID: "u1", Text: "the first prompt", Time: stamp, FilesWhy: "the copies of what the files held before that prompt were let go"},
+		{ID: "u2", Text: long, Time: stamp, Files: []string{"notes.txt", "~/.zshrc", "evil\u202etxt.exe"}},
+	}, &reads}
+	g.keys(`"an earlier prompt" <Enter>`)
+	g.hold = true
+	g.keys(`<Esc> <Esc> <Enter> <Enter>`)
+	g.release()
+	g.liveHas("Go back to before: a long pasted prompt", `notes.txt, ~/.zshrc, evil\u202Etxt.exe`, "Go back, and put the files back")
+	commands := func() string {
+		g.c.mu.Lock()
+		defer g.c.mu.Unlock()
+		return strings.Join(g.c.commands, "|")
+	}
+	if got := commands(); strings.Contains(got, "/rewind") {
+		t.Fatalf("a key typed ahead answered the confirmation: %q ran", got)
+	}
+	// Keys typed once it is there are its own, at once.
+	g.keys(`<Enter>`)
+	g.release()
+	if got := commands(); !strings.Contains(got, "/rewind 2 all") {
+		t.Fatalf("the confirmation ran %q", got)
+	}
+
+	g = newRig(t, 100, 24, text.NoColor)
+	g.s.c = rewindControls{g.c, []app.RewindPoint{
+		{ID: "u1", Text: "the first prompt", Time: stamp, FilesWhy: "the copies of what the files held before that prompt were let go"},
+		{ID: "u2", Text: "the second prompt", Time: stamp},
+	}, &reads}
+	g.keys(`"an earlier prompt" <Enter>`)
+	g.keys(`<Esc> <Esc>`)
+	g.keys(`<Down> <Enter>`)
+	g.liveHas("Go back to before: the first prompt", "No file can be put back: the copies of what the files held before that prompt were let go.")
+	g.liveLacks("put the files back")
 }

@@ -197,6 +197,9 @@ type live struct {
 	bgMu     sync.Mutex
 	bgAgents []*bgAgent
 	bgWG     sync.WaitGroup
+	// runs are the /fork and /subtask runs this session watches, by id:
+	// "fork" or "subtask".
+	runs sync.Map
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
 	// resumeShown is the list /resume showed last, by id: /resume N opens

@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -1240,7 +1239,16 @@ func loadThen[T any](s *session, again string, read func() T, show func(T)) {
 				// typed for it is not for the box, where Enter sends.
 				return
 			}
+			list := s.q
 			for _, ev := range held {
+				if s.q != list {
+					// The list was answered, and what that opened (the
+					// rewind's choice of what to put back) was not seen
+					// when the rest was typed: Esc Esc Enter Enter must
+					// not put the files back unseen (the rewind review of
+					// 2026-11-19). The rest is let go.
+					break
+				}
 				s.refeed(ev)
 			}
 		}
@@ -1269,7 +1277,7 @@ func (s *session) dropList(why string) {
 
 // rewindNote is what the menu says of the files a rewind can and cannot
 // put back.
-const rewindNote = "What a file holds when it is put back is kept first; what shell commands changed in other files is not put back."
+const rewindNote = "Each goes back as it was just before Write or Edit first changed it, and what it holds now is kept first. What shell commands and sub-agents changed is not kept."
 
 // rewind opens the list of the person's prompts, the newest first, to
 // take the conversation back to before one of them. It is what Esc Esc
@@ -1313,10 +1321,15 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		// The choices, as Claude Code offers them: the conversation and the
 		// files, the conversation alone, or the files alone; the ones about
 		// files only where Write or Edit changed one since.
-		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + oneLine(point.Text)}}
+		// (A long prompt, pasted, would take the rows the files and the
+		// choices need.)
+		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + fit(s.m, oneLine(point.Text), rewindTitleMost)}}
 		var opts []menu.Option
 		var commands []string
-		body := []string{"Write and Edit changed no file since then. " + rewindNote}
+		body := []string{"This session's own Write and Edit changed no file since then: sub-agents' changes and shell commands' are not kept."}
+		if point.FilesWhy != "" {
+			body = []string{"No file can be put back: " + oneLine(point.FilesWhy) + "."}
+		}
 		if n := len(point.Files); n > 0 {
 			shown := point.Files
 			if len(shown) > 5 {
@@ -1326,7 +1339,7 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			for i, f := range shown {
 				// (A name the model gave a file may hold anything: the
 				// menu keeps styles and links.)
-				names[i] = oneLine(filepath.Base(f))
+				names[i] = pathShown(f)
 			}
 			more := ""
 			if n > len(shown) {
@@ -1356,6 +1369,25 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		s.openLocal(sure)
 	}
 	s.openLocal(pick)
+}
+
+// rewindTitleMost is how many cells of the prompt a rewind's confirmation
+// shows.
+const rewindTitleMost = 100
+
+// pathShown is a path for a menu: on one line, with the marks that turn
+// the order text is drawn in written out, so that a name cannot pass for
+// another.
+func pathShown(p string) string {
+	var b strings.Builder
+	for _, r := range oneLine(p) {
+		if bidiMark(r) {
+			fmt.Fprintf(&b, "\\u%04X", r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // openLocal puts a menu of the interface's own on the screen. The person

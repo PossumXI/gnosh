@@ -268,6 +268,10 @@ func TestSubtaskAnswerComesBack(t *testing.T) {
 	s.see("-- done in ")
 	s.typeLine("/subtask run the whole test suite and report the count")
 	s.see("works on it in the background (process 4545)")
+	// A rewind waits for it: what it answers is to come back to this
+	// conversation, which a rewind opens again.
+	s.typeLine("/rewind 1")
+	s.see("going back now would stop it, or it could change the files again: the subtask ")
 	s.see("is done (gnosh -r ")
 	s.see("The subtask says all 42 tests pass.")
 	s.typeLine("/exit")

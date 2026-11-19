@@ -675,6 +675,15 @@ func (e *Engine) ReadDenied(p string) bool {
 	return e.pathHit(ListDeny, toolRead, e.expand(req, []string{p})) != nil
 }
 
+// EditDenied reports whether an Edit deny rule covers the cleaned absolute
+// path, as written or as resolved. A rewind leaves such a file as it is.
+func (e *Engine) EditDenied(p string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	req := &request{}
+	return e.pathHit(ListDeny, toolEdit, e.expand(req, []string{p})) != nil
+}
+
 // all returns every layer, the session's own included.
 func (e *Engine) all() []*layer {
 	out := make([]*layer, 0, len(e.layers)+2)

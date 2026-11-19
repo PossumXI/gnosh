@@ -4145,3 +4145,26 @@ or kept with the reason said (27).
     (the plan review of 2026-11-19). An approved plan is now written to a
     file of the session's own, plans/<time>.md in its folder, the person's
     alone, and the model is told where it is.
+
+290. **A rewind puts a file back only where it was, and waits for what
+    runs.** The paths a rewind puts back are written with every link on
+    the way followed, but only the last part was looked at again: a folder
+    removed and made a link in its place (to ~/.ssh, say) had a rewind
+    write the person's authorized_keys there, or take a file of theirs
+    away, with no rule asked (the rewind review of 2026-11-19). A file
+    whose folders hold a link now is left alone, as is one an Edit deny
+    rule covers, one that may not be written now (as Write leaves it), one
+    whose work tree is gone, and one holding more than 1 GiB now; what a
+    file holds is compared and set aside without reading it whole, and
+    its set-user-ID and the like come back with it. Every rewind waited
+    only for a turn: opening the session again stopped the commands and
+    sub-agents in the background unasked, and the files could change again
+    as they were put back; it now waits for those, for a /subtask run
+    whose answer is to come back, and, when files go back, for a /fork
+    run in the same folder. A branch finds its origin's copies wherever
+    that session is now (/cd and work trees move one of the two), and says
+    so when that session is gone; two spellings of one file on a disk that
+    ignores case are kept as one; the Esc Esc list says why no file can be
+    put back when none can, shows the files by their paths and a long
+    prompt cut, and keys typed before its confirmation could be seen no
+    longer answer it.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,9 +35,9 @@ import (
 // with the conversation ("/rewind N all") or alone ("/rewind N files"), from
 // the copies checkpoint.go keeps; "/rewind N" takes the conversation alone,
 // and the files stay as they are. What shell commands changed is not kept,
-// so it is never put back. Because the session is opened again, the
-// commands it had running in the background are stopped, as they are when
-// a session ends.
+// so it is never put back. Because the session is opened again, which
+// would stop what it runs in the background, a rewind waits until nothing
+// does (rewindHeldBy).
 
 // RewindPoint is one of the person's prompts that the conversation can be
 // taken back to.
@@ -46,12 +47,16 @@ type RewindPoint struct {
 	// Text is the prompt, and Time when it was sent.
 	Text string
 	Time time.Time
-	// Files are the files Write and Edit changed from this prompt on: what
-	// a rewind to before it can put back, as they were before the first of
-	// those changes. FilesGone says the copies from before it were let go
-	// (only the most recent prompts' are kept), so none can be.
-	Files     []string
-	FilesGone bool
+	// Files are the files Write and Edit changed from this prompt on, as
+	// the person is shown them: what a rewind to before it can put back,
+	// as they were before the first of those changes. FilesWhy says why
+	// none can be, when that is so: the copies from before it were let go
+	// (only the most recent prompts' are kept) or are not found, or none
+	// are kept here.
+	Files    []string
+	FilesWhy string
+	// why is FilesWhy's error.
+	why error
 }
 
 // rewindGroup finds the person's prompts in what is left of the
@@ -113,10 +118,42 @@ func (l *live) rewindPoints() []RewindPoint {
 	points, _, _ := l.rewindGroup()
 	order := l.promptsInOrder()
 	for i := range points {
-		cps, gone := l.filesSince(order, points[i].ID)
-		points[i].Files, points[i].FilesGone = filePaths(cps), gone
+		cps, err := l.filesSince(order, points[i].ID)
+		if err == nil && len(cps) == 0 && !l.cfg.Options.FileCheckpointingEnabled.V {
+			err = errNoCheckpoints
+		}
+		points[i].Files, points[i].why = make([]string, len(cps)), err
+		for j, cp := range cps {
+			points[i].Files[j] = l.showPath(cp.Path)
+		}
+		if err != nil {
+			points[i].FilesWhy = err.Error()
+		}
 	}
 	return points
+}
+
+// rewindHeldBy lists what a rewind must wait for: the work in the
+// background, which opening the session again would stop, and which could
+// change the files again as they are put back; a /subtask run, whose answer
+// is to come back to this conversation; and, when files are put back, a
+// /fork run, which works in the same folder.
+func (l *live) rewindHeldBy(files bool) []string {
+	held := l.runningWork()
+	var runs []string
+	l.runs.Range(func(id, what any) bool {
+		if what == "subtask" || files {
+			runs = append(runs, fmt.Sprintf("the %s %s", what, RunShort(id.(string))))
+		}
+		return true
+	})
+	slices.Sort(runs)
+	return append(held, runs...)
+}
+
+// rewindWaits is the refusal of a rewind while held runs.
+func rewindWaits(held []string) error {
+	return fmt.Errorf("this is still running, and going back now would stop it, or it could change the files again: %s. Go back once it has ended, or stop it (/tasks stop <id>, or ← ← for a run)", strings.Join(held, ", "))
 }
 
 // RewindPoints lists the person's prompts of this conversation, the
@@ -138,6 +175,9 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 	old := c.cur()
 	if old.busy(ctx) {
 		return "", "", errors.New("a turn is running. Stop it first (Esc, or Ctrl+C in the plain session), then go back")
+	}
+	if held := old.rewindHeldBy(files); len(held) > 0 {
+		return "", "", rewindWaits(held)
 	}
 	points, before, queued := old.rewindGroup()
 	for _, p := range points {
@@ -173,7 +213,7 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 	old.flog.logf("turn", "the conversation was taken back to before the prompt in entry %s", point)
 	old.close("other")
 	if files {
-		done, failed := old.checks.restore(restore, old.showPath)
+		done, failed := old.checks.restore(restore, old.restoreHow())
 		old.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point, len(done), len(failed))
 		filesSaid = restoreSaid(done, failed)
 	}
@@ -188,7 +228,7 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 }
 
 // rewindNote is what a person is told wherever a rewind is offered.
-const rewindNote = "The files that Write and Edit changed since then can be put back with the conversation, or alone; what a file holds when it is put back is kept first, beside the session, and the rewind says where. What shell commands changed in other files is not put back."
+const rewindNote = "The files that this session's own Write and Edit changed since then can be put back with the conversation, or alone: each as it was just before Write or Edit first changed it. What a file holds when it is put back is kept first, beside the session, and the rewind says where. What shell commands and sub-agents changed is not kept, so it is not put back."
 
 // slashRewind is /rewind: with no number it lists the points, and with
 // one it asks for the conversation to be taken back to before that
@@ -205,14 +245,19 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 		for i, p := range points {
 			files := ""
 			switch {
-			case p.FilesGone:
+			case errors.Is(p.why, errFilesGone):
 				files = "  (the copies of the files from before it were let go)"
+			case errors.Is(p.why, errFilesLost):
+				files = "  (the copies of the files from before it are not found)"
 			case len(p.Files) > 0:
 				files = fmt.Sprintf("  (%s changed since)", countWords(len(p.Files), "file", "files"))
 			}
 			c.Say("  %d. %s  %s%s", i+1, p.Time.Local().Format("15:04"), oneLine(p.Text, 100), files)
 		}
 		c.Say("/rewind N takes the conversation back to before prompt N, which you can then send again or change; /rewind N all puts the files back too, and /rewind N files the files alone. %s", rewindNote)
+		if !l.cfg.Options.FileCheckpointingEnabled.V {
+			c.Say("No file can be put back in this session: %s.", strings.TrimSuffix(errNoCheckpoints.Error(), ", so no file can be put back"))
+		}
 		return nil
 	}
 	n, err := strconv.Atoi(args[0])
@@ -232,19 +277,19 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 	point := points[n-1]
 	if how == "files" {
 		// The files alone: the conversation stays where it is, and the
-		// session is not opened again. A sub-agent in the background could
+		// session is not opened again. What works in the background could
 		// change the files again as they are put back.
-		if bg := l.backgroundAgents(); len(bg) > 0 {
-			return fmt.Errorf("%s in the background, and could change the files again: wait for it, or stop it (Ctrl+X Ctrl+K), then put the files back", countWords(len(bg), "sub-agent is working", "sub-agents are working"))
+		if held := l.rewindHeldBy(true); len(held) > 0 {
+			return rewindWaits(held)
 		}
 		cps, ferr := l.rewindFiles(point.ID)
 		if ferr != nil {
 			return ferr
 		}
-		done, failed := l.checks.restore(cps, l.showPath)
+		done, failed := l.checks.restore(cps, l.restoreHow())
 		l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point.ID, len(done), len(failed))
 		if len(done) > 0 {
-			c.Say("The files are back as they were before your prompt: %s", oneLine(point.Text, 100))
+			c.Say("The files that Write and Edit changed are back as they were before your prompt: %s", oneLine(point.Text, 100))
 		}
 		c.Say("%s", restoreSaid(done, failed))
 		c.Say("The conversation is as it was; the model is told with its next request.")
