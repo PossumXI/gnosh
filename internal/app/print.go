@@ -139,7 +139,11 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 		return f.runStream(ctx, c)
 	}
 
-	text, err := f.readPrompt(ctx)
+	var text string
+	var err error
+	if sig := f.guarded(ctx, c, func(ctx context.Context) { text, err = f.readPrompt(ctx) }); sig != nil {
+		return f.stoppedBySignal(c, "", sig, c.State())
+	}
 	first := agent.Prompt{Text: text}
 	if errors.Is(err, errNoPrompt) {
 		// Nothing was typed and nothing was piped in. A feature may still
@@ -154,7 +158,11 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	}
 	id := ""
 	if strings.HasPrefix(strings.TrimSpace(text), "/") {
-		res, err := c.Command(ctx, strings.TrimSpace(text))
+		var res CommandResult
+		var err error
+		if sig := f.guarded(ctx, c, func(ctx context.Context) { res, err = c.Command(ctx, strings.TrimSpace(text)) }); sig != nil {
+			return f.stoppedBySignal(c, "", sig, c.State())
+		}
 		if (res.Handled && res.Prompt == "") || err != nil {
 			return f.reportCommand(c, res, err)
 		}
@@ -211,13 +219,49 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 		return cli.ExitFailure
 	}
 	if f.inv.JSONSchema != "" && (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) {
-		f.structured, f.structuredErr = f.structuredOutput(ctx, c)
+		if sig := f.guarded(ctx, c, func(ctx context.Context) { f.structured, f.structuredErr = f.structuredOutput(ctx, c) }); sig != nil {
+			return f.stoppedBySignal(c, "", sig, c.State())
+		}
 	}
 	// The features are asked before anything is printed: what they have
 	// to say comes first, and they may raise the exit code.
 	code := c.RunEnd(res, f.exitCode(c, res))
 	f.report(c, res)
 	return code
+}
+
+// guarded runs a part of a run that does not read the signals itself
+// (reading what is piped in, a slash command given as the prompt, the
+// structured output): the first SIGINT, SIGTERM or SIGHUP cancels it and
+// is returned, so that the run ends as one a signal stopped does. Without
+// it a signal waited unread through the part (ten minutes and more), and
+// "producer | timeout 60 gnosh -p" could not be stopped short of SIGKILL.
+func (f *printer) guarded(ctx context.Context, c Controls, part func(ctx context.Context)) os.Signal {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	signals := c.Signals()
+	got := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	var watching sync.WaitGroup
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		select {
+		case s := <-signals:
+			got <- s
+			cancel()
+		case <-done:
+		}
+	}()
+	part(ctx)
+	close(done)
+	watching.Wait()
+	select {
+	case s := <-got:
+		return s
+	default:
+		return nil
+	}
 }
 
 // exitCode is the code a run ends with for how its last turn ended: 0
@@ -377,7 +421,8 @@ func (f *printer) stoppedBySignal(c Controls, id string, sig os.Signal, st agent
 	res := agent.TurnResult{Reason: agent.EndStopped}
 	wait := time.NewTimer(signalWait)
 	defer wait.Stop()
-	for waiting := true; waiting; {
+	// (With no turn of the run's own to wait for, no result can come.)
+	for waiting := id != ""; waiting; {
 		select {
 		case r := <-f.results:
 			if slices.Contains(r.Prompts, id) {

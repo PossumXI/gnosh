@@ -3086,3 +3086,15 @@ or kept with the reason said (27).
     agent's MoreRounds moment): the turn ends there, and the queued
     message goes out as a turn of its own. With text input the count is
     still the run's.
+
+184. **A signal stops print mode wherever it is.** SIGINT, SIGTERM and
+    SIGHUP were read only while a turn ran (the print mode review's
+    note). While gnosh -p read what was piped in, ran a slash command
+    given as the prompt, or asked for the structured output (three tries
+    of up to ten minutes), a signal waited unread, so "producer | timeout
+    60 gnosh -p" could not stop it short of SIGKILL, and the run later
+    ended with its own exit code rather than the signal's. Each of those
+    parts now runs under a watch that cancels it at the first signal; the
+    run ends as one a signal stopped does: 130 or 143, and the result
+    line in the JSON formats, written at once when no turn of the run's
+    own is left to report.

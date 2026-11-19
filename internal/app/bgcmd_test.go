@@ -268,6 +268,18 @@ func TestRunLoggedFromTwoFolders(t *testing.T) {
 	stop := func() { _ = syscall.Kill(-proc.Process.Pid, syscall.SIGKILL); _ = proc.Wait() }
 	t.Cleanup(stop)
 	write(filepath.Join(b, id+".background.pid"), strconv.Itoa(proc.Process.Pid)+"\n")
+	// Start returns once the exec is under way; the kernel sets out the
+	// new program's arguments a moment later, and until then its command
+	// line reads empty, naming no session. On a busy machine that moment
+	// was long enough for the run to read as one that had died (a CI run
+	// of 19 November).
+	cmdline := "/proc/" + strconv.Itoa(proc.Process.Pid) + "/cmdline"
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		data, err := os.ReadFile(cmdline)
+		if err != nil || strings.Contains(string(data), id) {
+			break
+		}
+	}
 
 	runs := runsIn([]string{a, b}, time.Time{})
 	if len(runs) != 1 || runs[0].prompt != "second" || !runs[0].running || runs[0].cwd != "/b" {
