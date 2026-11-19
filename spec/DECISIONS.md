@@ -3730,3 +3730,12 @@ or kept with the reason said (27).
     touched. The person's own rules are read from the rules folder beside
     their GNOSH.md. (~/.claude/CLAUDE.md stays unread: the person's own
     files are gnosh's, as CFG-20 lists them.)
+
+246. **gnosh does not look into network mounts on its own.** A look at
+    /net/beacon.example on macOS mounts that host's shares, so a
+    repository's "@/net/beacon.example/x.md", or an instruction file
+    linked there, had the machine call out as gnosh started, before the
+    folder was trusted (the skills review of 2026-11-19). The instruction
+    reader now looks at nothing inside /net, /Network or /afs but the
+    project, the person's home and their own files, and the folders on the
+    way to them, and says why it did not.

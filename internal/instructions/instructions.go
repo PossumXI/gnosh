@@ -475,7 +475,7 @@ func newSet(o Options) (*Set, error) {
 		s.owned = hostOwner()
 	}
 	s.o = o
-	s.d = disk{o.FS}
+	s.d = disk{fsys: o.FS, mine: append([]string{s.cwd, s.root, s.home}, s.userFiles...)}
 
 	s.realCwd = s.d.resolveLoose(s.cwd)
 	s.realRoot = s.d.resolveLoose(s.root)
