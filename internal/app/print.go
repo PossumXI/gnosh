@@ -537,9 +537,11 @@ func (f *printer) Event(ev any) {
 			f.partialEnd(ev.StopReason, ev.Usage)
 		}
 	case *agent.RetryEvent:
-		if ev.Discarded {
+		if ev.Discarded && ev.Agent == "" && ev.Purpose == "main" {
 			// What had arrived of the reply is thrown away; the next try
-			// writes it afresh.
+			// writes it afresh. (A sub-agent's reply is not the one held
+			// here: its retry threw away the session's own reply, and its
+			// stream-json message, half written.)
 			f.buf.Reset()
 			f.safe.Reset()
 			f.inMessage = false

@@ -3147,3 +3147,12 @@ or kept with the reason said (27).
     the folders of the directory its file is in; a session of another
     folder whose name only comes to the same directory is that folder's
     alone, as before.
+
+190. **A sub-agent's retry leaves the session's reply alone.** When a
+    request whose reply had begun to arrive is tried again, print mode
+    throws away what had arrived of the reply. It did so for a sub-agent's
+    retry too (a background sub-agent working while the session wrote
+    its answer): the session's own half-written reply was lost, and in
+    stream-json with --include-partial-messages its message was closed
+    half written (the print mode review's note). Only the session's own
+    main request's retry throws its reply away now.
