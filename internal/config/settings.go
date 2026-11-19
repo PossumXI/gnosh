@@ -423,6 +423,49 @@ func (s *source) statusLine(f jfield) {
 		apply: func(b *builder) { b.statusLine.put(sl, sl.Origin) }})
 }
 
+// attribution reads the attribution setting: {"commit": "...", "pr":
+// "...", "sessionUrl": false}, or false for none. sessionUrl is taken and
+// adds nothing: a gnosh session has no web address to link.
+func (s *source) attribution(f jfield) {
+	a := Attribution{Origin: s.at(f.line)}
+	switch {
+	case f.val.kind == jBool && !f.val.b:
+	case f.val.kind != jObject:
+		s.errorf(f.line, "\"attribution\" is an object such as {\"commit\": \"...\", \"pr\": \"...\"}, or false for none, and here it is %s.", f.val.kind.word())
+		return
+	default:
+		good := true
+		for _, m := range s.unique(f.val, "attribution.") {
+			switch m.key {
+			case "commit", "pr":
+				if m.val.kind != jString {
+					s.errorf(m.line, "the attribution's %q is the text added, as a string (an empty one adds none).", m.key)
+					good = false
+					break
+				}
+				if m.key == "commit" {
+					a.Commit = strings.TrimSpace(m.val.str)
+				} else {
+					a.PR = strings.TrimSpace(m.val.str)
+				}
+			case "sessionUrl":
+				if m.val.kind != jBool {
+					s.errorf(m.line, "the attribution's \"sessionUrl\" is true or false.")
+					good = false
+				}
+			default:
+				s.errorf(m.line, "the attribution has no field %s; its fields are commit, pr and sessionUrl.", showName(m.key))
+				good = false
+			}
+		}
+		if !good {
+			return
+		}
+	}
+	s.add(op{kind: KindOption, text: "attribution: commit " + strconv.Quote(a.Commit) + ", pull request " + strconv.Quote(a.PR), origin: a.Origin, what: "what the model signs its commits and pull requests with",
+		apply: func(b *builder) { b.attribution.put(a, a.Origin) }})
+}
+
 // fileSuggestion reads the fileSuggestion object: {"type": "command",
 // "command": "..."}.
 func (s *source) fileSuggestion(f jfield) {

@@ -64,7 +64,7 @@ func goldenFiles() []goldenFile {
 	return []goldenFile{
 		{
 			file:  "system",
-			texts: []string{textCore, textSecurity, textLanguage, textNoTools, textMemory, textGno, textDeliver},
+			texts: []string{textCore, textSecurity, textLanguage, textAttribution, textNoTools, textMemory, textGno, textDeliver},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"a session with everything", parts(s.System(SystemInput{
@@ -76,6 +76,8 @@ func goldenFiles() []goldenFile {
 					}))},
 					{"a session with the plain tools", parts(s.System(SystemInput{Tools: toolSpecs("Read", "Edit", "Bash")}))},
 					{"a session whose replies are in Japanese", parts(s.System(SystemInput{Tools: toolSpecs("Read"), Language: "japanese"}))},
+					{"a session whose commits and pull requests are signed", parts(s.System(SystemInput{Tools: toolSpecs("Read"),
+						AttributionCommit: "Made with gnosh\n\nCo-Authored-By: gnosh <bot@example.com>", AttributionPR: "Made with gnosh."}))},
 					{"a session with no tools", parts(s.System(SystemInput{Instructions: goldenInstructions}))},
 					{"the person's own system prompt", parts(s.System(SystemInput{
 						Tools:        toolSpecs("Read", "gnovm_run", "Deliver"),

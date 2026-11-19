@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -449,4 +451,20 @@ func ToolName(server, tool string) string {
 		return b.String()
 	}
 	return "mcp__" + clean(server) + "__" + clean(tool)
+}
+
+// MaxToolName is the longest tool name the model's APIs take: OpenAI's
+// function names, and Anthropic's tools', are at most 64 characters.
+const MaxToolName = 64
+
+// FitToolName shortens a tool's name that is longer than the model's APIs
+// take: its start is kept, and its end becomes a short hash of the whole,
+// so that two long names that begin alike stay apart. A name that fits
+// comes back as it was.
+func FitToolName(name string) string {
+	if len(name) <= MaxToolName {
+		return name
+	}
+	sum := sha256.Sum256([]byte(name))
+	return name[:MaxToolName-9] + "_" + hex.EncodeToString(sum[:4])
 }

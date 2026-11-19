@@ -77,6 +77,10 @@ type Config struct {
 	// then says why.
 	FileSuggestion    *FileSuggestion
 	FileSuggestionOff string
+	// Attribution is what the model adds to the git commits and pull
+	// requests it makes (Claude Code's attribution). gnosh adds none of
+	// its own: both are empty unless a file sets them.
+	Attribution Attribution
 	// Permissions are the permission rules, the starting mode and the
 	// extra directories.
 	Permissions Permissions
@@ -161,6 +165,14 @@ type StatusLine struct {
 	// Refresh is how often it is run again besides the moments it runs at
 	// (Claude Code's refreshInterval); zero means at those moments alone.
 	Refresh time.Duration
+	// Origin is the line that sets it.
+	Origin Origin
+}
+
+// Attribution is Claude Code's attribution setting: the lines the model
+// ends a commit's message with, and a pull request's description.
+type Attribution struct {
+	Commit, PR string
 	// Origin is the line that sets it.
 	Origin Origin
 }

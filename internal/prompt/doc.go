@@ -106,6 +106,11 @@
 //     prompt, as Claude Code does, since it holds for the whole session;
 //     code, commands and quoted text stay as they are.
 //
+//   - attribution, after it, when a settings file says what the model
+//     signs its commits and pull requests with (Claude Code's
+//     attribution). gnosh signs with nothing of its own: Jae's rule for
+//     his repositories is no agent trailers.
+//
 //   - no-tools, only in a session with no tools at all: a model with no
 //     tools otherwise writes its tool calls out as text.
 //

@@ -2063,3 +2063,20 @@ func TestFileSuggestion(t *testing.T) {
 		t.Errorf("the project's file suggestion is not held: %+v", cfg.Held)
 	}
 }
+
+// attribution is Claude Code's: the lines the model signs its commits and
+// pull requests with. gnosh adds none of its own; false is none too, and
+// includeCoAuthoredBy, Claude Code's older word, is taken and changes
+// nothing.
+func TestAttribution(t *testing.T) {
+	cfg := mustLoad(t, withConfig(`{"attribution": {"commit": "Co-Authored-By: gnosh <bot@example.com>", "pr": "", "sessionUrl": false}, "includeCoAuthoredBy": true}`))
+	if a := cfg.Attribution; a.Commit != "Co-Authored-By: gnosh <bot@example.com>" || a.PR != "" || a.Origin.File != userJSON {
+		t.Errorf("Attribution = %+v", cfg.Attribution)
+	}
+	if a := mustLoad(t, withConfig(`{"attribution": false}`)).Attribution; a.Commit != "" || a.PR != "" {
+		t.Errorf("attribution false: %+v", a)
+	}
+	if a := mustLoad(t, withConfig(`{}`)).Attribution; a.Commit != "" || a.PR != "" {
+		t.Errorf("nothing set: %+v", a)
+	}
+}

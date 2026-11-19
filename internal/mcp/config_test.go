@@ -118,6 +118,28 @@ func TestToolName(t *testing.T) {
 	}
 }
 
+// A name longer than the model's APIs take is cut to 64 characters, its
+// start kept and its end a hash of the whole: two long names that begin
+// alike stay apart, and a name that fits is left as it is.
+func TestFitToolName(t *testing.T) {
+	short := ToolName("github", "get_issue")
+	if got := FitToolName(short); got != short {
+		t.Errorf("a name that fits came back as %q", got)
+	}
+	a := ToolName("company-internal-documentation", "search_documents_by_full_text_query")
+	b := ToolName("company-internal-documentation", "search_documents_by_full_text_query_v2")
+	fa, fb := FitToolName(a), FitToolName(b)
+	if len(fa) != MaxToolName || len(fb) != MaxToolName || fa == fb {
+		t.Errorf("FitToolName gave %q and %q", fa, fb)
+	}
+	if !strings.HasPrefix(fa, "mcp__company-internal-documentation__search_") {
+		t.Errorf("the start of the name was not kept: %q", fa)
+	}
+	if FitToolName(a) != fa {
+		t.Error("FitToolName is not the same twice")
+	}
+}
+
 // Servers given on the command line (--mcp-config): files, found from
 // where gnosh was started, and JSON given whole. Their entries win over the
 // files', and with Strict they are the only ones.

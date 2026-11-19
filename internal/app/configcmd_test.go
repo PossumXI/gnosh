@@ -163,3 +163,17 @@ func TestBashOutputMaxChars(t *testing.T) {
 		t.Errorf("with BASH_MAX_OUTPUT_LENGTH 20000 the middle of the output was still cut")
 	}
 }
+
+// attribution, Claude Code's: the lines a settings file sets are asked
+// for in the system prompt; with none set, gnosh says nothing of signing,
+// as it signs with nothing of its own.
+func TestAttributionInTheSystemPrompt(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"}, apptest.Reply{Text: "ok"})
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	hasNot(t, "a request with no attribution set", requestText(t, w, 0), "end its message with these lines", "end its description with")
+	w.Settings(`{"attribution": {"commit": "Co-Authored-By: gnosh <bot@example.com>"}}`)
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	second := requestText(t, w, 1)
+	has(t, "a request with the commit's attribution set", second, "When you make a git commit, end its message with these lines, as they are:", "Co-Authored-By: gnosh ", "theirs come first")
+	hasNot(t, "a request with the commit's attribution set", second, "When you open a pull request")
+}

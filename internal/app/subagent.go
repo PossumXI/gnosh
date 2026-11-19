@@ -680,6 +680,8 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.wt != nil {
 		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentWorkTree(s.wt.path, s.wt.repo))
 	}
+	// A sub-agent makes commits too, signed as the session's are.
+	in.AttributionCommit, in.AttributionPR = l.cfg.Attribution.Commit, l.cfg.Attribution.PR
 
 	sub := agent.SubOptions{
 		CallID:  callID,

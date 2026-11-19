@@ -96,6 +96,8 @@ var topKeys = []keyDef{
 	{"agent", "", "the kind of agent the session runs as: its prompt, its tools and its model", fromClaudeCode + ": the settings key"},
 	{"statusLine", "", "a command whose output is the status line under the prompt", fromClaudeCode + ": the settings key"},
 	{"fileSuggestion", "", "a command that offers the paths an @ mention completes to, in place of gnosh's own search", fromClaudeCode + ": the settings key"},
+	{"attribution", "", "the lines the model ends its commits' messages and its pull requests' descriptions with: {\"commit\": ..., \"pr\": ...}; none by default", fromClaudeCode + ": the settings key"},
+	{"includeCoAuthoredBy", "", "Claude Code's older word for leaving its attribution out: taken, and changes nothing, as gnosh adds none of its own", fromClaudeCode + ": the settings key"},
 	{"skillOverrides", "", "how far each skill is seen, by its name: on, name-only, user-invocable-only or off", fromClaudeCode + ": the settings key"},
 	{"$schema", "", "accepted and not read", fromClaudeCode + ": the settings key"},
 }
@@ -153,7 +155,7 @@ var permissionKeys = []keyDef{
 // whose key it is. Those that gnosh has under "options", with Claude
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
-	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy",
+	"cleanupPeriodDays",
 	"spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",

@@ -70,6 +70,11 @@
 //	                 "refreshInterval": ...}: a command whose output is the
 //	                 status line under the prompt; a program to run, so a
 //	                 project's waits for trust, as a hook does
+//	attribution      {"commit": ..., "pr": ...} or false: the lines the
+//	                 model ends its commits' messages and its pull
+//	                 requests' descriptions with. gnosh adds none of its
+//	                 own (includeCoAuthoredBy, Claude Code's older word for
+//	                 leaving its own out, is taken and changes nothing)
 //	fileSuggestion   {"type": "command", "command": ...}: a command that
 //	                 offers the paths an @ mention completes to, in place
 //	                 of gnosh's own search; it is given {"query": what was

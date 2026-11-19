@@ -41,6 +41,9 @@ type builder struct {
 	statusLine Value[StatusLine]
 	// fileSuggestion is the @ file suggestion command; a later file wins.
 	fileSuggestion Value[FileSuggestion]
+	// attribution is what commits and pull requests are signed with; a
+	// later file wins.
+	attribution Value[Attribution]
 
 	layers []*RuleLayer
 	mode   Value[string]

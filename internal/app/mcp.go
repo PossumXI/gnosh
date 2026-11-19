@@ -369,13 +369,15 @@ func mcpConnect(ctx context.Context, c mcp.Config, root string, environ, roots [
 // mcpToolsOf makes the tools the model is offered of a server's list. Two
 // that come to one name (listed twice, or "a.b" beside "a_b") are offered
 // once, the first: a name twice in the model's list would have every
-// offer of tools refused.
+// offer of tools refused. A name longer than the model's APIs take (64
+// characters) is shortened, its end a hash of the whole: OpenAI's refuses
+// every request that holds one. The server is called by its own name.
 func (l *live) mcpToolsOf(s *mcpServer, tools []mcp.Tool) []*mcpTool {
 	var made []*mcpTool
 	seen := map[string]bool{}
 	var twice []string
 	for _, t := range tools {
-		name := mcp.ToolName(s.cfg.Name, t.Name)
+		name := mcp.FitToolName(mcp.ToolName(s.cfg.Name, t.Name))
 		if seen[name] {
 			twice = append(twice, t.Name)
 			continue

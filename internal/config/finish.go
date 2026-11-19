@@ -120,6 +120,7 @@ func (ld *loader) finish() *Config {
 			cfg.StatusLine = &sl
 		}
 	}
+	cfg.Attribution = b.attribution.V
 	if b.fileSuggestion.Set {
 		switch {
 		case cfg.Switches.SafeMode.V:

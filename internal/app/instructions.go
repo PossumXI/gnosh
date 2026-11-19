@@ -303,6 +303,7 @@ func (l *live) systemPrompt() ([]string, error) {
 	// are in.
 	in.Style = l.currentStyle()
 	in.Language = l.cfg.Options.Language.V
+	in.AttributionCommit, in.AttributionPR = l.cfg.Attribution.Commit, l.cfg.Attribution.PR
 	for _, c := range l.contribs {
 		if c.c.System != nil {
 			c.c.System(&in)

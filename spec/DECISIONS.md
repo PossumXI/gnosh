@@ -2940,3 +2940,25 @@ or kept with the reason said (27).
     once. It is a program to run, so a project's waits for trust, as a
     hook's and the status line's do, and safe mode and disableAllHooks
     turn it off, which /status says.
+
+175. **Claude Code's attribution, and includeCoAuthoredBy.**
+    {"commit": ..., "pr": ...}, or false: the lines the model ends a
+    commit's message and a pull request's description with, asked for
+    in the system prompt of the session and of its sub-agents (which
+    commit too), with the person's own instructions about it first, as
+    Claude Code tells the model. gnosh signs with nothing of its own
+    (Jae's rule for his repositories is no agent trailers), so with
+    nothing set nothing is said. sessionUrl is taken and adds nothing: a
+    gnosh session has no web address to link. includeCoAuthoredBy,
+    Claude Code's older word for leaving its own attribution out, is
+    taken and changes nothing.
+
+176. **An MCP tool's name longer than the model's APIs take is
+    shortened.** OpenAI's API refuses a request whose tools hold a name
+    longer than 64 characters (Anthropic's takes no longer one either),
+    and mcp__<server>__<tool> passes that with a long server name and a
+    long tool name: every request of the session failed (the MCP
+    review's note). Such a name keeps its start and ends in a short hash
+    of the whole, so that two long names that begin alike stay apart;
+    the server is still called by its own name. A rule for that tool
+    names it as offered, which the permission question shows.

@@ -45,7 +45,7 @@ func readFile(s *source, data []byte) {
 		}
 		given[f.key] = f
 	}
-	for _, key := range []string{"providers", "models", "model", "smallModel", "fallbackModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "fileSuggestion", "agent", "skillOverrides"} {
+	for _, key := range []string{"providers", "models", "model", "smallModel", "fallbackModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "fileSuggestion", "attribution", "includeCoAuthoredBy", "agent", "skillOverrides"} {
 		f, ok := given[key]
 		if !ok {
 			continue
@@ -75,6 +75,15 @@ func readFile(s *source, data []byte) {
 			s.statusLine(f)
 		case "fileSuggestion":
 			s.fileSuggestion(f)
+		case "attribution":
+			s.attribution(f)
+		case "includeCoAuthoredBy":
+			// Claude Code's older word for leaving its own attribution out.
+			// gnosh adds none of its own, so there is nothing for it to
+			// leave out: it is taken, and changes nothing.
+			if f.val.kind != jBool {
+				s.errorf(f.line, "\"includeCoAuthoredBy\" is true or false, and here it is %s.", f.val.kind.word())
+			}
 		case "agent":
 			if f.val.kind != jString || strings.TrimSpace(f.val.str) == "" {
 				s.errorf(f.line, "\"agent\" is the name of a kind of agent for the session to run as, as a string, and here it is %s.", f.val.kind.word())

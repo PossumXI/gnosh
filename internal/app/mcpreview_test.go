@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/mcp"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
@@ -19,6 +20,9 @@ func fakeMCPTools(tools string) string {
       printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"x","version":"0.1"},"capabilities":{"tools":{}}}}\n' "$id" ;;
     *'"method":"tools/list"'*)
       printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":%s}}\n' "$id" 'TOOLS' ;;
+    *'"method":"tools/call"'*)
+      name=$(printf '%s' "$line" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"called %s"}]}}\n' "$id" "$name" ;;
   esac
 done`, "TOOLS", tools)
 }
@@ -72,4 +76,29 @@ func TestDisabledMCPServerStaysDisabled(t *testing.T) {
 	if s.status != "disabled" || s.client != nil {
 		t.Errorf("a connection for an older generation was taken: %s", s.status)
 	}
+}
+
+// A tool whose name would be longer than the model's APIs take is offered
+// under a shortened one, and a call of it reaches the server under the
+// server's own name (the MCP review of 2026-11-19: OpenAI's API refuses
+// every request that holds a longer name).
+func TestMCPLongToolName(t *testing.T) {
+	long := "search_documents_by_full_text_query_with_filters"
+	name := mcp.FitToolName(mcp.ToolName("company-internal-documentation", long))
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: name, Args: `{}`}}},
+		apptest.Reply{Text: "Searched."})
+	srv := w.Script(w.Home+"/bin/docs.sh", fakeMCPTools(`[{"name":"`+long+`","description":"Searches."}]`))
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"company-internal-documentation": {"command": "`+srv+`"}}}`)
+	run(t, w, "-y", "-p", "search the docs").wantCode(t, 0)
+	names := toolNamesOf(w.Model.Requests()[0])
+	if !slices.Contains(names, name) {
+		t.Errorf("the tools offered are %v, want %s among them", names, name)
+	}
+	for _, n := range names {
+		if len(n) > mcp.MaxToolName {
+			t.Errorf("the tool name %s is longer than %d characters", n, mcp.MaxToolName)
+		}
+	}
+	has(t, "what the model read", toolResult(t, w, 1, "c1"), "called "+long)
 }

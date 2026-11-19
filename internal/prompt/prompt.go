@@ -45,6 +45,7 @@ const (
 	textSecurity         = "security"
 	textNoTools          = "no-tools"
 	textLanguage         = "language"
+	textAttribution      = "attribution"
 	textMemory           = "memory"
 	textMemoryFull       = "memory-full"
 	textGno              = "gno"
@@ -145,6 +146,8 @@ func specs() []spec {
 			when: "After the core, under the built-in output style Learning: Insights, and a piece of the code left to the user (TODO(human))."},
 		{name: textLanguage, kind: KindSystem, need: []string{"language"},
 			when: "After the core and the output style, when the person set the language replies are in (Claude Code's language)."},
+		{name: textAttribution, kind: KindSystem, may: []string{"commit", "pr"},
+			when: "After those, when a settings file says what the model signs its commits and pull requests with (Claude Code's attribution); gnosh adds none of its own."},
 		{name: textNoTools, kind: KindSystem,
 			when: "A part of the system prompt only when the session has no tools at all."},
 		{name: textMemory, kind: KindSystem,
