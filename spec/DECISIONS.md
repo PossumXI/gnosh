@@ -3339,3 +3339,10 @@ or kept with the reason said (27).
     command with redirections; reading more than runs is the safe way
     round. Also: the config doc said a provider key in an env block wins
     over the shell's; it is read from the shell alone, as the code does.
+
+206. **The file --settings names is watched where it was read.** The
+    watcher made the path again from the flag, relative to the folder the
+    session works in; the loader reads it relative to where gnosh was
+    started, with a ~ filled in. With --cwd (or a quoted ~) it watched
+    another file, and edits to the one in force were never taken in (the
+    config review of 2026-11-19). It watches the loader's path now.
