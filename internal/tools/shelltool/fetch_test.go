@@ -376,3 +376,25 @@ func restAfter(sent, data []byte) int {
 	}
 	return len(sent) - (at + end + 1) - len(data)
 }
+
+// A copy is never written through a link put where the file for it was:
+// the open fails, and the link's target is untouched.
+func TestReadCopyWritesNoLink(t *testing.T) {
+	dir := t.TempDir()
+	spool, dst, target := filepath.Join(dir, "spool"), filepath.Join(dir, "dst"), filepath.Join(dir, "target")
+	if err := os.WriteFile(spool, []byte(copyMarker+"\n5\nhello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, dst); err != nil {
+		t.Skip("no links here:", err)
+	}
+	if _, err := readCopy(spool, dst, 100); err == nil {
+		t.Error("the copy was written through a link")
+	}
+	if data, _ := os.ReadFile(target); string(data) != "keep" {
+		t.Errorf("the link's target holds %q", data)
+	}
+}

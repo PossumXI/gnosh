@@ -3945,3 +3945,10 @@ or kept with the reason said (27).
     one that could not be written down holds for the session alone. And a
     sub-agent's question says that a yes that keeps a rule keeps it for
     the whole session and all its agents.
+
+269. **A file brought from a host is never written through a link.** The
+    copy of a deliverable fetched from a host was written by opening its
+    file by name again, which would follow a link put in that file's place
+    since it was made, and write the copy wherever the link led (the
+    deliverables review of 2026-11-19). The file is now opened only if it
+    is still no link.
