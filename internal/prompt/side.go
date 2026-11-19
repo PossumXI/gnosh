@@ -59,13 +59,15 @@ func (s *Set) SummaryPart(words int, mem bool) string {
 
 // SummaryFrom returns the request for a summary of the conversation from
 // the person's prompt that begins with prompt on, which they are setting
-// aside (the rewind's "Summarize from here"). It goes at the end of the
-// session's own request; the loop puts it in the marker.
-func (s *Set) SummaryFrom(prompt string, words int, mem bool) string {
+// aside (the rewind's "Summarize from here"): mark is what stands at the
+// end of that message, in gnosh's marker, so that a prompt written twice
+// ("go on") is told apart. It goes at the end of the session's own
+// request; the loop puts it in the marker.
+func (s *Set) SummaryFrom(prompt, mark string, words int, mem bool) string {
 	if words <= 0 {
 		words = SummaryWords
 	}
-	vals := values{"words": strconv.Itoa(words), "prompt": oneLine(prompt, maxQuote)}
+	vals := values{"words": strconv.Itoa(words), "prompt": oneLine(prompt, maxQuote), "mark": oneLine(mark, maxName)}
 	vals.flag("mem", mem)
 	return s.bare(textSummaryFrom, vals)
 }

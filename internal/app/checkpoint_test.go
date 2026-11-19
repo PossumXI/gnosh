@@ -37,11 +37,9 @@ func TestCheckpointsLetGoOfOldPrompts(t *testing.T) {
 	if c.gone([]string{prompt(1)}) == nil || c.gone([]string{prompt(2)}) == nil || c.gone([]string{prompt(3), prompt(checkpointPrompts + 2)}) != nil {
 		t.Errorf("let go of: 1 %v, 2 %v, 3 %v", c.gone([]string{prompt(1)}), c.gone([]string{prompt(2)}), c.gone([]string{prompt(3)}))
 	}
-	// (The newest copy let go is kept as what the file held as the oldest
-	// prompt kept went out.)
 	blobs, _ := filepath.Glob(filepath.Join(store, "*-*"))
-	if len(blobs) != checkpointPrompts+1 {
-		t.Errorf("%d copies are kept, want %d", len(blobs), checkpointPrompts+1)
+	if len(blobs) != checkpointPrompts {
+		t.Errorf("%d copies are kept, want %d", len(blobs), checkpointPrompts)
 	}
 	// Opened again, the store still knows what it let go, and what it kept.
 	again := openCheckpoints(store, now)
@@ -56,8 +54,10 @@ func TestCheckpointsLetGoOfOldPrompts(t *testing.T) {
 	if len(cps) != 1 {
 		t.Fatalf("a kept prompt's copy is not found after the store is opened again (%d)", len(cps))
 	}
-	if b, _ := os.ReadFile(filepath.Join(cps[0].dir, cps[0].Blob)); string(b) != "v2\n" {
-		t.Errorf("before the oldest prompt kept, the file held %q, want the newest copy let go", b)
+	// (No prompt was looked at as it went out, begin: the oldest copy
+	// from the prompt on is what there is.)
+	if b, _ := os.ReadFile(filepath.Join(cps[0].dir, cps[0].Blob)); string(b) != "v3\n" {
+		t.Errorf("before the oldest prompt kept, the file held %q, want its own copy", b)
 	}
 }
 
@@ -344,5 +344,65 @@ func TestBeginFollowsChangedFiles(t *testing.T) {
 		if b, _ := os.ReadFile(p); string(b) != w {
 			t.Errorf("%s holds %q, want %q", filepath.Base(p), b, w)
 		}
+	}
+}
+
+// Where the files were not looked at as a prompt went out (a session from
+// before that was done, or a prompt sent with copies off), a rewind to
+// before it takes the oldest copy from it on, not the newest before it,
+// which would undo an earlier prompt's change too (the rewind review of
+// 2026-11-19, the day's own commits).
+func TestSinceWithoutBeginKeepsTheOldRule(t *testing.T) {
+	dir := realTemp(t)
+	f := filepath.Join(dir, "main.go")
+	writeTo(t, f, "A\n")
+	c := openCheckpoints(filepath.Join(dir, "checkpoints"), time.Now)
+	keepAll(t, c, "p1", f)
+	writeTo(t, f, "B\n")
+	keepAll(t, c, "p3", f)
+	writeTo(t, f, "C\n")
+	cps := c.since([]string{"p1", "p2", "p3"}, 1)
+	if len(cps) != 1 {
+		t.Fatalf("offered %+v", cps)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cps[0].dir, cps[0].Blob)); string(b) != "B\n" {
+		t.Errorf("before prompt 2 the file held %q, want B (what prompt 1 left)", b)
+	}
+	// Looked at as prompt 2 went out, it held B then too.
+	c2 := openCheckpoints(filepath.Join(dir, "checkpoints2"), time.Now)
+	writeTo(t, f, "A\n")
+	keepAll(t, c2, "p1", f)
+	writeTo(t, f, "B\n")
+	if err := c2.begin("p2"); err != nil {
+		t.Fatal(err)
+	}
+	writeTo(t, f, "C\n")
+	if cps := c2.since([]string{"p1", "p2"}, 1); len(cps) != 1 {
+		t.Fatalf("offered %+v", cps)
+	} else if b, _ := os.ReadFile(filepath.Join(cps[0].dir, cps[0].Blob)); string(b) != "B\n" {
+		t.Errorf("with begin, before prompt 2 the file held %q, want B", b)
+	}
+	// And the store opened again still knows prompt 2 was looked at.
+	if again := openCheckpoints(filepath.Join(dir, "checkpoints2"), time.Now); !again.begun["p2"] {
+		t.Error("a store opened again forgot which prompts were looked at as they went out")
+	}
+}
+
+// What two files hold alike, or one file at several prompts, is one copy.
+func TestCopiesOfTheSameContentAreKeptOnce(t *testing.T) {
+	dir := realTemp(t)
+	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
+	writeTo(t, a, "the same\n")
+	writeTo(t, b, "the same\n")
+	store := filepath.Join(dir, "checkpoints")
+	c := openCheckpoints(store, time.Now)
+	keepAll(t, c, "p1", a, b)
+	keepAll(t, c, "p2", a)
+	blobs, _ := filepath.Glob(filepath.Join(store, "c-*"))
+	if len(blobs) != 1 {
+		t.Errorf("%d copies of one content: %q", len(blobs), blobs)
+	}
+	for _, cp := range c.since([]string{"p1", "p2"}, 0) {
+		t.Errorf("offered %s, which holds what it held", cp.Path)
 	}
 }

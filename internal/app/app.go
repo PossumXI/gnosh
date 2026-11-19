@@ -174,6 +174,20 @@ type program struct {
 	// starts, and treeMoving what EnterWorktree or ExitWorktree did, for
 	// the one they start (TreeMoveEnv, as JSON).
 	moving, treeMoving string
+	// runs are the /fork and /subtask runs a session of this program
+	// started and watches, by id (*watchedRun): kept here, and watched
+	// again, when the session is opened again (a rewind), so that a
+	// rewind of the files still waits for them and a /subtask's answer
+	// still comes back.
+	runs sync.Map
+}
+
+// watchedRun is a /fork or /subtask run a session watches.
+type watchedRun struct {
+	// session is the session that started it; what is "fork" or
+	// "subtask"; log and path are its log and its session's file; task
+	// is what a /subtask run was set to do.
+	session, what, log, path, task string
 }
 
 // lockedWriter lets several goroutines write whole lines to one stream.

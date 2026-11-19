@@ -4209,3 +4209,24 @@ or kept with the reason said (27).
     2026-11-19), or between the summary "/rewind N summarize" waits for
     and its rewind, which a running turn refuses. The slash commands are
     now counted while they run, and the schedule waits for none to be.
+
+294. **A rewind's files go back from what is known of them.** The rule
+    that a followed file with no copy under a prompt held, as the prompt
+    went out, what its newest copy before it holds is true only where the
+    files were looked at then; in a session from before that was done,
+    or for a prompt sent with copies off, it put a file back to before an
+    earlier prompt, undoing that prompt's change too (the review of the
+    day's own rewind work, 2026-11-19). Each prompt they were looked at
+    for is now recorded (begun), and elsewhere the oldest copy from the
+    prompt on is taken, as before. Copies are named by what they hold, so
+    a file a build writes again each turn is kept once. "Summarize from
+    here" marks the prompt where the model reads it (a "go on" written
+    twice is told apart), keeps it in a request too long, and is made
+    only for a prompt the model still reads; it is not carried out when
+    a prompt was sent while the summary was made, which would have been
+    taken off unseen. A "Summarize up to here" summary is written again
+    after a later rewind that would have left it behind. The /fork and
+    /subtask runs a session watches outlive its being opened again, so
+    a rewind of the files still waits for them, and a /subtask's answer
+    still comes back. Ctrl+C in the line-mode front end stops the
+    summary a command waits for, not only the command.

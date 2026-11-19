@@ -57,6 +57,9 @@ type RewindPoint struct {
 	FilesWhy string
 	// why is FilesWhy's error.
 	why error
+	// InView says the model still reads the prompt: a summary of what
+	// came before it, or of what followed, can be made.
+	InView bool
 }
 
 // rewindGroup finds the person's prompts in what is left of the
@@ -117,7 +120,15 @@ func (l *live) rewindGroup() (points []RewindPoint, before, queued map[string]st
 func (l *live) rewindPoints() []RewindPoint {
 	points, _, _ := l.rewindGroup()
 	order := l.promptsInOrder()
+	_, sources := l.log.viewTraced()
+	read := map[string]bool{}
+	for _, src := range sources {
+		for _, u := range src {
+			read[u] = true
+		}
+	}
 	for i := range points {
+		points[i].InView = read[points[i].ID]
 		cps, err := l.filesSince(order, points[i].ID)
 		if err == nil && len(cps) == 0 && !l.cfg.Options.FileCheckpointingEnabled.V {
 			err = errNoCheckpoints
@@ -141,9 +152,10 @@ func (l *live) rewindPoints() []RewindPoint {
 func (l *live) rewindHeldBy(files bool) []string {
 	held := l.runningWork()
 	var runs []string
-	l.runs.Range(func(id, what any) bool {
-		if what == "subtask" || files {
-			runs = append(runs, fmt.Sprintf("the %s %s", what, RunShort(id.(string))))
+	own := l.ts.ID()
+	l.p.runs.Range(func(id, v any) bool {
+		if r := v.(*watchedRun); r.session == own && (r.what == "subtask" || files) {
+			runs = append(runs, fmt.Sprintf("the %s %s", r.what, RunShort(id.(string))))
 		}
 		return true
 	})
@@ -168,9 +180,9 @@ func (c *controls) Rewind(ctx context.Context, point string) (string, error) {
 }
 
 // rewindWith is Rewind, which with files puts back what Write and Edit
-// changed too, and says how that went. The files are put back only once
-// the rewind is in the session's file, and once the session has stopped
-// what it ran in the background, which could change them again. kept,
+// changed too, and says how that went. It waits for nothing in the
+// background (rewindHeldBy), and the files are put back only once the
+// rewind is in the session's file. kept,
 // when not empty, is the model's summary of what followed the prompt
 // (/rewind N summarize), which goes into the conversation after the
 // rewind, for the model to read with the next prompt.
@@ -201,9 +213,11 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool, kep
 			return "", "", fmt.Errorf("%v. Nothing was changed: /rewind N takes the conversation alone", err)
 		}
 	}
+	inForce := partSummary(old.ts.Entries())
 	if _, err := old.ts.Append(transcript.RewindEntry(to)); err != nil {
 		return "", "", fmt.Errorf("the rewind could not be written into the session's file (%v), so nothing was changed", err)
 	}
+	old.keepSummary(inForce)
 	if kept != "" {
 		note := agent.Entry{Kind: agent.EntryNote, Source: "rewind", Blocks: []core.Block{
 			core.Text(old.texts.SummaryFromNote(text)), core.Text(prompt.Untrusted(kept))}}
@@ -267,7 +281,7 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 		c.Say("/rewind N takes the conversation back to before prompt N, which you can then send again or change; /rewind N all puts the files back too, and /rewind N files the files alone. %s", rewindNote)
 		c.Say("/rewind N summarize goes back to before prompt N and keeps a summary of what followed it; /rewind N summarize-before makes everything before prompt N a summary, and what followed stays. Words after either say what the summary is to keep.")
 		if !l.cfg.Options.FileCheckpointingEnabled.V {
-			c.Say("No file can be put back in this session: %s.", strings.TrimSuffix(errNoCheckpoints.Error(), ", so no file can be put back"))
+			c.Say("What Write and Edit change is not kept now (fileCheckpointingEnabled is false): only what was kept before can be put back.")
 		}
 		return nil
 	}
@@ -292,7 +306,7 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 	case "summarize-before":
 		return l.summarizeBefore(c, point, guide)
 	case "summarize":
-		return l.summarizeAfter(ctx, c, point, guide)
+		return l.summarizeAfter(ctx, c, n, point, guide)
 	}
 	if how == "files" {
 		// The files alone: the conversation stays where it is, and the
@@ -325,6 +339,9 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 // came after it stays as it was. The summary is made as /compact's is, and
 // its events say how it went.
 func (l *live) summarizeBefore(c *SlashContext, point RewindPoint, guide string) error {
+	if _, at := l.viewAt(point.ID); at < 0 {
+		return errNotInView
+	}
 	_, before, _ := l.rewindGroup()
 	covers, ok := before[point.ID]
 	msgs := l.log.viewUpTo(covers)
@@ -346,20 +363,26 @@ func (l *live) summarizeBefore(c *SlashContext, point RewindPoint, guide string)
 // a summary is made of what followed the prompt, and the conversation goes
 // back to before it, with the summary kept in its place (rewindKept) and
 // the prompt back in the box. The files stay as they are.
-func (l *live) summarizeAfter(ctx context.Context, c *SlashContext, point RewindPoint, guide string) error {
+func (l *live) summarizeAfter(ctx context.Context, c *SlashContext, n int, point RewindPoint, guide string) error {
 	if held := l.rewindHeldBy(false); len(held) > 0 {
 		return rewindWaits(held)
 	}
-	v, err := l.log.View(ctx)
-	if err != nil {
-		return err
+	msgs, at := l.viewAt(point.ID)
+	if at < 0 {
+		return errNotInView
 	}
+	// The prompt is marked where the model reads it, so that one written
+	// twice ("go on") is told apart, and the request keeps it whole.
+	marked := msgs[at]
+	marked.Blocks = append(slices.Clone(marked.Blocks), core.Text(prompt.Wrap(setAsideMark)))
+	msgs = slices.Clone(msgs)
+	msgs[at] = marked
 	type made struct {
 		text string
 		err  error
 	}
 	done := make(chan made, 1)
-	part := agent.SummaryPart{Messages: v.Messages, Ask: l.texts.SummaryFrom(point.Text, prompt.SummaryWords, l.hasGno()),
+	part := agent.SummaryPart{Messages: msgs, Keep: at, Ask: l.texts.SummaryFrom(point.Text, setAsideMark, prompt.SummaryWords, l.hasGno()),
 		Done: func(text string, err error) { done <- made{text, err} }}
 	if err := c.Agent.CompactPart(guide, part); err != nil {
 		return fmt.Errorf("no summary was asked for: %w", err)
@@ -373,12 +396,83 @@ func (l *live) summarizeAfter(ctx context.Context, c *SlashContext, point Rewind
 	if r.err != nil {
 		return fmt.Errorf("no summary was made (%v), so the conversation is as it was", r.err)
 	}
-	// (Until the summary's command has ended: a rewind waits for an idle
-	// session.)
-	if err := c.Agent.Wait(ctx); err != nil {
-		return err
+	// The summary's command ends now. A prompt of the person's sent while
+	// it was made runs after it: the rewind would take that off unseen, so
+	// then there is none.
+	for {
+		switch st := c.Agent.State(); {
+		case st.Queued > 0 || st.Turn != "":
+			return fmt.Errorf("a prompt of yours went out while the summary was made, so the conversation was not taken back: /rewind %d summarize again once it is answered", n)
+		case !st.Busy:
+			l.rewindTo, l.rewindAll, l.rewindKept = point.ID, false, r.text
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return errors.New("the summary was let go, and the conversation is as it was")
+		case <-time.After(20 * time.Millisecond):
+		}
 	}
-	l.rewindTo, l.rewindAll, l.rewindKept = point.ID, false, r.text
+}
+
+// setAsideMark marks, for "Summarize from here", the prompt the part set
+// aside begins with.
+const setAsideMark = "[the part set aside begins here]"
+
+// errNotInView is the refusal of a summary of part of the conversation
+// about a prompt the model no longer reads.
+var errNotInView = errors.New("that prompt is no longer in what the model reads (a summary or a slide took it out), so there is no part of the conversation before or after it to summarize; /rewind N alone goes back to before it")
+
+// viewAt returns the conversation as the model reads it now, and the
+// place in it of the message the prompt in the session-file entry point
+// went out in: -1 when the model no longer reads that prompt (a summary
+// stands for it, or it slid out).
+func (l *live) viewAt(point string) ([]core.Message, int) {
+	msgs, sources := l.log.viewTraced()
+	for i, src := range sources {
+		if slices.Contains(src, point) {
+			return msgs, i
+		}
+	}
+	return msgs, -1
+}
+
+// keepSummary writes again, after a rewind, a summary of part of the
+// conversation that was in force before it (one "Summarize up to here"
+// made), when the part it stands for is still in the conversation:
+// written at the end of the file, it was behind the point the rewind went
+// back to, and the whole of that part would have come back.
+func (l *live) keepSummary(was *transcript.Entry) {
+	if was == nil {
+		return
+	}
+	conv := transcript.Conversation(l.ts.Entries())
+	has := func(uuid string) bool {
+		return slices.ContainsFunc(conv, func(e transcript.Entry) bool { return e.UUID == uuid })
+	}
+	if has(was.UUID) || !has(was.Covers) {
+		return
+	}
+	again := *was
+	again.UUID, again.ParentUUID, again.Timestamp = "", "", time.Time{}
+	if _, err := l.ts.Append(again); err != nil {
+		l.flog.logf("turn", "the summary of the conversation before an earlier prompt could not be kept through the rewind: %v", err)
+	}
+}
+
+// partSummary is the summary the conversation starts with, when it is one
+// of part of it (Covers names an entry), or nil.
+func partSummary(entries []transcript.Entry) *transcript.Entry {
+	conv := transcript.Conversation(entries)
+	for i := len(conv) - 1; i >= 0; i-- {
+		if conv[i].Type == transcript.TypeSummary {
+			if conv[i].Covers == "" {
+				return nil
+			}
+			e := conv[i]
+			return &e
+		}
+	}
 	return nil
 }
 

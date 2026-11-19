@@ -255,7 +255,7 @@ func specs() []spec {
 			when: "Just after that summary: carry on, keeping every stop the user set."},
 		{name: textSummaryPart, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
 			when: "At the end of a request that holds the conversation up to one of the person's prompts, when they chose \"Summarize up to here\": that part is to be replaced by a summary, and the rest stays."},
-		{name: textSummaryFrom, kind: KindLine, need: []string{"words", "prompt"}, may: []string{"mem"},
+		{name: textSummaryFrom, kind: KindLine, need: []string{"words", "prompt", "mark"}, may: []string{"mem"},
 			when: "At the end of the session's own request, when the person chose \"Summarize from here\": the conversation goes back to before that prompt, and a summary of what followed is kept in its place."},
 		{name: textSummaryPartIntro, kind: KindLine,
 			when: "Just before a summary of the part of the conversation before one of the person's prompts, which the rest follows as it was."},

@@ -978,6 +978,8 @@ func (f *plain) command(ctx context.Context, c Controls, text string) (CommandRe
 		case sig := <-signals:
 			signals = nil
 			cancel()
+			// (And what the command set going: a summary it waits for.)
+			c.Interrupt()
 			f.note("Stopping /%s.", strings.Fields(strings.TrimPrefix(text, "/") + " ")[0])
 			if sig != os.Interrupt {
 				// (Handled by the loop once the command has stopped.)

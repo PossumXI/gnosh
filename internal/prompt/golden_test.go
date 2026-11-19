@@ -292,7 +292,7 @@ func goldenFiles() []goldenFile {
 					{"files not given back", s.FilesNotShownBack([]string{"/home/dev/project/big.log", "/home/dev/project/shot.png"})},
 					{"the request for a summary up to a prompt, with mem", s.SummaryPart(0, true)},
 					{"before that summary", s.SummaryPartIntro()},
-					{"the request for a summary from a prompt on", s.SummaryFrom("fix the flaky test in auth/session_test.go", 0, false)},
+					{"the request for a summary from a prompt on", s.SummaryFrom("fix the flaky test in auth/session_test.go", "[the part set aside begins here]", 0, false)},
 					{"before that summary, once the conversation went back", s.SummaryFromNote("fix the flaky test in auth/session_test.go")},
 				}
 			},

@@ -173,6 +173,10 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 		first := msgs[0]
 		for _, keepFirst := range []bool{true, false} {
 			for i := 1; !done && i < len(msgs); i++ {
+				if part != nil && part.Keep > 0 && i > part.Keep {
+					// (What the summary is of stays whole.)
+					break
+				}
 				if msgs[i].Role != core.RoleAssistant {
 					continue
 				}

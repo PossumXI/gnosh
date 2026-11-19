@@ -702,7 +702,11 @@ func printEntry(p *program, e agent.Entry) {
 	case agent.EntryResult:
 		fmt.Fprintf(p.stdout, "  = %s\n", visible(resultLine(e.Result, e.Denied, e.Interrupted)))
 	case agent.EntrySummary:
-		fmt.Fprintf(p.stdout, "\n[%s] (the conversation up to here was replaced by a summary)\n", stamp)
+		if e.Covers != "" {
+			fmt.Fprintf(p.stdout, "\n[%s] (the conversation before an earlier prompt was replaced by a summary; what followed that prompt stays)\n", stamp)
+		} else {
+			fmt.Fprintf(p.stdout, "\n[%s] (the conversation up to here was replaced by a summary)\n", stamp)
+		}
 	case agent.EntryTurn:
 		if e.Reason != agent.EndCompleted {
 			fmt.Fprintf(p.stdout, "  -- the turn ended: %s\n", e.Reason)

@@ -104,8 +104,8 @@ func TestRewindConfirmation(t *testing.T) {
 
 	g = newRig(t, 100, 24, text.NoColor)
 	g.s.c = rewindControls{g.c, []app.RewindPoint{
-		{ID: "u1", Text: "the first prompt", Time: stamp, FilesWhy: "the copies of what the files held before that prompt were let go"},
-		{ID: "u2", Text: "the second prompt", Time: stamp},
+		{ID: "u1", Text: "the first prompt", Time: stamp, FilesWhy: "the copies of what the files held before that prompt were let go", InView: true},
+		{ID: "u2", Text: "the second prompt", Time: stamp, InView: true},
 	}, &reads}
 	g.keys(`"an earlier prompt" <Enter>`)
 	g.keys(`<Esc> <Esc>`)

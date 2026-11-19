@@ -151,15 +151,15 @@ func (l *live) forkRun(ctx context.Context, c *SlashContext, subtask bool) error
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}
 	writeRunPID(log, pid)
-	l.runs.Store(id, what)
+	task := ""
+	if subtask {
+		task = prompt
+	}
+	l.p.runs.Store(id, &watchedRun{session: l.ts.ID(), what: what, log: log, path: path, task: task})
 	if t := l.st.tree; t != nil {
 		// The run works in this session's work tree, which must outlive
 		// this session.
 		t.forked.Store(true)
-	}
-	task := ""
-	if subtask {
-		task = prompt
 	}
 	l.background(func(ctx context.Context) { l.watchRun(ctx, id, log, path, task) })
 	if subtask {
@@ -192,7 +192,6 @@ func firstWords(text string, n int) string {
 // task is what a run /subtask started was set to do, empty for /fork's:
 // what such a run printed goes to the model when it ends.
 func (l *live) watchRun(ctx context.Context, id, logPath, path, task string) {
-	defer l.runs.Delete(id)
 	started := l.p.now()
 	what := "fork"
 	if task != "" {
@@ -243,11 +242,25 @@ func (l *live) watchRun(ctx context.Context, id, logPath, path, task string) {
 			l.notice(agent.LevelWarning, what, fmt.Sprintf("The %s %s ended without taking its session (what it printed is in %s).%s", what, RunShort(id), l.tilde(logPath), said))
 			end.State, end.Why = prompt.AgentFailed, "it ended without starting"
 		}
+		l.p.runs.Delete(id)
 		if task != "" {
 			l.subtaskEnded(end, r.output)
 		}
 		return
 	}
+}
+
+// watchRuns watches again, in a session opened anew (a rewind), the /fork
+// and /subtask runs it started that still work: what ends them is said,
+// and a /subtask's answer comes back, as in the session before.
+func (l *live) watchRuns() {
+	own := l.ts.ID()
+	l.p.runs.Range(func(id, v any) bool {
+		if r := v.(*watchedRun); r.session == own {
+			l.background(func(ctx context.Context) { l.watchRun(ctx, id.(string), r.log, r.path, r.task) })
+		}
+		return true
+	})
 }
 
 // subtaskEnded gives the model what a run /subtask started printed, once

@@ -277,6 +277,16 @@ func (l *sessionLog) summaryLead() string {
 	return l.texts.SummaryIntro() + "\n\n"
 }
 
+// viewTraced is View with, for each message, the session-file entries it
+// came from.
+func (l *sessionLog) viewTraced() ([]core.Message, [][]string) {
+	l.mu.Lock()
+	last := l.last
+	l.mu.Unlock()
+	msgs, info := l.ts.View(transcript.ViewOptions{Prompt: last, SummaryLead: l.summaryLead(), PartLead: l.partLead(), Trace: true})
+	return msgs, info.Sources
+}
+
 // viewUpTo is the conversation as the model would be sent it, up to and
 // including the session-file entry uuid: the part a summary up to one of
 // the person's prompts stands for. It is nil when there is no such entry.

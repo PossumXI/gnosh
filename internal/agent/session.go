@@ -264,6 +264,10 @@ type SummaryPart struct {
 	// Empty, the summary is not kept: Done is given its text, and the
 	// event says "after".
 	Covers string
+	// Keep is the first of Messages a request too long for the model may
+	// not leave out: where the part to summarize begins. Zero lets any
+	// earlier part go, as a whole conversation's summary does.
+	Keep int
 	// Done, when set, is told the summary's text, or why none was made.
 	Done func(text string, err error)
 }

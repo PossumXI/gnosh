@@ -610,7 +610,11 @@ func exportText(entries []transcript.Entry) string {
 				}
 			}
 		case transcript.TypeSummary:
-			put("", "", "(The conversation up to here was summarized for the model.)")
+			if e.Covers != "" {
+				put("", "", "(The conversation before an earlier prompt was summarized for the model; what followed that prompt stays.)")
+			} else {
+				put("", "", "(The conversation up to here was summarized for the model.)")
+			}
 		}
 	}
 	return b.String()

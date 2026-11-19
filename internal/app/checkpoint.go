@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -135,29 +136,41 @@ type checkpoints struct {
 	// seen is, by path, a state each file was found in whose content is
 	// that of its newest copy, so that begin need not read it again.
 	seen map[string]fileState
+	// begun are the prompts begin looked at the files as they went out,
+	// here and in the sessions this one was branched from: only for those
+	// does a file with no copy of its own under the prompt hold what its
+	// newest copy before it holds (a session from before begin was, or a
+	// prompt sent with copies off, has none).
+	begun map[string]bool
 }
 
 // openCheckpoints opens the store in dir, reading what an earlier run of
 // the session kept there. A store that cannot be read is an empty one.
 func openCheckpoints(dir string, now func() time.Time) *checkpoints {
-	c := &checkpoints{dir: dir, now: now, kept: map[string]bool{}, taken: map[string][]fileCheckpoint{}, pruned: map[string]bool{}, lost: map[string]bool{}, seen: map[string]fileState{}}
+	c := &checkpoints{dir: dir, now: now, kept: map[string]bool{}, taken: map[string][]fileCheckpoint{}, pruned: map[string]bool{}, lost: map[string]bool{}, seen: map[string]fileState{}, begun: map[string]bool{}}
 	c.list = readCheckpoints(dir)
 	for _, cp := range c.list {
 		c.kept[cp.Prompt+"\x00"+cp.Path] = true
 	}
 	readPruned(dir, c.pruned)
+	readNames(filepath.Join(dir, "begun"), c.begun)
 	return c
 }
 
-// readPruned adds the prompts whose copies were let go in dir to set.
-func readPruned(dir string, set map[string]bool) {
-	data, err := os.ReadFile(filepath.Join(dir, "pruned"))
+// readNames adds the names a file holds, one to a line, to set.
+func readNames(path string, set map[string]bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
 	for _, line := range strings.Fields(string(data)) {
 		set[line] = true
 	}
+}
+
+// readPruned adds the prompts whose copies were let go in dir to set.
+func readPruned(dir string, set map[string]bool) {
+	readNames(filepath.Join(dir, "pruned"), set)
 }
 
 // readCheckpoints reads the index of the copies kept in dir.
@@ -245,8 +258,32 @@ func (c *checkpoints) copyOf(cp *fileCheckpoint, info fs.FileInfo) error {
 		return err
 	}
 	cp.Size = int64(len(data))
-	cp.Blob, err = c.write("", filepath.Base(cp.Path), data)
+	cp.Blob, err = c.writeCopy(data)
 	return err
+}
+
+// writeCopy keeps data as a copy in the store's folder, named by what it
+// holds: a file that holds the same at several prompts (one a build
+// writes again each turn) is kept once. A copy of that name that holds
+// something else is written anew.
+func (c *checkpoints) writeCopy(data []byte) (string, error) {
+	sum := sha256.Sum256(data)
+	name := "c-" + hex.EncodeToString(sum[:20])
+	path := filepath.Join(c.dir, name)
+	if same, err := holds(path, data); err == nil && same {
+		if info, err := os.Lstat(path); err == nil && info.Mode().IsRegular() {
+			return name, nil
+		}
+	}
+	part, err := c.write("", "", data)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(filepath.Join(c.dir, part), path); err != nil {
+		_ = os.Remove(filepath.Join(c.dir, part))
+		return "", err
+	}
+	return name, nil
 }
 
 // add puts a new copy into the store and its index, and lets go of the
@@ -293,6 +330,11 @@ func (c *checkpoints) begin(prompt string) error {
 	for _, cps := range c.taken {
 		note(cps)
 	}
+	if len(newest) == 0 {
+		// Nothing is followed yet: a file first changed later is put
+		// back from its own first copy whatever this prompt was.
+		return nil
+	}
 	paths := make([]string, 0, len(newest))
 	for p := range newest {
 		paths = append(paths, p)
@@ -332,6 +374,22 @@ func (c *checkpoints) begin(prompt string) error {
 		if err := c.add(cp, err); err != nil && first == nil {
 			first = err
 		}
+	}
+	// Noted last: a prompt is begun once every file was looked at.
+	c.begun[prompt] = true
+	err := os.MkdirAll(c.dir, 0o700)
+	var f *os.File
+	if err == nil {
+		f, err = os.OpenFile(filepath.Join(c.dir, "begun"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	}
+	if err == nil {
+		_, err = f.Write([]byte(prompt + "\n"))
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}
+	if err != nil && first == nil {
+		first = err
 	}
 	return first
 }
@@ -393,7 +451,7 @@ func (c *checkpoints) prune() error {
 	carried := map[string]fileCheckpoint{}
 	var paths []string
 	for _, cp := range c.list {
-		if drop[cp.Prompt] {
+		if drop[cp.Prompt] && c.begun[oldest] {
 			if _, ok := carried[cp.Path]; !ok {
 				paths = append(paths, cp.Path)
 			}
@@ -448,8 +506,14 @@ func (c *checkpoints) prune() error {
 	if err := putBack(filepath.Join(c.dir, "index.jsonl"), lines, 0o600); err != nil {
 		return err
 	}
+	// (A copy is let go only when no copy kept names it: the same
+	// content is one file, writeCopy.)
+	inUse := map[string]bool{}
+	for _, cp := range keep {
+		inUse[cp.Blob] = true
+	}
 	for _, cp := range c.list {
-		if drop[cp.Prompt] && cp.Blob != "" && carried[cp.Path].Blob != cp.Blob {
+		if drop[cp.Prompt] && cp.Blob != "" && !inUse[cp.Blob] {
 			_ = os.Remove(filepath.Join(c.dir, cp.Blob))
 		}
 	}
@@ -594,6 +658,7 @@ func (c *checkpoints) inherit(dir string, prompts []string) {
 		}
 		c.taken[dir] = mine
 		readPruned(dir, c.pruned)
+		readNames(filepath.Join(dir, "begun"), c.begun)
 	}
 }
 
@@ -614,6 +679,7 @@ func (c *checkpoints) since(order []string, at int) []fileCheckpoint {
 	for _, cps := range c.taken {
 		all = append(all, cps...)
 	}
+	begun := c.begun[order[at]]
 	c.mu.Unlock()
 	sort.SliceStable(all, func(i, j int) bool { return all[i].Time.Before(all[j].Time) })
 	before, from := map[string]bool{}, map[string]bool{}
@@ -650,9 +716,11 @@ func (c *checkpoints) since(order []string, at int) []fileCheckpoint {
 		then := f.start
 		switch {
 		case then != nil:
-		case f.last != nil:
+		case f.last != nil && begun:
 			then = f.last
 		default:
+			// (Where the files were not looked at as the prompt went out,
+			// the oldest copy from it on is the best there is.)
 			then = f.first
 		}
 		if then == nil {
@@ -686,8 +754,16 @@ func (c *checkpoints) restore(cps []fileCheckpoint, how restoreHow) (done, faile
 	if show == nil {
 		show = func(p string) string { return p }
 	}
+	var put []string
 	for _, cp := range cps {
 		path := show(cp.Path)
+		if other := sameFileAs(cp.Path, put); other != "" {
+			// One file under two spellings (a disk that ignores case):
+			// it went back with the first.
+			done = append(done, path+" (the same file as "+show(other)+", put back with it)")
+			continue
+		}
+		put = append(put, cp.Path)
 		if cp.Failed {
 			failed = append(failed, path+": what it held before could not be kept, so it cannot be put back")
 			continue
@@ -781,6 +857,25 @@ func (c *checkpoints) restore(cps []fileCheckpoint, how restoreHow) (done, faile
 		}
 	}
 	return done, failed
+}
+
+// sameFileAs returns the one of paths that names the same file as path,
+// written another way (README.md and readme.md on a disk that ignores
+// case), or "".
+func sameFileAs(path string, paths []string) string {
+	for _, p := range paths {
+		if p == path || !strings.EqualFold(p, path) {
+			continue
+		}
+		a, err := os.Lstat(path)
+		if err != nil {
+			continue
+		}
+		if b, err := os.Lstat(p); err == nil && os.SameFile(a, b) {
+			return p
+		}
+	}
+	return ""
 }
 
 // foldersChanged says what changed in the folders on the way to path since
@@ -906,7 +1001,7 @@ func (l *live) promptGoesOut(entry string) {
 		return
 	}
 	if err := l.checks.begin(entry); err != nil {
-		l.flog.logf("tool", "what the files a rewind follows held as a prompt went out could not all be kept: %v", err)
+		l.flog.logf("tool", "the files a rewind follows were not all copied as a prompt went out (%v)", err)
 		l.checkWarn.Do(func() {
 			l.notice(agent.LevelWarning, "rewind", fmt.Sprintf("What a file held as your prompt went out could not be kept (%v), so a rewind may not put it back.", err))
 		})

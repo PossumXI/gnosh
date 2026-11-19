@@ -1393,11 +1393,15 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			opts = append(opts, menu.Option{Label: "Put the files back only", Description: "the conversation stays as it is"})
 			commands = append(commands, fmt.Sprintf("/rewind %d files", number))
 		}
-		opts = append(opts, menu.Option{Label: "Summarize from here", Description: "go back to before it, keeping a summary of what followed; the files stay"})
-		commands = append(commands, fmt.Sprintf("/rewind %d summarize", number))
-		if number > 1 {
-			opts = append(opts, menu.Option{Label: "Summarize up to here", Description: "what came before it becomes a summary; it and what followed stay"})
-			commands = append(commands, fmt.Sprintf("/rewind %d summarize-before", number))
+		if point.InView {
+			// (Of a prompt the model still reads: one a summary or a slide
+			// took out has nothing before or after it to summarize.)
+			opts = append(opts, menu.Option{Label: "Summarize from here", Description: "go back to before it, keeping a summary of what followed; the files stay"})
+			commands = append(commands, fmt.Sprintf("/rewind %d summarize", number))
+			if number > 1 {
+				opts = append(opts, menu.Option{Label: "Summarize up to here", Description: "what came before it becomes a summary; it and what followed stay"})
+				commands = append(commands, fmt.Sprintf("/rewind %d summarize-before", number))
+			}
 		}
 		opts = append(opts, menu.Option{Label: "Never mind"})
 		sure.ui = menu.NewSelect(menu.SelectOptions{

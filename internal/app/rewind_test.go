@@ -604,7 +604,8 @@ func TestRewindSummarizeFrom(t *testing.T) {
 	}
 	asked := strings.Join(userTexts(reqs[2]), "\n")
 	has(t, "the request for the summary", asked, "the first prompt", "the second prompt",
-		`The user is taking this conversation back to before their message that begins "the second prompt"`)
+		`The user is taking this conversation back to before their message that begins "the second prompt", the one marked [the part set aside begins here]`,
+		"<gnosh>[the part set aside begins here]</gnosh>")
 	after := strings.Join(userTexts(reqs[3]), "\n") + string(reqs[3].Body)
 	has(t, "the request after the rewind", after, "the first prompt", "First answer.",
 		`The user took this conversation back to before their message that began "the second prompt"`,
@@ -638,5 +639,145 @@ func TestSummaryLeadMarkedOnce(t *testing.T) {
 	hasNot(t, "the request after the summary", after, "​")
 	if n := strings.Count(after, "<gnosh>The earlier part of this conversation ran out of room"); n != 1 {
 		t.Errorf("the summary's line came %d times:\n%s", n, after)
+	}
+}
+
+// A prompt sent while "Summarize from here" waits for its summary runs
+// after it: the rewind is then not made, rather than taking that prompt
+// and its answer off unseen (the rewind review of the day's own commits,
+// 2026-11-19).
+func TestRewindSummarizeFromWithAPromptSentMeanwhile(t *testing.T) {
+	hold := make(chan struct{})
+	w := apptest.NewWorld(t, apptest.Reply{Text: "One."}, apptest.Reply{Text: "Two."},
+		apptest.Reply{Text: "SUMMARY", Hold: hold}, apptest.Reply{Text: "Three."})
+	var cmdErr error
+	var points []RewindPoint
+	_, r := attach(t, w, func(o *Options) {}, func(ctx context.Context, c SessionControls, f *scripted) int {
+		for _, p := range []string{"prompt one", "prompt two"} {
+			if _, err := c.Submit(agent.Prompt{Text: p}); err != nil {
+				return 1
+			}
+			_ = c.Wait(ctx)
+		}
+		done := make(chan struct{})
+		go func() {
+			_, cmdErr = c.Command(ctx, "/rewind 2 summarize")
+			close(done)
+		}()
+		for deadline := time.Now().Add(patience); len(w.Model.Requests()) < 3; time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Error("the summary was never asked for")
+				close(hold)
+				return 1
+			}
+		}
+		if _, err := c.Submit(agent.Prompt{Text: "prompt three, sent meanwhile"}); err != nil {
+			t.Errorf("Submit: %v", err)
+		}
+		close(hold)
+		<-done
+		_ = c.Wait(ctx)
+		points = c.RewindPoints()
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	if cmdErr == nil || !strings.Contains(cmdErr.Error(), "a prompt of yours went out while the summary was made") {
+		t.Errorf("the summary with a prompt sent meanwhile came to: %v", cmdErr)
+	}
+	if len(points) != 3 || points[2].Text != "prompt three, sent meanwhile" {
+		t.Errorf("the conversation after it: %+v", points)
+	}
+}
+
+// A summary of what came before a prompt stays through a later rewind to a
+// prompt after it: written at the file's end, it was behind the point the
+// rewind went back to, and the whole of that part came back.
+func TestRewindKeepsASummaryUpToHere(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "First answer."},
+		apptest.Reply{Text: "Second answer."},
+		apptest.Reply{Text: "Third answer."},
+		apptest.Reply{Text: "SUMMARY-OF-THE-FIRST-PART"},
+		apptest.Reply{Text: "After the rewind."},
+	)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	for i, p := range []string{"the first prompt", "the second prompt", "the third prompt"} {
+		s.typeLine(p)
+		s.see([]string{"First answer.", "Second answer.", "Third answer."}[i])
+	}
+	s.typeLine("/rewind 2 summarize-before")
+	s.see("The conversation before your prompt was summarized")
+	s.typeLine("/rewind 3")
+	s.see("The conversation is back to before this prompt of yours")
+	s.typeLine("the third prompt, again")
+	s.see("After the rewind.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := w.Model.Requests()
+	last := strings.Join(userTexts(reqs[len(reqs)-1]), "\n") + string(reqs[len(reqs)-1].Body)
+	has(t, "the request after the rewind", last, "SUMMARY-OF-THE-FIRST-PART", "the second prompt", "Second answer.", "the third prompt, again")
+	hasNot(t, "the request after the rewind", last, "First answer.", "the first prompt", "Third answer.")
+}
+
+// The summary choices are for a prompt the model still reads: one a
+// summary took out has no part before or after it in the conversation the
+// model has (the rewind review of the day's own commits, 2026-11-19).
+func TestRewindSummarizeOnlyWhatTheModelReads(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "First answer."},
+		apptest.Reply{Text: "SUMMARY-OF-ALL"},
+		apptest.Reply{Text: "Second answer."},
+	)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("the first prompt")
+	s.see("First answer.")
+	s.typeLine("/compact")
+	s.see("The conversation was summarized")
+	s.typeLine("the second prompt")
+	s.see("Second answer.")
+	s.typeLine("/rewind 1 summarize")
+	s.see("that prompt is no longer in what the model reads")
+	s.typeLine("/rewind 1 summarize-before")
+	s.see("that prompt is no longer in what the model reads")
+	s.typeLine("/exit")
+	s.exit()
+	if n := len(w.Model.Requests()); n != 3 {
+		t.Errorf("the model was asked %d times, want 3", n)
+	}
+}
+
+// A rewind of the files waits for a /fork run working in the folder even
+// after a rewind of the conversation opened the session again: the runs
+// it watches are kept beyond one opening (the rewind review of the day's
+// own commits, 2026-11-19).
+func TestFilesRewindWaitsForAForkThroughAReopen(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+		apptest.Reply{Text: "Hi."},
+	)
+	s := sitWith(t, w, func(o *Options) {
+		// (A run that never takes its session is watched for half a
+		// minute before it is said not to have started.)
+		o.Detach = func(args, env []string, log string) (int, error) { return 4343, nil }
+	}, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("say hi")
+	s.see("Hi.")
+	s.typeLine("/fork look into it")
+	s.see("goes on in the background")
+	s.typeLine("/rewind 2")
+	s.see("The conversation is back to before this prompt of yours")
+	s.typeLine("/rewind 1 files")
+	s.see("going back now would stop it, or it could change the files again: the fork ")
+	s.typeLine("/exit")
+	s.exit()
+	if !w.Exists("notes.txt") {
+		t.Error("the files were put back while the fork worked in the folder")
 	}
 }
