@@ -3187,3 +3187,15 @@ or kept with the reason said (27).
     second time ends the turn, and the person says go on. A provider's
     own wait (Retry-After) is kept to up to BusyMax: a proxy that asked
     for a day had a run sleep a day without a word.
+
+194. **"Overloaded" in a message no longer outranks a refusal's code, and
+    a wait hint is read without recursion.** The word "overloaded"
+    anywhere in an error body made it a busy service's, waited on without
+    end, though its code said the request was refused as invalid (a C++
+    "overloaded function" quoted back) or a proxy echoed a prompt holding
+    it. The phrase is now read in the error's own message, after the
+    codes that refuse a request and before a server's own. And the reader
+    of "try again in 6m0s" called itself for each part, so an error of a
+    million "1s" ran the stack out, which no recover catches; it reads up
+    to four parts in a loop, in the first 4 KiB of the message (the model
+    client review of 2026-11-19).
