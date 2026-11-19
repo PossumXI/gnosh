@@ -2807,3 +2807,14 @@ or kept with the reason said (27).
     It names the session's file now, as Claude Code names its transcript
     after compacting. (A sub-agent shares the session's words and is
     pointed at the session's file.)
+
+167. **A summary that has to leave out the earliest part keeps the first
+    message.** When neither the session's own request nor the bare one
+    fits, the summary is asked for with the earliest part left out, cut
+    at one of the model's own messages. The cut took the first message
+    with it, and that is the task as it was set or, after a summary, the
+    summary all the rest builds on: a second summary forgot the first.
+    The first message is kept now, with the note of what was left out
+    after it ("Part of this conversation is left out here…"); only when
+    no asking with it fits, a first message too big to keep (a long
+    paste), is it left out as well (the compaction review's note).

@@ -103,8 +103,9 @@ type Texts struct {
 	// after the summary and tells the model to carry on.
 	SummaryIntro string
 	SummaryAfter string
-	// TrimNote stands where the earliest part of a conversation was left
-	// out of a summary request because it would not fit.
+	// TrimNote stands where part of a conversation was left out of a
+	// summary request because it would not fit: after its first message,
+	// or at its start.
 	TrimNote string
 
 	// LoopContinue is /loop's "keep going" prompt. LoopQuestion questions
@@ -183,7 +184,7 @@ var defaultTexts = Texts{
 	SummaryAfter: "Carry on with the task from where the summary leaves it. Keep every stop the user set: where they " +
 		"asked to be told or asked before a step, stop there and do that first. Do not ask the user to repeat anything, " +
 		"and otherwise do not ask whether to go on.",
-	TrimNote: "The earliest part of the conversation is left out here, because the whole of it no longer fits.",
+	TrimNote: "Part of the conversation is left out here, because the whole of it no longer fits.",
 
 	LoopContinue: "Keep going with the task. When all of it is finished and checked, reply with " + LoopDone + " alone on a line.",
 	LoopQuestion: "You said the task is done. Before that is believed: name what you produced, and show the listing or the output that proves each part of it. " +

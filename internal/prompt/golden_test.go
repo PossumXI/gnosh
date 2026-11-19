@@ -279,7 +279,7 @@ func goldenFiles() []goldenFile {
 				return []goldenCase{
 					{"the request", s.Summary(SummaryInput{})},
 					{"the request, with mem, a size and the person's wishes", s.Summary(SummaryInput{Words: 300, Mem: true, Instructions: "keep the API decisions\nand the names of the files"})},
-					{"the start of a conversation left out", s.EarlierLeftOut()},
+					{"part of a conversation left out", s.EarlierLeftOut()},
 					{"before the summary", s.SummaryIntro()},
 					{"after the summary", s.AfterSummary("/home/dev/project/.gnosh/sessions/before-summary-3.jsonl")},
 					{"after the summary, nothing kept", s.AfterSummary("")},

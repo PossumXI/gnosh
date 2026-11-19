@@ -151,14 +151,26 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 		if err != nil {
 			return err
 		}
-		for i := 1; !done && i < len(v.Messages); i++ {
-			if v.Messages[i].Role != core.RoleAssistant {
-				continue
-			}
-			rest := append([]core.Message{core.UserText(a.mark(a.texts.TrimNote))}, v.Messages[i:]...)
-			done, err = try(withAsk(bare, rest, ask))
-			if err != nil {
-				return err
+		// The earliest part is left out, cut at one of the model's own
+		// messages: first keeping the first message (the task as it was
+		// set, or the summary made before this one, on which all after it
+		// builds), with the note of what was left out after it; and only
+		// when nothing fits so, without it as well.
+		first := v.Messages[0]
+		for _, keepFirst := range []bool{true, false} {
+			for i := 1; !done && i < len(v.Messages); i++ {
+				if v.Messages[i].Role != core.RoleAssistant {
+					continue
+				}
+				lead := core.UserText(a.mark(a.texts.TrimNote))
+				if keepFirst {
+					lead = core.Message{Role: core.RoleUser, Blocks: append(slices.Clone(first.Blocks), core.Text(a.mark(a.texts.TrimNote)))}
+				}
+				rest := append([]core.Message{lead}, v.Messages[i:]...)
+				done, err = try(withAsk(bare, rest, ask))
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
