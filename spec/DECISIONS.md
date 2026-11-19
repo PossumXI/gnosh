@@ -3803,3 +3803,16 @@ or kept with the reason said (27).
     machine (a loopback address or localhost) is answered, which a page
     that rebinds its own name to 127.0.0.1 does not; idle connections
     close; and nothing is kept in the browser's cache.
+
+254. **A delivered file is served only while it is still that file.** The
+    server refused a file whose own name had become a link, but followed a
+    folder on the way that had, and served whatever another account had
+    since put at the path (a file in /tmp cleaned away and made again); a
+    pipe put there since held the open; and a link or a host could carry
+    characters that draw as nothing or turn the text around, so the line
+    the person saw was not where it led (the deliverables review of
+    2026-11-19). Now a file is served only while its path, its links
+    followed, is the one recorded and it belongs to this account or root;
+    it is opened without waiting; a target or a host with such characters
+    is refused; and the note that the port was taken says that earlier
+    addresses on it now reach whatever holds it.

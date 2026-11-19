@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -170,6 +171,11 @@ func loopbackHost(host string) bool {
 // system says of it. Only a regular file is opened, and never through a
 // link: a path that has become a link since the file was delivered leads
 // wherever whoever made the link wants, which is not what was delivered.
+// That holds for every folder on the way too (path is the file as it was
+// delivered, its links followed then); and a file another account has
+// put there since, as can happen in /tmp once the one delivered was
+// cleaned away, is not served either (the deliverables review of
+// 2026-11-19).
 func openRegular(path string) (*os.File, os.FileInfo, error) {
 	before, err := os.Lstat(path)
 	if err != nil {
@@ -178,7 +184,14 @@ func openRegular(path string) (*os.File, os.FileInfo, error) {
 	if !before.Mode().IsRegular() {
 		return nil, nil, errors.New("not a regular file")
 	}
-	f, err := os.Open(path)
+	if real, err := filepath.EvalSymlinks(path); err != nil || real != path {
+		return nil, nil, errors.New("a folder on its way has become a link")
+	}
+	if strangerOwns(before) {
+		return nil, nil, errors.New("another account owns it")
+	}
+	// (Opened so that a pipe put in its place since cannot hold the open.)
+	f, err := openNoWait(path)
 	if err != nil {
 		return nil, nil, err
 	}

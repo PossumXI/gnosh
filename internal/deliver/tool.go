@@ -20,6 +20,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	gtext "github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
@@ -130,7 +131,7 @@ func (t *tool) read(raw json.RawMessage) (request, error) {
 		return req, err
 	}
 	target = strings.TrimSpace(target)
-	if strings.IndexFunc(target, unicode.IsControl) >= 0 {
+	if hidden(target) {
 		return req, fmt.Errorf("the %s holds a line break or another character that cannot be seen, so it is not a path or an address as it stands", argTarget)
 	}
 	host, err := text(argHost)
@@ -139,6 +140,9 @@ func (t *tool) read(raw json.RawMessage) (request, error) {
 	}
 	if host = strings.TrimSpace(host); host == shelltool.LocalName {
 		host = ""
+	}
+	if hidden(host) {
+		return req, fmt.Errorf("the %s holds a character that cannot be seen, so it names no machine as it stands", argHost)
 	}
 
 	switch found := scheme.FindString(target); strings.ToLower(found) {
@@ -238,11 +242,12 @@ func checkFile(path, cwd string) (length int64, problem string) {
 	case !st.Mode().IsRegular():
 		return 0, fmt.Sprintf("%s is not a regular file (it is a device, a pipe or a socket), so it cannot be handed over", path)
 	}
-	f, err := os.Open(path)
-	if err != nil {
+	// Asked, not opened: a pipe put in the file's place since the look
+	// above would hold an open for reading until something wrote to it
+	// (the deliverables review of 2026-11-19).
+	if err := mayRead(path); err != nil {
 		return 0, fmt.Sprintf("%s is there, and this account may not read it (%v), so it cannot be handed over", path, err)
 	}
-	f.Close()
 	return st.Size(), ""
 }
 
@@ -498,4 +503,13 @@ func size(n int64) string {
 		}
 	}
 	return strings.TrimSuffix(strconv.FormatFloat(v, 'f', 1, 64), ".0") + " " + unit
+}
+
+// hidden reports whether s holds a control character, or one a terminal
+// draws as nothing or that turns the order text is drawn in (a bidi
+// override, a zero-width space): with one, what the person is shown is
+// not what the link or the path is (the deliverables review of
+// 2026-11-19). The joiners emoji and some scripts are written with stay.
+func hidden(s string) bool {
+	return strings.IndexFunc(s, unicode.IsControl) >= 0 || gtext.ShowInvisible(s) != s
 }

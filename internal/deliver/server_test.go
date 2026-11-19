@@ -359,3 +359,45 @@ func TestServerKeepsItsOriginSafe(t *testing.T) {
 		}
 	}
 }
+
+// A delivered file whose folder has since become a link is not served:
+// what was delivered is the file as its links were then (the deliverables
+// review of 2026-11-19).
+func TestServerRefusesAPathThatLeadsElsewhereNow(t *testing.T) {
+	s := startServer(t)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "out")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	page := filepath.Join(dir, "report.txt")
+	if err := os.WriteFile(page, []byte("the report"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.reg.add(t.Context(), "", page, page, "the report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, _, body := fetch(t, http.MethodGet, s.srv.address(rec)); status != http.StatusOK || body != "the report" {
+		t.Fatalf("before: %d %q", status, body)
+	}
+	other := filepath.Join(root, "other")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "report.txt"), []byte("not the report"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, dir); err != nil {
+		t.Skip("no links here:", err)
+	}
+	if status, _, body := fetch(t, http.MethodGet, s.srv.address(rec)); status != http.StatusNotFound || strings.Contains(body, "not the report") {
+		t.Errorf("after its folder became a link: %d %q", status, body)
+	}
+}
