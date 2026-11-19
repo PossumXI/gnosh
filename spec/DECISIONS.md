@@ -3389,3 +3389,12 @@ or kept with the reason said (27).
     must have run only after those checks, and a redirection whose word
     the engine cannot know (> ${}, &> $((x))) ends the check for the line.
     Probed in fresh jails: all three lines of seeds 157 and 158 pass.
+
+212. **A prompt in line is not returned after a turn's end failed to be
+    written.** When a turn's end cannot be written (a full disk), the next
+    turn settles the log first, and that pass took every prompt written
+    down as queued and not sent for one a dead gnosh left behind: the
+    person was told it was not sent while it went out all the same, twice
+    once they sent it again (the agent loop review of 2026-11-19). In a
+    session this process opened, such prompts are still in its line, so
+    the pass runs only when a session is opened.

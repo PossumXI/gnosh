@@ -563,10 +563,18 @@ func (a *Agent) settle() error {
 		entries = append(entries, Entry{Kind: EntryTurn, Reason: EndInterrupted, Text: detail})
 	}
 	var back []Entry
-	for _, id := range order {
-		if e, ok := waiting[id]; ok {
-			back = append(back, e)
-			entries = append(entries, Entry{Kind: EntryUnqueued, Prompt: id, Text: "returned when the session was reopened"})
+	if !a.opened {
+		// (In a session this process opened, a prompt written down as
+		// queued and not sent is still in its line, or in the turn that is
+		// starting: only a process that died leaves one behind. Returned
+		// here after a turn's end could not be written, it went out all
+		// the same, and twice once the person sent it again (the agent
+		// loop review of 2026-11-19).)
+		for _, id := range order {
+			if e, ok := waiting[id]; ok {
+				back = append(back, e)
+				entries = append(entries, Entry{Kind: EntryUnqueued, Prompt: id, Text: "returned when the session was reopened"})
+			}
 		}
 	}
 	if err := a.appendLog(entries...); err != nil {
