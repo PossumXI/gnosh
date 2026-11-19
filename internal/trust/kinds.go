@@ -27,6 +27,7 @@ const (
 	KindAddress      = "address"         // an address for analytics, embeddings or deliverables
 	KindHiddenSkill  = "hidden-skill"    // a skill hidden from the model
 	KindDisabledTool = "disabled-tool"   // a tool taken away from the model
+	KindRestriction  = "restriction"     // a setting that only takes a power away
 	KindRemoval      = "removal"         // taking away a provider, a model or a host
 	KindRunsCommand  = "runs-command"    // a value gnosh would expand by running something
 	KindGitProgram   = "git-program"     // a program the repository's own git settings name
@@ -45,7 +46,7 @@ const (
 // (config.Inputs.KeepUntrusted).
 func Restricts(kind string) bool {
 	switch kind {
-	case KindDenyRule, KindAskRule, KindDisabledTool, KindHiddenSkill:
+	case KindDenyRule, KindAskRule, KindDisabledTool, KindHiddenSkill, KindRestriction:
 		return true
 	}
 	return false

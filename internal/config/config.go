@@ -149,7 +149,8 @@ const (
 	KindExtraPath   = "extra-path"
 	KindAddress     = "address"
 	KindHiddenSkill = "hidden-skill"
-	KindRemoval     = "removal" // taking away a provider, a model or a host a weaker file declared
+	KindRestriction = "restriction" // a setting that only takes a power away, such as disableBypassPermissionsMode
+	KindRemoval     = "removal"     // taking away a provider, a model or a host a weaker file declared
 	KindStatusLine  = "status-line"
 	KindFileSuggest = "file-suggestion"
 )
@@ -401,7 +402,7 @@ type Hook struct {
 // quoted where a shell would need it.
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
-		return "POST " + h.URL
+		return "POST " + ShownHookURL(h.URL)
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool

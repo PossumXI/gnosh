@@ -475,14 +475,14 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 			note("defaultMode")
 			b.mode = Value[string]{}
 		}
-		if b.bypassDisabled.Set && from(b.bypassDisabled.Origin) {
-			note("disableBypassPermissionsMode")
-			b.bypassDisabled = Value[bool]{}
-		}
 		if b.denyInstead.Set && from(b.denyInstead.Origin) {
 			note("denyInsteadOfPrompting")
 			b.denyInstead = Value[bool]{}
 		}
+	}
+	if !ok(KindRestriction) && b.bypassDisabled.Set && from(b.bypassDisabled.Origin) {
+		note("disableBypassPermissionsMode")
+		b.bypassDisabled = Value[bool]{}
 	}
 	if !ok(KindAddDir) {
 		b.dirs = slices.DeleteFunc(b.dirs, func(d ListItem) bool {

@@ -3316,3 +3316,16 @@ or kept with the reason said (27).
     bare name taking a variable out; a skill's commands get the Bash
     tool's environment, which also leaves out what changes how a shell
     reads its line (BASH_ENV, SHELLOPTS, PS4, exported functions).
+
+204. **The config review's last fixes (2026-11-19).**
+    - An http hook's address is shown and logged without what can be its
+      secret: the user name, the query, and each long piece of the path
+      (a Slack or Discord webhook's token). It went whole to /status,
+      gnosh doctor, /hooks and the hook records.
+    - A project's env block cannot set the variables that move where
+      gnosh and the programs it starts keep their own files (HOME, TMPDIR,
+      XDG_*, CLAUDE_CONFIG_DIR, GNOSH_*_DIR), trusted or not, as
+      spec/cc/settings.md 2 says; a trusted project's could.
+    - disableBypassPermissionsMode only takes a mode away, so a folder
+      that is not trusted keeps it too, as DECISIONS 2 says of what only
+      restricts (a new kind of setting, "restriction"); it was held.

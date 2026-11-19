@@ -53,7 +53,10 @@ func (s *source) settingsPermissions(f jfield) {
 				s.errorf(m.line, "\"permissions.disableBypassPermissionsMode\" takes the one value \"disable\".")
 				continue
 			}
-			s.add(op{kind: KindMode, text: "disableBypassPermissionsMode", origin: o, feature: FeaturePermissions, what: "a permission setting",
+			// (It only takes a mode away, so a folder that is not trusted
+			// keeps it too, as DECISIONS 2 says; the config review of
+			// 2026-11-19 found it held as a mode.)
+			s.add(op{kind: KindRestriction, text: "disableBypassPermissionsMode", origin: o, feature: FeaturePermissions, what: "a permission setting",
 				apply: func(b *builder) { b.bypassDisabled.put(true, o) }})
 		case "disableAutoMode":
 			if m.val.kind != jString || m.val.str != "disable" {
@@ -548,9 +551,25 @@ func (s *source) settingsEnv(f jfield) {
 			s.errorf(m.line, "the value of \"env.%s\" is a string (put a number in quotes), and here it is %s.", m.key, m.val.kind.word())
 			continue
 		}
+		if movesOwnDirs(m.key) && (s.scope == "project" || s.scope == "local") {
+			s.probs.warnf(s.file, m.line, "\"env.%s\" is not taken from a project's file: it moves where gnosh and the programs it starts keep their own files. Set it in your own gnosh.json if you mean it.", m.key)
+			continue
+		}
 		s.secrets.add(m.val.str)
 		v := EnvVar{Name: m.key, Value: NewSecret(m.val.str), Origin: s.at(m.line)}
 		s.add(op{kind: KindEnv, text: "env " + m.key, origin: v.Origin, feature: FeatureEnv, what: "a variable for commands",
 			apply: func(b *builder) { b.setEnv(v) }})
 	}
+}
+
+// movesOwnDirs reports whether a variable moves where gnosh, or a program
+// it starts, keeps its own files and reads its own settings: a
+// repository's files must not set those (spec/cc/settings.md 2; a trusted
+// project's env block could, until the config review of 2026-11-19).
+func movesOwnDirs(name string) bool {
+	switch name {
+	case "HOME", "TMPDIR", "CLAUDE_CONFIG_DIR":
+		return true
+	}
+	return strings.HasPrefix(name, "XDG_") || strings.HasPrefix(name, "GNOSH_") && strings.HasSuffix(name, "_DIR")
 }

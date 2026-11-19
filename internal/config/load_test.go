@@ -1269,6 +1269,12 @@ func sameButRestrictions(t *testing.T, without, with *Config, project []string) 
 		t.Errorf("an untrusted folder's file took a hidden skill off the list: %+v, was %+v", b.Options.HiddenSkills, a.Options.HiddenSkills)
 	}
 	b.Options.HiddenSkills = a.Options.HiddenSkills
+	// It may turn the bypass mode off, which only takes a mode away, and
+	// never back on.
+	if a.Permissions.BypassDisabled.V && !b.Permissions.BypassDisabled.V {
+		t.Errorf("an untrusted folder's file turned the bypass mode back on")
+	}
+	b.Permissions.BypassDisabled = a.Permissions.BypassDisabled
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("an untrusted folder's files changed more than they may.\nwithout them:\n%s\nwith them:\n%s", without, with)
 	}
@@ -1334,7 +1340,8 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"permissions": {"defaultMode": "dontAsk"}}`,
 		`{"permissions": {"defaultMode": "plan"}}`,
 		`{"permissions": {"additionalDirectories": ["/etc"]}}`,
-		`{"permissions": {"disableBypassPermissionsMode": "disable"}}`,
+		// (disableBypassPermissionsMode only takes a mode away, so it
+		// applies: TestUntrustedFolderKeepsItsRestrictions.)
 		`{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "./x.sh"}]}]}}`,
 		`{"env": {"PATH": "/evil"}}`,
 		`{"env": {"MINE": ""}}`,
@@ -1496,7 +1503,7 @@ func TestHeldIsTakenAwayAfterEveryMerge(t *testing.T) {
 	b.opts.ProjectInstructionFiles = nil
 	if len(b.providers) != 1 || b.providers[0].ListModels.Set || len(b.unset) != 0 || len(b.models) != 1 || b.models[0].ContextWindow.Set ||
 		b.models[0].MaxOutputTokens.Set || b.models[0].ThinkingLevels.Set || !reflect.DeepEqual(b.large, Slot{}) || !reflect.DeepEqual(b.small, Slot{}) ||
-		len(b.hosts) != 0 || len(b.hooks) != 1 || b.hooks[0].Command != "mine" || b.hooksOff.Set || b.mode.Set || b.bypassDisabled.Set || b.denyInstead.Set ||
+		len(b.hosts) != 0 || len(b.hooks) != 1 || b.hooks[0].Command != "mine" || b.hooksOff.Set || b.mode.Set || b.denyInstead.Set ||
 		len(b.dirs) != 1 || len(b.env) != 1 || !reflect.DeepEqual(b.opts, def) {
 		t.Errorf("something of the project's that is held is still in force: %+v", b)
 	}
@@ -2158,5 +2165,63 @@ func TestSkillOverridesNameIsShownSafely(t *testing.T) {
 	}
 	if len(probs) == 0 {
 		t.Error("the bad value was not reported")
+	}
+}
+
+// An http hook's address is shown, and logged, without what can be its
+// secret: the user name (a token put there), the query, and the long
+// pieces of the path (a Slack or Discord webhook's token). It was shown
+// whole in /status, gnosh doctor and /hooks (the config review of
+// 2026-11-19).
+func TestHookAddressIsShownWithoutItsSecrets(t *testing.T) {
+	for raw, want := range map[string]string{
+		"https://ghp_abcdefghijklmnop@hooks.example.com/notify":                           "POST https://hooks.example.com/notify",
+		"https://hooks.example.com/services/T0123ABCD/B0123ABCD/abcdefghijklmnopqrstuvwx": "POST https://hooks.example.com/services/T0123ABCD/B0123ABCD/abcd…",
+		"https://example.com/hook?key=sekrit":                                             "POST https://example.com/hook?…",
+		"http://127.0.0.1:8080/h":                                                         "POST http://127.0.0.1:8080/h",
+	} {
+		if got := (Hook{URL: raw}).CommandLine(); got != want {
+			t.Errorf("%s is shown as %q, want %q", raw, got, want)
+		}
+	}
+}
+
+// A project's env block cannot move where gnosh and the programs it starts
+// keep their own files (HOME, TMPDIR, XDG_*, CLAUDE_CONFIG_DIR, gnosh's
+// own GNOSH_*_DIR), even in a trusted folder: spec/cc/settings.md 2 says
+// so, and a trusted project's could (the config review of 2026-11-19).
+// The person's own file can.
+func TestProjectEnvCannotMoveOwnDirs(t *testing.T) {
+	in := inputs(newFS().put(projJSON, `{"env": {"HOME": "/evil", "TMPDIR": "/evil", "XDG_CONFIG_HOME": "/evil", "CLAUDE_CONFIG_DIR": "/evil", "GNOSH_DATA_DIR": "/evil", "GNOSH_NOTE": "kept", "FOO": "bar"}}`))
+	cfg, probs := load(t, in)
+	if cfg == nil {
+		t.Fatalf("load:\n%s", showProblems(probs))
+	}
+	got := envOf(cfg)
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"FOO=bar", "GNOSH_NOTE=kept"}) {
+		t.Errorf("the project's env in force: %q", got)
+	}
+	for _, name := range []string{"HOME", "TMPDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "GNOSH_DATA_DIR"} {
+		wantProblem(t, probs, Warning, projJSON, 1, `"env.`+name+`" is not taken from a project's file`)
+	}
+	in = inputs(newFS().put(userJSON, `{"env": {"TMPDIR": "/mine"}}`))
+	if got := envOf(mustLoad(t, in)); !slices.Equal(got, []string{"TMPDIR=/mine"}) {
+		t.Errorf("the person's own env: %q", got)
+	}
+}
+
+// What only takes a power away applies in a folder that is not trusted, as
+// DECISIONS 2 says, disableBypassPermissionsMode among it: it was held as a
+// mode (the config review of 2026-11-19).
+func TestUntrustedFolderKeepsItsRestrictions(t *testing.T) {
+	in := inputs(newFS().put(projJSON, `{"permissions": {"disableBypassPermissionsMode": "disable"}}`))
+	in.Trusted = false
+	cfg, probs := load(t, in)
+	if cfg == nil {
+		t.Fatalf("load:\n%s", showProblems(probs))
+	}
+	if !cfg.Permissions.BypassDisabled.V || len(cfg.Held) != 0 {
+		t.Errorf("bypass disabled %v, held %+v", cfg.Permissions.BypassDisabled.V, cfg.Held)
 	}
 }
