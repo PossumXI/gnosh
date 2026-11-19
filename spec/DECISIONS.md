@@ -3517,3 +3517,12 @@ or kept with the reason said (27).
     The block is now given back with the instruction files after every
     summary, as things stand then, and says it was found "when the
     conversation was summed up".
+
+225. **A backslash that ends a command is part of its last word.** bash
+    and dash keep a backslash with nothing after it as a backslash, where
+    gnosh's reader stops at it, so "e>|cho ${V=mv} >/dev/null; $V .git
+    /tmp/g\mp/g\" was read as "mv .git" alone, which destroys nothing,
+    and with permissions skipped it ran and moved .git away (oracle seed
+    159). A line the reader cannot finish is read again as the shells
+    read it, for the checks no rule passes; that reading now takes such a
+    backslash as a backslash, and the line asks.

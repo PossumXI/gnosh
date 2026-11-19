@@ -274,6 +274,15 @@ func dangerWhat(why string) string {
 // gives is only ever judged for danger, never let go.)
 func shellReadings(line string) []string {
 	var out []string
+	if n := len(line) - len(strings.TrimRight(line, "\\")); n%2 == 1 {
+		// A backslash that ends the line, with nothing after it, is a
+		// backslash to bash and dash, where the reader stops at it: "$V
+		// .git /tmp/g\" with V=mv moved .git to /tmp/g\, and the reading
+		// held "mv .git" alone, which destroys nothing, so the line ran
+		// with permissions skipped (oracle seed 159).
+		line += "\\"
+		out = append(out, line)
+	}
 	if strings.Contains(line, "\\\n") {
 		line = strings.ReplaceAll(line, "\\\n", "")
 		out = append(out, line)

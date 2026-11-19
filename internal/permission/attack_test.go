@@ -53,6 +53,10 @@ func TestShellAttacks(t *testing.T) {
 		{"the shell reads git push 2>/dev/null", ModeBypass, rules{deny: []string{"Bash(git push)"}}, "git push 2\\\n>/dev/null", Ask},
 		{"the shell reads eval 'rm x'", ModeBypass, attackGuards, "e\\\nval 'rm x'", Ask},
 		{"a comment ends at its line whatever its last character", ModeBypass, attackGuards, "ls #\\\nrm x", Deny},
+		// A backslash that ends the line is a backslash to the shells
+		// (oracle seed 159: V is mv, and .git was moved to /tmp/gmp/g\).
+		{"a backslash that ends the line is part of the last word", ModeBypass, rules{allow: []string{"Bash(e mv)", "Bash(mv *)", "Bash(mv .git)"}}, "e>|cho ${V=mv} >/dev/null; $V .git /tmp/g\\mp/g\\", Ask},
+		{"a backslash that ends the line is part of the last word", ModeBypass, rules{allow: []string{"Bash(mv *)"}}, "V=mv; $V .git /tmp/g\\mp/g\\", Ask},
 		// A word that is nothing but a variable nobody set, outside quotes,
 		// is no word at all (oracle seed 99): this is echo x.
 		{"echo $X x is echo x", ModeBypass, rules{allow: []string{"Bash(echo *)"}, deny: []string{"Bash(echo x)"}}, "echo $X x > pwned", Deny},
