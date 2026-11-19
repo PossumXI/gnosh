@@ -283,7 +283,22 @@ func (l *live) sessionStart(ctx context.Context, info agent.StartInfo) ([]agent.
 		return nil, err
 	}
 	l.setWatched(out)
+	if out.EndTurn {
+		// "continue": false: the session takes no prompt (Claude Code:
+		// processing stops). What the hook said is the reason.
+		return hookParts(hooks.SessionStart, out), &agent.StopWork{Reason: hookHalt(hooks.SessionStart, "this session takes no prompt", out.StopReason)}
+	}
 	return hookParts(hooks.SessionStart, out), nil
+}
+
+// hookHalt is what a person and a model are told when a hook's
+// "continue": false stopped something.
+func hookHalt(event hooks.Event, what, said string) string {
+	text := fmt.Sprintf("A %s hook the user set up said to stop, so %s.", event, what)
+	if said = strings.TrimSpace(said); said != "" {
+		text += " It said: " + said
+	}
+	return text
 }
 
 // beforeModelSwitch runs the PreModelSwitch hooks before /model makes a
@@ -781,18 +796,33 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 		}
 		parts = append(parts, more...)
 	}
+	var halt *agent.StopWork
 	if l.hooks.has(hooks.PostCompact) {
-		if _, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostCompact, Trigger: info.Trigger, CompactSummary: info.Summary}); err != nil {
+		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostCompact, Trigger: info.Trigger, CompactSummary: info.Summary})
+		switch {
+		case err != nil:
 			errs = append(errs, err)
+		case out.EndTurn:
+			halt = &agent.StopWork{Reason: hookHalt(hooks.PostCompact, "the turn ended after the summary", out.StopReason)}
 		}
 	}
 	if l.hooks.has(hooks.SessionStart) {
 		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SessionStart, Source: "compact", Model: l.agent.Model().Info.ID, EnvFile: l.envFile()})
-		if err != nil {
+		switch {
+		case err != nil:
 			errs = append(errs, err)
-		} else {
+		default:
 			parts = append(parts, hookParts(hooks.SessionStart, out)...)
+			if out.EndTurn && halt == nil {
+				halt = &agent.StopWork{Reason: hookHalt(hooks.SessionStart, "the turn ended after the summary", out.StopReason)}
+			}
 		}
+	}
+	if halt != nil {
+		if err := errors.Join(errs...); err != nil {
+			l.notice(agent.LevelWarning, "summary", fmt.Sprintf("What the session is given back after a summary could not all be put together (%v).", err))
+		}
+		return parts, halt
 	}
 	return parts, errors.Join(errs...)
 }

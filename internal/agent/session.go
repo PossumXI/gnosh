@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -369,6 +370,12 @@ func (a *Agent) admitLoop() {
 func (a *Agent) admit(ctx context.Context, s *submission) (bool, ReturnReason, string) {
 	const stopped = "the session was stopped while this prompt was being checked, so it was not sent"
 
+	a.mu.Lock()
+	halted := a.startHalt
+	a.mu.Unlock()
+	if halted != "" {
+		return false, ReturnRefused, halted
+	}
 	if f := a.opts.Moments.SessionStart; f != nil {
 		a.mu.Lock()
 		ran, empty, model := a.startRan, !a.sent, a.model.Info.ID
@@ -383,6 +390,16 @@ func (a *Agent) admit(ctx context.Context, s *submission) (bool, ReturnReason, s
 			})
 			if ctx.Err() != nil || !ok {
 				return false, ReturnStopped, stopped
+			}
+			var h *StopWork
+			if errors.As(err, &h) {
+				// The start said stop: this prompt and every one after it
+				// are refused, with its reason.
+				reason := firstNonEmpty(h.Reason, "the session's start stopped it")
+				a.mu.Lock()
+				a.startRan, a.startHalt = true, reason
+				a.mu.Unlock()
+				return false, ReturnRefused, reason
 			}
 			if err != nil {
 				a.notice(LevelWarning, "session-start", fmt.Sprintf(

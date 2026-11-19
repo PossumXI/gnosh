@@ -187,3 +187,29 @@ func TestOnceIsNotReadInAnAgentDefinition(t *testing.T) {
 		t.Errorf("the agent's hook ran %d times for two calls", got)
 	}
 }
+
+// A SessionStart hook's "continue": false stops the session's work: no
+// prompt goes to the model, and the person is told why. A SubagentStart
+// hook's stops the sub-agent: it does not take its task, and the model
+// that started it reads why.
+func TestContinueFalseAtTheStart(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "never"})
+	stop := w.Script(w.Home+"/hooks/stop.sh", `echo '{"continue": false, "stopReason": "the license has run out"}'`)
+	w.Hook("SessionStart", "", stop)
+	r := run(t, w, "-p", "hello").wantCode(t, 1)
+	has(t, "what was said", r.out+r.err, "SessionStart hook", "the license has run out")
+	if n := len(w.Model.Requests()); n != 0 {
+		t.Errorf("the model was sent %d requests", n)
+	}
+
+	w = apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"look","prompt":"Look around.","subagent_type":"general-purpose"}`}}},
+		apptest.Reply{Text: "It did not run."})
+	stopSub := w.Script(w.Home+"/hooks/stop-sub.sh", `echo '{"continue": false, "stopReason": "no sub-agents today"}'`)
+	w.Hook("SubagentStart", "", stopSub)
+	run(t, w, "-y", "-p", "look around").wantCode(t, 0)
+	has(t, "what the model read", toolResult(t, w, 1, "c1"), "no sub-agents today")
+	if n := len(w.Model.Requests()); n != 2 {
+		t.Errorf("the model was sent %d requests, want 2 (no sub-agent's)", n)
+	}
+}

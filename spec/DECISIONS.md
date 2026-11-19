@@ -2589,11 +2589,8 @@ or kept with the reason said (27).
       in; they are passed over, as Go's own lookup does.
     - The package's docs said the hook types other than "command", "args"
       and background hooks stop startup; they no longer do.
-    Left for a pass of its own: "continue": false on SessionStart,
-    SubagentStart and PostCompact is read as the hooks package means it
-    (Claude Code: "stops processing entirely"), and the record says the
-    turn ended, but the session does not act on it yet: the prompt goes
-    out, the sub-agent runs, the turn goes on after a summary.
+    "continue": false on SessionStart, SubagentStart and PostCompact was
+    recorded as having ended the turn while nothing ended: built in 154.
     Not changed: the shell command of a call is also given to hooks as
     GNOSH_TOOL_INPUT_COMMAND, and one past 128 KiB is more than Linux lets
     a program be given in its environment, so no hook can start for it
@@ -2607,6 +2604,26 @@ or kept with the reason said (27).
     and reported. A clean-copy CI run on a busy devbox reported
     `(sleep 0.1; echo late) &` as left running: the subshell had closed
     the output as it ended and was seen before it was gone. As the
-    pruning of the books already does (DECISIONS 140's note on 7fd75ab),
+    pruning of the books already does (pruneDetached, since 7fd75ab),
     the session is looked at again 50 ms later, and only what is there
     both times, with the same start, was left running.
+
+154. **"continue": false at the start of a session or a sub-agent, and
+    after a summary.** Claude Code: with "continue": false, "Claude stops
+    processing entirely after the hook runs", on every event that takes
+    it. The hooks package read it so on SessionStart, SubagentStart and
+    PostCompact, and the session went on regardless. A moment can now
+    return agent.StopWork: the session's start refuses the prompt it
+    stands before and every one after it, with the hook's words (a run
+    exits 1 and sends the model nothing); a sub-agent's start refuses its
+    task, and the model that started it reads why; the end of a summary
+    made in a turn (PostCompact, or SessionStart with "compact") ends
+    that turn as halted, once what it gave back is kept. After /compact
+    no turn runs, and nothing is ended. Also found on the way, in CI: a
+    test of background runs stood in for gnosh with `sh -c "sleep 30" id`,
+    and dash puts sleep in its own place, so the command line lost the
+    session's id on a busy machine (the stand-in now keeps it); and the
+    agent's stress test takes GNOSH_STRESS_SEED to play a seed again
+    (one run in a full suite saw a turn end with a request still out;
+    thirty more runs did not, and the seed alone does not bring it back:
+    a race of the loop's, left open).

@@ -37,6 +37,9 @@ type turn struct {
 	chosen   *stopChoice // the model's choice to stop, made in reply to a checkpoint
 	guard    repeatGuard
 	ended    bool // its TurnEndEvent has been sent
+	// halt is why a moment ended the turn where it stood (a summary's end
+	// said stop, Halt).
+	halt string
 }
 
 // outcome is how a turn's body ended.
@@ -200,6 +203,9 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 	if fitErr != nil && !errors.Is(fitErr, errStopped) {
 		return failedOutcome(fitErr)
 	}
+	if t.halt != "" {
+		return &outcome{reason: EndHalted, detail: t.halt, driver: "after-summary"}
+	}
 
 	for {
 		if ctx.Err() != nil {
@@ -290,6 +296,8 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 			return nil, stoppedOutcome()
 		case err != nil:
 			return nil, failedOutcome(err)
+		case t.halt != "":
+			return nil, &outcome{reason: EndHalted, detail: t.halt, driver: "after-summary"}
 		}
 
 		rep, err := a.exchange(ctx, t, "main", fr.req, fr.est, fr.su.model, true)

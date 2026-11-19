@@ -186,9 +186,17 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 	if f := a.opts.Moments.AfterSummary; f != nil {
 		info.Summary = text
 		parts, ferr, ok := await(ctx, a, "the after-summary moment", func(ctx context.Context) ([]Part, error) { return f(ctx, info) })
+		var h *StopWork
+		halted := errors.As(ferr, &h)
+		if halted && t != nil {
+			// It said stop: the turn the summary was made in ends here,
+			// once what it gave back is kept. (After /compact no turn
+			// runs, and there is nothing to end.)
+			t.halt = firstNonEmpty(h.Reason, "the end of the summary stopped the turn")
+		}
 		switch {
 		case !ok || ctx.Err() != nil:
-		case ferr != nil:
+		case ferr != nil && !halted:
 			a.notice(LevelWarning, "summary", fmt.Sprintf("What the session is given back after a summary could not be put together (%v).", ferr))
 		default:
 			var notes []Entry

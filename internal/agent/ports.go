@@ -442,6 +442,15 @@ type Concurrent interface {
 // sent.
 const MetaHalt = "gnosh.halt"
 
+// StopWork is the error a moment returns to stop the work it stands before,
+// as a hook's "continue": false does: the session's start refuses the
+// prompt it stands before and every one after it (a sub-agent's start, its
+// task), and the end of a summary made in a turn ends that turn. Reason is
+// what the person and the model are told.
+type StopWork struct{ Reason string }
+
+func (h *StopWork) Error() string { return h.Reason }
+
 // Part is a piece of hidden text that rides on a prompt or is put between
 // two rounds. It is stored exactly as given, so its author marks it the way
 // the harness marks its own words.

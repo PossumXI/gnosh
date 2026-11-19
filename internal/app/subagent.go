@@ -867,6 +867,10 @@ func (s *subSession) sessionStart(ctx context.Context, info agent.StartInfo) ([]
 	if err != nil {
 		return nil, err
 	}
+	if out.EndTurn {
+		// "continue": false: the sub-agent does not take its task.
+		return hookParts(hooks.SubagentStart, out), &agent.StopWork{Reason: hookHalt(hooks.SubagentStart, "the sub-agent did not take its task", out.StopReason)}
+	}
 	return hookParts(hooks.SubagentStart, out), nil
 }
 
@@ -1028,6 +1032,11 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.To
 		} else {
 			out = core.TextResult(text + "\n\n[The sub-agent did not finish: " + strings.TrimRight(why, ".") + ". What stands above is what it had written.]")
 		}
+	case res.Reason == agent.EndRefused:
+		// Its task was refused before it went out: a SubagentStart hook
+		// said to stop. Its words say why.
+		status, caution = "stopped", ""
+		out = core.ErrorResult(firstOf(res.Detail, "The sub-agent did not take its task."))
 	default:
 		status, caution = "stopped", ""
 		out = core.ErrorResult("The sub-agent was stopped before it finished, with the turn that started it.")

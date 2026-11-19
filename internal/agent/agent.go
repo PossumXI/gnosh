@@ -248,7 +248,8 @@ type Agent struct {
 	cur        *operation
 	startRan   bool
 	startAdd   []Part
-	sent       bool // a prompt has gone out in this session, now or before
+	startHalt  string // the session's start said stop (Halt): every prompt is refused with it
+	sent       bool   // a prompt has gone out in this session, now or before
 	model      Model
 	small      *Model
 	fell       *Model          // the fallback the turn goes on with, or nil (fallback.go)
