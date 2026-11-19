@@ -171,8 +171,7 @@ func (s *statusLiner) run() {
 	}
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", sl.Command)
 	cmd.Dir = l.cwd()
-	cmd.Env = append(append([]string(nil), l.p.o.Environ...), l.cfg.CommandEnv()...)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("COLUMNS=%d", max(cols-sl.Padding, 1)), fmt.Sprintf("LINES=%d", rows))
+	cmd.Env = append(l.ownCommandEnv(), fmt.Sprintf("COLUMNS=%d", max(cols-sl.Padding, 1)), fmt.Sprintf("LINES=%d", rows))
 	cmd.Stdin = bytes.NewReader(input)
 	var out capBuffer
 	out.max = statusMaxBytes

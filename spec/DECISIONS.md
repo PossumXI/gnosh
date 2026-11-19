@@ -3305,3 +3305,14 @@ or kept with the reason said (27).
     config review of 2026-11-19). In such a folder the status line is not
     started, with a notice that says why, and the @ picker uses gnosh's
     own search, which keeps git from running them.
+
+203. **A variable the person's env setting takes away is gone from every
+    command gnosh starts.** "env": {"NAME": ""} takes NAME away; the Bash
+    tool and hooks did that, while the status line, the file suggestion
+    command, a skill's own commands (!`...`) and gnokey were handed the
+    whole inherited environment with the settings appended, so the one
+    taken away stayed (the config review of 2026-11-19). The person's own
+    commands now get the inherited environment under the env block, a
+    bare name taking a variable out; a skill's commands get the Bash
+    tool's environment, which also leaves out what changes how a shell
+    reads its line (BASH_ENV, SHELLOPTS, PS4, exported functions).

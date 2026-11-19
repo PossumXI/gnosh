@@ -2,7 +2,9 @@ package app
 
 import (
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 )
@@ -66,5 +68,37 @@ func TestStatusLineHeldWhereGitRunsTheRepositorysPrograms(t *testing.T) {
 	s.exit()
 	if _, err := os.Stat(ran); err == nil {
 		t.Error("the status line command ran")
+	}
+}
+
+// A variable the person's env setting sets to nothing is taken away from
+// every command gnosh starts, not only from Bash and hooks: the status
+// line and a skill's own commands were handed the one gnosh inherited (the
+// config review of 2026-11-19).
+func TestEnvTakenAwayFromEveryCommand(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Done."})
+	seen := w.Home + "/sl-saw"
+	script := w.Script(w.Home+"/bin/sl.sh", "printf '%s\\n' \"${SECRET-unset}\" >> "+seen+"\necho status")
+	w.Settings(`{"env": {"SECRET": ""}, "statusLine": {"type": "command", "command": "` + script + `"}}`)
+	w.Write(w.ConfigDir()+"/skills/peek/SKILL.md", "---\ndescription: Peeks.\n---\nIt holds: !`printf '%s' \"${SECRET-unset}\"`\n")
+	s := sitWith(t, w, func(o *Options) { o.Environ = append(o.Environ, "SECRET=shh") }, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/peek")
+	s.see("Done.")
+	// (The status line runs a moment after the reply, debounced.)
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if data, _ := os.ReadFile(seen); len(data) > 0 {
+			break
+		}
+	}
+	s.typeLine("/exit")
+	s.exit()
+	data, _ := os.ReadFile(seen)
+	if !strings.Contains(string(data), "unset") || strings.Contains(string(data), "shh") {
+		t.Errorf("the status line saw %q", data)
+	}
+	sent := string(w.Model.Requests()[0].Body)
+	if !strings.Contains(sent, "It holds: unset") || strings.Contains(sent, "shh") {
+		t.Errorf("the skill's command saw the secret, or nothing: %s", sent)
 	}
 }

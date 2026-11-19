@@ -78,7 +78,7 @@ func (c *controls) SuggestFiles(ctx context.Context, query string) (paths []stri
 // own, the env block's, and the variables a hook is given that do not
 // belong to an event.
 func (l *live) fileSuggestEnv() []string {
-	env := append(append([]string(nil), l.p.o.Environ...), l.cfg.CommandEnv()...)
+	env := l.ownCommandEnv()
 	env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "CLAUDECODE=") })
 	root := l.cfg.Paths.ProjectRoot
 	return append(env, "GNOSH=1", "AGENT=gnosh", "AI_AGENT=gnosh", "GNOSH_SESSION_ID="+l.ts.ID(),

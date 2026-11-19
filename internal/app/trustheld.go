@@ -143,3 +143,13 @@ func hasJSON(raw json.RawMessage) bool {
 func (l *live) gitRunsPrograms() bool {
 	return !l.st.trusted && len(l.st.gitPrograms) > 0
 }
+
+// ownCommandEnv is the environment of a command of the person's own that
+// gnosh starts (the status line, the file suggestion command, gnokey): the
+// one gnosh was started with, under the settings' env block, where a
+// variable set to nothing is taken away. Appended to the inherited one, as
+// it was, a variable the person had taken away stayed in (the config review
+// of 2026-11-19).
+func (l *live) ownCommandEnv() []string {
+	return overlayEnv(l.p.o.Environ, l.cfg.CommandEnv())
+}
