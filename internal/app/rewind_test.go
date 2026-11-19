@@ -39,7 +39,6 @@ func TestRewindInThePlainSession(t *testing.T) {
 	s.typeLine("/rewind 2")
 	s.see("The conversation is back to before this prompt of yours")
 	s.see("the second prompt")
-	s.see("The files stay as they are now.")
 
 	s.typeLine("the second prompt, changed")
 	s.see("The answer to the changed prompt.")

@@ -320,10 +320,12 @@ type session struct {
 	loop  bool
 
 	// cmdq are slash commands that wait for the turn to end, cmdRun the
-	// one that is running, and cmdStop what stops it.
-	cmdq    []string
-	cmdRun  string
-	cmdStop context.CancelFunc
+	// one that is running, and cmdStop what stops it. cmdShown says the
+	// running one was shown as typed when it started.
+	cmdq     []string
+	cmdRun   string
+	cmdStop  context.CancelFunc
+	cmdShown bool
 
 	// What the status line says.
 	info app.SessionInfo

@@ -1412,8 +1412,8 @@ func (l *live) info() SessionInfo {
 		Tools:            l.toolNames(),
 		MCPServers:       l.mcpStatus(),
 		Mode:             string(l.engine.Mode()),
-		Commands:         l.slash.names(),
-		CommandList:      l.slash.list(),
+		Commands:         l.commandNames(),
+		CommandList:      l.commandList(),
 		Skills:           append(l.typedSkills(), l.mcpPromptInfos()...),
 		Version:          l.p.o.BuildID,
 		Interactive:      l.interactive,
@@ -1612,6 +1612,14 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
 		all, kept := l.rewindAll, l.rewindKept
 		l.rewindTo, l.rewindAll, l.rewindKept = "", false, ""
+		changed := 0
+		if !all {
+			// (What a conversation-only rewind leaves in the files, said
+			// after it in a word.)
+			if cps, ferr := l.rewindFiles(point); ferr == nil {
+				changed = len(cps)
+			}
+		}
 		text, files, rerr := c.rewindWith(ctx, point, all, kept)
 		if rerr != nil {
 			if files != "" {
@@ -1624,10 +1632,11 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 		if kept != "" {
 			res.Text += "\nWhat followed it is kept as a summary, which the model reads with your next prompt."
 		}
-		if files != "" {
+		switch {
+		case files != "":
 			res.Text += "\n" + files
-		} else {
-			res.Text += "\nThe files stay as they are now. " + rewindNote
+		case changed > 0:
+			res.Text += fmt.Sprintf("\nThe files stay as they are now: %s changed since that prompt.", countWords(changed, "file", "files"))
 		}
 	}
 	if id := l.resumeTo; err == nil && res.Handled && res.Name == "resume" && id != "" {

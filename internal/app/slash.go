@@ -78,6 +78,23 @@ func (s *slashSet) find(name string) *SlashCommand {
 	return nil
 }
 
+// commandNames and commandList are the session's commands for a front end:
+// none when --disable-slash-commands turned them off, as a typed one then
+// goes to the model.
+func (l *live) commandNames() []string {
+	if l.inv.DisableSlashCommands {
+		return nil
+	}
+	return l.slash.names()
+}
+
+func (l *live) commandList() []CommandInfo {
+	if l.inv.DisableSlashCommands {
+		return nil
+	}
+	return l.slash.list()
+}
+
 // names lists the commands by name, in the order they were added.
 func (s *slashSet) names() []string {
 	out := make([]string, len(s.cmds))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -668,6 +669,13 @@ func (s *session) run(line string) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cmdRun, s.cmdStop = line, cancel
+	// A command of the session's is shown as typed when it starts, as a
+	// prompt is: what it says meanwhile (the notes of a summary it waits
+	// for, minutes on a local model) comes after it. A line that may be no
+	// command is shown once it has run (ran).
+	if s.cmdShown = s.isCommand(line); s.cmdShown {
+		s.showTyped(line)
+	}
 	c := s.c
 	s.host.spawn(func() func() {
 		res, err := c.Command(ctx, line)
@@ -676,6 +684,28 @@ func (s *session) run(line string) {
 			s.ran(line, res, err)
 		}
 	})
+}
+
+// isCommand reports whether line names one of the session's commands, by
+// its name or one of its aliases.
+func (s *session) isCommand(line string) bool {
+	word, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "/"), " ")
+	word = strings.ToLower(word)
+	for _, c := range s.info.CommandList {
+		if c.Name == word || slices.Contains(c.Aliases, word) {
+			return true
+		}
+	}
+	return false
+}
+
+// showTyped puts a command line into the scrollback as the person typed
+// it, with what is not to be kept of it held back (shownCommand).
+func (s *session) showTyped(line string) {
+	th := &s.th
+	shown, _ := shownCommand(line)
+	s.begin(blkPrompt)
+	s.put(wrap(s.m, th.PromptText.Render(oneLine(shown)), s.cols, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", s.m.Width(th.PromptMark)))...)
 }
 
 // verboseSet reads a /config line for the verbose option set true or
@@ -708,7 +738,8 @@ func configSet(line, key string) (string, bool) {
 
 // ran takes in what a slash command came to.
 func (s *session) ran(line string, res app.CommandResult, err error) {
-	s.cmdRun, s.cmdStop = "", nil
+	shown := s.cmdShown
+	s.cmdRun, s.cmdStop, s.cmdShown = "", nil, false
 	s.dirty = true
 	word, _, _ := strings.Cut(line, " ")
 	switch {
@@ -720,10 +751,15 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		// A prompt that happens to begin with a slash, such as a path.
 		s.send(editor.Draft{Text: line})
 	default:
-		th := &s.th
-		shown, held := shownCommand(line)
-		s.begin(blkPrompt)
-		s.put(wrap(s.m, th.PromptText.Render(oneLine(shown)), s.cols, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", s.m.Width(th.PromptMark)))...)
+		_, held := shownCommand(line)
+		switch {
+		case !shown:
+			s.showTyped(line)
+		case s.last != blkPrompt && strings.TrimSpace(res.Text) != "":
+			// Something came between: what the command says is a block
+			// of its own.
+			s.begin(blkText)
+		}
 		for _, l := range safeLines(res.Text) {
 			s.put(wrap(s.m, l, s.cols, "", "")...)
 		}
