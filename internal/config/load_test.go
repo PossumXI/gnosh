@@ -1718,7 +1718,7 @@ func TestContextFiles(t *testing.T) {
 	in.Cwd, in.ProjectRoot = "/work/proj/sub", "/work/proj"
 	in.FS.(*memFS).mkdir("/work/proj/sub")
 	c := mustLoad(t, in).Context
-	if c.Off || !slices.Equal(c.ProjectNames, []string{"AGENTS.md", "GNOSH.md", "CLAUDE.md"}) || !slices.Equal(c.LocalNames, []string{"CLAUDE.local.md"}) ||
+	if c.Off || !slices.Equal(c.ProjectNames, []string{"AGENTS.md", "GNOSH.md", "CLAUDE.md"}) || !slices.Equal(c.LocalNames, []string{"CLAUDE.local.md"}) || !slices.Equal(c.DotDirs, []string{".gnosh", ".claude"}) ||
 		c.Cwd != "/work/proj/sub" || c.ProjectRoot != "/work/proj" || c.ImportDepth != 4 || c.MaxFileBytes != 4<<20 || c.NestedMaxChars != 40000 {
 		t.Errorf("instruction files: %+v", c)
 	}
@@ -1726,7 +1726,7 @@ func TestContextFiles(t *testing.T) {
 	for _, g := range c.Global {
 		global = append(global, g.V)
 	}
-	if !slices.Equal(global, []string{userDir + "/GNOSH.md", "/home/dev/.config/AGENTS.md", testHome + "/standing"}) {
+	if !slices.Equal(global, []string{userDir + "/GNOSH.md", userDir + "/rules", "/home/dev/.config/AGENTS.md", testHome + "/standing"}) {
 		t.Errorf("global files, in order: %q", global)
 	}
 	if len(c.Extra) != 1 || c.Extra[0].V != "/work/proj/sub/NOTES.md" || c.Extra[0].Origin.Line != 2 {
@@ -1738,7 +1738,7 @@ func TestContextFiles(t *testing.T) {
 	in = inputs(newFS())
 	in.Environ = append(in.Environ, "GNOSH_CONFIG_DIR=/scratch/cfg")
 	c = mustLoad(t, in).Context
-	if c.Global[0].V != "/scratch/cfg/GNOSH.md" || c.Global[1].V != "/scratch/cfg/AGENTS.md" {
+	if c.Global[0].V != "/scratch/cfg/GNOSH.md" || c.Global[2].V != "/scratch/cfg/AGENTS.md" {
 		t.Errorf("global files with GNOSH_CONFIG_DIR: %+v", c.Global)
 	}
 }

@@ -48,6 +48,7 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 		Home:         l.cfg.Paths.Home,
 		ProjectNames: c.ProjectNames,
 		LocalNames:   c.LocalNames,
+		DotDirs:      c.DotDirs,
 		Trusted:      true,
 		MaxDepth:     c.ImportDepth,
 		MaxBytes:     c.MaxFileBytes,

@@ -3718,3 +3718,15 @@ or kept with the reason said (27).
     (gh pr view of a stranger's pull request) read as gnosh speaking (the
     skills review of 2026-11-19). The output of each command is now made
     harmless as a tool's result is, before it takes the command's place.
+
+245. **A folder's .claude and .gnosh hold its instruction files and rules
+    too.** The instruction reader could read .claude/CLAUDE.md beside
+    CLAUDE.md and the rules in .claude/rules, as Claude Code does, but
+    gnosh never asked it to, so a project's files there were left out
+    with nothing said (the skills review of 2026-11-19). Both folders,
+    gnosh's own and Claude Code's, are now read in every directory from
+    the project up: the files under the usual names, the rules without
+    paths from the start and those with paths once a file they name is
+    touched. The person's own rules are read from the rules folder beside
+    their GNOSH.md. (~/.claude/CLAUDE.md stays unread: the person's own
+    files are gnosh's, as CFG-20 lists them.)

@@ -151,6 +151,7 @@ func (ld *loader) finish() *Config {
 		Off:            cfg.Switches.SafeMode.V,
 		ProjectNames:   slices.Clone(contextNames),
 		LocalNames:     slices.Clone(contextLocalNames),
+		DotDirs:        []string{".gnosh", ".claude"},
 		Cwd:            in.Cwd,
 		ProjectRoot:    in.ProjectRoot,
 		Extra:          b.opts.ProjectInstructionFiles,
@@ -159,7 +160,7 @@ func (ld *loader) finish() *Config {
 		MaxFileBytes:   contextMaxFileBytes,
 		NestedMaxChars: contextNestedMaxChars,
 	}
-	cfg.Context.Global = []ListItem{{V: filepath.Join(ld.paths.ConfigDir, "GNOSH.md")}, {V: ld.agentsFile}}
+	cfg.Context.Global = []ListItem{{V: filepath.Join(ld.paths.ConfigDir, "GNOSH.md")}, {V: filepath.Join(ld.paths.ConfigDir, "rules")}, {V: ld.agentsFile}}
 	cfg.Context.Global = append(cfg.Context.Global, b.opts.UserInstructionFiles...)
 
 	cfg.BadEnv = ld.badEnv

@@ -163,6 +163,26 @@ func TestInstructionFilesAreRead(t *testing.T) {
 	}
 }
 
+// The files a folder keeps in .claude or .gnosh are read beside its own:
+// .claude/CLAUDE.md, and the rules in .claude/rules, those without paths
+// from the start and one with paths once a file it names is touched; and
+// the person's rules beside their GNOSH.md (the skills review of
+// 2026-11-19: none of these were read).
+func TestDotFolderInstructionsAreRead(t *testing.T) {
+	read := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Read", Args: `{"file_path":"api/server.go"}`}}}
+	w := apptest.NewWorld(t, read, apptest.Reply{Text: "ok"})
+	w.Write(w.ConfigDir()+"/rules/tone.md", "The person's rule: plain words.\n")
+	w.Write(".claude/CLAUDE.md", "The project's rule from .claude: tests live in ./tests.\n")
+	w.Write(".claude/rules/style.md", "A rule for the whole project: tabs.\n")
+	w.Write(".gnosh/rules/api.md", "---\npaths: \"api/**/*.go\"\n---\nA rule for the API: errors are wrapped.\n")
+	w.Write("api/server.go", "package api\n")
+	runWith(t, t.Context(), testOptions(w, "-p", "hello")).wantCode(t, 0).wantNoErr(t)
+	first := userTexts(w.Model.Requests()[0])[0]
+	has(t, "the first message", first, "The person's rule: plain words.", "The project's rule from .claude", "A rule for the whole project: tabs.")
+	hasNot(t, "the first message", first, "A rule for the API")
+	has(t, "what the model read with the file", requestText(t, w, 1), "A rule for the API: errors are wrapped.")
+}
+
 // claudeMdExcludes keeps the files it names out of what the model reads.
 // A pattern the reader cannot use stops startup, at the line that sets
 // it: it would keep nothing out.

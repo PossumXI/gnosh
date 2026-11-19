@@ -498,15 +498,20 @@ type ContextFiles struct {
 	// LocalNames are the names of the person's private file about a
 	// project, read after ProjectNames in each directory.
 	LocalNames []string
+	// DotDirs are the folders of a directory that hold its files too
+	// (.claude/CLAUDE.md beside CLAUDE.md) and its rules, in a "rules"
+	// folder inside them (.claude/rules/*.md): gnosh's own and Claude
+	// Code's.
+	DotDirs []string
 	// Cwd and ProjectRoot say where the walk ends and where the project
 	// begins. A directory above ProjectRoot gives only files owned by the
 	// user or by root.
 	Cwd, ProjectRoot string
 	// Global are the user's global files and folders, in the order they
-	// are read: GNOSH.md in the config directory, the AGENTS.md shared
-	// with other programs, then what the userInstructionFiles option
-	// names. A folder gives every Markdown file in it. A file that does
-	// not exist is passed over.
+	// are read: GNOSH.md in the config directory and the rules folder
+	// beside it, the AGENTS.md shared with other programs, then what the
+	// userInstructionFiles option names. A folder gives every Markdown
+	// file in it. A file that does not exist is passed over.
 	Global []ListItem
 	// Extra are more instruction files of the project, from the
 	// projectInstructionFiles option.
