@@ -212,6 +212,10 @@ type message struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
+
+	// failed is set by the transport, never sent: the answer to the
+	// request will not come, and why (Client.fail).
+	failed error
 }
 
 // Client is the connection to one server.
@@ -591,6 +595,9 @@ func (c *Client) request(ctx context.Context, method string, params any) (json.R
 		if !ok {
 			return nil, c.ended()
 		}
+		if m.failed != nil {
+			return nil, m.failed
+		}
 		if m.Error != nil {
 			return nil, m.Error
 		}
@@ -636,15 +643,30 @@ func (c *Client) dispatch(m message) {
 	case m.Method != "":
 		c.notified(m)
 	case len(m.ID) > 0:
-		id := strings.Trim(string(m.ID), `"`)
+		// (Handed over under the lock, which lost holds as it closes the
+		// channels: an answer that comes as the connection ends is not
+		// sent on a closed one.)
 		c.mu.Lock()
-		ch := c.pending[id]
-		c.mu.Unlock()
-		if ch != nil {
+		if ch := c.pending[strings.Trim(string(m.ID), `"`)]; ch != nil {
 			select {
 			case ch <- m:
 			default:
 			}
+		}
+		c.mu.Unlock()
+	}
+}
+
+// fail ends the wait of the request with that id, if it still waits, with
+// err: the transport knows its answer will not come (a server at a URL
+// whose answer to it ended without it).
+func (c *Client) fail(id json.RawMessage, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ch := c.pending[strings.Trim(string(id), `"`)]; ch != nil {
+		select {
+		case ch <- message{ID: id, failed: err}:
+		default:
 		}
 	}
 }

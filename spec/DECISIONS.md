@@ -2871,3 +2871,29 @@ or kept with the reason said (27).
     kept whole in a file. The variable, when set, wins, as the
     environment outranks the files; a failed command's output keeps its
     own bound (10,000), never more than this.
+
+172. **The review of the MCP client: its transports.** A fresh-eyes
+    review of gnosh's MCP code (2026-11-19) found calls that could wait
+    for ever, and fixed here:
+    - A server at a URL gives a request's answer with the request: as
+      JSON, or in a stream of events (gnosh opens no stream of its own
+      where a later answer could come). A request answered with 202, with
+      JSON that held no answer to it, or with a stream that ended before
+      its answer (the server restarted, a proxy cut it) waited for ever
+      when the call had no timeout, which is the default; a run never
+      ended. Each now fails at once as unreachable, so the server is
+      connected again and the model is told that whether the call ran is
+      not known. One event of a stream is held to the size of an answer
+      (16 MiB): a larger one ends the stream, where it grew without end.
+    - A server gnosh starts that stops reading its input held a call
+      larger than the pipe, and every message after it, for ever, past
+      the call's timeout and Esc. The write gives up with the call now,
+      or after two minutes; one that gave up partway leaves half a line
+      in the pipe, so the connection ends there.
+    - A server that exited while a process it left outside its group
+      held its output open kept its calls waiting, and closing it (at
+      the end of a session or a sub-agent, /mcp) waited for that process
+      to let go. Two seconds after the server exits its output is
+      closed; what it left in its group is stopped as it closes.
+    - An answer that came as the connection ended could be sent on a
+      closed channel: answers are handed over under the lock now.
