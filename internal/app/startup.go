@@ -204,10 +204,7 @@ func (p *program) prepare(ctx context.Context, inv cli.Invocation, interactive b
 	if st.cfg == nil {
 		return st, cli.ExitFailure
 	}
-	for _, h := range st.cfg.Held {
-		st.held = append(st.held, trust.Holding{Kind: h.Kind, Text: h.Text, File: h.Origin.File, Line: h.Origin.Line})
-	}
-	st.held = append(st.held, st.gitPrograms...)
+	st.held = st.heldList()
 
 	record := st.trustStore()
 	st.decision = trust.Decide(trust.Asked{

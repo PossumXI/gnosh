@@ -3280,3 +3280,17 @@ or kept with the reason said (27).
       escape in it reached the terminal.
     - A named pipe where a repository's git settings would be is refused
       before it is opened: gnosh hung at start in such a folder.
+
+201. **The trust question shows everything a Yes turns on.** It listed
+    what the folder's settings files hold and the programs its git
+    settings name; a Yes also turned on the servers of the project's
+    .mcp.json, its skills and commands (their hooks, the commands they
+    run as they are used, the tools they let run without asking) and its
+    kinds of sub-agent (their hooks, the MCP servers they start). A
+    repository with one harmless option and a .mcp.json server that ran
+    a stranger's command got a question that named only the option, and
+    a folder with nothing else of its own was never asked at all (the
+    config review of 2026-11-19). Those are listed now, with what each
+    runs (a server's command as the file writes it, no variable filled
+    in) or lets run, and counted: a folder that has any of them is asked
+    about, once, when gnosh starts there, at /cd and by gnosh trust.
