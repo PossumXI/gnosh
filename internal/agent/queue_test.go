@@ -797,3 +797,39 @@ func TestHungTurnEndMomentStops(t *testing.T) {
 		t.Fatal("End waited for the hung moment")
 	}
 }
+
+// A prompt taken back while its check still runs is handed back once, and
+// is not counted or shown as waiting: a second take handed it back again,
+// and the queue showed it until its check ended (the agent loop review of
+// 2026-11-19).
+func TestTakeBackDuringItsCheck(t *testing.T) {
+	inCheck, release := make(chan struct{}), make(chan struct{})
+	r := newRig(t, func(o *Options) {
+		o.Moments.PromptSubmit = func(ctx context.Context, p Prompt) (Admission, error) {
+			if p.Text == "slow" {
+				close(inCheck)
+				<-release // a check that takes its time, whatever is cancelled
+			}
+			return Admission{}, nil
+		}
+	})
+	r.a.Submit(Prompt{Text: "slow"})
+	<-inCheck
+	if got := r.a.TakeQueued(); len(got) != 1 || got[0].Text != "slow" {
+		t.Fatalf("the first take = %+v", got)
+	}
+	if got := r.a.TakeQueued(); len(got) != 0 {
+		t.Errorf("a second take handed it back again: %+v", got)
+	}
+	if st := r.a.State(); st.Queued != 0 {
+		t.Errorf("%d prompts counted as waiting", st.Queued)
+	}
+	if q := r.a.Queued(); len(q) != 0 {
+		t.Errorf("shown as waiting: %+v", q)
+	}
+	close(release)
+	r.idle()
+	if n := r.model.count(); n != 0 {
+		t.Errorf("the prompt taken back went out: %d requests", n)
+	}
+}

@@ -737,7 +737,7 @@ func (a *Agent) State() State {
 	s := a.state
 	s.Busy = a.busy
 	s.Running = slices.Clone(a.running)
-	s.Queued = len(a.queue) + len(a.intake)
+	s.Queued = len(a.queue) + len(a.intake) - takenLocked(a.intake)
 	s.Notes = len(a.notes)
 	s.Loop = a.loop.on
 	s.Model = a.model.Info.ID
@@ -1265,9 +1265,26 @@ func (a *Agent) queuedLocked() []QueuedPrompt {
 		out = append(out, QueuedPrompt{ID: s.id, Prompt: s.prompt})
 	}
 	for _, s := range a.intake {
+		if s.taken {
+			continue // taken back while its check runs: not in line
+		}
 		out = append(out, QueuedPrompt{ID: s.id, Prompt: s.prompt, Checking: true})
 	}
 	return out
+}
+
+// takenLocked counts the prompts in intake that were taken back while
+// their check ran, which wait there only for the admitting goroutine to
+// drop them. They were counted and listed as waiting, and a second take
+// handed one back again (the agent loop review of 2026-11-19).
+func takenLocked(intake []*submission) int {
+	n := 0
+	for _, s := range intake {
+		if s.taken {
+			n++
+		}
+	}
+	return n
 }
 
 // emitQueue tells the consumer of events which prompts wait for their
@@ -1321,7 +1338,7 @@ func (a *Agent) takeQueued(only string) []Prompt {
 	a.queue = keep
 	keepIn := a.intake[:0:0]
 	for _, s := range a.intake {
-		if s.prompt.Hidden || (only != "" && s.id != only) {
+		if s.taken || s.prompt.Hidden || (only != "" && s.id != only) {
 			keepIn = append(keepIn, s)
 			continue
 		}

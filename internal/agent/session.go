@@ -348,6 +348,7 @@ func (a *Agent) admitLoop() {
 			if persisted {
 				_ = a.appendLog(Entry{Kind: EntryUnqueued, Prompt: s.id, Text: "taken back"})
 			}
+			a.emitQueue()
 		case !ok:
 			a.emit(&PromptReturnedEvent{ID: s.id, Prompt: s.prompt, Why: why, Reason: reason})
 			end := EndWithdrawn

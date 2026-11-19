@@ -3398,3 +3398,12 @@ or kept with the reason said (27).
     once they sent it again (the agent loop review of 2026-11-19). In a
     session this process opened, such prompts are still in its line, so
     the pass runs only when a session is opened.
+
+213. **A prompt taken back during its check is handed back once.** One
+    taken back (Up, /withdraw) while its UserPromptSubmit check still ran
+    stayed in intake for the admitting goroutine to drop, marked taken,
+    and nothing passed over the mark: a second take handed it back again,
+    so the box held its text twice, and it was counted and shown as
+    waiting until its check ended (the agent loop review of 2026-11-19).
+    Taken prompts are passed over now, and the queue is told again when
+    the last one is dropped.
