@@ -506,9 +506,13 @@ type readyPrompt struct {
 // lines of the moment (an @-mentioned file, the environment).
 func (a *Agent) preparePrompts(ctx context.Context, t *turn, subs []*submission, folded bool) []readyPrompt {
 	var out []readyPrompt
-	for _, s := range subs {
+	for i, s := range subs {
 		a.mu.Lock()
-		first := !a.sent
+		// Only the first of the prompts that start a session's first turn
+		// together is its first: sent is set only once they are written,
+		// so each of them took the instruction files and the environment
+		// (the agent loop review of 2026-11-19).
+		first := !a.sent && i == 0
 		parts := a.startAdd
 		a.startAdd = nil
 		a.mu.Unlock()

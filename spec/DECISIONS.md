@@ -3446,3 +3446,13 @@ or kept with the reason said (27).
     question was neither on the screen nor in line, and the turn waited
     for an answer nobody could give (the TUI review of 2026-11-19). A
     question so displaced goes back to the head of the line.
+
+219. **Queue lists reach the screen in the order they were made, and a
+    session's first lines go with its first prompt only.** Two lists of
+    the waiting prompts, each made under the session's lock, could be
+    sent in the other order, so a prompt taken back or gone out stayed
+    shown as waiting; one list at a time now goes from being made to
+    being sent. And when two prompts started a session's first turn
+    together, each took the lines of the first prompt (the instruction
+    files, the environment): CLAUDE.md went out twice. Only the first of
+    them does now (the agent loop review of 2026-11-19).

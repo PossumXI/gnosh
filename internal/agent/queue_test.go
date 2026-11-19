@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -930,5 +931,143 @@ func TestTwoQuestionsAtOnce(t *testing.T) {
 	<-done
 	if st := r.a.State(); st.Phase != before {
 		t.Errorf("after both: phase %v, want %v", st.Phase, before)
+	}
+}
+
+// pauseInEmitQueue is the machine's clock, except that once armed, the
+// first time it is read from inside emitQueue it waits to be let go: a
+// queue list is then held between being made and being sent.
+type pauseInEmitQueue struct {
+	armed atomic.Bool
+	held  chan struct{}
+	let   chan struct{}
+}
+
+func (c *pauseInEmitQueue) Now() time.Time {
+	if c.armed.Load() && inEmitQueue() && c.armed.CompareAndSwap(true, false) {
+		close(c.held)
+		<-c.let
+	}
+	return time.Now()
+}
+
+func (c *pauseInEmitQueue) After(d time.Duration) <-chan time.Time { return time.After(d) }
+
+func inEmitQueue() bool {
+	pc := make([]uintptr, 64)
+	frames := runtime.CallersFrames(pc[:runtime.Callers(2, pc)])
+	for {
+		f, more := frames.Next()
+		if strings.HasSuffix(f.Function, ".emitQueue") {
+			return true
+		}
+		if !more {
+			return false
+		}
+	}
+}
+
+// Queue lists reach the screen in the order they were made: a list made
+// before a prompt was taken back, and sent after the list made since,
+// left the prompt shown as waiting (the agent loop review of 2026-11-19).
+func TestQueueListsArriveInOrder(t *testing.T) {
+	c := &pauseInEmitQueue{held: make(chan struct{}), let: make(chan struct{})}
+	r := newRig(t, func(o *Options) { o.Clock = c })
+	wait := make(chan struct{})
+	r.model.push(step{wait: wait, evs: say("one").evs}, say("rest"))
+	if _, err := r.a.Submit(Prompt{Text: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent[*RequestEvent](t, r.rec, nil)
+	idA, _ := r.a.Submit(Prompt{Text: "a"})
+	waitQueue(t, r, "a")
+
+	// The list that shows b coming in is made, and held.
+	c.armed.Store(true)
+	if _, err := r.a.Submit(Prompt{Text: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-c.held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no queue list was made for b")
+	}
+	// a is taken back meanwhile, and the list made for that is sent, or
+	// waits its turn.
+	took := make(chan bool, 1)
+	go func() {
+		_, ok := r.a.Withdraw(idA)
+		took <- ok
+	}()
+	select {
+	case <-took:
+		took <- true
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(c.let)
+	if !<-took {
+		t.Fatal("a could not be taken back")
+	}
+
+	ids := func(q []QueuedPrompt) []string {
+		var out []string
+		for _, p := range q {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+	want := ids(r.a.Queued())
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		qs := eventsOf[*QueueEvent](r.rec)
+		got := ids(qs[len(qs)-1].Queued)
+		if slices.Equal(got, want) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the queue shown last is %v, and what waits is %v", got, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	close(wait)
+	r.idle()
+	r.checkLog()
+}
+
+// The lines that go only with a session's first prompt (the instruction
+// files, the environment) go with the first of two prompts that start its
+// first turn together, not with both: each took them, and CLAUDE.md went
+// out twice (the agent loop review of 2026-11-19).
+func TestFirstLinesGoOnceWithTwoFirstPrompts(t *testing.T) {
+	var firsts []bool
+	r := newRig(t, func(o *Options) {
+		o.Moments.PromptLines = []func(context.Context, LineInfo) ([]Part, error){
+			func(_ context.Context, info LineInfo) ([]Part, error) {
+				firsts = append(firsts, info.First)
+				if info.First {
+					return []Part{{Source: "instructions", Text: "<instructions/>", Before: true}}, nil
+				}
+				return nil, nil
+			},
+		}
+	})
+	subs := []*submission{
+		{id: "p1", prompt: Prompt{ID: "p1", Text: "one"}},
+		{id: "p2", prompt: Prompt{ID: "p2", Text: "two"}},
+	}
+	ready := r.a.preparePrompts(context.Background(), &turn{id: "t1"}, subs, false)
+	if !slices.Equal(firsts, []bool{true, false}) {
+		t.Errorf("First was %v for the two prompts", firsts)
+	}
+	n := 0
+	for _, rp := range ready {
+		for _, p := range rp.parts {
+			if p.Text == "<instructions/>" {
+				n++
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("the first prompt's lines go out %d times", n)
 	}
 }

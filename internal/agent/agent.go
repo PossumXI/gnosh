@@ -247,28 +247,31 @@ type Agent struct {
 	queue      []*submission // admitted, waiting for their turn
 	notes      []Note        // told to the model with the next request
 	queueShown bool          // the consumer was last told of a queue that was not empty
-	commands   []*command
-	cur        *operation
-	startRan   bool
-	startAdd   []Part
-	startHalt  string // the session's start said stop (Halt): every prompt is refused with it
-	sent       bool   // a prompt has gone out in this session, now or before
-	model      Model
-	small      *Model
-	fell       *Model          // the fallback the turn goes on with, or nil (fallback.go)
-	fellName   string          // its name in Options.Fallbacks
-	fellOut    map[string]bool // the models and fallbacks that failed in this turn
-	tools      []core.Tool
-	index      map[string]core.Tool
-	specs      []core.ToolSpec
-	system     []string
-	compactAt  int
-	noAuto     bool
-	cwd        string
-	roots      []string
-	tree       *core.WorkTree // its work tree (Options.Tree, SubOptions.Tree), or its parent's
-	loop       loopState
-	questions  map[string]chan Answer
+	// queueEmit lets one queue list at a time go from being made to being
+	// sent (emitQueue); it is taken before a.mu, never under it.
+	queueEmit sync.Mutex
+	commands  []*command
+	cur       *operation
+	startRan  bool
+	startAdd  []Part
+	startHalt string // the session's start said stop (Halt): every prompt is refused with it
+	sent      bool   // a prompt has gone out in this session, now or before
+	model     Model
+	small     *Model
+	fell      *Model          // the fallback the turn goes on with, or nil (fallback.go)
+	fellName  string          // its name in Options.Fallbacks
+	fellOut   map[string]bool // the models and fallbacks that failed in this turn
+	tools     []core.Tool
+	index     map[string]core.Tool
+	specs     []core.ToolSpec
+	system    []string
+	compactAt int
+	noAuto    bool
+	cwd       string
+	roots     []string
+	tree      *core.WorkTree // its work tree (Options.Tree, SubOptions.Tree), or its parent's
+	loop      loopState
+	questions map[string]chan Answer
 	// asking is what each open question waits for, in words, and
 	// beforeAsk the state before the first of them was put: with two open
 	// (parallel sub-agents), the first answer put the phase back while the
@@ -1310,6 +1313,13 @@ func takenLocked(intake []*submission) int {
 // turn. A prompt that goes out at once never waits, so an empty list is
 // only told when a list that was not empty was told before.
 func (a *Agent) emitQueue() {
+	// Two lists made one after the other under a.mu could be sent in the
+	// other order, and the older one stayed on the screen: a prompt that
+	// had gone out, or was taken back, shown as waiting (the agent loop
+	// review of 2026-11-19). The sink never blocks, so holding this while
+	// the list is sent holds nobody up for long.
+	a.queueEmit.Lock()
+	defer a.queueEmit.Unlock()
 	a.mu.Lock()
 	q := a.queuedLocked()
 	if len(q) == 0 && !a.queueShown {
