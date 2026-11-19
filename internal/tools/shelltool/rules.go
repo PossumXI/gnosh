@@ -325,8 +325,8 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 				argBackground, argHost, h.Name)
 		}
 		if n := len(remoteScript(a.command)); n > maxRemoteCommand {
-			return fmt.Errorf("the command is %s long, and a command for another machine goes to ssh as one argument, of at most %s. Send it in parts: a long file can be written on %s by several commands that each add to it (cat >> FILE <<'EOF' ... EOF)",
-				byteSize(int64(len(a.command))), byteSize(maxRemoteCommand), h.Name)
+			return fmt.Errorf("the command is %s long, %s as it goes to ssh, quoted, as one argument, of at most %s. Send it in parts: a long file can be written on %s by several commands that each add to it (cat >> FILE <<'EOF' ... EOF)",
+				byteSize(int64(len(a.command))), byteSize(int64(n)), byteSize(maxRemoteCommand), h.Name)
 		}
 	}
 	if gnokeyPassword(a.command) {

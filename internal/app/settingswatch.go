@@ -15,6 +15,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // The settings files are looked at again while the session runs, before a
@@ -251,13 +252,11 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 	var parts []agent.Part
 	var done []string
 	if l.shell != nil {
-		was := l.shell.HostNames()
-		hosts := shellHosts(cfg)
-		var now []string
-		for _, h := range hosts {
-			now = append(now, h.Name)
-		}
-		if !slices.Equal(was, now) {
+		// The whole of each entry: a host given a new address, or a new
+		// description, under the same name kept its old one (the hosts
+		// review of 2026-11-19).
+		was, hosts := l.shell.Hosts(), shelltool.Declared(shellHosts(cfg))
+		if !slices.Equal(was, hosts) {
 			l.shell.SetHosts(hosts)
 			l.settings.mu.Lock()
 			l.settings.hosts = append([]config.Host{}, cfg.Hosts...)

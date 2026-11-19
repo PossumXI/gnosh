@@ -70,6 +70,7 @@ type Manager struct {
 	ended     []string
 	calls     map[string]*job // foreground commands by the id of the call that waits for them
 	pending   map[string]bool // calls about to start a foreground command, by id: true once asked to go to the background as it starts
+	remote    map[string]bool // calls described that name another machine, by id: they never go to the background
 	kept      []keptFile      // output files of finished foreground commands, oldest first
 	keptBytes int64           // how much disk those files take
 
@@ -140,6 +141,7 @@ func New(opts Options) *Manager {
 		tasks:        make(map[string]*job),
 		calls:        make(map[string]*job),
 		pending:      make(map[string]bool),
+		remote:       make(map[string]bool),
 	}
 	m.shell = m.opt.Shell
 	if m.shell == "" {
@@ -188,6 +190,26 @@ func (m *Manager) SetHosts(hosts []Host) {
 func (m *Manager) HostNames() []string {
 	_, names := m.hostSet()
 	return slices.Clone(names)
+}
+
+// Hosts are the machines calls may name, as declared now, in that order.
+func (m *Manager) Hosts() []Host {
+	return listed(m.hostSet())
+}
+
+// Declared is hosts as SetHosts takes them: without a name that is empty,
+// "local", or given before.
+func Declared(hosts []Host) []Host {
+	return listed(hostTable(hosts))
+}
+
+// listed is a table of hosts as a list, in the order of names.
+func listed(table map[string]*Host, names []string) []Host {
+	out := make([]Host, 0, len(names))
+	for _, n := range names {
+		out = append(out, *table[n])
+	}
+	return out
 }
 
 // hostSet is the table of declared hosts as it stands.
@@ -289,7 +311,10 @@ func (m *Manager) Background(callID string) bool {
 func (m *Manager) BackgroundSoon(callID string) bool {
 	m.mu.Lock()
 	if j := m.calls[callID]; j == nil {
-		ok := callID != "" && !m.opt.NoBackground && !m.closed
+		// (A call for another machine stays in the foreground: one asked
+		// for while its question was open said it had gone, and kept the
+		// turn. The hosts review of 2026-11-19.)
+		ok := callID != "" && !m.opt.NoBackground && !m.closed && !m.remote[callID]
 		if ok {
 			m.pending[callID] = true
 		}
@@ -298,6 +323,21 @@ func (m *Manager) BackgroundSoon(callID string) bool {
 	}
 	m.mu.Unlock()
 	return m.Background(callID)
+}
+
+// remoteCall notes, as a call is described, whether it names another
+// machine, for BackgroundSoon.
+func (m *Manager) remoteCall(callID string, remote bool) {
+	if callID == "" {
+		return
+	}
+	m.mu.Lock()
+	if remote {
+		m.remote[callID] = true
+	} else {
+		delete(m.remote, callID)
+	}
+	m.mu.Unlock()
 }
 
 // expect notes that the call callID is about to start a foreground

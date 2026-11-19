@@ -93,7 +93,10 @@ type join struct {
 	dir    string
 	listen string
 	// hosts are the machines the session may name, by name, with the
-	// destination ssh is given for each; hostNames keeps their order.
+	// destination ssh is given for each, as the session began; hostNames
+	// keeps their order. The shell's table, which a settings change
+	// replaces while the session runs, is read instead where there is
+	// one (hostTable).
 	hosts     map[string]string
 	hostNames []string
 

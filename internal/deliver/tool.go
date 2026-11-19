@@ -188,14 +188,34 @@ func (j *join) copyLimit() int64 {
 	return j.p.opts.MaxCopyBytes
 }
 
+// hostTable is the machines the session may name now, by name, with the
+// destination ssh is given for each, and their names in order: the
+// shell's table, which a settings change replaces while the session runs.
+// (The table the session began with was kept: a question named the old
+// address of a host whose file came from the new one, the hosts review of
+// 2026-11-19.)
+func (j *join) hostTable() (map[string]string, []string) {
+	if j.s.Shell != nil {
+		if shell := j.s.Shell(); shell != nil {
+			where, names := map[string]string{}, []string{}
+			for _, h := range shell.Hosts() {
+				where[h.Name], names = h.Target, append(names, h.Name)
+			}
+			return where, names
+		}
+	}
+	return j.hosts, j.hostNames
+}
+
 // unknownHost words the refusal of a machine that is not declared.
 func (j *join) unknownHost(name string) error {
-	if len(j.hostNames) == 0 {
+	hosts, hostNames := j.hostTable()
+	if len(hostNames) == 0 {
 		return fmt.Errorf("the %s %q was given, and no other machine is declared for this session. Leave %s out for a file on this machine. To deliver a file from another machine, ask the user to declare that machine as a host in gnosh's config", argHost, name, argHost)
 	}
-	listed := make([]string, len(j.hostNames))
-	for i, n := range j.hostNames {
-		listed[i] = n + " (" + j.hosts[n] + ")"
+	listed := make([]string, len(hostNames))
+	for i, n := range hostNames {
+		listed[i] = n + " (" + hosts[n] + ")"
 	}
 	return fmt.Errorf("the %s %q is not a machine declared for this session. The declared hosts are: %s. Leave %s out for a file on this machine", argHost, name, strings.Join(listed, ", "), argHost)
 }
@@ -275,7 +295,8 @@ func (t *tool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, err
 		return core.Action{Kind: core.ActionOther, Summary: fmt.Sprintf("Record the deliverable %q: the address %s", req.label, req.target)}, nil
 	case req.host != "":
 		summary := fmt.Sprintf("Record the deliverable %q: the file %s on %s", req.label, req.target, req.host)
-		where, known := j.hosts[req.host]
+		hosts, _ := j.hostTable()
+		where, known := hosts[req.host]
 		if !known {
 			return core.Action{Kind: core.ActionOther, Summary: summary}, j.unknownHost(req.host)
 		}
@@ -398,7 +419,8 @@ func (j *join) local(ctx context.Context, req request, cwd string, before app.De
 // served from the copy. A file that is too large to copy is recorded with
 // its path there and not served.
 func (j *join) fromHost(ctx context.Context, req request, before app.Deliverable, had bool) core.ToolResult {
-	if _, known := j.hosts[req.host]; !known {
+	hosts, _ := j.hostTable()
+	if _, known := hosts[req.host]; !known {
 		return refuse(j.unknownHost(req.host).Error())
 	}
 	var shell *shelltool.Manager

@@ -206,3 +206,30 @@ func TestOwnWriteLeavesAHandEditToBeTakenIn(t *testing.T) {
 		t.Error("a write over a hand edit not yet taken in was marked as taken in")
 	}
 }
+
+// A host given a new address under the same name while the session runs is
+// reached there from then on, and the model is told so (the hosts review
+// of 2026-11-19: only the names were compared, and the old address kept).
+func TestHostMovedWhileTheSessionRuns(t *testing.T) {
+	w := apptest.NewWorld(t)
+	far := w.FarMachine()
+	w.Settings(`{"hosts": {"render": {"ssh": "root@203.0.113.7"}}}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		switch n {
+		case 0:
+			w.Settings(`{"hosts": {"render": {"ssh": "root@203.0.113.9"}}}`)
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo first"}`}}}
+		case 1:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"echo there","host":"render"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-y", "-p", "go").wantCode(t, 0)
+	has(t, "what the model was told", string(w.Model.Requests()[1].Body), "the machines Bash's host may name are now render (root@203.0.113.9)")
+	if got := toolResult(t, w, 2, "c2"); !strings.HasPrefix(got, "<host>render (root@203.0.113.9)</host>") {
+		t.Errorf("the call naming the moved host: %q", got)
+	}
+	if calls := far.Calls(); len(calls) != 1 || calls[0] != "root@203.0.113.9" {
+		t.Errorf("ssh was called for %q, want once for the new address", calls)
+	}
+}

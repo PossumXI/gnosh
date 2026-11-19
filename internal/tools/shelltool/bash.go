@@ -32,6 +32,7 @@ func (t bashTool) Spec() core.ToolSpec { return t.m.bashSpec() }
 // Action's summary, which is what a person is shown.
 func (t bashTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
 	a, err := t.m.bashArgs(call.Input)
+	t.m.remoteCall(call.ID, a.host != nil)
 	if err == nil {
 		err = t.m.rules(a, env, t.person)
 	}
@@ -58,6 +59,9 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	}
 	if !a.background && a.host == nil && call.ID != "" {
 		defer m.expect(call.ID)()
+	}
+	if a.host != nil {
+		defer m.remoteCall(call.ID, false)
 	}
 	if ctx.Err() != nil {
 		return core.ErrorResult("The command was not started: the call was cancelled first."), nil
