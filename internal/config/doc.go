@@ -259,11 +259,12 @@
 // BASH_MAX_OUTPUT_LENGTH, CLAUDE_CODE_MAX_OUTPUT_TOKENS,
 // CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS,
 // CLAUDE_CODE_GLOB_TIMEOUT_SECONDS, CLAUDE_CODE_AUTO_COMPACT_WINDOW,
-// CLAUDE_AUTOCOMPACT_PCT_OVERRIDE and CLAUDE_CODE_SAFE_MODE; and
-// ANTHROPIC_API_KEY and OPENAI_API_KEY for a provider of that type that is
-// given no key. One of them in the env block of a config file wins over
-// the shell's. A value that cannot be used is passed over with a warning,
-// never a mistake.
+// CLAUDE_AUTOCOMPACT_PCT_OVERRIDE and CLAUDE_CODE_SAFE_MODE, of which one
+// in the env block of a config file wins over the shell's; and
+// ANTHROPIC_API_KEY and OPENAI_API_KEY, from the shell's environment
+// alone (an env block is for commands; a provider's own key goes in its
+// apiKey), for a provider of that type that is given no key. A value that
+// cannot be used is passed over with a warning, never a mistake.
 //
 // # Variables in a config file
 //

@@ -3329,3 +3329,13 @@ or kept with the reason said (27).
     - disableBypassPermissionsMode only takes a mode away, so a folder
       that is not trusted keeps it too, as DECISIONS 2 says of what only
       restricts (a new kind of setting, "restriction"); it was held.
+
+205. **The oracle no longer counts a redirected command against the
+    engine.** Its check that every command the engine read did run
+    trusted bash's trace, and a command whose standard error goes
+    elsewhere takes its own trace line with it (seed 157's ":&> $((x))"
+    ran and made the file 0, which then held the trace), while one whose
+    redirection fails does not run at all. The check passes over a
+    command with redirections; reading more than runs is the safe way
+    round. Also: the config doc said a provider key in an env block wins
+    over the shell's; it is read from the shell alone, as the code does.
