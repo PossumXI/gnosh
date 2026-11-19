@@ -169,6 +169,40 @@ func TestGnokeyToolShowsWhatItSigns(t *testing.T) {
 	}
 }
 
+// The gnokey a password was last handed to is remembered across sessions:
+// one rebuilt or replaced since is said in the question, for the person to
+// stop if they did not do it (the gno review of 2026-11-19).
+func TestGnokeyToolSaysWhenGnokeyChanged(t *testing.T) {
+	const sign = "gnokey maketx call -pkgpath gno.land/r/demo/counter -func Increment -gas-fee 1ugnot -gas-wanted 1 -chainid dev k"
+	const note = "is not the one gnosh last handed a password to"
+	secret := func(qs []agent.Question) string {
+		for _, q := range qs {
+			if q.Kind == secretKind {
+				return q.Text
+			}
+		}
+		t.Fatal("no masked question")
+		return ""
+	}
+	w := gnokeyWorld(t, apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c1", sign)}}, apptest.Reply{Text: "Done."})
+	if q := secret(gnokeySession(t, w, "sign it", "hunter22", "-y")); strings.Contains(q, note) {
+		t.Errorf("the first signing said gnokey changed:\n%s", q)
+	}
+	w.Model.Done()
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c2", sign)}}, apptest.Reply{Text: "Done."})
+	if q := secret(gnokeySession(t, w, "sign it again", "hunter22", "-y")); strings.Contains(q, note) {
+		t.Errorf("the same gnokey was said to have changed:\n%s", q)
+	}
+	// The stand-in is rebuilt between sessions.
+	w.Model.Done()
+	w.Script(w.Root+"/gnobin/gnokey", `echo "args: $*" # rebuilt
+case " $* " in *" -insecure-password-stdin "*) read pw; echo "read: $pw";; esac`)
+	w.Model.Add(apptest.Reply{Calls: []apptest.Call{gnokeyCallOf("c3", sign)}}, apptest.Reply{Text: "Done."})
+	if q := secret(gnokeySession(t, w, "and again", "hunter22", "-y")); !strings.Contains(q, note) {
+		t.Errorf("a rebuilt gnokey was not said:\n%s", q)
+	}
+}
+
 // What the gnokey tool refuses: key management, which stays in the
 // person's terminal; the password flag passed by the model; a shell's
 // words; anything that is not gnokey. A run, with nobody to type a

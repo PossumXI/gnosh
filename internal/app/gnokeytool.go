@@ -3,9 +3,12 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -407,6 +410,15 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		if c.dir != env.Cwd {
 			body = append(body, "It runs in "+t.l.tilde(c.dir)+".")
 		}
+		// The gnokey a password was last handed to, in any session, is
+		// remembered: one rebuilt or replaced since (make install in a gno
+		// checkout is routine, and the model can run it) is said, for the
+		// person to stop if they did not do it (the gno review of
+		// 2026-11-19).
+		sum := t.binSum()
+		if seen, ok := t.lastSigned(); ok && (seen.Path != t.bin || seen.Sum != sum) {
+			body = append(body, "This gnokey ("+t.l.tilde(t.bin)+") is not the one gnosh last handed a password to: it was rebuilt or replaced since. If you did not do that yourself, press Esc.")
+		}
 		body = append(body, "The password goes to gnokey alone: the model, the session's file and its log never see it. Esc signs nothing and stops the turn.")
 		ans, err := a.Ask(ctx, agent.Question{Kind: secretKind, Title: "Password for the key " + c.key, Text: strings.Join(body, "\n"), CallID: call.ID, Tool: gnokeyToolName})
 		switch {
@@ -461,6 +473,9 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	runErr := cmd.Run()
+	if runErr == nil && c.signs {
+		t.signedWith()
+	}
 	if runErr == nil && signedBack != "" {
 		if signed, err := os.ReadFile(from); err == nil && !bytes.Equal(signed, shownData) {
 			mode := os.FileMode(0o600)
@@ -503,6 +518,53 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 		return core.ToolResult{}, ctx.Err()
 	}
 	return core.ErrorResult("gnokey could not be run: " + runErr.Error() + "."), nil
+}
+
+// gnokeySeen is the gnokey a password was last handed to: its path and the
+// SHA-256 of the file.
+type gnokeySeen struct {
+	Path string `json:"path"`
+	Sum  string `json:"sum"`
+}
+
+// seenPath is where gnosh keeps gnokeySeen, beside its other state.
+func (t *gnokeyTool) seenPath() string {
+	return filepath.Join(t.l.cfg.Paths.StateDir, "gnokey-seen.json")
+}
+
+// binSum is the SHA-256 of the session's gnokey, "" when it cannot be read.
+func (t *gnokeyTool) binSum() string {
+	f, err := os.Open(t.bin)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// lastSigned is the gnokey a password was last handed to, if gnosh has
+// handed one to any.
+func (t *gnokeyTool) lastSigned() (gnokeySeen, bool) {
+	var seen gnokeySeen
+	data, err := os.ReadFile(t.seenPath())
+	if err != nil || json.Unmarshal(data, &seen) != nil || seen.Path == "" {
+		return seen, false
+	}
+	return seen, true
+}
+
+// signedWith remembers the session's gnokey as the one a password was last
+// handed to.
+func (t *gnokeyTool) signedWith() {
+	if sum := t.binSum(); sum != "" {
+		data, _ := json.Marshal(gnokeySeen{Path: t.bin, Sum: sum})
+		_ = os.MkdirAll(filepath.Dir(t.seenPath()), 0o700)
+		_ = os.WriteFile(t.seenPath(), data, 0o600)
+	}
 }
 
 // factLines are the flags of the command that say what it sends, pays and

@@ -3585,3 +3585,20 @@ or kept with the reason said (27).
     of 2026-11-19). Each fmt and mem native now polls the meter first.
     Left: the client's 15-minute backstop, and gas charged by what a
     native does.
+
+231. **A mem rule's text, and what a todo waits for, stand whole on their
+    own line.** The block that opens every prompt listed a rule's text as
+    it was kept, line breaks and all: a rule a session set, holding a
+    line break and "- `deploy` (set by the user, ...)", put a rule of the
+    user's in every later session that nobody gave, and a todo's wait
+    text could do the same (the gno review of 2026-11-19). Both are now
+    put on one line, whole.
+
+232. **gnosh says when the gnokey it hands a password to is not the one it
+    last did.** A gnokey was trusted for one session only: one the model
+    rebuilt between sessions (make install in a gno checkout is routine)
+    was handed the next password without a word (the gno review of
+    2026-11-19). gnosh keeps the path and the SHA-256 of the gnokey a
+    password last went to (gnokey-seen.json in its state folder), and the
+    question asking for the password says when the one at hand is
+    another: press Esc if you did not rebuild or replace it yourself.
