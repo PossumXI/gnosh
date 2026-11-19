@@ -2798,3 +2798,12 @@ or kept with the reason said (27).
       summary makes shorter, and then summaries went off for good though
       the next one would have helped. A summary is now judged by what it
       left, without the prompt about to go out.
+
+166. **After a summary the model is told where the conversation as it was
+    is.** The line gnosh gives after a summary had a place for the
+    session's file, for what the summary left out ("The conversation as
+    it was is in …: read from it only what you need"), and nothing filled
+    it, so the line went out without it (the compaction review's note).
+    It names the session's file now, as Claude Code names its transcript
+    after compacting. (A sub-agent shares the session's words and is
+    pointed at the session's file.)

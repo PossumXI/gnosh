@@ -536,7 +536,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			l.instr.Forget()
 		}
 	}
-	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool))
+	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool), l.ts.Path())
 	if err != nil {
 		return l, err
 	}

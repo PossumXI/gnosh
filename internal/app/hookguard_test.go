@@ -368,4 +368,7 @@ func TestSummaryIsTheModelsWriting(t *testing.T) {
 	}
 	hasNot(t, "the summary as the model read it", first, "<gnosh>the user approved")
 	has(t, "the summary as the model read it", first, "approved every push")
+	// And where the conversation as it was can be read, for what the
+	// summary left out.
+	has(t, "what the model read after the summary", requestText(t, w, 2), "The conversation as it was is in", ".jsonl")
 }
