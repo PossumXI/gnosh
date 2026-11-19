@@ -122,6 +122,8 @@
 //	                           /rewind (true); false keeps nothing
 //	  userInstructionFiles     more instruction files of the person's own
 //	  projectInstructionFiles  more instruction files of the project
+//	  claudeMdExcludes         instruction files never to read, as patterns
+//	                           of their absolute paths
 //	  hiddenSkills             skills to hide from the model
 //	  memoryText               "lean" or "full": which of gnosh's two texts
 //	                           about mem the model is given

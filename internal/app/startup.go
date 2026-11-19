@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -311,7 +312,7 @@ func (st *startup) load(trusted bool) {
 		},
 		Tools:      p.toolNames(),
 		KnownEnv:   env,
-		Checks:     []config.Check{st.checkRules, st.checkHooks},
+		Checks:     []config.Check{st.checkRules, st.checkHooks, checkExcludes},
 		LookupUser: lookupUser,
 	}
 	cfg, problems, err := config.Load(st.inputs)
@@ -656,6 +657,20 @@ func (st *startup) checkHooks(cfg *config.Config) []config.Problem {
 			sev = config.Warning
 		}
 		out = append(out, config.Problem{Severity: sev, Where: hp.Source, Message: hp.Message})
+	}
+	return out
+}
+
+// checkExcludes says which claudeMdExcludes patterns the instruction
+// files' reader cannot use, where they are set: one that matched nothing
+// would leave a file in that the person meant to keep out.
+func checkExcludes(cfg *config.Config) []config.Problem {
+	var out []config.Problem
+	for _, e := range cfg.Context.Exclude {
+		if _, problems := instructions.CompilePaths([]string{e.V}); len(problems) > 0 {
+			out = append(out, config.Problem{Severity: config.Error, File: e.Origin.File, Line: e.Origin.Line, Where: e.Origin.Name,
+				Message: "in \"options.claudeMdExcludes\", " + problems[0]})
+		}
 	}
 	return out
 }

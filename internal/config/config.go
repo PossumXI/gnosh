@@ -480,6 +480,9 @@ type ContextFiles struct {
 	// Extra are more instruction files of the project, from the
 	// projectInstructionFiles option.
 	Extra []ListItem
+	// Exclude are the files never read, by any route, as patterns matched
+	// against their absolute paths (the claudeMdExcludes option).
+	Exclude []ListItem
 	// ImportDepth is how many levels deep an @path line is followed.
 	ImportDepth int
 	// MaxFileBytes is the size past which a file is passed over, with a

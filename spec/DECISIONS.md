@@ -2473,3 +2473,18 @@ or kept with the reason said (27).
     list go, and so does Ctrl+C, with a line that says how to open it
     again; what was typed for it is dropped, never given to the box or to
     the question.
+
+148. **claudeMdExcludes.** Claude Code's settings key (its settings
+    reference, read 2026-11-19): instruction files never to read, as
+    glob patterns or absolute paths matched against their absolute paths,
+    for a monorepo's other teams' CLAUDE.md files. gnosh's reader of
+    instruction files could already leave files out (Options.Exclude) and
+    nothing set it; "options": {"claudeMdExcludes": [...]} now does, with
+    the patterns rule files use: "**/vendor/**/CLAUDE.md", a folder for
+    all under it, or a bare name for every file of that name. The entries
+    of every file add up. A project's file holds them until the folder is
+    trusted, as a removal: they can leave out the person's own GNOSH.md,
+    which may hold the rules they keep the agent to. A pattern the reader
+    cannot use stops startup at its line, since it would keep nothing
+    out; the app checks it (the config package imports nothing of
+    gnosh's).

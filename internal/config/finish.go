@@ -142,6 +142,7 @@ func (ld *loader) finish() *Config {
 		Cwd:            in.Cwd,
 		ProjectRoot:    in.ProjectRoot,
 		Extra:          b.opts.ProjectInstructionFiles,
+		Exclude:        b.opts.ClaudeMdExcludes,
 		ImportDepth:    contextImportDepth,
 		MaxFileBytes:   contextMaxFileBytes,
 		NestedMaxChars: contextNestedMaxChars,

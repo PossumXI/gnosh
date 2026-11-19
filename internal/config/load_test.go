@@ -1208,6 +1208,39 @@ func TestUntrustedFolderOnlyRestricts(t *testing.T) {
 	}
 }
 
+// claudeMdExcludes from the person's own file applies everywhere; from a
+// project's file it waits for the folder to be trusted, since it can leave
+// out the person's own instruction files. The entries of every file add
+// up.
+func TestClaudeMdExcludesWaitForTrust(t *testing.T) {
+	fsys := newFS().put(userJSON, `{"options": {"claudeMdExcludes": ["**/vendor/**/CLAUDE.md"]}}`).
+		put(projJSON, `{"options": {"claudeMdExcludes": ["GNOSH.md"]}}`)
+	excluded := func(cfg *Config) []string {
+		var out []string
+		for _, e := range cfg.Context.Exclude {
+			out = append(out, e.V)
+		}
+		return out
+	}
+	in := inputs(fsys)
+	in.Trusted = false
+	cfg := mustLoad(t, in)
+	if got := excluded(cfg); !slices.Equal(got, []string{"**/vendor/**/CLAUDE.md"}) {
+		t.Errorf("in an untrusted folder the files left out are %q", got)
+	}
+	held := false
+	for _, h := range cfg.Held {
+		held = held || h.Kind == KindRemoval && h.Text == "options.claudeMdExcludes: GNOSH.md"
+	}
+	if !held {
+		t.Errorf("the project's claudeMdExcludes is not held: %+v", cfg.Held)
+	}
+	in.Trusted = true
+	if got := excluded(mustLoad(t, in)); !slices.Equal(got, []string{"**/vendor/**/CLAUDE.md", "GNOSH.md"}) {
+		t.Errorf("in a trusted folder the files left out are %q", got)
+	}
+}
+
 // sameButRestrictions fails the test unless two configurations of one
 // untrusted folder are the same in everything but what an untrusted
 // folder's files may say: with is the load with the project's files there,

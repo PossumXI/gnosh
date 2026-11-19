@@ -63,6 +63,9 @@ type Options struct {
 	// ProjectInstructionFiles are more instruction files of the project,
 	// as absolute paths.
 	ProjectInstructionFiles []ListItem
+	// ClaudeMdExcludes are instruction files never to read, as patterns
+	// matched against their absolute paths.
+	ClaudeMdExcludes []ListItem
 	// HiddenSkills are skills hidden from the model.
 	HiddenSkills []ListItem
 	// MemoryText chooses which of gnosh's two texts about mem a model is
@@ -229,6 +232,11 @@ var optionDefs = []optionDef{
 		what: "more instruction files of the project", from: fromPlain,
 		trust: KindExtraPath, fromCwd: true,
 		list: func(o *Options) *[]ListItem { return &o.ProjectInstructionFiles }},
+	{key: "claudeMdExcludes", kind: oNameList, def: "none",
+		what:  "instruction files never to read, by any route, as patterns matched against their absolute paths: \"**/vendor/**/CLAUDE.md\", a folder (\"/work/vendor\") for all under it, or a bare name for every file of that name; a project's file holds them until the folder is trusted, as they can leave out your own",
+		from:  fromClaudeCode + ": the settings key",
+		trust: KindRemoval,
+		list:  func(o *Options) *[]ListItem { return &o.ClaudeMdExcludes }},
 	{key: "hiddenSkills", kind: oNameList, def: "none",
 		what: "skills to hide from the model", from: fromPlain,
 		trust: KindHiddenSkill,

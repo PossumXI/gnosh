@@ -276,6 +276,7 @@ func TestOptions(t *testing.T) {
     "userInstructionFiles": ["~/notes", "/etc/gnosh/RULES.md", "rules"],
     "projectInstructionFiles": ["docs/AGENT-NOTES.md"],
     "hiddenSkills": ["pdf", "xlsx", "pdf"],
+    "claudeMdExcludes": ["**/vendor/**/CLAUDE.md", "/work/old"],
     "memoryText": "full",
     "memReviewCloses": false,
     "memEmbeddingsUrl": "http://127.0.0.1:8090",
@@ -323,6 +324,8 @@ func TestOptions(t *testing.T) {
 	check("userInstructionFiles", items(o.UserInstructionFiles), []string{testHome + "/notes", "/etc/gnosh/RULES.md", userDir + "/rules"})
 	check("projectInstructionFiles", items(o.ProjectInstructionFiles), []string{testCwd + "/docs/AGENT-NOTES.md"})
 	check("hiddenSkills", items(o.HiddenSkills), []string{"pdf", "xlsx"})
+	check("claudeMdExcludes", items(o.ClaudeMdExcludes), []string{"**/vendor/**/CLAUDE.md", "/work/old"})
+	check("the files left out", items(cfg.Context.Exclude), []string{"**/vendor/**/CLAUDE.md", "/work/old"})
 	check("memoryText", o.MemoryText.V, "full")
 	check("memReviewCloses", o.MemReviewCloses.V, false)
 	check("memEmbeddingsUrl", o.MemEmbeddingsURL.V, "http://127.0.0.1:8090")

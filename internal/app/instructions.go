@@ -59,6 +59,9 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 	for _, e := range c.Extra {
 		o.ProjectFiles = append(o.ProjectFiles, e.V)
 	}
+	for _, e := range c.Exclude {
+		o.Exclude = append(o.Exclude, e.V)
+	}
 	if c.Off {
 		// Safe mode: no instruction file is read at all.
 		o = instructions.Options{Cwd: c.Cwd, ProjectRoot: c.ProjectRoot, Home: l.cfg.Paths.Home}
