@@ -307,3 +307,44 @@ func TestCopyPath(t *testing.T) {
 		t.Errorf("the copy %s is not in the folder for copies", a)
 	}
 }
+
+// A register that is a link (here to /dev/zero, which never ends), or a
+// file far bigger than one gnosh writes, is refused at once, unread: a
+// cloned repository may hold one, and every session in the folder reads
+// the register as it starts (the deliverables review of 2026-11-19).
+func TestRegisterThatIsNoFileIsRefused(t *testing.T) {
+	r := newTestRegister(t)
+	if err := os.MkdirAll(r.dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/dev/zero", r.path()); err != nil {
+		t.Skip("no links here:", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		done <- r.load()
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "is not a file gnosh wrote (it is a link)") {
+			t.Errorf("a register linked to /dev/zero: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("reading a register linked to /dev/zero did not end")
+	}
+	os.Remove(r.path())
+	big, err := os.Create(r.path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	big.Truncate(maxRegister + 1)
+	big.Close()
+	r.mu.Lock()
+	err = r.load()
+	r.mu.Unlock()
+	if err == nil || !strings.Contains(err.Error(), "more than one gnosh writes") {
+		t.Errorf("a register too big: %v", err)
+	}
+}

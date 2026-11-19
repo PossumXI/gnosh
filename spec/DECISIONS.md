@@ -3782,3 +3782,12 @@ or kept with the reason said (27).
     kept warm, so after one, automatic or /compact, the prompt is made
     again, as Claude Code 2.1.328 does after an automatic summary as after
     /compact.
+
+252. **A deliverables register that is no file gnosh wrote is not read.**
+    The register is looked for in the project's data folder as every
+    session there starts, and was read by following whatever stood there:
+    a cloned repository's register.json linked to /dev/zero filled the
+    memory, one linked to the terminal hung gnosh (the deliverables
+    review of 2026-11-19). A link, a folder, a pipe or a file over 16 MiB
+    is now refused unread, with what it is said; the file is read only
+    while it is the one looked at, and its cache knows it by its inode too.
