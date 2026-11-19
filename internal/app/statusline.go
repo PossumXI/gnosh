@@ -72,6 +72,13 @@ func (l *live) startStatusLine() {
 	if sl == nil || !l.interactive {
 		return
 	}
+	if l.gitRunsPrograms() {
+		// The person's command may well call git, and git would run what
+		// the repository's own settings name: gnosh's own git status is
+		// held there for that (the config review of 2026-11-19).
+		l.notice(agent.LevelInfo, "statusline", "Your status line command is not run in this folder: the repository's own git settings name programs that git would run, and the folder is not trusted. gnosh trust trusts it.")
+		return
+	}
 	s := &statusLiner{l: l, ended: make(chan struct{})}
 	l.statusLine = s
 	if sl.Refresh > 0 {

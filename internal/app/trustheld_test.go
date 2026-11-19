@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -42,4 +43,28 @@ func TestTrustQuestionShowsWhatAYesTurnsOn(t *testing.T) {
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/exit")
 	s.exit()
+}
+
+// In a folder that is not trusted, whose repository's own git settings name
+// a program, the person's status line command is not run: it may call git,
+// and git would run that program (gnosh's own git status is held there for
+// that). A notice says why (the config review of 2026-11-19).
+func TestStatusLineHeldWhereGitRunsTheRepositorysPrograms(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hello."})
+	gitIn(t, w.Dir, "init", "-q")
+	gitIn(t, w.Dir, "config", "core.fsmonitor", "touch fsmonitor-ran")
+	ran := w.Home + "/sl-ran"
+	script := w.Script(w.Home+"/bin/sl.sh", "touch "+ran+"\necho status")
+	w.Settings(`{"statusLine": {"type": "command", "command": "` + script + `"}}`)
+	s := sit(t, w)
+	s.see("? Trust this folder?")
+	s.typeLine("1")
+	s.seeAnywhere("Your status line command is not run in this folder: the repository's own git settings name programs")
+	s.typeLine("hi")
+	s.see("Hello.")
+	s.typeLine("/exit")
+	s.exit()
+	if _, err := os.Stat(ran); err == nil {
+		t.Error("the status line command ran")
+	}
 }

@@ -37,7 +37,10 @@ const (
 func (c *controls) SuggestFiles(ctx context.Context, query string) (paths []string, ok bool, err error) {
 	l := c.cur()
 	fs := l.cfg.FileSuggestion
-	if fs == nil {
+	if fs == nil || l.gitRunsPrograms() {
+		// (In a folder whose git settings name programs, gnosh's own
+		// search, which keeps git from running them, is used instead: the
+		// command may call git; see startStatusLine.)
 		return nil, false, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, fileSuggestWait)

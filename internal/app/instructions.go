@@ -198,7 +198,7 @@ func (l *live) gitState() prompt.Git {
 			g.Branch = ref
 		}
 	}
-	if !l.st.trusted && len(l.st.gitPrograms) > 0 {
+	if l.gitRunsPrograms() {
 		g.State = prompt.GitUnread
 		g.Why = "this repository's own git settings name programs that git would run, and the folder is not trusted"
 	}

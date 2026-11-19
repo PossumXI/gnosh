@@ -3294,3 +3294,14 @@ or kept with the reason said (27).
     runs (a server's command as the file writes it, no variable filled
     in) or lets run, and counted: a folder that has any of them is asked
     about, once, when gnosh starts there, at /cd and by gnosh trust.
+
+202. **The person's status line and file suggestion commands are held where
+    git would run a repository's programs.** In a folder that is not
+    trusted, whose repository's own git settings name a program (a
+    file-system monitor, a filter, a diff driver), gnosh holds its own
+    look at the repository, since git would run that program. The
+    person's status line and fileSuggestion commands still ran there, and
+    a status line that calls git status ran the repository's monitor (the
+    config review of 2026-11-19). In such a folder the status line is not
+    started, with a notice that says why, and the @ picker uses gnosh's
+    own search, which keeps git from running them.

@@ -134,3 +134,12 @@ func hasJSON(raw json.RawMessage) bool {
 	s := strings.TrimSpace(string(raw))
 	return s != "" && s != "null" && s != "{}" && s != "[]"
 }
+
+// gitRunsPrograms reports whether git, run in this folder, would run
+// programs the repository's own settings name, the folder not being
+// trusted: gnosh's own look at the repository is held then, and so are
+// the person's commands that may call git (the status line, the file
+// suggestion command).
+func (l *live) gitRunsPrograms() bool {
+	return !l.st.trusted && len(l.st.gitPrograms) > 0
+}
