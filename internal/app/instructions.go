@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/gnodocs"
@@ -33,9 +34,20 @@ func (l *live) loadInstructions(ctx context.Context) error {
 	for _, w := range set.Warnings() {
 		l.notice(agent.LevelWarning, "instructions", w.Text)
 	}
+	// Long files given at the start take room from every request, and a
+	// model follows a long text less well: said, as Claude Code says it.
+	if n := utf8.RuneCountInString(l.startInstructions()); n > largeInstructions {
+		l.notice(agent.LevelWarning, "instructions", fmt.Sprintf(
+			"The instruction files given to the model at the start come to %s characters, over %s: they take room from every request, and a model follows a long text less well. /memory lists them.",
+			thousands(n), thousands(largeInstructions)))
+	}
 	l.instructionsLoaded(set.Files(), "")
 	return nil
 }
+
+// largeInstructions is the length, in characters, past which the
+// instruction files given at the start are said to be long.
+const largeInstructions = 40_000
 
 // readInstructions reads the instruction files as the config says to. A
 // sub-agent has a reading of its own: which of the files that load along

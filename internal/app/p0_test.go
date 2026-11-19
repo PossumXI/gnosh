@@ -222,3 +222,15 @@ func TestConfigForWhatIsNotBuiltStopsStartup(t *testing.T) {
 		})
 	}
 }
+
+// Instruction files that come to more than 40,000 characters at the start
+// are said to be long, as Claude Code says it; shorter ones are not.
+func TestLongInstructionFilesAreSaidToBeLong(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"}, apptest.Reply{Text: "ok"})
+	w.Write("CLAUDE.md", "Keep it short.\n")
+	r := run(t, w, "-p", "hello").wantCode(t, 0)
+	hasNot(t, "stderr with short files", r.err, "instruction files given to the model at the start")
+	w.Write("CLAUDE.md", strings.Repeat("Keep every answer short and plain.\n", 1500))
+	r = run(t, w, "-p", "hello").wantCode(t, 0)
+	has(t, "stderr with long files", r.err, "The instruction files given to the model at the start come to 53.1K characters, over 40.0K", "/memory lists them")
+}

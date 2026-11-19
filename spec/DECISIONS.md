@@ -3872,3 +3872,10 @@ or kept with the reason said (27).
     are made safe like every other line, and a desktop note that begins
     with a number is put behind "gnosh: ", which terminals that read
     ConEmu's OSC 9 commands would otherwise take for one.
+
+261. **Long instruction files are said to be long.** The files given at
+    the start go with every request, and a model follows a long text less
+    well; Claude Code warns when they pass 40,000 characters, and gnosh
+    said nothing. At the start, files that come to more than 40,000
+    characters are now named as long in a notice, with /memory to list
+    them.
