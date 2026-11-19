@@ -348,3 +348,27 @@ func TestRegisterThatIsNoFileIsRefused(t *testing.T) {
 		t.Errorf("a register too big: %v", err)
 	}
 }
+
+// The folder for delivered files is not made or written through a link: a
+// repository may carry one in its data folder, and the register would be
+// written wherever it leads (the deliverables review of 2026-11-19).
+func TestRegisterWritesNothingThroughALink(t *testing.T) {
+	r := newTestRegister(t)
+	elsewhere := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(r.dir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, r.dir); err != nil {
+		t.Skip("no links here:", err)
+	}
+	video := file(t, "ad.mp4", "a video")
+	if _, err := r.add(t.Context(), "", video, video, "the ad"); err == nil || !strings.Contains(err.Error(), "is a link") {
+		t.Errorf("adding through a linked folder: %v", err)
+	}
+	if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
+		t.Errorf("the link's target was written: %v", entries)
+	}
+	if err := noLinks(filepath.Dir(r.dir), filepath.Join(r.dir, "files", "x")); err == nil {
+		t.Error("noLinks let a path through a link")
+	}
+}

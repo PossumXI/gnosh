@@ -313,11 +313,37 @@ func (r *register) makeFolder() error {
 	if err := os.MkdirAll(r.dir, 0o700); err != nil {
 		return fmt.Errorf("the folder for delivered files, %s, could not be made: %w", r.dir, err)
 	}
+	if err := noLinks(filepath.Dir(r.dir), r.dir); err != nil {
+		return err
+	}
 	if fresh {
 		_ = os.WriteFile(filepath.Join(project, ".gitignore"), []byte("*\n"), 0o600)
 	}
 	if ignore := filepath.Join(r.dir, ".gitignore"); !exists(ignore) {
 		_ = os.WriteFile(ignore, []byte("*\n"), 0o600)
+	}
+	return nil
+}
+
+// noLinks says why gnosh writes nothing in dir when a folder on the way
+// from base down to it is a link: a repository can carry one in the data
+// folder, and the register, its ignore file and the copies of delivered
+// files would be written wherever it leads (the deliverables review of
+// 2026-11-19). dir lies under base.
+func noLinks(base, dir string) error {
+	rel, err := filepath.Rel(base, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%s is not inside %s", dir, base)
+	}
+	at := base
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+		at = filepath.Join(at, part)
+		if st, err := os.Lstat(at); err == nil && st.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("the folder %s is a link, and gnosh writes nothing for delivered files through one: remove the link", at)
+		}
 	}
 	return nil
 }

@@ -440,6 +440,9 @@ func (j *join) fromHost(ctx context.Context, req request, before app.Deliverable
 	if err := os.MkdirAll(filepath.Dir(final), 0o700); err != nil {
 		return refuse(fmt.Sprintf("%s could not be copied to this machine: the folder for the copy could not be made (%v)", where, err))
 	}
+	if err := noLinks(reg.dir, filepath.Dir(final)); err != nil {
+		return refuse(fmt.Sprintf("%s could not be copied to this machine: %v", where, err))
+	}
 	incoming, err := os.CreateTemp(filepath.Dir(final), ".incoming-*")
 	if err != nil {
 		return refuse(fmt.Sprintf("%s could not be copied to this machine: no file could be made for the copy (%v)", where, err))

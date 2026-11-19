@@ -3905,3 +3905,11 @@ or kept with the reason said (27).
     does, and with a schema each message is a turn of its own: the next
     goes once the last one's result is written, since the structured
     output is asked of the conversation as that turn left it.
+
+265. **Nothing for delivered files is written through a link.** The
+    deliverables folder in the project's data folder, and a copy's folder
+    under it, were made and written by following whatever stood there, so
+    a repository that carried one as a link had the register, its ignore
+    file and copies of files from other machines written wherever it led
+    (the deliverables review of 2026-11-19). A folder on the way that is a
+    link now stops the write, and says so.
