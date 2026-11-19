@@ -481,10 +481,15 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 		}
 		read = true
 	}
+	plain := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
 	// From each such name on, the piece as it is written, read as a line
 	// of its own: so a word of the shell's own before the name does not
 	// keep it from being read ("do mv <(date) 0"), and what the command is
-	// handed keeps its <(...), which the words below take apart.
+	// handed keeps its <(...), which the words below take apart. Where
+	// that cannot be read either, its words as they are written: a <(...)
+	// among them stands for whatever a command prints, not for the text
+	// it holds ("mv <(wget =x${X:} origin) db/s", where the ${X:} kept
+	// the line from being read: oracle seed 163).
 	for _, tail := range nameTails(piece) {
 		if tail == piece && read {
 			continue
@@ -495,6 +500,10 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 					return why
 				}
 			}
+		} else if ws := writtenWords(tail); len(ws) > 0 {
+			if why := e.removalDanger(plain, &simpleCmd{words: ws}, dirs, nil); why != "" {
+				return why
+			}
 		}
 	}
 	// The words from the command's name on, as they are written. In a
@@ -503,7 +512,6 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 	// runs, made so in a piece of the line that this one does not hold
 	// ("alias zz=" on the line before, and then "zz rsync -a --delete src/
 	// ."). The piece's own program was judged above, as it was read.
-	plain := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
 	for _, i := range from {
 		if read && i == 0 {
 			continue
@@ -528,6 +536,49 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 		}
 	}
 	return ""
+}
+
+// writtenWords cuts a command that could not be read, from its name on,
+// into its words as they are written: at blanks outside quotes, (...) and
+// ${...}, up to what ends the command. A process substitution, <(...) or
+// >(...), is a word that stands for whatever a command prints; the others
+// are their text without quotes and backslashes.
+func writtenWords(tail string) []word {
+	cut := make([]bool, len(tail))
+	end := len(tail)
+	scanShell(tail, func(i, depth int) bool {
+		if depth != 0 {
+			return true
+		}
+		switch tail[i] {
+		case ' ', '\t':
+			cut[i] = true
+		case '\n', ';', '|', '&':
+			end = i
+			return false
+		}
+		return true
+	})
+	var ws []word
+	unquote := strings.NewReplacer("'", "", "\"", "", "\\", "")
+	for i := 0; i < end; {
+		if cut[i] {
+			i++
+			continue
+		}
+		j := i
+		for j < end && !cut[j] {
+			j++
+		}
+		w := tail[i:j]
+		if strings.HasPrefix(w, "<(") || strings.HasPrefix(w, ">(") {
+			ws = append(ws, word{raw: w, parts: []wordPart{{kind: partSubst}}})
+		} else {
+			ws = append(ws, litOf(unquote.Replace(w)))
+		}
+		i = j
+	}
+	return ws
 }
 
 // decideRead judges Read, Grep and Glob: inside the working directories,

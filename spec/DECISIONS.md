@@ -3965,3 +3965,13 @@ or kept with the reason said (27).
     those of the skills a kind of sub-agent preloads, are judged as calls
     of the agent they are for, and run where it works: in its work tree,
     when it has one (they ran in the session's folder).
+
+271. **A command gnosh cannot read is still judged by what it is handed.**
+    In a line the reader could not follow (oracle seed 163: a ${X:}
+    stopped it), `mv <(wget …) db/s` was let run with permissions skipped
+    once any allow rule stood: its crude reading took the <(...) apart
+    into plain words, and moving away whatever a command prints, which
+    asks on a line that can be read, went unseen. Where the piece from a
+    destroying command's name on cannot be read either, its words are now
+    taken as they are written, and a <(...) or >(...) among them stands
+    for whatever a command prints.
