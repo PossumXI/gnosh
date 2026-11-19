@@ -9,6 +9,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/mcp"
+	"github.com/gnosh-ai/gnosh/internal/permission"
 )
 
 // This file gives an agent the MCP servers its definition names
@@ -149,7 +150,9 @@ func (l *live) agentMCPTools(s *subSession) []*mcpTool {
 func toolListed(list []string, name string, away bool) bool {
 	for _, entry := range list {
 		switch {
-		case entry == name:
+		case permission.CanonicalTool(entry) == name:
+			// (Claude Code's old names count: Task is Agent, KillShell
+			// is TaskStop.)
 			return true
 		case !strings.HasPrefix(entry, "mcp__") || !strings.HasPrefix(name, "mcp__"):
 		case strings.HasSuffix(entry, "__*") && strings.HasPrefix(name, strings.TrimSuffix(entry, "*")):

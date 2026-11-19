@@ -213,3 +213,21 @@ func TestContinueFalseAtTheStart(t *testing.T) {
 		t.Errorf("the model was sent %d requests, want 2 (no sub-agent's)", n)
 	}
 }
+
+// A kind whose disallowedTools names Claude Code's old name for the Agent
+// tool (Task) has no Agent tool: it cannot start a sub-agent of its own.
+func TestDisallowedTaskTakesAgentAway(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"read","prompt":"Read it.","subagent_type":"reader"}`}}},
+		apptest.Reply{Text: "Read."},
+		apptest.Reply{Text: "Done."})
+	w.Write(w.ConfigDir()+"/agents/reader.md", "---\nname: reader\ndescription: Reads.\ndisallowedTools: Write, Edit, Task\n---\nRead only.\n")
+	run(t, w, "-y", "-p", "read it").wantCode(t, 0)
+	sub := string(w.Model.Requests()[1].Body)
+	if strings.Contains(sub, `"name":"Agent"`) {
+		t.Error("a kind that disallows Task was given the Agent tool")
+	}
+	if !strings.Contains(sub, `"name":"Read"`) {
+		t.Error("the kind was not given its other tools")
+	}
+}

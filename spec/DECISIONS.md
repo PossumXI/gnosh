@@ -2638,3 +2638,24 @@ or kept with the reason said (27).
     empty reply (what had arrived of it is still not kept), for a turn's
     request and a summary's alike. TestStopWhileAFallbackIsMade checks the
     order of the events and catches it every time.
+
+156. **The security review of sub-agents: the first three findings.** A
+    fresh-eyes review of the sub-agent machinery found no high finding;
+    the first of its medium ones fixed here:
+    - Agent(kind) deny and ask rules compared the kind as the model wrote
+      it, while the tool leaves blanks off and takes none for the
+      general-purpose kind: "" and " Explore" went past
+      Agent(general-purpose) and Agent(Explore), and past hooks' "if"
+      filters. The engine now reads the kind as the tool does.
+    - A definition's tools and disallowedTools were compared by name as
+      written, so Claude Code's old name Task did not take the Agent tool
+      away (a read-only kind from ~/.claude/agents with
+      `disallowedTools: Write, Edit, Task` could still start a sub-agent
+      with every tool), and under --agent, `tools: Task(worker)` took it
+      away entirely. Old names count as the tools they name now.
+    - The agent and skill definition files were read whole once their
+      size was small: a cloned repository's .claude/agents/a.md that is a
+      link to /dev/zero or a terminal hung gnosh, or ran it out of memory,
+      at startup, in a folder nobody trusted (the count of what an
+      untrusted folder holds reads them). Only plain files are read, and
+      never past the size cap.

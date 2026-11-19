@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -310,14 +311,26 @@ func readSmall(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("it could not be read (%v)", err)
 	}
+	if !info.Mode().IsRegular() {
+		// (A link a repository holds may lead to /dev/zero, a terminal
+		// or a pipe: reading one would never end.)
+		return "", fmt.Errorf("it is not a plain file")
+	}
 	if info.Size() > maxFile {
 		return "", fmt.Errorf("it is larger than %d bytes, which no agent definition is", maxFile)
 	}
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("it could not be read (%v)", err)
 	}
-	if !utf8.Valid(data) {
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxFile+1))
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("it could not be read (%v)", err)
+	case len(data) > maxFile:
+		return "", fmt.Errorf("it is larger than %d bytes, which no agent definition is", maxFile)
+	case !utf8.Valid(data):
 		return "", fmt.Errorf("it is not text")
 	}
 	return string(data), nil
