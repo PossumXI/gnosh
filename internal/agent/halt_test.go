@@ -52,3 +52,61 @@ func TestAfterSummaryHalt(t *testing.T) {
 	}
 	r.checkLog()
 }
+
+// A reply to the summary request that begins a tool call ("Let me check
+// the test first." and a Read) is no summary, which would stand for the
+// whole conversation: the model is asked again without tools, and that
+// answer is the summary (the compaction review of 2026-11-19).
+func TestSummaryThatBeginsACallIsRefused(t *testing.T) {
+	j := &job{want: 14}
+	j.summary = func(_ int, req *core.Request) step {
+		if len(req.Tools) > 0 {
+			s := use(core.ToolCall{ID: "s1", Name: "Read", Input: []byte(`{}`)})
+			s.evs = append([]core.Event{{Type: core.EventTextDelta, Text: "Let me check the failing test first."}}, s.evs...)
+			return s
+		}
+		return say("SUMMARY from the bare try: fourteen files are being read.")
+	}
+	r := newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 8000
+		o.System = []string{"You are gnosh."}
+		o.Tools = []core.Tool{fileTool(600)}
+	})
+	r.model.honest = true
+	r.model.window = 8000
+	r.model.answer(j.respond)
+	if res := r.run("read fourteen files"); res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	sums := r.log.of(EntrySummary)
+	if len(sums) == 0 {
+		t.Fatal("no summary was made")
+	}
+	for _, e := range sums {
+		text := core.TextOf(e.Blocks)
+		if strings.Contains(text, "Let me check the failing test first") || !strings.Contains(text, "SUMMARY from the bare try") {
+			t.Errorf("the summary stored is %q", text)
+		}
+	}
+}
+
+// One tool result takes at most a quarter of the model's window: the rest
+// is cut, with a line that says how much there was and how to have it.
+func TestResultIsCutToAQuarterOfTheWindow(t *testing.T) {
+	r := newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 8000
+		o.Tools = []core.Tool{fileTool(4000)}
+	})
+	r.model.push(use(core.ToolCall{ID: "c1", Name: "Read", Input: []byte(`{"file_path":"/big"}`)}), say("read"))
+	if res := r.run("read the big file"); res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	results := r.log.of(EntryResult)
+	if len(results) != 1 {
+		t.Fatalf("%d results", len(results))
+	}
+	text := core.TextOf(results[0].Result.Content)
+	if !strings.Contains(text, "a quarter of the model's window") || len(text) > 9000 {
+		t.Errorf("the result kept is %d bytes and ends %q", len(text), text[max(0, len(text)-200):])
+	}
+}

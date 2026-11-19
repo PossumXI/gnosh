@@ -2735,3 +2735,29 @@ or kept with the reason said (27).
     get nothing (EOF): the person would have seen an error in the tab of
     a sign-in that worked. The listener now shuts down gracefully, with
     what does not finish in two seconds closed.
+
+163. **The review of compaction: the three high findings.** A fresh-eyes
+    review of how gnosh keeps a conversation within the model's window
+    found that no tool call loses its result across a summary or a slide,
+    and that a summary that fails leaves the conversation as it was; and:
+    - One tool result could fill most of a small window: Read gives up to
+      25,000 tokens, which on a model with a 32K window is over the point
+      where a summary is made. The summary leaves the file out, the model
+      reads it again, and the window fills again, a summary every round;
+      past the room a summary leaves, nothing could be sent at all, and
+      the session stood still until /rewind. A tool's result now takes at
+      most a quarter of the model's window, cut with a line that says how
+      much there was and to read the rest in parts. On a large window the
+      tools' own limits are smaller, and nothing is cut.
+    - Any text was taken as the summary, and the first try offers the
+      session's tools: a reply "Let me check the failing test first." with
+      a Read call would have stood for the whole conversation. A reply
+      that calls a tool, or stops for one, or refuses, is not taken; the
+      try without tools follows.
+    - The summary reached the model as a plain message on the user's side,
+      the person's voice, with gnosh's marks in it live, though the model
+      wrote it from a conversation that held pages and tool output. It now
+      comes after gnosh's own line, in its marks, that says the model
+      wrote it and that what it quotes of files, pages and tool output is
+      data; and gnosh's marks and chat-template tokens in it are broken,
+      as in a tool's output.

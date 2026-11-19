@@ -127,6 +127,11 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 			return false, xerr
 		case rep.stop == core.StopMaxTokens:
 			return false, nil // cut short: not accepted
+		case len(rep.msg.ToolUses()) > 0 || rep.stop == core.StopToolUse || rep.stop == core.StopRefusal:
+			// The model began a call ("Let me check the test first.")
+			// or refused: not a summary, which would stand for the whole
+			// conversation. The bare try has no tools to call.
+			return false, nil
 		}
 		text = strings.TrimSpace(rep.msg.Text())
 		return text != "", nil

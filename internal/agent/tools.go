@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -625,11 +626,74 @@ func (a *Agent) exec(stopped, ctx context.Context, turn string, idx int, tool co
 		}
 	}
 
+	d.res = a.fitResultToWindow(d.res)
+
 	if !gone.deliver(func() { out <- d }) {
 		a.notice(LevelWarning, "tools", fmt.Sprintf(
 			"%s finished %s after the turn was stopped. Its result was not recorded, because gnosh had already gone on without it.",
 			call.Name, span(a.clock.Now().Sub(began))))
 	}
+}
+
+// resultShare is the most of the model's window one tool result may take:
+// a quarter. A result that fills the window makes each summary after it
+// in vain, since the model reads it again and fills the window again, and
+// one bigger than the room a summary leaves can never be sent at all (the
+// compaction review of 2026-11-19, on a model with a 32K window: Read
+// gives up to 25,000 tokens).
+const resultShare = 4
+
+// fitResultToWindow cuts a tool result's text to a quarter of the model's
+// window, with a line that says it was cut and how to have the rest. On a
+// model with a large window the tools' own limits are smaller than that,
+// and nothing is cut here.
+func (a *Agent) fitResultToWindow(res core.ToolResult) core.ToolResult {
+	window := a.setup().model.Info.ContextWindow
+	if window <= 0 {
+		return res
+	}
+	most := window / resultShare
+	total := a.estBlocks(res.Content, false)
+	if total <= most {
+		return res
+	}
+	out := make([]core.Block, 0, len(res.Content)+1)
+	left := most
+	for _, b := range res.Content {
+		if b.Type != core.BlockText {
+			out = append(out, b)
+			continue
+		}
+		n := a.est(b.Text)
+		switch {
+		case n <= left:
+			out = append(out, b)
+			left -= n
+		case left > 0:
+			b.Text = cutTo(b.Text, len(b.Text)*left/max(n, 1))
+			out = append(out, b)
+			left = 0
+		}
+	}
+	out = append(out, core.Text(fmt.Sprintf("[The output was cut here, to about %d tokens, a quarter of the model's window: it went on for about %d tokens in all. Read the rest in parts (offset and limit), or narrow what the call asks for.]", most, total)))
+	res.Content = out
+	return res
+}
+
+// cutTo cuts text to at most n bytes, at the end of a line when there is
+// one in the last tenth, and never inside a character.
+func cutTo(text string, n int) string {
+	if n >= len(text) {
+		return text
+	}
+	n = max(n, 0)
+	for n > 0 && !utf8.RuneStart(text[n]) {
+		n--
+	}
+	if i := strings.LastIndexByte(text[:n], '\n'); i >= n*9/10 {
+		n = i + 1
+	}
+	return text[:n]
 }
 
 // sayable returns a tool result's content as a model can be sent it: no
