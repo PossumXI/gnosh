@@ -976,6 +976,15 @@ func (s *session) open(qs *question) {
 	if qs.form != nil && !qs.escCancels && qs.local == nil && qs.q.Tool == "AskUserQuestion" {
 		qs.idle = s.info.AskTimeout
 	}
+	if cur := s.q; cur != nil && cur != qs && cur.local == nil && !cur.answered {
+		// A menu of the interface's own takes the screen from the
+		// session's question (a picker's second screen, opened just as
+		// the first one closed and put up the question that waited
+		// behind it): the question goes back to the head of the line,
+		// not out of it. It was lost, and its turn waited for ever (the
+		// TUI review of 2026-11-19).
+		s.qwait = append([]*question{cur}, s.qwait...)
+	}
 	s.q = qs
 	s.dirty = true
 }

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -561,7 +562,17 @@ func (u *UI) AskBefore(q agent.Question) (ans agent.Answer, err error) {
 		cols, rows = 80, 24
 	}
 	qs := newQuestion(&u.th, u.m, cols, q, -1)
-	opened := u.now()
+	// The guard of the session's questions (session.open): no key answers
+	// until the question has been on the screen guardShown and the person
+	// has stopped typing for guardPause. Someone still typing their first
+	// prompt as gnosh starts goes on typing it; a j or a 2 in it moved to
+	// or picked "Yes" and trusted the folder unread (the TUI review of
+	// 2026-11-19).
+	quiet := u.now().Add(guardShown)
+	if slices.ContainsFunc(u.ahead, typing) {
+		// Typed while gnosh started: someone is typing right now.
+		quiet = u.now().Add(guardPause)
+	}
 	record := func(words string) {
 		title := oneLine(firstNonEmpty(q.Title, q.Kind, "question"))
 		_ = u.r.Commit(wrap(u.m, u.th.Answer.Render(oneLine(words)), cols, u.th.Ask.Render(u.th.AskMark)+" "+title+" ", "  ")...)
@@ -599,11 +610,15 @@ func (u *UI) AskBefore(q agent.Question) (ans agent.Answer, err error) {
 					return agent.Answer{}, errors.New("left before the question was answered")
 				}
 			}
-			if u.now().Sub(opened) < guardShown {
-				// Typed before the question could have been read: not
-				// meant for it. It is kept for the prompt box, like
-				// everything typed before gnosh was ready.
+			if now := u.now(); now.Before(quiet) {
+				// Typed before the question could have been read, or in
+				// the middle of a sentence: not meant for it. It is kept
+				// for the prompt box, like everything typed before gnosh
+				// was ready, and the question waits for a pause.
 				u.ahead = append(u.ahead, ev)
+				if typing(ev) {
+					quiet = now.Add(guardPause)
+				}
 				continue
 			}
 			res := qs.ui.Handle(ev)
@@ -618,6 +633,16 @@ func (u *UI) AskBefore(q agent.Question) (ans agent.Answer, err error) {
 			return ans, nil
 		}
 	}
+}
+
+// typing reports whether ev is something the person typed: a key or a
+// paste.
+func typing(ev term.Event) bool {
+	switch ev.(type) {
+	case term.Key, term.Paste:
+		return true
+	}
+	return false
 }
 
 // Run drives the session from its first prompt to its end and returns the

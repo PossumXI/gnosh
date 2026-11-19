@@ -3429,3 +3429,20 @@ or kept with the reason said (27).
     put back the first's "waiting for an answer" (the agent loop review of
     2026-11-19). What the session did before the first question is put
     back when the last one closes; until then it waits on one still open.
+
+217. **The trust question waits for a pause in typing, as the session's
+    questions do.** Before the session exists, the question about a
+    folder's settings dropped keys only in its first 0.4 s; after that a
+    digit picked and j moved, so someone still typing "fix the 2 failing
+    tests" as gnosh started trusted the folder at the 2, unread (the TUI
+    review of 2026-11-19). Now no key answers it until it has been up
+    0.4 s and no key has come for 0.6 s; what was typed meanwhile goes to
+    the prompt box when the session starts.
+
+218. **A menu of gnosh's own never pushes the session's question out of
+    line.** A picker's second screen (/model's thinking level, /config,
+    the Esc Esc confirm) opened just as its first screen's close put up a
+    permission question that waited behind it, and took its place: the
+    question was neither on the screen nor in line, and the turn waited
+    for an answer nobody could give (the TUI review of 2026-11-19). A
+    question so displaced goes back to the head of the line.
