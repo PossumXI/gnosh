@@ -579,3 +579,29 @@ func TestStreamJSONMaxTurnsPerMessage(t *testing.T) {
 		t.Errorf("the second message's result: %v", results[1])
 	}
 }
+
+// With stream-json input, each turn's result line carries the structured
+// output --json-schema asks for, as a run of one prompt's does: it was
+// left out of every one (the print mode review of 2026-11-19).
+func TestStreamJSONInputWithAJSONSchema(t *testing.T) {
+	schema := `{"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}`
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "There are three files."}, apptest.Reply{Text: `{"count": 3}`},
+		apptest.Reply{Text: "And four dirs."}, apptest.Reply{Text: `{"count": 4}`})
+	o := testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--json-schema", schema)
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"how many files?"}}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":"and dirs?"}}` + "\n")
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o).wantCode(t, 0)
+	var counts []string
+	for _, l := range jsonLines(t, r.out) {
+		if l["type"] == "result" {
+			out, _ := l["structured_output"].(map[string]any)
+			counts = append(counts, fmt.Sprint(out["count"]))
+		}
+	}
+	if strings.Join(counts, " ") != "3 4" {
+		t.Errorf("the results' structured output: %v\n%s", counts, r.out)
+	}
+}

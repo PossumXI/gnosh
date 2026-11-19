@@ -3897,3 +3897,11 @@ or kept with the reason said (27).
     guards with permissions skipped (oracle seed 162). The Bash tool runs
     /bin/sh where there is no bash. Such text now makes the line one that
     cannot be read ahead of time, so the deny and ask rules ask about it.
+
+264. **With stream-json input, each turn's result carries its structured
+    output.** --json-schema asked for the result as JSON only in a run of
+    one prompt: with --input-format stream-json no result line carried
+    it (the print mode review of 2026-11-19). Each turn's result now
+    does, and with a schema each message is a turn of its own: the next
+    goes once the last one's result is written, since the structured
+    output is asked of the conversation as that turn left it.
