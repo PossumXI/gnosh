@@ -97,16 +97,25 @@ func main() {
 // selfPath is the program file gnosh runs from, as it was started: the
 // name it was run by, looked up on the PATH as the shell looked it up, so
 // that a gnosh installed in its place, by rename or behind a link, is the
-// one /restart starts. Failing that, it is the file the system says this
-// process runs.
+// one /restart starts, when that is the file this process runs. Otherwise
+// it is the file the system says this process runs: a launcher that ran
+// /opt/x/gnosh as "gnosh" had /restart start whichever gnosh came first on
+// the PATH (the cd review of 2026-11-19).
 func selfPath() string {
+	exe, _ := os.Executable()
 	if p, err := exec.LookPath(os.Args[0]); err == nil {
-		if abs, err := filepath.Abs(p); err == nil {
+		if abs, err := filepath.Abs(p); err == nil && sameFile(abs, exe) {
 			return abs
 		}
 	}
-	p, _ := os.Executable()
-	return p
+	return exe
+}
+
+// sameFile reports whether a and b are paths of one file.
+func sameFile(a, b string) bool {
+	ai, aerr := os.Stat(a)
+	bi, berr := os.Stat(b)
+	return aerr == nil && berr == nil && os.SameFile(ai, bi)
 }
 
 // sshHelp reports whether the words after gnosh ssh ask for gnosh's help

@@ -551,6 +551,10 @@ func (s *source) settingsEnv(f jfield) {
 			s.errorf(m.line, "the value of \"env.%s\" is a string (put a number in quotes), and here it is %s.", m.key, m.val.kind.word())
 			continue
 		}
+		if handoffMarker(m.key) {
+			s.probs.warnf(s.file, m.line, "\"env.%s\" is not taken from a settings file: gnosh sets it itself, to tell the gnosh it starts again what happened, and a gnosh a command starts must not be told so (it would take a move or a restart that never was).", m.key)
+			continue
+		}
 		if movesOwnDirs(m.key) && (s.scope == "project" || s.scope == "local") {
 			s.probs.warnf(s.file, m.line, "\"env.%s\" is not taken from a project's file: it moves where gnosh and the programs it starts keep their own files. Set it in your own gnosh.json if you mean it.", m.key)
 			continue
@@ -560,6 +564,19 @@ func (s *source) settingsEnv(f jfield) {
 		s.add(op{kind: KindEnv, text: "env " + m.key, origin: v.Origin, feature: FeatureEnv, what: "a variable for commands",
 			apply: func(b *builder) { b.setEnv(v) }})
 	}
+}
+
+// handoffMarker reports whether a variable is one gnosh puts on the gnosh
+// it starts again (/restart, /cd, a work tree, a run in the background),
+// which the new one takes at its word: a settings file's env block put it
+// on every command, so a gnosh a command started was told of a move that
+// never was (the cd review of 2026-11-19).
+func handoffMarker(name string) bool {
+	switch name {
+	case "GNOSH_RESTARTED", "GNOSH_MOVED_FROM", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS":
+		return true
+	}
+	return false
 }
 
 // movesOwnDirs reports whether a variable moves where gnosh, or a program

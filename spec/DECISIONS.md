@@ -4077,3 +4077,34 @@ or kept with the reason said (27).
     with a command in it always stands for /dev/fd/N; a word that begins
     with one is now a path nobody can know ahead, which the guards ask
     about.
+
+283. **/cd moves the session to the folder as gnosh names it.** It filed
+    the session under the path as typed, where a start looks under the
+    path with its links followed (/tmp/proj against /private/tmp/proj), so
+    gnosh -c did not find it there, nor did SendMessage its sub-agents
+    (the cd review of 2026-11-19). The folder is now resolved first; after
+    the trust question it is looked at again, and so is what the session
+    is doing, which a scheduled prompt may have set going meanwhile (a
+    move half made kept the session running where it was); and the
+    session's folder beside its file, where its checkpoints are, goes with
+    it, as well as the one under the working folder's project, and the
+    person is told if one cannot.
+
+284. **In plain mode a question is answered by a line typed after it.** A
+    line typed before a question came, or as it came, was taken as its
+    answer: a "2" meant for a list in the model's reply picked "Yes, and
+    don't ask again" (the cd review of 2026-11-19). Such a line is now
+    said to be too early, as the full interface waits before a key counts.
+    And Ctrl+C stops a command that runs, as Esc does there; a question
+    nobody can answer is answered no only where no is a choice (its reason
+    was handed to gnokey as a password); and what is written holds no
+    stray C1 byte or mark that turns text around.
+
+285. **What gnosh tells the gnosh it starts again is gnosh's alone.** A
+    settings file's env block could put GNOSH_RESTARTED, GNOSH_MOVED_FROM,
+    GNOSH_TREE_MOVE or GNOSH_RUN_ASKS on every command, so a gnosh a
+    command started was told of a move or a restart that never was; they
+    are now taken from no settings file. And /restart starts the program
+    the PATH names only when that is the very file running: a launcher
+    that ran another gnosh under the same name had /restart start the
+    PATH's (the cd review of 2026-11-19).
