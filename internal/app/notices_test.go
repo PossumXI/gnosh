@@ -178,6 +178,35 @@ func TestRunWaitsInStreamJSON(t *testing.T) {
 	w.Model.Done()
 }
 
+// A run whose turns of the model are spent (--max-turns) cannot ask the
+// model at a checkpoint whether to wait on: what is left is stopped and
+// the run ends, as Claude Code's wait ends. It asked, the turn was stopped
+// before its first request, and the next checkpoint asked again, so the
+// run never ended (the print mode review of 2026-11-19).
+func TestRunWaitCheckpointWithItsTurnsSpent(t *testing.T) {
+	defer func(was time.Duration) { waitCheckpoint = was }(waitCheckpoint)
+	waitCheckpoint = 300 * time.Millisecond
+	start := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 60; touch late.txt","run_in_background":true}`}}}
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	// The answer took the last of the run's turns.
+	w := apptest.NewWorld(t, start, apptest.Reply{Text: "Started."})
+	r := runWith(t, ctx, testOptions(w, "-y", "-p", "--max-turns", "2", "--output-format", "json", "start it")).wantCode(t, 0)
+	has(t, "the JSON result", r.out, `"result":"Started."`, `"subtype":"success"`)
+	has(t, "stderr", r.err, "cannot ask the model whether to wait on, as its 2 turns of the model are spent (--max-turns); it stops the work now: bg1")
+	w.Model.Done()
+	// The cap stopped the turn.
+	w.Model.Add(start)
+	r = runWith(t, ctx, testOptions(w, "-y", "-p", "--max-turns", "1", "--output-format", "json", "start it again")).wantCode(t, 1)
+	has(t, "the JSON result", r.out, `"subtype":"error_max_turns"`)
+	has(t, "stderr", r.err, "it stops the work now: bg1")
+	w.Model.Done()
+	time.Sleep(time.Second)
+	if w.Exists("late.txt") {
+		t.Errorf("the background command outlived the run")
+	}
+}
+
 // A ceiling set with CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS stops what is
 // left once the run has waited that long, and the run ends.
 func TestRunWaitCeiling(t *testing.T) {

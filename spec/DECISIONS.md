@@ -3098,3 +3098,14 @@ or kept with the reason said (27).
     run ends as one a signal stopped does: 130 or 143, and the result
     line in the JSON formats, written at once when no turn of the run's
     own is left to report.
+
+185. **A run whose turns are spent stops its background work at the
+    checkpoint.** gnosh asks the model, after ten minutes of idle
+    waiting for background work, whether to wait on, where Claude Code
+    stops what is left (DECISIONS 117's wait). With --max-turns spent, the
+    turn that asked was stopped before its first request, the next
+    checkpoint asked again, and a run whose background work never ended
+    never ended either (the print mode review's note). When the model
+    cannot be asked (its turns are spent, or the session is closing),
+    the run says so on stderr, stops what is left, as Claude Code's wait
+    does, and ends with the last turn's result.

@@ -280,6 +280,19 @@ func (l *live) turnCap(ctx context.Context, info agent.RequestInfo) ([]agent.Par
 	return nil, nil
 }
 
+// turnsSpent reports whether the run has had the turns of the model that
+// --max-turns gave it, so that a turn started now would be stopped before
+// its first request. With stream-json input each turn has a fresh count,
+// and none is spent ahead of it.
+func (l *live) turnsSpent() bool {
+	if l.maxTurns <= 0 || l.inv.InputFormat == cli.FormatStreamJSON {
+		return false
+	}
+	l.capMu.Lock()
+	defer l.capMu.Unlock()
+	return l.capped || l.roundsBefore >= l.maxTurns
+}
+
 // moreRounds is turnCap asked after a round, before what the person queued
 // meanwhile is handed to the turn: a turn that has had its replies ends
 // there, and the queued words go out as a turn of their own (with stream-

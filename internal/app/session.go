@@ -1730,13 +1730,16 @@ func (c *controls) BackgroundWork() (running []string, ever bool) {
 // CheckBackground hands the model a checkpoint in a run that has waited
 // long for background work: a note that wakes it, says what still runs
 // and for how long the run has waited, and asks whether to stop that work
-// or to wait on.
-func (c *controls) CheckBackground(waited time.Duration, work []string) {
+// or to wait on. It says why when the model cannot be asked.
+func (c *controls) CheckBackground(waited time.Duration, work []string) error {
 	l := c.cur()
-	if l.agent == nil || l.closing.Load() {
-		return
+	switch {
+	case l.agent == nil || l.closing.Load():
+		return errors.New("the session is closing")
+	case l.turnsSpent():
+		return fmt.Errorf("its %d turns of the model are spent (--max-turns)", l.maxTurns)
 	}
-	_ = l.agent.Tell(agent.Note{
+	return l.agent.Tell(agent.Note{
 		Text:   l.texts.PrintWait(roundTime(waited), strings.Join(work, ", ")),
 		Source: "print-wait",
 		Notice: "The run has waited " + roundTime(waited) + " for background work; the model is asked whether to go on waiting.",
