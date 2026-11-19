@@ -189,10 +189,23 @@ func TestClaudeCodeCommands(t *testing.T) {
 	if strings.Contains(exported, "\n\n") {
 		t.Errorf("the export holds an empty line:\n%s", exported)
 	}
+	if info, err := os.Stat(w.Path("talk.txt")); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the export is %v (%v), want the person's alone (0600)", info.Mode().Perm(), err)
+	}
 	s.typeLine("/export talk.txt")
 	s.see("is there already, and /export writes over nothing")
 	s.typeLine("/export")
 	s.see("The conversation is in " + w.Dir + "/")
+	// A folder named gets the file of the usual name in it, not a file
+	// beside it (the hosts review of 2026-11-19).
+	if err := os.Mkdir(w.Path("exports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.typeLine("/export exports")
+	s.see("The conversation is in " + w.Dir + "/exports/")
+	if w.Exists("exports.txt") {
+		t.Error("/export of a folder wrote a file beside it")
+	}
 
 	// /init asks the model to improve the GNOSH.md there is.
 	s.typeLine("/init")

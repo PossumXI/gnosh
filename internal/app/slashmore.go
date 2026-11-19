@@ -470,8 +470,11 @@ const exportClipboard = "--clipboard"
 // slashExport is /export [file | --clipboard]: the conversation as plain
 // text, in a file, or on the clipboard. A relative name is the working
 // directory's, a name with no extension gets .txt, and with no name it is
-// <date>-<session's name>.txt there. A file that is there already is
-// never written over.
+// <date>-<session's name>.txt there, or in the folder named. A file that
+// is there already is never written over. The file is the person's alone,
+// as the session's own file is, and holds no control character but tabs
+// and line breaks: what commands printed is in it (the hosts review of
+// 2026-11-19: it was readable by all, and cat replayed escape sequences).
 func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
 	name := strings.TrimSpace(c.Args)
 	if name == exportClipboard {
@@ -479,21 +482,28 @@ func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
 		l.toClipboard(ctx, c, "The conversation", exportText(l.ts.Entries()))
 		return nil
 	}
+	title, _ := l.title()
+	byDefault := l.p.now().Format("2006-01-02") + "-" + fileSlug(firstOf(title, "session")) + ".txt"
 	if name == "" {
-		title, _ := l.title()
-		name = l.p.now().Format("2006-01-02") + "-" + fileSlug(firstOf(title, "session")) + ".txt"
+		name = byDefault
 	}
 	switch {
+	case name == "~":
+		name = l.cfg.Paths.Home
 	case strings.HasPrefix(name, "~/"):
 		name = filepath.Join(l.cfg.Paths.Home, name[2:])
 	case !filepath.IsAbs(name):
 		name = filepath.Join(l.cwd(), name)
 	}
+	if info, err := os.Stat(name); err == nil && info.IsDir() {
+		// (/export ~/Desktop wrote ~/Desktop.txt.)
+		name = filepath.Join(name, byDefault)
+	}
 	if filepath.Ext(name) == "" {
 		name += ".txt"
 	}
-	text := exportText(l.ts.Entries())
-	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	text := clipboard.Plain(exportText(l.ts.Entries()))
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	switch {
 	case errors.Is(err, os.ErrExist):
 		return fmt.Errorf("%s is there already, and /export writes over nothing; give it another name", name)
