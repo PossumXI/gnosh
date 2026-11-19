@@ -525,16 +525,26 @@ func sameHandler(a, b Hook) bool {
 // monitorTool is the tool whose commands Bash hooks guard.
 const monitorTool = "Monitor"
 
-// bashOfMonitor is a Monitor call's input as a Bash call's: its command
-// and its description. What cannot be read is passed on as it is.
+// bashOfMonitor is a Monitor call's input as the Bash call's that runs its
+// command: the command, its description, its time (timeout_ms as timeout),
+// and run_in_background, which a Monitor's command always is (the hosts
+// review of 2026-11-19: a hook that refuses commands in the background
+// let a Monitor's through). What cannot be read is passed on as it is.
 func bashOfMonitor(input json.RawMessage) json.RawMessage {
-	var m struct {
-		Command     *string `json:"command"`
-		Description *string `json:"description,omitempty"`
+	var in struct {
+		Command     *string          `json:"command"`
+		Description *string          `json:"description"`
+		TimeoutMs   *json.RawMessage `json:"timeout_ms"`
 	}
-	if json.Unmarshal(input, &m) != nil || m.Command == nil {
+	if json.Unmarshal(input, &in) != nil || in.Command == nil {
 		return input
 	}
+	m := struct {
+		Command      *string          `json:"command"`
+		Description  *string          `json:"description,omitempty"`
+		Timeout      *json.RawMessage `json:"timeout,omitempty"`
+		InBackground bool             `json:"run_in_background"`
+	}{in.Command, in.Description, in.TimeoutMs, true}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return input

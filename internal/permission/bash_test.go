@@ -623,4 +623,10 @@ func TestMonitorUsesBashRules(t *testing.T) {
 	if d := mon("make watch"); d.Behavior != Ask {
 		t.Errorf("Monitor asks otherwise: %+v", d)
 	}
+	// Its command runs in the background, which Bash's rules about that
+	// argument cover (the hosts review of 2026-11-19).
+	e = engine(t, ModeDefault, rules{allow: []string{"Bash(npm run *)"}, deny: []string{"Bash(run_in_background:true)"}})
+	if d := mon("npm run dev"); d.Behavior != Deny {
+		t.Errorf("Monitor under a deny of Bash(run_in_background:true): %+v", d)
+	}
 }

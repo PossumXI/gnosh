@@ -911,6 +911,13 @@ func (e *Engine) match(list List, req *request) *crule {
 			if c.canon == req.canon && paramMatch(req.input, c.param, c.value) {
 				return c
 			}
+			// A Monitor call is a Bash command run in the background, and
+			// Bash's rules about its arguments hold for it as for that
+			// call: a deny of Bash(run_in_background:true) did not cover
+			// it (the hosts review of 2026-11-19).
+			if c.canon == toolBash && req.canon == toolMonitor && paramMatch(monitorAsBash(req.input), c.param, c.value) {
+				return c
+			}
 		case kindCommand:
 			if req.view != nil && list != ListAllow && e.commandHit(c, req.view) {
 				return c
@@ -1049,6 +1056,20 @@ func (e *Engine) allowsPath(p string, edit bool) *crule {
 
 // paramMatch reports whether the input has the scalar parameter with a
 // value the pattern covers.
+// monitorAsBash is a Monitor call's arguments as those of the Bash call
+// that runs its command: in the background, with timeout_ms as timeout.
+func monitorAsBash(input map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(input)+1)
+	for k, v := range input {
+		if k == "timeout_ms" {
+			k = "timeout"
+		}
+		out[k] = v
+	}
+	out["run_in_background"] = json.RawMessage("true")
+	return out
+}
+
 func paramMatch(input map[string]json.RawMessage, name, pat string) bool {
 	raw, ok := input[name]
 	if !ok {

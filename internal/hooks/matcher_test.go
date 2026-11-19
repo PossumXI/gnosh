@@ -293,7 +293,10 @@ func TestBashHooksGuardMonitorCommands(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.ToolName != "Bash" || got.ToolInput["command"] != "tail -f log" || got.ToolInput["timeout_ms"] != nil {
+	// As the Bash call that runs it: in the background, with its time
+	// (the hosts review of 2026-11-19).
+	if got.ToolName != "Bash" || got.ToolInput["command"] != "tail -f log" || got.ToolInput["timeout_ms"] != nil ||
+		got.ToolInput["run_in_background"] != true || got.ToolInput["timeout"] != float64(1000) {
 		t.Errorf("the Bash hook was given %s", data)
 	}
 

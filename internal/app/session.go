@@ -322,6 +322,9 @@ type live struct {
 	// bgUntold that the ends of that work are no longer told to the model
 	// (the run has stopped waiting for it).
 	bgEver, bgUntold atomic.Bool
+	// monitorSent is when each Monitor last passed lines on, by its id
+	// (monitorLines).
+	monitorSent sync.Map
 }
 
 // joined is a feature with what it added to this session.
