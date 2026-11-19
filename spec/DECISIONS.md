@@ -3379,3 +3379,13 @@ or kept with the reason said (27).
     held the next prompt, Esc did nothing, and /exit waited (the agent
     loop review of 2026-11-19). They run under a context of their own now,
     which Interrupt and End cancel first.
+
+211. **The oracle's redirect exception keeps the checks that end a line.**
+    DECISIONS 205 passed over a redirected command before the checks that
+    end the whole line, so seed 158 counted against the engine a command
+    after a redirected exec (a failed exec ends the shell) and one after a
+    redirected command holding ${} (a bad substitution ends a
+    non-interactive bash). The redirected command is now left out of what
+    must have run only after those checks, and a redirection whose word
+    the engine cannot know (> ${}, &> $((x))) ends the check for the line.
+    Probed in fresh jails: all three lines of seeds 157 and 158 pass.
