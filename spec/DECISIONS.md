@@ -3816,3 +3816,11 @@ or kept with the reason said (27).
     it is opened without waiting; a target or a host with such characters
     is refused; and the note that the port was taken says that earlier
     addresses on it now reach whatever holds it.
+
+255. **Deliver is held to the file it was judged for.** The question (or
+    the rule) judged the file a call's target named as the call was
+    described, and the run worked the target out again: a cd or a link
+    changed in between made the same words name another file, which was
+    delivered unjudged (the deliverables review of 2026-11-19). The run
+    now refuses when the target, its links followed, is not the file that
+    was judged, as Edit and Write do.

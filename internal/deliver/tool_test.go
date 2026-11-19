@@ -612,3 +612,37 @@ func TestLabels(t *testing.T) {
 		t.Errorf("an entry by its label: %+v, %v", d, ok)
 	}
 }
+
+// A call is held to the file it was judged for: a link changed between
+// the question and the run makes its target name another file, which is
+// not delivered (the deliverables review of 2026-11-19).
+func TestDeliverIsHeldToTheFileItWasJudgedFor(t *testing.T) {
+	b := newBench(t, "127.0.0.1:0", 0)
+	b.w.Write("one.md", "one")
+	b.w.Write("two.md", "two")
+	if err := os.Symlink("one.md", b.w.Path("report.md")); err != nil {
+		t.Skip("no links here:", err)
+	}
+	input, err := json.Marshal(map[string]any{"label": "report", "target": "report.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := core.ToolCall{ID: "call-judged", Name: app.DeliverToolName, Input: input}
+	if _, err := b.tool.Describe(c, b.env); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(b.w.Path("report.md"))
+	if err := os.Symlink("two.md", b.w.Path("report.md")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := b.tool.Run(t.Context(), c, b.env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := core.TextOf(res.Content); !res.IsError || !strings.Contains(got, "the call was judged for the file "+b.w.Path("one.md")) {
+		t.Errorf("a call whose link changed after the question: %v %q", res.IsError, got)
+	}
+	if got := b.list(); got != "" {
+		t.Errorf("the list holds %q", got)
+	}
+}

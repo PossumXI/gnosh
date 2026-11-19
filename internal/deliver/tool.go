@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -41,6 +42,10 @@ const unrecorded = "Nothing was recorded: "
 // tool is the Deliver tool of one session.
 type tool struct {
 	j *join
+	// judged is the file each call was described with, by call id, its
+	// links followed then: what the person or the rules judged, which
+	// the run is held to.
+	judged sync.Map
 }
 
 // Spec is what the model is told about the tool. The words are the same in
@@ -287,7 +292,19 @@ func (t *tool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, err
 	if _, problem := checkFile(path, cwd); problem != "" {
 		return action, errors.New(problem)
 	}
+	if call.ID != "" {
+		t.judged.Store(call.ID, realFile(path))
+	}
 	return action, nil
+}
+
+// realFile is a path with its links followed, or the path when they
+// cannot be.
+func realFile(path string) string {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
+	}
+	return path
 }
 
 // Run carries out a call.
@@ -307,7 +324,16 @@ func (t *tool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (
 	case req.host != "":
 		return j.fromHost(ctx, req, before, had), nil
 	}
-	return j.local(ctx, req, j.cwdOf(env), before, had), nil
+	cwd := j.cwdOf(env)
+	// The file the call was judged by is the one it may deliver: a cd or
+	// a link changed between the question and the run makes the same
+	// words name another (the deliverables review of 2026-11-19).
+	if v, ok := t.judged.LoadAndDelete(call.ID); ok {
+		if was, now := v.(string), realFile(j.localPath(req.target, cwd)); was != now {
+			return refuse(fmt.Sprintf("the call was judged for the file %s, and %s now leads to %s. Deliver it again, so that what is delivered is what is judged", was, req.target, now)), nil
+		}
+	}
+	return j.local(ctx, req, cwd, before, had), nil
 }
 
 // refuse is the result of a call that recorded nothing.
