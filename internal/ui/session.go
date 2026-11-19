@@ -255,6 +255,17 @@ type session struct {
 	// stopArmed is when Ctrl+X Ctrl+K was pressed once, waiting for the
 	// second press that stops the background sub-agents.
 	stopArmed time.Time
+	// listing says a picker's list is being read (loadThen): heldInput is
+	// what the person typed meanwhile, for the list; listAgain says how to
+	// ask for it again; listGen counts the lists let go before they came.
+	listing   bool
+	heldInput []term.Event
+	listAgain string
+	listGen   int
+	// refeed is input, set when the session is made: a list that came
+	// takes in what was held for it by it (a call to input from there
+	// would tie the slash commands' table to itself).
+	refeed func(term.Event)
 
 	// q is the question on the screen and qwait the ones behind it.
 	q     *question
@@ -383,6 +394,7 @@ func newSession(cfg config) *session {
 	if s.now == nil {
 		s.now = time.Now
 	}
+	s.refeed = s.input
 	s.ed = editor.New(editor.Options{
 		Theme:    s.th.Editor,
 		Complete: s.complete,

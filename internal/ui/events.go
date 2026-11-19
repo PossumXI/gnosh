@@ -49,6 +49,9 @@ const metaPastes = "pastes"
 func (s *session) handle(ev any) {
 	s.dirty = true
 	s.heard = s.now()
+	// A question or a turn that comes while a picker's list is read goes
+	// first.
+	defer s.listCheck()
 	if e, ok := ev.(agent.Event); ok {
 		if m := e.EventMeta(); m != nil && m.Agent != "" {
 			s.subAgent(ev, m)

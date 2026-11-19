@@ -2460,3 +2460,16 @@ or kept with the reason said (27).
     the page was lost. Not changed: the addresses the fetcher refuses leave
     out a few rare ranges (198.18/15, 192.0.0.0/24, NAT64); every fetch is
     https with a certificate checked against the name asked for.
+
+147. **Esc Esc and /resume read their lists away from the loop.** The list
+    of prompts to go back to is read from the session's file (and the
+    file copies' index), the list of sessions from the folder's files: on
+    a long session, or a folder of many, the screen stood still meanwhile.
+    Both are now read away from the loop. What is typed meanwhile is held
+    for the list, as had it come at once: Down and Enter pick in it. (A
+    first version let those keys through to the box, where Down took the
+    last prompt back and Enter sent it again; the test with the real
+    program caught it.) A question or a turn that comes first lets the
+    list go, and so does Ctrl+C, with a line that says how to open it
+    again; what was typed for it is dropped, never given to the box or to
+    the question.
