@@ -547,7 +547,9 @@ func (f *printer) Event(ev any) {
 			// here: its retry threw away the session's own reply, and its
 			// stream-json message, half written.)
 			f.buf.Reset()
-			f.safe.Reset()
+			if end := f.safe.End(); end != "" {
+				fmt.Fprint(f.p.stdout, end)
+			}
 			f.inMessage = false
 			f.partialEnd(core.StopCancelled, core.Usage{})
 		}
@@ -756,7 +758,11 @@ func (f *printer) endReply() {
 		}
 		f.buf.Reset()
 	}
-	f.safe.Reset()
+	if end := f.safe.End(); end != "" {
+		// (A style the reply opened is closed: gnosh's own lines and the
+		// person's shell come after it.)
+		fmt.Fprint(f.p.stdout, end)
+	}
 	f.inMessage = false
 }
 

@@ -1324,7 +1324,9 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			}
 			names := make([]string, len(shown))
 			for i, f := range shown {
-				names[i] = filepath.Base(f)
+				// (A name the model gave a file may hold anything: the
+				// menu keeps styles and links.)
+				names[i] = oneLine(filepath.Base(f))
 			}
 			more := ""
 			if n > len(shown) {

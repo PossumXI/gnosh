@@ -39,3 +39,20 @@ func TestCommandOutputToATerminalIsSafe(t *testing.T) {
 		t.Errorf("/btw printed to a terminal: %q", r.out)
 	}
 }
+
+// A reply printed to a terminal hides nothing ("conceal" is taken out of
+// its styles) and leaves no style on after it: what comes next, gnosh's
+// own lines and the person's shell, is not drawn in it (the terminal
+// review of 2026-11-19).
+func TestPrintToATerminalHidesNothingAndClosesItsStyle(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Run: \x1b[8mrm -rf ~\x1b[31m red"})
+	o := testOptions(w, "-p", "go")
+	o.StdoutIsTerminal = true
+	r := runWith(t, t.Context(), o).wantCode(t, 0)
+	if strings.Contains(r.out, "\x1b[8m") || !strings.Contains(r.out, "Run: rm -rf ~\x1b[31m red") {
+		t.Errorf("printed to a terminal: %q", r.out)
+	}
+	if i, j := strings.LastIndex(r.out, "\x1b[31m"), strings.LastIndex(r.out, "\x1b[0m"); j < i {
+		t.Errorf("the reply's style was left on: %q", r.out)
+	}
+}

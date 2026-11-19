@@ -3860,3 +3860,15 @@ or kept with the reason said (27).
     escape (\x1b, ‮). Sessions draw through their own renderer, and
     the agent view and attach take the terminal over; a pipe gets the
     output as it is.
+
+260. **A reply printed to a terminal hides nothing and leaves no style
+    on.** gnosh -p lets the model's styles through to a terminal, as
+    Claude Code does, but "conceal" among them hid words of a suggested
+    command that were still copied with the rest, and a style left open
+    at the end was worn by gnosh's later lines and the person's shell
+    until a reset (the terminal review of 2026-11-19). Conceal is now
+    taken out, and text that leaves a style open is followed by the one
+    that closes every style. The names of files in /rewind's question
+    are made safe like every other line, and a desktop note that begins
+    with a number is put behind "gnosh: ", which terminals that read
+    ConEmu's OSC 9 commands would otherwise take for one.
