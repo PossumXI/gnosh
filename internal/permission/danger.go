@@ -1054,6 +1054,12 @@ func (e *Engine) targetDanger(w word, dirs []string, fromSubst map[string]bool, 
 		if recursive && w.onlySubst() {
 			return "the target is whatever a command prints"
 		}
+		if recursive && w.parts[0].kind == partSubst && w.parts[0].proc {
+			// "<(cmd)x" is /dev/fd/63x: a path named by a number, which is
+			// only known when the line runs. Taken for a word that may be
+			// nothing, it was judged as "x" (oracle seed 164).
+			return "the target is a path a process substitution names, which is only known when the line runs"
+		}
 		if stated && !w.tilde {
 			left := litOf(s)
 			left.glob = w.glob

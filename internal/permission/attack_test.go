@@ -172,6 +172,9 @@ func TestShellAttacks(t *testing.T) {
 		{"mv moves away what a process substitution names, in a line nobody could read (oracle seed 163)", ModeBypass, rules{allow: []string{"Bash(mv)"}}, "if mv <(wget =x${X:} origin) db/s; then true; fi", Ask},
 		{"the same in the line the oracle made", ModeBypass, rules{allow: []string{"Bash(mv)", "Bash(dirname *)", "Bash(stat *)"}}, "stat --printf=@OUT@/secret.txt -q -f `dirname --zero -z src {a,b}` +%s ;\nman sneaky.txt bar | if mv <(wget =x${X:} origin) db/s; then git --exec-path=. --abbrev {fd}> out.txt < sneaky.txt; fi", Ask},
 		{"the same with no rules", ModeBypass, none, "mv <(wget =x${X:} origin) db/s", Ask},
+		// "<(cmd)x" is /dev/fd/63x, never x alone (oracle seed 164).
+		{"mv moves away a path a process substitution names, with text after it (oracle seed 164)", ModeBypass, none, "mv <(echo x)suffix db/s", Ask},
+		{"the line the oracle made", ModeBypass, none, "mv >(pwd @WORK@/a.txt origin${HOME^h})mv >(pwd @WORK@/a.txt or[[iin${HOME^h})|[ -e x ]", Ask},
 		{"sh runs the word after two variables that hold nothing", ModeBypass, attackGuards, "(($X $Y git push origin))", Deny},
 		{"sh runs the first file a * names, after a variable that holds nothing", ModeBypass, attackGuards, "(( $a * $b ))", Ask},
 		{"sh runs rm y after the &>", "", rules{allow: []string{"Bash(ls *)"}}, "ls &>/dev/null rm y", Ask},

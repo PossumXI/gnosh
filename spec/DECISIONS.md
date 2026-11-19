@@ -4068,3 +4068,12 @@ or kept with the reason said (27).
     A named pipe in its place stopped the keys, and /keybindings wrote its
     template through a link left where the file was (the status line
     review of 2026-11-19).
+
+282. **A word that begins with a process substitution names a path that is
+    only known when the line runs.** The engine read <(cmd) as a part of
+    a word that may stand for nothing, as an empty variable may, so
+    `mv <(echo x)suffix db/s` was judged as moving "suffix", where the
+    shell moves /dev/fd/63suffix (oracle seed 164). A process substitution
+    with a command in it always stands for /dev/fd/N; a word that begins
+    with one is now a path nobody can know ahead, which the guards ask
+    about.

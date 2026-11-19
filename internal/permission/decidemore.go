@@ -572,7 +572,7 @@ func writtenWords(tail string) []word {
 		}
 		w := tail[i:j]
 		if strings.HasPrefix(w, "<(") || strings.HasPrefix(w, ">(") {
-			ws = append(ws, word{raw: w, parts: []wordPart{{kind: partSubst}}})
+			ws = append(ws, word{raw: w, parts: []wordPart{{kind: partSubst, proc: true}}})
 		} else {
 			ws = append(ws, litOf(unquote.Replace(w)))
 		}

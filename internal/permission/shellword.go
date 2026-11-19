@@ -25,6 +25,11 @@ const (
 // wordPart is one piece of a shell word.
 type wordPart struct {
 	kind partKind
+	// proc marks a partSubst that is a process substitution with a
+	// command in it, <(cmd) or >(cmd): it stands for a path of the form
+	// /dev/fd/N, never for nothing, and which N is only known when the
+	// line runs.
+	proc bool
 	// lit is the text of a partLit.
 	lit string
 	// name is the variable a partVar expands.
@@ -932,7 +937,7 @@ func (p *parser) procSubst(b *wordBuilder) {
 		return
 	}
 	b.raw.WriteString(p.src[from:p.pos])
-	b.add(wordPart{kind: partSubst})
+	b.add(wordPart{kind: partSubst, proc: strings.TrimSpace(p.src[from+1:p.pos-1]) != ""})
 	p.sc.subst = true
 }
 
