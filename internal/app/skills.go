@@ -457,10 +457,11 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 	// A skill that is not run after all takes its grant back: it was put
 	// in force for the skill's commands, and is no leave for the rest of
 	// the turn (the skills review of 2026-11-19).
-	if text, refusal = l.prepareSkill(sk, args); refusal != "" {
+	parts, refusal := l.prepareSkill(sk, args)
+	if refusal != "" {
 		return "", false, refusal
 	}
-	if text, refusal = l.runSkillCommands(sk, text); refusal != "" {
+	if text, refusal = l.runSkillCommands(parts); refusal != "" {
 		l.dropSkillGrant(sk)
 		return "", false, refusal
 	}
@@ -476,34 +477,37 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 	return text, l.recordSkillRun(sk.Name, text), ""
 }
 
-// prepareSkill makes a skill's text with its arguments put in, puts its
-// permission rules in force (addSkillGrant), and checks the commands its
-// text runs before the model sees it against those rules, running none
-// (inject.go). Nothing else of it is in force yet: runSkillCommands runs
-// the commands, and commitSkill puts the rest in.
-func (l *live) prepareSkill(sk skill.Skill, args string) (text, refusal string) {
+// prepareSkill makes a skill's text with its arguments put in, cut into
+// its text and its commands (skill.Parts), puts its permission rules in
+// force (addSkillGrant), and checks its commands against those rules,
+// running none (inject.go). Nothing else of it is in force yet:
+// runSkillCommands runs the commands, and commitSkill puts the rest in.
+func (l *live) prepareSkill(sk skill.Skill, args string) ([]skill.Part, string) {
 	if len(sk.Unbuilt) > 0 {
-		return "", unbuiltSkill(sk)
+		return nil, unbuiltSkill(sk)
 	}
-	text = sk.Render(args, l.skillVars(sk))
+	parts, err := sk.Parts(args, l.skillVars(sk))
+	if err != nil {
+		return nil, err.Error()
+	}
 	if refusal := l.addSkillGrant(sk); refusal != "" {
-		return "", refusal
+		return nil, refusal
 	}
-	if err := l.checkCommands(text); err != nil {
+	if err := l.checkCommands(parts); err != nil {
 		l.dropSkillGrant(sk)
-		return "", err.Error()
+		return nil, err.Error()
 	}
-	return text, ""
+	return parts, ""
 }
 
-// runSkillCommands runs the commands a prepared skill's text asks for,
-// under the rules in force, and puts what each printed in its place.
-func (l *live) runSkillCommands(sk skill.Skill, text string) (string, string) {
-	injected, err := l.injectCommands(sk, text)
+// runSkillCommands runs the commands of a prepared skill, under the rules
+// in force, and gives its text with what each printed in its place.
+func (l *live) runSkillCommands(parts []skill.Part) (string, string) {
+	text, err := l.injectCommands(parts)
 	if err != nil {
 		return "", err.Error()
 	}
-	return injected, ""
+	return text, ""
 }
 
 // skillVars are what a skill's text and rules may name.
@@ -698,17 +702,18 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 		l.dropSkillGrants()
 		return res, true, fmt.Errorf(format, a...)
 	}
-	texts := make([]string, len(stack))
+	prepared := make([][]skill.Part, len(stack))
 	for i, s := range stack {
 		if i > 0 {
 			l.engine.RemoveLayers(permission.ScopeSkill)
 		}
-		text, refusal := l.prepareSkill(s, args)
+		parts, refusal := l.prepareSkill(s, args)
 		if refusal != "" {
 			return fail("the skill was not run: %s", refusal)
 		}
-		texts[i] = text
+		prepared[i] = parts
 	}
+	texts := make([]string, len(stack))
 	for i, s := range stack {
 		if len(stack) > 1 {
 			l.engine.RemoveLayers(permission.ScopeSkill)
@@ -716,7 +721,7 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 				return fail("the skill was not run: %s", refusal)
 			}
 		}
-		text, refusal := l.runSkillCommands(s, texts[i])
+		text, refusal := l.runSkillCommands(prepared[i])
 		if refusal != "" {
 			return fail("the skill was not run: %s", refusal)
 		}

@@ -636,3 +636,19 @@ func TestSkillCommandThatPrintsALot(t *testing.T) {
 		t.Errorf("it was stopped after %s", took)
 	}
 }
+
+// An argument that holds !`...` runs nothing, in a skill without commands
+// of its own and in one with them: the commands are found in the file
+// before its arguments go in (the skills review of 2026-11-19).
+func TestSkillArgumentsAddNoCommands(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Seen."}, apptest.Reply{Text: "Seen."})
+	w.Write(w.ConfigDir()+"/skills/say/SKILL.md", "---\ndescription: Says.\nallowed-tools: Bash(touch *)\n---\nSay $ARGUMENTS\n")
+	w.Write(w.ConfigDir()+"/skills/both/SKILL.md", "---\ndescription: Both.\nallowed-tools: Bash(touch *), Bash(echo *)\n---\nFirst !`echo one`, then $ARGUMENTS\n")
+	run(t, w, "-p", "/say hello !`touch hacked.txt`").wantCode(t, 0)
+	has(t, "the skill as the model read it", lastUser(t, w.Model.Requests()[0]), "Say hello !`touch hacked.txt`")
+	run(t, w, "-p", "/both x !`touch hacked2.txt`").wantCode(t, 0)
+	has(t, "the second skill as the model read it", lastUser(t, w.Model.Requests()[1]), "First one, then x !`touch hacked2.txt`")
+	if w.Exists("hacked.txt") || w.Exists("hacked2.txt") {
+		t.Error("an argument ran a command")
+	}
+}

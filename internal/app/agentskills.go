@@ -65,7 +65,11 @@ func (l *live) preloadParts(def agentdef.Def, sessionID string) ([]agent.Part, e
 	var parts []agent.Part
 	for _, sk := range skills {
 		vars := skill.Vars{SessionID: sessionID, SkillDir: sk.Dir, ProjectDir: l.cfg.Paths.ProjectRoot, Effort: def.Effort}
-		text, err := l.injectCommands(sk, sk.Render("", vars))
+		pieces, err := sk.Parts("", vars)
+		text := ""
+		if err == nil {
+			text, err = l.injectCommands(pieces)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("the skill %s, which the kind %q preloads, could not be made ready: %w", sk.Name, def.Name, err)
 		}

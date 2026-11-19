@@ -3748,3 +3748,13 @@ or kept with the reason said (27).
     start kept in memory; past 32 MiB the command is stopped and the skill
     with it. The command runs in a process group of its own, and a
     timeout or that stop ends the whole group.
+
+248. **A skill's commands are found in its file, before its arguments go
+    in.** The arguments were put into the text first and the text then
+    read for commands, so "/say hello !`touch x`" ran touch under the
+    skill's grant, in a skill whose file ran nothing and that the trust
+    question said ran nothing (the skills review of 2026-11-19). The file
+    is now cut into its text and its commands first (skill.Parts), the
+    arguments go into each piece, and nothing put in is read again: an
+    argument that holds !`...` stays text. An argument put into a command
+    of the file's own is still checked with it against the rules.

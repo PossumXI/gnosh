@@ -479,17 +479,11 @@ func SplitRules(line string) []string {
 // before the model sees it: !`command` at the start of a line or after a
 // blank, or a fenced block opened with ```!.
 func injects(body string) bool {
-	for _, line := range strings.Split(body, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "```!") {
-			return true
-		}
-		for i := 0; i+1 < len(line); i++ {
-			if line[i] == '!' && line[i+1] == '`' && (i == 0 || line[i-1] == ' ' || line[i-1] == '\t') {
-				return true
-			}
-		}
+	parts, err := splitCommands(body)
+	if err != nil {
+		return true // a block of commands that is never closed
 	}
-	return false
+	return slices.ContainsFunc(parts, func(p Part) bool { return p.Command })
 }
 
 // Vars are the values a skill's text may name.
@@ -512,17 +506,135 @@ type Vars struct {
 // more places. When arguments were given and the text had no place for
 // them, they follow at the end.
 func (sk Skill) Render(args string, v Vars) string {
-	args = strings.TrimSpace(args)
-	words := Words(args)
-	named := map[string]int{}
-	for i, name := range sk.Arguments {
-		if name != "" {
-			named[name] = i
+	r := sk.renderer(args, v)
+	out := r.render(sk.Body)
+	if tail := r.tail(); tail != "" {
+		out = strings.TrimRight(out, "\n") + tail
+	}
+	return out
+}
+
+// Part is a piece of a skill's text for one run: text that stands as it
+// is, or a command (Command) that runs before the model sees the skill,
+// whose output takes its place.
+type Part struct {
+	Text    string
+	Command bool
+}
+
+// Parts is Render cut into the skill's text and its commands (!`...` in
+// a line, or a block opened with ```!). The commands are found in the
+// file's own text, before any argument goes in: an argument that holds
+// !`...` is text, and never adds a command to a skill whose file has none
+// (the skills review of 2026-11-19). It fails on a block of commands that
+// is never closed.
+func (sk Skill) Parts(args string, v Vars) ([]Part, error) {
+	raw, err := splitCommands(sk.Body)
+	if err != nil {
+		return nil, err
+	}
+	r := sk.renderer(args, v)
+	out := make([]Part, len(raw))
+	for i, p := range raw {
+		out[i] = Part{Text: r.render(p.Text), Command: p.Command}
+	}
+	if tail := r.tail(); tail != "" {
+		if n := len(out); n > 0 && !out[n-1].Command {
+			out[n-1].Text = strings.TrimRight(out[n-1].Text, "\n") + tail
+		} else {
+			out = append(out, Part{Text: tail})
 		}
 	}
-	body := sk.Body
+	return out, nil
+}
+
+// splitCommands cuts a skill's text into its text and its commands: a
+// block from a line that begins ```! to a line of ``` is one command, its
+// fence lines gone; in any other line, !`...` that begins the line or
+// follows a blank is one.
+func splitCommands(body string) ([]Part, error) {
+	lines := strings.Split(body, "\n")
+	var out []Part
 	var b strings.Builder
-	used := false
+	flush := func() {
+		if b.Len() > 0 {
+			out = append(out, Part{Text: b.String()})
+			b.Reset()
+		}
+	}
+	for i := 0; i < len(lines); i++ {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "```!") {
+			j := i + 1
+			for j < len(lines) && strings.TrimSpace(lines[j]) != "```" {
+				j++
+			}
+			if j >= len(lines) {
+				return nil, fmt.Errorf("the block of commands that begins on line %d of the skill's text is not closed with ```", i+1)
+			}
+			flush()
+			out = append(out, Part{Text: strings.Join(lines[i+1:j], "\n"), Command: true})
+			i = j
+			continue
+		}
+		line, at := lines[i], 0
+		for k := 0; k+1 < len(line); k++ {
+			if line[k] != '!' || line[k+1] != '`' || (k > 0 && line[k-1] != ' ' && line[k-1] != '\t') {
+				continue
+			}
+			end := strings.IndexByte(line[k+2:], '`')
+			if end < 0 {
+				break
+			}
+			b.WriteString(line[at:k])
+			flush()
+			out = append(out, Part{Text: line[k+2 : k+2+end], Command: true})
+			at = k + 2 + end + 1
+			k = at - 1
+		}
+		b.WriteString(line[at:])
+	}
+	flush()
+	return out, nil
+}
+
+// renderer puts one run's arguments and values into a skill's text, a
+// piece at a time, and remembers whether any piece had a place for the
+// arguments.
+type renderer struct {
+	args  string
+	words []string
+	named map[string]int
+	v     Vars
+	used  bool
+}
+
+func (sk Skill) renderer(args string, v Vars) *renderer {
+	args = strings.TrimSpace(args)
+	r := &renderer{args: args, words: Words(args), named: map[string]int{}, v: v}
+	for i, name := range sk.Arguments {
+		if name != "" {
+			r.named[name] = i
+		}
+	}
+	return r
+}
+
+// tail is what follows the text when arguments were given and no piece
+// had a place for them, or "".
+func (r *renderer) tail() string {
+	if r.args == "" || r.used {
+		return ""
+	}
+	return "\n\nARGUMENTS: " + r.args
+}
+
+// render puts the values into one piece of the text.
+func (r *renderer) render(body string) string {
+	named, words, args, v := r.named, r.words, r.args, r.v
+	var b strings.Builder
 	for i := 0; i < len(body); {
 		c := body[i]
 		if c == '\\' && i+1 < len(body) && body[i+1] == '$' {
@@ -552,25 +664,21 @@ func (sk Skill) Render(args string, v Vars) string {
 			}[p.env])
 		case p.all:
 			b.WriteString(args)
-			used = true
+			r.used = true
 		case p.named:
 			if p.index < len(words) {
 				b.WriteString(words[p.index])
 			}
-			used = true
+			r.used = true
 		case p.index < len(words):
 			b.WriteString(words[p.index])
-			used = true
+			r.used = true
 		default:
 			b.WriteString(body[i : i+n])
 		}
 		i += n
 	}
-	out := b.String()
-	if args != "" && !used {
-		out = strings.TrimRight(out, "\n") + "\n\nARGUMENTS: " + args
-	}
-	return out
+	return b.String()
 }
 
 // place is one place in a skill's text that a value is put into.

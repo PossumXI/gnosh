@@ -40,64 +40,37 @@ const (
 	injectSpoolMost = 32 << 20
 )
 
-// injectCommands runs the commands a skill's text asks for and puts what
-// each printed in its place.
-func (l *live) injectCommands(sk skill.Skill, text string) (string, error) {
-	return l.inject(text, true)
-}
-
-// checkCommands checks every command a skill's text asks for against the
-// rules, as injectCommands does before it runs one, and runs none: a typed
-// line of several skills checks all of theirs before any runs.
-func (l *live) checkCommands(text string) error {
-	_, err := l.inject(text, false)
-	return err
-}
-
-// inject is injectCommands, and with run false checkCommands.
-func (l *live) inject(text string, run bool) (string, error) {
-	lines := strings.Split(text, "\n")
-	var out []string
-	for i := 0; i < len(lines); i++ {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), "```!") {
-			j := i + 1
-			for j < len(lines) && strings.TrimSpace(lines[j]) != "```" {
-				j++
-			}
-			if j >= len(lines) {
-				return "", fmt.Errorf("the block of commands that begins on line %d of the skill's text is not closed with ```", i+1)
-			}
-			got, err := l.injectOne(strings.Join(lines[i+1:j], "\n"), run)
-			if err != nil {
-				return "", err
-			}
-			out = append(out, got)
-			i = j
+// injectCommands runs the commands of a skill's parts (skill.Parts) and
+// gives its text with what each printed in its place. What a command
+// prints is not read for more.
+func (l *live) injectCommands(parts []skill.Part) (string, error) {
+	var b strings.Builder
+	for _, p := range parts {
+		if !p.Command {
+			b.WriteString(p.Text)
 			continue
 		}
-		line, b := lines[i], strings.Builder{}
-		at := 0
-		for k := 0; k+1 < len(line); k++ {
-			if line[k] != '!' || line[k+1] != '`' || (k > 0 && line[k-1] != ' ' && line[k-1] != '\t') {
-				continue
-			}
-			end := strings.IndexByte(line[k+2:], '`')
-			if end < 0 {
-				break
-			}
-			got, err := l.injectOne(line[k+2:k+2+end], run)
-			if err != nil {
-				return "", err
-			}
-			b.WriteString(line[at:k])
-			b.WriteString(got)
-			at = k + 2 + end + 1
-			k = at - 1
+		got, err := l.injectOne(p.Text, true)
+		if err != nil {
+			return "", err
 		}
-		b.WriteString(line[at:])
-		out = append(out, b.String())
+		b.WriteString(got)
 	}
-	return strings.Join(out, "\n"), nil
+	return b.String(), nil
+}
+
+// checkCommands checks every command of a skill's parts against the
+// rules, as injectCommands does before it runs one, and runs none: a typed
+// line of several skills checks all of theirs before any runs.
+func (l *live) checkCommands(parts []skill.Part) error {
+	for _, p := range parts {
+		if p.Command {
+			if _, err := l.injectOne(p.Text, false); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // injectOne checks one command against the rules, as a call of the Bash

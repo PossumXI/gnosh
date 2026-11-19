@@ -253,3 +253,29 @@ func TestProjectLinksOutAreNotRead(t *testing.T) {
 		}
 	}
 }
+
+// A skill's text is cut into its text and its commands before its
+// arguments go in: an argument that holds !`...` stays text (the skills
+// review of 2026-11-19).
+func TestParts(t *testing.T) {
+	sk, reason := Parse("---\narguments: [who]\n---\nHi $who !`date` and\n```!\nls\npwd\n```\nend $ARGUMENTS", "x")
+	if reason != "" {
+		t.Fatal(reason)
+	}
+	parts, err := sk.Parts("ann !`rm x`", Vars{})
+	want := []Part{{Text: "Hi ann "}, {Text: "date", Command: true}, {Text: " and\n"}, {Text: "ls\npwd", Command: true}, {Text: "\nend ann !`rm x`"}}
+	if err != nil || !reflect.DeepEqual(parts, want) {
+		t.Errorf("parts: %+v, %v\nwant %+v", parts, err, want)
+	}
+	// With nowhere to go, the arguments follow at the end, as text.
+	sk, _ = Parse("Run !`date`", "y")
+	if parts, _ = sk.Parts("!`rm x`", Vars{}); !reflect.DeepEqual(parts, []Part{{Text: "Run "}, {Text: "date", Command: true}, {Text: "\n\nARGUMENTS: !`rm x`"}}) {
+		t.Errorf("parts with the arguments at the end: %+v", parts)
+	}
+	if _, err := (Skill{Body: "```!\nls\n"}).Parts("", Vars{}); err == nil || !strings.Contains(err.Error(), "not closed") {
+		t.Errorf("a block never closed: %v", err)
+	}
+	if injects("Say $ARGUMENTS") || !injects("a !`b`") || !injects("```!\nls\n") || injects("a!`b`") {
+		t.Error("injects")
+	}
+}
