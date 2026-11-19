@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -249,6 +250,13 @@ func TestOtherDestroyers(t *testing.T) {
 		// the reader; the shells join the lines (oracle seed 101).
 		"a[0]=rsync; $a -\\\na --delete src/ .", "x=chmod; $x -\\\nR 000 .",
 		"time coproc shred -u *", "echo $[1]; rsync -a --delete src/ .", "mv ${HOME:0:${#HOME}} /tmp/h", "chmod -R 000 \"${PWD%\"x\"}\"",
+		// A piece of a line the reader cannot follow keeps what it is
+		// handed as it is written: <(date) is what a command prints, not
+		// the word date (oracle seed 161).
+		"coproc kill ;\nmv <(date) 0", "coproc kill; mv <(date -d yesterday ./src/../a.txt) 0", "coproc kill; mv $(tr a 'b c') <(date) 0",
+		"coproc kill; while true; do mv <(date) 0; break; done", "coproc kill; x=$(mv <(date) 0)", "coproc kill; { mv <(date | cat) 0; }",
+		"coproc kill; mv <(date) 0 2>&1", "coproc kill; (mv <(date) 0)", "coproc kill; \"mv\" <(date) 0", "coproc kill; mv <(date) 0 &>/dev/null",
+		"while if whoami; then sort ../outside | alias; fi; do ! coproc kill ;\nmv ${X:-$(tr --complement ./src/../a.txt -n-f$X.env 'a b'${X})} <(date 010100002030 -d yesterday ./src/../a.txt) 0; break; done",
 		// The forms bash adds to ${...}, on a value the line knows.
 		"rm -rf ${HOME/x/y}", "rm -rf ${HOME:0:1}", "v=HOME; rm -rf ${!v}", "d=build; rm -rf ${d/build//}", "d=/x; rm -rf ${d:0:1}", "rm -rf ${PWD//zz/y}",
 		"rm -rf ${HOME,,}", "d=/HOME/U; rm -rf ${d,,}", "mv ${HOME/x/y} /tmp/h", "d=.GIT; mv ${d,,} /tmp/g", "v=PWD; chmod -R 000 ${!v}", "d=HOME; d=y true; rm -rf ${!d}",
@@ -332,6 +340,7 @@ func TestOtherDestroyers(t *testing.T) {
 		"alias ll='ls -l'\nll src", "hash -r; ls src", "hash -p /usr/local/bin/mytool mytool; mytool build", "a=(make -j4); \"${a[@]}\"", "args=(-la src); ls \"${args[@]}\"", "a=(mv a.txt b.txt); \"${a[@]}\"",
 		"find . -type f | xargs chmod 644", "ls *.log | xargs gzip", "find . -name '*.sh' | xargs chmod +x", "git ls-files | xargs wc -l",
 		"echo $[1+1]; mv build dist", "select x in a b; do mv $x build/; done", "coproc mv a.txt b.txt", "chmod --reference=a.txt b.txt",
+		"coproc kill; mv a.txt b.txt 2>&1", "coproc kill; { mv a.txt b.txt; }", "coproc kill; x=$(mv a.txt b.txt)", "coproc kill; while true; do mv a.txt b.txt; break; done",
 		"mv --backup=numbered a.txt b.txt", "mv --suffix=.bak -b a.txt b.txt", "mv a.txt b.txt {fd}>log", "declare -n ref=out; ref=build; echo $out",
 		"for t in go node python3; do $t --version; done", "rm -f$v build/out.o", "git -C \"$dir\" $sub", "f() { rm -rf \"$1\"; }; f build", "f() { echo \"$@\"; }; f . / ~", "f() { git \"$@\"; }; f status; f diff", "f() { mv $1 $2; }; f a.txt b.txt", "f() { git $1 $2 $3; }; f commit -m x", "f() { chmod -R $1 $2; }; f 755 build", "f() { git \"$@\"; }; f status; f log -x", "sh -c 'echo \"$@\"' sh rm -rf /", "sh -c 'echo \"$1\"' sh .",
 		"set -euo pipefail; rm -rf \"$1\"", "clean() { rm -rf \"$1\"; }; clean build; clean dist", "f() { mv \"$@\"; }; f a.txt b.txt", "chmod -R$v u+w build", "rm -rf $X-backup", "rm -rf \"$DIR\"-old", "rm -rf ${PREFIX}/lib/app", "rm -rf \"$HOME/.cache/app-$V\"",
@@ -419,5 +428,18 @@ func TestWhatTheRemovalCheckLetsGo(t *testing.T) {
 		if d := bash(e, cmd); d.Behavior != Allow {
 			t.Errorf("%q with permissions skipped: got %s critical=%v (%s); the record says it is let go", cmd, d.Behavior, d.Critical, d.Reason)
 		}
+	}
+}
+
+// rawCommands cuts at what ends a command outside quotes and nesting, and
+// not inside a redirection.
+func TestRawCommands(t *testing.T) {
+	got := rawCommands("a <(b; c) | d 2>&1 &>x >|y; e \"f;g\" && h ${x;y} `i;j`\nk")
+	want := []string{"a <(b; c)", "d 2>&1 &>x >|y", "e \"f;g\"", "h ${x;y} `i;j`", "k"}
+	if !slices.Equal(got, want) {
+		t.Errorf("rawCommands: got %q, want %q", got, want)
+	}
+	if got, want := nameTails("do x=$(mv <(date) 0) 'git' clean"), []string{"mv <(date) 0", "'git' clean"}; !slices.Equal(got, want) {
+		t.Errorf("nameTails: got %q, want %q", got, want)
 	}
 }

@@ -3670,3 +3670,13 @@ or kept with the reason said (27).
     returned with the process still there (the clean-copy CI of aadc511
     caught it). A process once seen with the mark now stays gnosh's, by
     its pid and start time, until it has left the session.
+
+240. **A line nobody could read is also judged in pieces as written.**
+    Where the reader stops ("coproc kill;"), the line is cut into crude
+    pieces and each is judged for danger, but the pieces were plain words,
+    so "mv <(date) 0" was "mv date 0", which destroys nothing, while bash
+    moved /dev/fd/63, a name for what a command prints (oracle seed 161,
+    with permissions skipped). The line is now also cut only at what ends
+    a command outside quotes and nesting, each piece kept as written, and
+    from each destroying command's name on it is read as a line of its
+    own, past a word of the shell's own before it ("do", "coproc", "{").

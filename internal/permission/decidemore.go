@@ -87,6 +87,7 @@ func (e *Engine) safety(req *request) (Decision, bool) {
 			// from what follows its redirection. So the whole line is cut
 			// once more, at what ends a command and nothing else.
 			crude = append(append([]string(nil), crude...), looseCommands(v.text)...)
+			crude = append(crude, rawCommands(v.text)...)
 			// Where the reader stops, the shells go on: a backslash at the
 			// end of a line joins it to the next, and a descriptor written
 			// with more than one digit ("02>&1") is a word to dash and a
@@ -335,6 +336,123 @@ func looseCommands(line string) []string {
 	return out
 }
 
+// rawCommands cuts a line nobody could read at the line breaks,
+// semicolons, ampersands and bars that stand outside quotes, backquotes,
+// (...) and ${...}, and gives each piece as it is written. looseCommands
+// takes a piece apart into plain words: after a "coproc kill;" that stops
+// the reader, "mv <(date) 0" was "mv date 0", which destroys nothing,
+// while bash moved /dev/fd/63, a name for what a command prints (oracle
+// seed 161). A piece as it is written keeps its <(...).
+func rawCommands(line string) []string {
+	var out []string
+	start := 0
+	scanShell(line, func(i, depth int) bool {
+		c := line[i]
+		if depth != 0 || strings.IndexByte("\n;&|", c) < 0 {
+			return true
+		}
+		// (>&, <&, >| and &> are redirections.)
+		if (c == '&' || c == '|') && i > 0 && (line[i-1] == '>' || line[i-1] == '<') ||
+			c == '&' && i+1 < len(line) && line[i+1] == '>' {
+			return true
+		}
+		if p := strings.TrimSpace(line[start:i]); p != "" {
+			out = append(out, p)
+		}
+		start = i + 1
+		return true
+	})
+	if p := strings.TrimSpace(line[start:]); p != "" {
+		out = append(out, p)
+	}
+	return out
+}
+
+// scanShell walks a line as far as telling quotes and nesting goes: f is
+// called with the index of each byte that stands outside quotes and
+// backquotes, and how deep in (...) and ${...} it stands. A ) or } is told
+// at the depth it closes to, so one that closes nothing comes at -1 (and
+// the walk goes on at 0). A quote never closed ends the walk, and so does
+// f returning false.
+func scanShell(s string, f func(i, depth int) bool) {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '\\':
+			i++
+			continue
+		case '\'', '"', '`':
+			j := i + 1
+			for j < len(s) && s[j] != c {
+				if c != '\'' && s[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			if j >= len(s) {
+				return
+			}
+			i = j
+			continue
+		}
+		at := depth
+		switch {
+		case c == '(', c == '$' && i+1 < len(s) && s[i+1] == '{':
+			depth++
+		case c == ')', c == '}' && depth > 0:
+			depth--
+			at = depth
+		}
+		if !f(i, at) {
+			return
+		}
+		depth = max(depth, 0)
+	}
+}
+
+// nameTails gives, for each word of a piece as it is written that names
+// a command crudeDanger judges, the piece from that name on, up to a ) or
+// } that closes what was opened before the name. What stands before the
+// name may be a word of the shell's own that keeps the piece from being
+// read ("do", "coproc", "{"), or the opening of the $(...) it is in.
+func nameTails(piece string) []string {
+	var out []string
+	for i := 0; i < len(piece); i++ {
+		if i > 0 && strings.IndexByte(" \t\n({`!", piece[i-1]) < 0 {
+			continue
+		}
+		j := i
+		for j < len(piece) && strings.IndexByte(" \t\n;&|()<>`", piece[j]) < 0 {
+			j++
+		}
+		name := strings.NewReplacer("'", "", "\"", "", "\\", "").Replace(piece[i:j])
+		if !crudeDestroyer(progKey(baseName(name))) {
+			continue
+		}
+		tail := piece[i:]
+		scanShell(tail, func(k, depth int) bool {
+			if depth < 0 {
+				tail = tail[:k]
+				return false
+			}
+			return true
+		})
+		out = append(out, tail)
+	}
+	return out
+}
+
+// crudeDestroyer reports whether a program, by its name, is one that
+// crudeDanger judges by what it is handed.
+func crudeDestroyer(name string) bool {
+	switch name {
+	case "mv", "chmod", "chown", "chgrp", "git", "dd", "truncate", "shred", "rsync", "find":
+		return true
+	}
+	return false
+}
+
 // crudeDanger reads one crude piece of a line that could not be followed
 // and says why a command in it would destroy something that has to be
 // kept, or "". The piece is read as a line of its own where it can be,
@@ -347,8 +465,7 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 	fields := looseFields(piece)
 	var from []int
 	for i, f := range fields {
-		switch progKey(baseName(f)) {
-		case "mv", "chmod", "chown", "chgrp", "git", "dd", "truncate", "shred", "rsync", "find":
+		if crudeDestroyer(progKey(baseName(f))) {
 			from = append(from, i)
 		}
 	}
@@ -363,6 +480,22 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 			}
 		}
 		read = true
+	}
+	// From each such name on, the piece as it is written, read as a line
+	// of its own: so a word of the shell's own before the name does not
+	// keep it from being read ("do mv <(date) 0"), and what the command is
+	// handed keeps its <(...), which the words below take apart.
+	for _, tail := range nameTails(piece) {
+		if tail == piece && read {
+			continue
+		}
+		if tv := e.viewBash(tail); tv.sc.ok {
+			for _, u := range tv.units {
+				if why := e.removalDanger(tv, u.cmd, dirs, nil); why != "" {
+					return why
+				}
+			}
+		}
 	}
 	// The words from the command's name on, as they are written. In a
 	// piece that could be read this is for a name that is not the piece's
