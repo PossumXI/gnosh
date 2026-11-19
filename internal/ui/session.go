@@ -563,7 +563,7 @@ func (s *session) notice(level agent.Level, words string) {
 	case agent.LevelError:
 		label, style = th.ErrorLabel.Render(labelError), text.Style{}
 	}
-	lines := safeLines(words)
+	lines := nonBlank(safeLines(words))
 	if len(lines) == 0 {
 		return
 	}

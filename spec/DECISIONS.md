@@ -3446,3 +3446,13 @@ or kept with the reason said (27).
     question was neither on the screen nor in line, and the turn waited
     for an answer nobody could give (the TUI review of 2026-11-19). A
     question so displaced goes back to the head of the line.
+
+219. **No empty row from a call, a slash command or a notice.** Jae's
+    rule of 14 November 2026 ("in general don't print empty lines") held
+    for the live tail and a result's first lines, but the blank lines in a
+    command's output (between git log's entries), a heredoc, a failure,
+    a slash command's text and a notice were still printed as empty rows
+    (the TUI review of 2026-11-19), and in a clipped tail they took rows
+    that real lines should have had. They are left out, and not counted
+    as lines not shown. The model's own answer keeps its blank lines
+    between paragraphs: they are the answer's.

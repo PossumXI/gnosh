@@ -678,7 +678,7 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		shown, held := shownCommand(line)
 		s.begin(blkPrompt)
 		s.put(wrap(s.m, th.PromptText.Render(oneLine(shown)), s.cols, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", s.m.Width(th.PromptMark)))...)
-		for _, l := range safeLines(res.Text) {
+		for _, l := range nonBlank(safeLines(res.Text)) {
 			s.put(wrap(s.m, l, s.cols, "", "")...)
 		}
 		if !held {
