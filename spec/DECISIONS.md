@@ -3564,3 +3564,13 @@ or kept with the reason said (27).
     with …), reads a byte slice's bytes as they are held, stops writing a
     composite once its output is spent, and refuses a format whose widths
     and precisions add up to over 1 MiB.
+
+229. **What a mem call prints is capped as a VM's is, and a reply too big
+    to send is said.** A mem call printed into a buffer with no limit: a
+    loop printing a big string grew it for as long as the call ran, while
+    it held mem's lock; and a reply over the 16 MiB a frame carries was
+    dropped with a line in the worker's log, so the client waited, stopped
+    the worker and could not say what had become of the call (the gno
+    review of 2026-11-19). A mem call now keeps 64 KiB of what it prints,
+    with a line saying how much more there was, and the worker answers a
+    reply it cannot send with an error saying the call ran.

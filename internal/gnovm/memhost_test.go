@@ -51,6 +51,20 @@ func memOK(t *testing.T, h *memHost, code string) memResult {
 	return res
 }
 
+// What a mem call prints is capped as a VM's is, with a line saying how
+// much more there was: a loop printing a big string grew the call's
+// buffer for as long as it ran (the gno review of 2026-11-19).
+func TestMemCallOutputIsCapped(t *testing.T) {
+	t.Parallel()
+	h := newTestMemHost(t, t.TempDir())
+	res := memOK(t, h, `s := "0123456789"
+for i := 0; i < 20000; i++ {
+	println(s)
+}`)
+	require.LessOrEqual(t, len(res.Output), maxOutput+100)
+	require.Contains(t, res.Output, "more bytes of output not shown")
+}
+
 // memStoreStamp reads the stamp of mem's only store in dir.
 func memStoreStamp(t *testing.T, dir string) memStamp {
 	t.Helper()
