@@ -521,7 +521,12 @@ func (st *Store) List(ctx context.Context, cwd string) ([]Info, error) {
 			}
 			continue
 		}
-		if info.Entries == 0 || info.Cwd != cwd {
+		// A session of another folder whose name comes to the same
+		// directory is that folder's. One whose folder belongs in another
+		// directory is here because a move (/cd) was cut short between
+		// putting its file here and writing down the folder: it is this
+		// folder's, or it would be listed nowhere.
+		if info.Entries == 0 || info.Cwd != cwd && st.ProjectDir(info.Cwd) == dir {
 			continue
 		}
 		out = append(out, info)

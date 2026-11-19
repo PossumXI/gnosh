@@ -199,6 +199,10 @@ type live struct {
 	bgWG     sync.WaitGroup
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
+	// resumeShown is the list /resume showed last, by id: /resume N opens
+	// the Nth of it, though the folder's sessions have changed order since
+	// (a session beside this one was written to).
+	resumeShown []string
 	// branchTo is set by /branch: the name of the copy it asked for, which
 	// may be empty.
 	branchTo *string

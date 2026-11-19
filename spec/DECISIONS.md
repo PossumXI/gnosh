@@ -3130,3 +3130,20 @@ or kept with the reason said (27).
     CI run under load: /mcp said connected, and the model's call found no
     tool of that name). The tools are offered first now; /mcp says
     connected after, and a disable in between still wins.
+
+188. **/resume N opens the Nth session of the list as it was shown.** The
+    number was looked up in the list made again when it was typed, so a
+    session beside this one written to in between (a peer in the same
+    folder, a gnosh -p) came first and was opened in place of the one
+    picked (the session store review's note). The list /resume showed is
+    kept; with none shown, a number is the place in the list as it
+    stands.
+
+189. **A session whose /cd was cut short is still listed.** /cd moves the
+    file to the new folder's directory and then writes the move down; a
+    gnosh killed between the two left a session listed with neither
+    folder (its file in the one, its folder named the other's). The list
+    now holds a session whose folder belongs in another directory with
+    the folders of the directory its file is in; a session of another
+    folder whose name only comes to the same directory is that folder's
+    alone, as before.
