@@ -3507,3 +3507,13 @@ or kept with the reason said (27).
     them ("the MCP server helper", "3 MCP servers (a, b and c)"), as gnosh
     mcp list already did; with --strict-mcp-config, which uses no file's
     servers, it does not.
+
+224. **After a summary the model is told again where the session runs.**
+    The block with the date, the working directory, the machine and git
+    went with the first prompt only, and a summary takes that prompt's
+    place: after one, manual or automatic, the model knew none of it (the
+    gnosh counterpart of Claude Code 2.1.328's fix, which builds its
+    system prompt again after an automatic summary as after /compact).
+    The block is now given back with the instruction files after every
+    summary, as things stand then, and says it was found "when the
+    conversation was summed up".

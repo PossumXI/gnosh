@@ -132,6 +132,7 @@ func goldenFiles() []goldenFile {
 						},
 					})},
 					{"the least", s.Environment(Environment{Now: goldenTime, Cwd: "/home/dev/project"})},
+					{"after a summary", s.Environment(Environment{Now: goldenTime, Cwd: "/home/dev/project", Summary: true})},
 					{"not a repository", s.Environment(Environment{Now: goldenTime, Cwd: "/tmp/scratch", User: "dev", Git: Git{State: GitNone}})},
 					{"a repository whose status was not read", s.Environment(Environment{
 						Now: goldenTime, Cwd: "/home/dev/unknown", Machine: "box",

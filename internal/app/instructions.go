@@ -151,7 +151,10 @@ func touchedPath(done agent.ToolDone) string {
 // environment is the block that goes ahead of a session's first prompt:
 // what differs from session to session, which is why none of it is in the
 // system prompt.
-func (l *live) environment() string {
+func (l *live) environment() string { return l.texts.Environment(l.envNow()) }
+
+// envNow is where the session runs, as it stands now.
+func (l *live) envNow() prompt.Environment {
 	e := prompt.Environment{
 		Now:      l.p.now(),
 		Cwd:      l.cfg.Paths.Cwd,
@@ -172,7 +175,7 @@ func (l *live) environment() string {
 	if l.cfg.Options.IncludeGitInstructions.V {
 		e.Git = l.gitState()
 	}
-	return l.texts.Environment(e)
+	return e
 }
 
 // hostName is the machine's name, or "" when it has none to give.

@@ -45,7 +45,8 @@ func TestSummaryGivesBackTheFilesLastWorkedOn(t *testing.T) {
 	has(t, "what the model was given back after the summary", after,
 		"Before the summary you read or changed the file "+a, "alpha line",
 		"Before the summary you read or changed the file "+b, "beta line",
-		"Read or changed before the summary, and not shown again: "+big+". Read a file again")
+		"Read or changed before the summary, and not shown again: "+big+". Read a file again",
+		"Where this session runs, as gnosh found it when the conversation was summed up", "- Working directory: ")
 	hasNot(t, "what the model was given back after the summary", after, "a big file line")
 	if strings.Index(after, a) > strings.Index(after, b) {
 		t.Errorf("the file read last does not come first")

@@ -163,8 +163,8 @@ func specs() []spec {
 			when: "Last in the system prompt of a sub-agent that works in a git work tree of its own (isolation worktree): where the work tree is, and that its changes stay there."},
 
 		{name: textEnvironment, kind: KindLine, need: []string{"date", "cwd"},
-			may:  []string{"weekday", "user", "machine", "user_only", "machine_only", "platform", "branch", "repo", "nogit", "status", "unread", "why", "dirs", "hosts"},
-			when: "With a session's first prompt, ahead of its text: the date, the directory, the machine, the state of git."},
+			may:  []string{"began", "summed", "weekday", "user", "machine", "user_only", "machine_only", "platform", "branch", "repo", "nogit", "status", "unread", "why", "dirs", "hosts"},
+			when: "With a session's first prompt, ahead of its text, and again after a summary: the date, the directory, the machine, the state of git."},
 		{name: textMemLine, kind: KindLine,
 			when: "Last on every prompt a person types, in a session that has gnovm_run."},
 		{name: textFrameLine, kind: KindLine, need: []string{"id"}, may: []string{"purpose", "stack", "more", "slides"},

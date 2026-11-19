@@ -50,6 +50,9 @@ type Environment struct {
 	AddedDirs []string
 	// Hosts are the other machines declared for commands.
 	Hosts []Host
+	// Summary says the block is given again after a summary, which took
+	// the place of the first prompt it went with: it says so.
+	Summary bool
 }
 
 // GitState says what gnosh knows of git in the working directory.
@@ -91,7 +94,7 @@ type Host struct {
 }
 
 // Environment returns the block that goes with a session's first prompt,
-// ahead of the prompt's own text. It holds what differs from session to
+// ahead of the prompt's own text, and again after a summary. It holds what differs from session to
 // session, which is why none of it is in the system prompt.
 func (s *Set) Environment(e Environment) string {
 	vals := values{
@@ -103,6 +106,8 @@ func (s *Set) Environment(e Environment) string {
 		vals["date"] = e.Now.Format("2006-01-02")
 		vals["weekday"] = e.Now.Weekday().String()
 	}
+	vals.flag("began", !e.Summary)
+	vals.flag("summed", e.Summary)
 	vals["user"] = oneLine(e.User, maxName)
 	vals["machine"] = oneLine(e.Machine, maxName)
 	vals.flag("user_only", vals["machine"] == "")

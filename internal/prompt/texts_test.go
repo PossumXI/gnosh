@@ -148,7 +148,7 @@ var budgets = map[string]int{
 	textMemoryFull:     budgetMemoryFull,
 	textGno:            130,
 	textDeliver:        270,
-	textEnvironment:    220,
+	textEnvironment:    240, // (two wordings of its first line, one printed)
 	textMissingResult:  200,
 	textMemLine:        75,
 	textFrameLine:      110,

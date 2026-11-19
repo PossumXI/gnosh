@@ -827,6 +827,13 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	} else {
 		parts = append(parts, pre...)
 	}
+	// Where the session runs, as it stands now: the date, the folder and
+	// git went with the first prompt, which the summary took the place of,
+	// and the model knew none of them after it. (Claude Code 2.1.328 builds
+	// them again after an automatic summary as after /compact.)
+	env := l.envNow()
+	env.Summary = true
+	parts = append(parts, agent.Part{Source: "environment", Text: l.texts.Environment(env)})
 	back, given := l.filesBack(ctx, recent, info.Window)
 	parts = append(parts, back...)
 	defer func() {
