@@ -173,8 +173,8 @@ func (e *Engine) DecideAt(dir, tool string, call core.ToolCall, action core.Acti
 
 // DecideFor judges a call of one agent as DecideAt does: agent is the id
 // of the sub-agent that made it, or "" for the session's own agent. The
-// layers kept to another agent (Layer.Agent: a skill another agent
-// loaded) play no part.
+// layers kept to another sub-agent (Layer.Agent: a forked skill another
+// sub-agent runs) play no part.
 func (e *Engine) DecideFor(agent, dir, tool string, call core.ToolCall, action core.Action) Decision {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

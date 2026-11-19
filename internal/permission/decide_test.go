@@ -733,9 +733,10 @@ func TestKeepOnlyDropsWhatTheFileNoLongerHolds(t *testing.T) {
 	}
 }
 
-// A layer kept to one agent (a skill's grant) is in force for that
-// agent's calls alone, and RemoveAgentLayers ends one agent's without
-// touching another's.
+// A layer kept to one sub-agent (a forked skill's grant) is in force for
+// that sub-agent's calls alone; one kept to the session's own agent is in
+// force for its sub-agents too, which work for it; and RemoveAgentLayers
+// ends one agent's without touching another's.
 func TestLayerKeptToOneAgent(t *testing.T) {
 	e := engine(t, ModeDefault, rules{})
 	for _, ly := range []Layer{
@@ -761,7 +762,7 @@ func TestLayerKeptToOneAgent(t *testing.T) {
 	want("sub-2", "touch sub.txt", Ask)
 	want("", "touch sub.txt", Ask)
 	want("", "touch main.txt", Allow)
-	want("sub-1", "touch main.txt", Ask)
+	want("sub-1", "touch main.txt", Allow)
 	want("sub-1", "touch all.txt", Allow)
 	want("", "touch all.txt", Allow)
 	if d := bash(e, "touch sub.txt"); d.Behavior != Ask {
@@ -776,6 +777,7 @@ func TestLayerKeptToOneAgent(t *testing.T) {
 	// sub-agent's hold until it ends.
 	e.RemoveAgentLayers("", ScopeSkill)
 	want("", "touch main.txt", Ask)
+	want("sub-1", "touch main.txt", Ask)
 	want("sub-1", "touch sub.txt", Allow)
 	want("", "touch all.txt", Allow)
 	e.RemoveAgentLayers("sub-1", ScopeSkill)

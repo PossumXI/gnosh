@@ -35,10 +35,11 @@ type Layer struct {
 	// Agent, when not "", keeps the layer's rules to the calls of one
 	// agent: a skill's grant is for the agent that loaded the skill (for
 	// a forked skill, the sub-agent it runs in), and is no leave for the
-	// session's other agents. It is a sub-agent's id, or MainAgent for
-	// the session's own agent. Only DecideFor and the other Decide forms
-	// read it: the rest of the engine (ToolEnabled, ReadDenied, Explain)
-	// takes every layer.
+	// agent that started it nor for the others beside it. It is a
+	// sub-agent's id, or MainAgent for the session's own agent, whose
+	// sub-agents all work for it and have its grants too. Only DecideFor
+	// and the other Decide forms read it: the rest of the engine
+	// (ToolEnabled, ReadDenied, Explain) takes every layer.
 	Agent string
 }
 
@@ -636,11 +637,12 @@ func agentKey(agent string) string {
 }
 
 // forAgent is the engine as the calls of one agent ("" for the session's
-// own) see it: without the layers kept to other agents. The caller holds
-// e.mu, and uses what it returns only while it does.
+// own) see it: without the layers kept to other sub-agents. (The session's
+// own agent's are every agent's: its sub-agents work for it.) The caller
+// holds e.mu, and uses what it returns only while it does.
 func (e *Engine) forAgent(agent string) *Engine {
 	agent = agentKey(agent)
-	other := func(ly *layer) bool { return ly.Agent != "" && ly.Agent != agent }
+	other := func(ly *layer) bool { return ly.Agent != "" && ly.Agent != MainAgent && ly.Agent != agent }
 	if !slices.ContainsFunc(e.layers, other) {
 		return e
 	}
