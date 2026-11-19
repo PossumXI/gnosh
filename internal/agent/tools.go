@@ -37,6 +37,9 @@ type callState struct {
 	dur         time.Duration
 	parts       []Part // what AfterTool added for the model
 	gone        *late  // set when the loop gave up waiting for the tool
+	// rerouted is the note a call made in place of the model's (Reroute)
+	// starts its result with.
+	rerouted string
 }
 
 // execDone is what the goroutine that ran a tool reports.
@@ -122,6 +125,9 @@ func (a *Agent) runTools(ctx context.Context, t *turn, rep *reply) roundOutcome 
 			c.done = true
 		default:
 			r.prepare(c)
+			if !c.done {
+				r.reroute(c, su)
+			}
 		}
 		r.calls = append(r.calls, c)
 	}
@@ -229,6 +235,42 @@ func (r *round) prepare(c *callState) {
 	if p, ok := c.tool.(Concurrent); ok {
 		c.parallel = safely(func() bool { return p.Parallel(c.call) })
 	}
+}
+
+// reroute makes, in place of a call the model meant for another of the
+// session's tools, that tool's call (Options.Reroute): Gno for mem typed
+// into the shell runs in mem, not as a command no shell has, which only
+// taught a small model nothing (FrontierHarness on box 2, 2026-11-19: in
+// one trial 315 of 320 calls). The call keeps the model's id.
+func (r *round) reroute(c *callState, su setup) {
+	f := r.a.opts.Reroute
+	if f == nil {
+		return
+	}
+	to, note, ok := rerouteSafely(f, core.ToolCall{ID: c.call.ID, Name: c.call.Name, Input: c.input})
+	if !ok {
+		return
+	}
+	tool := su.index[to.Name]
+	in, good := jsonObject(to.Input)
+	if tool == nil || !good {
+		return
+	}
+	c.call.Name, c.call.Input, c.input, c.tool, c.changed, c.rerouted = to.Name, in, in, tool, true, note
+	c.parallel = false
+	if p, ok := tool.(Concurrent); ok {
+		c.parallel = safely(func() bool { return p.Parallel(c.call) })
+	}
+}
+
+// rerouteSafely calls Reroute and takes a panic for no.
+func rerouteSafely(f func(core.ToolCall) (core.ToolCall, string, bool), call core.ToolCall) (to core.ToolCall, note string, ok bool) {
+	defer func() {
+		if recover() != nil {
+			to, note, ok = core.ToolCall{}, "", false
+		}
+	}()
+	return f(call)
 }
 
 // cleanInput passes a call's arguments through the wiring's filter. What
@@ -825,6 +867,10 @@ func (r *round) record(c *callState) {
 			c.res = cleanResult(f, core.ToolCall{ID: c.call.ID, Name: c.call.Name, Input: c.input}, c.res)
 		}
 		c.res.Content = sayable(c.res.Content)
+	}
+	if c.rerouted != "" {
+		c.res.Content = append([]core.Block{core.Text(a.mark(c.rerouted))}, c.res.Content...)
+		c.rerouted = ""
 	}
 	if c.ran {
 		if why, ok := c.res.Meta[MetaHalt].(string); ok && strings.TrimSpace(why) != "" {

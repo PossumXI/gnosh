@@ -4263,3 +4263,17 @@ or kept with the reason said (27).
     answer cut off at its limit, --json-schema's output is printed safe
     on a terminal, and a schema with keywords gnosh does not check is
     refused.
+
+297. **mem's Gno sent to the wrong place runs in mem.** A shell command
+    that was nothing but calls on mem (mem.Show()) was refused with a note
+    that it is Gno, which taught a small model nothing: in 19 of 45
+    FrontierHarness trials on box 2 Qwen's first mem call went to the
+    shell, and in one, 315 of its 320 calls did, for the whole half hour,
+    building nothing (2026-11-19, the FrontierHarness session's numbers).
+    Such a command, every line of it one call on mem or a chain of them,
+    is now made a gnovm_run call on mem in its place, before the
+    permission rules (which judge that call), and its result begins with
+    gnosh's line saying so and what to call next time; a command with
+    anything more stays the shell's. Code that calls mem, sent to
+    gnovm_run with no VM named, runs in mem rather than in the scratch
+    VM, where mem is no name.

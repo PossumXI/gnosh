@@ -1,7 +1,10 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"os/user"
 	"path"
 	"regexp"
@@ -355,6 +358,87 @@ const gnoRunTool = "gnovm_run"
 
 // gnoCall finds a call on mem written as Gno: mem.Show(), mem.Todo(...).
 var gnoCall = regexp.MustCompile(`\bmem\.[A-Z][A-Za-z0-9_]*\(`)
+
+// rerouteGno is the loop's Reroute: a shell command that is nothing but
+// calls on mem, written as Gno (mem.Show(), mem.Todo("x").Push()), runs in
+// mem by gnovm_run in its place. Refused with a note, it taught a small
+// model nothing: in 19 of 45 FrontierHarness trials on box 2 (2026-11-19)
+// Qwen's first mem call went to the shell, and in one 315 of its 320 calls
+// did, for the whole half hour. What a command for another machine, or in
+// the background, says stays the shell's.
+func (l *live) rerouteGno(call core.ToolCall) (core.ToolCall, string, bool) {
+	if call.Name != shelltool.BashName || !slices.Contains(l.toolNames(), gnoRunTool) {
+		return core.ToolCall{}, "", false
+	}
+	var in struct {
+		Command    string `json:"command"`
+		Host       string `json:"host"`
+		Background bool   `json:"run_in_background"`
+	}
+	if json.Unmarshal(call.Input, &in) != nil || in.Host != "" || in.Background {
+		return core.ToolCall{}, "", false
+	}
+	code, ok := memCode(in.Command)
+	if !ok {
+		return core.ToolCall{}, "", false
+	}
+	input, err := json.Marshal(map[string]string{"code": code, "name": memVM})
+	if err != nil {
+		return core.ToolCall{}, "", false
+	}
+	note := "That was Gno for mem, which no shell runs, so gnosh ran it with " + gnoRunTool + ` (name "` + memVM + `") in its place; this is what it returned. Call ` + gnoRunTool + " for mem from here on."
+	return core.ToolCall{ID: call.ID, Name: gnoRunTool, Input: input}, note, true
+}
+
+// memCode returns a command that is nothing but calls on mem, each line
+// one Gno call, or a chain of them, on mem (mem.Show(),
+// mem.Todo("x").Push()), as the Gno to run. A line with anything more is
+// the shell's ("mem.Show() && rm -r build").
+func memCode(command string) (string, bool) {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(command), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !memStatement(line) {
+			return "", false
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return "", false
+	}
+	return strings.Join(lines, "\n"), true
+}
+
+// memStatement reports whether a line is one call on mem, or a chain of
+// calls that begins with one: read as Go, which Gno is written in.
+func memStatement(line string) bool {
+	e, err := parser.ParseExpr(strings.TrimSuffix(line, ";"))
+	if err != nil {
+		return false
+	}
+	call, ok := e.(*ast.CallExpr)
+	for ok {
+		sel, isSel := call.Fun.(*ast.SelectorExpr)
+		if !isSel {
+			return false
+		}
+		switch x := sel.X.(type) {
+		case *ast.Ident:
+			return x.Name == memVM && ast.IsExported(sel.Sel.Name)
+		case *ast.CallExpr:
+			call = x
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// memVM is the name of mem's VM to gnovm_run (gnovm.MemVM).
+const memVM = "mem"
 
 // misreadGno says of a command that it was Gno for mem typed into a shell,
 // when it was: mem, one of its calls, or a name made up from it or from the

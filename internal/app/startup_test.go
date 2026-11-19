@@ -408,3 +408,25 @@ func TestModelIsNeverGuessed(t *testing.T) {
 		t.Errorf("stdout = %q", out)
 	}
 }
+
+// A command that is nothing but calls on mem, one Gno call or chain of
+// them a line, is mem's to run (rerouteGno); anything more is the shell's.
+func TestMemCode(t *testing.T) {
+	for command, want := range map[string]bool{
+		"mem.Show()":                           true,
+		"mem.Show();":                          true,
+		`mem.Todo("ship it").Push()`:           true,
+		"mem.Fact(\"a\", \"b\")\n\nmem.Show()": true,
+		"mem.Show() && rm -rf build":           false,
+		"x := mem.Show()":                      false,
+		"echo mem.Show()":                      false,
+		"mem.show()":                           false,
+		"Mem.Show()":                           false,
+		"mem.Show()\nls":                       false,
+		"":                                     false,
+	} {
+		if _, got := memCode(command); got != want {
+			t.Errorf("memCode(%q) = %v, want %v", command, got, want)
+		}
+	}
+}

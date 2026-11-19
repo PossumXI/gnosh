@@ -162,6 +162,13 @@ type Options struct {
 	// results. The loop itself never reads a tool's output as
 	// instructions.
 	CleanResult func(call core.ToolCall, res core.ToolResult) core.ToolResult
+	// Reroute, when not nil, is given every tool call as the model wrote
+	// it (through CleanInput), and says of one that is plainly meant for
+	// another of the session's tools the call to make in its place: Gno
+	// for mem typed into the shell. The gate, the hooks and the tool see
+	// that call, and its result starts with note, in gnosh's marker, which
+	// tells the model what was done and what to call next time.
+	Reroute func(call core.ToolCall) (to core.ToolCall, note string, ok bool)
 	// Outgoing, when not nil, is given every request just before it is
 	// sent, main, summary and side alike, with the name of the provider it
 	// goes to. It may change the request, which is the loop's own copy.
