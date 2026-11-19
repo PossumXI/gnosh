@@ -104,3 +104,27 @@ func TestCleanInvisibleAt(t *testing.T) {
 		t.Errorf("offsets into text that is not UTF-8 came back: %v", at)
 	}
 }
+
+// What CleanInvisible takes out, ShowInvisible writes as its code point;
+// what it keeps (an emoji's joiners, Persian's non-joiner, a flag's tags)
+// stays as it is.
+func TestShowInvisible(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"rm -rf build", "rm -rf build"},
+		{"rm -rf /tmp/‮txt.exe", "rm -rf /tmp/<U+202E>txt.exe"},
+		{"a​b⁦c⁩", "a<U+200B>b<U+2066>c<U+2069>"},
+		{"hi\U000E0069", "hi<U+E0069>"},
+		{"\U0001F468‍\U0001F469‍\U0001F467", "\U0001F468‍\U0001F469‍\U0001F467"},
+		{"می‌خواهم", "می‌خواهم"},
+		{"\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F", "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F"},
+		{"ab‍", "ab<U+200D>"},
+	} {
+		if got := ShowInvisible(c.in); got != c.want {
+			t.Errorf("ShowInvisible(%+q) = %+q, want %+q", c.in, got, c.want)
+		}
+		cleaned, _ := CleanInvisible(c.in)
+		if strings.Contains(c.want, "<U+") == (cleaned == c.in) {
+			t.Errorf("%+q: ShowInvisible and CleanInvisible disagree on whether there is anything to show", c.in)
+		}
+	}
+}

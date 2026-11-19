@@ -575,7 +575,7 @@ func (u *UI) AskBefore(q agent.Question) (ans agent.Answer, err error) {
 	}
 	record := func(words string) {
 		title := oneLine(firstNonEmpty(q.Title, q.Kind, "question"))
-		_ = u.r.Commit(wrap(u.m, u.th.Answer.Render(oneLine(words)), cols, u.th.Ask.Render(u.th.AskMark)+" "+title+" ", "  ")...)
+		_ = u.r.Commit(answerRows(&u.th, u.m, cols, title, []string{oneLine(words)})...)
 	}
 	for {
 		qs.ui.SetMaxHeight(max(liveBound(rows), 3))

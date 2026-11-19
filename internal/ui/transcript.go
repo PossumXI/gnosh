@@ -225,9 +225,18 @@ func (s *session) viewInEditor() {
 		lines[i] = strings.TrimRight(text.Strip(l), " ")
 	}
 	s.closeView()
+	// The side panel, which closing the view put back, gives the screen up
+	// while the editor has it, as it does for every other editor: the
+	// editor ran under it, took mouse reports as keys, and left the panel
+	// drawn over the scrollback (the TUI review of 2026-11-19).
+	panel := s.panel != nil
+	s.closePanel()
 	s.frame()
 	if _, err := s.host.edit(strings.Join(lines, "\n") + "\n"); err != nil {
 		s.flash("The transcript could not be opened in an editor: " + err.Error())
+	}
+	if panel {
+		s.openPanel()
 	}
 	s.dirty = true
 }

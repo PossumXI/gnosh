@@ -254,6 +254,89 @@ func TestEditQuestion(t *testing.T) {
 	})
 }
 
+// A note typed under "No" stays when the window is resized: the question
+// with a diff is laid out again for the new width, and the note was lost,
+// so Enter sent a bare no and stopped the turn (the TUI review of
+// 2026-11-19).
+func TestNoteOnNoOutlivesAResize(t *testing.T) {
+	q := agent.Question{
+		ID: "q1", Kind: "permission", Title: "Allow Edit?",
+		Text: "  /home/jae/src/proj/a.go\nWhy gnosh asks: the file would be changed.",
+		Choices: []agent.Choice{
+			{Key: "yes", Label: "Yes, this once"},
+			{Key: "no", Label: "No"},
+		},
+		Action: &core.Action{Kind: core.ActionEdit, Paths: []string{"/home/jae/src/proj/a.go"},
+			Preview: &core.Display{Kind: "diff", Path: "a.go", Before: "one\ntwo\n", After: "one\nthree\n"}},
+	}
+	g := newRig(t, 100, 30, text.NoColor)
+	g.keys(`"edit" <Enter>`).start()
+	g.ev(&agent.QuestionEvent{Question: q})
+	g.liveHas("Allow Edit?", "+ three")
+	g.wait(time.Second).keys(`<Down> <Tab> "use a map instead" <Esc>`)
+	g.liveHas("use a map instead")
+	g.resize(80, 30)
+	g.liveHas("Allow Edit?", "use a map instead")
+	g.keys(`<Enter>`)
+	if len(g.c.answers) != 1 || g.c.answers[0].ans.Choice != "no" || g.c.answers[0].ans.Text != "use a map instead" {
+		t.Fatalf("after the resize Enter answered %+v", g.c.answers)
+	}
+}
+
+// A question whose title fills the row is recorded with its title on a row
+// of its own and the answer whole under it: beside it, the answer lost its
+// first letters (the TUI review of 2026-11-19: "es: use this folder's
+// settings").
+func TestLongTitleKeepsItsAnswerWhole(t *testing.T) {
+	title := "Trust /home/jae/src/a-folder-with-a-long-name? The session moves there only." // 76 cells
+	g := newRig(t, 80, 30, text.NoColor)
+	g.keys(`"move" <Enter>`).start()
+	g.ev(&agent.QuestionEvent{Question: agent.Question{ID: "q1", Kind: "trust", Title: title, Text: "Do you trust it?",
+		Choices: []agent.Choice{{Key: "no", Label: "No: stay where you are"}, {Key: "yes", Label: "Yes: use this folder's settings, and move there"}}}})
+	g.wait(time.Second).keys(`<Down> <Enter>`)
+	g.committedHas("? "+title, "  Yes: use this folder's settings, and move there")
+}
+
+// A paste while a question or the transcript view has the keys goes into
+// the prompt box and says so: it vanished (the TUI review of 2026-11-19).
+func TestPasteWhileSomethingElseHasTheKeys(t *testing.T) {
+	g := newRig(t, 80, 30, text.NoColor)
+	g.free = true // (the transcript view takes the whole screen)
+	g.keys(`"go" <Enter>`).start()
+	g.ev(&agent.QuestionEvent{Question: permission("q1")})
+	g.wait(time.Second)
+	g.s.input(pasteOf("the log says"))
+	g.frame()
+	if got := g.box(); got != "the log says" {
+		t.Fatalf("a paste at the question left the box %q", got)
+	}
+	g.liveHas("Allow Bash?", "the log says", "The paste went into the prompt box")
+	if len(g.c.answers) != 0 {
+		t.Fatalf("the paste answered the question: %+v", g.c.answers)
+	}
+	g.keys(`<Enter>`)
+	g.ev(&agent.AnswerEvent{ID: "q1"})
+	g.keys(`<Ctrl+U> <Ctrl+O>`)
+	g.s.input(pasteOf("a note"))
+	g.frame()
+	g.keys(`<Esc>`)
+	if got := g.box(); got != "a note" {
+		t.Fatalf("a paste in the transcript view left the box %q", got)
+	}
+}
+
+// A command holding a character drawn as nothing, or one that turns the
+// drawing order around, shows it as its code point in the question that
+// asks to let it run (the TUI review of 2026-11-19).
+func TestQuestionShowsInvisibleCharacters(t *testing.T) {
+	q := permission("q1")
+	q.Text = "  $ cat /tmp/‮txt.exe​\nWhy gnosh asks: no rule allows it."
+	g := newRig(t, 80, 30, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	g.ev(&agent.QuestionEvent{Question: q})
+	g.liveHas("$ cat /tmp/<U+202E>txt.exe<U+200B>")
+}
+
 // A question that is taken back, because the turn was stopped or nobody
 // answered in time, leaves the screen and says so.
 func TestQuestionWithdrawn(t *testing.T) {

@@ -377,7 +377,10 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 		return v
 	}
 	path := func(key string) string { return showPath(cwd, home, get(key)) }
-	h := head{name: name}
+	// The name is the model's word: on a server that takes any name, it
+	// can hold escape sequences, and the agent view drew it as it came
+	// (the TUI review of 2026-11-19).
+	h := head{name: oneLine(name)}
 	switch name {
 	case "Bash":
 		command := get("command")

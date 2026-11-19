@@ -184,6 +184,15 @@ func (s *Select) move(by int) {
 // Typing reports whether a text field is open and taking the keys.
 func (s *Select) Typing() bool { return s.typing }
 
+// TakeTexts gives s the text fields of old, a Select with the same options
+// laid out for another width, so that what was typed under an option
+// stays with it when the question is laid out again.
+func (s *Select) TakeTexts(old *Select) {
+	if len(old.fields) == len(s.fields) {
+		copy(s.fields, old.fields)
+	}
+}
+
 // handled is the result of a key that was understood and chose nothing,
 // and unhandled that of an event that meant nothing to the question.
 func handled() Result   { return Result{Handled: true, Index: -1} }

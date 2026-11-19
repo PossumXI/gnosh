@@ -3456,3 +3456,22 @@ or kept with the reason said (27).
     together, each took the lines of the first prompt (the instruction
     files, the environment): CLAUDE.md went out twice. Only the first of
     them does now (the agent loop review of 2026-11-19).
+
+220. **What the person reads and answers is read whole and kept.** From
+    the TUI review of 2026-11-19: a tool's name, which is the model's word,
+    and a run's folder are drawn safe in the agent view, which let their
+    escape sequences through (a conceal code could hide a row, a link be
+    planted); a question's text shows a character drawn as nothing, or one
+    that turns the drawing order around, as its code point (<U+202E>),
+    with text.ShowInvisible, which keeps what emoji and scripts need; a
+    note typed under "No" outlives a resize, which had laid the question
+    out fresh and sent a bare no; a question whose title fills the row is
+    recorded with the answer under the title, which had lost its first
+    letters; a paste while a question or the transcript view has the keys
+    goes into the prompt box and says so, where it had vanished; v in the
+    transcript view gives the editor the screen with the side panel put
+    aside, as Ctrl+G does; /copy and /export --clipboard leave control
+    characters out but tab and line breaks (ESC [201~ in a reply could end
+    a bracketed paste wherever it is pasted); a vim put with a count adds
+    at most about 4 MiB (9999p of a long line built gigabytes); and gnosh
+    agents no longer closes a view it could not open again (a nil panic).

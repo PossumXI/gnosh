@@ -347,6 +347,32 @@ func TestCopyCommand(t *testing.T) {
 	s.exit()
 }
 
+// What goes on the clipboard has no control characters but tab and the
+// line breaks: pasted into a terminal next, an escape sequence in a reply
+// (ESC [201~ ends a bracketed paste) could have the rest taken as typed
+// (the TUI review of 2026-11-19).
+func TestCopyLeavesControlCharactersOut(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "run this:\x1b[201~\rrm -rf ~\r\nok\tdone\x07"})
+	got := w.Path("clipboard.txt")
+	for _, name := range []string{"pbcopy", "wl-copy", "xclip", "xsel"} {
+		w.Script(w.Root+"/clipbin/"+name, `cat > "`+got+`"`)
+	}
+	w.PathFirst = append(w.PathFirst, w.Root+"/clipbin")
+	s := sitWith(t, w, func(o *Options) {
+		o.Environ = append(o.Environ, "DISPLAY=:0", "WAYLAND_DISPLAY=wayland-0")
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("hello")
+	s.see("-- done in ")
+	s.typeLine("/copy")
+	s.see("is on the clipboard.")
+	if b, err := os.ReadFile(got); err != nil || string(b) != "run this:[201~\nrm -rf ~\nok\tdone" {
+		t.Errorf("the clipboard tool was given %q (%v)", b, err)
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
+
 // Where the terminal is on this machine, /copy hands the reply to the
 // machine's own clipboard tool, and sends nothing through the terminal;
 // when the tool fails, it says so and sends the text through the terminal.

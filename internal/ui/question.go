@@ -146,7 +146,11 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 		var out []string
 		if strings.TrimSpace(q.Text) != "" && q.Text != q.Title {
 			for _, l := range strings.Split(strings.TrimRight(q.Text, "\n"), "\n") {
-				out = append(out, safeLine(l))
+				// What a person is asked about is read as it is: a
+				// character drawn as nothing, or one that turns the
+				// order of the rest around, shows as its code point
+				// (the TUI review of 2026-11-19).
+				out = append(out, text.ShowInvisible(safeLine(l)))
 			}
 		}
 		// The change a person is asked to approve is shown to them: every
@@ -235,15 +239,20 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 
 // rebuild lays the question out again for a new width, where its body
 // was drawn for the old one: a change shown as a diff, whose columns are
-// laid out for one width. The cursor stays on its option. A question on
-// which a text field is open is left as it is, so that nothing typed is
-// lost; its body is then wrapped by the question itself.
+// laid out for one width. The cursor stays on its option, and what was
+// typed under an option stays with it: a "No" with a note lost the note
+// and stopped the turn (the TUI review of 2026-11-19). A question on which
+// a text field is open is left as it is; its body is then wrapped by the
+// question itself.
 func (qs *question) rebuild(th *Theme, m text.Metrics, width int) {
 	sel, ok := qs.ui.(*menu.Select)
 	if !ok || sel.Typing() || qs.width == width || qs.q.Action == nil || qs.q.Action.Preview == nil {
 		return
 	}
 	fresh := newQuestion(th, m, width, qs.q, sel.Selected())
+	if fs, ok := fresh.ui.(*menu.Select); ok {
+		fs.TakeTexts(sel)
+	}
 	qs.ui, qs.width = fresh.ui, width
 }
 

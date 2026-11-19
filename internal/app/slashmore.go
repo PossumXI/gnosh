@@ -444,10 +444,32 @@ func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
+// pasteSafe is text as it may go on the clipboard. What it is pasted into
+// next may be a terminal, so its control characters go, but for tab and
+// the line breaks: a carriage return becomes a newline, and goes before
+// one. An escape sequence in a reply (ESC [201~ ends a bracketed paste)
+// could otherwise have the rest of it taken as typed (the TUI review of
+// 2026-11-19).
+func pasteSafe(s string) string {
+	s = strings.ReplaceAll(strings.ToValidUTF8(s, "�"), "\r\n", "\n")
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\t' || r == '\n':
+			return r
+		case r == '\r':
+			return '\n'
+		case r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0:
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // toClipboard puts text on the person's clipboard: with this machine's
 // own tool where the person's terminal is on this machine, and otherwise
 // through the terminal (OSC 52); and says which, of what (which).
 func (l *live) toClipboard(ctx context.Context, c *SlashContext, which, text string) {
+	text = pasteSafe(text)
 	size := countWords(utf8.RuneCountInString(text), "character", "characters")
 	failed := ""
 	if tool := clipboard.Tool(runtime.GOOS, l.p.getenv, l.p.lookPath); tool != nil {

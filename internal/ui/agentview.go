@@ -290,7 +290,7 @@ func (v *agentView) sortRuns() {
 
 // runFolder is the folder a run's group is named by when the list is
 // grouped by folder.
-func runFolder(r app.AgentRun) string { return firstNonEmpty(r.Folder, "(folder not known)") }
+func runFolder(r app.AgentRun) string { return oneLine(firstNonEmpty(r.Folder, "(folder not known)")) }
 
 // rank is where a run's group stands in the list: Needs input, Working,
 // Completed.
@@ -1409,7 +1409,7 @@ func (v *agentView) peekLines(r app.AgentRun, width int) []string {
 	case r.Question != nil:
 		state = "needs input" + th.Sep + "waiting " + shortAge(v.now().Sub(r.Question.Since))
 	}
-	head := "─ " + runName(r) + th.Sep + state + th.Sep + firstNonEmpty(r.Folder, "(folder not known)") + " ─"
+	head := "─ " + runName(r) + th.Sep + state + th.Sep + runFolder(r) + " ─"
 	out := []string{th.Quiet.Render(fit(v.m, head, width))}
 	if p := strings.TrimSpace(r.Prompt); p != "" {
 		rows := wrap(v.m, oneLine(p), width, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", v.m.Width(th.PromptMark)))
@@ -1651,7 +1651,11 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 		fmt.Fprintf(os.Stderr, "gnosh: the agent view could not take the screen: %v\n", err)
 		return 1
 	}
-	defer func() { _, _ = p.Close() }()
+	defer func() {
+		if p != nil {
+			_, _ = p.Close()
+		}
+	}()
 
 	v := newAgentView(th, m, now, info)
 	results := make(chan func(*agentView), 16)
@@ -1695,7 +1699,6 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 	}
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
-	var err2 error
 	for !v.quit {
 		if v.clear {
 			v.clear = false
@@ -1748,7 +1751,13 @@ func runAgentView(o Options, info app.AgentViewInfo) (code int) {
 				v.refresh()
 			}
 			cols, rows = size()
-			if p, err2 = term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput); err2 != nil {
+			// (A view that could not be opened again is nil: the close on
+			// the way out skips it. It was called on nil, and panicked: the
+			// TUI review of 2026-11-19.)
+			np, err := term.OpenView(t, cols, rows, m.Width, caps.SynchronizedOutput)
+			p = np
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "gnosh: the agent view could not take the screen back: %v\n", err)
 				return 1
 			}
 			scr = &agentScreen{p: p}

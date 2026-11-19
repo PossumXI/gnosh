@@ -1070,3 +1070,32 @@ func TestAgentViewStoppedBeforeItRead(t *testing.T) {
 		}
 	}
 }
+
+// A tool's name is the model's word, and a run's folder a file name:
+// neither reaches the terminal as an escape sequence. The panel lets
+// colour codes and links through, so a name with a conceal code could
+// hide its row, or plant a link in it (the TUI review of 2026-11-19).
+func TestAgentViewDrawsNamesSafely(t *testing.T) {
+	g := newAgentRig(t)
+	g.src.mu.Lock()
+	g.src.runs[0].Folder = "~/src/\x1b]8;;https://example.com/\x07app\x1b]8;;\x07"
+	g.src.convs[runTests] = append(g.src.convs[runTests], app.TranscriptEntry{Kind: "reply", Message: core.Message{
+		Role: core.RoleAssistant, Blocks: []core.Block{core.ToolUse("c2", "Read\x1b[8m", json.RawMessage(`{"file_path":"/x"}`))},
+	}})
+	g.src.mu.Unlock()
+	g.v.refresh()
+	check := func(what string) {
+		t.Helper()
+		b, l, _, _ := g.v.render(100, 20)
+		for _, row := range append(b, l...) {
+			if strings.ContainsRune(row, '\x1b') {
+				t.Errorf("%s: a row reaches the terminal with an escape sequence in it: %q", what, row)
+			}
+		}
+	}
+	check("the list")
+	g.keys(`<Space>`)
+	check("peeking")
+	g.keys(`<Esc> <Ctrl+S>`)
+	check("grouped by folder")
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/term"
+	"github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/ui/editor"
 	"github.com/gnosh-ai/gnosh/internal/ui/menu"
 )
@@ -170,14 +171,27 @@ func (s *session) input(ev term.Event) {
 			return
 		}
 		if s.view != nil {
-			// The transcript view takes every key while it is open.
-			if _, paste := ev.(term.Paste); !paste {
+			// The transcript view takes every key while it is open. A
+			// paste goes into the prompt box, where it is when the view
+			// is closed: it was lost (the TUI review of 2026-11-19).
+			if _, paste := ev.(term.Paste); paste {
+				s.pasteAside(ev)
+				s.flash("The paste went into the prompt box.")
+			} else {
 				s.viewInput(ev)
 			}
 			return
 		}
 		s.typedOrMouse(ev)
 	}
+}
+
+// pasteAside puts a paste into the prompt box while something else has the
+// keys: the box takes it as it takes any paste, and is locked again after.
+func (s *session) pasteAside(ev term.Event) {
+	s.ed.SetLocked(false)
+	s.box(ev, nil)
+	s.lock()
 }
 
 // typedOrMouse takes in a key, a paste or the mouse.
@@ -228,6 +242,14 @@ func (s *session) typed(ev term.Event, k *term.Key) {
 		return
 	}
 	res := q.ui.Handle(ev)
+	if k == nil && !res.Handled {
+		// A paste the question has no field open for goes into the
+		// prompt box, in sight under the question, instead of nowhere
+		// (the TUI review of 2026-11-19).
+		s.pasteAside(ev)
+		s.flash("The paste went into the prompt box: the question takes keys, and words only in a field it opens.")
+		return
+	}
 	if !res.Done {
 		return
 	}
@@ -1076,22 +1098,29 @@ func (s *session) record(q *question, words string) {
 		lines = []string{""}
 	}
 	s.begin(blkAsk)
-	if len(lines) > 1 {
-		// Several answers (a form's): the title stands on its own line,
-		// and each answer under it.
-		s.put(wrap(s.m, title, s.cols, th.Ask.Render(th.AskMark)+" ", "  ")...)
-		for _, l := range lines {
-			s.put(wrap(s.m, th.Answer.Render(l), s.cols, "  ", "  ")...)
-		}
-		return
+	s.put(answerRows(th, s.m, s.cols, title, lines)...)
+}
+
+// answerRoom is the fewest cells a question's title may leave for its
+// answer beside it in the record.
+const answerRoom = 8
+
+// answerRows are the rows that record a question's answer: "? title" and
+// the answer beside it. Several answers (a form's), or a title that
+// leaves no room beside it, put the title on its own row and each answer
+// under it: beside a title that filled the row, an answer lost its first
+// letters (the TUI review of 2026-11-19: "es: use this folder's
+// settings").
+func answerRows(th *Theme, m text.Metrics, cols int, title string, answers []string) []string {
+	lead := th.Ask.Render(th.AskMark) + " "
+	if len(answers) == 1 && m.VisibleWidth(lead+title+" ")+answerRoom <= cols {
+		return wrap(m, th.Answer.Render(answers[0]), cols, lead+title+" ", "  ")
 	}
-	for i, l := range lines {
-		first := "  "
-		if i == 0 {
-			first = th.Ask.Render(th.AskMark) + " " + title + " "
-		}
-		s.put(wrap(s.m, th.Answer.Render(l), s.cols, first, "  ")...)
+	rows := wrap(m, title, cols, lead, "  ")
+	for _, l := range answers {
+		rows = append(rows, wrap(m, th.Answer.Render(l), cols, "  ", "  ")...)
 	}
+	return rows
 }
 
 // help writes the keys into the scrollback, where they can be read and

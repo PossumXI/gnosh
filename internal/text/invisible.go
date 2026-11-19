@@ -1,6 +1,7 @@
 package text
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -130,6 +131,45 @@ func clean(s string, at []int) (string, []int, Invisible) {
 		}
 	}
 	return b.String(), moved, found
+}
+
+// ShowInvisible returns s with each character CleanInvisible would take
+// out written as its code point, <U+202E>: where a person must read what
+// is there, the command they are asked to let run, nothing in it may be
+// drawn as nothing or turn the order of what is drawn around.
+func ShowInvisible(s string) string {
+	if !mayHoldInvisible(s) {
+		return s
+	}
+	src := strings.ToValidUTF8(s, string(utf8.RuneError))
+	var b strings.Builder
+	b.Grow(len(src) + 16)
+	prev := '\n' // the last character kept as it is
+	for i := 0; i < len(src); {
+		r, n := utf8.DecodeRuneInString(src[i:])
+		if r == 0x1F3F4 {
+			if end := flagTags(src, i+n); end > 0 {
+				b.WriteString(src[i:end])
+				i, prev = end, 0xE007F
+				continue
+			}
+		}
+		next := rune(-1)
+		if i+n < len(src) {
+			next, _ = utf8.DecodeRuneInString(src[i+n:])
+		}
+		if cut, _ := invisible(r, prev, next); cut {
+			b.WriteString("<U+")
+			hex := strings.ToUpper(strconv.FormatInt(int64(r), 16))
+			b.WriteString(strings.Repeat("0", max(4-len(hex), 0)) + hex)
+			b.WriteString(">")
+		} else {
+			b.WriteString(src[i : i+n])
+			prev = r
+		}
+		i += n
+	}
+	return b.String()
 }
 
 // mayHoldInvisible reports whether s has a character beyond ASCII at all:
