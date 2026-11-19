@@ -118,4 +118,12 @@ func TestRewindConfirmation(t *testing.T) {
 	g.keys(`<Esc> <Esc>`)
 	g.keys(`<Enter>`)
 	g.liveHas("Go back to before: the second prompt", "Summarize from here", "Summarize up to here")
+	// What the summary is to keep is typed on its row, after Tab.
+	g.keys(`<Down> <Tab> "keep the API names" <Enter>`)
+	g.c.mu.Lock()
+	ran := strings.Join(g.c.commands, "|")
+	g.c.mu.Unlock()
+	if !strings.Contains(ran, "/rewind 2 summarize keep the API names") {
+		t.Fatalf("Summarize from here with a note ran %q", ran)
+	}
 }

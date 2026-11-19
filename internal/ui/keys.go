@@ -1396,10 +1396,14 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		if point.InView {
 			// (Of a prompt the model still reads: one a summary or a slide
 			// took out has nothing before or after it to summarize.)
-			opts = append(opts, menu.Option{Label: "Summarize from here", Description: "go back to before it, keeping a summary of what followed; the files stay"})
+			// (Each takes, as Claude Code's do, what the summary is to
+			// keep, typed on its row after Tab.)
+			opts = append(opts, menu.Option{Label: "Summarize from here", Description: "go back to before it, keeping a summary of what followed; the files stay",
+				Text: menu.TextOptional, Placeholder: "what the summary is to keep, if anything in particular"})
 			commands = append(commands, fmt.Sprintf("/rewind %d summarize", number))
 			if number > 1 {
-				opts = append(opts, menu.Option{Label: "Summarize up to here", Description: "what came before it becomes a summary; it and what followed stay"})
+				opts = append(opts, menu.Option{Label: "Summarize up to here", Description: "what came before it becomes a summary; it and what followed stay",
+					Text: menu.TextOptional, Placeholder: "what the summary is to keep, if anything in particular"})
 				commands = append(commands, fmt.Sprintf("/rewind %d summarize-before", number))
 			}
 		}
@@ -1412,7 +1416,11 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			if res.Cancelled || res.Index < 0 || res.Index >= len(commands) {
 				return
 			}
-			s.run(commands[res.Index])
+			line := commands[res.Index]
+			if guide := strings.Join(strings.Fields(res.Text), " "); guide != "" && strings.Contains(line, " summarize") {
+				line += " " + guide
+			}
+			s.run(line)
 		}
 		s.openLocal(sure)
 	}
