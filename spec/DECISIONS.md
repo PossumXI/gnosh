@@ -3602,3 +3602,13 @@ or kept with the reason said (27).
     password last went to (gnokey-seen.json in its state folder), and the
     question asking for the password says when the one at hand is
     another: press Esc if you did not rebuild or replace it yourself.
+
+233. **The shell's guard against gnokey's password flag reads past what a
+    shell fills in.** It took the quotes and backslashes out of a command
+    and looked for -insecure-password-stdin, so -insecure-pass$()word-stdin,
+    -insecure-password-std${X}in and a `...` in the middle went by, and a
+    command could sign without the gnokey tool's prompt with a key whose
+    password the model knew, or one with none (the gno review of
+    2026-11-19). It now also takes out $(...), ${...}, $NAME and `...`,
+    and looks for the flag's letters in order, in either case. A shell
+    can build any word; this keeps the plain ways from working.

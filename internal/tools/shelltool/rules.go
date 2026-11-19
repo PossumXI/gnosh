@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -204,9 +205,28 @@ func reaches(command string) string {
 func GnokeyPassword(command string) bool { return gnokeyPassword(command) }
 
 func gnokeyPassword(command string) bool {
-	plain := strings.NewReplacer(`'`, "", `"`, "", `\`, "").Replace(command)
-	return strings.Contains(plain, "insecure-password-stdin")
+	// The flag's letters in order, once what a shell fills in with nothing
+	// or takes out is gone: $() and ${X} when nothing is in them, $X,
+	// quotes and backslashes. -insecure-pass$()word-stdin was let through
+	// (the gno review of 2026-11-19). (A shell can build any word; this
+	// keeps the plain ways from working, and the gnokey tool's prompt is
+	// the way that signs.)
+	plain := shellFills.ReplaceAllString(command, "")
+	var b strings.Builder
+	for _, r := range plain {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r - 'A' + 'a')
+		}
+	}
+	return strings.Contains(b.String(), "insecurepasswordstdin")
 }
+
+// shellFills finds what a shell fills in when the command runs: a command
+// substitution, a ${...}, a $NAME, a `...`.
+var shellFills = regexp.MustCompile("\\$\\([^()]*\\)|\\$\\{[^{}]*\\}|\\$[A-Za-z_][A-Za-z0-9_]*|`[^`]*`")
 
 // commandLines are the lines of a command where the shell starts reading
 // a command (shellquote.CommandStarts: not the text of a here-document or

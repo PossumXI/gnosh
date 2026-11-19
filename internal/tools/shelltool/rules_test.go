@@ -463,6 +463,12 @@ func TestGnokeyPasswordFlagIsRefused(t *testing.T) {
 		"gnokey sign -tx-path t.tx --insecure-password-stdin=true k < pw.txt",
 		"printf '%s\\n' \"$PW\" | gnokey maketx send -broadcast '-insecure-password-std'in k",
 		"cd pkg &&\ngnokey maketx addpkg -broadcast -insecure-password-stdin k <<<\"$P\"",
+		// What a shell fills in with nothing or takes out (the gno review
+		// of 2026-11-19).
+		"gnokey maketx send -broadcast -insecure-pass$()word-stdin k",
+		"gnokey maketx send -broadcast -insecure-password-std${X}in k",
+		"gnokey maketx send -broadcast -insecure-password-std$X\\in k",
+		"gnokey maketx send -broadcast -Insecure-Password-`true`Stdin k",
 	} {
 		_, err := tool.Describe(core.ToolCall{Input: mustJSON(t, args{argCommand: command})}, env)
 		if err == nil || !strings.Contains(err.Error(), "only the gnokey tool opens") {
