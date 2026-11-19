@@ -798,6 +798,14 @@ func (l *live) beforeSummary(ctx context.Context, info agent.SummaryInfo) (strin
 // "compact".
 func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agent.Part, error) {
 	var parts []agent.Part
+	// The system prompt is made again, as at the start: what it is made
+	// of (the tools there are now, a project that has come to hold Gno
+	// code) may have changed since, and a summary has spent the cache it
+	// kept warm. Claude Code 2.1.328 does so after an automatic summary
+	// as after /compact.
+	if system, err := l.systemPrompt(); err == nil && !slices.Equal(system, l.systemNow()) {
+		l.putSystem(system)
+	}
 	// The model no longer sees any file it read: Edit and Write refuse to
 	// change one until Read has shown it again, as after a slide, so that
 	// no file is written from a copy the model can no longer see. The ones

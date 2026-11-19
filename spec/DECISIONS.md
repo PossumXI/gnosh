@@ -3773,3 +3773,12 @@ or kept with the reason said (27).
     file is now written where it is: its other names see the new content
     and it stays whose it was, and the result says why it was written so.
     One the process may not write so is replaced as any other.
+
+251. **After a summary the system prompt is made again.** It was made once,
+    at the start (and again only for /output-style), so what it is made
+    of and what changed since, the tools there are now, a project that
+    came to hold Gno code, the --append-system-prompt-file, stayed as they
+    were at the start. A summary has spent the cache the unchanged prompt
+    kept warm, so after one, automatic or /compact, the prompt is made
+    again, as Claude Code 2.1.328 does after an automatic summary as after
+    /compact.

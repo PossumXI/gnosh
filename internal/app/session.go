@@ -206,11 +206,13 @@ type live struct {
 	// branchTo is set by /branch: the name of the copy it asked for, which
 	// may be empty.
 	branchTo *string
-	// system is what the model is told as its instructions, and named
-	// says the session has a name or was given one after its first
-	// prompt.
-	system []string
-	named  atomic.Bool
+	// system is what the model is told as its instructions (held with
+	// systemMu: a summary makes it again from the loop, /output-style
+	// from a command, and /context reads it), and named says the session
+	// has a name or was given one after its first prompt.
+	systemMu sync.Mutex
+	system   []string
+	named    atomic.Bool
 	// lastCwd is the directory the shell was last seen in, for
 	// CwdChanged; empty means the one the session started in.
 	cwdMu   sync.Mutex
@@ -495,7 +497,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.agentNotices()
 	l.loadStyles()
 	system, err := l.systemPrompt()
+	l.systemMu.Lock()
 	l.system = system
+	l.systemMu.Unlock()
 	if err != nil {
 		return l, err
 	}

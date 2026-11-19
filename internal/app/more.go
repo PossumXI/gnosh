@@ -39,7 +39,7 @@ func (l *live) slashContext(ctx context.Context, c *SlashContext) error {
 	cs := l.agent.Context()
 	est := prompt.EstimateTokens
 	system := 0
-	for _, part := range l.system {
+	for _, part := range l.systemNow() {
 		system += est(part)
 	}
 	tools := 0

@@ -197,11 +197,25 @@ func (l *live) setStyle(name string) error {
 	if err != nil {
 		return err
 	}
+	l.putSystem(parts)
+	return nil
+}
+
+// putSystem makes parts the system prompt, from the next request on.
+func (l *live) putSystem(parts []string) {
+	l.systemMu.Lock()
 	l.system = parts
+	l.systemMu.Unlock()
 	if l.agent != nil {
 		l.agent.SetSystem(parts)
 	}
-	return nil
+}
+
+// systemNow is the system prompt in force.
+func (l *live) systemNow() []string {
+	l.systemMu.Lock()
+	defer l.systemMu.Unlock()
+	return l.system
 }
 
 // slashOutputStyle is /output-style: with nothing after it, the styles
