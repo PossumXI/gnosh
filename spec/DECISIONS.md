@@ -3199,3 +3199,20 @@ or kept with the reason said (27).
     million "1s" ran the stack out, which no recover catches; it reads up
     to four parts in a loop, in the first 4 KiB of the message (the model
     client review of 2026-11-19).
+
+195. **Anthropic: no thinking is asked for the way each model takes it,
+    and a default cap fits the model.** gnosh asked for no thinking with
+    thinking {type: "disabled"} (/think off, MAX_THINKING_TOKENS=0, the
+    side requests of a model with no known levels). Claude Opus 5.5 and
+    the Fable and Mythos models refuse that value with a 400, and Claude
+    Sonnet 5.5 takes only {type: "between_tools"}, so every such request
+    failed. The Models API says which a model takes
+    (capabilities.thinking.types.disabled.supported and
+    between_tools.supported, read 2026-11-19 at platform.claude.com);
+    gnosh now reads it when it lists the models and sends "disabled",
+    "between_tools", or, for a model whose thinking cannot be turned off,
+    no thinking field and effort "low". A model the list did not say
+    anything of is asked with "disabled", as before. And a request with
+    no cap of its own asks for at most what the model writes in one
+    answer, as listed: the default of 64000 is above the 32000 of the
+    older Opus models (the model client review of 2026-11-19).

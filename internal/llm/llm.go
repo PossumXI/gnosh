@@ -176,7 +176,7 @@ func New(cfg Config) (core.Provider, error) {
 	case TypeLlamaCpp:
 		return &llamaCpp{openAI{p}}, nil
 	case TypeAnthropic:
-		return &anthropic{p}, nil
+		return &anthropic{provider: p}, nil
 	default:
 		return &openAI{p}, nil
 	}
