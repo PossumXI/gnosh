@@ -3552,3 +3552,15 @@ or kept with the reason said (27).
     format character, a command over 2000 characters, and a file over 80
     lines or 64 KiB are refused: nothing is signed, and the model is told
     to hand the person the command for their own terminal.
+
+228. **What one fmt call takes in, and pads, is capped before Go's fmt
+    builds it.** The fmt natives handed Go's fmt their operands whole and
+    cut its text to 1 MiB after it was built: operands holding one shared
+    4 MB string built 16 GB, %[1]65536d written a hundred thousand times
+    6.5 GB, and a byte slice was made into a value for each byte, forty
+    times its size; gnovm_run asks no question, so a hostile file could
+    have the model do it (the gno review of 2026-11-19). A call now takes
+    in at most 2 MiB of strings and byte slices (what is past it is cut,
+    with …), reads a byte slice's bytes as they are held, stops writing a
+    composite once its output is spent, and refuses a format whose widths
+    and precisions add up to over 1 MiB.
