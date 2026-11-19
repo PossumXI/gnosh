@@ -29,13 +29,17 @@ import (
 //
 // Before Write or Edit first changes a file after one of the session's
 // prompts, the file's content then is copied into the session's own folder,
-// under that prompt. A rewind to before a prompt puts back every file that
-// was changed from that prompt on, as it was just before the first of those
-// changes: a file that was not there is taken away again. What shell
-// commands change is not kept, as in Claude Code: only the file tools say
-// what they are about to change. What a file holds when it is put back or
-// taken away, if anything changed it since, is kept beside the copies
-// first, so that a rewind never loses work (DECISIONS 143).
+// under that prompt. From then on the file is followed, as Claude Code
+// follows the files its tools changed: as each later prompt goes out, the
+// file is copied again if anything changed it since its newest copy (a
+// shell command, another program; begin). A rewind to before a prompt puts
+// every followed file that changed from that prompt on back as it was when
+// the prompt went out, and a file first changed after it as it was just
+// before Write or Edit first changed it: a file that was not there is
+// taken away again. A file only shell commands ever changed is not
+// followed. What a file holds when it is put back or taken away, if
+// anything changed it since, is kept beside the copies first, so that a
+// rewind never loses work (DECISIONS 143).
 //
 // The copies are written beside the session's file and read again when the
 // session is resumed, so a rewind after a resume can put files back too. A
@@ -63,7 +67,8 @@ const setAsideMost = 1 << 30
 const keptMode = fs.ModePerm | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky
 
 // fileCheckpoint is one file as it was before its first change after one
-// prompt.
+// prompt, or, for a file a copy was kept of before, as it was when the
+// prompt went out (Start).
 type fileCheckpoint struct {
 	// Prompt is the session-file entry of the prompt the change came
 	// after, and Path the file's real path.
@@ -79,9 +84,35 @@ type fileCheckpoint struct {
 	Large   bool        `json:"large,omitempty"`
 	Failed  bool        `json:"failed,omitempty"`
 	Time    time.Time   `json:"time"`
+	// Start says the copy is of the file as it was when the prompt went
+	// out, taken because something had changed it since its newest copy
+	// (begin). MTime is the file's modification time then, in
+	// nanoseconds: a later look that finds the same time and size takes
+	// the file for unchanged without reading it.
+	Start bool  `json:"start,omitempty"`
+	MTime int64 `json:"mtime,omitempty"`
 	// dir is the folder that holds the copy: this session's, or that of
 	// the session a branch took the prompt over from.
 	dir string
+}
+
+// fileState is what a look at a file, without reading it, tells.
+type fileState struct {
+	there       bool
+	size, mtime int64
+}
+
+// stateOf looks at the file at path: ok is false when it cannot be looked
+// at, or is something other than a file.
+func stateOf(path string) (st fileState, ok bool) {
+	info, err := os.Lstat(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return fileState{}, true
+	case err != nil || !info.Mode().IsRegular():
+		return fileState{}, false
+	}
+	return fileState{there: true, size: info.Size(), mtime: info.ModTime().UnixNano()}, true
 }
 
 // checkpoints is the session's store of them.
@@ -101,12 +132,15 @@ type checkpoints struct {
 	// any more.
 	pruned map[string]bool
 	lost   map[string]bool
+	// seen is, by path, a state each file was found in whose content is
+	// that of its newest copy, so that begin need not read it again.
+	seen map[string]fileState
 }
 
 // openCheckpoints opens the store in dir, reading what an earlier run of
 // the session kept there. A store that cannot be read is an empty one.
 func openCheckpoints(dir string, now func() time.Time) *checkpoints {
-	c := &checkpoints{dir: dir, now: now, kept: map[string]bool{}, taken: map[string][]fileCheckpoint{}, pruned: map[string]bool{}, lost: map[string]bool{}}
+	c := &checkpoints{dir: dir, now: now, kept: map[string]bool{}, taken: map[string][]fileCheckpoint{}, pruned: map[string]bool{}, lost: map[string]bool{}, seen: map[string]fileState{}}
 	c.list = readCheckpoints(dir)
 	for _, cp := range c.list {
 		c.kept[cp.Prompt+"\x00"+cp.Path] = true
@@ -177,30 +211,52 @@ func (c *checkpoints) keep(prompt, path string) error {
 			}
 		}
 	}
-	cp := fileCheckpoint{Prompt: prompt, Path: path, Time: c.now(), dir: c.dir}
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		err = nil
-	case err != nil:
-	case !info.Mode().IsRegular():
+	if err == nil && !info.Mode().IsRegular() {
 		// Write and Edit change regular files only.
 		return nil
-	case info.Size() > checkpointMax:
-		cp.Existed, cp.Large, cp.Size = true, true, info.Size()
-	default:
-		cp.Existed, cp.Mode = true, info.Mode()&keptMode
-		var data []byte
-		if data, err = os.ReadFile(path); err == nil {
-			cp.Size = int64(len(data))
-			cp.Blob, err = c.write("", filepath.Base(path), data)
-		}
+	}
+	cp := fileCheckpoint{Prompt: prompt, Path: path, Time: c.now(), dir: c.dir}
+	if errors.Is(err, fs.ErrNotExist) {
+		info, err = nil, nil
+	}
+	if err == nil {
+		err = c.copyOf(&cp, info)
 	}
 	if err != nil {
 		cp.Failed, cp.Blob = true, ""
 	}
-	fresh := !slices.ContainsFunc(c.list, func(o fileCheckpoint) bool { return o.Prompt == prompt })
+	delete(c.seen, path)
+	return c.add(cp, err)
+}
+
+// copyOf fills cp with the file at its path as info says it is (nil: it is
+// not there), keeping a copy of its content.
+func (c *checkpoints) copyOf(cp *fileCheckpoint, info fs.FileInfo) error {
+	switch {
+	case info == nil:
+		return nil
+	case info.Size() > checkpointMax:
+		cp.Existed, cp.Large, cp.Size, cp.MTime = true, true, info.Size(), info.ModTime().UnixNano()
+		return nil
+	}
+	cp.Existed, cp.Mode, cp.MTime = true, info.Mode()&keptMode, info.ModTime().UnixNano()
+	data, err := os.ReadFile(cp.Path)
+	if err != nil {
+		return err
+	}
+	cp.Size = int64(len(data))
+	cp.Blob, err = c.write("", filepath.Base(cp.Path), data)
+	return err
+}
+
+// add puts a new copy into the store and its index, and lets go of the
+// oldest prompts' copies when it is the first of a prompt. err is how the
+// copy went, returned unless the index went worse. The caller holds the
+// lock.
+func (c *checkpoints) add(cp fileCheckpoint, err error) error {
+	fresh := !slices.ContainsFunc(c.list, func(o fileCheckpoint) bool { return o.Prompt == cp.Prompt })
 	c.list = append(c.list, cp)
-	c.kept[key] = true
+	c.kept[cp.Prompt+"\x00"+cp.Path] = true
 	if ierr := c.index(cp); err == nil {
 		err = ierr
 	}
@@ -210,6 +266,103 @@ func (c *checkpoints) keep(prompt, path string) error {
 		}
 	}
 	return err
+}
+
+// begin is told that a prompt goes out. Every file a copy was kept of
+// before (one this session's Write or Edit changed, or the session's it
+// was branched from) that has changed since its newest copy, by a shell
+// command or another program, say, is copied as it is now, under the
+// prompt: a rewind to before the prompt puts it back so, as Claude Code
+// rewinds a file it tracks, whatever changed it. A file only a shell
+// command ever changed is not followed.
+func (c *checkpoints) begin(prompt string) error {
+	if prompt == "" {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	newest := map[string]fileCheckpoint{}
+	note := func(cps []fileCheckpoint) {
+		for _, cp := range cps {
+			if o, ok := newest[cp.Path]; !ok || !cp.Time.Before(o.Time) {
+				newest[cp.Path] = cp
+			}
+		}
+	}
+	note(c.list)
+	for _, cps := range c.taken {
+		note(cps)
+	}
+	paths := make([]string, 0, len(newest))
+	for p := range newest {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	var first error
+	for _, path := range paths {
+		if c.kept[prompt+"\x00"+path] {
+			continue
+		}
+		now, ok := stateOf(path)
+		if !ok {
+			continue
+		}
+		if was, ok := c.seen[path]; ok && was == now {
+			continue
+		}
+		if holdsCopy(path, now, newest[path]) {
+			if c.now().UnixNano()-now.mtime > racyTime {
+				c.seen[path] = now
+			}
+			continue
+		}
+		cp := fileCheckpoint{Prompt: prompt, Path: path, Start: true, Time: c.now(), dir: c.dir}
+		var info fs.FileInfo
+		var err error
+		if now.there {
+			info, err = os.Lstat(path)
+		}
+		if err == nil {
+			err = c.copyOf(&cp, info)
+		}
+		if err != nil {
+			cp.Failed, cp.Blob = true, ""
+		}
+		delete(c.seen, path)
+		if err := c.add(cp, err); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// racyTime is how long after a file's modification time a look must be
+// for its size and time to tell it unchanged: a file system keeps the time
+// in ticks (milliseconds, or seconds), and a change in the tick of a look
+// leaves both as they were (git's "racy" files).
+const racyTime = int64(2 * time.Second)
+
+// holdsCopy reports whether the file at path, in the state now, holds what
+// the copy cp holds: without reading it when its size and time are the
+// copy's, by its content otherwise. A copy that could not be made holds
+// nothing it can be compared with.
+func holdsCopy(path string, now fileState, cp fileCheckpoint) bool {
+	switch {
+	case !now.there || !cp.Existed:
+		return now.there == cp.Existed
+	case cp.Failed || now.size != cp.Size:
+		return false
+	case cp.MTime != 0 && now.mtime == cp.MTime && cp.Time.UnixNano()-cp.MTime > racyTime:
+		return true
+	case cp.Large:
+		return false
+	}
+	want, err := os.ReadFile(filepath.Join(cp.dir, cp.Blob))
+	if err != nil {
+		return false
+	}
+	same, err := holds(path, want)
+	return err == nil && same
 }
 
 // prune lets go of the copies of all but the checkpointPrompts most recent
@@ -232,17 +385,45 @@ func (c *checkpoints) prune() error {
 	for _, p := range order[:len(order)-checkpointPrompts] {
 		drop[p] = true
 	}
+	// What a file held as the oldest prompt kept went out is its newest
+	// copy among those let go, unless a copy of its own says otherwise:
+	// that copy is kept, as one taken as that prompt went out, for a
+	// rewind to before that prompt or a later one.
+	oldest := order[len(order)-checkpointPrompts]
+	carried := map[string]fileCheckpoint{}
+	var paths []string
+	for _, cp := range c.list {
+		if drop[cp.Prompt] {
+			if _, ok := carried[cp.Path]; !ok {
+				paths = append(paths, cp.Path)
+			}
+			carried[cp.Path] = cp
+		}
+	}
+	for _, cp := range c.list {
+		if cp.Prompt == oldest && cp.Start {
+			delete(carried, cp.Path)
+		}
+	}
 	var keep []fileCheckpoint
-	var lines []byte
+	for _, p := range paths {
+		if cp, ok := carried[p]; ok {
+			cp.Prompt, cp.Start = oldest, true
+			keep = append(keep, cp)
+		}
+	}
 	for _, cp := range c.list {
 		if !drop[cp.Prompt] {
 			keep = append(keep, cp)
-			line, err := json.Marshal(cp)
-			if err != nil {
-				return err
-			}
-			lines = append(append(lines, line...), '\n')
 		}
+	}
+	var lines []byte
+	for _, cp := range keep {
+		line, err := json.Marshal(cp)
+		if err != nil {
+			return err
+		}
+		lines = append(append(lines, line...), '\n')
 	}
 	// The prompts are noted first: a rewind must never take what is left
 	// for all there was.
@@ -268,11 +449,14 @@ func (c *checkpoints) prune() error {
 		return err
 	}
 	for _, cp := range c.list {
-		if drop[cp.Prompt] && cp.Blob != "" {
+		if drop[cp.Prompt] && cp.Blob != "" && carried[cp.Path].Blob != cp.Blob {
 			_ = os.Remove(filepath.Join(c.dir, cp.Blob))
 		}
 	}
 	c.list = keep
+	for _, cp := range keep {
+		c.kept[cp.Prompt+"\x00"+cp.Path] = true
+	}
 	return nil
 }
 
@@ -392,23 +576,39 @@ func (c *checkpoints) index(cp fileCheckpoint) error {
 }
 
 // inherit makes the copies kept in another session's folder part of what
-// this store finds: those of a session this one was branched from.
-func (c *checkpoints) inherit(dir string) {
+// this store finds: those of a session this one was branched from, kept
+// under the prompts this one took over from it (what that session went on
+// to change after the branch is not this one's).
+func (c *checkpoints) inherit(dir string, prompts []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if dir == c.dir {
 		return
 	}
 	if _, ok := c.taken[dir]; !ok {
-		c.taken[dir] = readCheckpoints(dir)
+		var mine []fileCheckpoint
+		for _, cp := range readCheckpoints(dir) {
+			if slices.Contains(prompts, cp.Prompt) {
+				mine = append(mine, cp)
+			}
+		}
+		c.taken[dir] = mine
 		readPruned(dir, c.pruned)
 	}
 }
 
-// since returns, for every file changed after one of the prompts, what it
-// held before the first of those changes: the oldest copy taken under one
-// of them. The files come in the order of their paths.
-func (c *checkpoints) since(prompts map[string]bool) []fileCheckpoint {
+// since returns what a rewind to before the prompt order[at] puts back,
+// order being the session's prompts in the order of its file: each file
+// that holds something else now than it held then, as it was then. For a
+// file a copy was kept of before that prompt, that is the copy taken as
+// the prompt went out (begin), or, without one (nothing had changed it),
+// its newest copy before the prompt; for any other file, the oldest copy
+// kept from the prompt on, taken before the first Write or Edit of it.
+// The files come in the order of their paths.
+func (c *checkpoints) since(order []string, at int) []fileCheckpoint {
+	if at < 0 || at >= len(order) {
+		return nil
+	}
 	c.mu.Lock()
 	all := slices.Clone(c.list)
 	for _, cps := range c.taken {
@@ -416,18 +616,53 @@ func (c *checkpoints) since(prompts map[string]bool) []fileCheckpoint {
 	}
 	c.mu.Unlock()
 	sort.SliceStable(all, func(i, j int) bool { return all[i].Time.Before(all[j].Time) })
-	first := map[string]fileCheckpoint{}
-	for _, cp := range all {
-		if !prompts[cp.Prompt] {
-			continue
-		}
-		if _, ok := first[cp.Path]; !ok {
-			first[cp.Path] = cp
+	before, from := map[string]bool{}, map[string]bool{}
+	for i, p := range order {
+		if i < at {
+			before[p] = true
+		} else {
+			from[p] = true
 		}
 	}
-	out := make([]fileCheckpoint, 0, len(first))
-	for _, cp := range first {
-		out = append(out, cp)
+	type found struct{ start, last, first *fileCheckpoint }
+	files := map[string]*found{}
+	for i := range all {
+		cp := &all[i]
+		f := files[cp.Path]
+		if f == nil {
+			f = &found{}
+			files[cp.Path] = f
+		}
+		switch {
+		case before[cp.Prompt]:
+			f.last = cp
+		case from[cp.Prompt]:
+			if f.first == nil {
+				f.first = cp
+			}
+			if cp.Start && cp.Prompt == order[at] && f.start == nil {
+				f.start = cp
+			}
+		}
+	}
+	var out []fileCheckpoint
+	for path, f := range files {
+		then := f.start
+		switch {
+		case then != nil:
+		case f.last != nil:
+			then = f.last
+		default:
+			then = f.first
+		}
+		if then == nil {
+			continue
+		}
+		if now, ok := stateOf(path); ok && holdsCopy(path, now, *then) {
+			// As it was then: nothing to put back.
+			continue
+		}
+		out = append(out, *then)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
@@ -664,6 +899,20 @@ func (l *live) keepFile(env *core.ToolEnv, path string) error {
 	return nil
 }
 
+// promptGoesOut is the session log's onPrompt: a prompt went out, and
+// begin copies the files a copy was kept of that something changed since.
+func (l *live) promptGoesOut(entry string) {
+	if l.checks == nil || !l.cfg.Options.FileCheckpointingEnabled.V {
+		return
+	}
+	if err := l.checks.begin(entry); err != nil {
+		l.flog.logf("tool", "what the files a rewind follows held as a prompt went out could not all be kept: %v", err)
+		l.checkWarn.Do(func() {
+			l.notice(agent.LevelWarning, "rewind", fmt.Sprintf("What a file held as your prompt went out could not be kept (%v), so a rewind may not put it back.", err))
+		})
+	}
+}
+
 // promptsInOrder lists the session-file entries of the person's prompts in
 // the order of the file, those a rewind took out of the conversation
 // among them: their changes were made to the files all the same. It also
@@ -672,8 +921,9 @@ func (l *live) keepFile(env *core.ToolEnv, path string) error {
 func (l *live) promptsInOrder() []string {
 	var out []string
 	own := l.ts.ID()
-	dir := filepath.Dir(l.ts.Path())
-	origins := map[string]string{}
+	// The prompts this session took over, by the session it took them from.
+	var origins []string
+	taken := map[string][]string{}
 	entries := l.ts.Entries()
 	for i := range entries {
 		e := &entries[i]
@@ -682,20 +932,25 @@ func (l *live) promptsInOrder() []string {
 				continue
 			}
 			out = append(out, e.UUID)
-			if l.checks != nil && transcript.ValidID(e.SessionID) && e.SessionID != own {
-				from, seen := origins[e.SessionID]
-				if !seen {
-					from = l.originCopies(dir, e.SessionID)
-					origins[e.SessionID] = from
-					if from != "" {
-						l.checks.inherit(from)
-					}
+			if transcript.ValidID(e.SessionID) && e.SessionID != own {
+				if _, ok := taken[e.SessionID]; !ok {
+					origins = append(origins, e.SessionID)
 				}
-				if from == "" {
-					l.checks.lose(e.UUID)
-				}
+				taken[e.SessionID] = append(taken[e.SessionID], e.UUID)
 			}
 			break
+		}
+	}
+	if l.checks != nil {
+		dir := filepath.Dir(l.ts.Path())
+		for _, id := range origins {
+			if from := l.originCopies(dir, id); from != "" {
+				l.checks.inherit(from, taken[id])
+				continue
+			}
+			for _, p := range taken[id] {
+				l.checks.lose(p)
+			}
 		}
 	}
 	return out
@@ -736,11 +991,7 @@ func (l *live) filesSince(order []string, point string) ([]fileCheckpoint, error
 	if err := l.checks.gone(order[at:]); err != nil {
 		return nil, err
 	}
-	prompts := map[string]bool{}
-	for _, p := range order[at:] {
-		prompts[p] = true
-	}
-	return l.checks.since(prompts), nil
+	return l.checks.since(order, at), nil
 }
 
 // rewindFiles returns what a rewind to before the prompt in the session's
@@ -828,4 +1079,4 @@ func restoreSaid(done, failed []string) string {
 }
 
 // noFilesSaid is what a rewind says when no file is to be put back.
-const noFilesSaid = "This session's own Write and Edit changed no file since then (what sub-agents and shell commands change is not kept)"
+const noFilesSaid = "No file this session's Write and Edit changed has changed since then (files only shell commands or sub-agents changed are not followed)"

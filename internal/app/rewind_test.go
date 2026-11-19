@@ -112,7 +112,7 @@ func TestRewindPutsFilesBack(t *testing.T) {
 	// The files alone, back to before the second prompt: notes.txt as the
 	// first prompt left it, keep.txt as it was; the conversation stays.
 	s.typeLine("/rewind 2 files")
-	s.see("The files that Write and Edit changed are back as they were before your prompt: change both files")
+	s.see("The files are back as they were before your prompt: change both files")
 	s.see("Put back 2 files")
 	if got := w.Read("notes.txt") + w.Read("keep.txt"); got != "first\nkept\n" {
 		t.Errorf("after /rewind 2 files the files hold %q", got)
@@ -128,14 +128,15 @@ func TestRewindPutsFilesBack(t *testing.T) {
 	s.exit()
 	s = sit(t, w, "-c", "--permission-mode", "acceptEdits")
 	s.see("Type a prompt and Enter.")
+	// (keep.txt holds again what it held then, and is not offered.)
 	s.typeLine("/rewind")
-	s.see("write the notes  (2 files changed since)")
+	s.see("write the notes  (1 file changed since)")
 
 	// Conversation and files, back to before the first prompt: notes.txt
 	// was not there, and goes.
 	s.typeLine("/rewind 1 all")
 	s.see("The conversation is back to before this prompt of yours")
-	s.see("Put back 2 files")
+	s.see("Put back: ")
 	if w.Exists("notes.txt") {
 		t.Errorf("notes.txt was not there before the first prompt, and is there after the rewind")
 	}
@@ -327,7 +328,7 @@ func TestRewindLeavesWhatASubAgentChanged(t *testing.T) {
 		t.Fatal("the sub-agent wrote nothing")
 	}
 	s.typeLine("/rewind 1 files")
-	s.see("This session's own Write and Edit changed no file since then")
+	s.see("No file this session's Write and Edit changed has changed since then")
 	s.typeLine("/exit")
 	s.exit()
 	if !w.Exists("sub.txt") {
@@ -487,5 +488,35 @@ func TestRewindInABranchOfAMovedSession(t *testing.T) {
 	s.exit()
 	if w.Exists("notes.txt") {
 		t.Error("the branch's rewind did not find the copy its moved origin kept")
+	}
+}
+
+// What a shell command changed in a file Write made is put back too, as
+// Claude Code rewinds the files it tracks: the file goes back as it was
+// when the prompt went out (the rewind review of 2026-11-19).
+func TestRewindPutsBackWhatAShellCommandChanged(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"printf 'by the shell\\n' >> notes.txt"}`}}},
+		apptest.Reply{Text: "Appended."},
+	)
+	s := sit(t, w, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("append to them")
+	s.see("Appended.")
+	if got := w.Read("notes.txt"); got != "first\nby the shell\n" {
+		t.Fatalf("notes.txt holds %q", got)
+	}
+	s.typeLine("/rewind")
+	s.see("append to them  (1 file changed since)")
+	s.typeLine("/rewind 2 files")
+	s.see("The files are back as they were before your prompt: append to them")
+	s.typeLine("/exit")
+	s.exit()
+	if got := w.Read("notes.txt"); got != "first\n" {
+		t.Errorf("notes.txt holds %q after the rewind, want what it held when the prompt went out", got)
 	}
 }

@@ -4168,3 +4168,19 @@ or kept with the reason said (27).
     put back when none can, shows the files by their paths and a long
     prompt cut, and keys typed before its confirmation could be seen no
     longer answer it.
+
+291. **A file Write or Edit changed is followed, whatever changes it
+    next.** A copy was taken only before the first Write or Edit of a file
+    after each prompt, so what a shell command changed in a file the model
+    had written was not put back, while the rewind said the files were as
+    they were before the prompt (the rewind review of 2026-11-19); Claude
+    Code rewinds the files it tracks whatever changed them. As each prompt
+    goes out, every file a copy was kept of is now looked at, by its size
+    and time (read only when those do not tell, or are too recent to
+    trust), and copied again under the prompt when it changed since its
+    newest copy; a rewind puts such a file back as it was when the prompt
+    went out. A file that holds now what it held then is no longer
+    offered, and when old prompts' copies are let go, each file's newest
+    copy among them is kept as what it held as the oldest prompt kept went
+    out. A file only shell commands changed is still not followed, nor
+    are a sub-agent's.

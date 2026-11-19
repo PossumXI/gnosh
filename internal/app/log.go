@@ -64,6 +64,9 @@ type sessionLog struct {
 	// pop a feature recorded, or a slide), so that what was given in it
 	// can be given again.
 	onCut func()
+	// onPrompt, when set, is told the session-file entry of each prompt
+	// as it goes out, before anything that prompt starts runs.
+	onPrompt func(entry string)
 	// cwd is the session's working directory now, against which the files
 	// a slide's rounds edited are named.
 	cwd func() string
@@ -420,14 +423,21 @@ func (l *sessionLog) Append(ctx context.Context, entries ...agent.Entry) error {
 	if err != nil {
 		return err
 	}
+	var went []string
 	l.mu.Lock()
 	for i, e := range entries {
 		if e.Kind == agent.EntryPrompt && at[i] < len(written) {
 			l.prompts[e.ID] = written[at[i]].UUID
 			l.last = written[at[i]].UUID
+			went = append(went, l.last)
 		}
 	}
 	l.mu.Unlock()
+	if l.onPrompt != nil {
+		for _, entry := range went {
+			l.onPrompt(entry)
+		}
+	}
 	if cut && l.onCut != nil {
 		l.onCut()
 	}

@@ -614,7 +614,7 @@ func TestRewindFilesWithTheProgram(t *testing.T) {
 	p.keys(`<Esc> <Esc>`)
 	p.has("Go back to before which prompt?", "make the file")
 	p.keys(`<Enter>`)
-	p.has("Go back to before: make the file", "Write and Edit changed 1 file since then: made.txt",
+	p.has("Go back to before: make the file", "1 file changed since then: made.txt",
 		"Go back, and put the files back", "Go back, the conversation only", "Put the files back only")
 	p.keys(`<Enter>`)
 	p.has("The conversation is back to before this prompt of yours", "Put back: ")
@@ -659,7 +659,7 @@ func TestRewindWithTheProgram(t *testing.T) {
 	p.keys(`<Esc> <Esc>`)
 	p.has("Go back to before which prompt?")
 	p.keys(`<Down> <Enter>`)
-	p.has("Go back to before: the second prompt", "Write and Edit changed no file since then", "Go back, the conversation only")
+	p.has("Go back to before: the second prompt", "has changed since then", "Go back, the conversation only")
 	p.keys(`<Down> <Enter>`)
 
 	// And for real: the second prompt, the middle of the three.

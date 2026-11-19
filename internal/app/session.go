@@ -493,6 +493,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	// (By the session's own file: a session resumed from another folder
 	// keeps its copies where they were made.)
 	l.checks = openCheckpoints(filepath.Join(strings.TrimSuffix(l.ts.Path(), ".jsonl"), "checkpoints"), l.p.now)
+	// (The copies of the session this one was branched from, which the
+	// files followed from there are compared with as each prompt goes out.)
+	l.promptsInOrder()
 	if err := l.buildTools(); err != nil {
 		return l, err
 	}
@@ -562,6 +565,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			l.instr.Forget()
 		}
 	}
+	l.log.onPrompt = l.promptGoesOut
 	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool), l.ts.Path())
 	if err != nil {
 		return l, err

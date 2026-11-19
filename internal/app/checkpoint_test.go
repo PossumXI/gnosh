@@ -37,17 +37,27 @@ func TestCheckpointsLetGoOfOldPrompts(t *testing.T) {
 	if c.gone([]string{prompt(1)}) == nil || c.gone([]string{prompt(2)}) == nil || c.gone([]string{prompt(3), prompt(checkpointPrompts + 2)}) != nil {
 		t.Errorf("let go of: 1 %v, 2 %v, 3 %v", c.gone([]string{prompt(1)}), c.gone([]string{prompt(2)}), c.gone([]string{prompt(3)}))
 	}
+	// (The newest copy let go is kept as what the file held as the oldest
+	// prompt kept went out.)
 	blobs, _ := filepath.Glob(filepath.Join(store, "*-*"))
-	if len(blobs) != checkpointPrompts {
-		t.Errorf("%d copies are kept, want %d", len(blobs), checkpointPrompts)
+	if len(blobs) != checkpointPrompts+1 {
+		t.Errorf("%d copies are kept, want %d", len(blobs), checkpointPrompts+1)
 	}
 	// Opened again, the store still knows what it let go, and what it kept.
 	again := openCheckpoints(store, now)
 	if again.gone([]string{prompt(2)}) == nil || again.gone([]string{prompt(3)}) != nil {
 		t.Error("a store opened again forgot which prompts' copies were let go")
 	}
-	if got := len(again.since(map[string]bool{prompt(3): true})); got != 1 {
-		t.Errorf("a kept prompt's copy is not found after the store is opened again (%d)", got)
+	var order []string
+	for i := 1; i <= checkpointPrompts+2; i++ {
+		order = append(order, prompt(i))
+	}
+	cps := again.since(order, 2)
+	if len(cps) != 1 {
+		t.Fatalf("a kept prompt's copy is not found after the store is opened again (%d)", len(cps))
+	}
+	if b, _ := os.ReadFile(filepath.Join(cps[0].dir, cps[0].Blob)); string(b) != "v2\n" {
+		t.Errorf("before the oldest prompt kept, the file held %q, want the newest copy let go", b)
 	}
 }
 
@@ -72,7 +82,7 @@ func TestRestoreLeavesHardLinkedFiles(t *testing.T) {
 	if err := os.Link(file, filepath.Join(dir, "other-name.txt")); err != nil {
 		t.Skip("no hard links here: ", err)
 	}
-	done, failed := c.restore(c.since(map[string]bool{"p1": true}), restoreHow{})
+	done, failed := c.restore(c.since([]string{"p1"}, 0), restoreHow{})
 	if len(done) != 0 || len(failed) != 1 || !strings.Contains(failed[0], "hard-linked") {
 		t.Errorf("done %q, failed %q", done, failed)
 	}
@@ -103,7 +113,7 @@ func TestFailedCopyIsNoted(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = c.keep("p1", file)
-	_, failed := c.restore(c.since(map[string]bool{"p1": true}), restoreHow{})
+	_, failed := c.restore(c.since([]string{"p1"}, 0), restoreHow{})
 	if len(failed) != 1 || !strings.Contains(failed[0], "could not be kept") {
 		t.Errorf("failed %q", failed)
 	}
@@ -169,7 +179,7 @@ func TestRestoreLeavesAFolderThatIsALinkNow(t *testing.T) {
 	if err := os.Symlink(elsewhere, fx); err != nil {
 		t.Skip("no symbolic links here: ", err)
 	}
-	done, failed := c.restore(c.since(map[string]bool{"p2": true}), restoreHow{})
+	done, failed := c.restore(c.since([]string{"p2"}, 0), restoreHow{})
 	if len(done) != 0 || len(failed) != 2 || !strings.Contains(failed[0], "is a link now") || !strings.Contains(failed[1], "is a link now") {
 		t.Errorf("done %q, failed %q", done, failed)
 	}
@@ -178,12 +188,13 @@ func TestRestoreLeavesAFolderThatIsALinkNow(t *testing.T) {
 			t.Errorf("%s, where the link leads, holds %q (%v), want %q", name, b, err, want)
 		}
 	}
-	// A folder that is gone is made again: the file comes back in it.
+	// A folder that is gone is made again: the file comes back in it (and
+	// the one that was not there is not, as it was).
 	if err := os.Remove(fx); err != nil {
 		t.Fatal(err)
 	}
-	done, failed = c.restore(c.since(map[string]bool{"p2": true}), restoreHow{})
-	if len(done) != 2 || len(failed) != 0 {
+	done, failed = c.restore(c.since([]string{"p2"}, 0), restoreHow{})
+	if len(done) != 1 || len(failed) != 0 {
 		t.Errorf("with the folder gone: done %q, failed %q", done, failed)
 	}
 	if b, _ := os.ReadFile(keys); string(b) != "K\n" {
@@ -218,7 +229,7 @@ func TestRestoreRefusalsAndModes(t *testing.T) {
 		}
 		return ""
 	}}
-	done, failed := c.restore(c.since(map[string]bool{"p1": true}), how)
+	done, failed := c.restore(c.since([]string{"p1"}, 0), how)
 	all := strings.Join(failed, "\n")
 	if !strings.Contains(all, "denied.txt: an Edit deny rule covers it now, so it is left as it is") {
 		t.Errorf("failed %q", failed)
@@ -263,11 +274,75 @@ func TestKeepTakesTwoSpellingsAsOneFile(t *testing.T) {
 	keepAll(t, c, "p1", lower)
 	writeTo(t, lower, "v2\n")
 	keepAll(t, c, "p2", lower)
-	cps := c.since(map[string]bool{"p1": true, "p2": true})
+	cps := c.since([]string{"p1", "p2"}, 0)
 	if len(cps) != 1 || cps[0].Path != upper {
 		t.Fatalf("kept %+v, want README.md alone", cps)
 	}
 	if b, _ := os.ReadFile(filepath.Join(cps[0].dir, cps[0].Blob)); string(b) != "v0\n" {
 		t.Errorf("the copy holds %q, want what the file held before the first change", b)
+	}
+}
+
+// A file Write or Edit changed is followed: as each later prompt goes out,
+// it is copied again if anything changed it since its newest copy (a shell
+// command, say), and a rewind to before a prompt puts it back as it was
+// when that prompt went out, as Claude Code rewinds the files it tracks. A
+// file that holds now what it held then is not offered, and one only a
+// shell command changed is not followed (the rewind review of 2026-11-19).
+func TestBeginFollowsChangedFiles(t *testing.T) {
+	dir := realTemp(t)
+	f, g, shell := filepath.Join(dir, "f.txt"), filepath.Join(dir, "g.txt"), filepath.Join(dir, "shell.txt")
+	writeTo(t, f, "v0\n")
+	writeTo(t, g, "w0\n")
+	writeTo(t, shell, "s0\n")
+	c := openCheckpoints(filepath.Join(dir, "checkpoints"), time.Now)
+	begin := func(p string) {
+		t.Helper()
+		if err := c.begin(p); err != nil {
+			t.Fatalf("begin %s: %v", p, err)
+		}
+	}
+	order := []string{"p1", "p2", "p3"}
+	// p1: Write changes f and g.
+	begin("p1")
+	keepAll(t, c, "p1", f, g)
+	writeTo(t, f, "v1\n")
+	writeTo(t, g, "w1\n")
+	// p2: a shell command changes f, and shell.txt.
+	begin("p2")
+	writeTo(t, f, "v2\n")
+	writeTo(t, shell, "s1\n")
+	// p3: Edit changes f again.
+	begin("p3")
+	keepAll(t, c, "p3", f)
+	writeTo(t, f, "v3\n")
+	want := func(at int, files map[string]string) {
+		t.Helper()
+		got := map[string]string{}
+		for _, cp := range c.since(order, at) {
+			b, _ := os.ReadFile(filepath.Join(cp.dir, cp.Blob))
+			got[filepath.Base(cp.Path)] = string(b)
+		}
+		if fmt.Sprint(got) != fmt.Sprint(files) {
+			t.Errorf("before %s: %q, want %q", order[at], got, files)
+		}
+	}
+	want(0, map[string]string{"f.txt": "v0\n", "g.txt": "w0\n"})
+	want(1, map[string]string{"f.txt": "v1\n"})
+	want(2, map[string]string{"f.txt": "v2\n"})
+	// Changed while the newest prompt's turn runs: offered as the prompt
+	// went out.
+	writeTo(t, g, "w2, by the shell\n")
+	want(2, map[string]string{"f.txt": "v2\n", "g.txt": "w1\n"})
+
+	// And put back so.
+	done, failed := c.restore(c.since(order, 1), restoreHow{})
+	if len(done) != 2 || len(failed) != 0 {
+		t.Errorf("done %q, failed %q", done, failed)
+	}
+	for p, w := range map[string]string{f: "v1\n", g: "w1\n", shell: "s1\n"} {
+		if b, _ := os.ReadFile(p); string(b) != w {
+			t.Errorf("%s holds %q, want %q", filepath.Base(p), b, w)
+		}
 	}
 }

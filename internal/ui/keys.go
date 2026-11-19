@@ -1277,7 +1277,7 @@ func (s *session) dropList(why string) {
 
 // rewindNote is what the menu says of the files a rewind can and cannot
 // put back.
-const rewindNote = "Each goes back as it was just before Write or Edit first changed it, and what it holds now is kept first. What shell commands and sub-agents changed is not kept."
+const rewindNote = "Each goes back as it was before that prompt, and what it holds now is kept first. Files only shell commands or sub-agents changed are not followed."
 
 // rewind opens the list of the person's prompts, the newest first, to
 // take the conversation back to before one of them. It is what Esc Esc
@@ -1320,13 +1320,13 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		point := points[number-1]
 		// The choices, as Claude Code offers them: the conversation and the
 		// files, the conversation alone, or the files alone; the ones about
-		// files only where Write or Edit changed one since.
+		// files only where one of the files followed changed since.
 		// (A long prompt, pasted, would take the rows the files and the
 		// choices need.)
 		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + fit(s.m, oneLine(point.Text), rewindTitleMost)}}
 		var opts []menu.Option
 		var commands []string
-		body := []string{"This session's own Write and Edit changed no file since then: sub-agents' changes and shell commands' are not kept."}
+		body := []string{"No file this session's Write and Edit changed has changed since then: files only shell commands or sub-agents changed are not followed."}
 		if point.FilesWhy != "" {
 			body = []string{"No file can be put back: " + oneLine(point.FilesWhy) + "."}
 		}
@@ -1345,7 +1345,7 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			if n > len(shown) {
 				more = fmt.Sprintf(" and %d more", n-len(shown))
 			}
-			body = []string{fmt.Sprintf("Write and Edit changed %s since then: %s%s. %s", count(n, "file", "files"), strings.Join(names, ", "), more, rewindNote)}
+			body = []string{fmt.Sprintf("%s changed since then: %s%s. %s", count(n, "file", "files"), strings.Join(names, ", "), more, rewindNote)}
 			opts = append(opts, menu.Option{Label: "Go back, and put the files back", Description: "the conversation and the files as they were"})
 			commands = append(commands, fmt.Sprintf("/rewind %d all", number))
 		}

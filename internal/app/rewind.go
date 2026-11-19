@@ -31,11 +31,11 @@ import (
 // a resume runs. Nothing is taken out of the file: a rewind that was a
 // mistake is itself in the record.
 //
-// The files: what Write and Edit changed from the prompt on can be put back
-// with the conversation ("/rewind N all") or alone ("/rewind N files"), from
-// the copies checkpoint.go keeps; "/rewind N" takes the conversation alone,
-// and the files stay as they are. What shell commands changed is not kept,
-// so it is never put back. Because the session is opened again, which
+// The files: those Write and Edit changed, as they were before the prompt,
+// can be put back with the conversation ("/rewind N all") or alone
+// ("/rewind N files"), from the copies checkpoint.go keeps; "/rewind N"
+// takes the conversation alone, and the files stay as they are. A file
+// only shell commands changed is not followed, so it is never put back. Because the session is opened again, which
 // would stop what it runs in the background, a rewind waits until nothing
 // does (rewindHeldBy).
 
@@ -47,9 +47,9 @@ type RewindPoint struct {
 	// Text is the prompt, and Time when it was sent.
 	Text string
 	Time time.Time
-	// Files are the files Write and Edit changed from this prompt on, as
-	// the person is shown them: what a rewind to before it can put back,
-	// as they were before the first of those changes. FilesWhy says why
+	// Files are the files that changed from this prompt on, of those
+	// Write and Edit changed, as the person is shown them: what a rewind
+	// to before it can put back, as they were then. FilesWhy says why
 	// none can be, when that is so: the copies from before it were let go
 	// (only the most recent prompts' are kept) or are not found, or none
 	// are kept here.
@@ -228,7 +228,7 @@ func (c *controls) rewindWith(ctx context.Context, point string, files bool) (te
 }
 
 // rewindNote is what a person is told wherever a rewind is offered.
-const rewindNote = "The files that this session's own Write and Edit changed since then can be put back with the conversation, or alone: each as it was just before Write or Edit first changed it. What a file holds when it is put back is kept first, beside the session, and the rewind says where. What shell commands and sub-agents changed is not kept, so it is not put back."
+const rewindNote = "The files that this session's Write and Edit changed can be put back with the conversation, or alone, as they were before that prompt, whatever changed them since. What a file holds when it is put back is kept first, beside the session, and the rewind says where. Files that only shell commands or sub-agents changed are not followed, so they are not put back."
 
 // slashRewind is /rewind: with no number it lists the points, and with
 // one it asks for the conversation to be taken back to before that
@@ -289,7 +289,7 @@ func (l *live) slashRewind(ctx context.Context, c *SlashContext) error {
 		done, failed := l.checks.restore(cps, l.restoreHow())
 		l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point.ID, len(done), len(failed))
 		if len(done) > 0 {
-			c.Say("The files that Write and Edit changed are back as they were before your prompt: %s", oneLine(point.Text, 100))
+			c.Say("The files are back as they were before your prompt: %s", oneLine(point.Text, 100))
 		}
 		c.Say("%s", restoreSaid(done, failed))
 		c.Say("The conversation is as it was; the model is told with its next request.")
