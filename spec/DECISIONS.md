@@ -3346,3 +3346,11 @@ or kept with the reason said (27).
     started, with a ~ filled in. With --cwd (or a quoted ~) it watched
     another file, and edits to the one in force were never taken in (the
     config review of 2026-11-19). It watches the loader's path now.
+
+208. **gnosh does not rewrite a local settings file that holds a key
+    twice.** Saving an approval reads the project's local file, changes its
+    rules and writes it back; it read the file as Go does, keeping the last
+    of a key given twice, so a duplicate the person had added (which the
+    loader refuses, with a mistake) lost its first copy unseen at the next
+    save (the config review of 2026-11-19). The file is left as it is now,
+    and the message names the key (config.DuplicateKey).

@@ -816,6 +816,10 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) > 0 {
 		plain, err := config.StandardJSON(data)
 		if err == nil {
+			if dup := config.DuplicateKey(plain); dup != "" {
+				// (Read last-wins, the first of the two would be lost.)
+				return fmt.Errorf("%s holds %q twice, which gnosh does not load, so it was left as it is; take one out", path, dup)
+			}
 			err = json.Unmarshal(plain, &doc)
 		}
 		if err != nil {
