@@ -689,6 +689,10 @@ func (s *session) turnEnd(res agent.TurnResult) {
 	detail := strings.TrimSpace(res.Detail)
 	switch res.Reason {
 	case agent.EndCompleted:
+		if s.info.HideTurnDuration {
+			// (The showTurnDuration option is off.)
+			break
+		}
 		s.begin(blkTurn)
 		s.put(wrap(s.m, th.Quiet.Render("done"+tail), s.cols, "", "  ")...)
 	case agent.EndStopped:

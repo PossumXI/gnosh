@@ -153,8 +153,8 @@ var permissionKeys = []keyDef{
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
 	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
-	"respectGitignore", "fileSuggestion",
-	"bashOutputMaxChars", "showTurnDuration", "language", "spinnerVerbs", "spinnerTipsEnabled",
+	"fileSuggestion",
+	"bashOutputMaxChars", "language", "spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
 	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "enabledMcpjsonServers",

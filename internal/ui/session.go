@@ -87,7 +87,7 @@ type config struct {
 	files func(dir string) []fileEntry
 	// project lists the project in a directory for the fuzzy @ search
 	// (mention.go), or is nil for none.
-	project func(dir string) []string
+	project func(dir string, ignored bool) []string
 	// programs lists the programs on the PATH, for shell mode's Tab
 	// (shellcomplete.go), or is nil for none. It is slow, and is run in
 	// the background.
@@ -218,7 +218,7 @@ type session struct {
 	progLoading bool
 	// listProject and index are the fuzzy @ search's lister and what it
 	// last listed (mention.go).
-	listProject func(string) []string
+	listProject func(dir string, ignored bool) []string
 	index       fileIndex
 
 	// pending are the lines that wait to be committed at the next frame,

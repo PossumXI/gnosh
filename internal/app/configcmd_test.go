@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -98,4 +99,26 @@ func TestConfigLiveOptions(t *testing.T) {
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
 	}
+}
+
+// showTurnDuration and respectGitignore reach the interface by the
+// session's info, and /config changes them in a running session: the
+// interface reads the info again after each command.
+func TestInterfaceOptionsAreLive(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Settings(`{"options": {"showTurnDuration": false, "respectGitignore": false}}`)
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		if info := c.Info(); !info.HideTurnDuration || !info.ListIgnored {
+			t.Errorf("showTurnDuration and respectGitignore false do not reach the interface: %+v", info)
+		}
+		if _, err := c.Command(ctx, "/config showTurnDuration=true respectGitignore=true"); err != nil {
+			t.Errorf("/config showTurnDuration=true respectGitignore=true: %v", err)
+		}
+		if info := c.Info(); info.HideTurnDuration || info.ListIgnored {
+			t.Errorf("/config set them true, and the interface still has them off: %+v", info)
+		}
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
 }

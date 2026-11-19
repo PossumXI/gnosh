@@ -89,6 +89,13 @@ type Options struct {
 	// both are set) or "focus" (each run of tool calls folded into one
 	// line that sums it up). Claude Code's viewMode; /focus sets it.
 	ViewMode Value[string]
+	// ShowTurnDuration shows the line under a turn that ended as it should:
+	// how long it took, its replies and its tokens (Claude Code's
+	// showTurnDuration).
+	ShowTurnDuration Value[bool]
+	// RespectGitignore leaves what git ignores out of the @ file picker
+	// (Claude Code's respectGitignore).
+	RespectGitignore Value[bool]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 
@@ -137,6 +144,8 @@ func defaultOptions() Options {
 	o.MemReviewCloses.V = true
 	o.RespondToBashCommands.V = true
 	o.FileCheckpointingEnabled.V = true
+	o.ShowTurnDuration.V = true
+	o.RespectGitignore.V = true
 	o.MemoryText.V = "lean"
 	o.DeliverablesServer.V = DefaultDeliverablesServer
 	o.ProjectDataDir.V = ".gnosh"
@@ -281,6 +290,14 @@ var optionDefs = []optionDef{
 		what: "how the conversation is shown as an interactive session starts: \"default\", \"verbose\" (as the verbose option, over which this one wins when both are set) or \"focus\" (each run of tool calls folded into one line that sums it up, with the lines each edit added and took out; /focus turns it on and off); not from a project's file",
 		from: fromClaudeCode + ": the settings key and /focus", enum: []string{"default", "verbose", "focus"}, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.ViewMode }},
+	{key: "showTurnDuration", kind: oBool, def: "true",
+		what: "the line under a turn that ended as it should, with how long it took, its replies and its tokens; false leaves it out (a turn that was stopped or failed still says so); not from a project's file",
+		from: fromClaudeCode + ": the settings key", ownOnly: true,
+		truth: func(o *Options) *Value[bool] { return &o.ShowTurnDuration }},
+	{key: "respectGitignore", kind: oBool, def: "true",
+		what:  "leave the files git ignores (and, outside a repository, those the ignore files name) out of the @ file picker; false lists them too, which in a big build folder can crowd out the rest",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.RespectGitignore }},
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
 		what: "the name of the project's data folder", from: fromPlain,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},

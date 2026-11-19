@@ -295,7 +295,9 @@ func TestOptions(t *testing.T) {
     "fileCheckpointingEnabled": false,
     "askUserQuestionTimeout": "5m",
     "theme": "light",
-    "viewMode": "focus"
+    "viewMode": "focus",
+    "showTurnDuration": false,
+    "respectGitignore": false
   }
 }`
 	cfg := mustLoad(t, withConfig(text))
@@ -345,6 +347,8 @@ func TestOptions(t *testing.T) {
 	check("askUserQuestionTimeout", o.AskUserQuestionTimeout.V, "5m")
 	check("theme", o.Theme.V, "light")
 	check("viewMode", o.ViewMode.V, "focus")
+	check("showTurnDuration", o.ShowTurnDuration.V, false)
+	check("respectGitignore", o.RespectGitignore.V, false)
 
 	// The table lists every key exactly once, All reports each, and the
 	// file above sets every one of them.

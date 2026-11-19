@@ -2488,3 +2488,18 @@ or kept with the reason said (27).
     cannot use stops startup at its line, since it would keep nothing
     out; the app checks it (the config package imports nothing of
     gnosh's).
+
+149. **showTurnDuration and respectGitignore.** Claude Code's settings keys
+    (its settings reference, read 2026-11-19), as options. showTurnDuration
+    false leaves out the line under a turn that ended as it should ("done
+    in 42s · 2 replies · …", Claude Code's "Cooked for …"); a turn that
+    was stopped or failed still says so, since that line is news. It is
+    the person's own (not from a project's file), as the other ways the
+    conversation is shown are. respectGitignore false has the @ file
+    picker list what the ignore rules name too: git's list without
+    --exclude-standard, or the walk without the ignore files (dot folders
+    stay out). Both go to the interface in the session's info, and
+    /config changes them at once: the session's info gives an option as
+    /config last set it (liveBool), and the interface reads the info
+    again after every command; the picker lists the project again when
+    the setting changes.

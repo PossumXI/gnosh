@@ -376,6 +376,13 @@ type SessionInfo struct {
 	// "verbose" or "focus" (each run of tool calls folded into one line).
 	// It wins over Verbose; "" leaves Verbose to decide.
 	ViewMode string
+	// HideTurnDuration says a turn that ended as it should goes without
+	// the line that says how long it took (the showTurnDuration option
+	// off, as the session has it now).
+	HideTurnDuration bool
+	// ListIgnored says the @ file picker lists what git ignores too (the
+	// respectGitignore option off, as the session has it now).
+	ListIgnored bool
 	// SidePanel says the session starts with the side panel on (the
 	// sidePanel option).
 	SidePanel bool

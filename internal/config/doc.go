@@ -142,6 +142,10 @@
 //	                           conversation is shown as a session starts;
 //	                           focus folds each run of tool calls into one
 //	                           line (/focus; not from a project's file)
+//	  showTurnDuration         the line under a turn that ended as it
+//	                           should (true); not from a project's file
+//	  respectGitignore         leave what git ignores out of the @ file
+//	                           picker (true)
 //	  projectDataDir           the name of the project's data folder
 //	  outputStyle              how the model replies: "Concise", say, or a
 //	                           style of your own (/output-style)
