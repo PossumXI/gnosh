@@ -476,6 +476,57 @@ func TestWriteInPlaceNeverLosesTheFile(t *testing.T) {
 	}
 }
 
+// Two sessions of one process, a session and its sub-agent, take turns on
+// a file: the second finds the file changed under it, and is told to read
+// it again. Each passed its check against what it had read, and the later
+// write undid the earlier one (the Edit/Write review of 2026-11-19).
+func TestTwoSessionsTakeTurnsOnAFile(t *testing.T) {
+	f := newFixture(t, Options{})
+	p := f.file("shared.go", "package x\n\nimport \"fmt\"\n")
+	other := &core.ToolEnv{Cwd: f.dir, Roots: []string{f.dir}, SessionID: "sub", Store: &sync.Map{}}
+	f.ok(f.read, in{"file_path": p})
+	if res, err := f.read.Run(context.Background(), call(in{"file_path": p}), other); err != nil || res.IsError {
+		t.Fatalf("the other session's read: %v %s", err, core.TextOf(res.Content))
+	}
+	sys := f.edit.(*editTool).sys
+	held, release := make(chan struct{}), make(chan struct{})
+	first := true
+	sys.rename = func(oldpath, newpath string) error {
+		if first {
+			first = false
+			close(held)
+			<-release
+		}
+		return os.Rename(oldpath, newpath)
+	}
+	done := make(chan core.ToolResult, 1)
+	go func() {
+		done <- f.run(f.edit, in{"file_path": p, "old_string": "import \"fmt\"", "new_string": "import \"fmt\"\nimport \"os\""})
+	}()
+	<-held
+	theirs := make(chan core.ToolResult, 1)
+	go func() {
+		res, _ := f.edit.Run(context.Background(), call(in{"file_path": p, "old_string": "import \"fmt\"", "new_string": "import \"fmt\"\nimport \"io\""}), other)
+		theirs <- res
+	}()
+	select {
+	case res := <-theirs:
+		t.Fatalf("the other session's edit ran while the first was writing: %s", core.TextOf(res.Content))
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(release)
+	if res := <-done; res.IsError {
+		t.Fatalf("the first edit failed: %s", core.TextOf(res.Content))
+	}
+	res := <-theirs
+	if !res.IsError {
+		t.Fatalf("the other session's edit went through on a file that changed under it: %s", core.TextOf(res.Content))
+	}
+	if got := f.content(p); !strings.Contains(got, "\"os\"") || strings.Contains(got, "\"io\"") {
+		t.Errorf("the file holds %q", got)
+	}
+}
+
 func TestWriteGuardsDamagedText(t *testing.T) {
 	f := newFixture(t, Options{})
 	p := f.file("latin1.txt", "caf\xe9\n")

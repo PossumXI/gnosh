@@ -101,6 +101,14 @@ func (ops *fileOps) replaceFile(path string, data []byte, old fs.FileInfo) (info
 		os.Remove(tmp)
 		return nil, "", err
 	}
+	// Another program may have written the file while the new content was
+	// made and flushed: the rename would undo what it wrote. It is looked
+	// at once more, as near the rename as can be (the Edit/Write review of
+	// 2026-11-19).
+	if changed := changedSince(path, old); changed != "" {
+		os.Remove(tmp)
+		return nil, "", errors.New(changed + ": nothing was written; read it again")
+	}
 	if err := ops.rename(tmp, path); err != nil {
 		os.Remove(tmp)
 		if old == nil || !inPlaceHelps(err) {
@@ -113,6 +121,23 @@ func (ops *fileOps) replaceFile(path string, data []byte, old fs.FileInfo) (info
 		return info, "it could not be replaced in one step: " + underlying(err).Error(), nil
 	}
 	return info, "", nil
+}
+
+// changedSince says how the file at path is no longer the one old
+// describes (nil: no file was there), or "" when it is still that file.
+func changedSince(path string, old fs.FileInfo) string {
+	now, err := os.Lstat(path)
+	switch {
+	case old == nil && err == nil:
+		return "a file was made there by another program meanwhile"
+	case old == nil:
+		return ""
+	case err != nil:
+		return "the file was taken away by another program meanwhile"
+	case !os.SameFile(old, now) || now.Size() != old.Size() || !now.ModTime().Equal(old.ModTime()):
+		return "the file was changed by another program meanwhile"
+	}
+	return ""
 }
 
 // createTemp makes a new, empty file in dir under a name no other file

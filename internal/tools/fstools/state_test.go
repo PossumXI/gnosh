@@ -246,13 +246,15 @@ func TestRecordUnchanged(t *testing.T) {
 }
 
 func TestSessionLock(t *testing.T) {
-	s := &session{files: map[string]*fileRecord{}, locks: map[string]chan struct{}{}}
-	unlock, err := s.lock(context.Background(), "/a")
+	// (The table of locks is the process's: the paths are this test's own.)
+	a, b := t.TempDir()+"/a", t.TempDir()+"/b"
+	s := &session{files: map[string]*fileRecord{}}
+	unlock, err := s.lock(context.Background(), a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Another file is free.
-	other, err := s.lock(context.Background(), "/b")
+	other, err := s.lock(context.Background(), b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,13 +262,13 @@ func TestSessionLock(t *testing.T) {
 	// The same file waits, and gives up when its context does.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := s.lock(ctx, "/a"); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := s.lock(ctx, a); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("a second lock on a held file: err = %v", err)
 	}
 	// Once released, it can be taken again.
 	got := make(chan struct{})
 	go func() {
-		u, err := s.lock(context.Background(), "/a")
+		u, err := s.lock(context.Background(), a)
 		if err == nil {
 			u()
 		}

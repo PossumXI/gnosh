@@ -3625,3 +3625,16 @@ or kept with the reason said (27).
     from the start and the file is cut to length after; a write that
     fails puts the old content back and says so; and the result says why
     the file was written in place.
+
+235. **A session and its sub-agents take turns on a file, and a write
+    looks once more before it lands.** Each session kept its own table of
+    whose turn it was to change a file, and each sub-agent is a session:
+    two sub-agents adding an import to one file both passed the check
+    against what they had read, both said Edited, and the later write
+    undid the earlier one; another program's write between the check and
+    the rename was undone the same way, and a new file made meanwhile was
+    written over (the Edit/Write review of 2026-11-19). The table is now
+    the process's: the later edit waits, finds the file changed, and is
+    told to read it again. And just before the rename the file is looked
+    at once more: changed, taken away or made by another program
+    meanwhile, nothing is written.

@@ -25,9 +25,6 @@ type session struct {
 	mu sync.Mutex
 	// files is keyed by the real path of a file: links followed.
 	files map[string]*fileRecord
-	// locks holds, per real path, a one-slot channel that a call fills
-	// while it changes the file.
-	locks map[string]chan struct{}
 	// ticks counts the looks and writes, for each record's order.
 	ticks uint64
 }
@@ -70,7 +67,6 @@ func sessionOf(env *core.ToolEnv) *session {
 	}
 	v, _ := env.Store.LoadOrStore(sessionKey{}, &session{
 		files: make(map[string]*fileRecord),
-		locks: make(map[string]chan struct{}),
 	})
 	return v.(*session)
 }
@@ -187,17 +183,21 @@ func (s *session) wrote(real string, info fs.FileInfo, sum [sha256.Size]byte, al
 	s.files[real] = rec
 }
 
+// fileLocks holds, per real path, a one-slot channel that a call fills
+// while it changes the file. It is one table for the whole process: a
+// session and its sub-agents, each with its own record of what it read,
+// take turns on a file too. Each passed its check against what it had
+// read, and the later write undid the earlier one (the Edit/Write review
+// of 2026-11-19); now the later one finds the file changed, and is told to
+// read it again.
+var fileLocks sync.Map // real path → chan struct{}
+
 // lock waits for the turn to change the file at the real path, so that two
 // calls on one file run one after the other and neither loses the other's
 // change. It returns the function that gives the turn up.
 func (s *session) lock(ctx context.Context, real string) (unlock func(), err error) {
-	s.mu.Lock()
-	ch, ok := s.locks[real]
-	if !ok {
-		ch = make(chan struct{}, 1)
-		s.locks[real] = ch
-	}
-	s.mu.Unlock()
+	v, _ := fileLocks.LoadOrStore(real, make(chan struct{}, 1))
+	ch := v.(chan struct{})
 	if ctx.Err() != nil {
 		return nil, context.Cause(ctx)
 	}
