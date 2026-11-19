@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -527,4 +528,30 @@ func TestSkillOverridesBySlashSkills(t *testing.T) {
 	has(t, "both on again", told(), "DEPLOY-DESC", "NOTES-DESC")
 	has(t, "a skill that is not there", sk("nosuch off"), "There is no skill named nosuch")
 	has(t, "a value that is not one", sk("deploy maybe"), "/skills <name> on|name-only|user-invocable-only|off")
+}
+
+// In a folder that is not trusted, the start says which MCP servers the
+// folder's .mcp.json names and are not started: their tools were missing
+// without a word. Trusted, they start and nothing is said.
+func TestUntrustedFolderNamesItsServers(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hello."})
+	w.Write(".mcp.json", `{"mcpServers": {"helper": {"command": "sh", "args": ["-c", "touch helper-ran"]}}}`)
+	r := run(t, w, "-p", "hello")
+	r.wantCode(t, 0)
+	has(t, "the start in a folder that is not trusted", r.err,
+		"This folder's .mcp.json names the MCP server helper, not started because the folder is not trusted")
+	if _, err := os.Stat(w.Path("helper-ran")); err == nil {
+		t.Error("the server the folder names was started")
+	}
+	w.Write(".gnosh/skills/deploy/SKILL.md", "Deploy the project.\n")
+	w.Model.Add(apptest.Reply{Text: "Hello."})
+	r = run(t, w, "-p", "hello")
+	has(t, "with a skill of its own too", r.err,
+		"This folder defines 1 skill of its own (in .gnosh or .claude), which is not read, and its .mcp.json names the MCP server helper, not started: the folder is not trusted.")
+	if got := serversText([]string{"a", "b", "c", "d", "e"}); got != "5 MCP servers (a, b, c and 2 more)" {
+		t.Errorf("five servers are named %q", got)
+	}
+	if got := serversText([]string{"a", "b"}); got != "2 MCP servers (a and b)" {
+		t.Errorf("two servers are named %q", got)
+	}
 }

@@ -3498,3 +3498,12 @@ or kept with the reason said (27).
     written for Claude Code kept gnosh from starting. Both are taken now,
     by the hooks parser and the settings check; any other value still
     stops startup.
+
+223. **A folder that is not trusted says which MCP servers it holds back.**
+    The start of a session in such a folder said what of its sub-agent
+    kinds and skills was not read, but the servers its .mcp.json names
+    were left out without a word, so their tools were missing and nothing
+    said why (seen in the trusttype box check). The same warning now names
+    them ("the MCP server helper", "3 MCP servers (a, b and c)"), as gnosh
+    mcp list already did; with --strict-mcp-config, which uses no file's
+    servers, it does not.

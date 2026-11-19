@@ -20,6 +20,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
+	"github.com/gnosh-ai/gnosh/internal/mcp"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
@@ -358,6 +359,41 @@ func untrustedRootNote(root string) string {
 	return fmt.Sprintf("The added folder %s defines %s of its own (in .gnosh or .claude), which %s not read: that folder is not trusted, and what it defines can run commands as you. To use what it defines, trust it: gnosh trust, run in that folder.", root, what, verb)
 }
 
+// heldServers names the MCP servers the project's .mcp.json would start in
+// a folder that is not trusted, and that wait for its trust. With
+// --strict-mcp-config, which uses no file's servers, there are none.
+func (l *live) heldServers() []string {
+	if l.st.trusted || l.inv.StrictMCPConfig {
+		return nil
+	}
+	src := l.mcpSources()
+	src.Project = filepath.Join(l.cfg.Paths.ProjectRoot, ".mcp.json")
+	src.Trusted = true
+	cfgs, _ := mcp.LoadConfig(src)
+	var names []string
+	for _, c := range cfgs {
+		names = append(names, c.Name)
+	}
+	return names
+}
+
+// serversText names MCP servers in a sentence: "the MCP server helper",
+// "3 MCP servers (a, b and c)", the first few of many.
+func serversText(names []string) string {
+	if len(names) == 1 {
+		return "the MCP server " + oneLine(names[0], 64)
+	}
+	shown := names[:min(len(names), 3)]
+	for i := range shown {
+		shown[i] = oneLine(shown[i], 64)
+	}
+	list := strings.Join(shown[:len(shown)-1], ", ") + " and " + shown[len(shown)-1]
+	if more := len(names) - len(shown); more > 0 {
+		list = strings.Join(shown, ", ") + fmt.Sprintf(" and %d more", more)
+	}
+	return fmt.Sprintf("%d MCP servers (%s)", len(names), list)
+}
+
 // agentNotices says, once at the start of a session, what of the agent
 // definitions and the skills is not in force: a project's, in a folder
 // that is not trusted, and files that hold nothing usable.
@@ -366,10 +402,21 @@ func (l *live) agentNotices() {
 		return
 	}
 	if !l.st.trusted {
-		if agents, skills := heldDefs(l.cfg, l.moreRoots()); agents+skills > 0 {
+		agents, skills := heldDefs(l.cfg, l.moreRoots())
+		servers := l.heldServers()
+		switch {
+		case agents+skills > 0 && len(servers) > 0:
+			heldWhat, heldVerb := heldDefsText(agents, skills)
+			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
+				"This folder defines %s of its own (in .gnosh or .claude), which %s not read, and its .mcp.json names %s, not started: the folder is not trusted. To use them: gnosh trust, or --trust-folder for this one run.", heldWhat, heldVerb, serversText(servers)))
+		case agents+skills > 0:
 			heldWhat, heldVerb := heldDefsText(agents, skills)
 			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
 				"This folder defines %s of its own (in .gnosh or .claude), which %s not read because the folder is not trusted. To use what it defines: gnosh trust, or --trust-folder for this one run.", heldWhat, heldVerb))
+		case len(servers) > 0:
+			// Its tools were missing without a word.
+			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
+				"This folder's .mcp.json names %s, not started because the folder is not trusted. To use it: gnosh trust, or --trust-folder for this one run.", serversText(servers)))
 		}
 	}
 	if l.st.trusted {
