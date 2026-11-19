@@ -4115,3 +4115,26 @@ or kept with the reason said (27).
     tree by its name, it was taken for one named and opened again, and
     kept for good (the cd review of 2026-11-19). /restart now tells the
     new start the tree was made here and nobody named it (treeMove.Made).
+
+287. **A plan is the person's alone to approve, and only in plan mode.**
+    ExitPlanMode was left out of plan mode's hold, so an allow rule, a
+    skill's allowed-tools, or a hook's allow approved a plan nobody had
+    read, and the model was told the user approved it; outside plan mode
+    it still asked, and its yes switched the mode whatever the session was
+    in, the second choice to acceptEdits for good without saying so (the
+    plan review of 2026-11-19). The plan is now asked of the person alone
+    (Decision.PersonOnly: no rule, no hook, no channel), and refused
+    outside plan mode; its choices say which mode each yes switches to;
+    what plan mode holds, a PermissionRequest hook no longer lets through;
+    EnterWorktree and ExitWorktree ask while planning, and a sub-agent
+    started then gets no work tree; and the plan is drawn as written, each
+    line set apart from the choices.
+
+288. **The person's own files are opened where they are.** /memory offered
+    a project's GNOSH.md that is a link leading out of the project, and the
+    editor wrote, or made, the file it led to, where the instructions are
+    not read through such a link; the prompt box's draft lay in the shared
+    temporary folder, where an editor's backup beside it kept what was
+    pasted (the plan review of 2026-11-19). Such a GNOSH.md is no longer
+    offered, folders made for the person's files are 0700, and the draft
+    gets a folder of its own, removed whole after.

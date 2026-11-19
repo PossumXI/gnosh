@@ -1133,12 +1133,19 @@ func (u *UI) edit(draft string) (string, error) {
 	if program == "" {
 		return "", errors.New("Set VISUAL or EDITOR to edit the prompt in your own editor.")
 	}
-	f, err := os.CreateTemp(u.env("TMPDIR"), "gnosh-prompt-*.md")
+	// In a folder of its own, gone with all in it after: an editor's
+	// backup or swap file beside the draft kept what was pasted into it,
+	// in a folder others can list (the plan review of 2026-11-19).
+	dir, err := os.MkdirTemp(u.env("TMPDIR"), "gnosh-prompt-")
+	if err != nil {
+		return "", fmt.Errorf("The prompt could not be written to a file for the editor: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	f, err := os.OpenFile(filepath.Join(dir, "prompt.md"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("The prompt could not be written to a file for the editor: %v", err)
 	}
 	path := f.Name()
-	defer os.Remove(path)
 	_, werr := f.WriteString(draft)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
@@ -1177,7 +1184,7 @@ func (u *UI) editFile(path string) error {
 	if program == "" {
 		return errors.New("Set VISUAL or EDITOR to open it in your own editor.")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("%s cannot be made: %v", filepath.Dir(path), err)
 	}
 	ran, err := u.runEditor(program, path)
