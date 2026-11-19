@@ -371,3 +371,24 @@ func TestPermissionsAsNobody(t *testing.T) {
 	}
 	permissionTests(t, dir)
 }
+
+// A file replaced by a new one leaves its other names, hard links, with
+// the old content: the result says so, as nothing else would (the
+// Edit/Write review of 2026-11-19).
+func TestEditSaysTheOtherNamesKeepTheOldContent(t *testing.T) {
+	f := newFixture(t, Options{})
+	p := f.file("dotfile", "one\n")
+	other := f.path("linked")
+	if err := os.Link(p, other); err != nil {
+		t.Skipf("no hard links here: %v", err)
+	}
+	f.ok(f.read, in{"file_path": p})
+	res := f.run(f.edit, in{"file_path": p, "old_string": "one", "new_string": "two"})
+	if res.IsError {
+		t.Fatalf("failed: %s", core.TextOf(res.Content))
+	}
+	mustContain(t, core.TextOf(res.Content), "It had 1 other name by hard links, which still hold the old content")
+	if got := f.content(other); got != "one\n" {
+		t.Errorf("the other name holds %q", got)
+	}
+}

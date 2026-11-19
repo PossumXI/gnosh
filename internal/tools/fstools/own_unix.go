@@ -8,6 +8,18 @@ import (
 	"syscall"
 )
 
+// otherNames is how many other names (hard links) the file old describes
+// has.
+func otherNames(old fs.FileInfo) int {
+	if old == nil {
+		return 0
+	}
+	if st, ok := old.Sys().(*syscall.Stat_t); ok && st.Nlink > 1 {
+		return int(st.Nlink) - 1
+	}
+	return 0
+}
+
 // keepOwner gives the open file f the owner and group of the file old
 // describes, as far as the system lets this process do so. A process that
 // may not hand a file to another user can usually still give it the group;

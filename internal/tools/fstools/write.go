@@ -424,6 +424,8 @@ func (t *writeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if inPlace != "" {
 		text += " The file was overwritten where it is, because " + inPlace + "."
 		meta["inPlace"] = true
+	} else if n := otherNames(c.old); n > 0 {
+		text += fmt.Sprintf(" It had %s by hard links, which still hold the old content.", countOf(n, "other name", "other names"))
 	}
 	res := core.TextResult(text)
 	res.Display = c.display()

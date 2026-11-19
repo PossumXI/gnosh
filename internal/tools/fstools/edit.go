@@ -368,6 +368,10 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	fmt.Fprintf(&text, "Edited %s%s: %s, at %s", c.loc.abs, c.loc.viaLink(), countOf(c.count, "replacement", "replacements"), newLines(c.lines))
 	if inPlace != "" {
 		text.WriteString(". The file was overwritten where it is, because " + inPlace)
+	} else if n := otherNames(c.old); n > 0 {
+		// Replaced by a new file, its other names keep the old content:
+		// said, as nothing else would (the Edit/Write review of 2026-11-19).
+		text.WriteString(fmt.Sprintf(". It had %s by hard links, which still hold the old content", countOf(n, "other name", "other names")))
 	}
 	if snippet := t.snippet(c); snippet != "" {
 		text.WriteString(". ")

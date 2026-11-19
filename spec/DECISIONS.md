@@ -3654,3 +3654,10 @@ or kept with the reason said (27).
     first unasked, where the rule is to refuse a text found more than once
     (the Edit/Write review of 2026-11-19). It is now refused, as two places
     apart are, and the model is told to add more of the text around it.
+
+238. **Edit and Write say when a file's other names keep its old
+    content.** A file is changed by putting a new file in its place, so
+    its other names, hard links (a dotfile linked into a repository),
+    still hold the old content, and nothing said so (the Edit/Write
+    review of 2026-11-19). The result now says how many other names the
+    file had and that they hold the old content.
