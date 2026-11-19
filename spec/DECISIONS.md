@@ -3711,3 +3711,10 @@ or kept with the reason said (27).
     fails later on the way in, is now taken back. And the question that
     asks to load a skill shows what it lets run whole: it was cut at 300
     characters, which a padded list could hide Bash(*) behind.
+
+244. **What a skill's commands print is text from outside.** A typed
+    skill's text goes to the model as the person's own prompt, which is
+    filtered lightly, so a <gnosh> tag in what one of its commands printed
+    (gh pr view of a stranger's pull request) read as gnosh speaking (the
+    skills review of 2026-11-19). The output of each command is now made
+    harmless as a tool's result is, before it takes the command's place.

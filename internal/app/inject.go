@@ -15,6 +15,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/app/skill"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/permission"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
@@ -144,7 +145,10 @@ func (l *live) injectOne(command string, run bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("Shell command failed for pattern %q: %v\n%s", pattern, err, oneLine(out, 2000))
 	}
-	return out, nil
+	// What a command prints is text from outside, though a typed skill's
+	// text goes to the model as the person's own prompt: a <gnosh> tag in
+	// it must not read as gnosh speaking (the skills review of 2026-11-19).
+	return prompt.Untrusted(out), nil
 }
 
 // runInjected runs one command and returns what it printed, stderr in
