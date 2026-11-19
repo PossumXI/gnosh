@@ -138,6 +138,12 @@ func (s *session) input(ev term.Event) {
 		// The terminal is gnosh's again after the process was stopped:
 		// what was on the screen is no longer what the renderer left.
 		s.r.Reset()
+		if s.panel != nil {
+			// The terminal took the whole screen back for the panel as it
+			// was taken back itself (term.Terminal.noteScreen): the panel
+			// is drawn anew.
+			s.keep(s.panel.Clear())
+		}
 		if s.view != nil {
 			s.keep(s.view.p.Clear())
 		}
@@ -174,10 +180,24 @@ func (s *session) input(ev term.Event) {
 			// The transcript view takes every key while it is open. A
 			// paste goes into the prompt box, where it is when the view
 			// is closed: it was lost (the TUI review of 2026-11-19).
-			if _, paste := ev.(term.Paste); paste {
-				s.pasteAside(ev)
-				s.flash("The paste went into the prompt box.")
-			} else {
+			k, key := ev.(term.Key)
+			switch {
+			case !key:
+				if _, paste := ev.(term.Paste); paste {
+					s.pasteAside(ev)
+					s.flash("The paste went into the prompt box.")
+					return
+				}
+				s.viewInput(ev)
+			case k.Is('l', term.ModCtrl):
+				// Draw the view again.
+				s.keep(s.view.p.Clear())
+			case k.Is('z', term.ModCtrl), k.Is('t', term.ModCtrl), k.Is('t', term.ModAlt), k.Is('b', term.ModCtrl):
+				// The keys of every state (doc.go) work here too: they did
+				// nothing (the TUI review of 2026-11-19). A stop gives the
+				// view's screen back, and the terminal takes it again.
+				s.global(k)
+			default:
 				s.viewInput(ev)
 			}
 			return

@@ -79,12 +79,22 @@ const (
 	altScreenOff = "\x1b[?1049l"
 	// mouseOn asks for presses and the wheel (mode 1000) in SGR form
 	// (mode 1006), which the decoder reads as Mouse events.
-	mouseOn    = "\x1b[?1000h\x1b[?1006h"
-	mouseOff   = "\x1b[?1006l\x1b[?1000l"
-	clearAll   = "\x1b[H\x1b[2J"
+	mouseOn  = "\x1b[?1000h\x1b[?1006h"
+	mouseOff = "\x1b[?1006l\x1b[?1000l"
+	clearAll = "\x1b[H\x1b[2J"
+	// screenOn and screenOff take the whole screen and give it back, as
+	// the Terminal writes them for a Panel when the terminal is given up
+	// and taken back (Terminal.noteScreen).
+	screenOn   = altScreenOn + AutoWrapOff + mouseOn
+	screenOff  = mouseOff + altScreenOff
 	panelLine  = "\x1b[90m│\x1b[39m"
 	panelFaint = "\x1b[90m"
 )
+
+// screenNoter is what a Panel draws on when it is a Terminal: told when
+// the whole screen is taken and given back, it gives it back too whenever
+// the terminal is given up.
+type screenNoter interface{ noteScreen(taken bool) }
 
 // PanelFits reports whether a terminal of cols columns takes a panel.
 func PanelFits(cols int) bool { return cols >= PanelMinCols }
@@ -112,8 +122,11 @@ func OpenView(out io.Writer, cols, rows int, width func(string) int, synced bool
 func openScreen(out io.Writer, cols, rows int, width func(string) int, synced, side bool, keep int) (*Panel, error) {
 	p := &Panel{out: out, width: width, synced: synced, open: true, wantShown: true, hasSide: side, keep: keep}
 	p.size(cols, rows)
-	if _, err := io.WriteString(out, altScreenOn+AutoWrapOff+mouseOn+clearAll); err != nil {
+	if _, err := io.WriteString(out, screenOn+clearAll); err != nil {
 		return nil, err
+	}
+	if n, ok := out.(screenNoter); ok {
+		n.noteScreen(true)
 	}
 	return p, p.paintLocked()
 }
@@ -348,6 +361,9 @@ func (p *Panel) Close() ([]string, error) {
 	}
 	p.open = false
 	_, err := io.WriteString(p.out, mouseOff+ShowCursor+AutoWrapOn+altScreenOff)
+	if n, ok := p.out.(screenNoter); ok {
+		n.noteScreen(false)
+	}
 	return p.since, err
 }
 

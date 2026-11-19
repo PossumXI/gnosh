@@ -3475,3 +3475,16 @@ or kept with the reason said (27).
     a bracketed paste wherever it is pasted); a vim put with a count adds
     at most about 4 MiB (9999p of a long line built gigabytes); and gnosh
     agents no longer closes a view it could not open again (a nil panic).
+
+221. **The whole screen goes and comes back with the terminal, and the
+    keys of every state work in the transcript view.** The side panel,
+    the transcript view and the agent view take the alternate screen with
+    mouse reporting on, written straight to the terminal, which did not
+    know: a panic, or a stop from outside (kill -TSTP), left the shell on
+    the alternate screen with every click typed into it (the TUI review
+    of 2026-11-19). A Panel now tells the Terminal when it takes and gives
+    back the whole screen; giving the terminal up gives it back too, and
+    taking the terminal back takes it again, and the side panel is drawn
+    anew on resume. In the transcript view Ctrl+Z, Ctrl+T, Alt+T and
+    Ctrl+B do what they do everywhere else, and Ctrl+L draws the view
+    again; they did nothing there.
