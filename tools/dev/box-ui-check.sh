@@ -163,6 +163,12 @@
 #   rewind      (acceptEdits) the model writes note.txt, the person changes
 #               it by hand, and /rewind 1 files takes it away again, keeping
 #               what the person wrote beside the session
+#   rewindsum   two turns, then /rewind 2 summarize: the model summarizes
+#               what followed the second prompt, the conversation goes back
+#               to before it with the summary kept, and a third prompt is
+#               answered from it (the reply should name both words)
+#   rewindsumb  two turns, then /rewind 2 summarize-before: what came
+#               before the second prompt becomes a summary
 #   subask      the model has a sub-agent run a command; the sub-agent's
 #               question says which sub-agent asks ("The sub-agent
 #               general-purpose asks: Allow Bash?")
@@ -189,7 +195,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype) ;;
+basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype | rewindsum | rewindsumb) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
@@ -216,7 +222,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp, trusttype)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype)" >&2
 	exit 2
 	;;
 esac
@@ -843,6 +849,24 @@ rewind)
 	tmux send-keys -t "$S" "/rewind 1 files" Enter
 	done_when() { [ ! -e "$T/work/note.txt" ] && screen | grep -q "what it held is kept at"; }
 	;;
+rewindsum | rewindsumb)
+	tmux send-keys -t "$S" "Remember the word PELICAN. Reply with the one word ok, and call no tool." Enter
+	for i in $(seq 1 180); do sleep 1; [ "$(screen | grep -c "done in")" -ge 1 ] && break; done
+	tmux send-keys -t "$S" "Remember the word OTTER too. Reply with the one word ok, and call no tool." Enter
+	for i in $(seq 1 180); do sleep 1; [ "$(screen | grep -c "done in")" -ge 2 ] && break; done
+	if [ "$scenario" = rewindsumb ]; then
+		tmux send-keys -t "$S" "/rewind 2 summarize-before" Enter
+		done_when() { screen | grep -q "The conversation before your prompt was summarized\|No summary was made"; }
+	else
+		tmux send-keys -t "$S" "/rewind 2 summarize" Enter
+		for i in $(seq 1 300); do sleep 1; screen | grep -q "kept as a summary\|No summary was made" && break; done
+		# (The second prompt is back in the box: Ctrl+C clears it.)
+		tmux send-keys -t "$S" C-c
+		sleep 1
+		tmux send-keys -t "$S" "Which words did I ask you to remember, in all? Reply with them only, and call no tool." Enter
+		done_when() { screen | grep -q "kept as a summary" && [ "$(screen | grep -c "done in")" -ge 3 ]; }
+	fi
+	;;
 subask)
 	# A sub-agent's question names the sub-agent that asks (a4ef214).
 	tmux send-keys -t "$S" "Use the Agent tool with subagent_type general-purpose to have a sub-agent run this shell command: touch made-by-sub.txt" Enter
@@ -972,6 +996,9 @@ fi
 if [ "$scenario" = filesuggest ] || [ "$scenario" = trusttype ]; then
 	tmux send-keys -t "$S" C-u
 	sleep 1
+fi
+if [ "$scenario" = rewindsum ] || [ "$scenario" = rewindsumb ]; then
+	echo "=== the last lines: $(screen | grep -v '^ *$' | tail -10 | tr '\n' '|')"
 fi
 if [ "$scenario" = compact ]; then
 	echo "=== given back: $(screen | grep -o 'Given back after the summary[^·]*' | head -1)"
