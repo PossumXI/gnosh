@@ -144,6 +144,31 @@ func (l *live) gitRunsPrograms() bool {
 	return !l.st.trusted && len(l.st.gitPrograms) > 0
 }
 
+// gitRunsProgramsAt is gitRunsPrograms for git run in dir, where the shell
+// may have gone since the session began: a repository there that is not
+// the start folder's (an archive unpacked with its .git, say) has its own
+// settings looked at, whether or not the folder is trusted, as the
+// permission engine asks about the model's own git there. The person's
+// status line and file suggestion commands, which may call git, ran in
+// such a repository past the start folder's check (the status line review
+// of 2026-11-19). What cannot be told counts as naming programs.
+func (l *live) gitRunsProgramsAt(dir string) bool {
+	if l.gitRunsPrograms() {
+		return true
+	}
+	if dir == "" || dir == l.st.folder.Start {
+		return false
+	}
+	folder, err := trust.Resolve(dir, l.p.home)
+	if err != nil {
+		return true
+	}
+	if folder.GitDir == "" || folder.GitDir == l.st.folder.GitDir {
+		return false
+	}
+	return len(trust.GitPrograms(folder)) > 0
+}
+
 // ownCommandEnv is the environment of a command of the person's own that
 // gnosh starts (the status line, the file suggestion command, gnokey): the
 // one gnosh was started with, under the settings' env block, where a

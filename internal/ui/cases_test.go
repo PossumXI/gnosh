@@ -896,6 +896,11 @@ func TestCustomStatusLine(t *testing.T) {
 		"\x1b]8;;https://example.org\x1b\\link":                 "\x1b]8;;https://example.org\x1b\\link\x1b]8;;\x1b\\",
 		"\x1b]8;;https://example.org\x07link\x1b]8;;\x07 after": "\x1b]8;;https://example.org\x07link\x1b]8;;\x07 after",
 		"tab\there\r":                                           "tab here",
+		// A link with a control or C1 character inside goes whole, and so
+		// does a mark that turns the text around (the status line review
+		// of 2026-11-19).
+		"\x1b]8;;x\u009c\v\v\x1b\\link": "link",
+		"a\u202eb":                      "ab",
 	} {
 		if got := statusText(in); got != want {
 			t.Errorf("statusText(%q) = %q, want %q", in, got, want)

@@ -37,7 +37,7 @@ const (
 func (c *controls) SuggestFiles(ctx context.Context, query string) (paths []string, ok bool, err error) {
 	l := c.cur()
 	fs := l.cfg.FileSuggestion
-	if fs == nil || l.gitRunsPrograms() {
+	if fs == nil || l.gitRunsProgramsAt(l.cwd()) {
 		// (In a folder whose git settings name programs, gnosh's own
 		// search, which keeps git from running them, is used instead: the
 		// command may call git; see startStatusLine.)
