@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -74,5 +75,22 @@ func TestFallbackKeepsTheSessionModelsRequests(t *testing.T) {
 	}
 	for i, r := range reqs {
 		has(t, fmt.Sprintf("request %d to the session's own model", i+1), string(r.Body), `"chat_template_kwargs":{"enable_thinking":false}`)
+	}
+}
+
+// A Read deny rule keeps a file out of what Grep finds in a folder it
+// searches, as it keeps Read away from it.
+func TestGrepLeavesOutWhatReadIsDenied(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Grep", Args: `{"pattern":"TOKEN","output_mode":"content"}`}}},
+		apptest.Reply{Text: "Searched."},
+	)
+	w.Deny("Read(./secret/**)")
+	w.Write("secret/key.txt", "TOKEN-in-the-secret\n")
+	w.Write("open.txt", "TOKEN-in-the-open\n")
+	run(t, w, "-p", "find the token").wantCode(t, 0)
+	got := toolResult(t, w, 1, "c1")
+	if !strings.Contains(got, "TOKEN-in-the-open") || strings.Contains(got, "TOKEN-in-the-secret") {
+		t.Errorf("Grep returned:\n%s", got)
 	}
 }

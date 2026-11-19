@@ -42,7 +42,7 @@ func (t looker) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, er
 // is not in the list at all.
 func (l *live) buildTools() error {
 	limits := l.cfg.Limits
-	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile}
+	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied}
 	if limits.FileReadMaxTokens.V > 0 {
 		// The limit is given in tokens, and the file tools count bytes: a
 		// token is about four of them.

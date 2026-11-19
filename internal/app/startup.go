@@ -435,6 +435,13 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	if s := st.inputs.Flags.Settings; s != "" && !strings.HasPrefix(strings.TrimSpace(s), "{") {
 		o.Protected = append(o.Protected, s)
 	}
+	// And the files --mcp-config names, as Claude Code protects them: a
+	// server added to one would start with the next run that names it.
+	for _, m := range st.inv.MCPConfigs {
+		if m = strings.TrimSpace(m); m != "" && !strings.HasPrefix(m, "{") {
+			o.Protected = append(o.Protected, st.p.absFrom(m))
+		}
+	}
 	o.Protected = append(o.Protected, protected...)
 	// What is inside the work trees made for sub-agents (worktree.go) is
 	// the project's, though they lie in its data folder; and so is a
@@ -718,7 +725,15 @@ func resolveDepth(p string, depth int) (string, error) {
 				return "", rerr
 			}
 			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(cur), target)
+				// The target is read from the folder the link is in, as
+				// the system reads it: that folder as it really is, past
+				// the links on the way to it ("d/../.." is not the text's
+				// folder when d is a link).
+				dir, derr := resolveDepth(filepath.Dir(cur), depth+1)
+				if derr != nil {
+					return "", derr
+				}
+				target = filepath.Join(dir, target)
 			}
 			real, err := resolveDepth(filepath.Clean(target), depth+1)
 			if err != nil {

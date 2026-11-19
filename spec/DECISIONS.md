@@ -2409,3 +2409,28 @@ or kept with the reason said (27).
     keeps nothing; a rewind of the files then says why it cannot be done.
     Not built: Claude Code's retention sweep (cleanupPeriodDays): gnosh
     keeps a session's copies as long as its file.
+
+145. **The security review of the file tools' paths.** A fresh-eyes review
+    of how Read, Write, Edit, Glob and Grep are judged outside Bash found:
+    - Grep and Glob left Read deny rules out of a folder they walked: the
+      gate judged the folder, and a deny on Read(./customer-data/**) or
+      Read(*.pem) did not keep those files' contents or names out of a
+      search of the project. fstools.Options.ReadDenied (the engine's
+      ReadDenied, which nothing called) now leaves them out of both walks,
+      by the path as written and as reached.
+    - Write and Edit judged one path and could write another: they found
+      the file again when they ran, so a folder on the way swapped for a
+      link between the question and the run (by a command in the
+      background) sent the write where nobody was asked about. A call is
+      now held to the real path it was described with, and refused when
+      that changed.
+    - A protected file or folder that is a link (a settings file linked
+      from a dotfiles repository) did not protect what it leads to, which
+      is the file the settings are read from; it does now. The files
+      --mcp-config names are protected, as in Claude Code. A work tree
+      named as a protected folder (.git) gets no work tree's exemption.
+    - The shared resolver read a dangling link's target from its folder as
+      written, not as reached: "d/dang" with d a link was read from the
+      text's folder. It now resolves the link's folder first.
+    Not changed: Write and Edit say that a file outside the project exists
+    when they cannot run (its content is not shown).
