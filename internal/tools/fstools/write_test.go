@@ -527,6 +527,30 @@ func TestTwoSessionsTakeTurnsOnAFile(t *testing.T) {
 	}
 }
 
+// A file written whole keeps its own CRLF line endings and byte order
+// mark, which Read does not show, when the content given has neither: in
+// a Windows-style project every line came out changed (the Edit/Write
+// review of 2026-11-19). A file whose endings are mixed is written as given.
+func TestWriteKeepsTheFilesLineEndings(t *testing.T) {
+	f := newFixture(t, Options{})
+	p := f.file("win.txt", "\uFEFFone\r\ntwo\r\n")
+	f.ok(f.read, in{"file_path": p})
+	res := f.run(f.write, in{"file_path": p, "content": "one\ntwo\nthree\n"})
+	if res.IsError {
+		t.Fatalf("failed: %s", core.TextOf(res.Content))
+	}
+	if got := f.content(p); got != "\uFEFFone\r\ntwo\r\nthree\r\n" {
+		t.Errorf("the file holds %q", got)
+	}
+	mustContain(t, core.TextOf(res.Content), "It keeps its byte order mark and its CRLF line endings, which the content given did not have.")
+	mixed := f.file("mixed.txt", "a\r\nb\n")
+	f.ok(f.read, in{"file_path": mixed})
+	f.ok(f.write, in{"file_path": mixed, "content": "a\nb\nc\n"})
+	if got := f.content(mixed); got != "a\nb\nc\n" {
+		t.Errorf("a file of mixed endings holds %q", got)
+	}
+}
+
 func TestWriteGuardsDamagedText(t *testing.T) {
 	f := newFixture(t, Options{})
 	p := f.file("latin1.txt", "caf\xe9\n")

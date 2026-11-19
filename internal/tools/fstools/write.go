@@ -31,6 +31,9 @@ type change struct {
 	after string
 	// same says that the file already holds exactly after.
 	same bool
+	// kept says what of the file's own form Write kept that the content
+	// given did not have (keepForm), or "".
+	kept string
 	// summary is one line saying what the change is.
 	summary string
 
@@ -302,9 +305,31 @@ func (t *writeTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failu
 	if !utf8.Valid(before) && strings.Contains(content, replacement) {
 		return c, failf("%s is not valid UTF-8, and the new content holds U+FFFD, the mark %s shows in place of bytes it cannot decode. Writing it would make that damage permanent. Nothing was written. Leave those characters out, or change the file with a shell command that keeps its encoding.", loc.abs, o.ReadName)
 	}
-	c.same = c.before == content
+	c.after, c.kept = keepForm(c.before, content)
+	c.same = c.before == c.after
 	c.summary = fmt.Sprintf("Overwrite %s (%s, was %s)", loc.abs, lines, countOf(lineCount(c.before), "line", "lines"))
 	return c, nil
+}
+
+// byteOrderMark is the mark some files begin with.
+const byteOrderMark = "\uFEFF"
+
+// keepForm is the content a Write gives a file, with the file's own line
+// endings and byte order mark where the content given has neither: Read
+// shows the model neither, so a whole file written back came out with LF
+// on every line and no mark (the Edit/Write review of 2026-11-19). kept
+// says what was kept, or "".
+func keepForm(before, after string) (string, string) {
+	var kept []string
+	if strings.HasPrefix(before, byteOrderMark) && !strings.HasPrefix(after, byteOrderMark) {
+		after = byteOrderMark + after
+		kept = append(kept, "its byte order mark")
+	}
+	if n := strings.Count(before, "\n"); n > 0 && strings.Count(before, "\r\n") == n && !strings.Contains(after, "\r") && strings.Contains(after, "\n") {
+		after = strings.ReplaceAll(after, "\n", "\r\n")
+		kept = append(kept, "its CRLF line endings")
+	}
+	return after, strings.Join(kept, " and ")
 }
 
 // Describe says what a Write call would do, with the diff it would make.
@@ -392,6 +417,9 @@ func (t *writeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 		text = fmt.Sprintf("Wrote %s%s (%s), replacing its %s.", c.loc.abs, c.loc.viaLink(), size, countOf(lineCount(c.before), "line", "lines"))
 	default:
 		text = fmt.Sprintf("Wrote %s%s (%s), replacing its %s.", c.loc.abs, c.loc.viaLink(), size, byteSize(c.old.Size()))
+	}
+	if c.kept != "" {
+		text += " It keeps " + c.kept + ", which the content given did not have."
 	}
 	if inPlace != "" {
 		text += " The file was overwritten where it is, because " + inPlace + "."

@@ -3638,3 +3638,12 @@ or kept with the reason said (27).
     told to read it again. And just before the rename the file is looked
     at once more: changed, taken away or made by another program
     meanwhile, nothing is written.
+
+236. **A file written whole keeps its CRLF line endings and its byte order
+    mark.** Read shows the model neither, so a whole file written back
+    came out with LF on every line and no mark, and in a Windows-style
+    project every line was a change, with nothing said (the Edit/Write
+    review of 2026-11-19). When every line of the file ends in CRLF, or it
+    begins with a byte order mark, and the content given has neither,
+    Write gives it the file's own, says so, and the diff to approve shows
+    the real change. A file whose endings are mixed is written as given.
