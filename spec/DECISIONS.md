@@ -2849,3 +2849,16 @@ or kept with the reason said (27).
     server of its own beside a file's lost the agent's in one run in 300
     (the clean-copy CI caught it twice; with the fix 1000 runs in 1000
     kept both). Taking the list and offering it are one step now.
+
+170. **Claude Code's language and includeGitInstructions.** language (a
+    name, as the person writes it: "japanese") asks in the system prompt,
+    after the output style, for replies in that language, as Claude Code
+    passes it to the model; code, commands, file names and quoted text
+    stay as they are. It holds under --system-prompt too, being the
+    person's choice and not gnosh's words. A sub-agent's system prompt
+    does not carry it: its report is read by the session's model, which
+    replies. includeGitInstructions false leaves git out of the block
+    ahead of a session's first prompt; gnosh says there only whether the
+    folder is a repository and its branch, read from files, and has no
+    commit or pull request instructions to leave out besides. Both are
+    read as a session starts.

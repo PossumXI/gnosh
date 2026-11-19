@@ -169,7 +169,9 @@ func (l *live) environment() string {
 	for _, h := range l.currentHosts() {
 		e.Hosts = append(e.Hosts, prompt.Host{Name: h.Name, Machine: h.SSH, Description: h.Description})
 	}
-	e.Git = l.gitState()
+	if l.cfg.Options.IncludeGitInstructions.V {
+		e.Git = l.gitState()
+	}
 	return l.texts.Environment(e)
 }
 
@@ -297,8 +299,10 @@ func (l *live) systemPrompt() ([]string, error) {
 	if l.cfg.Options.MemoryText.V == "full" {
 		in.Memory = prompt.MemoryFull
 	}
-	// The output style chosen (outputstyle.go).
+	// The output style chosen (outputstyle.go), and the language replies
+	// are in.
 	in.Style = l.currentStyle()
+	in.Language = l.cfg.Options.Language.V
 	for _, c := range l.contribs {
 		if c.c.System != nil {
 			c.c.System(&in)

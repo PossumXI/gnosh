@@ -149,6 +149,10 @@
 //	  projectDataDir           the name of the project's data folder
 //	  outputStyle              how the model replies: "Concise", say, or a
 //	                           style of your own (/output-style)
+//	  language                 the language the model replies in, as you
+//	                           name it ("japanese")
+//	  includeGitInstructions   say how git stands ahead of a session's
+//	                           first prompt (true)
 //	  editorMode               "normal" or "vim": how the box takes keys
 //	                           (not from a project's file)
 //	  preferredNotifChannel    how a person who seems away is told the

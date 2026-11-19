@@ -152,9 +152,9 @@ var permissionKeys = []keyDef{
 // whose key it is. Those that gnosh has under "options", with Claude
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
-	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
+	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy",
 	"fileSuggestion",
-	"bashOutputMaxChars", "language", "spinnerVerbs", "spinnerTipsEnabled",
+	"bashOutputMaxChars", "spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
 	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
 	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "enabledMcpjsonServers",

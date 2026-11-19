@@ -122,3 +122,20 @@ func TestInterfaceOptionsAreLive(t *testing.T) {
 	})
 	r.wantCode(t, 0)
 }
+
+// Claude Code's language and includeGitInstructions: the language the
+// person set is asked for in the system prompt, and with
+// includeGitInstructions false the block ahead of a session's first
+// prompt says nothing of git.
+func TestLanguageAndGitInstructions(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Konnichiwa."}, apptest.Reply{Text: "Hai."})
+	w.Settings(`{"options": {"language": "japanese"}}`)
+	run(t, w, "-p", "hello").wantCode(t, 0)
+	first := requestText(t, w, 0)
+	has(t, "the first session's request", first, "Reply to the user in japanese, whatever language their messages are in", "- Git: ")
+	w.Settings(`{"options": {"includeGitInstructions": false}}`)
+	run(t, w, "-p", "hello again").wantCode(t, 0)
+	second := requestText(t, w, 1)
+	has(t, "the second session's request", second, "Reply to the user in japanese", "Working directory: ")
+	hasNot(t, "the second session's request", second, "- Git: ")
+}

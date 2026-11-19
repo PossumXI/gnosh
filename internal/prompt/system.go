@@ -71,6 +71,10 @@ type SystemInput struct {
 	// Style is the output style the person chose (Claude Code's
 	// outputStyle), or nil for the default.
 	Style *Style
+
+	// Language is the language the person wants replies in, as they
+	// named it (Claude Code's language), or empty.
+	Language string
 }
 
 // Style is an output style: instructions on how the model replies, sent
@@ -104,6 +108,8 @@ func (s *Set) BuiltinStyles() []Style {
 //     bytes whatever is in SystemInput, but for a Style of the person's
 //     own that does not keep the coding instructions, whose role stands in
 //     place of the core's first line; then the Style, when there is one;
+//     then the language replies are in, when the person set one (with
+//     Replace too: it is the person's choice, not gnosh's words);
 //  2. the note that there are no tools, when there are none;
 //  3. the part about mem, when the session has gnovm_run: the lean text,
 //     or with Memory set to MemoryFull the full one;
@@ -138,6 +144,10 @@ func (s *Set) System(in SystemInput) []string {
 	}
 	if own && in.Style != nil {
 		add(in.Style.Text)
+	}
+	if lang := oneLine(in.Language, maxName); lang != "" {
+		// The person's own choice: it holds under --system-prompt too.
+		add(s.fill(textLanguage, values{"language": lang}))
 	}
 	if len(in.Tools) == 0 {
 		add(s.fill(textNoTools, nil))

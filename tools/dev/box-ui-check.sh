@@ -162,6 +162,9 @@
 #   subask      the model has a sub-agent run a command; the sub-agent's
 #               question says which sub-agent asks ("The sub-agent
 #               general-purpose asks: Allow Bash?")
+#   compact     (acceptEdits) the model reads notes.txt, /compact gives it
+#               back ("Given back after the summary, as they now are:
+#               notes.txt."), and the model edits it after the summary
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -178,7 +181,7 @@ case "$scenario" in
 basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
-rewind) flags="--permission-mode acceptEdits" ;;
+rewind | compact) flags="--permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
 suggest) opts='"promptSuggestionEnabled": true, ' ;;
 askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
@@ -201,7 +204,7 @@ wtflag) flags="--permission-mode acceptEdits --trust-folder --worktree demo" ;;
 hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"asyncRewake\": true, \"command\": \"$T/config/gnosh/wake.sh\" } ] } ] }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact)" >&2
 	exit 2
 	;;
 esac
@@ -751,6 +754,14 @@ failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
 	;;
+compact)
+	tmux send-keys -t "$S" "Read notes.txt with the Read tool, then say read." Enter
+	for i in $(seq 1 240); do sleep 1; screen | grep -q "done in" && break; done
+	tmux send-keys -t "$S" "/compact" Enter
+	for i in $(seq 1 300); do sleep 1; screen | grep -q "The conversation was summarized\|No summary was made" && break; done
+	tmux send-keys -t "$S" "In notes.txt change the word beta to BETA with the Edit tool. Then say done." Enter
+	done_when() { grep -q '^BETA$' "$T/work/notes.txt" && [ "$(screen | grep -c "done in")" -ge 2 ]; }
+	;;
 rewind)
 	tmux send-keys -t "$S" "Write the word one into a file named note.txt in the current folder, with the Write tool. Then say done." Enter
 	for i in $(seq 1 240); do sleep 1; [ -s "$T/work/note.txt" ] && screen | grep -q "done in" && break; done
@@ -883,6 +894,10 @@ if [ "$scenario" = bgfail ]; then
 	echo "=== sleeps left: $(ps -eo args | grep -c '^sleep 37$')"
 	tmux send-keys -t "$S" Escape
 	sleep 1
+fi
+if [ "$scenario" = compact ]; then
+	echo "=== given back: $(screen | grep -o 'Given back after the summary[^·]*' | head -1)"
+	echo "=== notes.txt: $(tr '\n' ' ' < "$T/work/notes.txt")"
 fi
 if [ "$scenario" = repo ]; then
 	echo "=== api/where.txt: $(cat "$T/work/api/where.txt" 2>/dev/null || echo none); work/where.txt: $(cat "$T/work/where.txt" 2>/dev/null || echo none)"

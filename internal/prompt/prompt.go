@@ -44,6 +44,7 @@ const (
 	textStyleLearning    = "style-learning"
 	textSecurity         = "security"
 	textNoTools          = "no-tools"
+	textLanguage         = "language"
 	textMemory           = "memory"
 	textMemoryFull       = "memory-full"
 	textGno              = "gno"
@@ -142,6 +143,8 @@ func specs() []spec {
 			when: "After the core, under the built-in output style Explanatory: Insight blocks on the choices made."},
 		{name: textStyleLearning, kind: KindSystem,
 			when: "After the core, under the built-in output style Learning: Insights, and a piece of the code left to the user (TODO(human))."},
+		{name: textLanguage, kind: KindSystem, need: []string{"language"},
+			when: "After the core and the output style, when the person set the language replies are in (Claude Code's language)."},
 		{name: textNoTools, kind: KindSystem,
 			when: "A part of the system prompt only when the session has no tools at all."},
 		{name: textMemory, kind: KindSystem,

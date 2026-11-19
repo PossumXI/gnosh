@@ -64,7 +64,7 @@ func goldenFiles() []goldenFile {
 	return []goldenFile{
 		{
 			file:  "system",
-			texts: []string{textCore, textSecurity, textNoTools, textMemory, textGno, textDeliver},
+			texts: []string{textCore, textSecurity, textLanguage, textNoTools, textMemory, textGno, textDeliver},
 			cases: func(s *Set) []goldenCase {
 				return []goldenCase{
 					{"a session with everything", parts(s.System(SystemInput{
@@ -75,6 +75,7 @@ func goldenFiles() []goldenFile {
 						Append:       "Answer in French.",
 					}))},
 					{"a session with the plain tools", parts(s.System(SystemInput{Tools: toolSpecs("Read", "Edit", "Bash")}))},
+					{"a session whose replies are in Japanese", parts(s.System(SystemInput{Tools: toolSpecs("Read"), Language: "japanese"}))},
 					{"a session with no tools", parts(s.System(SystemInput{Instructions: goldenInstructions}))},
 					{"the person's own system prompt", parts(s.System(SystemInput{
 						Tools:        toolSpecs("Read", "gnovm_run", "Deliver"),

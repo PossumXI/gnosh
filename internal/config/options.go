@@ -103,6 +103,12 @@ type Options struct {
 	// "default", one of gnosh's own, or one of the person's or the
 	// project's files.
 	OutputStyle Value[string]
+	// Language is the language the model replies to the person in, as
+	// they name it ("japanese"), or empty (Claude Code's language).
+	Language Value[string]
+	// IncludeGitInstructions puts how git stands in the block ahead of a
+	// session's first prompt (Claude Code's includeGitInstructions).
+	IncludeGitInstructions Value[bool]
 
 	// EditorMode is how the box takes keys: "normal", readline's keys, or
 	// "vim". VimInsertModeRemaps are the pairs of characters that, typed
@@ -146,6 +152,7 @@ func defaultOptions() Options {
 	o.FileCheckpointingEnabled.V = true
 	o.ShowTurnDuration.V = true
 	o.RespectGitignore.V = true
+	o.IncludeGitInstructions.V = true
 	o.MemoryText.V = "lean"
 	o.DeliverablesServer.V = DefaultDeliverablesServer
 	o.ProjectDataDir.V = ".gnosh"
@@ -307,6 +314,14 @@ var optionDefs = []optionDef{
 		what: "how the model replies: Proactive, Concise, Explanatory, Learning, or a style of your own (/output-style switches it)",
 		from: fromClaudeCode + ": the settings key",
 		text: func(o *Options) *Value[string] { return &o.OutputStyle }},
+	{key: "language", kind: oName, def: "none",
+		what: "the language the model replies to you in, as you name it (\"japanese\", \"français\"): the system prompt asks for it; code, commands and quoted text stay as they are",
+		from: fromClaudeCode + ": the settings key",
+		text: func(o *Options) *Value[string] { return &o.Language }},
+	{key: "includeGitInstructions", kind: oBool, def: "true",
+		what:  "say how git stands (a repository, its branch) in the block ahead of a session's first prompt; false leaves git out of it (gnosh has no commit or pull request workflow text to leave out besides)",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.IncludeGitInstructions }},
 
 	// The box.
 	{key: "editorMode", kind: oEnum, def: "normal",

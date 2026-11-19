@@ -101,6 +101,11 @@
 //     stays. These are the one choice of the person's that changes the
 //     system prompt: a choice made on purpose, for the whole session.
 //
+//   - language, after the style, when the person set the language replies
+//     are in (Claude Code's language): it is asked for in the system
+//     prompt, as Claude Code does, since it holds for the whole session;
+//     code, commands and quoted text stay as they are.
+//
 //   - no-tools, only in a session with no tools at all: a model with no
 //     tools otherwise writes its tool calls out as text.
 //

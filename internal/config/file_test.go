@@ -297,7 +297,9 @@ func TestOptions(t *testing.T) {
     "theme": "light",
     "viewMode": "focus",
     "showTurnDuration": false,
-    "respectGitignore": false
+    "respectGitignore": false,
+    "language": "japanese",
+    "includeGitInstructions": false
   }
 }`
 	cfg := mustLoad(t, withConfig(text))
@@ -349,6 +351,8 @@ func TestOptions(t *testing.T) {
 	check("viewMode", o.ViewMode.V, "focus")
 	check("showTurnDuration", o.ShowTurnDuration.V, false)
 	check("respectGitignore", o.RespectGitignore.V, false)
+	check("language", o.Language.V, "japanese")
+	check("includeGitInstructions", o.IncludeGitInstructions.V, false)
 
 	// The table lists every key exactly once, All reports each, and the
 	// file above sets every one of them.
