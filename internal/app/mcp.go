@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/mcp"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
 // This file joins MCP servers to a session (spec/cc/mcp.md): the servers
@@ -181,12 +182,15 @@ func (l *live) startMCP() {
 	}
 	var wg sync.WaitGroup
 	for _, s := range l.mcp.servers {
+		l.mcp.mu.Lock()
+		gen := s.gen
+		l.mcp.mu.Unlock()
 		wg.Add(1)
 		l.bg.Add(1)
 		go func() {
 			defer l.bg.Done()
 			defer wg.Done()
-			l.connectMCP(s)
+			l.connectMCP(s, gen)
 		}()
 	}
 	if !l.interactive {
@@ -194,11 +198,18 @@ func (l *live) startMCP() {
 	}
 }
 
-// connectMCP starts one server and offers its tools.
-func (l *live) connectMCP(s *mcpServer) {
+// connectMCP starts one server and offers its tools. gen is the server's
+// generation as the caller marked it pending, under the lock: a disable,
+// a reconnect or the end of a sub-agent since then makes another, and this
+// connection is then not taken (closing an old connection first can take
+// seconds, and the generation read here would be the newer one's).
+func (l *live) connectMCP(s *mcpServer, gen int) {
 	l.mcp.mu.Lock()
-	gen := s.gen
+	stale := s.gen != gen || s.status == "disabled"
 	l.mcp.mu.Unlock()
+	if stale {
+		return
+	}
 	fail := func(why string) {
 		l.mcp.mu.Lock()
 		if s.gen != gen {
@@ -290,7 +301,7 @@ func (l *live) connectMCP(s *mcpServer) {
 		}
 	}
 	l.mcp.mu.Lock()
-	if l.closing.Load() || s.gen != gen {
+	if l.closing.Load() || s.gen != gen || s.status == "disabled" || s.client != nil {
 		l.mcp.mu.Unlock()
 		_ = client.Close()
 		return
@@ -323,12 +334,13 @@ func (l *live) redialMCP(s *mcpServer, old *mcp.Client) *mcp.Client {
 		return nil
 	}
 	s.gen++
+	gen := s.gen
 	s.client, s.tools, s.err, s.status = nil, nil, "", "pending"
 	l.mcp.mu.Unlock()
 	_ = old.Close()
 	l.offerMCPTools()
 	l.flog.logf("mcp", "the connection to the MCP server %s dropped; connecting again", s.cfg.Name)
-	l.connectMCP(s)
+	l.connectMCP(s, gen)
 	l.mcp.mu.Lock()
 	defer l.mcp.mu.Unlock()
 	return s.client
@@ -354,11 +366,25 @@ func mcpConnect(ctx context.Context, c mcp.Config, root string, environ, roots [
 	return nil, fmt.Errorf("gnosh does not speak the %s transport", c.Type)
 }
 
-// mcpToolsOf makes the tools the model is offered of a server's list.
+// mcpToolsOf makes the tools the model is offered of a server's list. Two
+// that come to one name (listed twice, or "a.b" beside "a_b") are offered
+// once, the first: a name twice in the model's list would have every
+// offer of tools refused.
 func (l *live) mcpToolsOf(s *mcpServer, tools []mcp.Tool) []*mcpTool {
 	var made []*mcpTool
+	seen := map[string]bool{}
+	var twice []string
 	for _, t := range tools {
-		made = append(made, &mcpTool{l: l, server: s, tool: t, name: mcp.ToolName(s.cfg.Name, t.Name)})
+		name := mcp.ToolName(s.cfg.Name, t.Name)
+		if seen[name] {
+			twice = append(twice, t.Name)
+			continue
+		}
+		seen[name] = true
+		made = append(made, &mcpTool{l: l, server: s, tool: t, name: name})
+	}
+	if len(twice) > 0 {
+		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s lists tools whose names come to one another's (%s): the first of each is offered.", s.cfg.Name, strings.Join(twice, ", ")))
 	}
 	return made
 }
@@ -424,6 +450,17 @@ func (l *live) closeMCP() {
 	l.mcp.mu.Unlock()
 	for _, c := range clients {
 		_ = c.Close()
+	}
+	// The own servers of sub-agents still running (one in the background
+	// that did not stop in time) end with the session too.
+	l.subMu.Lock()
+	var subs []*subSession
+	for s := range l.subs {
+		subs = append(subs, s)
+	}
+	l.subMu.Unlock()
+	for _, s := range subs {
+		l.closeAgentMCP(s)
 	}
 }
 
@@ -544,7 +581,11 @@ func (l *live) mcpAct(c *SlashContext, words []string) error {
 	// Each one picked is let go of first: a reconnect starts afresh, and a
 	// disable ends there. An enable leaves alone a server that is not
 	// disabled, and a reconnect one that is.
-	var connect []*mcpServer
+	type pending struct {
+		s   *mcpServer
+		gen int
+	}
+	var connect []pending
 	var gone []*mcp.Client
 	l.mcp.mu.Lock()
 	for _, s := range picked {
@@ -561,7 +602,7 @@ func (l *live) mcpAct(c *SlashContext, words []string) error {
 			s.status = "disabled"
 		} else {
 			s.status = "pending"
-			connect = append(connect, s)
+			connect = append(connect, pending{s, s.gen})
 		}
 	}
 	l.mcp.mu.Unlock()
@@ -570,8 +611,8 @@ func (l *live) mcpAct(c *SlashContext, words []string) error {
 	}
 	l.offerMCPTools()
 	var wg sync.WaitGroup
-	for _, s := range connect {
-		wg.Go(func() { l.connectMCP(s) })
+	for _, p := range connect {
+		wg.Go(func() { l.connectMCP(p.s, p.gen) })
 	}
 	wg.Wait()
 	l.mcp.mu.Lock()
@@ -620,7 +661,11 @@ func (t *mcpTool) Spec() core.ToolSpec {
 	if len(schema) == 0 || string(schema) == "null" {
 		schema = json.RawMessage(`{"type":"object"}`)
 	}
-	return core.ToolSpec{Name: t.name, Description: desc, InputSchema: schema}
+	// The server's words, not the person's or gnosh's: gnosh's own tags in
+	// the description or the schema's reach the model broken, as in what
+	// the tool returns. (The mark goes inside JSON strings, where a "<"
+	// can stand; the schema stays JSON.)
+	return core.ToolSpec{Name: t.name, Description: prompt.Untrusted(desc), InputSchema: json.RawMessage(prompt.Untrusted(string(schema)))}
 }
 
 // Parallel says a call may run beside others when the server says its

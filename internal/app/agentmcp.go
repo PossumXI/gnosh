@@ -85,9 +85,14 @@ func (l *live) connectAgentMCP(s *subSession) {
 			l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The sub-agent %s writes an MCP server of its own named %s, the name of one of this session's, so it is not started: the session's %s is the one it has.", s.def.Name, c.Name, c.Name))
 			continue
 		}
+		// It is the sub-agent's before it connects, so that a sub-agent
+		// that ends meanwhile closes it (closeAgentMCP), and the
+		// connection is then not taken.
 		srv := &mcpServer{cfg: c, status: "pending", own: s.def.Name}
-		l.connectMCP(srv)
+		l.subMu.Lock()
 		s.ownMCP = append(s.ownMCP, srv)
+		l.subMu.Unlock()
+		l.connectMCP(srv, 0)
 	}
 }
 

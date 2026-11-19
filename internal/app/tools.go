@@ -291,8 +291,17 @@ func (l *live) mcpTools() []core.Tool {
 	defer l.mcp.mu.Unlock()
 	var out []core.Tool
 	resources := false
+	// Two servers' tools can come to one name (server "a" with "b__c",
+	// server "a__b" with "c"): the first server's is offered, since a name
+	// twice in the model's list would have every offer of tools refused.
+	seen := map[string]bool{}
 	for _, s := range l.mcp.servers {
 		for _, t := range s.tools {
+			if seen[t.name] {
+				l.flog.logf("mcp", "the tool %s of the MCP server %s has the name of another server's, which is offered in its place", t.tool.Name, s.cfg.Name)
+				continue
+			}
+			seen[t.name] = true
 			if l.engine.ToolEnabled(t.name) {
 				out = append(out, t)
 			}

@@ -2897,3 +2897,29 @@ or kept with the reason said (27).
       closed; what it left in its group is stopped as it closes.
     - An answer that came as the connection ended could be sent on a
       closed channel: answers are handed over under the lock now.
+
+173. **The review of the MCP client: the session's side.**
+    - A connection is made for the server as the caller marked it, and
+      not taken when the server was disabled or connected again since.
+      The connection read the server's generation as it began, after the
+      caller had let go of the lock and closed the old connection (up to
+      five seconds for a server at a URL): /mcp disable in that time was
+      undone, two reconnects could both be taken (and one connection
+      never closed), and a sign-in that ended after /mcp disable, or /mcp
+      logout, connected a disabled server again. A sub-agent's own server
+      is the sub-agent's before it connects, so that one that ends
+      meanwhile closes it.
+    - A flood of notices that a server's tools changed ran a listing of
+      them each on a goroutine of its own; one runs at a time now, and
+      once more after the notices that came while it ran. The server's
+      own requests (pings) are answered 32 at a time; more are refused.
+    - Two of a server's tools whose names come to one (listed twice, or
+      "gr.eet" beside "gr_eet"), or two servers' ("a" with "b__c" beside
+      "a__b" with "c"), had every offer of tools to the model refused, so
+      that servers that connected later were never offered and disabled
+      ones stayed offered. The first of each name is offered, and the
+      person is told of a server's own.
+    - A tool's description and input schema are the server's words: they
+      reach the model with gnosh's own tags broken, as what the tool
+      returns does.
+    - The own servers of sub-agents still running end with the session.

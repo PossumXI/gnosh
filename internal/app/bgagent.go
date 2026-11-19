@@ -86,6 +86,9 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 		defer l.bgWG.Done()
 		defer close(b.done)
 		defer cancel()
+		// (Closed below before its report goes out; this one is for a run
+		// that never gets there. Closing is done once.)
+		defer s.close()
 		res, err := s.agent.Run(ctx, agent.Prompt{Text: in.Prompt})
 		var rep core.ToolResult
 		var caution string

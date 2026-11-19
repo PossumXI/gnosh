@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -124,6 +125,12 @@ func fakeServer(mode string) {
 			case "slow":
 				time.Sleep(3 * time.Second)
 				reply(map[string]any{"content": []map[string]any{}})
+			case "flood":
+				// Two thousand notices that its tools changed, then the answer.
+				for range 2000 {
+					write(map[string]any{"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+				}
+				reply(map[string]any{"content": []map[string]any{{"type": "text", "text": "flooded"}}})
 			case "deaf":
 				// It answers, and reads nothing more.
 				reply(map[string]any{"content": []map[string]any{{"type": "text", "text": "deaf now"}}})
@@ -255,6 +262,40 @@ func TestStartFailures(t *testing.T) {
 	_, err := Start(ctx, fake(t, "die"), Options{StartTimeout: 5 * time.Second})
 	if err == nil || !strings.Contains(err.Error(), "it cannot find its config") {
 		t.Errorf("a server that dies at once: %v, want what it wrote on its standard error", err)
+	}
+}
+
+// A flood of notices that the tools changed costs one listing at a time,
+// not a goroutine each: OnToolsChanged runs on one goroutine, and once more
+// after the notices that came while it ran (the MCP review of 2026-11-19).
+func TestToolsChangedFloodIsCoalesced(t *testing.T) {
+	var mu sync.Mutex
+	calls, running, most := 0, 0, 0
+	opt := Options{OnToolsChanged: func() {
+		mu.Lock()
+		calls++
+		running++
+		most = max(most, running)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		running--
+		mu.Unlock()
+	}}
+	ctx := context.Background()
+	c, err := Start(ctx, fake(t, "ok"), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if res, err := c.CallTool(ctx, "flood", nil); err != nil || res.Content[0].Text != "flooded" {
+		t.Fatalf("flood: %+v, %v", res, err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if calls == 0 || calls > 100 || most != 1 {
+		t.Errorf("2000 notices ran OnToolsChanged %d times, at most %d at once; want a few, one at a time", calls, most)
 	}
 }
 
