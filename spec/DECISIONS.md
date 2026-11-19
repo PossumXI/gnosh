@@ -3701,3 +3701,13 @@ or kept with the reason said (27).
     And the settings reader takes three forms of YAML it refused: a
     list's entries at the start of the line, a list in brackets over
     several lines, and a setting's name in quotes.
+
+243. **A skill that is not run after all takes its grant back.** A
+    skill's allowed-tools are put in force before its commands are
+    checked, so that they may let them run; when one was refused, the
+    skill was not run but its grant stayed until the person's next prompt,
+    and the model's next call ran under it (the skills review of
+    2026-11-19). The grant of a skill whose commands are refused, or that
+    fails later on the way in, is now taken back. And the question that
+    asks to load a skill shows what it lets run whole: it was cut at 300
+    characters, which a padded list could hide Bash(*) behind.

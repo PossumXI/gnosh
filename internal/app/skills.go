@@ -454,13 +454,18 @@ func unbuiltSkill(sk skill.Skill) string {
 // the conversation. refusal says why it was not loaded. It is the three
 // steps below in a row, which a typed line takes one at a time.
 func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, refusal string) {
+	// A skill that is not run after all takes its grant back: it was put
+	// in force for the skill's commands, and is no leave for the rest of
+	// the turn (the skills review of 2026-11-19).
 	if text, refusal = l.prepareSkill(sk, args); refusal != "" {
 		return "", false, refusal
 	}
 	if text, refusal = l.runSkillCommands(sk, text); refusal != "" {
+		l.dropSkillGrant(sk)
 		return "", false, refusal
 	}
 	if refusal = l.commitSkill(sk); refusal != "" {
+		l.dropSkillGrant(sk)
 		return "", false, refusal
 	}
 	if sk.Fork {
@@ -485,6 +490,7 @@ func (l *live) prepareSkill(sk skill.Skill, args string) (text, refusal string) 
 		return "", refusal
 	}
 	if err := l.checkCommands(text); err != nil {
+		l.dropSkillGrant(sk)
 		return "", err.Error()
 	}
 	return text, ""
@@ -528,13 +534,25 @@ func (l *live) addSkillGrant(sk skill.Skill) string {
 		return rules
 	}
 	err := l.engine.AddLayer(permission.Layer{
-		Scope: permission.ScopeSkill, Name: "the skill " + sk.Name + " (" + sk.Source + ")",
+		Scope: permission.ScopeSkill, Name: skillGrantName(sk),
 		FromProject: sk.Scope == "project", Allow: fill(sk.AllowedTools), Deny: fill(sk.DisallowedTools),
 	})
 	if err != nil {
 		return fmt.Sprintf("the permission rules the skill %s carries (allowed-tools or disallowed-tools, in %s) cannot be used: %v. It is not run without them", sk.Name, sk.Source, err)
 	}
 	return ""
+}
+
+// skillGrantName is the name of the layer of rules a skill's grant is.
+func skillGrantName(sk skill.Skill) string {
+	return "the skill " + sk.Name + " (" + sk.Source + ")"
+}
+
+// dropSkillGrant ends the grant of one skill that is not run after all.
+func (l *live) dropSkillGrant(sk skill.Skill) {
+	if len(sk.AllowedTools)+len(sk.DisallowedTools) > 0 {
+		l.engine.RemoveLayer(permission.ScopeSkill, skillGrantName(sk))
+	}
 }
 
 // commitSkill puts the rest of a prepared skill in force: the thinking
@@ -894,7 +912,10 @@ func (t *skillTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action
 	}
 	act.Summary += " (" + sk.Source + ")"
 	if len(sk.AllowedTools) > 0 {
-		act.Summary += ", which lets these run without a question until your next prompt: " + oneLine(strings.Join(sk.AllowedTools, ", "), 300)
+		// Whole: what a Yes lets run is never cut (a list padded past a
+		// cut could hide Bash(*) behind it).
+		rules := strings.Join(sk.AllowedTools, ", ")
+		act.Summary += ", which lets these run without a question until your next prompt: " + oneLine(rules, len(rules))
 	}
 	return act, nil
 }

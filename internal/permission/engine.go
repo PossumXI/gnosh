@@ -567,6 +567,20 @@ func (e *Engine) RemoveLayers(scope Scope) {
 	e.layers = kept
 }
 
+// RemoveLayer drops the last layer of the scope with that name that was
+// passed to New or AddLayer, as when a skill whose grant was put in force
+// is not run after all.
+func (e *Engine) RemoveLayer(scope Scope, name string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if ly := e.layers[i]; ly.Scope == scope && ly.Name == name {
+			e.layers = append(e.layers[:i:i], e.layers[i+1:]...)
+			return
+		}
+	}
+}
+
 // ReadDenied reports whether a Read deny rule covers the cleaned absolute
 // path, as written or as resolved. File discovery and search results
 // leave such files out.

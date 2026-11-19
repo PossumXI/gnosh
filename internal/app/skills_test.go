@@ -574,3 +574,23 @@ func TestProjectCommandLinkedOutIsNotRead(t *testing.T) {
 	has(t, "/skills", run(t, w, "--trust-folder", "-p", "/skills").wantCode(t, 0).out,
 		"not a skill: "+w.Path(".claude/commands/setup.md")+" (it leads out of the project, to "+w.Home+"/.npmrc")
 }
+
+// A skill that is not run after all, one of its commands refused, takes
+// back the grant it put in force for them: the model's next call is not
+// let run under it (here, with nobody to ask, it is refused). The skills
+// review of 2026-11-19.
+func TestSkillNotRunTakesItsGrantBack(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Skill", Args: `{"skill":"half","args":"x"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"touch granted.txt"}`}}},
+		apptest.Reply{Text: "Done."})
+	w.Write(w.ConfigDir()+"/skills/half/SKILL.md", "---\ndescription: Half.\nallowed-tools: Bash(touch granted.txt)\n---\n!`touch other.txt`\nDo half.\n")
+	run(t, w, "-p", "--allowedTools", "Skill(half *)", "--", "go").wantCode(t, 0)
+	hasNot(t, "the skill's result", toolResult(t, w, 1, "c1"), "is loaded")
+	if w.Exists("other.txt") {
+		t.Error("the command the grant does not cover ran")
+	}
+	if w.Exists("granted.txt") {
+		t.Error("a call ran under the grant of a skill that was not run")
+	}
+}
