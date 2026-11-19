@@ -2689,3 +2689,22 @@ or kept with the reason said (27).
     sub-agent can stop any background command of the session, and
     definition files pass over keys they do not know (a "disallowedtools"
     typo is lost without a word).
+
+158. **A definition's setting in another letter case is not passed over.**
+    Agent definitions pass over keys they do not know, as Claude Code's
+    do, so that a key from a newer Claude Code does not stop gnosh. One
+    that gnosh knows written in another letter case ("disallowedtools",
+    "permissionmode") was passed over too, and the agent ran without what
+    it was meant to take away (the sub-agents review's note). Such a
+    definition is now not used, and the files that hold no usable
+    definition (/status, gnosh doctor) say why.
+
+159. **CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH and
+    CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.** Claude Code's variables (its
+    environment reference, read 2026-11-19): how many layers of sub-agents
+    there may be below the conversation (3; 1 turns nesting off), and how
+    many may run at once before the Agent tool refuses another (20). Each
+    takes a whole number above 0 in plain digits, and anything else is
+    passed over, so a limit can be moved and not taken away. gnosh had
+    both limits fixed, and the second counted only sub-agents in the
+    background; it counts every one that runs now, as Claude Code's does.

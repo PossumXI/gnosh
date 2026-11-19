@@ -377,6 +377,10 @@ func (s *Set) Names() []string {
 // Skipped returns the files that hold no usable definition.
 func (s *Set) Skipped() []Skipped { return slices.Clone(s.skipped) }
 
+// knownKeys are the settings of a definition gnosh reads.
+var knownKeys = []string{"name", "description", "tools", "disallowedTools", "model", "permissionMode", "maxTurns",
+	"omitClaudeMd", "background", "skills", "effort", "initialPrompt", "hooks", "isolation", "mcpServers", "memory"}
+
 // Parse reads one definition from the text of a file. reason is empty
 // when it could be read, and otherwise says why the file is skipped.
 func Parse(text string) (d Def, reason string) {
@@ -459,6 +463,15 @@ func Parse(text string) (d Def, reason string) {
 		case "memory":
 			if f.scalar != "" || len(f.items) > 0 || f.nested {
 				d.Other = append(d.Other, f.key)
+			}
+		default:
+			// A setting gnosh knows, in another letter case
+			// ("disallowedtools"), would be passed over, and the agent run
+			// without what it takes away: the definition is not used.
+			// Keys gnosh does not know at all are passed over, as in
+			// Claude Code.
+			if i := slices.IndexFunc(knownKeys, func(k string) bool { return strings.EqualFold(k, f.key) }); i >= 0 {
+				return d, fmt.Sprintf("it has the setting %q, which gnosh reads only as %q (letter case counts), so it is not used rather than used without it", f.key, knownKeys[i])
 			}
 		}
 	}

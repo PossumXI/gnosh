@@ -240,3 +240,15 @@ func TestDefinitionThatIsNotAPlainFile(t *testing.T) {
 		t.Fatal("reading a link to /dev/zero did not end")
 	}
 }
+
+// A setting gnosh knows written in another letter case would be passed
+// over, and the agent run without what it takes away: the definition is
+// not used. A key gnosh does not know at all is passed over.
+func TestSettingInAnotherCase(t *testing.T) {
+	if _, reason := Parse("---\nname: reader\ndescription: Reads.\ndisallowedtools: Write, Edit\n---\nRead.\n"); !strings.Contains(reason, `"disallowedTools"`) {
+		t.Errorf("a definition with disallowedtools: %q", reason)
+	}
+	if d, reason := Parse("---\nname: reader\ndescription: Reads.\ncolor: blue\n---\nRead.\n"); reason != "" || d.Name != "reader" {
+		t.Errorf("a definition with an unknown key: %q", reason)
+	}
+}

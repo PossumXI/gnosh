@@ -309,3 +309,28 @@ func TestSubAgentQuestionNamesIt(t *testing.T) {
 		t.Errorf("the question's title is %q", q.Title)
 	}
 }
+
+// CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH and CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
+// are read as Claude Code reads them: a whole number above 0 in plain
+// digits, and anything else is passed over.
+func TestSubAgentLimitsFromTheEnvironment(t *testing.T) {
+	for _, tt := range []struct {
+		v    string
+		want int
+	}{{"", 3}, {"1", 1}, {"5", 5}, {"0", 3}, {"-1", 3}, {"2e3", 3}, {" 2", 3}, {"x", 3}} {
+		if got := envCount(tt.v, 3); got != tt.want {
+			t.Errorf("envCount(%q) = %d, want %d", tt.v, got, tt.want)
+		}
+	}
+	// Nesting off: a sub-agent has no Agent tool of its own.
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"look","prompt":"Look.","subagent_type":"general-purpose"}`}}},
+		apptest.Reply{Text: "Looked."},
+		apptest.Reply{Text: "Done."})
+	o := testOptions(w, "-y", "-p", "look around")
+	o.Environ = append(o.Environ, "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	if names := strings.Join(toolNamesOf(w.Model.Requests()[1]), " "); strings.Contains(names, "Agent") {
+		t.Errorf("with nesting off the sub-agent has the tools %q", names)
+	}
+}

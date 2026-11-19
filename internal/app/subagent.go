@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -50,10 +51,49 @@ import (
 // agentToolName is the name of the tool, which is Claude Code's.
 const agentToolName = "Agent"
 
+// defaultAgentDepth is how many layers of sub-agents there may be below
+// the session the person is in, unless CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
+// says otherwise. At the last layer a sub-agent has no Agent tool.
+const defaultAgentDepth = 3
+
+// defaultConcurrentAgents is how many sub-agents may run at once in one
+// session, unless CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS says otherwise.
+const defaultConcurrentAgents = 20
+
 // maxAgentDepth is how many layers of sub-agents there may be below the
-// session the person is in. At the last layer a sub-agent has no Agent
-// tool.
-const maxAgentDepth = 3
+// session: CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, as Claude Code reads it
+// (a whole number above 0 in plain digits; 1 turns nesting off; anything
+// else is passed over, so the limit can be moved and not taken away).
+func (l *live) maxAgentDepth() int {
+	return envCount(l.p.env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"], defaultAgentDepth)
+}
+
+// maxConcurrentAgents is how many sub-agents may run at once, in the
+// foreground, the background or below another:
+// CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, read as Claude Code reads it.
+func (l *live) maxConcurrentAgents() int {
+	return envCount(l.p.env["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"], defaultConcurrentAgents)
+}
+
+// envCount reads a whole number above 0 written in plain digits, or gives
+// def for anything else.
+func envCount(v string, def int) int {
+	if v == "" || strings.Trim(v, "0123456789") != "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
+}
+
+// runningAgents counts the sub-agents that run now.
+func (l *live) runningAgents() int {
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	return len(l.subs)
+}
 
 // agentDescription is what a model is told about the tool. It names only
 // gnosh's own three kinds: the kinds a person or a project defined are told
@@ -156,8 +196,8 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if why := l.backgroundOff(t.owner); background && why != "" {
 		background, waited = false, why
 	}
-	if background && len(l.backgroundAgents()) >= maxBackgroundAgents {
-		return core.ErrorResult(fmt.Sprintf("No sub-agent was started: %d run in the background already, which is the most there may be at once. Do not try again until one of them has ended; TaskStop stops one.", maxBackgroundAgents)), nil
+	if n, most := l.runningAgents(), l.maxConcurrentAgents(); n >= most {
+		return core.ErrorResult(fmt.Sprintf("No sub-agent was started: %d run already, which is the most there may be at once. Do not try again until one of them has ended; TaskStop stops one in the background.", most)), nil
 	}
 	parent := agent.FromContext(ctx)
 	if parent == nil {
@@ -755,7 +795,7 @@ func (s *subSession) tools() ([]core.Tool, error) {
 	for _, t := range l.agentMCPTools(s) {
 		all = append(all, t)
 	}
-	if s.depth < maxAgentDepth && !s.background && l.engine.ToolEnabled(agentToolName) {
+	if s.depth < l.maxAgentDepth() && !s.background && l.engine.ToolEnabled(agentToolName) {
 		all = append(all, &agentTool{l: l, owner: s})
 	}
 

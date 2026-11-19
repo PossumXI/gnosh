@@ -30,10 +30,6 @@ import (
 // waits too, and says so. A background sub-agent has neither the Agent
 // tool nor anyone to put a question of its own to.
 
-// maxBackgroundAgents is how many sub-agents may run in the background at
-// once.
-const maxBackgroundAgents = 20
-
 // bgAgent is a sub-agent running in the background.
 type bgAgent struct {
 	id, desc, kind, output string
