@@ -3173,3 +3173,17 @@ or kept with the reason said (27).
     notice became a system line after the result, which a reader takes
     for the start of another (the print mode review's note). Once the
     result is written, notices go to standard error alone.
+
+193. **A provider's failures are given up on by the clock, whatever each
+    try sent first.** The five minutes a failing provider is given
+    (GoneAfter) were set back by the first piece of every reply. One that
+    sends a little of each reply and then fails the same way each time
+    (llama.cpp's "Failed to parse tool call arguments as JSON", a proxy
+    that cuts at the same byte) was asked again every twenty seconds for
+    ever, and gnosh -p never ended (the model client review of
+    2026-11-19). The clock now runs from the first failure until a reply
+    is whole; "answering again" is still said as the first piece comes. A
+    reply that streams for longer than the five minutes and then fails a
+    second time ends the turn, and the person says go on. A provider's
+    own wait (Retry-After) is kept to up to BusyMax: a proxy that asked
+    for a day had a run sleep a day without a word.

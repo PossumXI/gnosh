@@ -121,7 +121,10 @@ func (p RetryPolicy) next(st *retryState, pe *core.ProviderError, answered bool,
 		}
 		step.wait = min(step.wait, p.BusyMax)
 		if pe.RetryAfter > 0 {
-			step.wait = pe.RetryAfter
+			// The provider's own wait, up to BusyMax: a proxy that asked
+			// for a day (or "Retry-After: inf") had a run sleep a day
+			// without a word (the model client review of 2026-11-19).
+			step.wait = min(pe.RetryAfter, p.BusyMax)
 		}
 		return step
 	case troubleUnreachable:
@@ -435,20 +438,23 @@ func (a *Agent) count(t *turn, purpose string, m Model, rep *reply) {
 	a.mu.Unlock()
 }
 
-// alive notes that the provider has sent something: it is there.
+// alive notes that the provider has sent something: it is there. The
+// clock of its failures (rs.since) runs on until a reply is whole: one
+// that sends a little of every reply and then fails the same way each
+// time (llama.cpp's "Failed to parse tool call arguments as JSON", a proxy
+// that cuts at the same byte) set the clock back with each try's first
+// piece, and was asked again every 20 seconds for ever (the model client
+// review of 2026-11-19).
 func (a *Agent) alive(m Model) {
 	if a.answeredBy == nil {
 		a.answeredBy = map[string]bool{}
 	}
 	a.answeredBy[modelKey(m)] = true
 	a.live.Store(modelKey(m))
-	if !a.rs.since.IsZero() {
-		if a.rs.down {
-			a.notice(LevelInfo, "provider", fmt.Sprintf("%s is answering again, %s after it stopped.", m.label(), span(a.clock.Now().Sub(a.rs.since))))
-		}
-		a.rs.since = time.Time{}
-		a.rs.down = false
+	if a.rs.down && !a.rs.since.IsZero() {
+		a.notice(LevelInfo, "provider", fmt.Sprintf("%s is answering again, %s after it stopped.", m.label(), span(a.clock.Now().Sub(a.rs.since))))
 	}
+	a.rs.down = false
 }
 
 // streamItem is one step of a provider's answer, or its failure.
