@@ -67,10 +67,8 @@ type call struct {
 	action  core.Action
 	// tail is the end of the call's live output.
 	tail tailBuf
-	// hooks are the hooks that ran on the call, one line each, and
-	// hookWarn says one of them had more to say than nothing.
-	hooks    []string
-	hookWarn bool
+	// hooks are the hooks that ran on the call, one line each.
+	hooks []string
 	// subs counts the tool calls a sub-agent made under this call, and
 	// subLast is the last of them.
 	subs    int

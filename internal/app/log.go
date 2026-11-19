@@ -108,22 +108,6 @@ func (l *sessionLog) lastPrompt() string {
 	return l.last
 }
 
-// promptEntries lists the session-file entries of every prompt that is
-// still part of the conversation, the person's and gnosh's own, in order.
-func promptEntries(entries []transcript.Entry) []string {
-	var out []string
-	conv := transcript.Conversation(entries)
-	for i := range conv {
-		for _, e := range decode(&conv[i]) {
-			if e.Kind == agent.EntryPrompt {
-				out = append(out, conv[i].UUID)
-				break
-			}
-		}
-	}
-	return out
-}
-
 // loopExtra is the one key of an entry's Extra under which the loop's own
 // fields are kept.
 const loopExtra = "loop"
