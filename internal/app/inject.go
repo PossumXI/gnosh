@@ -42,15 +42,17 @@ const (
 
 // injectCommands runs the commands of a skill's parts (skill.Parts) and
 // gives its text with what each printed in its place. What a command
-// prints is not read for more.
-func (l *live) injectCommands(parts []skill.Part) (string, error) {
+// prints is not read for more. env is that of the agent the skill is
+// for: the commands are judged as its calls are, under its grants, and
+// run where it works.
+func (l *live) injectCommands(env *core.ToolEnv, parts []skill.Part) (string, error) {
 	var b strings.Builder
 	for _, p := range parts {
 		if !p.Command {
 			b.WriteString(p.Text)
 			continue
 		}
-		got, err := l.injectOne(p.Text, true)
+		got, err := l.injectOne(env, p.Text, true)
 		if err != nil {
 			return "", err
 		}
@@ -62,10 +64,10 @@ func (l *live) injectCommands(parts []skill.Part) (string, error) {
 // checkCommands checks every command of a skill's parts against the
 // rules, as injectCommands does before it runs one, and runs none: a typed
 // line of several skills checks all of theirs before any runs.
-func (l *live) checkCommands(parts []skill.Part) error {
+func (l *live) checkCommands(env *core.ToolEnv, parts []skill.Part) error {
 	for _, p := range parts {
 		if p.Command {
-			if _, err := l.injectOne(p.Text, false); err != nil {
+			if _, err := l.injectOne(env, p.Text, false); err != nil {
 				return err
 			}
 		}
@@ -74,8 +76,9 @@ func (l *live) checkCommands(parts []skill.Part) error {
 }
 
 // injectOne checks one command against the rules, as a call of the Bash
-// tool, runs it when run is set, and returns what it printed.
-func (l *live) injectOne(command string, run bool) (string, error) {
+// tool by the agent env is for, runs it when run is set, and returns what
+// it printed.
+func (l *live) injectOne(env *core.ToolEnv, command string, run bool) (string, error) {
 	pattern := oneLine(command, 200)
 	refused := func(why string) error {
 		return fmt.Errorf("Shell command permission check failed for pattern %q: %s", pattern, why)
@@ -94,21 +97,28 @@ func (l *live) injectOne(command string, run bool) (string, error) {
 		return "", refused(err.Error())
 	}
 	call := core.ToolCall{ID: newCallID(), Name: shelltool.BashName, Input: input}
-	action, err := describe(bash, call, l.env())
+	if env == nil {
+		env = l.env()
+	}
+	action, err := describe(bash, call, env)
 	if err != nil {
 		return "", refused(err.Error())
 	}
-	cwd := l.cwd()
-	if l.agent != nil {
-		if t := l.agent.Tree(); t != nil {
-			// A session in a git work tree of its own keeps its skills'
-			// commands there too, as it keeps its own (review, 16 November).
-			if why := l.commandOutsideTree(*t, cwd, command); why != "" {
-				return "", refused(why)
-			}
+	// A sub-agent's skill runs its commands where the sub-agent works, in
+	// its own work tree when it has one, as its own calls do: they ran in
+	// the session's folder, judged as the session's own agent's.
+	who, cwd, tree := agentOf(env), firstOf(env.Cwd, l.cwd()), env.Tree
+	if tree == nil && who == "" && l.agent != nil {
+		tree = l.agent.Tree()
+	}
+	if tree != nil {
+		// A session in a git work tree of its own keeps its skills'
+		// commands there too, as it keeps its own (review, 16 November).
+		if why := l.commandOutsideTree(*tree, cwd, command); why != "" {
+			return "", refused(why)
 		}
 	}
-	if d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action)); d.Behavior != permission.Allow {
+	if d := l.reach(who, cwd, call, action, l.engine.DecideFor(who, cwd, call.Name, call, action)); d.Behavior != permission.Allow {
 		return "", refused(firstOf(strings.TrimRight(d.Reason, "."), "no rule lets it run") + ". A skill's commands never ask: its allowed-tools can let them run")
 	}
 	if !run {

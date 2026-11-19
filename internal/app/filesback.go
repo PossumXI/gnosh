@@ -59,7 +59,7 @@ func (l *live) filesBack(ctx context.Context, recent []fstools.FileState, window
 		input, _ := json.Marshal(map[string]string{"file_path": f.Path})
 		call := core.ToolCall{ID: newCallID(), Name: name, Input: input}
 		act := core.Action{Kind: core.ActionRead, Paths: []string{f.Path}}
-		if d := l.engine.DecideAt(env.Cwd, name, call, act); d.Behavior == permission.Deny {
+		if d := l.engine.DecideFor(agentOf(env), env.Cwd, name, call, act); d.Behavior == permission.Deny {
 			continue
 		}
 		each := min(backFileTokens, budget)

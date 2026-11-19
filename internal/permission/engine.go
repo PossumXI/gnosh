@@ -32,7 +32,19 @@ type Layer struct {
 	Dirs []string
 	// DefaultMode is the settings key defaultMode, or "".
 	DefaultMode string
+	// Agent, when not "", keeps the layer's rules to the calls of one
+	// agent: a skill's grant is for the agent that loaded the skill (for
+	// a forked skill, the sub-agent it runs in), and is no leave for the
+	// session's other agents. It is a sub-agent's id, or MainAgent for
+	// the session's own agent. Only DecideFor and the other Decide forms
+	// read it: the rest of the engine (ToolEnabled, ReadDenied, Explain)
+	// takes every layer.
+	Agent string
 }
+
+// MainAgent stands for the session's own agent in Layer.Agent, as ""
+// does in DecideFor: its calls carry no agent id.
+const MainAgent = "(the session's own agent)"
 
 // Options is everything the engine is told. It reads nothing by itself.
 type Options struct {
@@ -596,6 +608,45 @@ func (e *Engine) RemoveLayers(scope Scope) {
 		}
 	}
 	e.layers = kept
+}
+
+// RemoveAgentLayers drops the layers of the scope kept to one agent
+// (Layer.Agent; "" for the session's own), as when the turn its skills'
+// grants were for is over, or the sub-agent they were for has ended.
+func (e *Engine) RemoveAgentLayers(agent string, scope Scope) {
+	agent = agentKey(agent)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	kept := e.layers[:0:0]
+	for _, ly := range e.layers {
+		if ly.Scope != scope || ly.Agent != agent {
+			kept = append(kept, ly)
+		}
+	}
+	e.layers = kept
+}
+
+// agentKey is how Layer.Agent names the agent with that id: MainAgent for
+// the session's own, whose calls carry none.
+func agentKey(agent string) string {
+	if agent == "" {
+		return MainAgent
+	}
+	return agent
+}
+
+// forAgent is the engine as the calls of one agent ("" for the session's
+// own) see it: without the layers kept to other agents. The caller holds
+// e.mu, and uses what it returns only while it does.
+func (e *Engine) forAgent(agent string) *Engine {
+	agent = agentKey(agent)
+	other := func(ly *layer) bool { return ly.Agent != "" && ly.Agent != agent }
+	if !slices.ContainsFunc(e.layers, other) {
+		return e
+	}
+	v := *e
+	v.layers = slices.DeleteFunc(slices.Clone(e.layers), other)
+	return &v
 }
 
 // RemoveLayer drops the last layer of the scope with that name that was

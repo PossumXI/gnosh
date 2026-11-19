@@ -469,25 +469,30 @@ func unbuiltSkill(sk skill.Skill) string {
 // until the person's next prompt. again says the same text is already in
 // the conversation. refusal says why it was not loaded. It is the three
 // steps below in a row, which a typed line takes one at a time.
-func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, refusal string) {
+func (l *live) loadSkill(env *core.ToolEnv, sk skill.Skill, args string) (text string, again bool, refusal string) {
 	// A skill that is not run after all takes its grant back: it was put
 	// in force for the skill's commands, and is no leave for the rest of
 	// the turn (the skills review of 2026-11-19).
-	parts, refusal := l.prepareSkill(sk, args)
+	who := agentOf(env)
+	parts, refusal := l.prepareSkill(env, sk, args)
 	if refusal != "" {
 		return "", false, refusal
 	}
-	if text, refusal = l.runSkillCommands(parts); refusal != "" {
-		l.dropSkillGrant(sk)
+	if text, refusal = l.runSkillCommands(env, parts); refusal != "" {
+		l.dropSkillGrant(who, sk)
 		return "", false, refusal
 	}
 	if refusal = l.commitSkill(sk); refusal != "" {
-		l.dropSkillGrant(sk)
+		l.dropSkillGrant(who, sk)
 		return "", false, refusal
 	}
 	if sk.Fork {
 		// (A forked skill's text is a sub-agent's task: it never enters
-		// this conversation, and is not given back after a summary.)
+		// this conversation, and is not given back after a summary. Its
+		// grant is the sub-agent's alone, from its start to its end:
+		// forkSkill. The agent that loaded it had it for the skill's
+		// commands only.)
+		l.dropSkillGrant(who, sk)
 		return text, false, ""
 	}
 	return text, l.recordSkillRun(sk.Name, text), ""
@@ -498,7 +503,7 @@ func (l *live) loadSkill(sk skill.Skill, args string) (text string, again bool, 
 // force (addSkillGrant), and checks its commands against those rules,
 // running none (inject.go). Nothing else of it is in force yet:
 // runSkillCommands runs the commands, and commitSkill puts the rest in.
-func (l *live) prepareSkill(sk skill.Skill, args string) ([]skill.Part, string) {
+func (l *live) prepareSkill(env *core.ToolEnv, sk skill.Skill, args string) ([]skill.Part, string) {
 	if len(sk.Unbuilt) > 0 {
 		return nil, unbuiltSkill(sk)
 	}
@@ -506,11 +511,12 @@ func (l *live) prepareSkill(sk skill.Skill, args string) ([]skill.Part, string) 
 	if err != nil {
 		return nil, err.Error()
 	}
-	if refusal := l.addSkillGrant(sk); refusal != "" {
+	who := agentOf(env)
+	if refusal := l.addSkillGrant(who, sk); refusal != "" {
 		return nil, refusal
 	}
-	if err := l.checkCommands(parts); err != nil {
-		l.dropSkillGrant(sk)
+	if err := l.checkCommands(env, parts); err != nil {
+		l.dropSkillGrant(who, sk)
 		return nil, err.Error()
 	}
 	return parts, ""
@@ -518,8 +524,8 @@ func (l *live) prepareSkill(sk skill.Skill, args string) ([]skill.Part, string) 
 
 // runSkillCommands runs the commands of a prepared skill, under the rules
 // in force, and gives its text with what each printed in its place.
-func (l *live) runSkillCommands(parts []skill.Part) (string, string) {
-	text, err := l.injectCommands(parts)
+func (l *live) runSkillCommands(env *core.ToolEnv, parts []skill.Part) (string, string) {
+	text, err := l.injectCommands(env, parts)
 	if err != nil {
 		return "", err.Error()
 	}
@@ -535,12 +541,16 @@ func (l *live) skillVars(sk skill.Skill) skill.Vars {
 	return skill.Vars{SessionID: l.ts.ID(), SkillDir: sk.Dir, ProjectDir: l.cfg.Paths.ProjectRoot, Effort: effort}
 }
 
-// addSkillGrant puts the permission rules a skill carries in force until
-// the person's next prompt: what it lets run, and what it takes away
-// (disallowed-tools, as rules that refuse: the model's list of tools stays
-// as it is, so that a local server keeps the prompt it has read). It says
-// why it could not, or "".
-func (l *live) addSkillGrant(sk skill.Skill) string {
+// addSkillGrant puts the permission rules a skill carries in force for
+// one agent (who: a sub-agent's id, or "" for the session's own) until
+// the person's next prompt, or for a sub-agent until it ends: what it lets
+// run, and what it takes away (disallowed-tools, as rules that refuse:
+// the model's list of tools stays as it is, so that a local server keeps
+// the prompt it has read). The session's other agents are not given it:
+// a skill one agent loaded, or a forked skill's sub-agent, was leave for
+// all of them (the skills review of 2026-11-19). It says why it could
+// not, or "".
+func (l *live) addSkillGrant(who string, sk skill.Skill) string {
 	if len(sk.AllowedTools)+len(sk.DisallowedTools) == 0 {
 		return ""
 	}
@@ -554,7 +564,7 @@ func (l *live) addSkillGrant(sk skill.Skill) string {
 		return rules
 	}
 	err := l.engine.AddLayer(permission.Layer{
-		Scope: permission.ScopeSkill, Name: skillGrantName(sk),
+		Scope: permission.ScopeSkill, Name: skillGrantName(who, sk), Agent: grantAgent(who),
 		FromProject: sk.Scope == "project", Allow: fill(sk.AllowedTools), Deny: fill(sk.DisallowedTools),
 	})
 	if err != nil {
@@ -563,15 +573,38 @@ func (l *live) addSkillGrant(sk skill.Skill) string {
 	return ""
 }
 
-// skillGrantName is the name of the layer of rules a skill's grant is.
-func skillGrantName(sk skill.Skill) string {
-	return "the skill " + sk.Name + " (" + sk.Source + ")"
+// skillGrantName is the name of the layer of rules a skill's grant is,
+// for the agent who (a sub-agent's id, or "" for the session's own).
+func skillGrantName(who string, sk skill.Skill) string {
+	name := "the skill " + sk.Name + " (" + sk.Source + ")"
+	if who != "" {
+		name += ", for the sub-agent " + who + " alone"
+	}
+	return name
+}
+
+// grantAgent is how the engine's layer names the agent a grant is for
+// (permission.Layer.Agent).
+func grantAgent(who string) string {
+	if who == "" {
+		return permission.MainAgent
+	}
+	return who
+}
+
+// agentOf is the id of the agent a tool's env is for, as the engine is
+// told it: a sub-agent's, or "" for the session's own.
+func agentOf(env *core.ToolEnv) string {
+	if env == nil || env.ParentSessionID == "" {
+		return ""
+	}
+	return env.SessionID
 }
 
 // dropSkillGrant ends the grant of one skill that is not run after all.
-func (l *live) dropSkillGrant(sk skill.Skill) {
+func (l *live) dropSkillGrant(who string, sk skill.Skill) {
 	if len(sk.AllowedTools)+len(sk.DisallowedTools) > 0 {
-		l.engine.RemoveLayer(permission.ScopeSkill, skillGrantName(sk))
+		l.engine.RemoveLayer(permission.ScopeSkill, skillGrantName(who, sk))
 	}
 }
 
@@ -615,11 +648,12 @@ func (l *live) unrecordSkillRun(name, text string) {
 	}
 }
 
-// dropSkillGrants ends the permission rules that skills brought with
-// them, and the thinking level one asked for: they hold until the
-// person's next prompt.
+// dropSkillGrants ends the permission rules that the skills of the
+// session's own agent brought with them, and the thinking level one asked
+// for: they hold until the person's next prompt. (A sub-agent's hold
+// until it ends: subSession.close.)
 func (l *live) dropSkillGrants() {
-	l.engine.RemoveLayers(permission.ScopeSkill)
+	l.engine.RemoveAgentLayers("", permission.ScopeSkill)
 	l.skillMu.Lock()
 	restore, before := l.effortHeld, l.effortBefore
 	l.effortHeld = false
@@ -699,6 +733,7 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	}
 	l.dropSkillGrants()
 	l.nameAfter(line)
+	env := l.env()
 	// Skills stacked after the first (/write-tests /fix-issue 123) are
 	// all loaded, with the words after the last as the arguments of each.
 	stack := []skill.Skill{sk}
@@ -721,9 +756,9 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	prepared := make([][]skill.Part, len(stack))
 	for i, s := range stack {
 		if i > 0 {
-			l.engine.RemoveLayers(permission.ScopeSkill)
+			l.engine.RemoveAgentLayers("", permission.ScopeSkill)
 		}
-		parts, refusal := l.prepareSkill(s, args)
+		parts, refusal := l.prepareSkill(env, s, args)
 		if refusal != "" {
 			return fail("the skill was not run: %s", refusal)
 		}
@@ -732,21 +767,21 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 	texts := make([]string, len(stack))
 	for i, s := range stack {
 		if len(stack) > 1 {
-			l.engine.RemoveLayers(permission.ScopeSkill)
-			if refusal := l.addSkillGrant(s); refusal != "" {
+			l.engine.RemoveAgentLayers("", permission.ScopeSkill)
+			if refusal := l.addSkillGrant("", s); refusal != "" {
 				return fail("the skill was not run: %s", refusal)
 			}
 		}
-		text, refusal := l.runSkillCommands(prepared[i])
+		text, refusal := l.runSkillCommands(env, prepared[i])
 		if refusal != "" {
 			return fail("the skill was not run: %s", refusal)
 		}
 		texts[i] = text
 	}
 	if len(stack) > 1 {
-		l.engine.RemoveLayers(permission.ScopeSkill)
+		l.engine.RemoveAgentLayers("", permission.ScopeSkill)
 		for _, s := range stack {
-			if refusal := l.addSkillGrant(s); refusal != "" {
+			if refusal := l.addSkillGrant("", s); refusal != "" {
 				return fail("the skill was not run: %s", refusal)
 			}
 		}
@@ -794,6 +829,8 @@ func (l *live) typedSkill(word, args, line string) (CommandResult, bool, error) 
 		}
 	}
 	if sk.Fork {
+		// Its grant is the sub-agent's alone (forkSkill).
+		l.dropSkillGrant("", sk)
 		return l.typedFork(sk, texts[0], line, res)
 	}
 	var body, notice string
@@ -947,7 +984,7 @@ func (t *skillTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if refusal != "" {
 		return core.ErrorResult("The skill was not loaded: " + refusal + "."), nil
 	}
-	text, again, refusal := t.l.loadSkill(sk, in.Args)
+	text, again, refusal := t.l.loadSkill(env, sk, in.Args)
 	if refusal != "" {
 		return core.ErrorResult("The skill was not loaded: " + refusal + "."), nil
 	}
@@ -1107,7 +1144,7 @@ func (l *live) forkSkill(ctx context.Context, callID string, sk skill.Skill, tex
 		return core.ErrorResult("The skill was not run: " + err.Error() + "."), false
 	}
 	call := core.ToolCall{ID: callID, Name: agentToolName, Input: input}
-	out, err := (&agentTool{l: l}).Run(ctx, call, l.env())
+	out, err := (&agentTool{l: l, grant: &sk}).Run(ctx, call, l.env())
 	if err != nil {
 		return core.ErrorResult("The skill was not run: " + err.Error() + "."), false
 	}

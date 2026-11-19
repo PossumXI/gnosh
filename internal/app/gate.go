@@ -179,8 +179,8 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 	// machine (left blank, or named "local") as the call for this machine
 	// that it is, and any other as a command on another machine, which
 	// always asks.
-	d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action))
-	d = l.resumeAsStart(ctx, cwd, call, d).WithHook(verdict, hookReason)
+	d := l.reach(req.AgentID, cwd, call, action, l.engine.DecideFor(req.AgentID, cwd, call.Name, call, action))
+	d = l.resumeAsStart(ctx, req.AgentID, cwd, call, d).WithHook(verdict, hookReason)
 	confirm := action.Confirm && cannot == nil
 	if confirm {
 		// Asked every time: a kept approval would be the rule that this
@@ -318,7 +318,8 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 // feature's own keeping, and returns the answer that holds for the call:
 // own, which is the engine's answer for the call as its own tool's, or
 // the engine's answer for the call of gnosh's own tool that reaches the
-// same thing, whichever is the stricter.
+// same thing, whichever is the stricter. who is the id of the agent that
+// made the call ("" for the session's own), as the engine is told it.
 //
 // A feature's tool is known to the engine by its name alone: quiet, or
 // asking every time. What a call of it touches is said by the tool
@@ -338,7 +339,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 //     the tool's own answer stands.)
 //
 // Nothing here makes an answer milder than the engine's own.
-func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
+func (l *live) reach(who, cwd string, call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
 	if own.Behavior == permission.Deny || !l.featureTool(call.Name) {
 		return own
 	}
@@ -369,7 +370,7 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 		}
 		input := json.RawMessage(`{"command":` + string(quoted) + `,"host":` + string(host) + `}`)
 		own = stricter(own, call.Name+" runs a command on another machine for this call, which is judged as that command is.",
-			l.engine.DecideAt(cwd, shelltool.BashName,
+			l.engine.DecideFor(who, cwd, shelltool.BashName,
 				core.ToolCall{ID: call.ID, Name: shelltool.BashName, Input: input},
 				core.Action{Kind: core.ActionExecute, Command: action.Command, Summary: action.Summary}))
 	case core.ActionRead:
@@ -382,7 +383,7 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 			if err != nil {
 				continue
 			}
-			d := l.engine.DecideAt(cwd, read,
+			d := l.engine.DecideFor(who, cwd, read,
 				core.ToolCall{ID: call.ID, Name: read, Input: json.RawMessage(`{"file_path":` + string(quoted) + `}`)},
 				core.Action{Kind: core.ActionRead, Paths: []string{path}, Summary: action.Summary})
 			if d.Stage == permission.StageTool {
@@ -418,7 +419,7 @@ func stricter(own permission.Decision, why string, other permission.Decision) pe
 // one of that kind more to do, as it covers starting one. A call whose
 // sub-agent cannot be found is left as it is; it refuses itself when it
 // runs.
-func (l *live) resumeAsStart(ctx context.Context, cwd string, call core.ToolCall, own permission.Decision) permission.Decision {
+func (l *live) resumeAsStart(ctx context.Context, who, cwd string, call core.ToolCall, own permission.Decision) permission.Decision {
 	if call.Name != sendMessageName || own.Behavior == permission.Deny {
 		return own
 	}
@@ -438,7 +439,7 @@ func (l *live) resumeAsStart(ctx context.Context, cwd string, call core.ToolCall
 	as := core.ToolCall{ID: call.ID, Name: agentToolName, Input: input}
 	act, _ := (&agentTool{l: l}).Describe(as, nil)
 	return stricter(own, sendMessageName+" gives a "+kind+" sub-agent more to do, which is judged as starting one is.",
-		l.engine.DecideAt(cwd, agentToolName, as, act))
+		l.engine.DecideFor(who, cwd, agentToolName, as, act))
 }
 
 // featureTool reports whether a tool is one a feature brought, and not

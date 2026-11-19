@@ -3952,3 +3952,16 @@ or kept with the reason said (27).
     since it was made, and write the copy wherever the link led (the
     deliverables review of 2026-11-19). The file is now opened only if it
     is still no link.
+
+270. **A skill's grant is the agent's that runs the skill.** A forked
+    skill's allowed-tools were put in force for the whole session until the
+    person's next prompt (the skills review of 2026-11-19): the agent that
+    loaded it, and any other agent running then, could run what the skill
+    allowed, and a forked skill run in the background lost them as soon as
+    the person typed again. A layer of the permission engine can now be
+    kept to one agent (Layer.Agent, DecideFor): a skill's grant is for the
+    agent that runs it, a forked skill's for the sub-agent it runs in,
+    from its start to its end. The skill's own commands (!`command`), and
+    those of the skills a kind of sub-agent preloads, are judged as calls
+    of the agent they are for, and run where it works: in its work tree,
+    when it has one (they ran in the session's folder).

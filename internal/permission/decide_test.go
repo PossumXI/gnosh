@@ -732,3 +732,53 @@ func TestKeepOnlyDropsWhatTheFileNoLongerHolds(t *testing.T) {
 		t.Errorf("an approval the file still holds was dropped: %s", d.Behavior)
 	}
 }
+
+// A layer kept to one agent (a skill's grant) is in force for that
+// agent's calls alone, and RemoveAgentLayers ends one agent's without
+// touching another's.
+func TestLayerKeptToOneAgent(t *testing.T) {
+	e := engine(t, ModeDefault, rules{})
+	for _, ly := range []Layer{
+		{Scope: ScopeSkill, Name: "the sub-agent's skill", Agent: "sub-1", Allow: []string{"Bash(touch sub.txt)"}},
+		{Scope: ScopeSkill, Name: "the session's skill", Agent: MainAgent, Allow: []string{"Bash(touch main.txt)"}},
+		{Scope: ScopeSkill, Name: "everyone's", Allow: []string{"Bash(touch all.txt)"}},
+	} {
+		if err := e.AddLayer(ly); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decide := func(agent, cmd string) Behavior {
+		return e.DecideFor(agent, "/proj", "Bash", core.ToolCall{Name: "Bash", Input: input("command", cmd)},
+			core.Action{Kind: core.ActionExecute, Command: cmd}).Behavior
+	}
+	want := func(agent, cmd string, b Behavior) {
+		t.Helper()
+		if got := decide(agent, cmd); got != b {
+			t.Errorf("%q for agent %q: %s, want %s", cmd, agent, got, b)
+		}
+	}
+	want("sub-1", "touch sub.txt", Allow)
+	want("sub-2", "touch sub.txt", Ask)
+	want("", "touch sub.txt", Ask)
+	want("", "touch main.txt", Allow)
+	want("sub-1", "touch main.txt", Ask)
+	want("sub-1", "touch all.txt", Allow)
+	want("", "touch all.txt", Allow)
+	if d := bash(e, "touch sub.txt"); d.Behavior != Ask {
+		t.Errorf("Decide, the session's own agent, under a sub-agent's grant: %s", d.Behavior)
+	}
+	if d := e.DecideAt("/proj", "Bash", core.ToolCall{Name: "Bash", Input: input("command", "touch main.txt")},
+		core.Action{Kind: core.ActionExecute, Command: "touch main.txt"}); d.Behavior != Allow {
+		t.Errorf("DecideAt is the session's own agent's: %s", d.Behavior)
+	}
+
+	// The person's next prompt ends the session's own agent's grants; the
+	// sub-agent's hold until it ends.
+	e.RemoveAgentLayers("", ScopeSkill)
+	want("", "touch main.txt", Ask)
+	want("sub-1", "touch sub.txt", Allow)
+	want("", "touch all.txt", Allow)
+	e.RemoveAgentLayers("sub-1", ScopeSkill)
+	want("sub-1", "touch sub.txt", Ask)
+	want("sub-1", "touch all.txt", Allow)
+}

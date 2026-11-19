@@ -706,3 +706,26 @@ func TestDataFolderLinkedOutIsSaidToBe(t *testing.T) {
 	r := run(t, w, "-p", "hello").wantCode(t, 0)
 	has(t, "stderr", r.err, "The project's data folder "+w.Path(".gnosh")+" is a link to "+outside+", outside the project")
 }
+
+// A forked skill's allowed-tools are the sub-agent's it runs in, and no
+// leave for the agent that loaded it (the skills review of 2026-11-19:
+// they held for every agent of the session until the person's next
+// prompt).
+func TestForkedSkillGrantIsItsSubAgentsAlone(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Skill", Args: `{"skill":"maker","args":"x"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "s1", Name: "Bash", Args: `{"command":"touch by-the-fork.txt"}`}}},
+		apptest.Reply{Text: "FORK-REPORT: made it."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"touch by-the-parent.txt"}`}}},
+		apptest.Reply{Text: "Done."})
+	w.Write(w.ConfigDir()+"/skills/maker/SKILL.md", "---\ndescription: Makes files.\ncontext: fork\nallowed-tools: Bash(touch *)\n---\nMake by-the-fork.txt with touch.\n")
+	run(t, w, "-p", "--allowedTools", "Skill(maker *)", "--", "make the files").wantCode(t, 0)
+	if !w.Exists("by-the-fork.txt") {
+		t.Errorf("the forked skill's sub-agent could not use the skill's grant: %s", toolResult(t, w, 2, "s1"))
+	}
+	if w.Exists("by-the-parent.txt") {
+		t.Errorf("the agent that loaded a forked skill ran a command under the grant of its sub-agent")
+	}
+	has(t, "what the parent was told of its own touch", toolResult(t, w, 4, "c2"), "needs a person's approval")
+	w.Model.Done()
+}

@@ -123,6 +123,10 @@ type agentTool struct {
 	// owner is the sub-agent whose tool this is, or nil in the session the
 	// person is in.
 	owner *subSession
+	// grant, for the sub-agent a forked skill runs in, is that skill: its
+	// allowed-tools and disallowed-tools hold for the sub-agent alone,
+	// from its start to its end.
+	grant *skill.Skill
 }
 
 // agentInput is the tool's arguments. The last four are Claude Code's and
@@ -212,6 +216,12 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	s, err := l.newSub(subCtx, parent, t.owner, def, call.ID, strings.TrimSpace(in.Model), background, "")
 	if err != nil {
 		return core.ErrorResult("No sub-agent was started: " + strings.TrimRight(err.Error(), ".") + "."), nil
+	}
+	if t.grant != nil {
+		if refusal := l.addSkillGrant(s.id, *t.grant); refusal != "" {
+			s.close()
+			return core.ErrorResult("No sub-agent was started: " + strings.TrimRight(refusal, ".") + "."), nil
+		}
 	}
 	if background {
 		return l.startBackground(s, in), nil
@@ -618,9 +628,6 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		return s, err
 	}
 	s.log.onCut = func() { s.instr.Forget() }
-	if s.preloaded, err = l.preloadParts(def, s.id); err != nil {
-		return s, err
-	}
 	if s.dropHooks, err = l.agentHooks(def, s.id); err != nil {
 		return s, err
 	}
@@ -642,6 +649,16 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		}
 		// (So that SendMessage knows it is not to be resumed without it.)
 		_, _ = s.ts.AppendAll(transcript.MetaEntry(metaWorkTree, s.wt.path))
+	}
+	// The skills its kind preloads, their commands run where it starts:
+	// in its work tree when it has one (they ran in the session's folder,
+	// before the tree was made).
+	pre := s.env()
+	if s.treeAt != nil {
+		pre.Cwd = s.start
+	}
+	if s.preloaded, err = l.preloadParts(def, pre); err != nil {
+		return s, err
 	}
 
 	// The features' part in it.
@@ -1188,6 +1205,11 @@ func (s *subSession) close() {
 		l := s.l
 		if s.agent != nil {
 			_ = s.agent.Close()
+		}
+		// The grants of the skills it loaded, or ran as a forked skill
+		// for, end with it.
+		if l.engine != nil {
+			l.engine.RemoveAgentLayers(s.id, permission.ScopeSkill)
 		}
 		l.closeAgentMCP(s)
 		if s.dropHooks != nil {

@@ -137,7 +137,7 @@ type request struct {
 func (e *Engine) Decide(tool string, call core.ToolCall, action core.Action) Decision {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.decideLocked(tool, call, action)
+	return e.forAgent("").decideLocked(tool, call, action)
 }
 
 // DecideAs judges a call as Decide does, but as if the session were in
@@ -152,7 +152,7 @@ func (e *Engine) DecideAs(mode Mode, tool string, call core.ToolCall, action cor
 		return Decision{Behavior: Deny, Stage: StageMode, Mode: e.mode,
 			Reason: "The call was to be judged in the mode \"" + string(mode) + "\", which is not one this session may use."}
 	}
-	as := *e
+	as := *e.forAgent("")
 	as.mode = mode
 	return as.decideLocked(tool, call, action)
 }
@@ -165,14 +165,24 @@ func (e *Engine) DecideAs(mode Mode, tool string, call core.ToolCall, action cor
 // may have told it something else, so that "rm -rf *" in the project would
 // be judged as the same words in some folder under it. Here the directory
 // and the question are one step, and the engine's own directory is left as
-// it is. A dir that is not an absolute path changes nothing.
+// it is. A dir that is not an absolute path changes nothing. The call is
+// the session's own agent's: DecideFor judges a sub-agent's.
 func (e *Engine) DecideAt(dir, tool string, call core.ToolCall, action core.Action) Decision {
+	return e.DecideFor("", dir, tool, call, action)
+}
+
+// DecideFor judges a call of one agent as DecideAt does: agent is the id
+// of the sub-agent that made it, or "" for the session's own agent. The
+// layers kept to another agent (Layer.Agent: a skill another agent
+// loaded) play no part.
+func (e *Engine) DecideFor(agent, dir, tool string, call core.ToolCall, action core.Action) Decision {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	v := e.forAgent(agent)
 	if !strings.HasPrefix(dir, "/") {
-		return e.decideLocked(tool, call, action)
+		return v.decideLocked(tool, call, action)
 	}
-	at := *e
+	at := *v
 	at.cur = path.Clean(dir)
 	return at.decideLocked(tool, call, action)
 }
