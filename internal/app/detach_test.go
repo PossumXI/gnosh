@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -444,4 +445,44 @@ func TestRunLogReadKept(t *testing.T) {
 	if after := readRunLogKept(log, id, stat()); after.last != "all 42 tests pass" {
 		t.Errorf("after the log grew, its last line was read as %q", after.last)
 	}
+}
+
+// However a run's output is cut into writes, and whichever of its two
+// streams each goes to, its log holds it as if written at once: each line
+// that begins as gnosh's own lines do, and only those, with a space before
+// it.
+func FuzzRunOutput(f *testing.F) {
+	f.Add("working\ngnosh: its folder is /home/u\ngnu\ngnosh!\n", []byte{3, 1, 7, 2})
+	f.Add("gnosh: \ngnosh: gnosh: x\n\ngnosh", []byte{1})
+	f.Add("gno", []byte{0})
+	f.Fuzz(func(t *testing.T, text string, cuts []byte) {
+		var want strings.Builder
+		for i, line := range strings.Split(text, "\n") {
+			if i > 0 {
+				want.WriteByte('\n')
+			}
+			if strings.HasPrefix(line, runMark) {
+				want.WriteByte(' ')
+			}
+			want.WriteString(line)
+		}
+		var got strings.Builder
+		out := &runOutput{w: &got}
+		ws := []io.Writer{out.to(&got), out.to(&got)}
+		rest := text
+		for i := 0; rest != ""; i++ {
+			n := len(rest)
+			if len(cuts) > 0 {
+				n = min(n, int(cuts[i%len(cuts)])%9+1)
+			}
+			if k, err := ws[i%2].Write([]byte(rest[:n])); k != n || err != nil {
+				t.Fatalf("Write = %d, %v", k, err)
+			}
+			rest = rest[n:]
+		}
+		out.flush()
+		if got.String() != want.String() {
+			t.Errorf("%q cut by %v went in as %q, want %q", text, cuts, got.String(), want.String())
+		}
+	})
 }
