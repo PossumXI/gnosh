@@ -224,9 +224,29 @@ func (t *stopAgentTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Ac
 }
 
 func (t *stopAgentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+	sub := env != nil && env.ParentSessionID != ""
 	if b := t.agentOf(call); b != nil {
+		if sub {
+			// A sub-agent starts none in the background, so this one is
+			// not its to stop.
+			return core.ErrorResult(fmt.Sprintf("%s is a sub-agent the session runs in the background, and a sub-agent stops only what it started itself.", b.id)), nil
+		}
 		t.l.stopBackgroundAgent(b)
 		return core.TextResult(fmt.Sprintf("The background sub-agent %s is stopped: %s. Its session file is %s.", b.id, b.desc, b.output)), nil
+	}
+	if sub && t.l.shell != nil {
+		// A sub-agent stops its own background commands, and no other's.
+		var in struct {
+			TaskID  string `json:"task_id"`
+			ShellID string `json:"shell_id"`
+		}
+		_ = json.Unmarshal(call.Input, &in)
+		id := firstOf(in.TaskID, in.ShellID)
+		for _, task := range t.l.shell.Tasks() {
+			if task.ID == id && task.Owner != env.SessionID {
+				return core.ErrorResult(fmt.Sprintf("The background command %s was not started by this sub-agent, and a sub-agent stops only what it started itself.", id)), nil
+			}
+		}
 	}
 	return t.shell.Run(ctx, call, env)
 }

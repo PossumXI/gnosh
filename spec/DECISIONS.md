@@ -2708,3 +2708,12 @@ or kept with the reason said (27).
     passed over, so a limit can be moved and not taken away. gnosh had
     both limits fixed, and the second counted only sub-agents in the
     background; it counts every one that runs now, as Claude Code's does.
+
+160. **A sub-agent's TaskStop stops only what it started.** TaskStop in a
+    sub-agent could stop any background command of the session and any
+    sub-agent running in the background (the sub-agents review's note):
+    one that read a hostile page could stop the person's build or server.
+    A background command now knows the sub-agent that started it (157), so
+    a sub-agent's TaskStop refuses a command it did not start, and refuses
+    every background sub-agent (a sub-agent starts none). The session's
+    own TaskStop is as it was.

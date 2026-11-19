@@ -334,3 +334,18 @@ func TestSubAgentLimitsFromTheEnvironment(t *testing.T) {
 		t.Errorf("with nesting off the sub-agent has the tools %q", names)
 	}
 }
+
+// A sub-agent's TaskStop stops only what the sub-agent started: a
+// background command of the session's own is not its to stop.
+func TestSubAgentStopsOnlyItsOwn(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 2","description":"the build","run_in_background":true}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Agent", Args: `{"description":"stop it","prompt":"Stop bg1.","subagent_type":"general-purpose"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "TaskStop", Args: `{"task_id":"bg1"}`}}},
+		apptest.Reply{Text: "It was not mine to stop."},
+		apptest.Reply{Text: "Done."},
+		apptest.Reply{Text: "The build ended."})
+	run(t, w, "-y", "-p", "build and stop").wantCode(t, 0)
+	// (The sub-agent's request holds its own one call.)
+	has(t, "what the sub-agent read", toolResult(t, w, 3, "c1"), "not started by this sub-agent")
+}
