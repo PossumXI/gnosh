@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/skill"
@@ -35,6 +35,9 @@ const (
 	injectTime    = 2 * time.Minute
 	injectMost    = 30000
 	injectPreview = 2000
+	// injectSpoolMost is the most of what a command prints that is kept:
+	// past it the command is stopped.
+	injectSpoolMost = 32 << 20
 )
 
 // injectCommands runs the commands a skill's text asks for and puts what
@@ -152,7 +155,11 @@ func (l *live) injectOne(command string, run bool) (string, error) {
 }
 
 // runInjected runs one command and returns what it printed, stderr in
-// with stdout, and its exit code.
+// with stdout, and its exit code. What it prints is kept in a file as it
+// comes, up to injectSpoolMost, and only its start in memory; the command
+// runs in a process group of its own, which a timeout stops whole. (It
+// was all held in memory for up to two minutes, and a timeout stopped the
+// shell alone: the skills review of 2026-11-19.)
 func (l *live) runInjected(command, dir string) (string, int, error) {
 	ctx, cancel := context.WithTimeout(l.ctx, injectTime)
 	defer cancel()
@@ -169,29 +176,83 @@ func (l *live) runInjected(command, dir string) (string, int, error) {
 	// review of 2026-11-19).
 	cmd.Env = shelltool.CommandEnv(l.p.o.Environ, dir, l.cfg.CommandEnv())
 	cmd.WaitDelay = 2 * time.Second
-	var buf bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &buf, &buf
+	groupOf(cmd)
+	out := &injectOut{stop: cancel}
+	path := filepath.Join(l.spoolDir(), "skill-command-"+newCallID()+".txt")
+	if os.MkdirAll(filepath.Dir(path), 0o700) == nil {
+		out.f, _ = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	}
+	kept := false
+	defer func() {
+		if out.f != nil {
+			out.f.Close()
+			if !kept {
+				os.Remove(path)
+			}
+		}
+	}()
+	cmd.Stdout, cmd.Stderr = out, out
 	err := cmd.Run()
+	head := strings.ToValidUTF8(string(out.head[:min(len(out.head), injectMost)]), "")
 	code := 0
 	var exit *exec.ExitError
 	switch {
+	case out.over:
+		return head, -1, fmt.Errorf("it printed more than %d MiB and was stopped", injectSpoolMost>>20)
 	case ctx.Err() != nil:
-		return buf.String(), -1, fmt.Errorf("it did not finish within %s and was stopped", injectTime)
+		return head, -1, fmt.Errorf("it did not finish within %s and was stopped", injectTime)
 	case errors.As(err, &exit):
 		code, err = exit.ExitCode(), nil
 	}
 	if err != nil {
-		return buf.String(), -1, err
+		return head, -1, err
 	}
-	out := strings.TrimRight(buf.String(), "\n")
-	if len(out) > injectMost {
-		// All of it goes to a file, and its start stands here.
-		path := filepath.Join(l.spoolDir(), "skill-command-"+newCallID()+".txt")
-		if os.MkdirAll(filepath.Dir(path), 0o700) == nil && os.WriteFile(path, []byte(out), 0o600) == nil {
-			out = fmt.Sprintf("[The command printed %d bytes; all of it is in %s. It begins:]\n%s", len(out), path, strings.ToValidUTF8(out[:injectPreview], ""))
-		} else {
-			out = strings.ToValidUTF8(out[:injectMost], "") + "\n[The rest of what the command printed was cut.]"
+	if out.n <= int64(len(out.head)) {
+		if text := strings.TrimRight(string(out.head), "\n"); len(text) <= injectMost {
+			return text, code, nil
 		}
 	}
-	return out, code, nil
+	// All of it is in the file, and its start stands here.
+	if out.f != nil && out.f.Close() == nil {
+		out.f, kept = nil, true
+		return fmt.Sprintf("[The command printed %d bytes; all of it is in %s. It begins:]\n%s", out.n, path, strings.ToValidUTF8(string(out.head[:injectPreview]), "")), code, nil
+	}
+	return head + "\n[The rest of what the command printed was cut.]", code, nil
+}
+
+// injectOut keeps what a skill's command prints: its start in memory, and
+// all of it in a file (f, when one could be made), up to injectSpoolMost
+// bytes, past which stop ends the command.
+type injectOut struct {
+	mu   sync.Mutex
+	head []byte // the first injectMost+1 bytes
+	f    *os.File
+	n    int64
+	over bool
+	stop context.CancelFunc
+}
+
+func (o *injectOut) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	given := len(p)
+	if o.over {
+		return given, nil
+	}
+	if room := injectSpoolMost - o.n; int64(len(p)) > room {
+		p, o.over = p[:room], true
+		o.stop()
+	}
+	o.n += int64(len(p))
+	if keep := injectMost + 1 - len(o.head); keep > 0 {
+		o.head = append(o.head, p[:min(keep, len(p))]...)
+	}
+	if o.f != nil {
+		if _, err := o.f.Write(p); err != nil {
+			o.f.Close()
+			os.Remove(o.f.Name())
+			o.f = nil
+		}
+	}
+	return given, nil
 }

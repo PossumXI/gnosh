@@ -3739,3 +3739,12 @@ or kept with the reason said (27).
     reader now looks at nothing inside /net, /Network or /afs but the
     project, the person's home and their own files, and the folders on the
     way to them, and says why it did not.
+
+247. **A skill's command keeps what it prints in a file as it comes, and
+    a timeout stops all it started.** What one printed was held whole in
+    memory for up to two minutes (a "yes" grew without end), and a timeout
+    stopped the shell alone, leaving what it started running (the skills
+    review of 2026-11-19). The output now goes to a file as it comes, its
+    start kept in memory; past 32 MiB the command is stopped and the skill
+    with it. The command runs in a process group of its own, and a
+    timeout or that stop ends the whole group.
