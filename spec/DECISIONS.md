@@ -2627,3 +2627,14 @@ or kept with the reason said (27).
     (one run in a full suite saw a turn end with a request still out;
     thirty more runs did not, and the seed alone does not bring it back:
     a race of the loop's, left open).
+
+155. **A turn stopped while a fallback is made ready ends with its request
+    closed.** The agent's stress test saw a turn end with a request still
+    out (154). The path: the model fails, a fallback is being made ready
+    (fallbackModel, 140), and the person stops the turn; the loop gave
+    back no reply, as after a retry's wait, but no retry had closed that
+    request, so no reply event came for it, and an interface waiting on
+    one waited for good. The failed try is now closed as stopped, with an
+    empty reply (what had arrived of it is still not kept), for a turn's
+    request and a summary's alike. TestStopWhileAFallbackIsMade checks the
+    order of the events and catches it every time.

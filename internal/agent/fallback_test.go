@@ -368,4 +368,8 @@ func TestStopWhileAFallbackIsMade(t *testing.T) {
 	if res := r.run("hello"); res.Reason != EndStopped {
 		t.Fatalf("result = %+v", res)
 	}
+	// The failed try is closed as stopped: no request is left out when
+	// the turn ends (the stress test once saw one).
+	r.idle()
+	checkEvents(t, r.rec.all())
 }

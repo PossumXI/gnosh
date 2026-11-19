@@ -311,8 +311,10 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		if ctx.Err() != nil {
 			// Stopped while a fallback was being made ready. What had
 			// arrived of the failed try is not handed back, as after a
-			// wait (the person saw it cut off).
-			return nil, errStopped
+			// wait (the person saw it cut off); the try is closed as
+			// stopped all the same, with an empty reply, since no retry
+			// closed it: a turn must not end with a request still out.
+			return &reply{model: m}, errStopped
 		}
 		if !pe.Retryable() {
 			return rep, &failure{
@@ -330,7 +332,9 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 				return rep, errFellBack
 			}
 			if ctx.Err() != nil {
-				return nil, errStopped
+				// (As above: the try is closed, and what arrived is not
+				// kept.)
+				return &reply{model: m}, errStopped
 			}
 			msg := fmt.Sprintf("%s did not come back within %s: it %s.", m.label(), span(waited), whatHappened(pe))
 			if step.notRunning {
