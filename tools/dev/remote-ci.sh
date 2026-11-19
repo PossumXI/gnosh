@@ -72,5 +72,31 @@ else
 	run="$run && go test -count=1 -timeout 30m $flags \$(go list ./... | grep -v '/internal/gnovm\$')"
 fi
 
+# The run goes on by itself on the devbox, writing to a log there, and this
+# side follows the log: a laptop's network drop, which ended the run with
+# the connection (2026-11-19, a CI at 2 of 42 packages), now only pauses
+# the following, which connects again and goes on where it was. The last
+# line of the log is the run's exit status.
+log="$dir/ci.log"
 # shellcheck disable=SC2086,SC2029
-$SSH "$HOST" "$run"
+printf '%s\n' "$run" | $SSH "$HOST" "cat > $dir/ci.sh && cd $dir && : > ci.log && (setsid sh -c 'sh ./ci.sh > ci.log 2>&1; echo \"remote-ci-exit=\$?\" >> ci.log' < /dev/null > /dev/null 2>&1 &)"
+part=$(mktemp)
+trap 'rm -f "$part"' EXIT
+off=0
+while :; do
+	# shellcheck disable=SC2086,SC2029
+	if $SSH "$HOST" "tail -c +$((off + 1)) $log" > "$part" 2>/dev/null; then
+		n=$(wc -c < "$part")
+		if [ "$n" -gt 0 ]; then
+			grep -v '^remote-ci-exit=' "$part" || true
+			off=$((off + n))
+		fi
+		if code=$(sed -n 's/^remote-ci-exit=\([0-9]*\)$/\1/p' "$part") && [ -n "$code" ]; then
+			exit "$code"
+		fi
+		sleep 5
+	else
+		echo "remote-ci: lost the devbox for a moment; the run goes on there, and is followed again" >&2
+		sleep 20
+	fi
+done
