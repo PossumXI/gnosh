@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -741,4 +742,58 @@ func TestStopBetweenRoundsKeepsTheQueue(t *testing.T) {
 		t.Errorf("the next turn was sent %q", text)
 	}
 	r.checkLog()
+}
+
+// The moments after a turn ended (TurnEnded, TurnFailed: the Stop and
+// StopFailure hooks) stop at Esc and at End: one that hung held the next
+// prompt, Esc did nothing, and End waited for it (the agent loop review of
+// 2026-11-19).
+func TestHungTurnEndMomentStops(t *testing.T) {
+	hangOnce := func(in chan<- struct{}) func(ctx context.Context, _ TurnResult) {
+		var calls atomic.Int32
+		return func(ctx context.Context, _ TurnResult) {
+			if calls.Add(1) == 1 {
+				in <- struct{}{}
+				<-ctx.Done()
+			}
+		}
+	}
+	inMoment := make(chan struct{}, 1)
+	r := newRig(t, func(o *Options) { o.Moments.TurnEnded = hangOnce(inMoment) })
+	r.model.push(say("one"), say("two"))
+	first := make(chan TurnResult, 1)
+	go func() { first <- r.run("first") }()
+	<-inMoment
+	second := make(chan TurnResult, 1)
+	go func() { second <- r.run("second") }()
+	waitQueue(t, r, "second")
+	r.a.Interrupt()
+	for _, c := range []struct {
+		name string
+		ch   chan TurnResult
+		want string
+	}{{"first", first, "one"}, {"second", second, "two"}} {
+		select {
+		case res := <-c.ch:
+			if res.Reason != EndCompleted || res.Text != c.want {
+				t.Errorf("%s = %+v", c.name, res)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("Esc did not stop the hung moment: %s never ended", c.name)
+		}
+	}
+
+	// End does not wait for it either.
+	inMoment = make(chan struct{}, 1)
+	r = newRig(t, func(o *Options) { o.Moments.TurnEnded = hangOnce(inMoment) })
+	r.model.push(say("one"))
+	go func() { r.run("first") }()
+	<-inMoment
+	ended := make(chan struct{})
+	go func() { r.a.End("other"); close(ended) }()
+	select {
+	case <-ended:
+	case <-time.After(10 * time.Second):
+		t.Fatal("End waited for the hung moment")
+	}
 }

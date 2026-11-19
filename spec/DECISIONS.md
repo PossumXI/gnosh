@@ -3371,3 +3371,11 @@ or kept with the reason said (27).
     - /loop goes off when its prompt is refused (a session start that said
       stop): it sent the next one at once, refused the same way, until
       Esc.
+
+210. **Esc and End stop the moments that run after a turn ended.** The
+    turn-failed and turn-ended moments (StopFailure and Stop hooks) ran
+    under the session's own context, which only End cancelled, after it
+    had waited for them: a hook that hung there (ten minutes by default)
+    held the next prompt, Esc did nothing, and /exit waited (the agent
+    loop review of 2026-11-19). They run under a context of their own now,
+    which Interrupt and End cancel first.

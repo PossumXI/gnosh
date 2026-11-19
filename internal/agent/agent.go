@@ -233,14 +233,17 @@ type Agent struct {
 	turnNow    atomic.Value // the running turn's id, a string
 	live       atomic.Value // the model that last sent something, as modelKey names it
 
-	mu         sync.Mutex
-	closing    bool
-	busy       bool
-	idle       chan struct{} // closed when the session next goes idle
-	intake     []*submission // sent, not yet admitted
-	intaking   bool
-	admitting  *submission
-	admitStop  context.CancelFunc
+	mu        sync.Mutex
+	closing   bool
+	busy      bool
+	idle      chan struct{} // closed when the session next goes idle
+	intake    []*submission // sent, not yet admitted
+	intaking  bool
+	admitting *submission
+	admitStop context.CancelFunc
+	// endStop cancels the moments that run after a turn ended (TurnFailed,
+	// TurnEnded) while they run: Esc and End stop them.
+	endStop    context.CancelFunc
 	queue      []*submission // admitted, waiting for their turn
 	notes      []Note        // told to the model with the next request
 	queueShown bool          // the consumer was last told of a queue that was not empty
@@ -1377,6 +1380,9 @@ func (a *Agent) Interrupt() {
 	if a.cur != nil {
 		a.cur.cancel()
 	}
+	if a.endStop != nil {
+		a.endStop()
+	}
 	loopOn := a.loop.on
 	turns := a.loop.turns
 	a.loop = loopState{}
@@ -1440,6 +1446,9 @@ func (a *Agent) End(reason string) error {
 		}
 		if a.admitStop != nil {
 			a.admitStop()
+		}
+		if a.endStop != nil {
+			a.endStop()
 		}
 		a.mu.Unlock()
 		a.kick()

@@ -850,18 +850,31 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 
 	a.emit(&TurnEndEvent{Result: res})
 	t.ended = true
+	// The moments after a turn ended run under a context of their own,
+	// which Esc and End cancel: a hook that hung there (a StopFailure
+	// webhook, ten minutes by default) held the next prompt, Esc did
+	// nothing, and /exit waited for it (the agent loop review of
+	// 2026-11-19).
+	mctx, mstop := context.WithCancel(a.root)
+	a.mu.Lock()
+	a.endStop = mstop
+	a.mu.Unlock()
 	if f := a.opts.Moments.TurnFailed; f != nil && res.Reason == EndFailed {
-		_, _, _ = await(a.root, a, "the turn-failed moment", func(ctx context.Context) (struct{}, error) {
+		_, _, _ = await(mctx, a, "the turn-failed moment", func(ctx context.Context) (struct{}, error) {
 			f(ctx, res)
 			return struct{}{}, nil
 		})
 	}
 	if f := a.opts.Moments.TurnEnded; f != nil {
-		_, _, _ = await(a.root, a, "the turn-ended moment", func(ctx context.Context) (struct{}, error) {
+		_, _, _ = await(mctx, a, "the turn-ended moment", func(ctx context.Context) (struct{}, error) {
 			f(ctx, res)
 			return struct{}{}, nil
 		})
 	}
+	a.mu.Lock()
+	a.endStop = nil
+	a.mu.Unlock()
+	mstop()
 	a.mu.Lock()
 	subs := slices.Clone(t.subs)
 	a.mu.Unlock()
