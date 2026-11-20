@@ -59,6 +59,11 @@ func (st *startup) sandboxOf(cfg *config.Config) *sandboxState {
 			s.why = "its temporary folder could not be made (" + err.Error() + ")"
 			return
 		}
+		// gnosh's own folder in the project made now, so that it is there
+		// to mount read-only: made by a sandboxed command, kinds of agent
+		// in it would run their hooks outside, and gnosh makes it itself,
+		// so it is not one taken away after a command (sandboxMade).
+		ensureDataDir(cfg)
 		s.on, s.temp = true, temp
 	})
 	return s
@@ -418,4 +423,20 @@ func (l *live) startSandboxProxy(temp string) error {
 	l.sandboxProxy = p
 	l.sandboxNet.proxy, l.sandboxNet.relay = p.Addr().String(), relay
 	return nil
+}
+
+// ensureDataDir makes the project's data folder (.gnosh) when it is not
+// there, as gnosh makes it to save there, with what is in it kept out of
+// git; never through a link that leads out of the project.
+func ensureDataDir(cfg *config.Config) {
+	dir := cfg.Paths.DataDir
+	if dir == "" || dataDirLeadsOut(cfg) != "" {
+		return
+	}
+	if _, err := os.Lstat(dir); err == nil {
+		return
+	}
+	if os.MkdirAll(dir, 0o700) == nil {
+		_ = os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*\n"), 0o600)
+	}
 }

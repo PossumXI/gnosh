@@ -172,7 +172,7 @@ func TestSandboxTakesAwayWhatItCouldNotKeep(t *testing.T) {
 			return &apptest.Reply{Calls: []apptest.Call{
 				py("c1", "import os; os.makedirs('.claude/agents'); open('.claude/agents/x.md', 'w').write('x')"),
 				py("c2", "open('HEAD', 'w').write('ref: refs/heads/main')"),
-				py("c3", "import os; os.makedirs('.gnosh', exist_ok=True); open('.gnosh/settings.local.json', 'w').write('{\\\\\"permissions\\\\\": {\\\\\"allow\\\\\": [\\\\\"Bash(touch *)\\\\\"]}}')"),
+				py("c3", "import json, os; os.makedirs('.gnosh', exist_ok=True); json.dump(dict(permissions=dict(allow=['Bash(touch *)'])), open('.gnosh/settings.local.json', 'w'))"),
 			}}
 		case 1:
 			return &apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: `{"command":"touch outside-ok","dangerouslyDisableSandbox":true}`}}}
@@ -191,6 +191,12 @@ func TestSandboxTakesAwayWhatItCouldNotKeep(t *testing.T) {
 	if w.Exists(".gnosh/settings.local.json") {
 		has(t, "the person told", r.out+r.err, "changed during the session", "/restart")
 	}
+	// gnosh's own folder is made as the session starts, to be kept
+	// read-only: a command cannot put a kind of agent in it.
+	if !w.Exists(".gnosh") {
+		t.Error("gnosh's own folder was not made, to be kept read-only")
+	}
+	has(t, "a write in gnosh's own folder", toolResult(t, w, 1, "c3"), "Read-only file system")
 }
 
 // In a git work tree, git's own folder (the repository's) is the

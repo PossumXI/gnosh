@@ -5291,3 +5291,11 @@ or kept with the reason said (27).
     full or with a last /**. Left: a nested repository's or a submodule's
     working copy's own .git, and the person's git settings outside the
     session's folders, which are read-only to a sandboxed command anyway.
+
+359. **gnosh's own folder made for the sandbox.** With the sandbox on,
+    the project's data folder (.gnosh) is made as the session starts, as
+    gnosh makes it to save there (its .gitignore keeping it out of git),
+    so that it is there to mount read-only: made by a sandboxed command,
+    a kind of agent in it would run its hooks outside, and since gnosh
+    makes the folder itself, it is not among what is taken away after a
+    command (358).
