@@ -55,6 +55,14 @@ type Options struct {
 	// and so is one longer than 1568 pixels on a side (shrink.go).
 	ReadMaxImageBytes int64
 
+	// ReadRoom, when not nil, says how many bytes of text a Read with
+	// allow_large may return now: about what the context of the agent
+	// that calls has room for, which the app works out. Read then reads
+	// the whole file, or as much of it as that, in one call, as Claude
+	// Code's allow_large does. Nil, or no more than ReadMaxBytes, leaves
+	// allow_large without effect.
+	ReadRoom func(ctx context.Context) int
+
 	// PDFPages and PDFText read a PDF for Read (pdf.go): how many pages it
 	// has, and the text of pages first to last, each page ended by a form
 	// feed. Nil means poppler's pdfinfo and pdftotext, found on the PATH

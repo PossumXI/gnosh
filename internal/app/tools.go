@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -46,7 +48,7 @@ func (t looker) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, er
 // is not in the list at all.
 func (l *live) buildTools() error {
 	limits := l.cfg.Limits
-	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied}
+	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied, ReadRoom: l.readRoom}
 	if limits.FileReadMaxTokens.V > 0 {
 		// The limit is given in tokens, and the file tools count bytes: a
 		// token is about four of them.
@@ -462,4 +464,19 @@ func misreadGno(command string, programs []string) string {
 		}
 	}
 	return ""
+}
+
+// readRoom is how many bytes of text a Read with allow_large may return:
+// about what the calling agent's context has room for before room has to
+// be made, at three bytes a token, as Claude Code sizes allow_large to the
+// room left in the context.
+func (l *live) readRoom(ctx context.Context) int {
+	a := agent.FromContext(ctx)
+	if a == nil {
+		a = l.agent
+	}
+	if a == nil {
+		return 0
+	}
+	return a.Context().Room() * 3
 }

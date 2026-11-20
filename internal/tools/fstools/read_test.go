@@ -523,11 +523,11 @@ func TestReadArguments(t *testing.T) {
 		}
 		home.fails(home.read, in{"file_path": "~other/a.txt"}, "not expanded")
 	})
-	t.Run("allow_large is accepted and has no effect", func(t *testing.T) {
+	t.Run("allow_large without the room to read more", func(t *testing.T) {
 		small := newFixture(t, Options{ReadDefaultLines: 2})
 		big := small.file("b.txt", manyLines(5))
 		text := small.ok(small.read, in{"file_path": big, "allow_large": true})
-		mustContain(t, text, "Showing lines 1-2 of 5.", "allow_large is not supported")
+		mustContain(t, text, "Showing lines 1-2 of 5.", "allow_large finds no more room than that here")
 	})
 	t.Run("no arguments at all", func(t *testing.T) {
 		for _, raw := range []string{"", "{}", "null", " "} {
@@ -613,4 +613,31 @@ func TestReadNamesWithOddCharacters(t *testing.T) {
 			t.Errorf("%q: text = %q", name, got)
 		}
 	}
+}
+
+// allow_large reads the whole file in one call, as far as the context has
+// room for (Options.ReadRoom), as Claude Code's does; without the room, or
+// without the argument, the usual limits hold.
+func TestReadAllowLarge(t *testing.T) {
+	room := 50_000
+	f := newFixture(t, Options{ReadMaxBytes: 1000, ReadRoom: func(context.Context) int { return room }})
+	p := f.file("big.txt", manyLines(1500))
+	got := f.ok(f.read, in{"file_path": p})
+	mustContain(t, got, "This call stopped at the 1000 bytes one call may show")
+	got = f.ok(f.read, in{"file_path": p, "allow_large": true})
+	mustContain(t, got, "1500\tline 1500\n")
+	if strings.Contains(got, "To read on") {
+		t.Errorf("a whole read with allow_large says to read on: %s", got[len(got)-200:])
+	}
+	// A limit given still holds.
+	got = f.ok(f.read, in{"file_path": p, "allow_large": true, "limit": 10})
+	mustContain(t, got, "10\tline 10\n", "Showing lines 1-10")
+	// Less room than the file: as much as there is room for.
+	room = 5000
+	got = f.ok(f.read, in{"file_path": p, "allow_large": true})
+	mustContain(t, got, "the context has room for now, with allow_large", "To read on")
+	// No room given: the usual limits, and it says so.
+	g := newFixture(t, Options{ReadMaxBytes: 1000})
+	q := g.file("big.txt", manyLines(1500))
+	mustContain(t, g.ok(g.read, in{"file_path": q, "allow_large": true}), "allow_large finds no more room than that here")
 }

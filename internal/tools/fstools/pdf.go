@@ -31,6 +31,8 @@ const (
 	pdfToolWait = time.Minute
 	// pdfToolMost is the most a poppler tool may print.
 	pdfToolMost = 16 << 20
+	// readLargeMost is the most text a Read with allow_large returns.
+	readLargeMost = 8 << 20
 )
 
 // errNoPoppler is the error of a poppler tool that is not installed.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +28,7 @@ func (t *readTool) props() []prop {
 		{name: "offset", kind: "integer", desc: "Line number to start at; the first line is 1. Leave out to start at the top."},
 		{name: "limit", kind: "integer", desc: fmt.Sprintf("How many lines to read. Leave out for the first %d.", t.opts.ReadDefaultLines)},
 		{name: "pages", kind: "string", desc: fmt.Sprintf("For a PDF: the pages to read, such as \"3\" or \"1-5\", at most %d a call. Needed for a PDF of more than %d pages.", pdfCallMost, pdfWholeMost)},
+		{name: "allow_large", kind: "boolean", desc: "Read the whole file, or a long part of it, in one call, past the usual limits, as far as the context has room for. Only when all of it is needed."},
 	}
 }
 
@@ -59,15 +61,15 @@ type readArgs struct {
 	ranged bool
 	// pages is the PDF page range (pdf.go).
 	pages string
-	// allowLarge is the request to read past the usual limits, likewise.
-	allowLarge bool
+	// allowLarge is the request to read past the usual limits, as far as
+	// the context has room for (Options.ReadRoom); limitGiven says the
+	// call set limit.
+	allowLarge, limitGiven bool
 }
 
 func (t *readTool) parse(call core.ToolCall) (readArgs, *failure) {
 	var r readArgs
-	// allow_large is a Claude Code argument this Read does not offer but
-	// must not choke on.
-	names := append(propNames(t.props()), "allow_large")
+	names := propNames(t.props())
 	a, f := parseArgs(t.opts.ReadName, call.Input, names...)
 	if f != nil {
 		return r, f
@@ -85,7 +87,8 @@ func (t *readTool) parse(call core.ToolCall) (readArgs, *failure) {
 	}
 	r.offset = max(offset, 1)
 	r.limit = limit
-	if !limitGiven || limit == 0 {
+	r.limitGiven = limitGiven && limit > 0
+	if !r.limitGiven {
 		r.limit = t.opts.ReadDefaultLines
 	}
 	r.ranged = (offsetGiven && offset > 1) || (limitGiven && limit > 0)
@@ -186,10 +189,21 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		return refused(failf("%s looks like a binary file (%s) and is not shown as text. %s", loc.abs, byteSize(info.Size()), hint))
 	}
 
+	// allow_large: the whole file, or as much as the context has room for,
+	// past the usual limits.
+	maxBytes, large := o.ReadMaxBytes, false
+	if args.allowLarge && o.ReadRoom != nil {
+		if room := min(o.ReadRoom(ctx), readLargeMost); room > maxBytes {
+			maxBytes, large = room, true
+			if !args.limitGiven {
+				args.limit = math.MaxInt32
+			}
+		}
+	}
 	tr := &textRead{
 		first:    args.offset,
 		limit:    args.limit,
-		maxBytes: o.ReadMaxBytes,
+		maxBytes: maxBytes,
 		maxChars: o.ReadMaxLineChars,
 		sum:      sha256.New(),
 	}
@@ -271,12 +285,15 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		} else {
 			note += fmt.Sprintf("; the file goes on (it is %s, and its lines were not all counted).", byteSize(info.Size()))
 		}
-		if tr.stoppedByBytes {
+		switch {
+		case tr.stoppedByBytes && large:
+			note += fmt.Sprintf(" This call stopped at the %s the context has room for now, with allow_large.", byteSize(int64(maxBytes)))
+		case tr.stoppedByBytes:
 			note += fmt.Sprintf(" This call stopped at the %d bytes one call may show.", o.ReadMaxBytes)
 		}
 		note += fmt.Sprintf(" To read on, call %s again with offset=%d.", o.ReadName, tr.lastShown+1)
-		if args.allowLarge {
-			note += " (allow_large is not supported here.)"
+		if args.allowLarge && !large {
+			note += " (allow_large finds no more room than that here.)"
 		}
 		notes = append(notes, note)
 	case tr.firstShown > 1:

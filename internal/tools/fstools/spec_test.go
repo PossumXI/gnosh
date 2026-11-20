@@ -14,7 +14,7 @@ func TestNewReturnsTheSixTools(t *testing.T) {
 	tools := New(Options{})
 	wantNames := []string{"Read", "Write", "Edit", "Glob", "Grep", "NotebookEdit"}
 	wantArgs := map[string][]string{
-		"Read":         {"file_path", "offset", "limit", "pages"},
+		"Read":         {"file_path", "offset", "limit", "pages", "allow_large"},
 		"Write":        {"file_path", "content"},
 		"Edit":         {"file_path", "old_string", "new_string", "replace_all"},
 		"Glob":         {"pattern", "path"},

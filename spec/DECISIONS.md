@@ -4738,3 +4738,14 @@ or kept with the reason said (27).
     carries both sizes. WebP, which Go does not decode, goes as it is, or
     is refused past the limit; a picture that cannot be decoded but fits
     goes as it is, as before. Notebook pictures are not shrunk.
+
+329. **Read's allow_large reads past the usual limits.** Read took Claude
+    Code's allow_large and did nothing with it but say so. Claude Code's
+    reads the whole file, or a long range, in one call, sized against the
+    room left in the context. gnosh's Read now offers allow_large in its
+    schema; with it, the most one call shows is what the calling agent's
+    context has room for before room has to be made (ContextStatus.Room,
+    at three bytes a token: app readRoom, Options.ReadRoom), at most
+    8 MiB, and never less than the usual 100,000 bytes, and the default
+    count of lines does not apply unless limit is given. A file longer
+    than that room is cut where it runs out, and the note says so.
