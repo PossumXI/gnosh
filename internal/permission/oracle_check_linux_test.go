@@ -467,7 +467,6 @@ type lineCheck struct {
 	line  string
 	view  *bashView // the engine's reading
 	plain *Engine
-	runs  []shellRun
 }
 
 // guardHit says which deny or ask rule names something the run did, or

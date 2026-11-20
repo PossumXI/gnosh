@@ -636,7 +636,7 @@ func TestSummaryLeadMarkedOnce(t *testing.T) {
 	s.exit()
 	reqs := w.Model.Requests()
 	after := strings.Join(userTexts(reqs[len(reqs)-1]), "\n")
-	hasNot(t, "the request after the summary", after, "​")
+	hasNot(t, "the request after the summary", after, "\u200b")
 	if n := strings.Count(after, "<gnosh>The earlier part of this conversation ran out of room"); n != 1 {
 		t.Errorf("the summary's line came %d times:\n%s", n, after)
 	}

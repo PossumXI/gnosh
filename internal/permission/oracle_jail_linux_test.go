@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,7 +73,7 @@ func buildStub(dir string) (string, error) {
 	}
 	goBin, err := exec.LookPath("go")
 	if err != nil {
-		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
+		goBin = "/usr/local/go/bin/go"
 	}
 	bin := filepath.Join(dir, "stub")
 	cmd := exec.Command(goBin, "build", "-o", bin, ".")

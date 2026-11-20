@@ -573,7 +573,7 @@ func TestCleanTitle(t *testing.T) {
 		"fix \x1b[31mthe\x1b[0m bug":          "fix the bug",
 		"title\x1b]0;owned\x07 here":          "title here",
 		"bell\x07 and \u0085next and \u009bx": "bell and next and x",
-		"right‮to left":                       "rightto left",
+		"right\u202eto left":                  "rightto left",
 	} {
 		if got := cleanTitle(in); got != want {
 			t.Errorf("cleanTitle(%q) = %q, want %q", in, got, want)

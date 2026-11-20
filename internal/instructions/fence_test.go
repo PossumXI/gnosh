@@ -256,11 +256,11 @@ func TestInvisibleCharactersAreTakenOut(t *testing.T) {
 		ProjectNames: []string{"CLAUDE.md"},
 		Trusted:      true,
 		FS: tree(map[string]string{
-			"/p/CLAUDE.md": "Use tabs." + hidden + " Keep 👩‍💻 and می‌خواهم.\n",
+			"/p/CLAUDE.md": "Use tabs." + hidden + " Keep 👩\u200d💻 and می\u200cخواهم.\n",
 		}),
 	})
 	f := find(t, s.Files(), "/p/CLAUDE.md")
-	if f.Text != "Use tabs. Keep 👩‍💻 and می‌خواهم.\n" {
+	if f.Text != "Use tabs. Keep 👩\u200d💻 and می\u200cخواهم.\n" {
 		t.Errorf("the text given: %q", f.Text)
 	}
 	same(t, "warnings", warned(s.Warnings()), []string{"invisible /p/CLAUDE.md"})

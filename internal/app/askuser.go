@@ -211,7 +211,7 @@ func (in askInput) form() QuestionForm {
 	for _, q := range in.Questions {
 		fq := FormQuestion{Question: q.Question, Header: q.Header, MultiSelect: q.MultiSelect}
 		for _, o := range q.Options {
-			fq.Options = append(fq.Options, FormOption{Label: o.Label, Description: o.Description, Preview: o.Preview})
+			fq.Options = append(fq.Options, FormOption(o))
 		}
 		f.Questions = append(f.Questions, fq)
 	}

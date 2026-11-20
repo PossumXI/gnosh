@@ -36,7 +36,7 @@ import (
 func (l *live) shellLine(command string) error {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return errors.New("there is no command after the !")
+		return errors.New("nothing follows the ! to run as a command")
 	}
 	if l.shell == nil || l.closing.Load() {
 		return errors.New("the session is closing")
