@@ -4788,3 +4788,14 @@ or kept with the reason said (27).
     now says it under tools: "PDFs are read as text" when both are on the
     PATH, else a note naming the package (apt install poppler-utils; brew
     install poppler).
+
+334. **Grep searches UTF-16 files.** A file in UTF-16, which Windows tools
+    write (PowerShell's redirects, some exports and resource files), holds
+    zero bytes and was passed over as binary; ripgrep, and so Claude
+    Code's Grep, decodes one that begins with a byte order mark (its
+    --encoding auto). gnosh's Grep now looks at a file's first two bytes
+    where they lie (so the file is read from its start whatever they
+    are), and decodes a UTF-16 file, little- or big-endian, to UTF-8 to
+    search it, its line numbers and lines as the text is; one larger than
+    GrepMaxMultilineBytes is counted among the files too large, not
+    decoded. Read still shows such a file as binary, with the iconv hint.

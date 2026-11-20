@@ -3,13 +3,17 @@ package fstools
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -94,13 +98,53 @@ func (s *scanSpec) scan(ctx context.Context, path string, emit func(grepLine) bo
 	}
 	defer f.Close()
 	res := fileScan{modTime: info.ModTime()}
+	r, decodeErr := fromUTF16(f, s.maxWhole)
+	if decodeErr != nil {
+		if errors.Is(decodeErr, errUTF16TooBig) {
+			res.tooBig = true
+			return res, nil
+		}
+		return res, decodeErr
+	}
 	var err error
 	if s.multiline {
-		err = s.scanWhole(ctx, f, &res, emit)
+		err = s.scanWhole(ctx, r, &res, emit)
 	} else {
-		err = s.scanLines(ctx, f, &res, emit)
+		err = s.scanLines(ctx, r, &res, emit)
 	}
 	return res, err
+}
+
+// errUTF16TooBig says a UTF-16 file is larger than is decoded to search.
+var errUTF16TooBig = errors.New("too large to decode")
+
+// fromUTF16 is the file's text as UTF-8 when it begins with a UTF-16 byte
+// order mark, as ripgrep reads such a file (its --encoding auto), and the
+// file as it is otherwise: a UTF-16 file was passed over as binary. One of
+// more than most bytes is not decoded. (The mark is looked at where it is,
+// so that the file is read from its start either way.)
+func fromUTF16(f *os.File, most int64) (io.Reader, error) {
+	var mark [2]byte
+	if n, _ := f.ReadAt(mark[:], 0); n < 2 || !utf16Mark(mark[:]) {
+		return f, nil
+	}
+	data, err := io.ReadAll(io.LimitReader(f, most+3))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > most+2 {
+		return nil, errUTF16TooBig
+	}
+	data = data[2:]
+	units := make([]uint16, len(data)/2)
+	for i := range units {
+		if mark[0] == 0xFF {
+			units[i] = uint16(data[2*i]) | uint16(data[2*i+1])<<8
+		} else {
+			units[i] = uint16(data[2*i])<<8 | uint16(data[2*i+1])
+		}
+	}
+	return strings.NewReader(string(utf16.Decode(units))), nil
 }
 
 // hasShortCut reports whether there is text to look for before trying the

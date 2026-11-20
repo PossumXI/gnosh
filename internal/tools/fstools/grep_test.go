@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -1100,4 +1101,39 @@ func TestMoreFileTypes(t *testing.T) {
 			t.Errorf("type %s on %s: %v, want %v", c.typ, c.name, got, c.want)
 		}
 	}
+}
+
+// A file in UTF-16, with its byte order mark, is searched as the text it
+// is, as ripgrep searches one, and not passed over as binary.
+func TestGrepUTF16(t *testing.T) {
+	f := newFixture(t, Options{})
+	enc := func(s string, little bool) string {
+		var b strings.Builder
+		if little {
+			b.WriteString("\xff\xfe")
+		} else {
+			b.WriteString("\xfe\xff")
+		}
+		for _, u := range utf16.Encode([]rune(s)) {
+			if little {
+				b.WriteByte(byte(u))
+				b.WriteByte(byte(u >> 8))
+			} else {
+				b.WriteByte(byte(u >> 8))
+				b.WriteByte(byte(u))
+			}
+		}
+		return b.String()
+	}
+	le := f.file("win.txt", enc("first line\r\nthe needle, café\r\n", true))
+	be := f.file("mac.txt", enc("no\nneedle here\n", false))
+	got := f.ok(f.grep, in{"pattern": "needle", "output_mode": "content", "path": le})
+	if want := le + "\n2:the needle, café\n"; got != want {
+		t.Errorf("UTF-16LE: got %q, want %q", got, want)
+	}
+	got = f.ok(f.grep, in{"pattern": "needle", "output_mode": "content", "path": be})
+	if want := be + "\n2:needle here\n"; got != want {
+		t.Errorf("UTF-16BE: got %q, want %q", got, want)
+	}
+	mustContain(t, f.ok(f.grep, in{"pattern": "needle"}), le, be)
 }
