@@ -124,3 +124,21 @@ func TestConfigHidesAnAddressesSecret(t *testing.T) {
 	r = run(t, w, "-p", "/config webSearchUrl").wantCode(t, 0)
 	hasNot(t, "/config webSearchUrl", r.out+r.err, "s3cret-pw", "k3y-abc")
 }
+
+// /focus off after /focus on in the same session keeps a setting that
+// outweighs the focus the person's gnosh.json sets: it took the setting
+// away, and the file's focus came back the next session (the
+// settings-commands review of 2026-11-20).
+func TestFocusOffOutweighsAFileAfterFocusOn(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Settings(`{"options": {"viewMode": "focus"}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/focus on")
+	s.see("viewMode is focus")
+	s.typeLine("/focus off")
+	s.see("viewMode is default")
+	s.typeLine("/exit")
+	s.exit()
+	has(t, "the state file", w.Read(filepath.Join(w.DataDir(), "state.json")), `"viewMode": "default"`)
+}

@@ -436,13 +436,13 @@ func (l *live) viewModeNow() string {
 // viewModeOff is what /focus off sets the viewMode option to: nothing,
 // so that the verbose option decides again, unless one of the person's
 // config files sets focus, which a /config setting must then outweigh:
-// the view verbose gives.
+// the view verbose gives. (Whether /focus on ran earlier in the session
+// does not matter: it made /focus off take the setting away, and the
+// file's focus came back the next session: the settings-commands review
+// of 2026-11-20.)
 func (l *live) viewModeOff() string {
-	l.configMu.Lock()
-	_, now := l.configNow["viewMode"]
-	l.configMu.Unlock()
 	o := l.cfg.Options.ViewMode
-	if now || !o.Set || o.Origin.Layer == config.LayerState || o.V != "focus" {
+	if !o.Set || o.Origin.Layer == config.LayerState || o.V != "focus" {
 		return ""
 	}
 	if l.cfg.Options.Verbose.V {
