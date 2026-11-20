@@ -30,7 +30,9 @@ Built:
   ended.
 - **A session** in the terminal's own scrollback. Opened again (`-r`,
   `-c`, `/resume`), it shows where it left off: its last prompt and the
-  model's last answer.
+  model's last answer. A picture goes with a prompt by Ctrl+V (the
+  clipboard of the machine gnosh runs on), by dragging its file into the
+  terminal, or as `@` and its path.
 - **Runs in the background**, as Claude Code's background sessions: a
   session goes on without the terminal (`/background`, `/fork`), or
   starts that way from a shell (`gnosh --bg "fix the flaky test"`, as
@@ -58,8 +60,12 @@ Built:
     work in).
   - A run that ended with an error, or was killed, is marked failed (✗)
     and says how it ended.
-- **Tools:** the file and shell tools, WebFetch (a page read by the small
-  model with the model's request, from the open web only), WebSearch on a
+- **Tools:** the file and shell tools (Read gives a PDF's text page by
+  page where poppler is installed, a Jupyter notebook's cells, which
+  NotebookEdit changes one at a time, and a large picture shrunk to fit),
+  WebFetch (a page read by the small model with the model's request, from
+  the open web only; a PDF, a picture or an archive is saved to a file
+  instead), WebSearch on a
   SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,
   with SearXNG's JSON format on; no tool without it), commands on
   declared hosts over ssh, and MCP servers, those gnosh starts itself and
