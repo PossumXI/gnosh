@@ -40,6 +40,26 @@ func TestURLAllowed(t *testing.T) {
 	if URLAllowed("https://hooks.example.com/check", []string{}) {
 		t.Error("an empty list let a URL through")
 	}
+	// A * in the host stands for host characters alone, unless it ends
+	// the pattern (the review of 2026-11-20).
+	for _, c := range []struct {
+		pattern, url string
+		want         bool
+	}{
+		{"https://*.example.com/*", "https://a.example.com/x", true},
+		{"https://*.example.com/*", "https://attacker.test/.example.com/x", false},
+		{"https://*.example.com", "https://a.b.example.com", true},
+		{"https://*.example.com", "https://attacker.test#.example.com", false},
+		{"https://*.example.com", "https://attacker.test?.example.com", false},
+		{"http://*.example.com:8080/*", "http://:8080/.example.com:8080/", false},
+		{"http://*:8080/*", "http://evil.test:9/:8080/x", false},
+		{"http://localhost:*", "http://localhost:8080/x/y?z=1", true},
+		{"*", "https://anything.example/x", true},
+	} {
+		if got := URLAllowed(c.url, []string{c.pattern}); got != c.want {
+			t.Errorf("URLAllowed(%q, %q) = %v, want %v", c.url, c.pattern, got, c.want)
+		}
+	}
 	for _, c := range []struct {
 		pattern, s string
 		want       bool
@@ -47,8 +67,8 @@ func TestURLAllowed(t *testing.T) {
 		{"*", "", true}, {"a*b*c", "aXbYc", true}, {"a*b*c", "aXbY", false}, {"**", "x", true},
 		{"a*a", "aaa", true}, {"a*ab", "aaab", true}, {"", "", true}, {"", "x", false}, {"x*", "x", true},
 	} {
-		if got := wildMatch(c.pattern, c.s); got != c.want {
-			t.Errorf("wildMatch(%q, %q) = %v", c.pattern, c.s, got)
+		if got := urlMatch(c.pattern, c.s); got != c.want {
+			t.Errorf("urlMatch(%q, %q) = %v", c.pattern, c.s, got)
 		}
 	}
 }

@@ -4977,8 +4977,9 @@ or kept with the reason said (27).
 
 346. **A started program is found on the PATH it is given.** A language
     server or an MCP server named by its bare name is looked for on the
-    PATH of the environment it is started with (its entry's env, else the
-    settings' env block, else gnosh's own), as hooks in the exec form
+    PATH of the environment it is started with (its entry's env, else, for
+    a language server, the settings' env block, else gnosh's own), as
+    hooks in the exec form
     already were, and as Claude Code finds it: Node looks a program up on
     the PATH of the env it is given, while Go's exec looks only at the
     process's own, so a server installed where only its env's PATH leads
@@ -5012,3 +5013,18 @@ or kept with the reason said (27).
     check's warnings and the records of hook runs. The shortening now
     lives in the hooks package (ShownURL), and config's command line uses
     it, so there is one rule.
+
+349. **The http hook limits, after their review.** A fresh-eyes review of
+    347 (2026-11-20) found two holes, closed so. A project's
+    allowedHttpHookUrls or httpHookAllowedEnvVars waits for the folder's
+    trust, as its disableAllHooks does (the hook-off kind, whose sentence
+    in the trust question is that some settings switch off things you set
+    up yourself): an empty list from a repository just cloned had switched
+    off the person's own http guard, which then let through what it
+    guarded, with only a startup warning to show for it. And a * in a
+    pattern's scheme and host stands for host characters alone (no /, ?,
+    #, @ or :), unless it ends the pattern: "https://*.example.com/*" had
+    taken "https://attacker.test/.example.com/x", the * reaching into the
+    path. A URL with no host name fits nothing. gnosh doctor looks for a
+    language server's program at the path it names, when its PATH is its
+    own, and no longer calls a missing one installed.

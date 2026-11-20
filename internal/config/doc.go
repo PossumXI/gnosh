@@ -74,8 +74,9 @@
 //	                 the URL patterns an http hook may post to (* is any
 //	                 run of characters), and the variables its headers may
 //	                 take beside its own allowedEnvVars: every file's list
-//	                 merged, a project's in a folder not yet trusted too,
-//	                 and an empty list lets none
+//	                 merged, a project's once the folder is trusted (it
+//	                 would switch off the person's own hooks), and an
+//	                 empty list lets none
 //	statusLine       {"type": "command", "command": ..., "padding": ...,
 //	                 "refreshInterval": ...}: a command whose output is the
 //	                 status line under the prompt; a program to run, so a

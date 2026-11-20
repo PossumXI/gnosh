@@ -512,7 +512,7 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 		note("blockWritesOutsideWorkingDirectories")
 		b.blockWrites = Value[bool]{}
 	}
-	if !ok(KindRestriction) {
+	if !ok(KindHookOff) {
 		if b.hookURLs.drop(from) {
 			note("allowedHttpHookUrls")
 		}

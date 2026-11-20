@@ -461,4 +461,8 @@ func TestDoctorSaysWhetherLanguageServersCanStart(t *testing.T) {
 	findings = doctor(t, withConfig(cfg), &fakeMachine{programs: []string{"gopls"}})
 	wantFinding(t, findings, "tools", Note, "the language server gopls (for .go) cannot start: gopls is not installed")
 	wantFinding(t, findings, "tools", Fine, "the language server pyright (for .py) is installed")
+	// A path from / is looked at too, where the PATH is the server's own.
+	cfg = `{` + box + `, "lspServers": {"pyright": {"command": "/nowhere/pyright-langserver", "env": {"PATH": ` + strconv.Quote(bin) + `}, "extensionToLanguage": {".py": "python"}}}}`
+	findings = doctor(t, withConfig(cfg), &fakeMachine{programs: []string{"gopls"}})
+	wantFinding(t, findings, "tools", Note, "the language server pyright (for .py) cannot start")
 }

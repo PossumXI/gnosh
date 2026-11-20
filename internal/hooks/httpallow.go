@@ -20,22 +20,29 @@ func (r *Runner) urlAllowed(u string) bool {
 // matched whatever their case, and a host's trailing dot (a fully
 // qualified name's) is no part of it, as DNS has it.
 //
-// A URL with a user name in it fits none: in
-// "http://localhost:80@elsewhere.example/" the host is elsewhere.example,
-// though "http://localhost:*" would fit the text.
+// A * in the pattern's scheme and host stands only for characters a host
+// name has (no /, ?, #, @ or :), so that "https://*.example.com/*" does
+// not take "https://elsewhere.test/.example.com/x"; a * that ends the
+// pattern stands for the rest of the address, as in "http://localhost:*".
+// A URL with a user name in it, or no host name, fits none: in
+// "http://localhost:80@elsewhere.example/" the host is elsewhere.example.
 func URLAllowed(u string, patterns []string) bool {
 	parsed, err := url.Parse(u)
-	if err != nil || parsed.User != nil || parsed.Host == "" {
+	if err != nil || parsed.User != nil || parsed.Hostname() == "" || len(u) > maxMatchedURL {
 		return false
 	}
 	nu := normalURL(u)
 	for _, p := range patterns {
-		if wildMatch(normalURL(p), nu) {
+		if len(p) <= maxMatchedURL && urlMatch(normalURL(p), nu) {
 			return true
 		}
 	}
 	return false
 }
+
+// maxMatchedURL is the longest address or pattern matched: the matching
+// takes time in the product of the two lengths.
+const maxMatchedURL = 4096
 
 // normalURL lowers the case of a URL's (or a pattern's) scheme and host,
 // and takes a trailing dot off the host; the rest is left as it is.
@@ -92,30 +99,38 @@ func ShownURL(raw string) string {
 // maxShownPathPiece is the longest piece of a hook's path shown whole.
 const maxShownPathPiece = 16
 
-// wildMatch reports whether s fits pattern, where * stands for any run of
-// characters, none included, and every other byte for itself.
-func wildMatch(pattern, s string) bool {
-	p, i := 0, 0
-	star, mark := -1, 0
-	for i < len(s) {
-		switch {
-		case p < len(pattern) && pattern[p] == '*':
-			star, mark = p, i
-			p++
-		case p < len(pattern) && pattern[p] == s[i]:
-			p++
-			i++
-		case star >= 0:
-			// Back to the last *, which takes one more byte.
-			p = star + 1
-			mark++
-			i = mark
-		default:
-			return false
+// urlMatch reports whether s fits pattern, where * stands for a run of
+// characters, none included, and every other byte for itself; a * before
+// the end of the pattern's scheme and host (the first /, ? or # after its
+// "://") stands for host characters alone, unless it ends the pattern.
+func urlMatch(pattern, s string) bool {
+	hostEnd := -1
+	if i := strings.Index(pattern, "://"); i >= 0 {
+		hostEnd = len(pattern)
+		if j := strings.IndexAny(pattern[i+3:], "/?#"); j >= 0 {
+			hostEnd = i + 3 + j
 		}
 	}
-	for p < len(pattern) && pattern[p] == '*' {
-		p++
+	takes := func(i int, c byte) bool {
+		return i >= hostEnd || i == len(pattern)-1 || !strings.ContainsRune("/?#@:", rune(c))
 	}
-	return p == len(pattern)
+	// next[j] says whether pattern[i+1:] fits s[j:], for the i being
+	// worked out (from the end of the pattern back).
+	next := make([]bool, len(s)+1)
+	next[len(s)] = true
+	for i := len(pattern) - 1; i >= 0; i-- {
+		cur := make([]bool, len(s)+1)
+		if pattern[i] == '*' {
+			cur[len(s)] = next[len(s)]
+			for j := len(s) - 1; j >= 0; j-- {
+				cur[j] = next[j] || takes(i, s[j]) && cur[j+1]
+			}
+		} else {
+			for j := len(s) - 1; j >= 0; j-- {
+				cur[j] = pattern[i] == s[j] && next[j+1]
+			}
+		}
+		next = cur
+	}
+	return next[0]
 }

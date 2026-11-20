@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -350,8 +351,12 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		find := pr.LookPath
 		if path, ok := givenPath(cfg, srv.Env); ok {
 			find = func(name string) (string, error) {
+				// (Find takes a path from / as it is written: whether a
+				// program is there is looked at here.)
 				if p, ok := execpath.Find(name, []string{"PATH=" + path}, ""); ok {
-					return p, nil
+					if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
+						return p, nil
+					}
 				}
 				return "", errors.New("not on the PATH it is given")
 			}

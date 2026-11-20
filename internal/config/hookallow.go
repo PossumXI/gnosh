@@ -9,10 +9,11 @@ import (
 // the URL patterns an http hook may post to, and httpHookAllowedEnvVars,
 // the variables an http hook's headers may take. Each is a list that the
 // files' lists are merged into, and in force once any file gives it, even
-// as an empty list (no http hook runs; no header takes a variable). They
-// only take a power away, so a project's counts in a folder that is not
-// trusted too (KindRestriction), as blockReadsOutsideWorkingDirectories
-// does.
+// as an empty list (no http hook runs; no header takes a variable). A
+// project's waits for the folder's trust, as its disableAllHooks does
+// (KindHookOff): it would switch off the person's own http hooks, a guard
+// among them, which would then let through what it guards (the review of
+// 2026-11-20).
 
 // allowList is one of them, as the builder gathers it.
 type allowList struct {
@@ -75,7 +76,7 @@ func (s *source) hookAllowList(f jfield) {
 		items = append(items, v)
 	}
 	o := s.at(f.line)
-	s.add(op{kind: KindRestriction, text: f.key, origin: o, feature: FeatureHooks, what: "a hook setting",
+	s.add(op{kind: KindHookOff, text: f.key, origin: o, feature: FeatureHooks, what: "a hook setting",
 		apply: func(b *builder) {
 			if urls {
 				b.hookURLs.add(items, o)

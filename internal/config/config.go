@@ -69,8 +69,8 @@ type Config struct {
 	// the files that give it, merged: an http hook runs only when its URL
 	// fits one of the patterns. Nil when no file gives it (any URL), empty
 	// but not nil when the files give only empty lists (no http hook
-	// runs). It only takes a power away, so a project's counts in a folder
-	// that is not trusted too.
+	// runs). A project's waits for the folder's trust, as its
+	// disableAllHooks does: it would switch off the person's own hooks.
 	HTTPHookURLs []ListItem
 	// HTTPHookEnvVars is Claude Code's httpHookAllowedEnvVars, merged the
 	// same way: an http hook's header takes a variable only when both the
