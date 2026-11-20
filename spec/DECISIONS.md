@@ -4487,3 +4487,16 @@ or kept with the reason said (27).
     the model so, quoting the cycle, in the person's words for a
     repetition (repeat.md). As before it never ends the turn, and counts
     afresh after it speaks.
+
+314. **A loop is seen through fresh ids and in no fixed order.** The
+    guard compared each result as it was, so a loop of the same commands
+    whose every result held a fresh random id or a new PID was never one:
+    eval.py 58 times and a postfix restart 35, in no fixed order, 102 of
+    236 calls repeating one of the six before them, and one result only
+    the same (the FrontierHarness session, 2026-11-20, from the trial's
+    own logs). Results are now compared with every run of hex digits of
+    four or more that holds a digit, and then every run of digits,
+    blanked (agent.RepeatKey, the default key and the app's for tools no
+    feature keys); and twelve rounds in a row made of no more than three
+    kinds of round, in any order, are a loop too, told as a cycle. As
+    before the guard never ends the turn.

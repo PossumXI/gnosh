@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -72,13 +73,45 @@ func (g *repeatGuard) reset() {
 	g.sigs, g.rounds = nil, nil
 }
 
-// defaultRepeatKey compares a call and its result as they are.
+// defaultRepeatKey compares a call as it is, and its result with what
+// changes from run to run blanked (sameButFor).
 func defaultRepeatKey(call core.ToolCall, res core.ToolResult) string {
+	return RepeatKey(call, res)
+}
+
+// RepeatKey is what the guard compares of a call and its result unless the
+// wiring says otherwise: the tool and its arguments as they are, whether
+// it failed, and its result's text with what changes from run to run
+// blanked (sameButFor). A model ran "python3 /app/eval.py | tail -60" 58
+// times and restarted postfix 35, in a loop of the same commands, and was
+// never told: each result held a fresh random id, or a new PID (the
+// FrontierHarness session, 2026-11-20).
+func RepeatKey(call core.ToolCall, res core.ToolResult) string {
 	failed := "ok"
 	if res.IsError {
 		failed = "error"
 	}
-	return call.Name + "\x00" + string(call.Input) + "\x00" + failed + "\x00" + core.TextOf(res.Content)
+	return call.Name + "\x00" + string(call.Input) + "\x00" + failed + "\x00" + sameButFor(core.TextOf(res.Content))
+}
+
+// hexID is a run of hex digits as long as a short commit or longer, a
+// random id, a hash, a part of a UUID.
+var hexID = regexp.MustCompile(`[0-9A-Fa-f]{4,}`)
+
+// digits is a run of digits: a PID, a port, a time, a count.
+var digits = regexp.MustCompile(`[0-9]+`)
+
+// sameButFor is a result's text with what changes from one run of the same
+// command to the next blanked: every run of hex digits of four or more
+// that holds a digit (an id, a hash), then every run of digits.
+func sameButFor(text string) string {
+	text = hexID.ReplaceAllStringFunc(text, func(s string) string {
+		if strings.ContainsAny(s, "0123456789") {
+			return "#"
+		}
+		return s
+	})
+	return digits.ReplaceAllString(text, "#")
 }
 
 // checkRepeat looks at the round that just ended. It is only ever called
@@ -145,11 +178,11 @@ func (a *Agent) checkRepeat(t *turn, ro roundOutcome) error {
 		// loop all the same.
 		rep = Repetition{Rounds: same, Window: len(sigs), Calls: calls, Other: rounds[otherAt]}
 	default:
-		p := g.cycle()
-		if p == 0 {
+		cyc, looked := g.cycle()
+		if cyc == nil {
 			return nil
 		}
-		rep = Repetition{Rounds: p * cycleTurns, Window: p * cycleTurns, Calls: calls, Cycle: g.rounds[len(g.rounds)-p:]}
+		rep = Repetition{Rounds: looked, Window: looked, Calls: calls, Cycle: cyc}
 	}
 	g.reset()
 
@@ -174,10 +207,14 @@ func (a *Agent) checkRepeat(t *turn, ro roundOutcome) error {
 	return a.ownPrompt(t, "nudge:repeat", text)
 }
 
-// cycle is the length of a cycle of three or four rounds that the latest
-// rounds came round cycleTurns times in a row, the same calls with the
-// same results, or 0.
-func (g *repeatGuard) cycle() int {
+// cycle finds the rounds the latest rounds keep going round, and how many
+// rounds were looked at: a cycle of three or four rounds come round
+// cycleTurns times in a row, the same calls with the same results; or, in
+// any order, the last 4*cycleTurns rounds made of no more than three kinds
+// of round (a test run and a restart of the server, one 58 times and the
+// other 35, in no fixed order: the FrontierHarness session, 2026-11-20).
+// It returns nil when there is no such loop.
+func (g *repeatGuard) cycle() ([][]RepeatedCall, int) {
 	for p := 3; p <= 4; p++ {
 		n := p * cycleTurns
 		if len(g.sigs) < n {
@@ -189,10 +226,25 @@ func (g *repeatGuard) cycle() int {
 			loop = s[i] == s[i-p]
 		}
 		if loop {
-			return p
+			return g.rounds[len(g.rounds)-p:], n
 		}
 	}
-	return 0
+	n := 4 * cycleTurns
+	if len(g.sigs) < n {
+		return nil, 0
+	}
+	seen := map[string]bool{}
+	var kinds [][]RepeatedCall
+	for i := len(g.sigs) - n; i < len(g.sigs); i++ {
+		if !seen[g.sigs[i]] {
+			seen[g.sigs[i]] = true
+			kinds = append(kinds, g.rounds[i])
+		}
+	}
+	if len(kinds) > 3 {
+		return nil, 0
+	}
+	return kinds, n
 }
 
 // quoteCalls writes calls and their results so that a model can see what

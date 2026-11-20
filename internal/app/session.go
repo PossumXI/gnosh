@@ -1305,11 +1305,7 @@ func (l *live) repeatPolicy() agent.RepeatPolicy {
 					return k
 				}
 			}
-			failed := "ok"
-			if res.IsError {
-				failed = "error"
-			}
-			return call.Name + "\x00" + string(call.Input) + "\x00" + failed + "\x00" + core.TextOf(res.Content)
+			return agent.RepeatKey(call, res)
 		}
 	}
 	if len(nudges) > 0 {
