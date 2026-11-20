@@ -5068,3 +5068,34 @@ or kept with the reason said (27).
     person's word for this run and start; a server at a URL runs nothing
     here and does not wait. gnosh mcp list and get, run by the person from
     a shell, still start a server to see how it stands.
+
+352. **A sandbox for the shell's commands (the package).** Claude Code's
+    Bash sandbox (code.claude.com/docs/en/sandboxing), built from its
+    docs alone, in
+    internal/sandbox: the command line that runs a command inside the
+    operating system's own sandbox, and a check, made once, that the
+    sandbox can run here. On Linux it is bubblewrap: the machine mounted
+    read-only, a /dev and a /proc of the sandbox's own, its own processes
+    (it can signal no other) and its own network (nothing reachable, the
+    machine's loopback neither), dying with gnosh; the folders it may
+    write in mounted writable, the read-only paths inside them read-only
+    again, the denied paths hidden (an empty folder, or the null device
+    for a file), the paths inside those it may read after all opened
+    again, and a denied path inside one of those hidden again (the
+    narrower wins, as in Claude Code). On macOS it is Seatbelt
+    (sandbox-exec) with a profile that allows everything but writes
+    outside those folders (and the devices a shell writes to), writes to
+    the read-only paths, reads of the denied ones and the network, the
+    paths in the system's own spelling (/private/tmp). The sandbox's
+    temporary folder is the person's own (/tmp/gnosh-sandbox-<uid>, 0700,
+    no link), kept from one command to the next: on Linux it is /tmp
+    inside the sandbox, the real one out of sight, so that a command that
+    writes /tmp/x works and finds it next time, and gnosh's own files in
+    the real /tmp are out of reach; on macOS, where Seatbelt cannot move a
+    folder, it is TMPDIR. Caches go under it too (XDG_CACHE_HOME): the
+    person's own are read-only to a sandboxed command, and one it could
+    write would be one a later command outside the sandbox trusts. A
+    path that is not there is not mounted (bubblewrap mounts only what
+    exists, and making a place for it would change the folder). Which
+    commands run in it, and what they may do without asking, is the shell
+    tool's and the permission engine's (353).
