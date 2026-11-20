@@ -1520,3 +1520,17 @@ func TestModeChangedByTheSession(t *testing.T) {
 	// (The status line's; the hint Shift+Tab left still names plan mode.)
 	g.liveHas("manual mode ·").liveLacks("plan mode ·")
 }
+
+// An approved plan's call says so in the person's words, and where the
+// plan is kept: the model's text ("carry the plan out") is not theirs.
+func TestPlanApprovedLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"plan it" <Enter>`).start()
+	args := map[string]any{"plan": "1. Do it."}
+	g.ev(toolCall("c1", "ExitPlanMode"), replyEnd(core.StopToolUse), toolStart("c1", "ExitPlanMode", args))
+	g.ev(toolEnd("c1", "ExitPlanMode", args, core.ToolResult{
+		Content: []core.Block{core.Text("The user approved the plan. The session is in the default mode now: carry the plan out.")},
+		Meta:    map[string]any{"approved": true, "mode": "default", "planFile": "/home/jae/.local/share/gnosh/plans/1.md"},
+	}, 0))
+	g.committedHas("approved · manual mode", "the plan is kept in ~/.local/share/gnosh/plans/1.md").committedLacks("carry the plan out")
+}

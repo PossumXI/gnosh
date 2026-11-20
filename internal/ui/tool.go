@@ -839,6 +839,21 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		}
 	case "gnovm_run":
 		return "", s.clipHead(safeLines(text), s.limit(receiptLines))
+	case "ExitPlanMode":
+		// The plan approved, in the person's words (the result is the
+		// model's: "carry the plan out").
+		if approved, _ := meta["approved"].(bool); approved {
+			mode, _ := meta["mode"].(string)
+			name, ok := modeNames[mode]
+			if !ok {
+				name = oneLine(mode) + " mode"
+			}
+			summary = "approved · " + name
+			if file, _ := meta["planFile"].(string); file != "" {
+				under = s.body([]string{"the plan is kept in " + showPath(s.cwd, s.home, file)})
+			}
+			return summary, under
+		}
 	}
 	lines := nonBlank(safeLines(text))
 	switch len(lines) {

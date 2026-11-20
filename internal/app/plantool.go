@@ -115,10 +115,16 @@ func (t *exitPlanTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 		}
 	}
 	text := fmt.Sprintf("The user approved the plan. The session is in the %s mode now: carry the plan out.", l.engine.Mode())
+	// (For the screen, which says it in the person's words: the model's
+	// text, under the call, had told the person to carry the plan out.)
+	meta := map[string]any{"approved": true, "mode": string(l.engine.Mode())}
 	if path := l.keepPlan(call); path != "" {
 		text += " The plan as approved is kept in " + path + ", for when it is no longer in front of you."
+		meta["planFile"] = path
 	}
-	return core.TextResult(text), nil
+	res := core.TextResult(text)
+	res.Meta = meta
+	return res, nil
 }
 
 // keepPlan writes an approved plan to a file of the session's own, the
