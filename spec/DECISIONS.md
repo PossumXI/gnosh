@@ -5769,3 +5769,22 @@ or kept with the reason said (27).
     covers nothing. On Linux the sandbox has a mount namespace of its own
     and no new privileges, so a mount there (fusermount's) is the
     sandbox's alone.
+
+382. **No application's preferences written from the macOS sandbox, and
+    no signal sent out of it.**
+    The preferences service (cfprefsd, which defaults write and every
+    program's settings go through) writes ~/Library/Preferences outside
+    the sandbox, past every path rule: tried with a made-up domain, a
+    sandboxed defaults write landed although writes to that folder were
+    denied, and Terminal's preferences, for one, can name a command for
+    each new window to run. Seatbelt's (deny user-preference-write) now
+    stands whenever the files are confined; reading preferences still
+    works. Also tried while looking for more such services: launchctl
+    setenv is refused to a sandboxed command by launchd itself. And a
+    command could signal any of the person's processes (gnosh itself, an
+    editor, a server, an agent), where Linux's sandbox, with a pid
+    namespace of its own, sees none of them: (deny signal) with (allow
+    signal (target same-sandbox)) now keeps it to its own, its children
+    and its shell still signalled (tried on a Mac). A server a command
+    left running in the background is stopped through gnosh, as on
+    Linux.

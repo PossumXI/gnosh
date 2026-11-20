@@ -28,6 +28,12 @@ func seatbeltProfile(p Policy) string {
 		b.WriteString("(deny appleevent-send)\n")
 	}
 	b.WriteString("(deny job-creation)\n")
+	// Signals to its own processes only, as Linux's sandbox, with a pid
+	// namespace of its own, sees no other: not to gnosh, nor the person's
+	// editor, servers or agents (tried on a Mac: an outside process was
+	// reachable before, refused with this, and the command's own children
+	// and its shell are still signalled).
+	b.WriteString("(deny signal)\n(allow signal (target same-sandbox))\n")
 	b.WriteString("(deny mach-lookup (global-name \"com.apple.coreservices.launchservicesd\") (global-name \"com.apple.coreservices.quarantine-resolver\")")
 	if !p.TrustService {
 		b.WriteString(" (global-name \"com.apple.trustd.agent\")")
@@ -98,6 +104,12 @@ func seatbeltProfile(p Policy) string {
 	// scratch files on a Mac, 2026-11-20). A volume mounted where macOS
 	// puts one, under /Volumes, is not stopped, and covers nothing.
 	b.WriteString("(deny file-mount)\n")
+	// No application's preferences written: the preferences service
+	// (cfprefsd, defaults write) writes them outside the sandbox, past
+	// every path rule, and Terminal's, for one, can name a command to run
+	// in each new window (tried with a made-up domain, 2026-11-20).
+	// Reading them is left.
+	b.WriteString("(deny user-preference-write)\n")
 	b.WriteString("(deny file-write*)\n(allow file-write*\n")
 	for _, w := range append(append([]string(nil), p.Write...), p.Temp) {
 		if w != "" {

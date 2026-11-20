@@ -61,7 +61,7 @@ func TestSeatbeltProfile(t *testing.T) {
 	}
 	got := seatbeltProfile(p)
 	for _, piece := range []string{
-		"(version 1)\n(allow default)\n", "(deny network*)\n(deny file-read* file-write* (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))\n(deny file-mount)\n(deny file-write*)\n(allow file-write*\n",
+		"(version 1)\n(allow default)\n", "(deny network*)\n(deny file-read* file-write* (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))\n(deny file-mount)\n(deny user-preference-write)\n(deny file-write*)\n(allow file-write*\n",
 		`(subpath "/Users/u/proj")`, `(subpath "/Users/u/we\"ird\\dir")`, `(subpath "/private/tmp/gnosh-sandbox-501")`,
 		`(literal "/private/var/x/cwd")`, `(literal "/dev/null")`, `(regex #"^/dev/fd/[0-9]+$")`,
 		"(deny appleevent-send)\n(deny job-creation)\n", `(global-name "com.apple.coreservices.launchservicesd")`,
@@ -352,13 +352,18 @@ func TestSeatbeltRefusesLinksOnTheWay(t *testing.T) {
 	}
 }
 
-// No volume may be mounted over a folder while the files are confined;
-// with them left open, the command may do as the person may.
-func TestSeatbeltRefusesMounts(t *testing.T) {
-	if got := seatbeltProfile(Policy{Write: []string{"/w"}}); !strings.Contains(got, "(deny file-mount)\n") {
-		t.Errorf("a volume may be mounted over a folder:\n%s", got)
+// No volume may be mounted over a folder, nor an application's
+// preferences written, while the files are confined (both are done by a
+// service outside the sandbox); with them left open, the command may do
+// as the person may.
+func TestSeatbeltRefusesMountsAndPreferences(t *testing.T) {
+	got := seatbeltProfile(Policy{Write: []string{"/w"}})
+	for _, want := range []string{"(deny file-mount)\n", "(deny user-preference-write)\n", "(deny signal)\n(allow signal (target same-sandbox))\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the profile lacks %q:\n%s", want, got)
+		}
 	}
-	if got := seatbeltProfile(Policy{FilesystemOff: true}); strings.Contains(got, "file-mount") {
-		t.Errorf("mounts refused with the files left open:\n%s", got)
+	if got := seatbeltProfile(Policy{FilesystemOff: true}); strings.Contains(got, "file-mount") || strings.Contains(got, "user-preference") {
+		t.Errorf("mounts or preferences refused with the files left open:\n%s", got)
 	}
 }
