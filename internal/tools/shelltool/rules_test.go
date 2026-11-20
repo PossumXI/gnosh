@@ -531,6 +531,15 @@ func TestSandboxHintAndIgnoredReports(t *testing.T) {
 	if got := hint("curl https://registry.npmjs.org", "curl: (6) Could not resolve host: registry.npmjs.org\n"); !strings.Contains(got, "reach no network") {
 		t.Errorf("the same stop for another command: %q", got)
 	}
+	// (On macOS a refused read says what a refused write says.)
+	sb.HidesReads = true
+	if got := hint("cat ~/.aws/credentials", "cat: /Users/u/.aws/credentials: Operation not permitted\n"); !strings.Contains(got, "and read nothing the settings keep from it") {
+		t.Errorf("a refused read or write on macOS: %q", got)
+	}
+	if got := hint("touch /etc/x", "touch: /etc/x: Read-only file system\n"); strings.Contains(got, "read nothing") {
+		t.Errorf("a write only: %q", got)
+	}
+	sb.HidesReads = false
 	sb.Writes = ""
 	if got := hint("touch /etc/x", "touch: /etc/x: Read-only file system\n"); got != "" {
 		t.Errorf("a write, with the files left open: %q", got)

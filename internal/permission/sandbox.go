@@ -53,13 +53,14 @@ func (e *Engine) sandboxAllows(req *request) (Decision, bool) {
 // paths to what a sandboxed command may not read, the Edit deny rules' to
 // what it may not write, the Edit allow rules' to where it may. A rule's
 // path counts when it is written out in full, or with a last /** (the
-// folder with what is in it); any other pattern is left out, as the
-// sandbox mounts paths. A "!" rule that opens a path again is left out
-// too.
+// folder with what is in it); a Read deny rule's pattern counts too, as
+// the pattern (the sandbox finds the paths it matches: the sandbox
+// review); any other pattern is left out, as the sandbox mounts paths. A
+// "!" rule that opens a path again is left out too.
 func (e *Engine) SandboxPaths() (denyRead, denyWrite, allowWrite []string) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	path := func(c *crule) (string, bool) {
+	path := func(c *crule, patterns bool) (string, bool) {
 		if c.kind != kindPath || c.negate {
 			return "", false
 		}
@@ -72,23 +73,31 @@ func (e *Engine) SandboxPaths() (denyRead, denyWrite, allowWrite []string) {
 			n++
 		}
 		lit := "/" + strings.Join(segs[:n], "/")
-		if n == len(segs) || n == len(segs)-1 && segs[n] == "**" {
+		switch {
+		case n == len(segs) || n == len(segs)-1 && segs[n] == "**":
 			return lit, true
+		case patterns:
+			if segs[len(segs)-1] == "**" {
+				segs = segs[:len(segs)-1]
+			}
+			return "/" + strings.Join(segs, "/"), true
 		}
 		return "", false
 	}
 	for _, c := range e.rules(ListDeny) {
-		if p, ok := path(c); ok {
-			switch c.canon {
-			case toolRead:
+		switch c.canon {
+		case toolRead:
+			if p, ok := path(c, true); ok {
 				denyRead = append(denyRead, p)
-			case toolEdit:
+			}
+		case toolEdit:
+			if p, ok := path(c, false); ok {
 				denyWrite = append(denyWrite, p)
 			}
 		}
 	}
 	for _, c := range e.rules(ListAllow) {
-		if p, ok := path(c); ok && c.canon == toolEdit {
+		if p, ok := path(c, false); ok && c.canon == toolEdit {
 			allowWrite = append(allowWrite, p)
 		}
 	}

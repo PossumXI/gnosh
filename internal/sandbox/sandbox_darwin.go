@@ -36,7 +36,7 @@ func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 		return out
 	}
 	p.Write, p.ReadOnly, p.DenyRead, p.AllowRead = real(p.Write), real(p.ReadOnly), real(p.DenyRead), real(p.AllowRead)
-	p.UnixSockets = real(p.UnixSockets)
+	p.UnixSockets, p.Hidden = real(p.UnixSockets), real(p.Hidden)
 	if t := real([]string{p.Temp}); len(t) == 1 {
 		p.Temp = t[0]
 	}

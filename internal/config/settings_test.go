@@ -773,4 +773,18 @@ func TestSettingsSandboxLoosenings(t *testing.T) {
 	if _, problems := load(t, withConfig(`{"sandbox": {"bwrapPath": "bwrap"}}`)); !strings.Contains(showProblems(problems), "not a whole path") {
 		t.Errorf("a relative bwrapPath: %s", showProblems(problems))
 	}
+	// A pattern is kept where the sandbox finds what it matches (denyRead,
+	// credentials.files), and left out, with a warning, where it writes or
+	// reads; PATH is not hidden (the sandbox review).
+	cfg, problems := load(t, withConfig(`{"sandbox": {"filesystem": {"denyRead": ["~/**/.env"], "allowWrite": ["~/build-*"]},
+		"credentials": {"files": [{"path": "~/.ssh/id_*", "mode": "deny"}], "envVars": [{"name": "PATH", "mode": "deny"}, {"name": "NPM_TOKEN", "mode": "deny"}]}}}`))
+	if cfg == nil {
+		t.Fatalf("refused: %s", showProblems(problems))
+	}
+	sb := cfg.Sandbox
+	if values(sb.DenyRead) != "/home/dev/**/.env" || values(sb.HiddenFiles) != "/home/dev/.ssh/id_*" || len(sb.AllowWrite) != 0 || values(sb.HiddenVars) != "NPM_TOKEN" {
+		t.Errorf("denyRead %q, hidden %q, allowWrite %q, vars %q", values(sb.DenyRead), values(sb.HiddenFiles), values(sb.AllowWrite), values(sb.HiddenVars))
+	}
+	wantProblem(t, problems, Warning, userJSON, 0, "is a pattern, and only a path")
+	wantProblem(t, problems, Warning, userJSON, 0, "PATH is not hidden from sandboxed commands")
 }

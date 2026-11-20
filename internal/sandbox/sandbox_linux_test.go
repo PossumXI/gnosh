@@ -182,6 +182,45 @@ func TestBubblewrapLoosenings(t *testing.T) {
 	}
 }
 
+// Under real bubblewrap a denied file in a folder it writes in stays
+// denied when the file or its folder is renamed (a mount moves with its
+// folder, and cannot itself be renamed), and a hidden credential stays
+// hidden though allowRead names it and its folder is one it writes in
+// (the sandbox review). Skipped where bubblewrap cannot run.
+func TestBubblewrapHiddenStaysHidden(t *testing.T) {
+	if st := Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	work, home := t.TempDir(), t.TempDir()
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, text := range map[string]string{
+		filepath.Join(work, "conf", "secret.yml"): "hunter2", filepath.Join(work, ".env"): "hunter3",
+		filepath.Join(home, ".ssh", "id_ed25519"): "hunter4",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ssh := filepath.Join(home, ".ssh")
+	p := Policy{Write: []string{work, ssh}, AllowRead: []string{filepath.Join(ssh, "id_ed25519")}, Temp: temp,
+		DenyRead: []string{filepath.Join(work, "conf", "secret.yml")}, Hidden: []string{filepath.Join(work, ".env"), ssh}}
+	argv, err := Wrap(p, work, []string{"/bin/sh", "-c", `cat conf/secret.yml; mv conf/secret.yml s 2>/dev/null; cat s;
+		mv conf c2 && cat c2/secret.yml; mv c2 conf; cat .env; mv .env e2 2>/dev/null; cat e2; cat ` + ssh + `/id_ed25519; echo done`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	if strings.Contains(string(out), "hunter") || !strings.Contains(string(out), "done") {
+		t.Errorf("a denied or hidden file was read: %s", out)
+	}
+}
+
 // TestMain runs the test binary as the relay when bubblewrap starts it so,
 // as gnosh's own main does.
 func TestMain(m *testing.M) {

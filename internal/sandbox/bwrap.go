@@ -143,6 +143,13 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 			hide(d)
 		}
 	}
+	// The credentials the settings hide, last, so that nothing opened
+	// above brings one back (a bind of a hidden path, or of a folder
+	// that holds one, is covered by this mount; a mount cannot be renamed
+	// away, and moves with a folder renamed that holds it).
+	for _, h := range present(p.Hidden, there) {
+		hide(h)
+	}
 	for _, d := range emptied {
 		a = append(a, "--remount-ro", d)
 	}

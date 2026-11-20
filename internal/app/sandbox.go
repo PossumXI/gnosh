@@ -46,6 +46,53 @@ type sandboxState struct {
 	// weaker says what the sandbox here cannot do that it does elsewhere,
 	// for the person, when there is such a thing.
 	weaker string
+	// found is the paths each pattern of the sandbox's lists matched,
+	// found once for the session (sandboxFound).
+	found expansions
+}
+
+// expansions are the paths the sandbox's patterns matched (a denyRead
+// entry or a credentials file such as ~/**/.env, a Read deny rule such as
+// Read(./**/*.pem)), each found the first time it is needed and kept for
+// the session: a walk of the home folder for each command would be too
+// slow. A file that comes to match later is not among them, which
+// /sandbox says (the sandbox review: such patterns had hidden nothing).
+type expansions struct {
+	mu     sync.Mutex
+	budget int
+	got    map[string][]string
+	// short are the patterns whose walk ran out of its budget.
+	short []string
+}
+
+// sandboxFound is the list with each pattern in it replaced by the paths
+// it matched, found once for the session; a path that is no pattern
+// stays itself.
+func (st *sandboxState) sandboxFound(list []string) []string {
+	var out []string
+	for _, p := range list {
+		if !sandbox.IsPattern(p) {
+			out = append(out, p)
+			continue
+		}
+		e := &st.found
+		e.mu.Lock()
+		got, ok := e.got[p]
+		if !ok {
+			if e.got == nil {
+				e.got, e.budget = map[string][]string{}, sandbox.ExpandBudget
+			}
+			var done bool
+			got, done = sandbox.Expand(p, &e.budget)
+			e.got[p] = got
+			if !done {
+				e.short = append(e.short, p)
+			}
+		}
+		e.mu.Unlock()
+		out = append(out, got...)
+	}
+	return out
 }
 
 // sandboxSetup is what of the settings decides whether the sandbox can
@@ -148,9 +195,11 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 		Unsandboxed: sc.AllowUnsandboxed,
 		Writes:      writes,
 		NoTrust:     runtime.GOOS == "darwin" && !sc.Loose("enableWeakerNetworkIsolation"),
-		Ignored:     ignored,
-		Before:      before,
-		After:       after,
+		// (On macOS a refused read says what a refused write says.)
+		HidesReads: runtime.GOOS == "darwin" && (len(sc.DenyRead) > 0 || len(sc.HiddenFiles) > 0),
+		Ignored:    ignored,
+		Before:     before,
+		After:      after,
 	}
 }
 
@@ -181,16 +230,17 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 		}
 	}
 	p.ReadOnly = append(append(p.ReadOnly, settingsFiles(l.cfg)...), listValues(sc.DenyWrite)...)
-	p.DenyRead, p.AllowRead = listValues(sc.DenyRead), listValues(sc.AllowRead)
-	// The credentials the settings hide: files as denyRead hides them,
-	// variables not given.
-	p.DenyRead = append(p.DenyRead, listValues(sc.HiddenFiles)...)
+	found := l.st.sandboxOf(l.cfg).sandboxFound
+	p.DenyRead, p.AllowRead = found(listValues(sc.DenyRead)), listValues(sc.AllowRead)
+	// The credentials the settings hide: files never to be read, whatever
+	// opens them again; variables not given.
+	p.Hidden = found(listValues(sc.HiddenFiles))
 	p.HideVars = listValues(sc.HiddenVars)
 	if l.engine != nil {
 		// The Read and Edit rules' paths, as Claude Code adds them: a
 		// Read(./.env) deny rule keeps .env from a script's cat too.
 		read, write, allow := l.engine.SandboxPaths()
-		p.DenyRead = append(p.DenyRead, read...)
+		p.DenyRead = append(p.DenyRead, found(read)...)
 		p.ReadOnly = append(p.ReadOnly, write...)
 		p.Write = append(p.Write, allow...)
 	}

@@ -30,6 +30,11 @@ type Policy struct {
 	// DenyRead are paths it may not read, and AllowRead paths inside them
 	// it may read after all.
 	DenyRead, AllowRead []string
+	// Hidden are paths it may never read nor change, whatever else opens
+	// them: the credentials the settings hide (no allowRead, folder it
+	// writes in or file of gnosh's own brings one back: the sandbox
+	// review).
+	Hidden []string
 	// Temp is the sandbox's own temporary folder, the session's alone,
 	// kept from one command to the next: /tmp inside the sandbox on Linux
 	// (the real /tmp out of sight), and a folder it may write in on macOS,
@@ -126,7 +131,10 @@ var ErrUnsupported = errors.New("gnosh has no sandbox for this system: it sandbo
 // temporary files go, and its caches, which the person's own folders
 // (read-only to it) cannot hold.
 func Env(p Policy) []string {
-	var env []string
+	// (A name alone takes the variable away: those the settings hide
+	// first, so that hiding one of gnosh's own, HTTPS_PROXY say, cannot
+	// take the sandbox's: the sandbox review.)
+	env := slices.Clone(p.HideVars)
 	if !p.FilesystemOff {
 		tmp := sandboxTmp(p)
 		env = append(env, "TMPDIR="+tmp, "XDG_CACHE_HOME="+filepath.Join(tmp, ".cache"))
@@ -139,8 +147,7 @@ func Env(p Policy) []string {
 		}
 		env = append(env, "NO_PROXY=", "no_proxy=")
 	}
-	// (A name alone takes the variable away.)
-	return append(env, p.HideVars...)
+	return env
 }
 
 // present is the paths of a list that are there, absolute, cleaned, each

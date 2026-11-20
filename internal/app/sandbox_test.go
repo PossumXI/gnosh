@@ -301,12 +301,17 @@ func TestSandboxHidesCredentials(t *testing.T) {
 	}
 	w := apptest.NewWorld(t)
 	keys := w.Write(w.Home+"/.aws/credentials", "aws_secret=hunter2\n")
-	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "credentials": {"files": [{"path": "~/.aws/credentials", "mode": "deny"}], "envVars": [{"name": "GITHUB_TOKEN", "mode": "deny"}]}}}`)
+	w.Write(".env", "TOKEN=hunter5\n")
+	// (A pattern, as Claude Code's docs write one; an allowRead of the
+	// hidden file, which must not bring it back: the sandbox review.)
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "filesystem": {"allowRead": ["~/.aws/credentials"]},
+		"credentials": {"files": [{"path": "~/.aws/credentials", "mode": "deny"}, {"path": "` + w.Dir + `/**/.env", "mode": "deny"}], "envVars": [{"name": "GITHUB_TOKEN", "mode": "deny"}]}}}`)
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		if n == 0 {
 			return &apptest.Reply{Calls: []apptest.Call{
 				{ID: "c1", Name: "Bash", Args: `{"command":"echo token=[$GITHUB_TOKEN] other=[$OTHER_TOKEN]"}`},
 				{ID: "c2", Name: "Bash", Args: `{"command":"python3 -c \"print(open('` + keys + `').read())\""}`},
+				{ID: "c3", Name: "Bash", Args: `{"command":"cat .env; echo read"}`},
 			}}
 		}
 		return &apptest.Reply{Text: "Done."}
@@ -316,8 +321,13 @@ func TestSandboxHidesCredentials(t *testing.T) {
 	runWith(t, context.Background(), o).wantCode(t, 0)
 	has(t, "the variables", toolResult(t, w, 1, "c1"), "token=[] other=[kept]")
 	if got := toolResult(t, w, 1, "c2"); strings.Contains(got, "hunter2") {
-		t.Errorf("a hidden credentials file was read: %s", got)
+		t.Errorf("a hidden credentials file was read, allowRead naming it: %s", got)
 	}
+	if got := toolResult(t, w, 1, "c3"); strings.Contains(got, "hunter5") || !strings.Contains(got, "read") {
+		t.Errorf("a file a hidden pattern matches was read: %s", got)
+	}
+	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
+	has(t, "/sandbox", r.out, "Credentials hidden:", "/proj/**/.env (1 path found when the session started")
 }
 
 // With filesystem.disabled the sandbox leaves the files open: a command

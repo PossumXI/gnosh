@@ -529,7 +529,13 @@ func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
 	}
 	var lets []string
 	if sb.Writes != "" && in(writeSigns) {
-		lets = append(lets, "write only in "+sb.Writes)
+		w := "write only in " + sb.Writes
+		if sb.HidesReads && !in(writeSigns[:1]) {
+			// (Not "Read-only file system": it may as well have been a
+			// read the settings refuse, which is told the same way.)
+			w += ", and read nothing the settings keep from it"
+		}
+		lets = append(lets, w)
 	}
 	if in(netSigns) {
 		lets = append(lets, sb.network())

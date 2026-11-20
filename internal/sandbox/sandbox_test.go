@@ -154,3 +154,59 @@ func TestSeatbeltLoosenings(t *testing.T) {
 		t.Errorf("the files left open:\n%s", open)
 	}
 }
+
+// A credential the settings hide is hidden last: an allowRead of it, a
+// folder written in that holds it, or the folder itself among those
+// written in, brings nothing back (the sandbox review). The variables
+// the settings hide go first, so that hiding one of gnosh's own cannot
+// take the sandbox's.
+func TestHiddenLast(t *testing.T) {
+	fs := fakeFS(map[string]bool{"/home/u": true, "/home/u/.ssh": true, "/home/u/.ssh/id_ed25519": false, "/w": true, "/w/.env": false, "/t": true})
+	p := Policy{Write: []string{"/w", "/home/u/.ssh"}, AllowRead: []string{"/home/u/.ssh/id_ed25519"}, DenyRead: []string{"/home/u"},
+		Hidden: []string{"/home/u/.ssh", "/w/.env"}, Temp: "/t"}
+	got := strings.Join(bwrapArgs("bwrap", p, "/w", []string{"true"}, fs), " ")
+	last := strings.LastIndex(got, "--bind /home/u/.ssh /home/u/.ssh")
+	hide := strings.LastIndex(got, "--tmpfs /home/u/.ssh")
+	envHide := strings.LastIndex(got, "--ro-bind /dev/null /w/.env")
+	if last < 0 || hide < last || envHide < strings.LastIndex(got, "--bind /w /w") || !strings.Contains(got, "--remount-ro /home/u/.ssh") {
+		t.Errorf("the hidden paths are not hidden after what opens them:\n%s", got)
+	}
+	prof := seatbeltProfile(p)
+	if i := strings.LastIndex(prof, "(deny file-read* file-write*\n  (subpath \"/home/u/.ssh\")\n  (subpath \"/w/.env\"))"); i < 0 || i < strings.LastIndex(prof, "(allow file-read*") {
+		t.Errorf("the hidden paths are not denied last:\n%s", prof)
+	}
+	p.HideVars = []string{"HTTPS_PROXY", "GITHUB_TOKEN"}
+	p.Proxy = "/t/proxy.sock"
+	env := strings.Join(Env(p), " ")
+	if !strings.HasPrefix(env, "HTTPS_PROXY GITHUB_TOKEN ") || !strings.Contains(env, "HTTPS_PROXY=http://") {
+		t.Errorf("the variables: %s", env)
+	}
+}
+
+// Seatbelt matches paths, so a folder renamed takes what is in it out
+// from under the rules: nothing may be moved out of a path the command may
+// not read (but out of what is opened again in one), and no folder that
+// holds a path kept from it may be renamed or taken away, up to the root
+// (the sandbox review).
+func TestSeatbeltKeepsFoldersInPlace(t *testing.T) {
+	p := Policy{
+		Write:     []string{"/Users/u/proj"},
+		ReadOnly:  []string{"/Users/u/proj/.gnosh"},
+		DenyRead:  []string{"/Users/u", "/Users/u/proj/conf/secret.yml"},
+		AllowRead: []string{"/Users/u/proj"},
+	}
+	got := seatbeltProfile(p)
+	for _, piece := range []string{
+		"(deny file-write-unlink\n  (subpath \"/Users/u\")\n  (subpath \"/Users/u/proj/conf/secret.yml\"))",
+		"(allow file-write-unlink\n  (subpath \"/Users/u/proj\")",
+		"(deny file-write-unlink\n  (subpath \"/Users/u/proj/conf/secret.yml\"))",
+		"(deny file-write-unlink\n  (literal \"/Users\")\n  (literal \"/Users/u\")\n  (literal \"/Users/u/proj\")\n  (literal \"/Users/u/proj/conf\"))",
+	} {
+		if !strings.Contains(got, piece) {
+			t.Errorf("the profile has no %q:\n%s", piece, got)
+		}
+	}
+	if strings.Index(got, "(allow file-write-unlink") > strings.Index(got, "(deny file-write*\n  (subpath \"/Users/u/proj/.gnosh\"))") {
+		t.Errorf("the unlinks opened again come after the read-only paths, and open them:\n%s", got)
+	}
+}

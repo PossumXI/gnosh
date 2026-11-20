@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -102,6 +104,37 @@ func seatbeltProfile(p Policy) string {
 			b.WriteString("(" + what + "\n" + strings.Join(some, "\n") + ")\n")
 		}
 	}
+	// Nothing moved out of a path it may not read (a rename or a delete,
+	// Seatbelt's file-write-unlink; writing in it is another matter):
+	// moved, a file is out from under the rule's path (the sandbox
+	// review). But in what is opened again inside one, as the reads are
+	// below.
+	opened := append(append([]string(nil), p.AllowRead...), p.Write...)
+	for _, e := range p.Expose {
+		opened = append(opened, e.Path)
+	}
+	rule("deny file-write-unlink", p.DenyRead)
+	var inside, again []string
+	for _, o := range opened {
+		for _, d := range p.DenyRead {
+			if o != "" && d != "" && o != d && under(o, d) {
+				inside = append(inside, o)
+				break
+			}
+		}
+	}
+	// A denied path inside one opened again stays denied: the narrower
+	// wins, as in Claude Code.
+	for _, d := range p.DenyRead {
+		for _, r := range opened {
+			if d != "" && r != "" && d != r && under(d, r) {
+				again = append(again, d)
+				break
+			}
+		}
+	}
+	rule("allow file-write-unlink", inside)
+	rule("deny file-write-unlink", again)
 	rule("deny file-write*", p.ReadOnly)
 	// gnosh's own files after the read-only paths, which may hold them.
 	var writable []string
@@ -116,25 +149,36 @@ func seatbeltProfile(p Policy) string {
 	rule("deny file-read*", p.DenyRead)
 	// Opened again: allowRead, and the folders it writes in and gnosh's
 	// own files, which a denied path must not take from it.
-	opened := append(append([]string(nil), p.AllowRead...), p.Write...)
-	for _, e := range p.Expose {
-		opened = append(opened, e.Path)
-	}
 	if len(p.DenyRead) > 0 {
 		rule("allow file-read*", opened)
 	}
-	// A denied path inside one opened again stays denied: the narrower
-	// wins, as in Claude Code.
-	var again []string
-	for _, d := range p.DenyRead {
-		for _, r := range opened {
-			if d != "" && r != "" && d != r && under(d, r) {
-				again = append(again, d)
-				break
+	rule("deny file-read*", again)
+	// The credentials the settings hide, last, so that nothing opened
+	// above brings one back; nor may one be changed, or moved away.
+	rule("deny file-read* file-write*", p.Hidden)
+	// No folder that holds a path kept from the command may be renamed or
+	// taken away, up to the root: renamed, a folder takes what is in it
+	// out from under the rules' paths, into a folder it may read and
+	// write (the sandbox review: the project folder itself, moved into
+	// the sandbox's temporary folder, gave up a denied file in it).
+	var held []string
+	for _, list := range [][]string{p.DenyRead, p.ReadOnly, p.Hidden} {
+		for _, path := range list {
+			for dir := filepath.Dir(path); dir != "/" && dir != "." && dir != path; dir = filepath.Dir(dir) {
+				if !slices.Contains(held, dir) {
+					held = append(held, dir)
+				}
 			}
 		}
 	}
-	rule("deny file-read*", again)
+	if len(held) > 0 {
+		slices.Sort(held)
+		lits := make([]string, len(held))
+		for i, h := range held {
+			lits[i] = "  (literal " + sbString(h) + ")"
+		}
+		b.WriteString("(deny file-write-unlink\n" + strings.Join(lits, "\n") + ")\n")
+	}
 	return b.String()
 }
 

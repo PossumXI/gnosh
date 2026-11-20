@@ -5409,3 +5409,33 @@ or kept with the reason said (27).
     unlike Claude Code, no seccomp filter refuses Unix sockets: the
     sockets under /run are kept out of sight instead, and a socket
     elsewhere in sight can be reached.
+
+365. **What the sandbox hides stays hidden.** From the second sandbox
+    review (spec of findings in its memory note). Seatbelt matches paths,
+    so on macOS a folder renamed took what was in it out from under the
+    rules: `mv conf c2 && cat c2/secret.yml` read a denied file, and —
+    checked by hand — moving the project folder itself into the
+    sandbox's temporary folder gave up any denied or read-only path in
+    it. The profile now refuses `file-write-unlink` (rename and delete)
+    under a path the command may not read, but in what is opened again
+    inside one, and on every folder that holds a denied, read-only or
+    hidden path, up to the root; writing inside them still works, and a
+    link or a clone of a denied file was already refused (all checked
+    with sandbox-exec against the generated profile on macOS 27). On
+    Linux a mount cannot be renamed and moves with its folder (tested).
+    The credentials the settings hide are a list of their own
+    (Policy.Hidden), hidden last on both systems, so that no allowRead,
+    folder written in, or Edit allow rule brings one back ("no scope can
+    remove one that another scope added", as Claude Code says). A
+    pattern in denyRead, credentials.files or a Read deny rule (Claude
+    Code's docs write `~/**/.env`) had hidden nothing; the sandbox now
+    finds the paths it matches the first time it is needed, once for the
+    session, in a walk of at most 200000 entries that follows no link
+    into a folder, and /sandbox says how many it found, that one made
+    since is not among them, and when the walk stopped short; in
+    allowWrite, denyWrite and allowRead a pattern is left out with a
+    warning, as Claude Code takes none there on Linux. The variables the
+    settings hide are given first, so hiding HTTPS_PROXY cannot take the
+    sandbox's own; PATH, HOME and PWD are not hidden. On macOS the note
+    under a failed command says a refused read may be what stopped it,
+    as Seatbelt words a refused read as a refused write.

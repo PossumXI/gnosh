@@ -379,7 +379,18 @@ func (s *source) sandboxFilesystem(f jfield) {
 			// (A trailing /** is the folder with what is in it, which is
 			// what a folder's path is to the sandbox.)
 			it = strings.TrimSuffix(it, "/**")
+			if strings.ContainsAny(it, "*?[") && m.key != "filesystem.denyRead" {
+				// A pattern names the paths it matches: those a command may
+				// not read are found as the session starts; where it may
+				// write or read, a pattern is not taken, as Claude Code
+				// takes none there on Linux (the sandbox review).
+				s.probs.warnf(s.file, m.line, "%s in \"sandbox.%s\" is a pattern, and only a path, or a folder with a last /**, is taken there. It is left out.", showName(it), m.key)
+				continue
+			}
 			paths = append(paths, absPath(it, s.home, base))
+		}
+		if len(paths) == 0 {
+			continue
 		}
 		kind, list := KindRestriction, func(b *builder) *allowList { return &b.sandbox.denyWrite }
 		switch m.key {
@@ -675,6 +686,12 @@ func (s *source) sandboxCredentials(f jfield) {
 				continue
 			case !files && !validVarName(name):
 				s.errorf(it.line, "%s is not a variable's name: one starts with a letter or an underscore, and holds letters, digits and underscores.", showName(name))
+				continue
+			case !files && (name == "PATH" || name == "HOME" || name == "PWD"):
+				// (No command runs without them, and a repository's file is
+				// taken before trust: hiding one would only make every
+				// command fail, the model then asking to leave the sandbox.)
+				s.probs.warnf(s.file, it.line, "%s is not hidden from sandboxed commands: they cannot run without it. It is left out.", name)
 				continue
 			}
 			if mode == "mask" {

@@ -102,8 +102,13 @@ func (l *live) sandboxReport() string {
 	if len(guarded) > 0 {
 		fmt.Fprintf(&b, "\nRead-only within them: %s.", l.shownList(guarded))
 	}
-	if len(p.DenyRead) > 0 {
-		fmt.Fprintf(&b, "\nNot to be read: %s.", l.shownList(p.DenyRead))
+	deny := listValues(sc.DenyRead)
+	if l.engine != nil {
+		read, _, _ := l.engine.SandboxPaths()
+		deny = append(deny, read...)
+	}
+	if len(deny) > 0 {
+		fmt.Fprintf(&b, "\nNot to be read: %s.", l.shownFound(deny))
 		if len(p.AllowRead) > 0 {
 			fmt.Fprintf(&b, " Read after all: %s.", l.shownList(p.AllowRead))
 		}
@@ -111,7 +116,7 @@ func (l *live) sandboxReport() string {
 	if files, vars := listValues(sc.HiddenFiles), listValues(sc.HiddenVars); len(files)+len(vars) > 0 {
 		b.WriteString("\nCredentials hidden:")
 		if len(files) > 0 {
-			fmt.Fprintf(&b, " %s (not to be read)", l.shownList(files))
+			fmt.Fprintf(&b, " %s (not to be read, whatever else opens them)", l.shownFound(files))
 		}
 		if len(vars) > 0 {
 			fmt.Fprintf(&b, " %s (not given)", strings.Join(vars, ", "))
@@ -175,6 +180,30 @@ func (l *live) sandboxNetReport(sc config.Sandbox) string {
 		b.WriteString("; WebFetch(domain:...) allow rules let hosts through too, and any other host is asked about (Yes for the session, or kept as such a rule).")
 	}
 	return b.String()
+}
+
+// shownFound is the sandbox's list as the person is shown it: a pattern
+// with how many paths it matched as the session first needed it, and
+// what it may have missed.
+func (l *live) shownFound(list []string) string {
+	st := l.st.sandboxOf(l.cfg)
+	st.sandboxFound(list)
+	e := &st.found
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make([]string, 0, len(list))
+	for _, p := range list {
+		shown := l.shownList([]string{p})
+		if got, ok := e.got[p]; ok {
+			shown += fmt.Sprintf(" (%s found when the session started", countWords(len(got), "path", "paths"))
+			if slices.Contains(e.short, p) {
+				shown += fmt.Sprintf("; the search stopped after %d entries, so what lies beyond is not kept from commands", sandbox.ExpandBudget)
+			}
+			shown += "; one made since is not among them)"
+		}
+		out = append(out, shown)
+	}
+	return strings.Join(out, ", ")
 }
 
 // shownList is paths as the person is shown them, whole, the home folder

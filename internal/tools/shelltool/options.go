@@ -320,6 +320,10 @@ type Sandbox struct {
 	// NoTrust says the command cannot reach macOS's certificate trust
 	// service, which Go's programs check certificates with.
 	NoTrust bool
+	// HidesReads says a read the sandbox refuses is told as a refused
+	// write is (macOS's "Operation not permitted"), and there are paths
+	// it refuses to read.
+	HidesReads bool
 	// Ignored are the reports of what the sandbox stopped that are not
 	// made (ignoreViolations).
 	Ignored []Ignored

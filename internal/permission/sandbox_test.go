@@ -57,14 +57,15 @@ func TestSandboxAllows(t *testing.T) {
 
 // The Read and Edit rules' paths, for the sandbox's lists: those written
 // out in full or with a last /**, as written (a deny rule's are folded for
-// matching); not a pattern, not a "!" rule.
+// matching), and a Read deny rule's pattern as the pattern, for the
+// sandbox to find what it matches; no other pattern, no "!" rule.
 func TestSandboxPaths(t *testing.T) {
 	e := engine(t, ModeDefault, rules{
 		deny:  []string{"Read(./.env)", "Read(~/.ssh/**)", "Read(*.pem)", "Edit(./Build/**)", "Bash(rm *)"},
 		allow: []string{"Edit(//srv/out/**)", "Read(./docs/**)"},
 	})
 	read, write, allow := e.SandboxPaths()
-	if strings.Join(read, " ") != "/proj/.env /home/u/.ssh" || strings.Join(write, " ") != "/proj/Build" || strings.Join(allow, " ") != "/srv/out" {
+	if strings.Join(read, " ") != "/proj/.env /home/u/.ssh /proj/**/*.pem" || strings.Join(write, " ") != "/proj/Build" || strings.Join(allow, " ") != "/srv/out" {
 		t.Errorf("read %q, write %q, allow %q", read, write, allow)
 	}
 }
