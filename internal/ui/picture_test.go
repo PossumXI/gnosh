@@ -108,3 +108,22 @@ func TestDraggedPicturesAreMentioned(t *testing.T) {
 		t.Errorf("eleven paths became %q", got)
 	}
 }
+
+// Ctrl+V reads the clipboard away from the screen's loop; when the box
+// has turned into a shell line meanwhile, the picture is kept and said,
+// not put into the command.
+func TestCtrlVReadsTheClipboardAside(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) {
+		c.picture = func(context.Context) (string, error) { return "image-1", nil }
+	})
+	g.hold = true
+	g.keys(`<Ctrl+V>`)
+	g.keys(`<Ctrl+V>`)
+	g.liveHas("The clipboard is still being read.")
+	g.keys(`"!ls "`)
+	g.release()
+	g.liveHas("The picture is kept as @image-1: mention it in a prompt to send it.")
+	if got := g.box(); got != "!ls " {
+		t.Errorf("the mention went into a shell line: %q", got)
+	}
+}

@@ -4926,3 +4926,44 @@ or kept with the reason said (27).
     hover, documentSymbol, workspaceSymbol, goToImplementation,
     incomingCalls and outgoingCalls, read-only; it is offered only when a
     server is named, and its permission is Read's (rules, the read block).
+
+343. **Pictures pasted without holding the screen; LSP for the looking
+    sub-agents.** Ctrl+V reads the clipboard away from the screen's loop,
+    as a slash command's job runs (a clipboard tool may take ten
+    seconds); a second Ctrl+V meanwhile is told it is still being read,
+    and a picture that comes after the box turned into a shell line or a
+    search is kept and named, not put into the command. A paste of
+    dragged picture paths checks its files for a second at most (a
+    network mount that does not answer leaves the paste as text). The
+    Explore and Plan kinds of sub-agent list LSP beside Read, Glob and
+    Grep: a kind that lists a tool the session has not got goes without
+    it. And a line of a file a language server names is shown (in the
+    LSP tool's answers, and beside a change's new problems) only where
+    the Read deny rules and the read block would let the model read it:
+    a server may name any file.
+
+344. **Language servers, after their review.** A fresh-eyes review of 342
+    (2026-11-20) found the trust seams loose, fixed so: a server starts
+    only in a trusted folder, the person's own too (a server reads the
+    folder's code, and rust-analyzer's build scripts or a workspace's own
+    TypeScript run in it), and a folder is asked about when the person
+    has servers, as Claude Code asks for its workspace trust; gnosh -p
+    starts one only where the folder is recorded as trusted or with
+    --trust-folder. A project's entry is held under the trust package's
+    word for a server, with its whole command line and the names of its
+    variables in the question. A command is a program found on the PATH
+    by its name, or a path from / or ~/, never one of the folder's. A
+    server starts in the background with its own time limit
+    (startupTimeout); a change or a question waits for it only as long as
+    it can, and no lock is held across a start or a close. Each file's
+    diagnostics as the model last knew them are the base a change's new
+    problems are counted against (a file's own at its first reading are
+    not new), a publish of an older version is not taken for the new one,
+    and files that changed on disk are sent again before a change or a
+    question. A file the Read deny rules or the read block keep from the
+    model gives no line and no problems; the server's words go outside
+    gnosh's own tags; messages are clipped, call sites capped, and a
+    negative line is no crash. In the client: the process is known before
+    reading starts, a send whose context ended sends nothing and leaves
+    the next writer's deadline alone, and the server's requests are
+    answered sixteen at a time.

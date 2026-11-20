@@ -71,7 +71,14 @@ type Client struct {
 	done      chan struct{} // closed when the reader stops
 	exited    chan struct{} // closed when the server's process has exited
 	closeOnce sync.Once
+	answering chan struct{} // a slot for each request of the server's being answered
 }
+
+// answersAtOnce is how many of the server's requests are answered at
+// once, each by a goroutine of its own; more are answered in turn, by the
+// reader (the language servers review of 2026-11-20: one goroutine a
+// request, with no limit, let a server make as many as it liked).
+const answersAtOnce = 16
 
 // document is a file the server has been told of.
 type document struct {
@@ -81,8 +88,9 @@ type document struct {
 
 // published is what the server last said of one file.
 type published struct {
-	seq   uint64 // the publish it came in, counted over every file
-	diags []Diagnostic
+	seq     uint64 // the publish it came in, counted over every file
+	version int    // the version of the file it is of, or -1 when the server did not say
+	diags   []Diagnostic
 }
 
 // reply is a response to one of the client's requests.
@@ -149,12 +157,15 @@ func Start(ctx context.Context, cfg Config) (*Client, error) {
 		out.Close()
 		return nil, fmt.Errorf("%s could not be started: %w", cfg.Command, err)
 	}
-	c := connect(cfg, in, out)
+	c := newClient(cfg, in)
 	c.cmd, c.errs = cmd, errs
 	go func() {
 		_ = cmd.Wait()
 		close(c.exited)
 	}()
+	// (The reader starts once the client knows its process: output that
+	// is not the protocol closes the client at once, which stops it.)
+	go c.read(out)
 	if err := c.initialize(ctx, cfg); err != nil {
 		_ = c.Close()
 		if said := strings.TrimSpace(errs.String()); said != "" {
@@ -168,15 +179,21 @@ func Start(ctx context.Context, cfg Config) (*Client, error) {
 // connect makes a client of a server already running at the other end of
 // in and out, and starts reading.
 func connect(cfg Config, in, out *os.File) *Client {
+	c := newClient(cfg, in)
+	go c.read(out)
+	return c
+}
+
+// newClient makes a client that writes to in, not yet reading.
+func newClient(cfg Config, in *os.File) *Client {
 	name := cfg.Name
 	if name == "" {
 		name = filepath.Base(cfg.Command)
 	}
-	c := &Client{name: name, root: cfg.Root, settings: cfg.Settings, stopWait: cfg.StopWait, in: in, errs: &tail{},
+	return &Client{name: name, root: cfg.Root, settings: cfg.Settings, stopWait: cfg.StopWait, in: in, errs: &tail{},
 		pending: map[int64]chan reply{}, docs: map[string]*document{}, diags: map[string]published{},
-		changed: make(chan struct{}), done: make(chan struct{}), exited: make(chan struct{})}
-	go c.read(out)
-	return c
+		changed: make(chan struct{}), done: make(chan struct{}), exited: make(chan struct{}),
+		answering: make(chan struct{}, answersAtOnce)}
 }
 
 // Name is the server's name.
@@ -336,7 +353,15 @@ func (c *Client) Err() error {
 func (c *Client) dispatch(m message) {
 	switch {
 	case m.Method != "" && len(m.ID) > 0:
-		go c.answer(m)
+		select {
+		case c.answering <- struct{}{}:
+			go func() {
+				defer func() { <-c.answering }()
+				c.answer(m)
+			}()
+		default:
+			c.answer(m)
+		}
 	case m.Method == "textDocument/publishDiagnostics":
 		c.publish(m.Params)
 	case m.Method != "":
@@ -411,15 +436,20 @@ func (c *Client) answer(m message) {
 func (c *Client) publish(params json.RawMessage) {
 	var p struct {
 		URI         string       `json:"uri"`
+		Version     *int         `json:"version"`
 		Diagnostics []Diagnostic `json:"diagnostics"`
 	}
 	if json.Unmarshal(params, &p) != nil || p.URI == "" {
 		return
 	}
+	version := -1
+	if p.Version != nil {
+		version = *p.Version
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.seq++
-	c.diags[p.URI] = published{seq: c.seq, diags: p.Diagnostics}
+	c.diags[p.URI] = published{seq: c.seq, version: version, diags: p.Diagnostics}
 	close(c.changed)
 	c.changed = make(chan struct{})
 }
@@ -433,6 +463,9 @@ func (c *Client) send(ctx context.Context, m message) error {
 	if err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
 	if c.broken != nil {
@@ -443,9 +476,17 @@ func (c *Client) send(ctx context.Context, m message) error {
 		deadline = d
 	}
 	_ = c.in.SetWriteDeadline(deadline)
-	stop := context.AfterFunc(ctx, func() { _ = c.in.SetWriteDeadline(time.Now()) })
+	fired := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = c.in.SetWriteDeadline(time.Now())
+		close(fired)
+	})
 	n, err := c.in.Write(frame(body))
-	stop()
+	if !stop() {
+		// (The deadline was moved to now: it is put back before the
+		// lock goes, so that it cannot cut the next writer's message.)
+		<-fired
+	}
 	switch {
 	case err == nil:
 		return nil

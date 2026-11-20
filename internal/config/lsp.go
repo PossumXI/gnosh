@@ -110,6 +110,16 @@ func (s *source) lspServers(f jfield) {
 						s.errorf(fl.line, "%s.command is the program alone, with no spaces unless it is a path that starts with /: put its arguments in \"args\".", at)
 						continue
 					}
+					if strings.HasPrefix(v, "~/") {
+						v = absPath(v, s.home, s.cwd)
+					}
+					if strings.Contains(v, "/") && !strings.HasPrefix(v, "/") {
+						// (A path of the folder's would run the folder's own
+						// file, which its repository can put there: the
+						// language servers review of 2026-11-20.)
+						s.errorf(fl.line, "%s.command is a program found on the PATH, by its name alone, or a path that starts with / or ~/; %s is neither.", at, showName(v))
+						continue
+					}
 					srv.Command = v
 				case "workspaceFolder":
 					srv.WorkspaceFolder = absPath(v, s.home, s.cwd)
@@ -197,8 +207,14 @@ func (s *source) lspServers(f jfield) {
 			s.errorf(m.line, "the language server %s has no \"extensionToLanguage\": name the file endings it is for, as in {\".go\": \"go\"}.", showName(name))
 			continue
 		}
+		// The trust question says all that it would run: the command
+		// line, and the names of the variables it would be given.
 		exts := slices.Sorted(maps.Keys(srv.Extensions))
-		s.add(op{kind: KindLSPServer, text: "language server " + name + " (" + srv.Command + ") for " + strings.Join(exts, " "), origin: o, what: "a language server",
+		text := "language server " + name + " for " + strings.Join(exts, " ") + ", run as " + strings.Join(append([]string{srv.Command}, srv.Args...), " ")
+		if len(srv.Env) > 0 {
+			text += " with " + strings.Join(slices.Sorted(maps.Keys(srv.Env)), ", ") + " set"
+		}
+		s.add(op{kind: KindLSPServer, text: text, origin: o, what: "a language server",
 			apply: func(b *builder) {
 				if b.lsp == nil {
 					b.lsp = map[string]LSPServer{}

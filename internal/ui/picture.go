@@ -14,6 +14,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
 	"github.com/gnosh-ai/gnosh/internal/term"
+	"github.com/gnosh-ai/gnosh/internal/ui/editor"
 )
 
 // This file is pictures in the prompt box, as Claude Code takes them
@@ -29,16 +30,35 @@ type picturePaster interface {
 	PastePicture(ctx context.Context) (string, error)
 }
 
-// pastePicture is Ctrl+V in the prompt box.
+// pastePicture is Ctrl+V in the prompt box. The clipboard is read away
+// from the screen's loop, as a slash command's job is: a clipboard tool
+// that takes its time (up to ten seconds) leaves the screen working.
 func (s *session) pastePicture() {
 	pp, ok := s.c.(picturePaster)
 	if !ok {
 		s.flash("Pasting a picture (Ctrl+V) is not joined to this build.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	name, err := pp.PastePicture(ctx)
+	if s.pasting {
+		s.flash("The clipboard is still being read.")
+		return
+	}
+	s.pasting = true
+	s.host.spawn(func() func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		name, err := pp.PastePicture(ctx)
+		return func() {
+			s.pasting = false
+			s.pasted(name, err)
+		}
+	})
+}
+
+// pasted says how a paste of a picture went, and puts its mention in the
+// box: unless the box has turned into a shell line or a search meanwhile,
+// where the mention would be no mention, and is said instead.
+func (s *session) pasted(name string, err error) {
 	switch {
 	case errors.Is(err, app.ErrClipboardFar):
 		s.flash("Over ssh, the clipboard Ctrl+V would read is on your own machine, out of gnosh's reach. Put the picture in a file here and mention it with @.")
@@ -48,6 +68,8 @@ func (s *session) pastePicture() {
 		s.flash("The clipboard holds no picture. Text is pasted with the terminal's own paste.")
 	case err != nil:
 		s.flash("The picture could not be pasted: " + err.Error() + ".")
+	case s.ed.Mode() != editor.ModePrompt || s.ed.Searching():
+		s.flash("The picture is kept as @" + name + ": mention it in a prompt to send it.")
 	default:
 		s.ed.Handle(term.Paste{Text: s.spaced("@" + name + " ")})
 		s.flash("The picture goes with the prompt as @" + name + ".")
@@ -100,6 +122,7 @@ func (s *session) picturePaths(text string) (string, bool) {
 		return "", false
 	}
 	out := make([]string, 0, len(words))
+	var paths []string
 	for _, w := range words {
 		p := w
 		if strings.HasPrefix(p, "file://") {
@@ -115,9 +138,7 @@ func (s *session) picturePaths(text string) (string, bool) {
 		if !filepath.IsAbs(p) || !pictureEndings[strings.ToLower(filepath.Ext(p))] {
 			return "", false
 		}
-		if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
-			return "", false
-		}
+		paths = append(paths, p)
 		shown := p
 		if s.home != "" && strings.HasPrefix(p, s.home+string(filepath.Separator)) {
 			shown = "~/" + p[len(s.home)+1:]
@@ -130,5 +151,30 @@ func (s *session) picturePaths(text string) (string, bool) {
 		}
 		out = append(out, "@"+shown)
 	}
+	if !regularFiles(paths, time.Second) {
+		return "", false
+	}
 	return strings.Join(out, " ") + " ", true
+}
+
+// regularFiles reports whether every path is a regular file that is
+// there, giving up after wait: a path on a network mount that does not
+// answer would otherwise hold the screen (the paste is then text).
+func regularFiles(paths []string, wait time.Duration) bool {
+	done := make(chan bool, 1)
+	go func() {
+		for _, p := range paths {
+			if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
+				done <- false
+				return
+			}
+		}
+		done <- true
+	}()
+	select {
+	case ok := <-done:
+		return ok
+	case <-time.After(wait):
+		return false
+	}
 }

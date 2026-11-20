@@ -199,25 +199,25 @@ func TestSyncAndDiagnostics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	path := filepath.Join(c.root, "a.go")
-	since, sent, err := c.Sync(ctx, path, "go", "package a\n")
-	if err != nil || !sent {
-		t.Fatalf("open: sent %v, %v", sent, err)
+	s, err := c.Sync(ctx, path, "go", "package a\n")
+	if err != nil || !s.Sent {
+		t.Fatalf("open: %+v, %v", s, err)
 	}
-	if !c.Settle(ctx, path, since, 50*time.Millisecond) {
+	if !c.Settle(ctx, path, s, 50*time.Millisecond) {
 		t.Fatal("the opened file's diagnostics did not come")
 	}
 	if d := c.Diagnostics(); len(d) != 0 {
 		t.Errorf("a clean file: %v", d)
 	}
-	since, sent, err = c.Sync(ctx, path, "go", "var bad = x\n")
-	if err != nil || !sent || !c.Settle(ctx, path, since, 50*time.Millisecond) {
-		t.Fatalf("change: sent %v, %v", sent, err)
+	s, err = c.Sync(ctx, path, "go", "var bad = x\n")
+	if err != nil || !s.Sent || s.Version != 2 || !c.Settle(ctx, path, s, 50*time.Millisecond) {
+		t.Fatalf("change: %+v, %v", s, err)
 	}
 	d := c.Diagnostics()
 	if len(d[path]) != 1 || d[path][0].Message != "undefined: bad" || len(d[filepath.Join(c.root, "b.go")]) != 1 {
 		t.Errorf("diagnostics after the change: %+v", d)
 	}
-	if _, sent, _ := c.Sync(ctx, path, "go", "var bad = x\n"); sent {
+	if s, _ := c.Sync(ctx, path, "go", "var bad = x\n"); s.Sent {
 		t.Error("the same text was sent again")
 	}
 	changes, saves := f.received("textDocument/didChange"), f.received("textDocument/didSave")
@@ -231,7 +231,7 @@ func TestSyncAndDiagnostics(t *testing.T) {
 	c.mu.Lock()
 	now := c.seq
 	c.mu.Unlock()
-	if c.Settle(short, filepath.Join(c.root, "none.go"), now, 10*time.Millisecond) {
+	if c.Settle(short, filepath.Join(c.root, "none.go"), Synced{Since: now}, 10*time.Millisecond) {
 		t.Error("Settle said diagnostics came for a file nothing was published of")
 	}
 }
@@ -406,4 +406,35 @@ func TestSettings(t *testing.T) {
 		t.Errorf("didChangeConfiguration: %+v", sent)
 	}
 	_ = c
+}
+
+// A late publish of an older version of a file is not taken for the
+// diagnostics of the version just sent: Settle waits for its own.
+func TestSettleWaitsForItsVersion(t *testing.T) {
+	c, f := newFake(t, func(f *fake, m message) {
+		if m.Method == "textDocument/didChange" {
+			// The answer to the change before, late, then this one's.
+			old, _ := json.Marshal(map[string]any{"uri": FileURI("/w/a.go"), "version": 1, "diagnostics": []Diagnostic{{Message: "old"}}})
+			f.write(message{Method: "textDocument/publishDiagnostics", Params: old})
+			time.Sleep(50 * time.Millisecond)
+			cur, _ := json.Marshal(map[string]any{"uri": FileURI("/w/a.go"), "version": 2, "diagnostics": []Diagnostic{{Message: "new"}}})
+			f.write(message{Method: "textDocument/publishDiagnostics", Params: cur})
+			return
+		}
+		standard(f, m)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	first, err := c.Sync(ctx, "/w/a.go", "go", "one")
+	if err != nil || !c.Settle(ctx, "/w/a.go", first, 10*time.Millisecond) {
+		t.Fatalf("open: %+v, %v", first, err)
+	}
+	s, err := c.Sync(ctx, "/w/a.go", "go", "two")
+	if err != nil || !c.Settle(ctx, "/w/a.go", s, 10*time.Millisecond) {
+		t.Fatalf("settle: %+v, %v", s, err)
+	}
+	if d := c.Diagnostics()["/w/a.go"]; len(d) != 1 || d[0].Message != "new" {
+		t.Errorf("settled on %+v, want the new version's", d)
+	}
+	_ = f
 }

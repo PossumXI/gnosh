@@ -172,6 +172,8 @@ type session struct {
 	// record showed it whole: the note that the turn goes on does not say
 	// it again.
 	hookSaid string
+	// pasting says a Ctrl+V is reading the clipboard (picture.go).
+	pasting bool
 	// profile, light and themed are config's, for the theme option
 	// (themecmd.go).
 	profile text.Profile

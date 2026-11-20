@@ -38,10 +38,10 @@ func TestBuiltin(t *testing.T) {
 	if gp.ToolsSet || gp.OmitInstructions {
 		t.Errorf("general-purpose is to have every tool and the instruction files: %+v", gp)
 	}
-	if strings.Join(ex.Tools, " ") != "Read Glob Grep" || !ex.ToolsSet || !ex.OmitInstructions {
+	if strings.Join(ex.Tools, " ") != "Read Glob Grep LSP" || !ex.ToolsSet || !ex.OmitInstructions {
 		t.Errorf("Explore is to read and search only, without the instruction files: %+v", ex)
 	}
-	if pl := byName["Plan"]; strings.Join(pl.Tools, " ") != "Read Glob Grep" || !pl.ToolsSet || !pl.OmitInstructions {
+	if pl := byName["Plan"]; strings.Join(pl.Tools, " ") != "Read Glob Grep LSP" || !pl.ToolsSet || !pl.OmitInstructions {
 		t.Errorf("Plan is to read and search only, without the instruction files: %+v", pl)
 	}
 }

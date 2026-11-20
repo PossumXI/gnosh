@@ -24,8 +24,12 @@ const lspToolName = "LSP"
 var lspOperations = []string{"goToDefinition", "findReferences", "hover", "documentSymbol", "workspaceSymbol",
 	"goToImplementation", "incomingCalls", "outgoingCalls"}
 
-// lspResultsMost is the most locations or symbols one call lists.
-const lspResultsMost = 100
+// lspResultsMost is the most locations or symbols one call lists, and
+// lspCallSitesShown the most places of the calls of one caller.
+const (
+	lspResultsMost    = 100
+	lspCallSitesShown = 10
+)
 
 const lspToolDescription = `Asks the language server of a file's language (gopls for Go, say) about the code: where a symbol is defined, every place that refers to it, its type and documentation, the symbols of a file or of the whole workspace, what implements an interface, and who calls a function and what it calls. Read-only: it changes nothing. Prefer it to searching text when you look for a symbol by name or meaning.
 
@@ -137,18 +141,27 @@ func (t *lspTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	}
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
-	srv.mu.Lock()
 	c, err := t.s.clientOf(ctx, srv)
 	var text string
-	if err == nil && in.FilePath != "" {
-		var ok bool
-		if text, ok = readFileFor(in.FilePath); !ok {
-			err = fmt.Errorf("%s cannot be read, or is larger than %d MiB", in.FilePath, lspFileMost>>20)
+	if err == nil {
+		// The server is told of what changed on disk since it was last
+		// told, the asked file among it, in the one slot a change takes,
+		// so that the answer is of the files as they are.
+		release, ok := srv.edit(ctx)
+		if !ok {
+			err = ctx.Err()
 		} else {
-			_, _, err = c.Sync(ctx, in.FilePath, lang, text)
+			t.s.refresh(ctx, c, in.FilePath)
+			if in.FilePath != "" {
+				if text, ok = readFileFor(in.FilePath); !ok {
+					err = fmt.Errorf("%s cannot be read, or is larger than %d MiB", in.FilePath, lspFileMost>>20)
+				} else {
+					_, err = c.Sync(ctx, in.FilePath, lang, text)
+				}
+			}
+			release()
 		}
 	}
-	srv.mu.Unlock()
 	if err != nil {
 		return core.ErrorResult(fmt.Sprintf("The language server %s could not answer: %v.", srv.cfg.Name, err)), nil
 	}
@@ -212,7 +225,9 @@ func (t *lspTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 }
 
 // lspFormat words answers, each place as path:line:character (1-based)
-// with the text of its line.
+// with the text of its line: a line of a file the Read deny rules or the
+// read block keep from the model is left out, whatever file the server
+// names (lineFor).
 type lspFormat struct {
 	l     *live
 	files map[string][]string
@@ -227,8 +242,7 @@ func (f *lspFormat) place(loc lsp.Location) string {
 	}
 	lines, ok := f.files[path]
 	if !ok {
-		text, _ := readFileFor(path)
-		lines = strings.Split(text, "\n")
+		lines = f.l.lspLines(path)
 		f.files[path] = lines
 	}
 	lineText := ""
@@ -298,7 +312,11 @@ func (f *lspFormat) calls(calls []lsp.Call, incoming bool) string {
 		fmt.Fprintf(&b, "%s %s at %s\n", lsp.SymbolKind(c.Item.Kind), c.Item.Name, f.place(lsp.Location{URI: c.Item.URI, Range: c.Item.SelectionRange}))
 		if incoming {
 			uri := c.Item.URI
-			for _, r := range c.Ranges {
+			for j, r := range c.Ranges {
+				if j == lspCallSitesShown {
+					fmt.Fprintf(&b, "  and %d more calls there.\n", len(c.Ranges)-j)
+					break
+				}
 				b.WriteString("  calls it at " + f.place(lsp.Location{URI: uri, Range: r}) + "\n")
 			}
 		}

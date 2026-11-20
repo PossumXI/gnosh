@@ -25,7 +25,24 @@ func (st *startup) heldList() []trust.Holding {
 		held = append(held, trust.Holding{Kind: h.Kind, Text: h.Text, File: h.Origin.File, Line: h.Origin.Line})
 	}
 	held = append(held, st.gitPrograms...)
+	held = append(held, lspHoldings(st.cfg)...)
 	return append(held, projectHoldings(st.cfg)...)
+}
+
+// lspHoldings are the person's own language servers, which would read
+// this folder's code and may run some of it (a build script, a macro, the
+// workspace's own TypeScript): they wait for the folder to be trusted, as
+// Claude Code's wait for its workspace trust, so a folder is asked about
+// when the person has servers for it to run (the language servers review
+// of 2026-11-20). A project's own are held by its settings file already.
+func lspHoldings(cfg *config.Config) []trust.Holding {
+	var out []trust.Holding
+	for _, srv := range cfg.LSPServers {
+		line := strings.Join(append([]string{srv.Command}, srv.Args...), " ")
+		out = append(out, trust.Holding{Kind: trust.KindLSP, Text: "your language server " + srv.Name + " (" + line + "), which would read this folder's code and may run some of it",
+			File: srv.Origin.File, Line: srv.Origin.Line})
+	}
+	return out
 }
 
 // projectHoldings is what a folder's own definitions would run, or let

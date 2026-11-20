@@ -156,7 +156,7 @@ const (
 	KindRemoval     = "removal"     // taking away a provider, a model or a host a weaker file declared
 	KindStatusLine  = "status-line"
 	KindFileSuggest = "file-suggestion"
-	KindLSPServer   = "lsp-server" // a language server, a program gnosh runs
+	KindLSPServer   = "lsp" // a language server, a program gnosh runs (the trust package's word)
 )
 
 // StatusLine is a command whose output takes the place of the status line
