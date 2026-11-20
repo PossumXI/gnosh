@@ -729,3 +729,15 @@ func TestForkedSkillGrantIsItsSubAgentsAlone(t *testing.T) {
 	has(t, "what the parent was told of its own touch", toolResult(t, w, 4, "c2"), "needs a person's approval")
 	w.Model.Done()
 }
+
+// /skills says what each skill costs in the model's window, as Claude
+// Code's /skill-doctor does: its line in the list the model is told of,
+// or that it is not in that list; and the whole list's cost.
+func TestSkillsSayTheirCost(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploy the service to the staging box, with the checks that come first.\n---\nSteps.\n")
+	w.Write(w.ConfigDir()+"/skills/secret/SKILL.md", "---\nname: secret\ndescription: Only the user runs this.\ndisable-model-invocation: true\n---\nSteps.\n")
+	out := run(t, w, "-p", "/skills").wantCode(t, 0).out
+	has(t, "/skills", out, "/deploy", "about 2", "tokens in the model's window", "/secret", "not in the model's list",
+		"The model is told of 1 skill in about")
+}

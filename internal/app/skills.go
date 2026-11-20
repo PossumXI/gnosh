@@ -424,12 +424,26 @@ func (l *live) skillsForFile(done agent.ToolDone) []agent.Part {
 // the descriptions are left off from the end when together they would
 // take more than a hundredth of the model's window.
 func (l *live) skillsLine() string {
-	if !slices.Contains(l.toolNames(), skillToolName) {
+	list, lines := l.skillsList()
+	if len(list) == 0 {
 		return ""
+	}
+	return prompt.Wrap(skillsLead + "\n" + strings.Join(lines, "\n"))
+}
+
+// skillsLead is the sentence the list of skills begins with.
+const skillsLead = "The user keeps these skills: instructions for one kind of task each. When a task matches one, load it with the Skill tool before you start on the task, and follow what it says."
+
+// skillsList is the skills the model is told of and the line each has in
+// skillsLine: every name, with its description where the descriptions
+// together fit a hundredth of the model's window, from the first on.
+func (l *live) skillsList() ([]skill.Skill, []string) {
+	if !slices.Contains(l.toolNames(), skillToolName) {
+		return nil, nil
 	}
 	list := l.forModel()
 	if len(list) == 0 {
-		return ""
+		return nil, nil
 	}
 	budget := 8000
 	if l.agent != nil {
@@ -451,7 +465,7 @@ func (l *live) skillsLine() string {
 		lines[i] += ": " + d
 		used += len(d) + 2
 	}
-	return prompt.Wrap("The user keeps these skills: instructions for one kind of task each. When a task matches one, load it with the Skill tool before you start on the task, and follow what it says.\n" + strings.Join(lines, "\n"))
+	return list, lines
 }
 
 // skillRun is a skill as it went into the conversation.
@@ -1103,6 +1117,16 @@ func (l *live) slashSkills(ctx context.Context, c *SlashContext) error {
 		c.Say("There are no skills. A skill is a folder with a SKILL.md in it: in %s for all your projects, or in %s of a project you trust.",
 			userDefDirs(l.cfg, "skills")[0], filepath.Join(ownDir, "skills"))
 	}
+	// What each costs in the model's window (Claude Code's /skill-doctor):
+	// its line in the list the model is told of, with the first prompt
+	// and again after each summary.
+	offered, lines := l.skillsList()
+	cost, total := map[string]int{}, 0
+	for i, sk := range offered {
+		n := (len(lines[i]) + 4) / 4
+		cost[sk.Name] = n
+		total += n
+	}
 	for _, sk := range set.All() {
 		who := l.skillWho(sk)
 		hint := ""
@@ -1110,13 +1134,21 @@ func (l *live) slashSkills(ctx context.Context, c *SlashContext) error {
 			hint = " " + sk.ArgumentHint
 		}
 		c.Say("/%s%s  %s", sk.Name, hint, oneLine(sk.Description, 200))
-		c.Say("    %s (%s)", sk.Source, who)
+		if n, ok := cost[sk.Name]; ok {
+			c.Say("    %s (%s) · about %s in the model's window", sk.Source, who, countWords(n, "token", "tokens"))
+		} else {
+			c.Say("    %s (%s) · not in the model's list", sk.Source, who)
+		}
 		if len(sk.AllowedTools) > 0 {
 			c.Say("    lets these run without a question until your next prompt: %s", oneLine(strings.Join(sk.AllowedTools, ", "), 300))
 		}
 	}
 	for _, sk := range set.Skipped() {
 		c.Say("not a skill: %s (%s)", sk.Path, sk.Reason)
+	}
+	if len(offered) > 0 {
+		c.Say("The model is told of %s in about %s, with the first prompt and after each summary; /skills <name> name-only keeps one's description out, /skills <name> off the skill.",
+			countWords(len(offered), "skill", "skills"), countWords(total+(len(skillsLead)+3)/4, "token", "tokens"))
 	}
 	if !l.st.trusted {
 		if _, held := heldDefs(l.cfg, l.moreRoots()); held > 0 {
