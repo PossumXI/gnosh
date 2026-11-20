@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -30,17 +31,37 @@ type Proxy struct {
 	// Told is called with each host refused, for the person; nil is
 	// nothing.
 	Told func(host, why string)
-	// Also lets a host neither list names through all the same (a
-	// WebFetch(domain:...) allow rule, as Claude Code takes them); Ask
-	// asks the person about a host nothing lets through or refuses, once
-	// per host for the session, the answer kept. Nil: neither.
-	Also func(host string) bool
-	Ask  func(ctx context.Context, host string, port int) (yes bool, why string)
+	// Rules says what the permission rules say of a host
+	// (WebFetch(domain:...), as Claude Code takes them): a deny rule
+	// refuses it, an ask rule has the person asked, an allow rule lets it
+	// through. Nil: none.
+	Rules func(host string) HostRule
+	// Ask asks about a host nothing lets through or refuses: forced when
+	// an ask rule names it. kept says the answer is the person's, kept
+	// for the session; one that is the mode's (bypass, dontAsk, nobody
+	// there) is not kept, as the mode may change (the sandbox review).
+	// Nil: such a host is refused.
+	Ask func(ctx context.Context, host string, port int, forced bool) (yes bool, why string, kept bool)
 
 	mu       sync.Mutex
 	answered map[string]answer
-	asking   map[string]*sync.Mutex
+	pending  map[string]chan struct{}
 }
+
+// HostRule is what the permission rules say of a host.
+type HostRule int
+
+const (
+	HostUnruled HostRule = iota // no rule names it
+	HostAllowed                 // a rule lets it through
+	HostAsked                   // a rule says to ask the person first
+	HostDenied                  // a rule refuses it
+)
+
+// maxAsked is how many hosts the person is asked about in a session, at
+// most: a command that reaches for one host after another would
+// otherwise put question after question (the sandbox review).
+const maxAsked = 40
 
 // proxyDialWait bounds the making of one connection outward.
 const proxyDialWait = 30 * time.Second
@@ -86,12 +107,20 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.refuse(w, host, "the port "+port+" is not one")
 		return
 	}
-	if ok, why := p.lets(r.Context(), host, n); !ok {
-		p.refuse(w, host, why)
+	h, ok := HostName(host)
+	if !ok {
+		// (A name with a * in it, or 2130706433 for 127.0.0.1: an answer
+		// would be kept as a rule wider, or other, than what was shown:
+		// the sandbox review.)
+		p.refuse(w, host, "it is no host name, nor an address written in full")
+		return
+	}
+	if ok, why := p.lets(r.Context(), h, n); !ok {
+		p.refuse(w, h, why)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), proxyDialWait)
-	conn, why := p.dial(ctx, host, port)
+	conn, why := p.dial(ctx, h, port)
 	cancel()
 	if conn == nil {
 		p.refuse(w, host, why)
@@ -131,9 +160,28 @@ func (p *Proxy) dial(ctx context.Context, host, port string) (net.Conn, string) 
 }
 
 // local reports whether an address is the machine's own, its network's,
-// or no address at all.
+// or no address at all: the loopback, the private ranges, the shared
+// address space carrier networks and Tailscale use (100.64.0.0/10), and
+// every address of the machine's own interfaces, its public ones among
+// them, where a server a firewall keeps from the internet may listen (the
+// sandbox review).
 func local(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+		return true
+	}
+	if v4 := ip.To4(); v4 != nil && v4[0] == 100 && v4[1]&0xc0 == 64 {
+		return true
+	}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // errText is an error's words, or nothing.
@@ -236,54 +284,105 @@ func (p *Proxy) refuse(w http.ResponseWriter, host, why string) {
 		". The person may add it to sandbox.network.allowedDomains, or the command may run outside the sandbox (dangerouslyDisableSandbox), after asking.\n")
 }
 
-// lets decides whether the host may be reached: never one deniedDomains
-// names; one allowedDomains names, or Also lets through; else as the
-// person answered, asked once per host for the session (several
-// connections to a new host at once ask once).
-func (p *Proxy) lets(ctx context.Context, host string, port int) (bool, string) {
-	v, why := p.domains.verdict(host, port)
-	switch {
-	case v == denied:
+// lets decides whether the host (as HostName gives it) may be reached:
+// never one deniedDomains or a deny rule names; one an ask rule names as the person answers; one
+// allowedDomains names, or an allow rule; else as the person answers,
+// asked once per host for the session (several connections to a new host
+// at once ask once, and one that gives up waiting stops waiting).
+func (p *Proxy) lets(ctx context.Context, h string, port int) (bool, string) {
+	v, why := p.domains.verdict(h, port)
+	if v == denied {
 		return false, why
-	case v == listed:
-		return true, ""
 	}
-	h := normalHost(host)
-	if p.Also != nil && p.Also(h) {
+	rule := HostUnruled
+	if p.Rules != nil {
+		rule = p.Rules(h)
+	}
+	switch {
+	case rule == HostDenied:
+		return false, h + " is refused by a WebFetch(domain:...) deny rule"
+	case rule == HostAsked:
+	case v == listed || rule == HostAllowed:
 		return true, ""
 	}
 	if p.Ask == nil {
 		return false, why
 	}
-	p.mu.Lock()
-	if p.asking == nil {
-		p.asking, p.answered = map[string]*sync.Mutex{}, map[string]answer{}
-	}
-	one := p.asking[h]
-	if one == nil {
-		one = &sync.Mutex{}
-		p.asking[h] = one
-	}
-	p.mu.Unlock()
-	one.Lock()
-	defer one.Unlock()
-	p.mu.Lock()
-	a, done := p.answered[h]
-	p.mu.Unlock()
-	if !done {
-		a.yes, a.why = p.Ask(ctx, h, port)
+	for {
+		p.mu.Lock()
+		if a, done := p.answered[h]; done {
+			p.mu.Unlock()
+			return a.yes, a.why
+		}
+		if wait := p.pending[h]; wait != nil {
+			p.mu.Unlock()
+			select {
+			case <-wait:
+				continue
+			case <-ctx.Done():
+				return false, h + " was not answered for"
+			}
+		}
+		if len(p.answered) >= maxAsked {
+			p.mu.Unlock()
+			return false, fmt.Sprintf("%d hosts have been asked about in this session already; one more is refused (sandbox.network.allowedDomains lets it through)", maxAsked)
+		}
+		if p.pending == nil {
+			p.pending, p.answered = map[string]chan struct{}{}, map[string]answer{}
+		}
+		wait := make(chan struct{})
+		p.pending[h] = wait
+		p.mu.Unlock()
+		yes, why, kept := p.Ask(ctx, h, port, rule == HostAsked)
+		p.mu.Lock()
+		delete(p.pending, h)
+		if kept && ctx.Err() == nil {
+			p.answered[h] = answer{yes: yes, why: why}
+		}
+		p.mu.Unlock()
+		close(wait)
 		if ctx.Err() != nil {
 			// (Taken back before it was answered: nothing kept.)
 			return false, h + " was not answered for"
 		}
-		p.mu.Lock()
-		p.answered[h] = a
-		p.mu.Unlock()
+		return yes, why
 	}
-	if !a.yes {
-		return false, a.why
+}
+
+// HostName is a host as the proxy takes it, lower case, without a last
+// dot or an IPv6 address's brackets: a name of letters, digits, dashes
+// and underscores, in labels of at most 63, the last not all digits, or
+// an address written in full (an IPv4 address's four numbers; any form
+// of an IPv6 one, given back as Go writes it). ok is false for anything
+// else: a name with a * in it, an address written short or as one number
+// (127.1, 2130706433), which resolvers take for an address but rules do
+// not.
+func HostName(host string) (string, bool) {
+	h := normalHost(host)
+	if h == "" || len(h) > 253 {
+		return "", false
 	}
-	return true, ""
+	if ip := net.ParseIP(h); ip != nil {
+		// (Go takes an IPv4 address only as four numbers, no zero ahead
+		// of one.)
+		return ip.String(), true
+	}
+	labels := strings.Split(h, ".")
+	for _, l := range labels {
+		if l == "" || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+			return "", false
+		}
+		for _, r := range l {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+				return "", false
+			}
+		}
+	}
+	last := labels[len(labels)-1]
+	if strings.Trim(last, "0123456789") == "" || strings.HasPrefix(last, "0x") {
+		return "", false
+	}
+	return h, true
 }
 
 // answer is what Ask said of a host, kept for the session.

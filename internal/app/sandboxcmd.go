@@ -168,7 +168,7 @@ func (l *live) sandboxLooseText(sc config.Sandbox) string {
 func (l *live) sandboxNetReport(sc config.Sandbox) string {
 	var b strings.Builder
 	b.WriteString("\nNetwork: through gnosh's proxy")
-	if hosts := listValues(sc.AllowedDomains); len(hosts) > 0 {
+	if hosts := sandboxAllowed(sc); len(hosts) > 0 {
 		fmt.Fprintf(&b, "; %s let through at once", strings.Join(hosts, ", "))
 	}
 	if denied := listValues(sc.DeniedDomains); len(denied) > 0 {

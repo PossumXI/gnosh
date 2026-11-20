@@ -104,22 +104,46 @@ func (e *Engine) SandboxPaths() (denyRead, denyWrite, allowWrite []string) {
 	return denyRead, denyWrite, allowWrite
 }
 
-// FetchAllows reports whether a WebFetch(domain:...) allow rule covers the
-// host: Claude Code takes those rules into its sandbox's allowed domains,
-// and keeps a host the person let a sandboxed command reach as one.
-func (e *Engine) FetchAllows(host string) bool {
+// HostRule is what the WebFetch(domain:...) rules say of a host, for the
+// sandbox's proxy.
+type HostRule int
+
+const (
+	HostUnruled HostRule = iota // no rule names it
+	HostAllowed                 // an allow rule lets it through
+	HostAsked                   // an ask rule says to ask first
+	HostDenied                  // a deny rule refuses it, in every mode
+)
+
+// FetchRule is what the WebFetch(domain:...) rules say of a host a
+// sandboxed command reaches for, as Claude Code takes them into its
+// sandbox (a deny rule with its deniedDomains, an allow rule with its
+// allowedDomains; the answer "Yes, and don't ask again" is kept as one):
+// a deny rule refuses it whatever the mode, an ask rule asks first, as it
+// does a tool call, and an allow rule lets it through, but one with a *
+// inside a name ("*npmjs.org"), which Claude Code's sandbox does not take
+// (the sandbox review). ownOnly counts only the person's own allow rules,
+// for strictAllowlist.
+func (e *Engine) FetchRule(host string, ownOnly bool) HostRule {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	match := func(c *crule) bool { return c.kind == kindDomain && domainMatch(c.domain, host) }
 	for _, c := range e.rules(ListDeny) {
-		if c.kind == kindDomain && domainMatch(c.domain, host) {
-			return false
+		if match(c) {
+			return HostDenied
+		}
+	}
+	for _, c := range e.rules(ListAsk) {
+		if match(c) {
+			return HostAsked
 		}
 	}
 	for _, c := range e.rules(ListAllow) {
-		if c.kind == kindDomain && domainMatch(c.domain, host) {
-			return true
+		whole := !strings.Contains(strings.TrimPrefix(c.domain, "*."), "*")
+		if match(c) && whole && !(ownOnly && c.layer.FromProject) {
+			return HostAllowed
 		}
 	}
-	return false
+	return HostUnruled
 }

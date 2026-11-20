@@ -89,3 +89,34 @@ func TestSandboxAskedOutInAnySpelling(t *testing.T) {
 		}
 	}
 }
+
+// What the WebFetch(domain:...) rules say of a host, for the sandbox's
+// proxy: a deny rule refuses it, an ask rule asks first though an allow
+// rule names it too, an allow rule lets it through, but one with a * in
+// a name or alone (which Claude Code's sandbox does not take); with
+// ownOnly, a repository's allow rules count for nothing (the sandbox
+// review).
+func TestFetchRule(t *testing.T) {
+	o := testOptions(ModeDefault, rules{
+		deny:  []string{"WebFetch(domain:pastebin.com)"},
+		ask:   []string{"WebFetch(domain:ask.example)"},
+		allow: []string{"WebFetch(domain:*.npmjs.org)", "WebFetch(domain:ask.example)", "WebFetch(domain:*evil.org)", "WebFetch(domain:*)", "WebFetch(domain:pastebin.com)"},
+	})
+	o.Trusted = true
+	o.Layers = append(o.Layers, Layer{Scope: ScopeProject, Name: "repo", Allow: []string{"WebFetch(domain:repo.example)"}})
+	e := mustEngine(t, o)
+	for host, want := range map[string]HostRule{
+		"pastebin.com": HostDenied, "ask.example": HostAsked, "registry.npmjs.org": HostAllowed, "npmjs.org": HostUnruled,
+		"notevil.org": HostUnruled, "other.example": HostUnruled, "repo.example": HostAllowed,
+	} {
+		if got := e.FetchRule(host, false); got != want {
+			t.Errorf("FetchRule(%q) = %v, want %v", host, got, want)
+		}
+	}
+	if got := e.FetchRule("repo.example", true); got != HostUnruled {
+		t.Errorf("a repository's allow rule under strictAllowlist: %v", got)
+	}
+	if got := e.FetchRule("registry.npmjs.org", true); got != HostAllowed {
+		t.Errorf("the person's own allow rule under strictAllowlist: %v", got)
+	}
+}

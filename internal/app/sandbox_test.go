@@ -146,7 +146,7 @@ func TestSandboxedCommandsReachAllowedHosts(t *testing.T) {
 	run(t, w, "-p", "fetch").wantCode(t, 0)
 	has(t, "an allowed host", toolResult(t, w, 1, "c1"), "reached")
 	has(t, "a host not allowed", toolResult(t, w, 1, "c2"), "not in sandbox.network.allowedDomains")
-	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "which lets through 127.0.0.1 and the hosts WebFetch", "refuses any other host, as nobody is here to be asked")
+	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "which lets through 127.0.0.1 and the hosts WebFetch", "any other host only as the permission mode says, as nobody is here to be asked")
 }
 
 // What the sandbox cannot keep from being made, where it was not there to
@@ -280,6 +280,7 @@ func TestSandboxAsksAboutANewHost(t *testing.T) {
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("fetch it")
+	s.see("The answer is for the host on every port.")
 	s.see("Let a command in the sandbox reach 127.0.0.1?")
 	s.see("  1. Yes: for this session")
 	s.typeLine("1")
@@ -367,4 +368,32 @@ func TestSandboxFilesLeftOpen(t *testing.T) {
 	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
 	has(t, "/sandbox", r.out, "Files: left open (filesystem.disabled", "they ask as any command does",
 		"Loosened: network.allowLocalBinding", "Not reported when stopped (ignoreViolations): /etc/hosts for *", "Network: through gnosh's proxy")
+}
+
+// A WebFetch(domain:...) deny rule refuses its host to a sandboxed
+// command in every mode, bypassPermissions too, where a host no rule
+// names is let through (the sandbox review). Skipped where the sandbox or
+// curl cannot run.
+func TestSandboxDenyRuleInBypass(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "reached") }))
+	defer srv.Close()
+	w := apptest.NewWorld(t)
+	w.Settings(`{"sandbox": {"enabled": true}}`)
+	w.Deny("WebFetch(domain:127.0.0.1)")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if !strings.Contains(string(r.Body), `"role":"tool"`) {
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"curl -s -m 30 ` + srv.URL + `/x"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-y", "-p", "fetch it").wantCode(t, 0)
+	if got := toolResult(t, w, 1, "c1"); strings.Contains(got, "reached") || !strings.Contains(got, "WebFetch(domain:...) deny rule") {
+		t.Errorf("a denied host in bypassPermissions mode: %s", got)
+	}
 }

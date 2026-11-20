@@ -3,6 +3,7 @@ package sandbox
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -121,12 +122,12 @@ func TestProxyAsks(t *testing.T) {
 	defer p.Close()
 	var mu sync.Mutex
 	asked := map[string]int{}
-	p.Ask = func(ctx context.Context, host string, port int) (bool, string) {
+	p.Ask = func(ctx context.Context, host string, port int, forced bool) (bool, string, bool) {
 		mu.Lock()
 		asked[host]++
 		mu.Unlock()
 		time.Sleep(50 * time.Millisecond)
-		return host == "127.0.0.1", "the person said no to " + host
+		return host == "127.0.0.1", "the person said no to " + host, true
 	}
 	proxyURL, _ := url.Parse("http://" + p.Addr().String())
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
@@ -159,5 +160,152 @@ func TestProxyAsks(t *testing.T) {
 	defer mu.Unlock()
 	if asked["127.0.0.1"] != 1 || asked["other.example"] != 1 || asked["denied.example"] != 0 {
 		t.Errorf("asked: %v", asked)
+	}
+}
+
+// What the proxy takes for a host: a name of letters, digits, dashes and
+// underscores whose last label is not all digits, or an address written
+// in full; not a name with a * in it, nor an address written short or as
+// one number, which a resolver would take for 127.0.0.1 (the sandbox
+// review).
+func TestHostName(t *testing.T) {
+	for in, want := range map[string]string{
+		"GitHub.com.": "github.com", "registry.npmjs.org": "registry.npmjs.org", "_dmarc.example.com": "_dmarc.example.com",
+		"127.0.0.1": "127.0.0.1", "[::1]": "::1", "::FFFF:127.0.0.1": "127.0.0.1", "x-1.example": "x-1.example",
+	} {
+		if got, ok := HostName(in); !ok || got != want {
+			t.Errorf("HostName(%q) = %q, %v; want %q", in, got, ok, want)
+		}
+	}
+	for _, bad := range []string{"", "*npmjs.org", "*.npmjs.org", "2130706433", "127.1", "0x7f.1", "0x7f000001", "a..b", "-a.com", "a-.com", "exa mple.com", "ex\x1bample.com", "1.2.3.04", strings.Repeat("a", 64) + ".com"} {
+		if got, ok := HostName(bad); ok {
+			t.Errorf("HostName(%q) took it, as %q", bad, got)
+		}
+	}
+}
+
+// The permission rules and the answers: a deny rule refuses a host,
+// asked about or listed; an ask rule has the person asked though a list
+// lets the host through; an allow rule lets it through unasked; an answer
+// the mode gave is not kept, the person's is; a CONNECT to a host written
+// as one number is refused before anybody is asked; after maxAsked hosts,
+// no more questions.
+func TestProxyRulesAndAnswers(t *testing.T) {
+	p, err := ListenProxy("tcp", "127.0.0.1:0", Domains{Allowed: []string{"listed.example"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	p.Rules = func(host string) HostRule {
+		switch host {
+		case "denied.example":
+			return HostDenied
+		case "listed.example":
+			return HostAsked
+		case "allowed.example":
+			return HostAllowed
+		}
+		return HostUnruled
+	}
+	var mu sync.Mutex
+	asked := map[string]int{}
+	var forcedFor []string
+	p.Ask = func(ctx context.Context, host string, port int, forced bool) (bool, string, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked[host]++
+		if forced {
+			forcedFor = append(forcedFor, host)
+		}
+		// (mode.example: an answer the mode gives, not kept.)
+		return false, "no to " + host, host != "mode.example"
+	}
+	ctx := context.Background()
+	for host, want := range map[string]bool{"denied.example": false, "listed.example": false, "allowed.example": true, "mode.example": false} {
+		if got, why := p.lets(ctx, host, 443); got != want {
+			t.Errorf("%s: %v (%s)", host, got, why)
+		}
+	}
+	p.lets(ctx, "mode.example", 443)
+	p.lets(ctx, "listed.example", 443)
+	mu.Lock()
+	if asked["denied.example"] != 0 || asked["allowed.example"] != 0 || asked["listed.example"] != 1 || asked["mode.example"] != 2 {
+		t.Errorf("asked: %v", asked)
+	}
+	if len(forcedFor) != 1 || forcedFor[0] != "listed.example" {
+		t.Errorf("forced: %v", forcedFor)
+	}
+	mu.Unlock()
+	proxyURL, _ := url.Parse("http://" + p.Addr().String())
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	resp, err := client.Get("http://2130706433/")
+	if err == nil {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "no host name, nor an address written in full") {
+			t.Errorf("a host as one number: %d %s", resp.StatusCode, body)
+		}
+	}
+	for i := 0; i < maxAsked+5; i++ {
+		p.lets(ctx, fmt.Sprintf("h%d.example", i), 443)
+	}
+	mu.Lock()
+	n := 0
+	for host := range asked {
+		if strings.HasPrefix(host, "h") {
+			n++
+		}
+	}
+	mu.Unlock()
+	if want := maxAsked - 1; n != want {
+		t.Errorf("%d hosts asked about up to the cap of %d (one answer kept before)", n, want)
+	}
+	if ok, why := p.lets(ctx, "one-more.example", 443); ok || !strings.Contains(why, "asked about in this session already") {
+		t.Errorf("past the cap: %v %s", ok, why)
+	}
+}
+
+// One waiting on another connection's question stops waiting when its
+// own request is taken back.
+func TestProxyWaiterGivesUp(t *testing.T) {
+	p, err := ListenProxy("tcp", "127.0.0.1:0", Domains{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	release := make(chan struct{})
+	p.Ask = func(ctx context.Context, host string, port int, forced bool) (bool, string, bool) {
+		<-release
+		return true, "", true
+	}
+	go p.lets(context.Background(), "slow.example", 443)
+	time.Sleep(50 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if ok, _ := p.lets(ctx, "slow.example", 443); ok || time.Since(start) > 2*time.Second {
+		t.Errorf("the waiter: %v after %s", ok, time.Since(start))
+	}
+	close(release)
+}
+
+// The machine's own and its network's addresses: the shared address space
+// (100.64.0.0/10) and each of its interfaces' among them.
+func TestLocal(t *testing.T) {
+	for _, a := range []string{"127.0.0.1", "10.1.2.3", "100.64.0.1", "100.127.255.254", "169.254.169.254", "::1", "fd00::1"} {
+		if !local(net.ParseIP(a)) {
+			t.Errorf("%s is not local", a)
+		}
+	}
+	for _, a := range []string{"100.63.255.255", "100.128.0.1", "8.8.8.8"} {
+		if local(net.ParseIP(a)) {
+			t.Errorf("%s is local", a)
+		}
+	}
+	addrs, _ := net.InterfaceAddrs()
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && !local(n.IP) {
+			t.Errorf("an interface's own address %s is not local", n.IP)
+		}
 	}
 }

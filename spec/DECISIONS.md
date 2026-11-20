@@ -5411,7 +5411,7 @@ or kept with the reason said (27).
     elsewhere in sight can be reached.
 
 365. **What the sandbox hides stays hidden.** From the second sandbox
-    review (spec of findings in its memory note). Seatbelt matches paths,
+    review. Seatbelt matches paths,
     so on macOS a folder renamed took what was in it out from under the
     rules: `mv conf c2 && cat c2/secret.yml` read a denied file, and —
     checked by hand — moving the project folder itself into the
@@ -5439,3 +5439,31 @@ or kept with the reason said (27).
     sandbox's own; PATH, HOME and PWD are not hidden. On macOS the note
     under a failed command says a refused read may be what stopped it,
     as Seatbelt words a refused read as a refused write.
+
+366. **The sandbox's proxy keeps to the rules and to what it showed.**
+    From the second sandbox review. A WebFetch(domain:...) deny rule now
+    refuses its host to sandboxed commands in every mode (bypass had let
+    it through, and default mode asked about it), an ask rule has the
+    person asked even where a list or an allow rule names the host (in
+    bypass too, as an ask rule asks of a tool call), and an allow rule
+    with a * inside a name ("*npmjs.org") or alone counts for nothing
+    there, as Claude Code's sandbox does not take one (Engine.FetchRule,
+    in place of FetchAllows). The proxy takes a host only as a name of
+    letters, digits, dashes and underscores whose last label is not all
+    digits, or an address written in full (HostName): `CONNECT
+    *npmjs.org` would have had a "Yes, and don't ask again" kept as a
+    wildcard rule, and `2130706433`, which rules fold to 127.0.0.1, one
+    that opened every port of the machine. The question says the answer
+    is for the host on every port, and when the host is an address of the
+    machine or its network. With strictAllowlist only the person's own
+    allow rules and allowedDomains count (a project's file, its local one
+    too, is left out), as Claude Code leaves a repository's out. An
+    answer the mode gives (bypass, dontAsk, nobody there) is no longer
+    kept for the session, as the mode may change; the person's is. At
+    most 40 hosts are asked about in a session; a connection waiting on
+    another's question stops waiting when its own request is taken back.
+    The proxy's check for a name that leads to the machine itself now
+    counts the shared address space carriers and Tailscale use
+    (100.64.0.0/10) and every address of the machine's own interfaces, its
+    public ones among them. The model is told that, with nobody there, a
+    host no rule names goes as the permission mode says.
