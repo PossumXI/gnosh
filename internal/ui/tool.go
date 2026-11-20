@@ -436,6 +436,23 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 		if h.arg == "" {
 			h.arg = oneLine(get("prompt"))
 		}
+	case "LSP":
+		// The question, and where: the file, at line:character when one
+		// is given.
+		h.arg = oneLine(get("operation"))
+		if q := get("query"); q != "" {
+			h.arg += " " + oneLine(q)
+		}
+		if p := get("filePath"); p != "" {
+			at := showPath(cwd, home, p)
+			if n, ok := metaInt(args, "line"); ok && n > 0 {
+				at += fmt.Sprintf(":%d", n)
+				if c, ok := metaInt(args, "character"); ok && c > 0 {
+					at += fmt.Sprintf(":%d", c)
+				}
+			}
+			h.arg += " " + at
+		}
 	case "WebFetch":
 		h.arg = oneLine(get("url"))
 	case "WebSearch":

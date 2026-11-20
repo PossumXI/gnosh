@@ -5346,3 +5346,16 @@ or kept with the reason said (27).
     started there read what the folder holds; and No says those wait
     ("No: not now, my own servers here waiting too"). gnosh trust's report
     lists them too, as now running in the folder.
+
+363. **A call's result can carry notes for the person, shown under its
+    block.** Seen on the devbox's screen with gopls: "Found 1 new
+    diagnostic issue in 1 file (gopls)." printed above the Edit it was
+    about, because the after-call step runs before the call's end is
+    drawn, and a notice is drawn when it is made. A ToolResult now has
+    Notes, short lines for the person that are never sent to the model
+    (which has the problems themselves); an after-call step's verdict
+    adds them, the screen draws them under the call's block (a call
+    shown as one line grows a block to hold them), and plain and
+    verbose print mode print them under the call's line. The LSP
+    tool's call is headed by what it asks and where ("LSP hover
+    main.go:6:10") rather than a sentence with the whole path.

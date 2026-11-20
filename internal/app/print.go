@@ -572,6 +572,9 @@ func (f *printer) Event(ev any) {
 				f.stderr("%s%s%s", indent, ev.Name, mark)
 			} else {
 				f.stderr("%s%s (%s)%s", indent, toolLine(ev.Name, ev.Input), resultLine(ev.Result, ev.Denied, ev.Interrupted), mark)
+				for _, n := range ev.Result.Notes {
+					f.stderr("%s  %s", indent, visible(n))
+				}
 			}
 		}
 		if ev.Denied && ev.Unattended && !f.toldUnattended {

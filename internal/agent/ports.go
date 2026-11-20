@@ -689,6 +689,10 @@ type ToolVerdict struct {
 	// says why, for the person.
 	Halt   bool
 	Reason string
+	// Notes are lines for the person, shown under the call
+	// (core.ToolResult.Notes): placed there, and not given as notices,
+	// which would stand above the call, drawn once it is done.
+	Notes []string
 }
 
 // SummaryInfo is what BeforeSummary and AfterSummary are told.

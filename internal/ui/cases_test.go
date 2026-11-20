@@ -1478,3 +1478,32 @@ func TestReadOfAPDFSaysItsPages(t *testing.T) {
 		Meta: map[string]any{"type": "pdf", "file": map[string]any{"numPages": 4, "firstPage": 1, "lastPage": 4}}}, 0))
 	g.once("Read paper.pdf (pages 3-5)").committedHas("pages 3-5 of 12", "4 pages of a PDF")
 }
+
+// A note that travels with a call's result (the language server's count
+// of new problems after an edit) is drawn under the call's block, never
+// above it; and a question to the language server is headed by what it
+// asks and where.
+func TestNotesUnderTheCall(t *testing.T) {
+	each(t, func(t *testing.T, cols int) {
+		g := newRig(t, cols, 30, text.NoColor)
+		g.keys(`"rename it" <Enter>`).start()
+		args := map[string]any{"file_path": "/home/jae/src/proj/a.go", "old_string": "Old", "new_string": "New"}
+		g.ev(toolCall("c1", "Edit"), replyEnd(core.StopToolUse), toolStart("c1", "Edit", args))
+		g.ev(toolEnd("c1", "Edit", args, core.ToolResult{
+			Content: []core.Block{core.Text("edited")},
+			Display: &core.Display{Kind: "diff", Path: "/home/jae/src/proj/a.go", Before: "func Old() {}\n", After: "func New() {}\n"},
+			Notes:   []string{"Found 1 new diagnostic issue in 1 file (gopls)."},
+		}, 0))
+		g.committedHas("+ func New() {}", "Found 1 new diagnostic issue in 1 file (gopls).")
+		all := g.scroll()
+		if strings.Index(all, "Found 1 new") < strings.Index(all, "+ func New() {}") {
+			t.Errorf("the note is above the call's block:\n%s", all)
+		}
+		lsp := map[string]any{"operation": "hover", "filePath": "/home/jae/src/proj/a.go", "line": 12, "character": 5}
+		g.ev(toolCall("c2", "LSP"), replyEnd(core.StopToolUse), toolStart("c2", "LSP", lsp))
+		g.liveHas("LSP hover a.go:12:5")
+		g.ev(toolEnd("c2", "LSP", lsp, core.ToolResult{Content: []core.Block{core.Text("func New()")}}, 0))
+		g.committedLacks("Ask the language server")
+		g.show("a note under an edit")
+	})
+}

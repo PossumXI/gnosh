@@ -602,8 +602,12 @@ func (s *session) toolEnd(ev *agent.ToolEndEvent) {
 	} else {
 		rows, compact := s.endBlock(c, ev)
 		kind := blkTool
-		if compact {
+		if compact && len(ev.Result.Notes) == 0 {
 			kind = blkToolLine
+		}
+		for _, n := range ev.Result.Notes {
+			// (Under the call: what came of it besides its result.)
+			rows = append(rows, wrap(s.m, s.th.Quiet.Render(oneLine(n)), s.cols, "  ", "  ")...)
 		}
 		s.begin(kind)
 		s.put(rows...)

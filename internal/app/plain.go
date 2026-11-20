@@ -1270,6 +1270,9 @@ func (f *plain) Event(ev any) {
 			f.say("%s%s", markTool, visible(toolLine(ev.Name, ev.Input)))
 		}
 		f.say("%s%s", markResult, visible(resultLine(ev.Result, ev.Denied, ev.Interrupted)))
+		for _, n := range ev.Result.Notes {
+			f.say("  %s", visible(n))
+		}
 		if !ev.Denied && !ev.Result.IsError {
 			if _, isCommand := metaInt(ev.Result.Meta, "exitCode"); isCommand {
 				// The line a command's result begins with, which says

@@ -550,7 +550,11 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 		// The file's language server is told of it; a change gives the
 		// model the problems it brought (lsp.go).
 		if change {
-			v.Context = append(v.Context, l.lspSrv.changed(ctx, path)...)
+			parts, note := l.lspSrv.changed(ctx, path)
+			v.Context = append(v.Context, parts...)
+			if note != "" {
+				v.Notes = append(v.Notes, note)
+			}
 		} else {
 			l.lspSrv.opened(path)
 		}

@@ -143,9 +143,19 @@ func TestLanguageServer(t *testing.T) {
 		}
 		return &apptest.Reply{Text: "Done."}
 	})
-	r := run(t, w, "--trust-folder", "-y", "-p", "fix it")
+	r := run(t, w, "--trust-folder", "-y", "--verbose", "-p", "fix it")
 	r.wantCode(t, 0)
 	body := string(w.Model.Requests()[2].Body)
+	// The person is told how many new problems the edit brought, under
+	// the edit's own line; the model is not (it has the problems).
+	edit, note := strings.Index(r.err, "Edit: main.go"), strings.Index(r.err, "Found 1 new diagnostic issue in 1 file (fake).")
+	if edit < 0 || note < edit {
+		t.Errorf("the note is not under the edit's line:\n%s", r.err)
+	}
+	if strings.Contains(body, "new diagnostic issue in") {
+		t.Error("the person's note went to the model")
+	}
+	has(t, "the hover's line", r.err, "LSP: hover main.go:3:6")
 	if !strings.Contains(body, "main.go:3:15: error: undefined: undefinedThing (compiler)") {
 		i := max(strings.Index(body, `"role":"tool"`), 0)
 		t.Errorf("the request after the edit does not carry the new problem; gnosh said:\n%s\nthe request from its first tool result on:\n%s", r.err, clipText(body[i:], 4000))

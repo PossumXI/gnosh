@@ -327,20 +327,20 @@ func (s *lspServers) opened(path string) {
 // what it says, and returns the new errors and warnings since the model
 // last knew (the base), in this file and others, for the model; the person
 // is told how many.
-func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
+func (s *lspServers) changed(ctx context.Context, path string) ([]agent.Part, string) {
 	srv, lang := s.serverFor(path)
 	if srv == nil {
-		return nil
+		return nil, ""
 	}
 	ctx, cancel := context.WithTimeout(ctx, lspEditWait)
 	defer cancel()
 	c, err := s.clientOf(ctx, srv)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	release, ok := srv.edit(ctx)
 	if !ok {
-		return nil
+		return nil, ""
 	}
 	defer release()
 	// The text is read once the slot is held: read before, it could be
@@ -348,7 +348,7 @@ func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
 	// as the newer (the second review).
 	text, ok := readFileFor(path)
 	if !ok {
-		return nil
+		return nil, ""
 	}
 	s.mu.Lock()
 	if _, known := srv.base[path]; !known {
@@ -365,7 +365,7 @@ func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
 	if err != nil || !synced.Sent || !srv.cfg.Diagnostics {
 		// (With diagnostics off the server is still told of the change,
 		// for the LSP tool's questions.)
-		return nil
+		return nil, ""
 	}
 	settle, done := context.WithTimeout(ctx, lspSettle)
 	c.Settle(settle, path, synced, lspQuiet)
@@ -387,18 +387,19 @@ func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
 	// quote it.
 	issues = slices.DeleteFunc(issues, func(is issue) bool { return s.l.engine != nil && s.l.engine.ReadDenied(is.path) })
 	if len(issues) == 0 {
-		return nil
+		return nil, ""
 	}
 	files := map[string]bool{}
 	for _, is := range issues {
 		files[is.path] = true
 	}
-	s.l.notice(agent.LevelInfo, "lsp", fmt.Sprintf("Found %s in %s (%s).",
-		countWords(len(issues), "new diagnostic issue", "new diagnostic issues"), countWords(len(files), "file", "files"), srv.cfg.Name))
+	// (The person's line goes under the call, as Claude Code puts it.)
+	note := fmt.Sprintf("Found %s in %s (%s).",
+		countWords(len(issues), "new diagnostic issue", "new diagnostic issues"), countWords(len(files), "file", "files"), srv.cfg.Name)
 	lead, list := s.issuesText(srv.cfg.Name, issues)
 	// (gnosh's line in its own words; the server's, which may quote the
 	// repository's text, outside them.)
-	return []agent.Part{{Source: "lsp", Text: prompt.Wrap(lead) + "\n" + prompt.Untrusted(list)}}
+	return []agent.Part{{Source: "lsp", Text: prompt.Wrap(lead) + "\n" + prompt.Untrusted(list)}}, note
 }
 
 // issue is one diagnostic a change brought.

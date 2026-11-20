@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -666,6 +667,9 @@ func (a *Agent) exec(stopped, ctx context.Context, turn string, idx int, tool co
 			}
 			rep.Content = sayable(rep.Content)
 			d.res = rep
+		}
+		if len(d.verdict.Notes) > 0 {
+			d.res.Notes = append(slices.Clip(d.res.Notes), d.verdict.Notes...)
 		}
 	}
 
