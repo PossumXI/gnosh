@@ -2469,9 +2469,14 @@ func (e *Engine) addWordText(v *bashView, text string, nest nesting, depth int) 
 func (e *Engine) addDerived(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 	// "time ! cmd" and "! cmd" run cmd, and so does "X=1 cmd" wherever a
 	// shell reads those words as a command of their own. ("time X=1" is
-	// an assignment to bash: the value may be the variable's.)
-	for len(c.words) > 0 && (c.words[0].raw == "!" && len(c.words) > 1 || isAssignWord(c.words[0].raw)) {
+	// an assignment to bash: the value may be the variable's.) A "!" is
+	// the shell's own word only before the assignments: after one it is a
+	// command's name, which "X=1 !" runs (the permission oracle, seed
+	// 174).
+	assigned := len(c.assigns) > 0
+	for len(c.words) > 0 && (!assigned && c.words[0].raw == "!" && len(c.words) > 1 || isAssignWord(c.words[0].raw)) {
 		if name, ok := assignName(c.words[0].raw); ok {
+			assigned = true
 			if strings.HasPrefix(c.words[0].raw, name+"=") {
 				e.noteWord(v, name, c.words[0], true, false, noPlace)
 			}
@@ -2482,7 +2487,7 @@ func (e *Engine) addDerived(v *bashView, c *simpleCmd, prev *simpleCmd, depth in
 		}
 		c.words = c.words[1:]
 	}
-	if len(c.words) == 1 && c.words[0].raw == "!" {
+	if !assigned && len(c.words) == 1 && c.words[0].raw == "!" {
 		c.words = nil
 	}
 	if len(v.units) >= maxUnits+len(v.sc.cmds) {

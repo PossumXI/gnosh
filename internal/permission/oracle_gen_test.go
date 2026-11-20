@@ -1083,4 +1083,6 @@ var attackLines = []string{
 	"command -p bash notes.md", "command -p bash notes.md src/.env < sneaky.txt >| out.txt", "/bin/sh notes.md", "command -p sh -c 'rm x'", "exec -a x /bin/bash notes.md",
 	// What dash prints for a bare set: PS4's own value, which is the trace's mark.
 	"set", "PAGER=rm set", "! { set; }", "f() { set; }; f", "seq \"$(set)\"", "git push `set` a{b,c}d", "echo \"$(set)\" | head -1", "ls \"$(set | grep PS4)\"", "printf '%s' \"$PS4\"; ls",
+	// A ! after an assignment is a command's name, not the shell's word (seed 174).
+	"eval x=1 ! ", "eval x=1 ! ls", "eval 'x=1 y=2 !' && ls", "bash -c 'x=1 ! ls'", "eval '! x=1 ls'", "eval ! ! ls",
 }
