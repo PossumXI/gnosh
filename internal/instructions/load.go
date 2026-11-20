@@ -462,18 +462,18 @@ func (l *loading) fetch(w want) (fetched, bool) {
 	}
 	if w.outside(s, pr.real) && !l.approve(w, pr.real) {
 		from := w.path
-		where := "which is outside the project"
+		where := "which is outside the project; that was not approved"
 		if s.secretPath(pr.real) {
-			where = "where keys and passwords are kept"
+			where = "where keys and passwords are kept, which a project's file never brings in"
 		}
-		text := fmt.Sprintf("%s leads, through a link, to %s, %s; that was not approved, so it was not loaded.", shown, plain(osPath(pr.real)), where)
+		text := fmt.Sprintf("%s leads, through a link, to %s, %s, so it was not loaded.", shown, plain(osPath(pr.real)), where)
 		if w.kind == KindImport {
 			from = w.parent
 			target := plain(osPath(pr.real))
 			if w.path != pr.real {
 				target = fmt.Sprintf("%s (which leads, through a link, to %s)", shown, target)
 			}
-			text = fmt.Sprintf("%s imports %s, %s; that was not approved, so it was not loaded.", plain(osPath(w.parent)), target, where)
+			text = fmt.Sprintf("%s imports %s, %s, so it was not loaded.", plain(osPath(w.parent)), target, where)
 		}
 		l.warn(WarnImportRefused, pr.real, from, text)
 		return fetched{}, false
@@ -521,6 +521,11 @@ func (l *loading) fetch(w want) (fetched, bool) {
 // the project root. Each target is asked about once.
 func (l *loading) approve(w want, real string) bool {
 	s := l.s
+	if s.secretPath(real) {
+		// Where keys are kept is never a project file's to bring in, an
+		// approval of the project's outside files notwithstanding.
+		return false
+	}
 	if ok, asked := s.approved[real]; asked {
 		return ok
 	}
@@ -533,6 +538,9 @@ func (l *loading) approve(w want, real string) bool {
 		ok = s.o.ApproveImport(osPath(from), osPath(real))
 	}
 	s.approved[real] = ok
+	if !ok {
+		s.unapproved = append(s.unapproved, real)
+	}
 	return ok
 }
 

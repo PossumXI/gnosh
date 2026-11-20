@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -30,8 +31,23 @@ func (l *live) loadInstructions(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if l.askOutsideImports(set) {
+		if again, err := l.readInstructions(ctx); err == nil {
+			set = again
+		}
+	}
 	l.instr = set
 	ws := set.Warnings()
+	if allow, answered := l.outsideImports(); answered && !allow {
+		// The person said no to them: not told of each again.
+		left := map[string]bool{}
+		for _, p := range set.Unapproved() {
+			left[p] = true
+		}
+		ws = slices.DeleteFunc(ws, func(w instructions.Warning) bool {
+			return w.Kind == instructions.WarnImportRefused && left[w.Path]
+		})
+	}
 	for i, w := range ws {
 		if i == warningsShown && len(ws) > warningsShown+1 {
 			// A folder with thousands of troubled files flooded the
@@ -86,6 +102,11 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 	}
 	for _, e := range c.Exclude {
 		o.Exclude = append(o.Exclude, e.V)
+	}
+	if allow, _ := l.outsideImports(); allow {
+		// The person let this project's files bring in files from
+		// outside it (importsok.go).
+		o.ApproveImport = func(from, target string) bool { return true }
 	}
 	if c.Off {
 		// Safe mode: no instruction file is read at all.

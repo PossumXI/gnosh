@@ -354,8 +354,10 @@ type Set struct {
 	// value is the real path of the file whose arrival brought it in (its
 	// own, unless it was imported); for the others it is empty.
 	loaded map[string]string
-	// approved remembers what ApproveImport said about each target.
-	approved map[string]bool
+	// approved remembers what ApproveImport said about each target, and
+	// unapproved lists those it did not let in, in the order they came.
+	approved   map[string]bool
+	unapproved []string
 	// rules are the rules that wait for a matching path, in the order they
 	// were found; ruleAt finds one by its real path.
 	rules  []*pathRule
@@ -680,10 +682,26 @@ func (s *Set) Reload(ctx context.Context) ([]Warning, error) {
 		}
 	}
 	s.files, s.warnings, s.warned = n.files, n.warnings, n.warned
-	s.loaded, s.approved = n.loaded, n.approved
+	s.loaded, s.approved, s.unapproved = n.loaded, n.approved, n.unapproved
 	s.rules, s.ruleAt, s.walked = n.rules, n.ruleAt, n.walked
 	s.stamps, s.fallback = n.stamps, n.fallback
 	return fresh, nil
+}
+
+// Unapproved returns the files outside the project that a project's file
+// would have brought in, by an import or through a link, and that were
+// left out for want of approval (Options.ApproveImport), with their links
+// followed; never the places keys are kept, which are left out whatever
+// is approved. Claude Code asks the person once per project whether to
+// load such files.
+func (s *Set) Unapproved() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.unapproved))
+	for i, p := range s.unapproved {
+		out[i] = osPath(p)
+	}
+	return out
 }
 
 // Changed returns the paths that are no longer as they were when the loader

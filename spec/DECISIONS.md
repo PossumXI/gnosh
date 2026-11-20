@@ -4374,3 +4374,17 @@ or kept with the reason said (27).
     missing import at every start: a missing import is now said only
     when it was surely meant for a file, written from a folder (./ ../ ~/
     /) or ending .md, .markdown or .txt (the same review).
+
+305. **Files from outside the project load once the person says yes.** A
+    project's instruction file that brought in a file from outside the
+    project, by an import or a link, was refused with a warning at every
+    start, and nothing let it in (Options.ApproveImport was never set): a
+    shared file in the home folder, Claude Code's own pattern for notes
+    kept across work trees, never loaded (the instruction-files review of
+    2026-11-20). As in Claude Code, a session somebody attends now asks
+    once per project, listing the files ("Load files from outside the
+    project?"); the answer is kept in the person's state folder, never in
+    the project, and the question is not put again; a yes loads them in
+    this project's sessions, runs included, and a no leaves them out with
+    no warning at each start. Where keys and passwords are kept is never
+    offered nor loaded, whatever the answer.

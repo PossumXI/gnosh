@@ -284,3 +284,23 @@ func TestGuardTakesTheHeaderLoosely(t *testing.T) {
 		}
 	}
 }
+
+// What a project's file would bring in from outside the project is listed
+// for the person to approve; with approval it is loaded, and the places
+// keys are kept never are.
+func TestUnapprovedImports(t *testing.T) {
+	files := map[string]string{
+		"/p/.git/HEAD":          "ref: refs/heads/main\n",
+		"/p/CLAUDE.md":          "@~/notes/a.md @~/.ssh/config\n",
+		"/home/jae/notes/a.md":  "notes\n",
+		"/home/jae/.ssh/config": "Host *\n",
+	}
+	o := Options{Cwd: "/p", Home: "/home/jae", ProjectNames: []string{"CLAUDE.md"}, Trusted: true, FS: tree(files)}
+	s := load(t, o)
+	same(t, "unapproved", s.Unapproved(), []string{"/home/jae/notes/a.md"})
+	same(t, "files", paths(s.Files()), []string{"/p/CLAUDE.md"})
+	o.ApproveImport = func(from, target string) bool { return true }
+	s = load(t, o)
+	same(t, "files approved", paths(s.Files()), []string{"/p/CLAUDE.md", "/home/jae/notes/a.md"})
+	same(t, "unapproved after approval", s.Unapproved(), []string{})
+}
