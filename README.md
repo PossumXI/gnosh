@@ -103,7 +103,10 @@ Built:
   stands and chooses its mode. A host no setting lets through is asked
   about, as Claude Code asks (Yes for the session, or kept as a
   `WebFetch(domain:…)` allow rule, which lets a host through too);
-  `network.strictAllowlist` refuses instead. Not built yet: `credentials`.
+  `network.strictAllowlist` refuses instead. `credentials.files` and
+  `credentials.envVars` hide credential files and take variables away
+  from sandboxed commands (Claude Code's `"mask"`, which needs its
+  TLS-terminating proxy, is hidden as `"deny"`).
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,

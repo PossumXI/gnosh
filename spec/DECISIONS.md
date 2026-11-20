@@ -5317,3 +5317,20 @@ or kept with the reason said (27).
     sandboxed command always has HTTP_PROXY and HTTPS_PROXY set, and the
     model is told how its network stands (let through at once, asked
     about, or refused). deniedDomains is never asked about.
+
+361. **The sandbox's credentials.** Claude Code's sandbox.credentials:
+    files ({"path": ..., "mode": "deny"}) a sandboxed command may not
+    read, hidden as filesystem.denyRead hides a path, and envVars
+    ({"name": ..., "mode": "deny"}) it is not given, taken out of its
+    environment. Claude Code's "mask" mode (a stand-in value inside the
+    sandbox, the real one put in by its proxy on the way out, which
+    needs the proxy to end TLS) is not built: an entry in that mode is
+    hidden as "deny" hides it, which keeps the credential from the
+    command all the same and may stop a tool that wants it, and the
+    person is told so. Its mask fields are taken and change nothing;
+    allowPlaintextInject, awsPairs and sigv4 are refused as not built.
+    Both lists only take a power away, so a project's count before the
+    folder is trusted; the lists of every file are merged. A variable a
+    SessionStart hook writes into the environment file is set again by
+    that file inside the sandbox: such a credential is the hook's to
+    keep out.

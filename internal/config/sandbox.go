@@ -40,6 +40,10 @@ type Sandbox struct {
 	// write, and paths it may not; AllowRead and DenyRead, the same for
 	// reading. Each is absolute.
 	AllowWrite, DenyWrite, AllowRead, DenyRead []ListItem
+	// HiddenFiles are credential files a sandboxed command may not read,
+	// and HiddenVars variables it is not given (credentials.files and
+	// envVars; a "mask" entry, not built, is hidden as "deny").
+	HiddenFiles, HiddenVars []ListItem
 	// Strict refuses a host the lists do not name, where the person would
 	// otherwise be asked (network.strictAllowlist, the person's own files
 	// alone).
@@ -66,6 +70,7 @@ type sandboxBuild struct {
 	autoOnTheirs                               []Origin
 	excluded, allowWrite, denyWrite, allowRead allowList
 	denyRead, allowedDomains, deniedDomains    allowList
+	hiddenFiles, hiddenVars                    allowList
 	strict                                     []Origin
 }
 
@@ -85,11 +90,12 @@ var sandboxKeys = []keyDef{
 	{"excludedCommands", "", "commands that run outside the sandbox, as a Bash(...) rule's content", fromClaudeCode},
 	{"filesystem", "", "allowWrite, denyWrite, allowRead and denyRead: lists of paths", fromClaudeCode},
 	{"network", "", "allowedDomains and deniedDomains: the hosts a sandboxed command may reach through gnosh's proxy, and those it may not", fromClaudeCode},
+	{"credentials", "", "files and envVars: credential files a sandboxed command may not read, and variables it is not given ({\"path\" or \"name\", \"mode\": \"deny\"})", fromClaudeCode},
 }
 
 // sandboxNotBuilt are the keys of Claude Code's "sandbox" gnosh has not
 // built.
-var sandboxNotBuilt = []string{"credentials", "ignoreViolations", "enableWeakerNestedSandbox", "enableWeakerNetworkIsolation",
+var sandboxNotBuilt = []string{"ignoreViolations", "enableWeakerNestedSandbox", "enableWeakerNetworkIsolation",
 	"allowAppleEvents", "allowNestedUserNamespaces", "bwrapPath", "socatPath", "ripgrep"}
 
 // sandbox reads the "sandbox" key.
@@ -120,6 +126,8 @@ func (s *source) sandbox(f jfield) {
 			s.sandboxFilesystem(m)
 		case "network":
 			s.sandboxNetwork(m)
+		case "credentials":
+			s.sandboxCredentials(m)
 		default:
 			if slices.Contains(sandboxNotBuilt, m.key) {
 				s.errorf(m.line, "\"sandbox.%s\" is a setting Claude Code has and gnosh has not built. Take it out of this file.", m.key)
@@ -268,6 +276,8 @@ func (b *sandboxBuild) sweep(ok func(string) bool, from func(Origin) bool, note 
 		{KindRestriction, "sandbox.filesystem.denyRead", &b.denyRead},
 		{KindAddress, "sandbox.network.allowedDomains", &b.allowedDomains},
 		{KindRestriction, "sandbox.network.deniedDomains", &b.deniedDomains},
+		{KindRestriction, "sandbox.credentials.files", &b.hiddenFiles},
+		{KindRestriction, "sandbox.credentials.envVars", &b.hiddenVars},
 	}
 	for _, l := range lists {
 		if !ok(l.kind) && l.l.drop(from) {
@@ -305,6 +315,7 @@ func (b *sandboxBuild) finish() Sandbox {
 	out.AllowRead, out.DenyRead = b.allowRead.items, b.denyRead.items
 	out.AllowedDomains, out.DeniedDomains = b.allowedDomains.items, b.deniedDomains.items
 	out.Strict = len(b.strict) > 0
+	out.HiddenFiles, out.HiddenVars = b.hiddenFiles.items, b.hiddenVars.items
 	return out
 }
 
@@ -348,4 +359,113 @@ func (s *source) sandboxNetwork(f jfield) {
 			s.errorf(m.line, "%s is not a key gnosh reads under \"sandbox.network\". The keys are allowedDomains, deniedDomains and strictAllowlist.", showName(m.key))
 		}
 	}
+}
+
+// sandboxCredentials reads "sandbox.credentials": credential files a
+// sandboxed command may not read (as denyRead hides them) and variables it
+// is not given. Claude Code's "mask" (a stand-in value, the real one put
+// in by its proxy on the way out) is not built: such an entry is hidden as
+// "deny" is, which keeps the credential from the command all the same, and
+// the person is told. Either only takes a power away, so a project's
+// counts before trust.
+func (s *source) sandboxCredentials(f jfield) {
+	if f.val.kind != jObject {
+		s.errorf(f.line, "\"sandbox.credentials\" is an object (files, envVars), and here it is %s.", f.val.kind.word())
+		return
+	}
+	base := s.baseDir
+	if (s.scope == "project" || s.scope == "local") && s.ruleDir != "" {
+		base = s.ruleDir
+	}
+	if s.scope == "command line" {
+		base = s.cwd
+	}
+	for _, m := range s.unique(f.val, "sandbox.credentials.") {
+		o := s.at(m.line)
+		files := m.key == "files"
+		switch m.key {
+		case "files", "envVars":
+		case "allowPlaintextInject", "awsPairs", "sigv4":
+			s.errorf(m.line, "\"sandbox.credentials.%s\" is a setting Claude Code has and gnosh has not built (its proxy puts in no credential). Take it out of this file.", m.key)
+			continue
+		default:
+			s.errorf(m.line, "%s is not a key gnosh reads under \"sandbox.credentials\". The keys are files and envVars.", showName(m.key))
+			continue
+		}
+		if m.val.kind != jArray {
+			s.errorf(m.line, "\"sandbox.credentials.%s\" is a list of entries, each an object, and here it is %s.", m.key, m.val.kind.word())
+			continue
+		}
+		var items []string
+		for _, it := range m.val.items {
+			if it.kind != jObject {
+				s.errorf(it.line, "an entry of \"sandbox.credentials.%s\" is an object, and here it is %s.", m.key, it.kind.word())
+				continue
+			}
+			var name, mode string
+			for _, fl := range s.unique(it, "sandbox.credentials."+m.key+".") {
+				switch fl.key {
+				case "path", "name", "mode":
+					if fl.val.kind != jString {
+						s.errorf(fl.line, "%q of a credentials entry is a string, and here it is %s.", fl.key, fl.val.kind.word())
+						continue
+					}
+					if fl.key == "mode" {
+						mode = fl.val.str
+					} else {
+						name = strings.TrimSpace(fl.val.str)
+					}
+				case "extract", "onExtractNoMatch", "decode", "maskClaims", "maskDuplicates", "injectHosts":
+					// (A mask entry's own fields: taken, as the entry is hidden.)
+				default:
+					s.errorf(fl.line, "%s is not a field of a credentials entry.", showName(fl.key))
+				}
+			}
+			want := "path"
+			if !files {
+				want = "name"
+			}
+			switch {
+			case name == "":
+				s.errorf(it.line, "an entry of \"sandbox.credentials.%s\" has no %q.", m.key, want)
+				continue
+			case mode != "deny" && mode != "mask":
+				s.errorf(it.line, "the \"mode\" of a credentials entry is \"deny\" or \"mask\", and here it is %s.", showName(mode))
+				continue
+			case !files && !validVarName(name):
+				s.errorf(it.line, "%s is not a variable's name: one starts with a letter or an underscore, and holds letters, digits and underscores.", showName(name))
+				continue
+			}
+			if mode == "mask" {
+				s.probs.warnf(s.file, it.line, "\"mode\": \"mask\" is not built in gnosh (its proxy puts in no credential), so %s is hidden from sandboxed commands, as \"deny\" hides it.", name)
+			}
+			if files {
+				if strings.HasPrefix(name, "//") {
+					name = name[1:]
+				}
+				name = absPath(strings.TrimSuffix(name, "/**"), s.home, base)
+			}
+			items = append(items, name)
+		}
+		if len(items) == 0 {
+			continue
+		}
+		list := func(b *builder) *allowList { return &b.sandbox.hiddenVars }
+		if files {
+			list = func(b *builder) *allowList { return &b.sandbox.hiddenFiles }
+		}
+		s.add(op{kind: KindRestriction, text: "sandbox.credentials." + m.key + ": " + strings.Join(items, ", "), origin: o, what: "a sandbox setting",
+			apply: func(b *builder) { list(b).add(items, o) }})
+	}
+}
+
+// validVarName reports whether s can be an environment variable's name.
+func validVarName(s string) bool {
+	for i, r := range s {
+		if r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return s != ""
 }

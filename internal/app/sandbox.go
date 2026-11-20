@@ -152,6 +152,10 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 	}
 	p.ReadOnly = append(append(p.ReadOnly, settingsFiles(l.cfg)...), listValues(sc.DenyWrite)...)
 	p.DenyRead, p.AllowRead = listValues(sc.DenyRead), listValues(sc.AllowRead)
+	// The credentials the settings hide: files as denyRead hides them,
+	// variables not given.
+	p.DenyRead = append(p.DenyRead, listValues(sc.HiddenFiles)...)
+	p.HideVars = listValues(sc.HiddenVars)
 	if l.engine != nil {
 		// The Read and Edit rules' paths, as Claude Code adds them: a
 		// Read(./.env) deny rule keeps .env from a script's cat too.

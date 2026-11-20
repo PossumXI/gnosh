@@ -101,6 +101,16 @@ func (l *live) sandboxReport() string {
 			fmt.Fprintf(&b, " Read after all: %s.", l.shownList(p.AllowRead))
 		}
 	}
+	if files, vars := listValues(sc.HiddenFiles), listValues(sc.HiddenVars); len(files)+len(vars) > 0 {
+		b.WriteString("\nCredentials hidden:")
+		if len(files) > 0 {
+			fmt.Fprintf(&b, " %s (not to be read)", l.shownList(files))
+		}
+		if len(vars) > 0 {
+			fmt.Fprintf(&b, " %s (not given)", strings.Join(vars, ", "))
+		}
+		b.WriteString(".")
+	}
 	if len(sc.Excluded) > 0 {
 		fmt.Fprintf(&b, "\nRun outside it (excludedCommands): %s.", strings.Join(listValues(sc.Excluded), ", "))
 	}

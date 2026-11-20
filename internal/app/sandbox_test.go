@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -289,4 +290,32 @@ func TestSandboxAsksAboutANewHost(t *testing.T) {
 	has(t, "the second fetch, asked nothing", toolResult(t, w, 3, "c2"), "reached")
 	s.typeLine("/exit")
 	s.exit()
+}
+
+// credentials: a variable listed is not given to a sandboxed command, and
+// a file listed reads as nothing it may have. Skipped where the sandbox
+// cannot run.
+func TestSandboxHidesCredentials(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	w := apptest.NewWorld(t)
+	keys := w.Write(w.Home+"/.aws/credentials", "aws_secret=hunter2\n")
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "credentials": {"files": [{"path": "~/.aws/credentials", "mode": "deny"}], "envVars": [{"name": "GITHUB_TOKEN", "mode": "deny"}]}}}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if n == 0 {
+			return &apptest.Reply{Calls: []apptest.Call{
+				{ID: "c1", Name: "Bash", Args: `{"command":"echo token=[$GITHUB_TOKEN] other=[$OTHER_TOKEN]"}`},
+				{ID: "c2", Name: "Bash", Args: `{"command":"python3 -c \"print(open('` + keys + `').read())\""}`},
+			}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	o := testOptions(w, "-p", "look")
+	o.Environ = append(o.Environ, "GITHUB_TOKEN=ghp_secret", "OTHER_TOKEN=kept")
+	runWith(t, context.Background(), o).wantCode(t, 0)
+	has(t, "the variables", toolResult(t, w, 1, "c1"), "token=[] other=[kept]")
+	if got := toolResult(t, w, 1, "c2"); strings.Contains(got, "hunter2") {
+		t.Errorf("a hidden credentials file was read: %s", got)
+	}
 }

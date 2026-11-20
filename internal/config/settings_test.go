@@ -664,14 +664,31 @@ func TestSettingsSandbox(t *testing.T) {
 		t.Errorf("trusted: allowed %q", values(sb.AllowedDomains))
 	}
 
+	// Credentials: files hidden as denyRead hides them, variables taken
+	// away; "mask" hidden as "deny", with a warning; a project's count
+	// before trust.
+	cred := inputs(newFS().put(userJSON, `{"sandbox": {"credentials": {"files": [{"path": "~/.aws/credentials", "mode": "deny"}], "envVars": [{"name": "GITHUB_TOKEN", "mode": "mask", "injectHosts": ["api.github.com"]}]}}}`).
+		put(projJSON, `{"sandbox": {"credentials": {"envVars": [{"name": "NPM_TOKEN", "mode": "deny"}]}}}`))
+	cred.Trusted = false
+	cfg2, credProblems := load(t, cred)
+	if cfg2 == nil {
+		t.Fatalf("credentials refused: %s", showProblems(credProblems))
+	}
+	if values(cfg2.Sandbox.HiddenFiles) != "/home/dev/.aws/credentials" || values(cfg2.Sandbox.HiddenVars) != "GITHUB_TOKEN NPM_TOKEN" {
+		t.Errorf("hidden files %q, vars %q", values(cfg2.Sandbox.HiddenFiles), values(cfg2.Sandbox.HiddenVars))
+	}
+	wantProblem(t, credProblems, Warning, userJSON, 0, "\"mask\" is not built", "GITHUB_TOKEN is hidden")
 	for bad, says := range map[string]string{
-		`{"sandbox": {"credentials": {}}}`:                      "a setting Claude Code has and gnosh has not built",
-		`{"sandbox": {"network": {"tlsTerminate": {}}}}`:        "\"sandbox.network.tlsTerminate\" is a setting Claude Code has and gnosh has not built",
-		`{"sandbox": {"network": {"allowedDomains": "x.com"}}}`: "is a list of hosts",
-		`{"sandbox": {"enabled": "yes"}}`:                       `"sandbox.enabled" is true or false`,
-		`{"sandbox": {"bogus": 1}}`:                             "not a key gnosh reads under \"sandbox\"",
-		`{"sandbox": {"filesystem": {"allowWrite": "/x"}}}`:     "is a list of paths",
-		`{"sandbox": true}`:                                     "\"sandbox\" is an object",
+		`{"sandbox": {"credentials": {"sigv4": {}}}}`:                                 "\"sandbox.credentials.sigv4\" is a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"credentials": {"envVars": [{"name": "1X", "mode": "deny"}]}}}`: "is not a variable's name",
+		`{"sandbox": {"credentials": {"files": [{"path": "/x", "mode": "hide"}]}}}`:   "is \"deny\" or \"mask\"",
+		`{"sandbox": {"ignoreViolations": {}}}`:                                       "a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"network": {"tlsTerminate": {}}}}`:                              "\"sandbox.network.tlsTerminate\" is a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"network": {"allowedDomains": "x.com"}}}`:                       "is a list of hosts",
+		`{"sandbox": {"enabled": "yes"}}`:                                             `"sandbox.enabled" is true or false`,
+		`{"sandbox": {"bogus": 1}}`:                                                   "not a key gnosh reads under \"sandbox\"",
+		`{"sandbox": {"filesystem": {"allowWrite": "/x"}}}`:                           "is a list of paths",
+		`{"sandbox": true}`: "\"sandbox\" is an object",
 	} {
 		if _, problems := load(t, withConfig(bad)); !strings.Contains(showProblems(problems), says) {
 			t.Errorf("%s: %s", bad, showProblems(problems))

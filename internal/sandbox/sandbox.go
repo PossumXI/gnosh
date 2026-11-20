@@ -42,6 +42,9 @@ type Policy struct {
 	// Network lets it reach the network. Without it there is none, but
 	// for the loopback of its own (Linux) where nothing listens.
 	Network bool
+	// HideVars are variables the command is not given (credentials it
+	// may not hold).
+	HideVars []string
 	// Proxy is the sandbox's way out to the hosts the settings allow
 	// (proxy.go), when there is one: on Linux the proxy's socket, which
 	// must be in Temp, reached through Relay (gnosh itself, run inside the
@@ -74,7 +77,8 @@ func Env(p Policy) []string {
 		}
 		env = append(env, "NO_PROXY=", "no_proxy=")
 	}
-	return env
+	// (A name alone takes the variable away.)
+	return append(env, p.HideVars...)
 }
 
 // present is the paths of a list that are there, absolute, cleaned, each
