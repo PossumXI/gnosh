@@ -165,7 +165,7 @@ func templateTag(rest string) bool {
 
 // ownTag reports whether rest goes on as one of gnosh's own tags.
 func ownTag(rest string) bool {
-	return tagNamed(rest, tagName) || tagNamed(rest, memTag)
+	return tagNamed(rest, tagName) || tagNamed(rest, memTag) || tagNamed(rest, agentMemoryTag)
 }
 
 // tagNamed reports whether rest, the text that follows a "<", goes on as a

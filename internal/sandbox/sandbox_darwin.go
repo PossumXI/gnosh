@@ -18,30 +18,26 @@ func check(Setup) Status {
 
 // Wrap returns the program and arguments that run argv, a program and its
 // arguments, in the folder dir inside the sandbox the policy describes.
-// The paths are put in the system's own spelling first, links resolved
-// (/private/tmp for /tmp), which is what Seatbelt matches.
+// The paths are put in the system's own spelling, links resolved
+// (/private/tmp for /tmp), which is what Seatbelt matches; and what lies
+// on the way to a path kept from the command is kept too (onTheWay).
 func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 	st := Check()
 	if !st.OK {
 		return nil, errors.New(st.Why)
 	}
-	real := func(list []string) []string {
-		out := make([]string, 0, len(list))
-		for _, s := range list {
-			if s != "" {
-				out = append(out, realPath(s))
-			}
-		}
-		return out
+	var links []string
+	if !p.FilesystemOff {
+		links, p.noLinks = onTheWay(p)
 	}
-	p.Write, p.ReadOnly, p.DenyRead, p.AllowRead = real(p.Write), real(p.ReadOnly), real(p.DenyRead), real(p.AllowRead)
-	p.UnixSockets, p.Hidden = real(p.UnixSockets), real(p.Hidden)
-	if t := real([]string{p.Temp}); len(t) == 1 {
-		p.Temp = t[0]
+	p.Write, p.ReadOnly, p.DenyRead, p.AllowRead = realPaths(p.Write), append(realPaths(p.ReadOnly), links...), realPaths(p.DenyRead), realPaths(p.AllowRead)
+	p.UnixSockets, p.Hidden = realPaths(p.UnixSockets), realPaths(p.Hidden)
+	if p.Temp != "" {
+		p.Temp = realPath(p.Temp)
 	}
 	for i := range p.Expose {
-		if r := real([]string{p.Expose[i].Path}); len(r) == 1 {
-			p.Expose[i].Path = r[0]
+		if p.Expose[i].Path != "" {
+			p.Expose[i].Path = realPath(p.Expose[i].Path)
 		}
 	}
 	return append([]string{st.Tool, "-p", seatbeltProfile(p)}, argv...), nil

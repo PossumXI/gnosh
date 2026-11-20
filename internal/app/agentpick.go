@@ -88,8 +88,5 @@ func agentDetails(d agentdef.Def) []string {
 	if d.OmitInstructions {
 		out = append(out, "Starts without the instruction files")
 	}
-	if len(d.Other) > 0 {
-		out = append(out, "Asks for "+strings.Join(d.Other, ", ")+", which gnosh does not have: it is not started")
-	}
 	return out
 }

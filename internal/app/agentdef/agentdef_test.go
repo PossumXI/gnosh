@@ -62,7 +62,7 @@ func TestParse(t *testing.T) {
 		strings.Join(d.Tools, ",") != strings.Join(want.Tools, ",") || !d.ToolsSet ||
 		strings.Join(d.Disallowed, ",") != strings.Join(want.Disallowed, ",") ||
 		d.Model != "" || d.PermissionMode != "plan" || d.MaxTurns != 12 || !d.OmitInstructions ||
-		len(d.Other) != 0 || string(d.Hooks) != `{"PreToolUse":[{"matcher":"Bash"}]}` {
+		string(d.Hooks) != `{"PreToolUse":[{"matcher":"Bash"}]}` {
 		t.Errorf("read as %+v", d)
 	}
 
@@ -86,7 +86,7 @@ func TestParse(t *testing.T) {
 
 	// The skills it preloads, as a list or with commas, and its effort.
 	d, reason = Parse("---\nname: careful\ndescription: Checks.\nskills:\n  - review-list\n  - ' style '\neffort: high\n---\nCheck.")
-	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" || len(d.Other) != 0 {
+	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" {
 		t.Errorf("read as %+v (%s)", d, reason)
 	}
 	if d, _ = Parse("---\nname: c\ndescription: d\nskills: a, b\n---\nx"); strings.Join(d.Skills, ",") != "a,b" {
@@ -220,7 +220,7 @@ func TestParseMCPServers(t *testing.T) {
 	if reason != "" {
 		t.Fatalf("skipped: %s", reason)
 	}
-	if len(d.MCPServers) != 2 || d.MCPServers[0].Name != "playwright" || d.MCPServers[1].Name != "github" || d.MCPServers[1].Inline != nil || len(d.Other) != 0 {
+	if len(d.MCPServers) != 2 || d.MCPServers[0].Name != "playwright" || d.MCPServers[1].Name != "github" || d.MCPServers[1].Inline != nil {
 		t.Fatalf("read as %+v", d.MCPServers)
 	}
 	var own struct {
@@ -298,7 +298,7 @@ func TestParseMemory(t *testing.T) {
 		return "---\nname: " + name + "\ndescription: Reviews.\nmemory: " + memory + "\n---\nReview.\n"
 	}
 	for _, scope := range []string{"user", "project", "local"} {
-		if d, reason := Parse(file("reviewer", scope)); reason != "" || d.Memory != scope || len(d.Other) != 0 {
+		if d, reason := Parse(file("reviewer", scope)); reason != "" || d.Memory != scope {
 			t.Errorf("memory: %s: %q, %+v", scope, reason, d)
 		}
 	}
@@ -312,7 +312,7 @@ func TestParseMemory(t *testing.T) {
 		t.Errorf("a name with a slash, without a memory: %q", reason)
 	}
 	defs, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "local"}}`)
-	if err != nil || len(defs) != 1 || defs[0].Memory != "local" || len(defs[0].Other) != 0 {
+	if err != nil || len(defs) != 1 || defs[0].Memory != "local" {
 		t.Errorf("memory in JSON: %v %+v", err, defs)
 	}
 	if _, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "always"}}`); err == nil || !strings.Contains(err.Error(), "user, project or local") {
@@ -332,7 +332,7 @@ func TestParseCompactWindow(t *testing.T) {
 		}
 		return d
 	}
-	if d := file("200000"); d.CompactWindow != 200000 || d.CompactWindowUnused != "" || len(d.Other) != 0 {
+	if d := file("200000"); d.CompactWindow != 200000 || d.CompactWindowUnused != "" {
 		t.Errorf("200000: %+v", d)
 	}
 	for _, bad := range []string{"200k", "99999", "-5"} {
@@ -345,7 +345,7 @@ func TestParseCompactWindow(t *testing.T) {
 		t.Fatalf("JSON: %v %+v", err, defs)
 	}
 	for _, d := range defs {
-		if d.Name == "a" && d.CompactWindow != 150000 || d.Name == "b" && (d.CompactWindow != 0 || d.CompactWindowUnused != "40000") || len(d.Other) != 0 {
+		if d.Name == "a" && d.CompactWindow != 150000 || d.Name == "b" && (d.CompactWindow != 0 || d.CompactWindowUnused != "40000") {
 			t.Errorf("JSON %s: %+v", d.Name, d)
 		}
 	}

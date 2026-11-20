@@ -148,14 +148,11 @@ type cmdFacts struct {
 	fsEdit bool
 	// reads and writes are the operands the command reads and changes.
 	reads, writes []word
-	// lands are the names a copy (cp, mv, ln, install, rsync, scp) gets
-	// in its place where the place is a folder: each source's last name
-	// there ("cp x/.env ." writes ./.env). They are held to the Read and
+	// lands are the places a copy (cp, mv, ln, install, rsync, scp) puts
+	// its sources in a folder (copyLanding). They are held to the Read and
 	// Edit rules and the protected paths; where the copy lands for the
-	// working directories, cpLands says. landsFrom are their sources, one
-	// for each: a pattern copied in lands under the names of what it
-	// matches, which are not in the folder yet (oracle seed 176).
-	lands, landsFrom []word
+	// working directories, cpLands says.
+	lands []copyLanding
 	// rewrites are files the command may put back as they are (see
 	// sedFacts): nothing in them changes, but a link among them would be
 	// replaced by a copy of what it leads to.
@@ -1522,7 +1519,7 @@ func fsFacts(f *cmdFacts, args []word) {
 	}
 	f.writes = append(f.writes[:len(f.writes):len(f.writes)], late...)
 	if f.name == "cp" || f.name == "mv" {
-		_, _, f.lands, f.landsFrom = copiedInto(f.name, args)
+		_, _, f.lands = copiedInto(f.name, args)
 	}
 	f.fsEdit = true
 }

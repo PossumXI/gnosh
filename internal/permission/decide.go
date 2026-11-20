@@ -905,14 +905,15 @@ func absOnly(ps []string) []string {
 // that a rule is held against the path as written and as resolved: a deny
 // rule applies when either matches, an allow rule only when both do.
 func (e *Engine) expand(req *request, paths []string) []string {
+	// (Kept once each by a set: a pattern copied into a folder gives a
+	// name for each of its matches, which may be thousands.)
 	var out []string
+	seen := map[string]bool{}
 	add := func(p string) {
-		for _, o := range out {
-			if o == p {
-				return
-			}
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
 		}
-		out = append(out, p)
 	}
 	for _, p := range paths {
 		if !strings.HasPrefix(p, "/") {

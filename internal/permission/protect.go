@@ -90,10 +90,18 @@ func (e *Engine) protectedWhy(p string) string {
 	return ""
 }
 
+// The folders of the agents' memories, in a .claude or .gnosh folder or
+// in gnosh's own config folder: those kept with the project, or the
+// person's, and those kept only here (app's agentmemory.go).
+const (
+	MemoryFolder      = "agent-memory"
+	MemoryLocalFolder = "agent-memory-local"
+)
+
 // memoryNote reports whether the path's segments after a .claude or .gnosh
 // folder, or after gnosh's own config folder, are those of a note in an
 // agent's memory: agent-memory or agent-memory-local, the agent's folder,
 // and a Markdown file in it, or in a folder in it.
 func memoryNote(rest []string) bool {
-	return len(rest) >= 3 && (rest[0] == "agent-memory" || rest[0] == "agent-memory-local") && strings.HasSuffix(rest[len(rest)-1], ".md")
+	return len(rest) >= 3 && (rest[0] == MemoryFolder || rest[0] == MemoryLocalFolder) && strings.HasSuffix(rest[len(rest)-1], ".md")
 }

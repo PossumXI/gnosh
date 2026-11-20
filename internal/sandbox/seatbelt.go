@@ -198,6 +198,17 @@ func seatbeltProfile(p Policy) string {
 		}
 		b.WriteString("(deny file-write-unlink\n" + strings.Join(lits, "\n") + ")\n")
 	}
+	// No link made, or renamed in, where a folder not there yet lies on
+	// the way to a path kept from the command (onTheWay): a link to a
+	// folder of its own, it would write the path in that. A folder of its
+	// own may be made there.
+	if len(p.noLinks) > 0 {
+		lits := make([]string, len(p.noLinks))
+		for i, d := range p.noLinks {
+			lits[i] = "  (require-all (literal " + sbString(d) + ") (vnode-type SYMLINK))"
+		}
+		b.WriteString("(deny file-write-create\n" + strings.Join(lits, "\n") + ")\n")
+	}
 	if len(p.DenyRead) > 0 || len(p.Hidden) > 0 {
 		// No folder cloned whole: clonefile(2) copies a folder's tree in
 		// the kernel, and Seatbelt asks only about the folder, so a copy of

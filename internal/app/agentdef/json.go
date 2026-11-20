@@ -13,8 +13,9 @@ const ScopeCommandLine = "command line"
 // FromJSON reads the definitions of --agents: a JSON object whose keys are
 // the agents' names, each holding the settings a definition file's
 // frontmatter has (description, tools, disallowedTools, model,
-// permissionMode, maxTurns, omitClaudeMd, background, and those this
-// package only notes in Other), with prompt for the file's body. color and
+// permissionMode, maxTurns, omitClaudeMd, background, hooks, skills,
+// effort, mcpServers, memory, autoCompactWindow and the rest), with prompt
+// for the file's body. color and
 // experimental are ignored, as Claude Code ignores them, and any other key
 // is a mistake. Each definition comes back with the scope "command line"
 // and the source "--agents", in the order of their names. An error says

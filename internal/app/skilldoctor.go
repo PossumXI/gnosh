@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/skill"
-	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -32,17 +31,12 @@ func (l *live) slashSkillDoctor(ctx context.Context, c *SlashContext) error {
 	if strings.TrimSpace(c.Args) != "" {
 		return errors.New("/skill-doctor takes nothing after it")
 	}
-	set := l.skills()
-	all := set.All()
+	all := l.skills().All()
 	if len(all) == 0 {
 		c.Say("There are no skills to look at.")
 		return nil
 	}
-	offered, lines := l.skillsList()
-	cost := map[string]int{}
-	for i, sk := range offered {
-		cost[sk.Name] = (len(lines[i]) + 4) / 4
-	}
+	cost, _, _ := l.skillCosts()
 	uses, sessions := l.skillUses(ctx)
 	// Those never run, the costliest first: the ones to look at; then the
 	// rest, the most run first.
@@ -62,19 +56,19 @@ func (l *live) slashSkillDoctor(ctx context.Context, c *SlashContext) error {
 	c.Say("Your skills: what each costs in the model's window, with the first prompt and after each summary, and how often it ran in your last %s (the model's Skill calls and the ones you typed):", lastSessions(sessions))
 	idle, idleCost := 0, 0
 	for _, sk := range all {
+		n, u := cost[sk.Name], uses[sk.Name]
 		where := "not in the model's list"
-		if n, ok := cost[sk.Name]; ok {
+		if n > 0 {
 			where = "about " + countWords(n, "token", "tokens")
 		}
-		u := uses[sk.Name]
 		ran := "never ran"
 		if u.runs > 0 {
 			ran = "ran " + countWords(u.runs, "time", "times") + ", last on " + u.last.Local().Format("Jan 2")
 		}
 		line := fmt.Sprintf("  /%s · %s · %s · %s", sk.Name, firstOf(sk.Scope, "gnosh's"), where, ran)
-		if u.runs == 0 && cost[sk.Name] > 0 {
+		if u.runs == 0 && n > 0 {
 			idle++
-			idleCost += cost[sk.Name]
+			idleCost += n
 			line += ": /skills " + sk.Name + " off takes it out, name-only keeps only its name"
 		}
 		c.Say("%s", visible(line))
@@ -119,7 +113,7 @@ func (l *live) skillUses(ctx context.Context) (map[string]skillUse, int) {
 					}
 				}
 			case transcript.TypeUser:
-				for _, name := range typedSkills(textOfBlocks(e.Message.Blocks)) {
+				for _, name := range typedSkills(e.Message.Text()) {
 					note(name, e.Timestamp)
 				}
 			}
@@ -152,16 +146,4 @@ func typedSkills(text string) []string {
 		return names
 	}
 	return nil
-}
-
-// textOfBlocks is the words of a message's text blocks.
-func textOfBlocks(blocks []core.Block) string {
-	var b strings.Builder
-	for _, bl := range blocks {
-		if bl.Type == core.BlockText {
-			b.WriteString(bl.Text)
-			b.WriteByte('\n')
-		}
-	}
-	return b.String()
 }

@@ -10,9 +10,6 @@ import (
 	"syscall"
 )
 
-// isInit is Linux's: only its sandbox has a pid namespace of its own.
-func isInit() bool { return false }
-
 // runChild runs the program at path and returns its status as a shell
 // gives it. (The relay runs only in Linux's sandbox.)
 func runChild(path string, argv []string) int {

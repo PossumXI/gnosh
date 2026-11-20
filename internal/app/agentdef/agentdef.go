@@ -113,11 +113,6 @@ type Def struct {
 	// written, for /agents to say.
 	CompactWindow       int
 	CompactWindowUnused string
-	// Other lists the fields of a definition that change what the
-	// sub-agent is or may do and that this package only notes (none at
-	// present). A caller that cannot honour one must say so, and not run
-	// the agent as if the field were not there.
-	Other []string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
 	// definition was read from (empty for a built-in).

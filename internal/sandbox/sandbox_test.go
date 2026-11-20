@@ -258,3 +258,96 @@ func TestRealPathOfWhatIsNotThereYet(t *testing.T) {
 		}
 	}
 }
+
+// What lies on the way to a path kept from the command, where it may
+// write: a link, by its own name (a ~/.zshrc a dotfile manager keeps by
+// one, a .claude that is one), and the folders not there yet (a .gnosh,
+// its agents folder); not a link outside the folders it writes in, nor
+// the path's own place, which its rule covers; a loop of links ends.
+func TestTheWayToAKeptPath(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(base, "root")
+	for _, d := range []string{root, filepath.Join(base, "dot"), filepath.Join(base, "elsewhere")} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for link, target := range map[string]string{
+		filepath.Join(root, ".zshrc"):  filepath.Join(base, "dot", "zshrc"),
+		filepath.Join(root, ".claude"): "../elsewhere",
+		filepath.Join(base, "outside"): root,
+		filepath.Join(root, "loop1"):   "loop2",
+		filepath.Join(root, "loop2"):   "loop1",
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in := func(s string) bool { return under(s, root) }
+	for _, c := range []struct {
+		path          string
+		links, absent []string
+	}{
+		{filepath.Join(root, ".zshrc"), []string{filepath.Join(root, ".zshrc")}, nil},
+		{filepath.Join(root, ".claude", "settings.json"), []string{filepath.Join(root, ".claude")}, nil},
+		{filepath.Join(root, ".gnosh", "agents", "x.md"), nil, []string{filepath.Join(root, ".gnosh", "agents"), filepath.Join(root, ".gnosh")}},
+		{filepath.Join(base, "outside", ".envrc"), nil, nil},
+		// (A folder not there yet outside the folders it writes in, it
+		// cannot make.)
+		{filepath.Join(base, "outside", ".claude", "skills", "s"), []string{filepath.Join(root, ".claude")}, nil},
+		{filepath.Join(root, "loop1", "x"), []string{filepath.Join(root, "loop1"), filepath.Join(root, "loop2")}, nil},
+	} {
+		links, absent := way(c.path, in)
+		if len(links) > 2 {
+			links = links[:2] // (the loop's, met again and again)
+		}
+		if strings.Join(links, " ") != strings.Join(c.links, " ") || strings.Join(absent, " ") != strings.Join(c.absent, " ") {
+			t.Errorf("way(%s) = links %q, folders not there %q; want %q, %q", c.path, links, absent, c.links, c.absent)
+		}
+	}
+}
+
+// The policy's kept paths, read-only, denied and hidden, each have their
+// way looked at, in the folders the command writes in, its temporary
+// folder among them; each link and folder once, in order.
+func TestOnTheWayOfAPolicy(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, temp := filepath.Join(base, "root"), filepath.Join(base, "temp")
+	for _, d := range []string{root, temp, filepath.Join(base, "elsewhere")} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for link, target := range map[string]string{filepath.Join(root, ".zshrc"): "../elsewhere/zshrc", filepath.Join(root, ".claude"): "../elsewhere"} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := Policy{Write: []string{root}, Temp: temp, ReadOnly: []string{filepath.Join(root, ".zshrc"), filepath.Join(root, ".claude", "settings.json")},
+		DenyRead: []string{filepath.Join(root, ".claude", "x")}, Hidden: []string{filepath.Join(root, ".gnosh", "y", "z"), filepath.Join(temp, "a", "b")}}
+	links, absent := onTheWay(p)
+	if want := []string{filepath.Join(root, ".claude"), filepath.Join(root, ".zshrc")}; strings.Join(links, " ") != strings.Join(want, " ") {
+		t.Errorf("links %q, want %q", links, want)
+	}
+	if want := []string{filepath.Join(root, ".gnosh"), filepath.Join(root, ".gnosh", "y"), filepath.Join(temp, "a")}; strings.Join(absent, " ") != strings.Join(want, " ") {
+		t.Errorf("folders not there %q, want %q", absent, want)
+	}
+}
+
+// The folders not there yet on the way to a kept path take no link, made
+// or renamed in, though a folder may be made there; nothing so without.
+func TestSeatbeltRefusesLinksOnTheWay(t *testing.T) {
+	got := seatbeltProfile(Policy{Write: []string{"/w"}, ReadOnly: []string{"/w/.gnosh/settings.json"}, noLinks: []string{"/w/.gnosh"}})
+	if !strings.Contains(got, "(deny file-write-create\n  (require-all (literal \"/w/.gnosh\") (vnode-type SYMLINK)))") {
+		t.Errorf("no rule against a link at the folder not there yet:\n%s", got)
+	}
+	if got := seatbeltProfile(Policy{Write: []string{"/w"}}); strings.Contains(got, "SYMLINK") {
+		t.Errorf("links refused with nothing kept:\n%s", got)
+	}
+}

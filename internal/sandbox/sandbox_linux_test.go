@@ -226,6 +226,50 @@ func TestBubblewrapHiddenStaysHidden(t *testing.T) {
 	}
 }
 
+// Under real bubblewrap, a session's folder reached through a link to an
+// absolute path, and a read-only file kept by one (as a dotfile manager
+// keeps ~/.zshrc), and a hidden one: the command runs (bubblewrap had
+// stopped, the link leading nowhere inside the sandbox it was making),
+// writes in its folder, and not through the links.
+func TestBubblewrapThroughLinks(t *testing.T) {
+	if st := Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	proj, elsewhere, home := t.TempDir(), t.TempDir(), t.TempDir()
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := filepath.Join(home, "work")
+	for path, text := range map[string]string{filepath.Join(elsewhere, "zshrc"): "good", filepath.Join(elsewhere, "env"): "hunter2"} {
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for link, target := range map[string]string{work: proj, filepath.Join(proj, ".zshrc"): filepath.Join(elsewhere, "zshrc"), filepath.Join(proj, ".env"): filepath.Join(elsewhere, "env")} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := Policy{Write: []string{work}, ReadOnly: []string{filepath.Join(work, ".zshrc")}, Hidden: []string{filepath.Join(work, ".env")}, Temp: temp}
+	argv, err := Wrap(p, work, []string{"/bin/sh", "-c", `echo in > in.txt && echo ok-in; echo bad > .zshrc 2>/dev/null || echo no-zshrc; cat .env; echo done`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	for _, want := range []string{"ok-in", "no-zshrc", "done"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("the sandboxed command said %q, without %q", out, want)
+		}
+	}
+	if strings.Contains(string(out), "hunter2") {
+		t.Errorf("a hidden file was read through its link: %s", out)
+	}
+	if data, _ := os.ReadFile(filepath.Join(elsewhere, "zshrc")); string(data) != "good" {
+		t.Errorf("the read-only file was written through its link: %q", data)
+	}
+}
+
 // Under real bubblewrap, behind gnosh's filter (here the test binary), a
 // command may make no Unix socket, but a pair of its own, and an internet
 // one; every Unix socket let, it may. Skipped where bubblewrap or python3

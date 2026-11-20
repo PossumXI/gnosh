@@ -12,6 +12,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/permission"
 )
 
 // A memory's index is given as far as its first 200 lines or 25 KB go,
@@ -19,7 +20,7 @@ import (
 // folder is made with a .gitignore that keeps it out of git.
 func TestAgentMemoryIndex(t *testing.T) {
 	base := t.TempDir()
-	dir := filepath.Join(base, ".gnosh", memoryLocalFolder, "rev")
+	dir := filepath.Join(base, ".gnosh", permission.MemoryLocalFolder, "rev")
 	open := func(content string) (string, bool) {
 		t.Helper()
 		if err := os.MkdirAll(dir, 0o755); err != nil {

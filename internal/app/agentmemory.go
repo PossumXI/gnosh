@@ -11,9 +11,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/permission"
 )
 
 // An agent's memory (DECISIONS 374), as Claude Code's subagents have one:
@@ -26,9 +28,7 @@ import (
 // CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 turns it off, as in Claude Code.
 
 const (
-	memoryFolder      = "agent-memory"
-	memoryLocalFolder = "agent-memory-local"
-	memoryIndex       = "MEMORY.md"
+	memoryIndex = "MEMORY.md"
 	// What of the index a sub-agent starts with: its first lines, as far
 	// as both limits allow.
 	memoryIndexLines = 200
@@ -63,16 +63,16 @@ func (l *live) agentMemoryDir(def agentdef.Def) (dir, base string) {
 		if theirs {
 			base = filepath.Join(l.cfg.Paths.Home, theirDir)
 		}
-		return filepath.Join(base, memoryFolder, def.Name), base
+		return filepath.Join(base, permission.MemoryFolder, def.Name), base
 	case "project", "local":
 		base = l.cfg.Paths.ProjectRoot
 		own := ownDir
 		if theirs {
 			own = theirDir
 		}
-		folder := memoryFolder
+		folder := permission.MemoryFolder
 		if def.Memory == "local" {
-			folder = memoryLocalFolder
+			folder = permission.MemoryLocalFolder
 		}
 		return filepath.Join(base, own, folder, def.Name), base
 	}
@@ -104,12 +104,14 @@ func openAgentMemory(dir, base, scope string) (index string, cut bool, err error
 	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
 		return "", false, fmt.Errorf("%s is not inside %s", dir, base)
 	}
+	perm := os.FileMode(0o755)
 	if scope == "user" {
 		// (The config folder itself, on a machine gnosh has not kept one
 		// on yet.)
 		if err := os.MkdirAll(base, 0o700); err != nil {
 			return "", false, err
 		}
+		perm = 0o700
 	}
 	at := base
 	for _, part := range strings.Split(rel, string(filepath.Separator)) {
@@ -117,10 +119,6 @@ func openAgentMemory(dir, base, scope string) (index string, cut bool, err error
 		info, err := os.Lstat(at)
 		switch {
 		case errors.Is(err, os.ErrNotExist):
-			perm := os.FileMode(0o755)
-			if scope == "user" {
-				perm = 0o700
-			}
 			if err := os.Mkdir(at, perm); err != nil && !errors.Is(err, os.ErrExist) {
 				return "", false, err
 			}
@@ -161,15 +159,21 @@ func openAgentMemory(dir, base, scope string) (index string, cut bool, err error
 		if i := bytes.LastIndexByte(b, '\n'); i >= 0 {
 			b = b[:i+1]
 		}
-		for len(b) > 0 && !utf8.Valid(b) {
-			b = b[:len(b)-1] // (a line longer than the limit, cut mid-letter)
+		// (A line longer than the limit, cut mid-letter: at most the
+		// three bytes of the letter cut are taken off the end, whatever is
+		// before them.)
+		for i := 0; i < utf8.UTFMax-1 && len(b) > 0; i++ {
+			if r, size := utf8.DecodeLastRune(b); r != utf8.RuneError || size > 1 {
+				break
+			}
+			b = b[:len(b)-1]
 		}
 	}
-	lines := strings.SplitAfter(string(b), "\n")
-	if len(lines) > memoryIndexLines && !(len(lines) == memoryIndexLines+1 && lines[memoryIndexLines] == "") {
+	lines := strings.SplitAfterN(string(b), "\n", memoryIndexLines+1)
+	if len(lines) > memoryIndexLines && lines[memoryIndexLines] != "" {
 		lines, cut = lines[:memoryIndexLines], true
 	}
-	return strings.Join(lines, ""), cut, nil
+	return strings.Join(lines[:min(len(lines), memoryIndexLines)], ""), cut, nil
 }
 
 // memoryOnly is a file tool a kind of agent is given for its memory alone,
@@ -191,6 +195,13 @@ func (t memoryOnly) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action
 		return act, errors.New(why)
 	}
 	return act, err
+}
+
+// Parallel is the tool's own: a Read of the memory still runs beside the
+// round's other calls that only look.
+func (t memoryOnly) Parallel(call core.ToolCall) bool {
+	c, ok := t.Tool.(agent.Concurrent)
+	return ok && c.Parallel(call)
 }
 
 // Run refuses a file outside the memory folder, and is the tool's own

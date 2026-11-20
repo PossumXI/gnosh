@@ -23,7 +23,7 @@ func TestFromJSON(t *testing.T) {
 		strings.Join(r.AgentTypes, ",") != "helper,x" || r.Model != "" || !r.InheritModel || r.MaxTurns != 5 || r.Scope != ScopeCommandLine || r.Source != "--agents" {
 		t.Errorf("reviewer = %+v", r)
 	}
-	if strings.Join(w.Tools, ",") != "Read,Edit" || strings.Join(w.Disallowed, ",") != "Bash" || !w.Background || len(w.Other) != 0 || w.Hooks != nil ||
+	if strings.Join(w.Tools, ",") != "Read,Edit" || strings.Join(w.Disallowed, ",") != "Bash" || !w.Background || w.Hooks != nil ||
 		strings.Join(w.Skills, ",") != "style,terms" || w.Effort != "max" || w.InitialPrompt != "Begin." {
 		t.Errorf("writer = %+v", w)
 	}

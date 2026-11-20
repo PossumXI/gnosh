@@ -88,17 +88,17 @@ func treeOps(words []word) (trees []word, copies []treeCopy) {
 			trees = ops[1:] // (the first is the mode or the owner)
 		}
 	case "mv":
-		sources, places, _, _ := copiedInto(name, args)
+		sources, places, _ := copiedInto(name, args)
 		trees = sources
 		lands(sources, places)
 	case "cp":
 		if has("rRa", "--recursive", "--archive") {
-			sources, places, _, _ := copiedInto(name, args)
+			sources, places, _ := copiedInto(name, args)
 			lands(sources, places)
 		}
 	case "rsync":
 		if has("ra", "--recursive", "--archive") {
-			sources, places, _, _ := copiedInto(name, args)
+			sources, places, _ := copiedInto(name, args)
 			lands(sources, places)
 		}
 	}

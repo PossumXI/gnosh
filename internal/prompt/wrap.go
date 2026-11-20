@@ -22,6 +22,10 @@ const tagName = "gnosh"
 // gnosh's own words too, made elsewhere and sent as they are.
 const memTag = "mem"
 
+// agentMemoryTag is the block a sub-agent's MEMORY.md is given in
+// (AgentMemory): text from outside can neither open nor close one.
+const agentMemoryTag = "agent-memory"
+
 // Wrap marks text as gnosh's own words: it trims it and puts it between
 // Open and Close. Text that is empty once trimmed gives an empty string,
 // so that a caller can leave an empty line out.

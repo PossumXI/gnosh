@@ -109,6 +109,10 @@ type Policy struct {
 	// blockUserns refuses it user namespaces: set by Wrap, where the
 	// machine's bubblewrap can and the policy does not let it make them.
 	blockUserns bool
+	// noLinks are the folders not there yet on the way to a path kept
+	// from the command, where it may make no link (onTheWay): set by Wrap
+	// on macOS.
+	noLinks []string
 }
 
 // Setup is what of a policy decides whether the sandbox can run here:

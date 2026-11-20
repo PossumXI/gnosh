@@ -79,7 +79,21 @@ func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 		// (It could not be put on here: said at startup and in /sandbox.)
 		p.Filter = ""
 	}
-	return bwrapArgs(st.Tool, p, dir, argv, statPath), nil
+	// The paths mounted on, and the folder the command starts in, with
+	// their links resolved: bubblewrap finds where to mount inside the
+	// sandbox it is making, where a link to an absolute path leads
+	// nowhere, and it stopped (a session's folder reached through one, a
+	// ~/.zshrc a dotfile manager keeps by one: every command failed); and
+	// a link in the machine's /tmp is not in the sandbox's. A link on the
+	// way that the command could replace is not kept from it: a mount
+	// cannot be put on a link (spec/DECISIONS.md 379).
+	p.Write, p.ReadOnly, p.DenyRead, p.AllowRead, p.Hidden = realPaths(p.Write), realPaths(p.ReadOnly), realPaths(p.DenyRead), realPaths(p.AllowRead), realPaths(p.Hidden)
+	for i := range p.Expose {
+		if p.Expose[i].Path != "" {
+			p.Expose[i].Path = realPath(p.Expose[i].Path)
+		}
+	}
+	return bwrapArgs(st.Tool, p, realPath(dir), argv, statPath), nil
 }
 
 // statPath says whether a path is there, and whether it is a folder,

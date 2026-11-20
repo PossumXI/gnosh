@@ -104,17 +104,24 @@ func (l *live) slashFewerPrompts(ctx context.Context, c *SlashContext) error {
 // offer, the most calls first; it says how many sessions it looked
 // through.
 func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
+	// Only the tools whose calls are judged here: commands, web pages and
+	// MCP tools.
 	tools := map[string]core.Tool{}
-	for _, t := range l.own {
-		tools[t.Spec().Name] = t
-	}
-	for _, t := range l.allowedMCPTools() {
-		tools[t.Spec().Name] = t
+	for _, t := range l.offeredTools() {
+		if name := t.Spec().Name; name == shelltool.BashName || name == webFetchName || strings.HasPrefix(name, "mcp__") {
+			tools[name] = t
+		}
 	}
 	files, sessions := recentSessionFiles([]string{l.store.ProjectDir(l.cfg.Paths.Cwd), l.store.ProjectDir(l.cfg.Paths.ProjectRoot)})
 	byRules := map[string]*askedRule{}
+	// The same call, made again (as a loop's are), is judged once: by its
+	// tool, where it ran and its arguments.
+	judgedAs := map[string]*askedRule{}
 	judged := 0
 	for _, f := range files {
+		if judged >= fewerCalls {
+			break // (nothing after can change the list)
+		}
 		// The calls of the file that would ask now, by their ids, until
 		// their results say they ran: one the person refused, or that was
 		// cut off, counts for nothing (the review of 2026-11-20: refused
@@ -124,6 +131,13 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 			if err != nil || ctx.Err() != nil {
 				break
 			}
+			if te.Type == transcript.TypeAssistant {
+				l.judgeCalls(te, tools, byRules, judgedAs, asking, &judged)
+				continue
+			}
+			if len(asking) == 0 || !resultFor(te, asking) {
+				continue
+			}
 			for _, e := range decode(&te) {
 				if e.Kind == agent.EntryResult {
 					if r := asking[e.ToolUseID]; r != nil && !e.Denied && !e.Interrupted {
@@ -131,45 +145,6 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 					}
 					delete(asking, e.ToolUseID)
 				}
-			}
-			if te.Type != transcript.TypeAssistant {
-				continue
-			}
-			e := te
-			for _, b := range e.Message.ToolUses() {
-				t := tools[b.Name]
-				if t == nil || !(b.Name == shelltool.BashName || b.Name == webFetchName || strings.HasPrefix(b.Name, "mcp__")) || judged >= fewerCalls {
-					continue
-				}
-				judged++
-				call := core.ToolCall{ID: b.ID, Name: b.Name, Input: b.Input}
-				act, err := describe(t, call, &core.ToolEnv{Cwd: firstOf(e.Cwd, l.cwd()), Roots: l.roots})
-				if err != nil {
-					continue
-				}
-				d := l.engine.DecideAs(permission.ModeDefault, b.Name, call, act)
-				if d.Behavior != permission.Ask {
-					continue
-				}
-				// The widest rules the question offers: the prefix rule
-				// ("kubectl get *") where the engine finds one sensible,
-				// so that the calls it covers count together.
-				var rules []string
-				for _, s := range d.Suggestions {
-					if s.Mode == "" && len(s.Rules) > 0 {
-						rules = s.Rules
-					}
-				}
-				if len(rules) == 0 {
-					continue
-				}
-				key := strings.Join(rules, "\x00")
-				r := byRules[key]
-				if r == nil {
-					r = &askedRule{rules: rules, example: firstOf(act.Command, act.URL)}
-					byRules[key] = r
-				}
-				asking[b.ID] = r
 			}
 		}
 	}
@@ -183,12 +158,81 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 		if a.calls != b.calls {
 			return b.calls - a.calls
 		}
-		return strings.Compare(strings.Join(a.rules, ","), strings.Join(b.rules, ","))
+		return slices.Compare(a.rules, b.rules)
 	})
 	if len(out) > fewerShown {
 		out = out[:fewerShown]
 	}
 	return out, sessions
+}
+
+// judgeCalls judges the calls of an assistant entry that would be asked
+// about now, as manual mode would, and notes each under the rules its
+// question would offer, to be counted once its result says it ran.
+func (l *live) judgeCalls(te transcript.Entry, tools map[string]core.Tool, byRules, judgedAs, asking map[string]*askedRule, judged *int) {
+	for _, b := range te.Message.ToolUses() {
+		t := tools[b.Name]
+		if t == nil || *judged >= fewerCalls {
+			continue
+		}
+		*judged++
+		cwd := firstOf(te.Cwd, l.cwd())
+		key := b.Name + "\x00" + cwd + "\x00" + string(b.Input)
+		r, seen := judgedAs[key]
+		if !seen {
+			r = l.judgeCall(t, b, cwd, byRules)
+			judgedAs[key] = r
+		}
+		if r != nil {
+			asking[b.ID] = r
+		}
+	}
+}
+
+// judgeCall is the rules a past call's question would offer, as the call
+// would be judged now in manual mode, or nil where it would not ask.
+// (Described with no id: a past call is not to be taken for one of this
+// session's, which the shell keeps account of by id.)
+func (l *live) judgeCall(t core.Tool, b core.Block, cwd string, byRules map[string]*askedRule) *askedRule {
+	call := core.ToolCall{Name: b.Name, Input: b.Input}
+	act, err := describe(t, call, &core.ToolEnv{Cwd: cwd, Roots: l.roots})
+	if err != nil {
+		return nil
+	}
+	d := l.engine.DecideAs(permission.ModeDefault, b.Name, call, act)
+	if d.Behavior != permission.Ask {
+		return nil
+	}
+	// The widest rules the question offers: the prefix rule ("kubectl get
+	// *") where the engine finds one sensible, so that the calls it covers
+	// count together.
+	var rules []string
+	for _, s := range d.Suggestions {
+		if s.Mode == "" && len(s.Rules) > 0 {
+			rules = s.Rules
+		}
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	key := strings.Join(rules, "\x00")
+	r := byRules[key]
+	if r == nil {
+		r = &askedRule{rules: rules, example: firstOf(act.Command, act.URL)}
+		byRules[key] = r
+	}
+	return r
+}
+
+// resultFor reports whether a user entry holds the result of a call that
+// is waited on, before its gnosh fields are read at all.
+func resultFor(te transcript.Entry, asking map[string]*askedRule) bool {
+	for _, b := range te.Message.Blocks {
+		if b.Type == core.BlockToolResult && asking[b.ToolUseID] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // recentSessionFiles are the session files in dirs (a session store's

@@ -959,7 +959,7 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		// A report ends with the sub-agent's id for SendMessage, a line for
 		// the model (seen on the devbox's screen under the report).
 		if id, _ := meta["agentId"].(string); id != "" {
-			text = strings.TrimRight(strings.TrimSuffix(strings.TrimRight(text, "\n"), "[agent id: "+id+"]"), "\n")
+			text = strings.TrimRight(strings.TrimSuffix(strings.TrimRight(text, "\n"), app.AgentIDLine(id)), "\n")
 		}
 	case "ScheduleWakeup":
 		// When the loop runs next (the result's "This turn ends here" is

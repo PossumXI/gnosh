@@ -508,11 +508,6 @@ func (l *live) cannotRunAgent(def agentdef.Def) string {
 	if def.Source != "" {
 		where = def.Source
 	}
-	switch {
-	case len(def.Other) > 0:
-		return fmt.Sprintf("the kind %q asks for %s in its definition (%s), and this gnosh does not have that for sub-agents yet. It is not run without: that would be another agent than the one its author wrote. Use another kind, or take the setting out of the file.",
-			def.Name, strings.Join(def.Other, ", "), where)
-	}
 	if _, why := l.skillsToPreload(def); why != "" {
 		return why + "."
 	}
@@ -1233,7 +1228,7 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.To
 	if s.owner == nil && takesMore(s.def, status) && !out.IsError {
 		// Its id, which SendMessage takes to give it more to do.
 		if n := len(out.Content); n > 0 && out.Content[n-1].Type == core.BlockText {
-			out.Content[n-1].Text += "\n\n[agent id: " + s.id + "]"
+			out.Content[n-1].Text += "\n\n" + AgentIDLine(s.id)
 		}
 	}
 	if wt := s.wt; wt != nil {
@@ -1298,3 +1293,7 @@ func (s *subSession) close() {
 		}
 	})
 }
+
+// AgentIDLine is the line a sub-agent's report ends with, its id for
+// SendMessage: for the model, which the screen leaves out.
+func AgentIDLine(id string) string { return "[agent id: " + id + "]" }

@@ -207,7 +207,9 @@ func (s *Set) AgentWorkTree(tree, repo string) string {
 
 // memoryClose finds what could close the block MEMORY.md is given in, in
 // any letter case and with blanks inside ("</AGENT-MEMORY>", "< /agent-memory":
-// the review of 2026-11-20).
+// the review of 2026-11-20). Untrusted breaks such a tag wherever it
+// stands whole; this catches one left open at the very end of the index,
+// which the line after it would close.
 var memoryClose = regexp.MustCompile(`(?i)<(\s*/\s*agent-memory)`)
 
 // AgentMemory is the part of a sub-agent's system prompt, sent last, for

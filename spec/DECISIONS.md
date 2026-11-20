@@ -5708,3 +5708,33 @@ or kept with the reason said (27).
     side question asked between was told it was interrupted; the calls of
     the round under way are now taken as still running until their end is
     told.
+
+379. **The sandbox keeps what lies on the way to a kept path.** The rules
+    on a path kept from a command (read-only, denied, hidden) were written
+    for the path as its links resolve, which is all Seatbelt matches; tried
+    on scratch files on a Mac, a command could rename a file of its own
+    over a ~/.zshrc that a dotfile manager keeps by a link (the rule held
+    the link's target, not the link), and could make a .gnosh not there
+    yet a link to a folder of its own and write its settings.json in that
+    (the rule held the path as it would be, which the link took elsewhere).
+    On macOS each link met on the way to a kept path, in a folder the
+    command may write in, is now kept read-only by its own name, and each
+    folder not there yet on the way may not be made a link, or have one
+    renamed in (Seatbelt's vnode-type SYMLINK); a folder may still be
+    made there. On Linux bubblewrap mounts on what a path leads to, and a
+    mount cannot be put on a link: a link on the way is not kept, as a
+    path not there yet is not (354), and the permission engine's own
+    questions catch what they can see. But bubblewrap was given the paths
+    as written, and finds where to mount inside the sandbox it is making,
+    where a link to an absolute path leads nowhere: a session's folder
+    reached through one, or a kept file that is one, stopped every
+    command (tried on the devbox). The paths it mounts on, and the folder
+    the command starts in, are now resolved first. And the cleanup review
+    of the day's work is applied: /fewer-permission-prompts stops at the
+    calls it judges, reads a result's fields only for a call it waits on,
+    judges a call made again (as a loop's are) once, and describes past
+    calls without their ids, which the shell keeps account of; a copy's
+    landing is one record; the memory tools keep Read's running beside
+    other reading calls; and a kind of agent's list of the fields gnosh
+    could not honour, empty since its memory and its compact window came
+    in, is gone with the code that read it.
