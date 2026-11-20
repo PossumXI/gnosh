@@ -624,6 +624,15 @@ func TestGrepVeryLongLineIsSearchedInPieces(t *testing.T) {
 	if want := p + "\n3:third NEEDLE\n"; got != want {
 		t.Errorf("line numbers after a long line: got %q, want %q", got, want)
 	}
+	// A match in two pieces of one line counts that line once, and shows
+	// it once (the search-tools review of 2026-11-20).
+	q := f.file("twice.txt", strings.Repeat("x", 500)+"NEEDLE"+strings.Repeat("y", 1500)+"NEEDLE\n")
+	got = f.ok(f.grep, in{"pattern": "NEEDLE", "output_mode": "count", "path": q})
+	mustContain(t, got, q+":1\n")
+	got = f.ok(f.grep, in{"pattern": "NEEDLE", "output_mode": "content", "path": q})
+	if n := strings.Count("\n"+got, "\n1:"); n != 1 {
+		t.Errorf("the line was shown %d times: %q", n, got)
+	}
 }
 
 func TestGrepTextOddities(t *testing.T) {

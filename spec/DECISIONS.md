@@ -4771,3 +4771,12 @@ or kept with the reason said (27).
     the next, and the result says so (shelltool Options.NoCarryCwd).
     Claude Code documents all four (its tools reference and env vars);
     gnosh read none of them.
+
+332. **A line read in pieces is one line.** Grep reads a line longer than
+    GrepMaxLineBytes (1 MiB) in pieces, each matched on its own; a match
+    in two pieces of one line counted the line twice and showed it twice
+    (the search-tools review of 2026-11-20). The scan now remembers the
+    line it last counted, and a later piece of it that matches is neither
+    counted nor shown again, with -o too. A match across two pieces is
+    still not found, and ^ and $ still match at a piece's edges, as
+    Options.GrepMaxLineBytes says.

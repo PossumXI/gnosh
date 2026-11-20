@@ -295,7 +295,10 @@ func (s *scanSpec) scanLines(ctx context.Context, r io.Reader, res *fileScan, em
 		res.entries++
 		return emit == nil || emit(l)
 	}
-	lineNo, fresh, afterLeft := 0, true, 0
+	// lastHit is the line last counted as a match: a line longer than one
+	// piece is read in pieces, and a match in each would count it, and
+	// show it, again (the search-tools review of 2026-11-20).
+	lineNo, fresh, afterLeft, lastHit := 0, true, 0, 0
 	for n := 0; ; n++ {
 		line, terminated, ok := lr.next()
 		if !ok {
@@ -326,7 +329,10 @@ func (s *scanSpec) scanLines(ctx context.Context, r io.Reader, res *fileScan, em
 				continue
 			}
 			res.matched = true
-			res.count++
+			if lastHit != lineNo {
+				res.count++
+				lastHit = lineNo
+			}
 			for _, m := range all {
 				if m[1] == m[0] {
 					continue
@@ -364,6 +370,11 @@ func (s *scanSpec) scanLines(ctx context.Context, r io.Reader, res *fileScan, em
 			}
 			continue
 		}
+		if lastHit == lineNo {
+			// Another piece of a line already counted and shown.
+			continue
+		}
+		lastHit = lineNo
 		res.matched = true
 		res.count++
 		switch s.mode {
