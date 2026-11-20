@@ -15,24 +15,38 @@ type Domains struct {
 	Allowed, Denied []string
 }
 
-// Allows reports whether the host, at the port, may be reached, and says
-// why not when it may not.
+// Allows reports whether the host, at the port, may be reached by the
+// lists alone, and says why not when it may not.
 func (d Domains) Allows(host string, port int) (bool, string) {
+	v, why := d.verdict(host, port)
+	return v == listed, why
+}
+
+// A host's standing with the lists.
+const (
+	unlisted = iota // neither list names it: the person may be asked
+	listed          // allowedDomains names it
+	denied          // deniedDomains names it, or it is no host: never let through
+)
+
+// verdict is the host's standing with the lists, and why it may not be
+// reached by them.
+func (d Domains) verdict(host string, port int) (int, string) {
 	host = normalHost(host)
 	if host == "" {
-		return false, "no host was named"
+		return denied, "no host was named"
 	}
 	for _, e := range d.Denied {
 		if entryFits(e, host, port) {
-			return false, host + " is in sandbox.network.deniedDomains"
+			return denied, host + " is in sandbox.network.deniedDomains"
 		}
 	}
 	for _, e := range d.Allowed {
 		if entryFits(e, host, port) {
-			return true, ""
+			return listed, ""
 		}
 	}
-	return false, host + " is not in sandbox.network.allowedDomains"
+	return unlisted, host + " is not in sandbox.network.allowedDomains"
 }
 
 // normalHost is a host as it is compared: lower case, no trailing dot, no

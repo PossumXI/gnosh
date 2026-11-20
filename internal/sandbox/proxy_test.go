@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 // Claude Code's allowedDomains and deniedDomains: a name, *.name for the
@@ -103,5 +105,59 @@ func TestProxy(t *testing.T) {
 	}
 	if len(told) != 2 || told[0] != "elsewhere.example" || told[1] != "rebound.example" {
 		t.Errorf("told: %q", told)
+	}
+}
+
+// A host neither list names is asked about once for the session, however
+// many connections reach for it at once, and the answer kept; a denied
+// host is never asked about.
+func TestProxyAsks(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "ok") }))
+	defer srv.Close()
+	p, err := ListenProxy("tcp", "127.0.0.1:0", Domains{Denied: []string{"denied.example"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	var mu sync.Mutex
+	asked := map[string]int{}
+	p.Ask = func(ctx context.Context, host string, port int) (bool, string) {
+		mu.Lock()
+		asked[host]++
+		mu.Unlock()
+		time.Sleep(50 * time.Millisecond)
+		return host == "127.0.0.1", "the person said no to " + host
+	}
+	proxyURL, _ := url.Parse("http://" + p.Addr().String())
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	get := func(target string) (int, string) {
+		resp, err := client.Get(target)
+		if err != nil {
+			return 0, err.Error()
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if code, body := get(srv.URL + "/x"); code != 200 || body != "ok" {
+				t.Errorf("an approved host: %d %q", code, body)
+			}
+		}()
+	}
+	wg.Wait()
+	if code, body := get("http://other.example/x"); code != http.StatusForbidden || !strings.Contains(body, "the person said no to other.example") {
+		t.Errorf("a refused host: %d %q", code, body)
+	}
+	get("http://other.example/y")
+	get("http://denied.example/")
+	mu.Lock()
+	defer mu.Unlock()
+	if asked["127.0.0.1"] != 1 || asked["other.example"] != 1 || asked["denied.example"] != 0 {
+		t.Errorf("asked: %v", asked)
 	}
 }

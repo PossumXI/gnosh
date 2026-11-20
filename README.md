@@ -100,8 +100,10 @@ Built:
   Claude Code's; `network.allowedDomains` (and `deniedDomains`) let a
   sandboxed command reach those hosts through gnosh's own proxy, and no
   other (no socat needed: gnosh relays itself). `/sandbox` says how it
-  stands and chooses its mode. Not built yet: `credentials`, and asking
-  about a new host (it is refused).
+  stands and chooses its mode. A host no setting lets through is asked
+  about, as Claude Code asks (Yes for the session, or kept as a
+  `WebFetch(domain:…)` allow rule, which lets a host through too);
+  `network.strictAllowlist` refuses instead. Not built yet: `credentials`.
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,

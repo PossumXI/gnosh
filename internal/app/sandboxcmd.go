@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/sandbox"
@@ -87,7 +88,7 @@ func (l *live) sandboxReport() string {
 	fmt.Fprintf(&b, "\nWrites: %s, and a /tmp of its own.", l.shownList(p.Write))
 	var guarded []string
 	for _, r := range p.ReadOnly {
-		if _, err := os.Lstat(r); err == nil && l.insideAny(r, p.Write) {
+		if _, err := os.Lstat(r); err == nil && l.insideAny(r, p.Write) && !slices.ContainsFunc(guarded, func(g string) bool { return r == g || strings.HasPrefix(r, g+"/") }) {
 			guarded = append(guarded, r)
 		}
 	}
@@ -103,14 +104,17 @@ func (l *live) sandboxReport() string {
 	if len(sc.Excluded) > 0 {
 		fmt.Fprintf(&b, "\nRun outside it (excludedCommands): %s.", strings.Join(listValues(sc.Excluded), ", "))
 	}
+	b.WriteString("\nNetwork: through gnosh's proxy")
 	if hosts := listValues(sc.AllowedDomains); len(hosts) > 0 {
-		fmt.Fprintf(&b, "\nNetwork: only %s, through gnosh's proxy", strings.Join(hosts, ", "))
-		if denied := listValues(sc.DeniedDomains); len(denied) > 0 {
-			fmt.Fprintf(&b, ", never %s", strings.Join(denied, ", "))
-		}
-		b.WriteString("; any other host is refused (sandbox.network.allowedDomains).")
+		fmt.Fprintf(&b, "; %s let through at once", strings.Join(hosts, ", "))
+	}
+	if denied := listValues(sc.DeniedDomains); len(denied) > 0 {
+		fmt.Fprintf(&b, "; never %s", strings.Join(denied, ", "))
+	}
+	if sc.Strict {
+		b.WriteString("; any other host is refused (strictAllowlist), but those WebFetch(domain:...) allow rules name.")
 	} else {
-		b.WriteString("\nNetwork: none. sandbox.network.allowedDomains lets hosts through, by gnosh's proxy.")
+		b.WriteString("; WebFetch(domain:...) allow rules let hosts through too, and any other host is asked about (Yes for the session, or kept as such a rule).")
 	}
 	return b.String()
 }

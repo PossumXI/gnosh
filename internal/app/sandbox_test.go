@@ -109,7 +109,7 @@ func TestSlashSandbox(t *testing.T) {
 	}
 	if st := sandbox.Check(); st.OK {
 		r = run(t, w, "-p", "/sandbox").wantCode(t, 0)
-		has(t, "/sandbox with it on", r.out, "The sandbox is on", "Mode: auto-allow", "Writes: ", "Network: none")
+		has(t, "/sandbox with it on", r.out, "The sandbox is on", "Mode: auto-allow", "Writes: ", "Network: through gnosh's proxy")
 	}
 	run(t, w, "-p", "/sandbox strict").wantCode(t, 0)
 	if local := w.Read(".gnosh/settings.local.json"); !strings.Contains(local, `"allowUnsandboxedCommands": false`) || !strings.Contains(local, `"enabled": true`) {
@@ -145,7 +145,7 @@ func TestSandboxedCommandsReachAllowedHosts(t *testing.T) {
 	run(t, w, "-p", "fetch").wantCode(t, 0)
 	has(t, "an allowed host", toolResult(t, w, 1, "c1"), "reached")
 	has(t, "a host not allowed", toolResult(t, w, 1, "c2"), "not in sandbox.network.allowedDomains")
-	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "reach on the network only 127.0.0.1")
+	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "127.0.0.1 let through at once", "any other host refused, as nobody is here to be asked")
 }
 
 // What the sandbox cannot keep from being made, where it was not there to
@@ -231,4 +231,62 @@ func TestGitGuardsOfAWorkTree(t *testing.T) {
 			t.Errorf("a repository's %s is not guarded: %v", want, guards)
 		}
 	}
+}
+
+// A WebFetch(domain:...) allow rule lets a sandboxed command reach its
+// host too, as Claude Code takes those rules into its sandbox's allowed
+// domains. Skipped where the sandbox or curl cannot run.
+func TestSandboxedCommandsReachWebFetchHosts(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "reached") }))
+	defer srv.Close()
+	w := apptest.NewWorld(t)
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true}}`)
+	w.Allow("WebFetch(domain:127.0.0.1)")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if n == 0 {
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"curl -s -m 10 ` + srv.URL + `/x"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-p", "fetch").wantCode(t, 0)
+	has(t, "a host a WebFetch rule allows", toolResult(t, w, 1, "c1"), "reached")
+}
+
+// In a session somebody attends, a sandboxed command that reaches for a
+// host nothing lets through waits while the person is asked; Yes lets it
+// through for the session, and the next command reaches it without a
+// question. Skipped where the sandbox or curl cannot run.
+func TestSandboxAsksAboutANewHost(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "reached") }))
+	defer srv.Close()
+	curl := func(id string) apptest.Reply {
+		return apptest.Reply{Calls: []apptest.Call{{ID: id, Name: "Bash", Args: `{"command":"curl -s -m 30 ` + srv.URL + `/x"}`}}}
+	}
+	w := apptest.NewWorld(t, curl("c1"), apptest.Reply{Text: "First."}, curl("c2"), apptest.Reply{Text: "Second."})
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true}}`)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("fetch it")
+	s.see("Let a command in the sandbox reach 127.0.0.1?")
+	s.see("  1. Yes: for this session")
+	s.typeLine("1")
+	s.see("First.")
+	has(t, "the first fetch", toolResult(t, w, 1, "c1"), "reached")
+	s.typeLine("again")
+	s.see("Second.")
+	has(t, "the second fetch, asked nothing", toolResult(t, w, 3, "c2"), "reached")
+	s.typeLine("/exit")
+	s.exit()
 }

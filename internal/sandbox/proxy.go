@@ -30,6 +30,16 @@ type Proxy struct {
 	// Told is called with each host refused, for the person; nil is
 	// nothing.
 	Told func(host, why string)
+	// Also lets a host neither list names through all the same (a
+	// WebFetch(domain:...) allow rule, as Claude Code takes them); Ask
+	// asks the person about a host nothing lets through or refuses, once
+	// per host for the session, the answer kept. Nil: neither.
+	Also func(host string) bool
+	Ask  func(ctx context.Context, host string, port int) (yes bool, why string)
+
+	mu       sync.Mutex
+	answered map[string]answer
+	asking   map[string]*sync.Mutex
 }
 
 // proxyDialWait bounds the making of one connection outward.
@@ -76,7 +86,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.refuse(w, host, "the port "+port+" is not one")
 		return
 	}
-	if ok, why := p.domains.Allows(host, n); !ok {
+	if ok, why := p.lets(r.Context(), host, n); !ok {
 		p.refuse(w, host, why)
 		return
 	}
@@ -224,4 +234,60 @@ func (p *Proxy) refuse(w http.ResponseWriter, host, why string) {
 	w.WriteHeader(http.StatusForbidden)
 	_, _ = io.WriteString(w, "gnosh's sandbox did not let the command reach "+strings.TrimSpace(host)+": "+why+
 		". The person may add it to sandbox.network.allowedDomains, or the command may run outside the sandbox (dangerouslyDisableSandbox), after asking.\n")
+}
+
+// lets decides whether the host may be reached: never one deniedDomains
+// names; one allowedDomains names, or Also lets through; else as the
+// person answered, asked once per host for the session (several
+// connections to a new host at once ask once).
+func (p *Proxy) lets(ctx context.Context, host string, port int) (bool, string) {
+	v, why := p.domains.verdict(host, port)
+	switch {
+	case v == denied:
+		return false, why
+	case v == listed:
+		return true, ""
+	}
+	h := normalHost(host)
+	if p.Also != nil && p.Also(h) {
+		return true, ""
+	}
+	if p.Ask == nil {
+		return false, why
+	}
+	p.mu.Lock()
+	if p.asking == nil {
+		p.asking, p.answered = map[string]*sync.Mutex{}, map[string]answer{}
+	}
+	one := p.asking[h]
+	if one == nil {
+		one = &sync.Mutex{}
+		p.asking[h] = one
+	}
+	p.mu.Unlock()
+	one.Lock()
+	defer one.Unlock()
+	p.mu.Lock()
+	a, done := p.answered[h]
+	p.mu.Unlock()
+	if !done {
+		a.yes, a.why = p.Ask(ctx, h, port)
+		if ctx.Err() != nil {
+			// (Taken back before it was answered: nothing kept.)
+			return false, h + " was not answered for"
+		}
+		p.mu.Lock()
+		p.answered[h] = a
+		p.mu.Unlock()
+	}
+	if !a.yes {
+		return false, a.why
+	}
+	return true, ""
+}
+
+// answer is what Ask said of a host, kept for the session.
+type answer struct {
+	yes bool
+	why string
 }

@@ -40,6 +40,10 @@ type Sandbox struct {
 	// write, and paths it may not; AllowRead and DenyRead, the same for
 	// reading. Each is absolute.
 	AllowWrite, DenyWrite, AllowRead, DenyRead []ListItem
+	// Strict refuses a host the lists do not name, where the person would
+	// otherwise be asked (network.strictAllowlist, the person's own files
+	// alone).
+	Strict bool
 	// AllowedDomains are the hosts a sandboxed command may reach, through
 	// gnosh's proxy, and DeniedDomains those it may not whatever else says
 	// (network.allowedDomains and network.deniedDomains): a name,
@@ -62,6 +66,7 @@ type sandboxBuild struct {
 	autoOnTheirs                               []Origin
 	excluded, allowWrite, denyWrite, allowRead allowList
 	denyRead, allowedDomains, deniedDomains    allowList
+	strict                                     []Origin
 }
 
 // sandboxToggle is one of the person's files turning the sandbox on or
@@ -299,13 +304,14 @@ func (b *sandboxBuild) finish() Sandbox {
 	out.AllowWrite, out.DenyWrite = b.allowWrite.items, b.denyWrite.items
 	out.AllowRead, out.DenyRead = b.allowRead.items, b.denyRead.items
 	out.AllowedDomains, out.DeniedDomains = b.allowedDomains.items, b.deniedDomains.items
+	out.Strict = len(b.strict) > 0
 	return out
 }
 
 // sandboxNetwork reads "sandbox.network": the hosts a sandboxed command
-// may reach through gnosh's proxy, and those it may not. A host outside
-// the lists is refused: gnosh asks nobody about a new host, as Claude
-// Code's strictAllowlist has it, which is taken and changes nothing.
+// may reach through gnosh's proxy, and those it may not. The person is
+// asked about a host the lists do not name, unless strictAllowlist (from
+// the person's own files) refuses it.
 func (s *source) sandboxNetwork(f jfield) {
 	if f.val.kind != jObject {
 		s.errorf(f.line, "\"sandbox.network\" is an object (allowedDomains, deniedDomains), and here it is %s.", f.val.kind.word())
@@ -327,8 +333,14 @@ func (s *source) sandboxNetwork(f jfield) {
 			s.add(op{kind: kind, text: "sandbox." + m.key + ": " + strings.Join(items, ", "), origin: o, what: "a sandbox setting",
 				apply: func(b *builder) { list(b).add(items, o) }})
 		case "strictAllowlist":
-			if m.val.kind != jBool {
+			switch {
+			case m.val.kind != jBool:
 				s.errorf(m.line, "\"sandbox.network.strictAllowlist\" is true or false, and here it is %s.", m.val.kind.word())
+			case s.theirs || s.scope == "project":
+				s.probs.warnf(s.file, m.line, "\"sandbox.network.strictAllowlist\" in a project's file is not taken: as in Claude Code, a repository can turn it neither on nor off. It is left out.")
+			case m.val.b:
+				s.add(op{kind: KindRestriction, text: "sandbox.network.strictAllowlist: true", origin: o, what: "a sandbox setting",
+					apply: func(b *builder) { b.sandbox.strict = append(b.sandbox.strict, o) }})
 			}
 		case "allowManagedDomainsOnly", "tlsTerminate", "allowUnixSockets", "allowAllUnixSockets", "allowLocalBinding", "httpProxyPort", "socksProxyPort", "allowMachLookup":
 			s.errorf(m.line, "\"sandbox.network.%s\" is a setting Claude Code has and gnosh has not built. Take it out of this file.", m.key)

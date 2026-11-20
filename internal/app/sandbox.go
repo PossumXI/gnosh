@@ -1,12 +1,14 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -95,19 +97,20 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 		return nil
 	}
 	temp := state.temp
-	hosts := listValues(sc.AllowedDomains)
-	if len(hosts) > 0 {
-		if err := l.startSandboxProxy(temp); err != nil {
-			l.notice(agent.LevelWarning, "sandbox", "The sandbox's proxy could not start ("+err.Error()+"), so sandboxed commands reach no host on the network.")
-			hosts = nil
-		}
+	// The proxy, whenever the sandbox is on: a host the lists do not name
+	// is asked about (or refused), as Claude Code asks.
+	hosts, network := listValues(sc.AllowedDomains), true
+	if err := l.startSandboxProxy(temp); err != nil {
+		l.notice(agent.LevelWarning, "sandbox", "The sandbox's proxy could not start ("+err.Error()+"), so sandboxed commands reach no host on the network.")
+		hosts, network = nil, false
 	}
 	writes := "the session's folders and /tmp (this session's own)"
 	if runtime.GOOS != "linux" {
 		writes = "the session's folders and $TMPDIR (this session's own)"
 	}
 	return &shelltool.Sandbox{
-		Hosts: hosts,
+		Hosts:   hosts,
+		Network: l.sandboxNetworkText(network),
 		Wrap: func(dir string, roots, argv []string, expose []sandbox.Exposed) ([]string, []string, error) {
 			p := l.sandboxPolicy(roots, temp, expose)
 			out, err := sandbox.Wrap(p, dir, argv)
@@ -420,6 +423,12 @@ func (l *live) startSandboxProxy(temp string) error {
 	p.Told = func(host, why string) {
 		l.flog.logf("sandbox", "a sandboxed command was not let reach %s: %s", host, why)
 	}
+	if l.engine != nil {
+		p.Also = l.engine.FetchAllows
+	}
+	if !sc.Strict {
+		p.Ask = l.askNetHost
+	}
 	l.sandboxProxy = p
 	l.sandboxNet.proxy, l.sandboxNet.relay = p.Addr().String(), relay
 	return nil
@@ -439,4 +448,74 @@ func ensureDataDir(cfg *config.Config) {
 	if os.MkdirAll(dir, 0o700) == nil {
 		_ = os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*\n"), 0o600)
 	}
+}
+
+// sandboxNetworkText says what of the network a sandboxed command reaches,
+// for the model.
+func (l *live) sandboxNetworkText(network bool) string {
+	sc := l.cfg.Sandbox
+	hosts := listValues(sc.AllowedDomains)
+	switch {
+	case !network:
+		return "reach no network"
+	case sc.Strict && len(hosts) == 0:
+		return "reach no host on the network but those WebFetch(domain:...) allow rules name, through a proxy HTTP_PROXY and HTTPS_PROXY name"
+	case sc.Strict:
+		return "reach on the network only " + strings.Join(hosts, ", ") + " (and the hosts WebFetch(domain:...) allow rules name), through a proxy HTTP_PROXY and HTTPS_PROXY name"
+	}
+	reach := "reach the network through a proxy HTTP_PROXY and HTTPS_PROXY name (a program that ignores those reaches nothing)"
+	if len(hosts) > 0 {
+		reach += ", " + strings.Join(hosts, ", ") + " let through at once"
+	}
+	if !l.interactive {
+		return reach + ", and any other host refused, as nobody is here to be asked about it"
+	}
+	return reach + ", any other host waiting while the person is asked about it"
+}
+
+// askNetHost asks the person whether a sandboxed command may reach a host
+// nothing lets through, as Claude Code asks: in bypassPermissions mode it
+// may, in dontAsk mode and where nobody can be asked it may not. "Yes"
+// lets it reach the host for the session; "Yes, and don't ask again"
+// keeps a WebFetch(domain:...) allow rule for the project, which Claude
+// Code's sandbox takes in too.
+func (l *live) askNetHost(ctx context.Context, host string, port int) (bool, string) {
+	no := host + " is not in sandbox.network.allowedDomains, and "
+	switch l.engine.Mode() {
+	case permission.ModeBypass:
+		return true, ""
+	case permission.ModeDontAsk:
+		return false, no + "dontAsk mode refuses what would ask"
+	}
+	if !l.interactive || l.agent == nil {
+		return false, no + "nobody is here to be asked about it"
+	}
+	const yes, keep, refuse = "Yes", "Yes, and don't ask again for this host", "No"
+	q := "Let a command in the sandbox reach " + host + "?"
+	form := QuestionForm{EscCancels: true,
+		Lead: "A command running in the sandbox wants to reach " + host + " (port " + strconv.Itoa(port) + "), which no setting lets it reach.",
+		Questions: []FormQuestion{{Question: q, Header: "Network", NoOther: true,
+			Options: []FormOption{{Label: yes, Description: "for this session"}, {Label: keep, Description: "keeps WebFetch(domain:" + host + ") for this project"}, {Label: refuse}}}}}
+	ans, err := l.agent.Ask(ctx, agent.Question{Kind: questionKind, Title: "A sandboxed command wants to reach " + host, Text: form.Lead, Data: form})
+	if err != nil {
+		return false, no + "the question was not answered"
+	}
+	values, _ := ans.Data.(map[string]string)
+	rule := "WebFetch(domain:" + host + ")"
+	switch values[q] {
+	case yes:
+		_ = l.engine.Grant(rule, permission.GrantSession)
+		l.flog.logf("sandbox", "the person let sandboxed commands reach %s for the session", host)
+		return true, ""
+	case keep:
+		if err := l.engine.Grant(rule, permission.GrantLocal); err == nil {
+			if err := l.saveRules([]string{rule}); err != nil {
+				l.engine.Unkeep(rule, permission.ListAllow)
+				_ = l.engine.Grant(rule, permission.GrantSession)
+				l.notice(agent.LevelWarning, "sandbox", "Sandboxed commands may reach "+host+" for this session, but it could not be written down ("+err.Error()+"), so gnosh will ask again next time.")
+			}
+		}
+		return true, ""
+	}
+	return false, "the person did not let the command reach " + host
 }

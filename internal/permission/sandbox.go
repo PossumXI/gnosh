@@ -94,3 +94,23 @@ func (e *Engine) SandboxPaths() (denyRead, denyWrite, allowWrite []string) {
 	}
 	return denyRead, denyWrite, allowWrite
 }
+
+// FetchAllows reports whether a WebFetch(domain:...) allow rule covers the
+// host: Claude Code takes those rules into its sandbox's allowed domains,
+// and keeps a host the person let a sandboxed command reach as one.
+func (e *Engine) FetchAllows(host string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, c := range e.rules(ListDeny) {
+		if c.kind == kindDomain && domainMatch(c.domain, host) {
+			return false
+		}
+	}
+	for _, c := range e.rules(ListAllow) {
+		if c.kind == kindDomain && domainMatch(c.domain, host) {
+			return true
+		}
+	}
+	return false
+}

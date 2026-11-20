@@ -5299,3 +5299,21 @@ or kept with the reason said (27).
     a kind of agent in it would run its hooks outside, and since gnosh
     makes the folder itself, it is not among what is taken away after a
     command (358).
+
+360. **The sandbox asks about a new host.** As Claude Code does, a host a
+    sandboxed command reaches for that neither sandbox.network list names
+    is put to the person while the command waits: "Yes" lets commands
+    reach it for the session, "Yes, and don't ask again" keeps a
+    WebFetch(domain:<host>) allow rule in the project's local settings,
+    "No" refuses it; once per host for the session, however many
+    connections reach for it at once, the answer kept. By mode, as in
+    Claude Code: bypassPermissions lets it through, dontAsk refuses, and
+    a run nobody attends refuses, saying so. WebFetch(domain:...) allow
+    rules let their hosts through as allowedDomains does (a WebFetch deny
+    rule refuses its host), as Claude Code takes them into its sandbox's
+    allowed domains. network.strictAllowlist, from the person's own files
+    alone (a repository can turn it neither on nor off), refuses instead
+    of asking. The proxy now starts whenever the sandbox is on, so a
+    sandboxed command always has HTTP_PROXY and HTTPS_PROXY set, and the
+    model is told how its network stands (let through at once, asked
+    about, or refused). deniedDomains is never asked about.

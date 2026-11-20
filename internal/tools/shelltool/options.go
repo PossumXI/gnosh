@@ -316,9 +316,11 @@ type Sandbox struct {
 	Unsandboxed bool
 	// Writes says where a sandboxed command may write, for the model.
 	Writes string
-	// Hosts are the only hosts a sandboxed command may reach, through a
-	// proxy its HTTP_PROXY names; none, no network at all.
-	Hosts []string
+	// Hosts are the hosts a sandboxed command may reach at once, through a
+	// proxy its HTTP_PROXY names, and Network says what of the network it
+	// reaches, for the model ("" for: no network at all).
+	Hosts   []string
+	Network string
 	// Before is called as a sandboxed command starts, for the session's
 	// folders, and After as it ends, with what Before returned: what the
 	// sandbox could not keep from being made (a path that was not there to
@@ -331,7 +333,10 @@ type Sandbox struct {
 // network says what of the network a sandboxed command reaches, for the
 // model.
 func (sb *Sandbox) network() string {
-	if len(sb.Hosts) == 0 {
+	switch {
+	case sb.Network != "":
+		return sb.Network
+	case len(sb.Hosts) == 0:
 		return "reach no network"
 	}
 	return "reach on the network only " + strings.Join(sb.Hosts, ", ") + ", through a proxy that HTTP_PROXY and HTTPS_PROXY name (a program that ignores those reaches nothing)"
