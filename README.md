@@ -70,7 +70,8 @@ Built:
   with SearXNG's JSON format on; no tool without it), commands on
   declared hosts over ssh, and MCP servers, those gnosh starts itself and
   those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
-  `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
+  `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; one
+  gnosh starts runs in the folder, so your own wait for its trust; their
   tools are `mcp__<server>__<tool>`, and a server may ask you for a few
   values in the middle of a call, Claude Code's elicitation). Language
   servers named in `lspServers` (`{"gopls": {"command": "gopls", "args":

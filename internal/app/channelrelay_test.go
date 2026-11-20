@@ -57,6 +57,7 @@ func TestChannelRelayAllows(t *testing.T) {
 	record := w.Home + "/relayed.jsonl"
 	server := w.Script(w.Home+"/bin/phone.sh", relayChannel(record, "allow"))
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"phone": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	s := sitWith(t, w, nil, "--channels", "server:phone")
 	s.see("The channel phone takes permission questions too")
 	s.typeLine("write it")
@@ -87,6 +88,7 @@ func TestChannelRelayDenies(t *testing.T) {
 	record := w.Home + "/relayed.jsonl"
 	server := w.Script(w.Home+"/bin/phone.sh", relayChannel(record, "deny"))
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"phone": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	s := sitWith(t, w, nil, "--channels", "server:phone")
 	s.see("The channel phone takes permission questions too")
 	s.typeLine("write it")
@@ -198,6 +200,7 @@ func TestChannelRelayLeavesPersonOnlyQuestions(t *testing.T) {
 	record := w.Home + "/relayed.jsonl"
 	server := w.Script(w.Home+"/bin/phone.sh", relayChannel(record, "allow"))
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"phone": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	s := sitWith(t, w, nil, "--channels", "server:phone")
 	s.see("The channel phone takes permission questions too")
 	s.typeLine("clean up")

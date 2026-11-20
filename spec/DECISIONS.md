@@ -5050,3 +5050,21 @@ or kept with the reason said (27).
     Left, and known: a server's message about a file the model may read
     can quote what another file holds (a constant's value in a type
     error); that file's problems are told, words and all.
+
+351. **The person's own MCP servers wait for the folder's trust.** A
+    server gnosh starts runs in the project's folder and reads what a
+    repository put there before anything else: npx reads the folder's
+    .npmrc (which can name another registry) and node_modules/.bin, uvx
+    its uv.toml, a relative command is the folder's own file, and a
+    ${CLAUDE_PROJECT_DIR} path in the arguments runs the folder's code.
+    The second review of 2026-11-20 found that the person's own servers
+    (mcp.json, every project's and this folder's own, and a kind of
+    sub-agent's) started in a folder not yet trusted, where hooks had a
+    guard and language servers waited (344). Now a server gnosh would
+    start waits for the trust, as Claude Code's do behind its workspace
+    trust dialog, and the trust question names the person's (so a new
+    folder is asked about when the person has such servers); /mcp says
+    why it is not connected. Servers given with --mcp-config are the
+    person's word for this run and start; a server at a URL runs nothing
+    here and does not wait. gnosh mcp list and get, run by the person from
+    a shell, still start a server to see how it stands.

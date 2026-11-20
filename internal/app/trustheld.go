@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,7 +27,52 @@ func (st *startup) heldList() []trust.Holding {
 	}
 	held = append(held, st.gitPrograms...)
 	held = append(held, lspHoldings(st.cfg)...)
+	held = append(held, userMCPHoldings(st.cfg)...)
 	return append(held, projectHoldings(st.cfg)...)
+}
+
+// userMCPHoldings are the person's own MCP servers that gnosh starts (in
+// mcp.json: every project's, and this folder's own), which would run in
+// this folder and read what a repository put there (an .npmrc for npx, a
+// relative command): they wait for the folder to be trusted, as the
+// language servers do, so a folder is asked about when the person has
+// such servers (the second review of 2026-11-20). Safe mode reads none.
+func userMCPHoldings(cfg *config.Config) []trust.Holding {
+	if cfg.Switches.SafeMode.V {
+		return nil
+	}
+	path := filepath.Join(cfg.Paths.ConfigDir, "mcp.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var f struct {
+		Servers  map[string]json.RawMessage `json:"mcpServers"`
+		Projects map[string]struct {
+			Servers map[string]json.RawMessage `json:"mcpServers"`
+		} `json:"projects"`
+	}
+	if json.Unmarshal(data, &f) != nil {
+		return nil // (the session says what is wrong with the file)
+	}
+	servers := maps.Clone(f.Servers)
+	if servers == nil {
+		servers = map[string]json.RawMessage{}
+	}
+	maps.Copy(servers, f.Projects[cfg.Paths.ProjectRoot].Servers)
+	var out []trust.Holding
+	for _, name := range slices.Sorted(maps.Keys(servers)) {
+		var e struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}
+		if json.Unmarshal(servers[name], &e) != nil || e.Command == "" {
+			continue
+		}
+		out = append(out, trust.Holding{Kind: trust.KindMCPLocal, File: path,
+			Text: "your MCP server " + name + " (" + strings.Join(append([]string{e.Command}, e.Args...), " ") + "), which would start in this folder and read what is there"})
+	}
+	return out
 }
 
 // lspHoldings are the person's own language servers, which would read

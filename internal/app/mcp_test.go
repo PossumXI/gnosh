@@ -80,6 +80,7 @@ func TestMCPServerTools(t *testing.T) {
 		"remote": {"type": "http", "url": "`+far.URL+`/mcp?key=k9", "headers": {"Authorization": "Bearer t0k"}}
 	}}`)
 
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "-y", "-p", "greet Jae").wantCode(t, 0)
 	reqs := w.Model.Requests()
 	has(t, "the tools the model was offered", string(reqs[0].Body), "mcp__greeter__greet", "Greets someone by name.", "mcp__remote__wave", "Waves from afar.")
@@ -191,7 +192,10 @@ func TestMCPCommands(t *testing.T) {
 	has(t, "get of a server waiting for trust", r.out, "not used until this folder is trusted")
 	run(t, w, "mcp", "get", "nobody").wantCode(t, 1)
 
-	// A session uses the local server.
+	// A session uses the local server, once the folder is trusted (the
+	// person's own servers wait for that; gnosh mcp list and get, run by
+	// the person from a shell, do not).
+	run(t, w, "trust").wantCode(t, 0)
 	r = run(t, w, "-p", "/mcp").wantCode(t, 0)
 	has(t, "/mcp", r.out, "greeter: connected (greeter 0.1; local, ", "far: connected (far 1; user, ")
 
@@ -224,6 +228,7 @@ func TestMCPReconnectAndDisable(t *testing.T) {
 		return strings.Count(string(data), "started")
 	}
 
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "-p", "/mcp disable greeter").wantCode(t, 0)
 	has(t, "/mcp disable", r.out, "greeter: disabled for this session (user, ", "/mcp enable greeter connects it")
 	r = run(t, w, "-p", "/mcp enable greeter").wantCode(t, 0)
@@ -251,6 +256,7 @@ func TestMCPConfigFlags(t *testing.T) {
 	inline := `{"mcpServers": {"typed": {"command": "` + server + `"}}}`
 
 	// (JSON with blanks in it ends a list, so it goes first.)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "-p", "--mcp-config", inline, "given.json", "--", "/mcp").wantCode(t, 0)
 	has(t, "/mcp with --mcp-config", r.out, "filed: connected", "given: connected (greeter 0.1; command line, "+w.Dir+"/given.json)", "typed: connected (greeter 0.1; command line, --mcp-config)")
 
@@ -280,6 +286,7 @@ func TestMCPToolsInSubAgents(t *testing.T) {
 	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"greeter": {"command": "`+server+`"}}}`)
 
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "-y", "-p", "greet Jae through a sub-agent").wantCode(t, 0)
 	reqs := w.Model.Requests()
 	if len(reqs) != 4 {
@@ -336,6 +343,7 @@ func TestMCPToolsChange(t *testing.T) {
 	server := w.Script(w.Home+"/bin/changer.sh", changerMCPServer)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"changer": {"command": "`+server+`"}}}`)
 
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "-y", "-p", "open the door").wantCode(t, 0)
 	reqs := w.Model.Requests()
 	if len(reqs) != 2 {
@@ -438,6 +446,7 @@ func TestMCPLargeResult(t *testing.T) {
 	)
 	server := w.Script(w.Home+"/bin/big.sh", bigMCPServer)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"big": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	o := testOptions(w, "-y", "-p", "dump it")
 	o.Environ = append(o.Environ, "MAX_MCP_OUTPUT_TOKENS=100")
 	runWith(t, context.Background(), o).wantCode(t, 0)
@@ -492,6 +501,7 @@ func TestMCPResources(t *testing.T) {
 	)
 	server := w.Script(w.Home+"/bin/memo.sh", fakeMCPResources)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"memo": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "-p", "read the plan").wantCode(t, 0)
 	has(t, "the tools offered", strings.Join(toolNamesOf(w.Model.Requests()[0]), " "), "ListMcpResourcesTool ReadMcpResourceTool")
 	has(t, "the listing", toolResult(t, w, 1, "c1"), "memo  memo://plan  plan (text/plain): The plan.")
@@ -532,6 +542,7 @@ func TestMCPPrompts(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Reviewed."})
 	server := w.Script(w.Home+"/bin/rev.sh", fakeMCPPrompts)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"rev": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "-p", "/mcp__rev__review main.go error handling").wantCode(t, 0)
 	has(t, "the run's answer", r.out, "Reviewed.")
 	first := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
@@ -550,6 +561,7 @@ func TestMCPResourceMention(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "It says PLAN-TEXT-12."})
 	server := w.Script(w.Home+"/bin/memo.sh", fakeMCPResources)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"memo": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "-p", "what does @memo:memo://plan say? and @nobody:memo://x").wantCode(t, 0)
 	users := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
 	has(t, "the first request", users, "The user mentioned the resource memo:memo://plan of an MCP server", "PLAN-TEXT-12")
@@ -628,4 +640,29 @@ func TestMCPToolsThatCannotBeListedAreSaidToTheModel(t *testing.T) {
 	if strings.Contains(body, "ghostsrv") {
 		t.Errorf("the model was told of a server that never connected: %s", body)
 	}
+}
+
+// The person's own MCP servers that gnosh starts wait for the folder's
+// trust: a server started here runs in the folder and reads what a
+// repository put there (an .npmrc for npx, a relative command). The trust
+// question names them, and --trust-folder starts them for one run (the
+// second review of 2026-11-20). A server at a URL does not wait.
+func TestMCPPersonsServersWaitForTrust(t *testing.T) {
+	w := apptest.NewWorld(t)
+	server := w.Script(w.Home+"/bin/greeter.sh", fakeMCPServer)
+	var auth []string
+	far := fakeMCPHTTP(t, &auth)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"greeter": {"command": "`+server+`"}, "remote": {"type": "http", "url": "`+far.URL+`/mcp"}}}`)
+	r := run(t, w, "-p", "/mcp").wantCode(t, 0)
+	has(t, "/mcp in a folder not trusted", r.out, "greeter: not connected", "waits for this folder to be trusted", "remote: connected")
+	r = run(t, w, "--trust-folder", "-p", "/mcp").wantCode(t, 0)
+	has(t, "/mcp with --trust-folder", r.out, "greeter: connected")
+
+	s := sit(t, w)
+	s.see("? Trust this folder?")
+	s.seeAnywhere("your MCP server greeter (" + server + "), which would start in this folder")
+	s.typeLine("1")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/exit")
+	s.exit()
 }

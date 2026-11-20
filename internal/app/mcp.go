@@ -199,6 +199,10 @@ func (l *live) startMCP() {
 	}
 }
 
+// errMCPUntrusted is why a server the person set up to be started is not,
+// in a folder that is not trusted.
+const errMCPUntrusted = "it waits for this folder to be trusted, since a server started here runs in the folder and reads what a repository put there (gnosh trust, or --trust-folder for one run, lets it start)"
+
 // connectMCP starts one server and offers its tools. gen is the server's
 // generation as the caller marked it pending, under the lock: a disable,
 // a reconnect or the end of a sub-agent since then makes another, and this
@@ -211,6 +215,7 @@ func (l *live) connectMCP(s *mcpServer, gen int) {
 	if stale {
 		return
 	}
+	held := s.cfg.Type == "stdio" && s.cfg.Scope != "command line" && l.st != nil && !l.st.trusted
 	fail := func(why string) {
 		l.mcp.mu.Lock()
 		if s.gen != gen {
@@ -225,6 +230,17 @@ func (l *live) connectMCP(s *mcpServer, gen int) {
 			return
 		}
 		l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The MCP server %s is not connected: %s (/mcp says more)", s.cfg.Name, oneLine(why, 300)))
+	}
+	if held {
+		// A server gnosh starts runs in the folder, and reads what a
+		// repository put there before anything else: an .npmrc or a
+		// node_modules for npx, a relative command, a path under the
+		// project in its arguments. The person's own wait for the folder's
+		// trust, as their language servers do, and the trust question
+		// names them (the second review of 2026-11-20). Those given on the
+		// command line are the person's word for this run.
+		fail(errMCPUntrusted)
+		return
 	}
 	timeout := l.cfg.Limits.MCPTimeout.V
 	ctx, cancel := context.WithTimeout(l.ctx, timeout)

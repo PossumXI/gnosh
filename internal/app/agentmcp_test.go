@@ -66,6 +66,7 @@ mcpServers:
 ---
 You greet people with the greet tool.
 `)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "-y", "-p", "greet Jae")
 	r.wantCode(t, 0)
 	reqs := w.Model.Requests()
@@ -109,6 +110,7 @@ mcpServers:
 ---
 You greet people with the greet tool.
 `)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "--agent", "greeter", "-y", "-p", "greet Jae").wantCode(t, 0)
 	has(t, "the tools offered", string(w.Model.Requests()[0].Body), "mcp__own__greet")
 	has(t, "what the model read", toolResult(t, w, 1, "c1"), "hello, Jae")
@@ -142,6 +144,7 @@ mcpServers:
 You greet people.
 `)
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"other": {"command": "`+server+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "--agent", "greeter", "--strict-mcp-config", "-p", "/mcp").wantCode(t, 0)
 	has(t, "/mcp under --strict-mcp-config", r.out+r.err, "leaves out")
 	hasNot(t, "/mcp under --strict-mcp-config", r.out, "own: connected")
