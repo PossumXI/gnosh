@@ -130,7 +130,7 @@ func (h Hook) label() string {
 // argument quoted where a shell would need it.
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
-		return "POST " + h.URL
+		return "POST " + ShownURL(h.URL)
 	}
 	if h.Prompt != "" && h.Agent {
 		return "agent: " + shorten(h.Prompt, 80)
@@ -492,8 +492,7 @@ func Check(cfg Config, opts Options) []Problem {
 			continue
 		}
 		if h.URL != "" && opts.HTTPURLs != nil && !URLAllowed(h.URL, opts.HTTPURLs) {
-			shown, _, _ := strings.Cut(h.URL, "?") // (a query may hold a key)
-			out = append(out, Problem{Source: h.Source, Warning: true, Message: fmt.Sprintf("the http hook %s posts to %s, which allowedHttpHookUrls does not let an http hook post to, so it never runs.", h.label(), shown)})
+			out = append(out, Problem{Source: h.Source, Warning: true, Message: fmt.Sprintf("the http hook %s is at an address allowedHttpHookUrls does not let an http hook post to, so it never runs.", h.label())})
 		}
 		if h.Global && startsWithRelativePath(h.Command) {
 			out = append(out, Problem{Source: h.Source, Message: fmt.Sprintf("the command of the hook %s starts with a relative path. A hook's command is found from the folder a session works in, and this hook applies in every folder. Write the full path, or a command found on PATH.", h.label())})

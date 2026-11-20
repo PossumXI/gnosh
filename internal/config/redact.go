@@ -74,30 +74,3 @@ func DisplayURL(raw string) string {
 	}
 	return out
 }
-
-// ShownHookURL is a hook's address as it is shown and logged: no user name
-// or password, no query string, and each long piece of the path cut to its
-// start, since a webhook's path is often its secret (Slack's
-// /services/T…/B…/<token>, Discord's /api/webhooks/<id>/<token>). The
-// address went to /status, gnosh doctor, /hooks and the hook records whole
-// (the config review of 2026-11-19).
-func ShownHookURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return "(an address that cannot be read)"
-	}
-	parts := strings.Split(u.EscapedPath(), "/")
-	for i, p := range parts {
-		if len(p) > maxShownPathPiece {
-			parts[i] = p[:4] + "…"
-		}
-	}
-	out := u.Scheme + "://" + u.Host + strings.Join(parts, "/")
-	if u.RawQuery != "" {
-		out += "?…"
-	}
-	return out
-}
-
-// maxShownPathPiece is the longest piece of a hook's path shown whole.
-const maxShownPathPiece = 16

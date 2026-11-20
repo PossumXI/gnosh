@@ -5003,3 +5003,12 @@ or kept with the reason said (27).
     folder that is not trusted too (KindRestriction), as the blocks do: a
     project's list can widen the person's own only for hooks that run,
     and a project's hooks wait for trust.
+
+348. **An http hook's address is shown the one way everywhere.** The
+    config review of 2026-11-19 took the query, the user and the long
+    pieces of the path (often a webhook's secret) out of an http hook's
+    address in /status, gnosh doctor and /hooks, but the hooks package's
+    own command line still carried the whole address into the startup
+    check's warnings and the records of hook runs. The shortening now
+    lives in the hooks package (ShownURL), and config's command line uses
+    it, so there is one rule.

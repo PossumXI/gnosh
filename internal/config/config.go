@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
@@ -418,7 +419,7 @@ type Hook struct {
 // quoted where a shell would need it.
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
-		return "POST " + ShownHookURL(h.URL)
+		return "POST " + hooks.ShownURL(h.URL)
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool

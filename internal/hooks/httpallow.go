@@ -64,6 +64,34 @@ func normalURL(s string) string {
 	return strings.ToLower(scheme) + "://" + user + host + port + tail
 }
 
+// ShownURL is an http hook's address as it is shown and logged: no user
+// name or password, no query string, and each long piece of the path cut
+// to its start, since a webhook's path is often its secret (Slack's
+// /services/T…/B…/<token>, Discord's /api/webhooks/<id>/<token>). The
+// whole address went to /status, gnosh doctor, /hooks and the hook records
+// (the config review of 2026-11-19), and to the startup check's warnings
+// and the hooks' own records until 2026-11-20.
+func ShownURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "(an address that cannot be read)"
+	}
+	parts := strings.Split(u.EscapedPath(), "/")
+	for i, p := range parts {
+		if len(p) > maxShownPathPiece {
+			parts[i] = p[:4] + "…"
+		}
+	}
+	out := u.Scheme + "://" + u.Host + strings.Join(parts, "/")
+	if u.RawQuery != "" {
+		out += "?…"
+	}
+	return out
+}
+
+// maxShownPathPiece is the longest piece of a hook's path shown whole.
+const maxShownPathPiece = 16
+
 // wildMatch reports whether s fits pattern, where * stands for any run of
 // characters, none included, and every other byte for itself.
 func wildMatch(pattern, s string) bool {
