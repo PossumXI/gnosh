@@ -484,7 +484,11 @@ func (s *session) header() {
 		where += th.Quiet.Render(" (" + s.branch + ")")
 	}
 	s.put(wrap(s.m, where, s.cols, "", "  ")...)
-	s.put(wrap(s.m, th.Quiet.Render("? shows the keys"+th.Sep+"/help lists the commands"+th.Sep+"Esc stops a turn"), s.cols, "", "")...)
+	welcome := "? shows the keys" + th.Sep + "/help lists the commands"
+	if k := s.keyHint("chat:cancel", "Esc"); k != "" {
+		welcome += th.Sep + k + " stops a turn"
+	}
+	s.put(wrap(s.m, th.Quiet.Render(welcome), s.cols, "", "")...)
 	s.put(wrap(s.m, th.credits(), s.cols, "", "")...)
 }
 

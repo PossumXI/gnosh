@@ -215,7 +215,10 @@ func (s *session) placeholder() string {
 	case s.busy && len(s.personQueue()) > 0:
 		return "Type to queue another prompt; Up takes the queue back"
 	case s.busy:
-		return "Type to queue a prompt; Esc stops the turn"
+		if k := s.keyHint("chat:cancel", "Esc"); k != "" {
+			return "Type to queue a prompt; " + k + " stops the turn"
+		}
+		return "Type to queue a prompt"
 	case s.failHint != "":
 		return s.failHint
 	}
@@ -581,8 +584,8 @@ func (s *session) activityLine(width int, now time.Time) string {
 	if extra != "" {
 		parts = append(parts, extra)
 	}
-	if !s.stopping && s.q == nil {
-		parts = append(parts, "Esc stops")
+	if k := s.keyHint("chat:cancel", "Esc"); k != "" && !s.stopping && s.q == nil {
+		parts = append(parts, k+" stops")
 	}
 	// As many of the parts as fit; what gnosh is doing is always there.
 	rest := ""

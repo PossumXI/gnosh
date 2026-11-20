@@ -359,3 +359,19 @@ func TestKeyHintsFollowTheKeybindings(t *testing.T) {
 		t.Errorf("with no binding of it the transcript's key is %q, want Ctrl+O", got)
 	}
 }
+
+// The welcome line and the working line name the key the person bound to
+// stop a turn.
+func TestStopHintFollowsTheKeybindings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := os.WriteFile(path, []byte(`{"bindings": [{"context": "Chat", "bindings": {"ctrl+q": "chat:cancel"}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) { c.info.Keybindings = path })
+	if got := g.s.keyHint("chat:cancel", "Esc"); got != "Ctrl+Q" {
+		t.Fatalf("the stop key is named %q, want Ctrl+Q", got)
+	}
+	if got := g.s.keyHint("chat:cycleMode", "Shift+Tab"); got != "Shift+Tab" {
+		t.Errorf("the mode key is named %q, want Shift+Tab", got)
+	}
+}

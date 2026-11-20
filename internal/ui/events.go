@@ -661,13 +661,17 @@ func (s *session) hooks(ev *app.HookEvent) {
 func (s *session) summary(ev *agent.SummaryEvent) {
 	switch {
 	case ev.Phase == "start":
+		stop := "."
+		if k := s.keyHint("chat:cancel", "Esc"); k != "" {
+			stop = "; " + k + " stops it."
+		}
 		switch ev.Part {
 		case "before":
-			s.say("Summarizing the conversation before your prompt; what followed it stays. On a local model this can take minutes; Esc stops it.")
+			s.say("Summarizing the conversation before your prompt; what followed it stays. On a local model this can take minutes" + stop)
 		case "after":
-			s.say("Summarizing what followed your prompt, to go back to before it. On a local model this can take minutes; Esc stops it.")
+			s.say("Summarizing what followed your prompt, to go back to before it. On a local model this can take minutes" + stop)
 		default:
-			s.say(fmt.Sprintf("Summarizing the conversation to make room (%s). On a local model this can take minutes; Esc stops it.", ev.Trigger))
+			s.say(fmt.Sprintf("Summarizing the conversation to make room (%s). On a local model this can take minutes%s", ev.Trigger, stop))
 		}
 		s.setPhase(phSummary)
 	case ev.Err != nil:

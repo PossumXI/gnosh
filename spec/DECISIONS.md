@@ -4615,7 +4615,11 @@ or kept with the reason said (27).
     other: the hints for the transcript view (thinking folded and done,
     folded tool calls, the first shortened block, the recap of a session
     opened again) and the view's own line (the keys that go back and that
-    show all) follow it. Other hints keep gnosh's keys.
+    show all) follow it. Other hints keep gnosh's keys. Later the same
+    morning the key that stops a turn (the welcome line, the working line,
+    the summarizing note), the one that shows the task list again and the
+    one that goes to the next permission mode follow it too; the editor's
+    own hints and the app's replies still name gnosh's keys.
 
 323. **Searches reach what is spelled out, and leave out what is.** The
     search-tools review of 2026-11-20 found Glob's description promising

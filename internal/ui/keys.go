@@ -361,7 +361,11 @@ func (s *session) global(k term.Key) bool {
 			s.hideTasks = false
 		default:
 			s.hideTasks = true
-			s.flash("The task list is out of sight. Ctrl+T shows it again.")
+			if k := s.keyHint("app:toggleTodos", "Ctrl+T"); k != "" {
+				s.flash("The task list is out of sight. " + k + " shows it again.")
+			} else {
+				s.flash("The task list is out of sight.")
+			}
 		}
 	case k.Is('b', term.ModCtrl):
 		s.background()
@@ -1005,7 +1009,11 @@ func (s *session) cycleMode() {
 		if next == "bypassPermissions" {
 			s.notice(agent.LevelWarning, "The permission mode is now BYPASS PERMISSIONS: nothing asks before it runs, except what a deny rule or an ask rule names and the removals gnosh always asks about. Shift+Tab leaves it.")
 		} else {
-			s.flash("Permission mode: " + modeNames[next] + ". Shift+Tab goes on to the next.")
+			if k := s.keyHint("chat:cycleMode", "Shift+Tab"); k != "" {
+				s.flash("Permission mode: " + modeNames[next] + ". " + k + " goes on to the next.")
+			} else {
+				s.flash("Permission mode: " + modeNames[next] + ".")
+			}
 		}
 		s.dirty = true
 		return
