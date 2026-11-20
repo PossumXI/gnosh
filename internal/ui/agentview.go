@@ -1089,7 +1089,7 @@ func (v *agentView) layWatch(force bool) {
 	}
 	w.shown = len(entries)
 	width := max(w.width, 10)
-	w.lines, _ = layTranscript(&v.th, v.m, entries, width, false)
+	w.lines, _ = layTranscript(&v.th, v.m, entries, width, false, "Ctrl+E")
 	if len(w.lines) == 0 {
 		w.lines = []string{v.th.Quiet.Render(fit(v.m, "(nothing in its conversation yet)", width))}
 	}

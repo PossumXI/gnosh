@@ -179,11 +179,11 @@ func (s *session) writeFold() {
 		return
 	}
 	line := s.foldLine(false)
-	hint := s.th.Sep + "Ctrl+O shows them"
+	hint := s.transcriptHint(s.th.Sep, "shows them")
 	if s.fold.calls == 0 {
-		hint = s.th.Sep + "Ctrl+O shows it"
+		hint = s.transcriptHint(s.th.Sep, "shows it")
 	}
-	if with := line + s.th.Quiet.Render(hint); s.m.VisibleWidth(with) <= s.cols {
+	if with := line + s.th.Quiet.Render(hint); hint != "" && s.m.VisibleWidth(with) <= s.cols {
 		line = with
 	}
 	s.fold = fold{}

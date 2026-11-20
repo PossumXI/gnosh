@@ -4603,3 +4603,16 @@ or kept with the reason said (27).
     oom_score_adj to 1000, which needs no privilege and which everything
     it starts inherits. gnosh's own score is untouched. A memory cap of
     Claude Code's kind is left for when a box offers a writable cgroup.
+
+322. **The hints name the keys the person bound.** After 319 the list of
+    keys showed the person's own, while the hints about the transcript
+    still said Ctrl+O, and in the view Ctrl+E and q, whatever the
+    keybindings file said; a file that gave Ctrl+O to something else left
+    a hint naming a key that no longer did it. keyHint(action, gnosh's
+    key) now names the key the file binds to the action (a key of its own
+    before a chord), else gnosh's own, and nothing when the file gives
+    gnosh's key or chord to something else or takes it away and binds no
+    other: the hints for the transcript view (thinking folded and done,
+    folded tool calls, the first shortened block, the recap of a session
+    opened again) and the view's own line (the keys that go back and that
+    show all) follow it. Other hints keep gnosh's keys.

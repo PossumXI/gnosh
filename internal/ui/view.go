@@ -269,7 +269,9 @@ func (s *session) streamLines(width int) []string {
 			if !s.detail {
 				// Folded, only its last rows show: say every time how
 				// to have all of it.
-				head += s.th.Quiet.Render(s.th.Sep + "Ctrl+O shows all of it")
+				if h := s.transcriptHint(s.th.Sep, "shows all of it"); h != "" {
+					head += s.th.Quiet.Render(h)
+				}
 			}
 			out = append(out, fit(s.m, head, width))
 		}

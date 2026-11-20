@@ -429,8 +429,10 @@ func (s *session) endThinking() {
 		// at its end: so that a thought that stops short reads as that.
 		said += fmt.Sprintf(", up to its budget of %d tokens", s.info.ThinkingBudget)
 	}
-	line := s.th.Thinking.Render(said) +
-		s.th.Quiet.Render(s.th.Sep+"Ctrl+O shows it")
+	line := s.th.Thinking.Render(said)
+	if h := s.transcriptHint(s.th.Sep, "shows it"); h != "" {
+		line += s.th.Quiet.Render(h)
+	}
 	s.begin(blkThinking)
 	s.put(fit(s.m, line, s.cols))
 }

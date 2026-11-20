@@ -549,3 +549,64 @@ func keyLabel(k term.Key) string {
 	}
 	return strings.Join(append(parts, name), "+")
 }
+
+// keyHint is the key a hint names for action: the one the person bound to
+// it in the keybindings file (a key of its own before a chord), else
+// gnosh's own, dflt; "" when the file gives gnosh's key, or chord, to
+// something else or takes it away, and binds no other, so that no hint
+// names a key that does not do it. Claude Code's hints follow the file so
+// (2.1.329).
+func (s *session) keyHint(action, dflt string) string {
+	s.keysNow()
+	if s.keys == nil {
+		return dflt
+	}
+	b := s.keys.b
+	ctxs := []string{"Chat", "Global"}
+	if strings.HasPrefix(action, "transcript:") {
+		ctxs = []string{"Transcript", "Global"}
+	}
+	own := keyActions[action]
+	var keys, chords []string
+	lost := false
+	for _, ctx := range ctxs {
+		for k, a := range b.byCtx[ctx] {
+			switch {
+			case a == action:
+				keys = append(keys, keyLabel(k))
+			case len(own) == 1 && canonKey(own[0]) == k:
+				lost = true
+			}
+		}
+		for p, a := range b.chords[ctx] {
+			switch {
+			case a == action:
+				chords = append(chords, keyLabel(p[0])+" "+keyLabel(p[1]))
+			case len(own) == 2 && canonKey(own[0]) == p[0] && canonKey(own[1]) == p[1]:
+				lost = true
+			}
+		}
+	}
+	slices.Sort(keys)
+	slices.Sort(chords)
+	switch {
+	case len(keys) > 0:
+		return keys[0]
+	case len(chords) > 0:
+		return chords[0]
+	case lost:
+		return ""
+	}
+	return dflt
+}
+
+// transcriptHint is what names the key that opens the transcript view in
+// a hint: sep, the key and what follows ("shows all of it"), or "" when
+// no key opens it.
+func (s *session) transcriptHint(sep, what string) string {
+	k := s.keyHint("app:toggleTranscript", "Ctrl+O")
+	if k == "" {
+		return ""
+	}
+	return sep + k + " " + what
+}

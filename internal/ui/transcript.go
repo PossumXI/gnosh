@@ -3,7 +3,6 @@ package ui
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -259,11 +258,18 @@ func (s *session) viewFrame() {
 	if s.busy {
 		parts = append(parts, "the session is working")
 	}
-	toggle := "Ctrl+E shows all"
-	if v.all {
-		toggle = "Ctrl+E cuts long parts"
+	// (The keys the person bound, where the keybindings file says.)
+	if k := s.keyHint("transcript:exit", "q"); k != "" {
+		parts = append(parts, k+" goes back")
 	}
-	parts = append(parts, "q goes back", toggle, "{ } between prompts", "[ into the scrollback", "v in your editor")
+	if k := s.keyHint("transcript:toggleShowAll", "Ctrl+E"); k != "" {
+		if v.all {
+			parts = append(parts, k+" cuts long parts")
+		} else {
+			parts = append(parts, k+" shows all")
+		}
+	}
+	parts = append(parts, "{ } between prompts", "[ into the scrollback", "v in your editor")
 	s.keep(v.p.SetLive([]string{fit(s.m, th.Quiet.Render(strings.Join(parts, th.Sep)), cols)}, -1, 0))
 }
 
@@ -324,11 +330,12 @@ func thoughtLines(th *Theme, m text.Metrics, words string, width int) []string {
 // transcriptLines lays entries out at width: their lines, and the rows
 // the person's prompts start at. With all, nothing is cut.
 func (s *session) transcriptLines(entries []app.TranscriptEntry, width int, all bool) (lines []string, prompts []int) {
-	return layTranscript(&s.th, s.m, entries, width, all)
+	return layTranscript(&s.th, s.m, entries, width, all, s.keyHint("transcript:toggleShowAll", "Ctrl+E"))
 }
 
-// layTranscript is transcriptLines in the look th.
-func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, width int, all bool) (lines []string, prompts []int) {
+// layTranscript is transcriptLines in the look th. showAll is the key
+// that shows a long part whole, named under one that is cut, or "".
+func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, width int, all bool, showAll string) (lines []string, prompts []int) {
 	width = max(width, 10)
 	// Each call is shown with its result, which comes in the entry after
 	// the reply that made the call.
@@ -367,7 +374,11 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 		if all || len(rows) <= viewPart {
 			return rows
 		}
-		return append(rows[:viewPart:viewPart], quiet(fmt.Sprintf("    … %s: Ctrl+E shows all", count(len(rows)-viewPart, "more line", "more lines"))))
+		more := "    … " + count(len(rows)-viewPart, "more line", "more lines")
+		if showAll != "" {
+			more += ": " + showAll + " shows all"
+		}
+		return append(rows[:viewPart:viewPart], quiet(more))
 	}
 	call := func(b core.Block) {
 		add(wrap(m, th.Tool.Render(th.ToolMark)+" "+th.ToolName.Render(oneLine(b.Name)), width, "", "  ")...)

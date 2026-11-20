@@ -540,7 +540,10 @@ func (s *session) detailTip() string {
 		return ""
 	}
 	s.tipped = true
-	return " (Ctrl+O shows all of it)"
+	if h := s.transcriptHint("", "shows all of it"); h != "" {
+		return " (" + h + ")"
+	}
+	return ""
 }
 
 // limit is n while detail is off and detailLines while it is on (the

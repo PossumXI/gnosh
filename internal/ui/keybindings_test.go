@@ -316,3 +316,46 @@ func TestKeyLabel(t *testing.T) {
 		}
 	}
 }
+
+// The hints name the key the person bound to what they tell of: the
+// transcript view's, and in it the key that shows all; with gnosh's own
+// key given to something else and none bound in its place, no hint names
+// one.
+func TestKeyHintsFollowTheKeybindings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	write := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`{"bindings": [{"context": "Chat", "bindings": {"ctrl+y": "app:toggleTranscript"}}, {"context": "Transcript", "bindings": {"ctrl+a": "transcript:toggleShowAll"}}]}`)
+	g := newRig(t, 100, 24, text.NoColor, func(c *controls) { c.info.Keybindings = path })
+	if got := g.s.keyHint("app:toggleTranscript", "Ctrl+O"); got != "Ctrl+Y" {
+		t.Errorf("the transcript's key is named %q, want Ctrl+Y", got)
+	}
+	if got := g.s.keyHint("transcript:toggleShowAll", "Ctrl+E"); got != "Ctrl+A" {
+		t.Errorf("the key that shows all is named %q, want Ctrl+A", got)
+	}
+	if got := g.s.keyHint("transcript:exit", "q"); got != "q" {
+		t.Errorf("the key that goes back is named %q, want q", got)
+	}
+	if got := g.s.transcriptHint(" · ", "shows it"); got != " · Ctrl+Y shows it" {
+		t.Errorf("the hint is %q", got)
+	}
+	// Ctrl+O given to something else, and no key in its place.
+	write(`{"bindings": [{"context": "Chat", "bindings": {"ctrl+o": "chat:stash"}}]}`)
+	g.wait(2 * time.Second)
+	if got := g.s.transcriptHint(" · ", "shows it"); got != "" {
+		t.Errorf("with Ctrl+O given away the hint is %q, want none", got)
+	}
+	// Taken away in a chord of gnosh's: Ctrl+X Ctrl+K.
+	write(`{"bindings": [{"context": "Chat", "bindings": {"ctrl+x ctrl+k": null}}]}`)
+	g.wait(2 * time.Second)
+	if got := g.s.keyHint("chat:killAgents", "Ctrl+X Ctrl+K"); got != "" {
+		t.Errorf("with Ctrl+X Ctrl+K taken away its hint is %q, want none", got)
+	}
+	if got := g.s.keyHint("app:toggleTranscript", "Ctrl+O"); got != "Ctrl+O" {
+		t.Errorf("with no binding of it the transcript's key is %q, want Ctrl+O", got)
+	}
+}
