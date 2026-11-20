@@ -4903,3 +4903,26 @@ or kept with the reason said (27).
     program that opens files of its own (python -c, curl file://) is not
     held by the read block, which can only trace the commands it knows;
     Claude Code's sandbox is what holds those, and gnosh has none.
+
+342. **Language servers, and the LSP tool.** Claude Code gives the model a
+    language server's diagnostics after each edit and an LSP tool to
+    navigate code, once a code-intelligence plugin names the server.
+    gnosh adopts no plugins, so the same entries (a plugin's .lsp.json:
+    command, args, extensionToLanguage, env, initializationOptions,
+    settings, workspaceFolder, startupTimeout, shutdownTimeout,
+    requestTimeout, restartOnCrash, maxRestarts, diagnostics, strict as
+    Claude Code's) go under lspServers in gnosh.json; a project's waits
+    for trust, as a program it would run, and safe mode starts none. A
+    server starts the first time a file of its endings is read or
+    changed (internal/lsp, a client of the protocol over standard input
+    and output, standard library only, with Claude Code's limits of 64 KiB
+    of headers and 32 MiB a message). A file the model reads is opened in
+    it; after Write, Edit or NotebookEdit the file's text is sent, gnosh
+    waits up to 3 seconds for what the server publishes and a moment of
+    quiet after, and the model is told the errors and warnings that were
+    not there before, in that file and others, at most 20, each at its
+    1-based line and character; the person sees "Found N new diagnostic
+    issues in M files". The LSP tool asks goToDefinition, findReferences,
+    hover, documentSymbol, workspaceSymbol, goToImplementation,
+    incomingCalls and outgoingCalls, read-only; it is offered only when a
+    server is named, and its permission is Read's (rules, the read block).

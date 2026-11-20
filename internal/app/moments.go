@@ -546,6 +546,15 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 		v.Context = append(v.Context, l.lateInstructionsAt(ctx, instr, path)...)
 	}
 	v.Context = append(v.Context, l.skillsForFile(done)...)
+	if path, change := lspPath(done); path != "" && l.lspSrv != nil {
+		// The file's language server is told of it; a change gives the
+		// model the problems it brought (lsp.go).
+		if change {
+			v.Context = append(v.Context, l.lspSrv.changed(ctx, path)...)
+		} else {
+			l.lspSrv.opened(path)
+		}
+	}
 	for _, c := range contribs {
 		if c.c.AfterTool == nil {
 			continue

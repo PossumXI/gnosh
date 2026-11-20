@@ -43,6 +43,9 @@ type live struct {
 	inv cli.Invocation
 	cfg *config.Config
 
+	// lspSrv are the session's language servers (lsp.go).
+	lspSrv *lspServers
+
 	// agentsSeen is when the person last looked at the runs in the
 	// background from the session (its start, or the agent view opened
 	// over it), in Unix nanoseconds (agentview.go, agentsWord).
@@ -1521,6 +1524,7 @@ func (l *live) close(reason string) {
 		l.cancel()
 		waitGroup(&l.bg, 15*time.Second)
 		l.closeMCP()
+		l.lspSrv.close()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		for _, c := range slices.Backward(l.contribs) {
 			if c.c.Close == nil {

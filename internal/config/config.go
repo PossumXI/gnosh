@@ -77,6 +77,9 @@ type Config struct {
 	// then says why.
 	FileSuggestion    *FileSuggestion
 	FileSuggestionOff string
+	// LSPServers are the language servers of the lspServers key, by name
+	// (lsp.go): none in safe mode.
+	LSPServers []LSPServer
 	// Attribution is what the model adds to the git commits and pull
 	// requests it makes (Claude Code's attribution). gnosh adds none of
 	// its own: both are empty unless a file sets them.
@@ -153,6 +156,7 @@ const (
 	KindRemoval     = "removal"     // taking away a provider, a model or a host a weaker file declared
 	KindStatusLine  = "status-line"
 	KindFileSuggest = "file-suggestion"
+	KindLSPServer   = "lsp-server" // a language server, a program gnosh runs
 )
 
 // StatusLine is a command whose output takes the place of the status line

@@ -41,6 +41,9 @@ type builder struct {
 	statusLine Value[StatusLine]
 	// fileSuggestion is the @ file suggestion command; a later file wins.
 	fileSuggestion Value[FileSuggestion]
+	// lsp are the language servers by name; a later file's entry of a name
+	// takes the place of a weaker file's.
+	lsp map[string]LSPServer
 	// attribution is what commits and pull requests are signed with; a
 	// later file wins.
 	attribution Value[Attribution]

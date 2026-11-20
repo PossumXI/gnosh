@@ -72,7 +72,12 @@ Built:
   those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
   `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
   tools are `mcp__<server>__<tool>`, and a server may ask you for a few
-  values in the middle of a call, Claude Code's elicitation).
+  values in the middle of a call, Claude Code's elicitation). Language
+  servers named in `lspServers` (`{"gopls": {"command": "gopls", "args":
+  ["serve"], "extensionToLanguage": {".go": "go"}}}`, Claude Code's
+  `.lsp.json` entries) give the model the errors and warnings each edit
+  brings, and the LSP tool: where a symbol is defined, what refers to it,
+  its type, a file's or the workspace's symbols, implementations, calls.
 - **Permissions:** modes, plan mode included (the model presents its plan
   with ExitPlanMode and you approve it), and rules; Claude Code's
   `blockReadsOutsideWorkingDirectories` and

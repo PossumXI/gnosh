@@ -121,6 +121,9 @@ func (ld *loader) finish() *Config {
 		}
 	}
 	cfg.Attribution = b.attribution.V
+	if !cfg.Switches.SafeMode.V {
+		cfg.LSPServers = ld.lspServerList()
+	}
 	if b.fileSuggestion.Set {
 		switch {
 		case cfg.Switches.SafeMode.V:

@@ -99,6 +99,7 @@ var topKeys = []keyDef{
 	{"attribution", "", "the lines the model ends its commits' messages and its pull requests' descriptions with: {\"commit\": ..., \"pr\": ...}; none by default", fromClaudeCode + ": the settings key"},
 	{"includeCoAuthoredBy", "", "Claude Code's older word for leaving its attribution out: taken, and changes nothing, as gnosh adds none of its own", fromClaudeCode + ": the settings key"},
 	{"skillOverrides", "", "how far each skill is seen, by its name: on, name-only, user-invocable-only or off", fromClaudeCode + ": the settings key"},
+	{"lspServers", "", "language servers, each under a name, with the files they are for: diagnostics after edits, and the LSP tool", fromClaudeCode + ": a plugin's .lsp.json and manifest key"},
 	{"$schema", "", "accepted and not read", fromClaudeCode + ": the settings key"},
 }
 

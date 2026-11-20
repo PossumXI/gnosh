@@ -111,6 +111,11 @@ func (l *live) buildTools() error {
 	}
 	l.shell = shelltool.New(so)
 	all = append(all, l.wrapStop(l.shell.Tools())...)
+	if len(l.cfg.LSPServers) > 0 {
+		// (Only with a language server named: lsp.go.)
+		l.lspSrv = newLSPServers(l, l.cfg.LSPServers)
+		all = append(all, &lspTool{s: l.lspSrv})
+	}
 	noFetch := l.envOn("CLAUDE_CODE_DISABLE_WEB_FETCH")
 	if !noFetch {
 		// (CLAUDE_CODE_DISABLE_WEB_FETCH turns it off, as in Claude Code.)

@@ -89,6 +89,15 @@
 //	                 file says), "name-only", "user-invocable-only" or
 //	                 "off"; a later file wins, and a folder that is not
 //	                 trusted keeps its own, since each only takes away
+//	lspServers       language servers, each under a name, with the fields
+//	                 of Claude Code's .lsp.json entries (command, args,
+//	                 extensionToLanguage, env, initializationOptions,
+//	                 settings, workspaceFolder, the three timeouts in
+//	                 milliseconds, restartOnCrash, maxRestarts,
+//	                 diagnostics): a server is started for the first file of
+//	                 its endings that is read or changed, gives the model
+//	                 the problems a change brings, and answers the LSP
+//	                 tool; a project's waits for trust, none in safe mode
 //	$schema          accepted and not read
 //
 // gnosh's own keys stand beside them:

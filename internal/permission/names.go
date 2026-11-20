@@ -99,7 +99,7 @@ var builtinTools = map[string]toolInfo{
 	"CronDelete":           {classQuiet, "", nil},
 	"CronList":             {classQuiet, "", nil},
 	"ScheduleWakeup":       {classQuiet, "", nil},
-	"LSP":                  {classQuiet, "", nil},
+	"LSP":                  {classFileRead, "filePath", []string{"operation", "line", "character", "query"}},
 	"PushNotification":     {classQuiet, "", []string{"message", "status"}},
 
 	// Names Claude Code has or had and gnosh does not: settings written
