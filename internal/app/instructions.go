@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/gnodocs"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
@@ -182,6 +183,54 @@ func (l *live) lateInstructionsFor(ctx context.Context, instr *instructions.Set,
 		return nil
 	}
 	return []agent.Part{{Source: "instructions", Text: prompt.Wrap(text)}}
+}
+
+// forgetGone tells instr which of the files given along the way left the
+// conversation with the part a cut took from it: those whose header is no
+// longer in what the model reads, to be given again when the model next
+// works where they apply. Each cut forgot them all, and those still in
+// view were given a second time (the instruction-files review of
+// 2026-11-20).
+func forgetGone(log *sessionLog, instr *instructions.Set) {
+	if instr == nil {
+		return
+	}
+	var late []instructions.File
+	for _, f := range instr.Files() {
+		if f.Late {
+			late = append(late, f)
+		}
+	}
+	if len(late) == 0 {
+		return
+	}
+	v, err := log.View(context.Background())
+	if err != nil {
+		instr.Forget()
+		return
+	}
+	var b strings.Builder
+	var add func([]core.Block)
+	add = func(blocks []core.Block) {
+		for _, blk := range blocks {
+			b.WriteString(blk.Text)
+			b.WriteByte('\n')
+			add(blk.Content)
+		}
+	}
+	for _, m := range v.Messages {
+		add(m.Blocks)
+	}
+	seen := b.String()
+	var gone []string
+	for _, f := range late {
+		if !strings.Contains(seen, instructions.Shown(f)) {
+			gone = append(gone, f.Path)
+		}
+	}
+	if len(gone) > 0 {
+		instr.Forget(gone...)
+	}
 }
 
 // touchedPath is the file a call of a file tool worked on: the path its

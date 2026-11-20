@@ -559,11 +559,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			l.log.afterStored = append(l.log.afterStored, c.c.AfterStored)
 		}
 	}
-	l.log.onCut = func() {
-		if l.instr != nil {
-			l.instr.Forget()
-		}
-	}
+	l.log.onCut = func() { forgetGone(l.log, l.instr) }
 	l.log.onPrompt = l.promptGoesOut
 	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool), l.ts.Path())
 	if err != nil {

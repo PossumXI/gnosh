@@ -47,6 +47,14 @@ func RenderFiles(files []File) string {
 	return render(lateIntro, files)
 }
 
+// Shown is how the header of a file begins in what the model is given,
+// from the line break before it: what tells whether the file is still in
+// a conversation. A line of a file's own text never begins so: guard sets
+// such a line apart with a backslash.
+func Shown(f File) string {
+	return "\n=== " + plain(f.Path) + " ("
+}
+
 // render lays files out under intro. A file with no text is left out.
 func render(intro string, files []File) string {
 	var b strings.Builder

@@ -633,7 +633,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.instr, err = l.readInstructions(ctx); err != nil {
 		return s, err
 	}
-	s.log.onCut = func() { s.instr.Forget() }
+	s.log.onCut = func() { forgetGone(s.log, s.instr) }
 	if s.dropHooks, err = l.agentHooks(def, s.id); err != nil {
 		return s, err
 	}
