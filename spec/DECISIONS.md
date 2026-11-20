@@ -4400,3 +4400,15 @@ or kept with the reason said (27).
     wallet, signing, mnemonic, key…): a digest alone, a checksum, stays
     keepable. The word list is BIP-0039's own (PROVENANCE.md). What the
     person keeps with /mem is not held to it, as before.
+
+307. **An option gnosh does not know stops no save, and "default" is a
+    style kept.** The state file's every option was checked again on each
+    save, so one that another version of gnosh saved, which this one does
+    not know, made every /model, /think, /effort, /config and /theme say
+    it could not be saved, and /config key= could not take it off (the
+    settings-commands review of 2026-11-20). An option written back as
+    the file held it is now carried through unchecked; one being changed
+    is checked; /config key= takes off a saved option this gnosh does not
+    know. And /output-style default took the setting away, so a style the
+    person's gnosh.json or /config named won the next session; "default"
+    is now kept as the choice it is.

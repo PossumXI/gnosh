@@ -90,6 +90,31 @@ func TestStateKeepsUnknownKeys(t *testing.T) {
 	}
 }
 
+// An option another version of gnosh saved, which this one does not know,
+// is carried through when a choice is saved, as it was on disk, and does
+// not stop the choice from being saved; one being changed is checked
+// (the settings-commands review of 2026-11-20).
+func TestStateCarriesAnOptionItDoesNotKnow(t *testing.T) {
+	fsys := newFS().put(statePath, `{"version": 1, "models": {}, "options": {"oldOption": 3, "debug": true}}`)
+	if err := UpdateState(fsys, statePath, func(st *State) { _ = st.SetModel("model", ModelRef{Provider: "p", ID: "m"}) }); err != nil {
+		t.Fatalf("a choice was not saved beside an option this gnosh does not know: %v", err)
+	}
+	st, _ := ReadState(fsys, statePath)
+	if st.Model != "p/m" || string(st.Options["oldOption"]) != "3" {
+		t.Errorf("after the save: %+v", st)
+	}
+	err := UpdateState(fsys, statePath, func(st *State) { st.Options["oldOption"] = json.RawMessage("4") })
+	if err == nil || !strings.Contains(err.Error(), "not an option gnosh knows") {
+		t.Errorf("a changed unknown option was written: %v", err)
+	}
+	if err := UpdateState(fsys, statePath, func(st *State) { _ = st.SetOption("oldOption", nil) }); err != nil {
+		t.Errorf("an unknown option could not be taken off: %v", err)
+	}
+	if st, _ := ReadState(fsys, statePath); st.Options["oldOption"] != nil || string(st.Options["debug"]) != "true" {
+		t.Errorf("after taking it off: %+v", st)
+	}
+}
+
 // What gnosh wrote itself never stops it from starting: a state file that
 // cannot be understood, or that names things that are gone, is passed
 // over with a word.
@@ -269,7 +294,9 @@ func TestStateOptions(t *testing.T) {
 	if err := WriteState(fsys, statePath, st); err != nil {
 		t.Fatal(err)
 	}
-	if got, problems := ReadState(fsys, statePath); len(problems) != 0 || !reflect.DeepEqual(got, st) {
+	got, problems := ReadState(fsys, statePath)
+	got.read = nil // (what the file held, for the next write's check)
+	if len(problems) != 0 || !reflect.DeepEqual(got, st) {
 		t.Errorf("read back %+v with %v, want %+v", got, problems, st)
 	}
 	// The state outranks the user's file, and the project's file outranks

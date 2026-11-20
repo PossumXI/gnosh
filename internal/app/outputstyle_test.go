@@ -57,9 +57,12 @@ func TestOutputStyles(t *testing.T) {
 
 	style("default").wantCode(t, 0)
 	hasNot(t, "the default again", told(), "TERSE-TEXT", "PIRATE-TEXT")
-	if strings.Contains(w.Read(local), "outputStyle") {
-		t.Errorf("default is kept as no setting at all, and the file holds:\n%s", w.Read(local))
-	}
+	// Kept as a choice, so that a style the person's gnosh.json names does
+	// not win the next session (the settings-commands review of
+	// 2026-11-20: taken off, it did).
+	has(t, "default kept", w.Read(local), `"outputStyle": "default"`)
+	w.Settings(`{"options": {"outputStyle": "Concise"}}`)
+	hasNot(t, "the person's gnosh.json under the choice", told(), "Output style: Concise")
 
 	bad := style("nosuch")
 	if bad.code == 0 || !strings.Contains(bad.out+bad.err, `there is no output style named "nosuch"`) {

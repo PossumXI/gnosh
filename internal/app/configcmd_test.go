@@ -56,6 +56,17 @@ func TestConfigCommand(t *testing.T) {
 	has(t, "/config hiddenSkills=x", run(t, w, "-p", "/config hiddenSkills=x").wantCode(t, 1).err, "hiddenSkills holds a list, and a list is set in gnosh.json")
 	has(t, "/config fancy", run(t, w, "-p", "/config fancy").wantCode(t, 1).err, `"fancy" is not an option gnosh knows`)
 
+	// An option another version of gnosh saved, which this one does not
+	// know, stops no save, and /config takes it off (the settings-commands
+	// review of 2026-11-20: every save failed, and key= too).
+	saved, _ := os.ReadFile(state)
+	w.Write(state, strings.Replace(string(saved), `"options": {`, `"options": {"oldOption": 3, `, 1))
+	has(t, "a save beside it", run(t, w, "-p", "/config maxBackgroundTasks=8").wantCode(t, 0).out, "maxBackgroundTasks is 8 when gnosh next starts")
+	has(t, "/config oldOption=", run(t, w, "-p", "/config oldOption=").wantCode(t, 0).out, "oldOption, an option this gnosh does not know, is no longer kept.")
+	if now, _ := os.ReadFile(state); strings.Contains(string(now), "oldOption") || !strings.Contains(string(now), `"maxBackgroundTasks": 8`) {
+		t.Errorf("the state file after both:\n%s", now)
+	}
+
 	// A project's own file outranks what /config set.
 	w.Write("gnosh.json", `{"options": {"debug": false}}`)
 	out = run(t, w, "--trust-folder", "-p", "/config debug").wantCode(t, 0).out

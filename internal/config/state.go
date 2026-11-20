@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,12 @@ type State struct {
 	// extra holds keys this gnosh does not know, so that writing the file
 	// back does not drop what another version put there.
 	extra map[string]json.RawMessage
+	// read are the options as the file held them when it was read: one
+	// that is written back unchanged is not checked again, so an option
+	// another version of gnosh saved, which this one does not know, does
+	// not stop every later choice from being saved (the settings-commands
+	// review of 2026-11-20).
+	read map[string]json.RawMessage
 }
 
 // stateVersion is the version written to the state file.
@@ -75,7 +82,7 @@ func ReadState(fsys FS, path string) (State, []Problem) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return warn("the state file is not JSON gnosh can read, so the model and thinking level chosen earlier are not in force. Choosing them again with /model writes a new file.")
 	}
-	st := State{Model: f.Models.Model, SmallModel: f.Models.SmallModel, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow, Options: f.Options}
+	st := State{Model: f.Models.Model, SmallModel: f.Models.SmallModel, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow, Options: f.Options, read: maps.Clone(f.Options)}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(data, &all) == nil {
 		for _, k := range stateKeys {
@@ -110,6 +117,11 @@ func (st State) check() error {
 	for key, raw := range st.Options {
 		if key == "autoCompactWindow" {
 			return errors.New("autoCompactWindow has a slot of its own")
+		}
+		if was, ok := st.read[key]; ok && bytes.Equal(was, raw) {
+			// As it was on disk: carried through, whether or not this
+			// gnosh knows it.
+			continue
 		}
 		if err := CheckOption(key, raw); err != nil {
 			return err

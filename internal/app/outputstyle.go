@@ -301,12 +301,11 @@ func (l *live) slashOutputStyle(ctx context.Context, c *SlashContext) error {
 				return fmt.Errorf("its \"options\" is not an object (%v)", err)
 			}
 		}
-		if name == defaultStyle {
-			delete(opts, "outputStyle")
-		} else {
-			raw, _ := json.Marshal(name)
-			opts["outputStyle"] = raw
-		}
+		// "default" is kept as a choice like any other: taken off, a
+		// style the person's gnosh.json or /config names won the next
+		// session (the settings-commands review of 2026-11-20).
+		raw, _ := json.Marshal(name)
+		opts["outputStyle"] = raw
 		if len(opts) == 0 {
 			delete(doc, "options")
 			return nil
