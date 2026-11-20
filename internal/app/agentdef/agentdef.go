@@ -105,11 +105,18 @@ type Def struct {
 	// "project", in the project, shared with whoever works on it; "local",
 	// in the project, kept out of version control; or "" for none.
 	Memory string
+	// CompactWindow is the window of context, in tokens, at which the
+	// agent's sub-agents make room (autoCompactWindow), when it is lower
+	// than their session's: 100000 or more, or 0. CompactWindowUnused is
+	// a value written that is not that (Claude Code reads "200k" as 200,
+	// below the least, and runs the agent as if it were not there), as
+	// written, for /agents to say.
+	CompactWindow       int
+	CompactWindowUnused string
 	// Other lists the fields of a definition that change what the
-	// sub-agent is or may do and that this package only notes:
-	// autoCompactWindow, in --agents' JSON. A caller that cannot honour
-	// one must say so, and not run the agent as if the field were not
-	// there.
+	// sub-agent is or may do and that this package only notes (none at
+	// present). A caller that cannot honour one must say so, and not run
+	// the agent as if the field were not there.
 	Other []string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
@@ -396,7 +403,7 @@ func (s *Set) Skipped() []Skipped { return slices.Clone(s.skipped) }
 
 // knownKeys are the settings of a definition gnosh reads.
 var knownKeys = []string{"name", "description", "tools", "disallowedTools", "model", "permissionMode", "maxTurns",
-	"omitClaudeMd", "background", "skills", "effort", "initialPrompt", "hooks", "isolation", "mcpServers", "memory"}
+	"omitClaudeMd", "background", "skills", "effort", "initialPrompt", "hooks", "isolation", "mcpServers", "memory", "autoCompactWindow"}
 
 // Parse reads one definition from the text of a file. reason is empty
 // when it could be read, and otherwise says why the file is skipped.
@@ -477,6 +484,8 @@ func Parse(text string) (d Def, reason string) {
 				return d, "its mcpServers " + why
 			}
 			d.MCPServers = servers
+		case "autoCompactWindow":
+			d.compactWindow(strings.TrimSpace(f.scalar))
 		case "memory":
 			if len(f.items) > 0 || f.nested {
 				return d, "its memory is not one word: user, project or local"
@@ -532,6 +541,19 @@ func (d Def) problem() string {
 		return fmt.Sprintf("the agent %q keeps a memory, in a folder named as the agent is, and its name names no folder", clip(d.Name, 80))
 	}
 	return ""
+}
+
+// MinCompactWindow is the least autoCompactWindow taken, as Claude Code's.
+const MinCompactWindow = 100000
+
+// compactWindow takes an autoCompactWindow as written: a whole number of
+// tokens, MinCompactWindow or more, or else a value noted as not used.
+func (d *Def) compactWindow(s string) {
+	if n, err := strconv.Atoi(s); err == nil && n >= MinCompactWindow {
+		d.CompactWindow, d.CompactWindowUnused = n, ""
+	} else if s != "" && s != "null" {
+		d.CompactWindow, d.CompactWindowUnused = 0, clip(s, 40)
+	}
 }
 
 // memoryScope says what is wrong with a memory field's word, or "": it is

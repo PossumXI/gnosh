@@ -5634,3 +5634,19 @@ or kept with the reason said (27).
     turns memories off, as in Claude Code. A session run as such an agent
     (--agent) is refused, saying so, as it was. A name with a slash, or .
     or .., keeps a definition with a memory from being used.
+
+375. **A kind of agent may make room earlier.** Claude Code's subagents
+    take autoCompactWindow, a token count of 100000 or more at which the
+    subagent compacts, when lower than the window it would otherwise have
+    (the lowest of the field, the model's window and
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW); a value below 100000, or "200k",
+    which it reads as 200, is ignored and the subagent loads as if the
+    field were absent; a session run as the agent (--agent) takes no
+    account of it. gnosh refused a JSON definition with it (--agents) and
+    passed it over in a file. It now takes a whole number of 100000 or
+    more, in a file or in JSON: that kind's sub-agents make room at the
+    lower of it and the session's window (autoCompactWindow or
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW), with CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
+    taken of it, the model's own window bounding it as any agent's. Any
+    other value is not used, and /agents says so; the definition is used
+    without it.

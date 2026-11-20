@@ -318,7 +318,35 @@ func TestParseMemory(t *testing.T) {
 	if _, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "always"}}`); err == nil || !strings.Contains(err.Error(), "user, project or local") {
 		t.Errorf("memory: always, in JSON: %v", err)
 	}
-	if defs, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "autoCompactWindow": 40000}}`); err != nil || len(defs) != 1 || strings.Join(defs[0].Other, ",") != "autoCompactWindow" {
-		t.Errorf("autoCompactWindow in JSON: %v %+v", err, defs)
+}
+
+// autoCompactWindow is a whole number of tokens, 100000 or more, in a file
+// and in JSON; another value is noted and not used, and the definition is
+// used without it, as Claude Code runs it ("200k" is not 200,000).
+func TestParseCompactWindow(t *testing.T) {
+	file := func(window string) Def {
+		t.Helper()
+		d, reason := Parse("---\nname: reader\ndescription: Reads logs.\nautoCompactWindow: " + window + "\n---\nRead.\n")
+		if reason != "" {
+			t.Fatalf("autoCompactWindow: %s: %s", window, reason)
+		}
+		return d
+	}
+	if d := file("200000"); d.CompactWindow != 200000 || d.CompactWindowUnused != "" || len(d.Other) != 0 {
+		t.Errorf("200000: %+v", d)
+	}
+	for _, bad := range []string{"200k", "99999", "-5"} {
+		if d := file(bad); d.CompactWindow != 0 || d.CompactWindowUnused != bad {
+			t.Errorf("%s: %+v", bad, d)
+		}
+	}
+	defs, err := FromJSON(`{"a": {"description": "A.", "prompt": "A.", "autoCompactWindow": 150000}, "b": {"description": "B.", "prompt": "B.", "autoCompactWindow": 40000}}`)
+	if err != nil || len(defs) != 2 {
+		t.Fatalf("JSON: %v %+v", err, defs)
+	}
+	for _, d := range defs {
+		if d.Name == "a" && d.CompactWindow != 150000 || d.Name == "b" && (d.CompactWindow != 0 || d.CompactWindowUnused != "40000") || len(d.Other) != 0 {
+			t.Errorf("JSON %s: %+v", d.Name, d)
+		}
 	}
 }

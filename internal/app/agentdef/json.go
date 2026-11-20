@@ -124,9 +124,7 @@ func FromJSON(text string) ([]Def, error) {
 				}
 				d.Memory = s
 			case "autoCompactWindow":
-				if string(val) != "null" {
-					d.Other = append(d.Other, key)
-				}
+				d.compactWindow(strings.TrimSpace(string(val)))
 			case "color", "experimental":
 			default:
 				return nil, fmt.Errorf("the agent %q has %q, which is not a setting of an agent", name, key)

@@ -822,6 +822,12 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		return s, err
 	}
 	l.agentEffort(s.agent, def)
+	if def.CompactWindow > 0 {
+		// Its kind's autoCompactWindow, where lower than the session's,
+		// with CLAUDE_AUTOCOMPACT_PCT_OVERRIDE taken of it, as Claude Code
+		// does; its model's own window bounds it as any agent's.
+		s.agent.SetCompactAt(l.compactAtWindow(lowerWindow(def.CompactWindow, l.cfg.Options.AutoCompactWindow)))
+	}
 	l.subMu.Lock()
 	if l.subs == nil {
 		l.subs = map[*subSession]struct{}{}

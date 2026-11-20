@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/gnosh-ai/gnosh/internal/config"
 )
 
 // A memory's index is given as far as its first 200 lines or 25 KB go,
@@ -50,5 +52,23 @@ func TestAgentMemoryIndex(t *testing.T) {
 	}
 	if index, cut, err := openAgentMemory(dir, base, "local"); index != "" || cut || err != nil {
 		t.Errorf("no index: %q %v %v", index, cut, err)
+	}
+}
+
+// A kind's autoCompactWindow holds where it is the lower; the session's,
+// set lower, wins (Claude Code takes the lowest).
+func TestLowerWindow(t *testing.T) {
+	for _, c := range []struct {
+		kind    int
+		session config.Value[int]
+		want    int
+	}{
+		{200000, config.Value[int]{}, 200000},
+		{200000, config.Value[int]{V: 150000, Set: true}, 150000},
+		{200000, config.Value[int]{V: 500000, Set: true}, 200000},
+	} {
+		if got := lowerWindow(c.kind, c.session); got != c.want {
+			t.Errorf("lowerWindow(%d, %+v) = %d, want %d", c.kind, c.session, got, c.want)
+		}
 	}
 }

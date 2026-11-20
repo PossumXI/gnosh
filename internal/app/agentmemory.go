@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
+	"github.com/gnosh-ai/gnosh/internal/config"
 )
 
 // An agent's memory (DECISIONS 374), as Claude Code's subagents have one:
@@ -31,6 +32,16 @@ const (
 	memoryIndexLines = 200
 	memoryIndexBytes = 25 * 1024
 )
+
+// lowerWindow is the auto-compact window of a sub-agent whose kind sets
+// one, kind: the session's where that is lower, as Claude Code takes the
+// lowest of the two (with the model's window, which bounds every agent).
+func lowerWindow(kind int, session config.Value[int]) int {
+	if session.Set && session.V > 0 && session.V < kind {
+		return session.V
+	}
+	return kind
+}
 
 // memoryTools are the tools a sub-agent with a memory has for it.
 var memoryTools = map[string]bool{"Read": true, "Write": true, "Edit": true}

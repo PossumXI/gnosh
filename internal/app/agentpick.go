@@ -76,6 +76,12 @@ func agentDetails(d agentdef.Def) []string {
 	if d.Memory != "" {
 		out = append(out, "Keeps a memory of its own: "+memoryScopeWords(d.Memory)+" ("+d.Memory+")")
 	}
+	switch {
+	case d.CompactWindow > 0:
+		out = append(out, fmt.Sprintf("Makes room at %s tokens of context, or the session's point where earlier (autoCompactWindow)", thousands(d.CompactWindow)))
+	case d.CompactWindowUnused != "":
+		out = append(out, fmt.Sprintf("Its autoCompactWindow, %s, is not used: it is a whole number of tokens, %s or more", d.CompactWindowUnused, thousands(agentdef.MinCompactWindow)))
+	}
 	if d.Hooks != nil {
 		out = append(out, "Has hooks of its own")
 	}
