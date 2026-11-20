@@ -5585,3 +5585,20 @@ or kept with the reason said (27).
     are closed to an unprivileged command, and through gnosh a
     sandboxed Bash call ran as pid 12 under the relay with Unix
     sockets refused.
+
+373. **What gnosh was started with stays with gnosh.** From the third
+    sandbox review's leads: Go opens its own files close-on-exec, but a
+    descriptor left open by whatever started gnosh (a connected Unix
+    socket, an agent's) passed to every command gnosh ran, a sandboxed
+    one too, which could use it without making a socket. gnosh now marks
+    every descriptor it was started with, past the standard three,
+    close-on-exec as it starts (Linux and macOS). And on macOS a path the
+    sandbox names that is not there yet is spelled as it will be: the
+    nearest folder above it that is there, links resolved, then the
+    rest (only its own folder was looked at, so a denied path two
+    folders down under a link, as /tmp is, matched neither spelling).
+    Where anything is denied or hidden, the macOS profile also refuses
+    Spotlight's services (com.apple.metadata.mds and those named after
+    it): Spotlight reads what the command may not, and mdfind's queries,
+    a match at a time, could spell a denied file out (checked: refused,
+    mdfind finds nothing). allowMachLookup can name them again.

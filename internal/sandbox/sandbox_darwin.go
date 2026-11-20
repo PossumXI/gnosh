@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"errors"
-	"path/filepath"
 )
 
 // check tries Seatbelt once (the setup is bubblewrap's).
@@ -46,18 +45,4 @@ func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 		}
 	}
 	return append([]string{st.Tool, "-p", seatbeltProfile(p)}, argv...), nil
-}
-
-// realPath is the path in the system's own spelling, links resolved; for
-// a path not there yet (a socket made later, a file denied before it is
-// written), its folder's, which is what it will be when it is there.
-func realPath(s string) string {
-	s = filepath.Clean(s)
-	if r, err := filepath.EvalSymlinks(s); err == nil {
-		return r
-	}
-	if r, err := filepath.EvalSymlinks(filepath.Dir(s)); err == nil {
-		return filepath.Join(r, filepath.Base(s))
-	}
-	return s
 }

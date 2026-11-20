@@ -56,6 +56,8 @@ func main() {
 		os.Exit(relay.Main(os.Args[2:]))
 	}
 
+	inheritedCloseOnExec()
+
 	// SIGINT and SIGTERM stop a run in order (the turn, its commands, the
 	// SessionEnd hooks, the session's file); a second one ends the process
 	// at once. SIGHUP, which is what a dropped ssh connection sends, is

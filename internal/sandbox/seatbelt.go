@@ -32,6 +32,14 @@ func seatbeltProfile(p Policy) string {
 	if !p.TrustService {
 		b.WriteString(" (global-name \"com.apple.trustd.agent\")")
 	}
+	if !p.FilesystemOff && (len(p.DenyRead) > 0 || len(p.Hidden) > 0) {
+		// Spotlight, which reads the files the command may not and
+		// answers questions about what is in them (mdfind's queries, one
+		// match at a time, could spell a denied file out: a lead of the
+		// third sandbox review; checked: denied, mdfind finds nothing).
+		// allowMachLookup can name it again.
+		b.WriteString(" (global-name-prefix \"com.apple.metadata.mds\")")
+	}
 	b.WriteString(")\n")
 	var names []string
 	for _, n := range p.MachLookup {

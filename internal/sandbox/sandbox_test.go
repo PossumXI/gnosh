@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -217,10 +219,42 @@ func TestSeatbeltKeepsFoldersInPlace(t *testing.T) {
 	if !strings.Contains(got, "(deny file-clone (vnode-type DIRECTORY))") {
 		t.Errorf("folders may be cloned:\n%s", got)
 	}
+	if !strings.Contains(got, `(global-name-prefix "com.apple.metadata.mds")`) {
+		t.Errorf("Spotlight may be asked what the denied files hold:\n%s", got)
+	}
 	if i := strings.Index(got, "(allow file-write-unlink"); i < 0 || strings.Contains(got[i:i+strings.Index(got[i:], ")\n")], "/Users/u/notes") {
 		t.Errorf("a path opened again to be read may be moved or deleted:\n%s", got)
 	}
-	if strings.Contains(seatbeltProfile(Policy{Write: []string{"/w"}}), "file-clone") {
-		t.Errorf("folders refused cloning with nothing denied or hidden")
+	if got := seatbeltProfile(Policy{Write: []string{"/w"}}); strings.Contains(got, "file-clone") || strings.Contains(got, "metadata") {
+		t.Errorf("folders refused cloning, or Spotlight its questions, with nothing denied or hidden:\n%s", got)
+	}
+}
+
+// A path not there yet is spelled as it will be when it is: the nearest
+// folder above it that is there, its links resolved, then the rest; a
+// path that is there, resolved whole (the third sandbox review: only its
+// own folder was looked at, so two folders down under a link, as /tmp is
+// on macOS, it matched neither spelling).
+func TestRealPathOfWhatIsNotThereYet(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(base, "real"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "real"), filepath.Join(base, "link")); err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[string]string{
+		filepath.Join(base, "link"):                         filepath.Join(base, "real"),
+		filepath.Join(base, "link", "a.txt"):                filepath.Join(base, "real", "a.txt"),
+		filepath.Join(base, "link", "x", "y", "secret.yml"): filepath.Join(base, "real", "x", "y", "secret.yml"),
+		filepath.Join(base, "link", "..", "link", "z"):      filepath.Join(base, "real", "z"),
+		"/no-such-root-folder/a/b":                          "/no-such-root-folder/a/b",
+	} {
+		if got := realPath(in); got != want {
+			t.Errorf("realPath(%s) = %s, want %s", in, got, want)
+		}
 	}
 }
