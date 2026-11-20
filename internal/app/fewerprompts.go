@@ -112,7 +112,7 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 	for _, t := range l.allowedMCPTools() {
 		tools[t.Spec().Name] = t
 	}
-	files, sessions := l.recentSessionFiles()
+	files, sessions := recentSessionFiles([]string{l.store.ProjectDir(l.cfg.Paths.Cwd), l.store.ProjectDir(l.cfg.Paths.ProjectRoot)})
 	byRules := map[string]*askedRule{}
 	judged := 0
 	for _, f := range files {
@@ -176,10 +176,10 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 	return out, sessions
 }
 
-// recentSessionFiles are the session files of this folder and of the
-// project's root (where they differ), with their sub-agents', the newest
-// first, at most fewerFiles; and how many of them are sessions' own.
-func (l *live) recentSessionFiles() ([]string, int) {
+// recentSessionFiles are the session files in dirs (a session store's
+// folders of projects), with their sub-agents', the newest first, at most
+// fewerFiles; and how many of them are sessions' own.
+func recentSessionFiles(dirs []string) ([]string, int) {
 	type file struct {
 		path string
 		at   time.Time
@@ -187,7 +187,7 @@ func (l *live) recentSessionFiles() ([]string, int) {
 	}
 	var found []file
 	seen := map[string]bool{}
-	for _, dir := range []string{l.store.ProjectDir(l.cfg.Paths.Cwd), l.store.ProjectDir(l.cfg.Paths.ProjectRoot)} {
+	for _, dir := range dirs {
 		if seen[dir] {
 			continue
 		}

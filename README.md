@@ -303,7 +303,8 @@ files anywhere else. With nothing after them, `/model`,
 off` and the like set Claude Code's `skillOverrides`). `/fewer-permission-prompts`
 lists the allow rules that would have spared this folder's sessions the most
 questions, as gnosh's engine judges their calls today, and `add 1 3` keeps
-the ones you pick (only those that read). Alt+T turns thinking on
+the ones you pick (only those that read); `/skill-doctor` says what each
+skill costs and how often it ran, the ones never run first. Alt+T turns thinking on
 or off, Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents
 in the background. `/panel` (or the `sidePanel` option) draws the session on
 the whole screen beside a side panel of the files it changed and its

@@ -240,6 +240,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "hooks", Summary: "Every hook that is configured, by the moment it runs at.", InRun: true, Run: l.slashHooks},
 		{Name: "output-style", Args: "[<style>]", Summary: "The output styles there are, or switch to one: how the model replies, from your next message on.", InRun: true, Run: l.slashOutputStyle},
 		{Name: "skills", Args: "[<name> on|name-only|user-invocable-only|off]", Summary: "Every skill there is, where it came from, and who may run it; or how far one is seen.", InRun: true, Run: l.slashSkills},
+		{Name: "skill-doctor", Summary: "What each skill costs in the model's window and how often it ran, the ones never run first.", InRun: true, Run: l.slashSkillDoctor},
 		{Name: "reload-skills", Summary: "Read the skill and command folders again now, and say what changed.", InRun: true, Run: l.slashReloadSkills},
 		{Name: "autocompact", Args: "[auto|<tokens>]", Summary: "How full the model's window may get before room is made: a number of tokens, or auto.", InRun: true, Run: l.slashAutocompact},
 		{Name: "context", Args: "[all]", Summary: "What fills the model's window, by kind.", InRun: true, Run: l.slashContext},

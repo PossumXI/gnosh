@@ -5667,3 +5667,14 @@ or kept with the reason said (27).
     again first, numbered the same. A model reading JSONL transcripts for
     this, the way Claude Code's skill does, is slow and unsure on a small
     local model; the engine's own judgement is the one that asks.
+
+377. **/skill-doctor.** Claude Code's reports what each skill costs and
+    how often it is used, flags the listed ones never invoked, and says
+    where to turn them off, the costliest first. gnosh's says, for each
+    skill, its scope, what its line costs in the model's window (as
+    /skills does), and how often it ran in the newest 200 session files
+    of every folder and their sub-agents': the model's Skill calls, and
+    the skills the person typed (named by the words gnosh sends ahead of
+    a typed skill). Those never run come first, the costliest first, each
+    with /skills <name> off (or name-only); then the rest, the most run
+    first; and how many tokens the never-run ones take.
