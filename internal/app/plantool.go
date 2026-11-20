@@ -52,6 +52,21 @@ func (t *enterPlanTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	return core.TextResult("Plan mode is on: read, search and think, and change nothing. When the plan is ready, present it with ExitPlanMode; the user approves it or asks for changes."), nil
 }
 
+// planApproved says a plan can be approved in this session, so that plan
+// mode's tools are offered: ExitPlanMode is a person's alone to approve,
+// who is there in a session somebody attends, and is reached through the
+// agent view from a run in the background (agent.Options.Relay). In any
+// other run it is not, and permissions.denyInsteadOfPrompting refuses
+// what would ask (and takes the plan tools away, as in Claude Code).
+func (l *live) planApproved() bool {
+	return !l.cfg.Permissions.DenyInsteadOfPrompting.V && (l.interactive || l.p.runAsks != "")
+}
+
+// planInAnswer is what plan mode's refusal of an edit says to do in a
+// session with no plan tools, in place of presenting the plan with
+// ExitPlanMode.
+const planInAnswer = "Nobody approves a plan in this session: give the plan in your answer."
+
 // exitPlanTool is ExitPlanMode. planned holds the calls that were made
 // in plan mode, as Describe saw them: the approval may have switched the
 // mode before Run (acceptEdits), so Run cannot look at the mode itself.

@@ -194,7 +194,12 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		}
 		d.Reason = "This call throws away something that cannot be got back, so gnosh asks before it runs, whatever the rules and the mode allow."
 	case permission.Deny:
-		return agent.Decision{Reason: "This call did not run. " + d.Reason + " Do the work another way if there is one, or say what you could not do."}, nil
+		why := d.Reason
+		if !l.planApproved() {
+			// (No ExitPlanMode is offered to present a plan with.)
+			why = strings.Replace(why, permission.PresentPlan, planInAnswer, 1)
+		}
+		return agent.Decision{Reason: "This call did not run. " + why + " Do the work another way if there is one, or say what you could not do."}, nil
 	}
 
 	// 3. Somebody has to say yes.

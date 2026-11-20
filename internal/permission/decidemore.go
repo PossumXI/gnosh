@@ -615,11 +615,16 @@ func (e *Engine) decideRead(req *request) Decision {
 	return Decision{Behavior: Allow, Stage: StageMode, Reason: "Reading inside the working directories needs no approval."}
 }
 
+// PresentPlan ends plan mode's refusal of an edit. A program that offers
+// no ExitPlanMode, nobody being there to approve a plan, says something
+// else in its place.
+const PresentPlan = "Present the plan with ExitPlanMode."
+
 // decideEdit judges Edit, Write and NotebookEdit.
 func (e *Engine) decideEdit(req *request) Decision {
 	if e.mode == ModePlan {
 		return Decision{Behavior: Deny, Stage: StageMode,
-			Reason: "Plan mode is on: nothing is changed until the plan is approved. Present the plan with ExitPlanMode."}
+			Reason: "Plan mode is on: nothing is changed until the plan is approved. " + PresentPlan}
 	}
 	if c := e.match(ListAllow, req); c != nil {
 		return allowedBy(c)

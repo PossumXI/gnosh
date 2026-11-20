@@ -15,6 +15,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
@@ -125,15 +126,21 @@ func (l *live) buildTools() error {
 		// where sub-agents may be started at all.
 		all = append(all, &sendMessageTool{l: l})
 	}
+	// A run has nobody to put a question to, whatever its input format
+	// (stream-json carries user messages, no answers): a tool that only
+	// asks is offered where a person is there, or where a PreToolUse hook
+	// the person set up may answer in their place, and plan mode's where a
+	// plan can be approved (planApproved). Offered in a run, the three
+	// schemas were 3.5K of the 27K characters of tools sent with every
+	// request of a FrontierHarness run, and a call of one came back
+	// refused (the FrontierHarness session, 2026-11-19).
 	deny := l.cfg.Permissions.DenyInsteadOfPrompting.V
-	if l.inv.PermissionPrompts != "none" && !deny {
+	if l.inv.PermissionPrompts != "none" && !deny && (l.interactive || l.hooks.has(hooks.PreToolUse)) {
 		// (With --permission-prompts none nobody answers, and a tool that
 		// asks a person is no tool.)
 		all = append(all, &askTool{l: l})
 	}
-	if !deny {
-		// (permissions.denyInsteadOfPrompting takes the plan tools away
-		// too, as in Claude Code: a plan is approved by a person.)
+	if l.planApproved() {
 		all = append(all, &enterPlanTool{l: l}, &exitPlanTool{l: l})
 	}
 	if l.interactive && l.p.o.Relaunch != nil {

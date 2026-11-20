@@ -17,9 +17,20 @@ func TestOwnToolsNameEveryTool(t *testing.T) {
 	w := apptest.NewWorld(t)
 	w.Write(w.ConfigDir()+"/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploys.\n---\nDeploy the site.\n")
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply { return &apptest.Reply{Text: "Hi."} })
-	run(t, w, "-p", "hi").wantCode(t, 0)
-	names := toolNamesOf(w.Model.Requests()[0])
-	for _, want := range []string{"Agent", "SendMessage", "WebFetch", "Monitor", "Skill", "EnterPlanMode"} {
+	// (A session somebody attends, where every tool is offered.)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("hi")
+	s.see("Hi.")
+	s.typeLine("/exit")
+	s.exit()
+	var names []string
+	for _, r := range w.Model.Requests() {
+		if names = toolNamesOf(r); slices.Contains(names, "Bash") {
+			break
+		}
+	}
+	for _, want := range []string{"Agent", "SendMessage", "WebFetch", "Monitor", "Skill", "EnterPlanMode", "AskUserQuestion"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("%s was not offered, so this test does not cover it: %v", want, names)
 		}

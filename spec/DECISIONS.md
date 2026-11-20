@@ -4277,3 +4277,18 @@ or kept with the reason said (27).
     anything more stays the shell's. Code that calls mem, sent to
     gnovm_run with no VM named, runs in mem rather than in the scratch
     VM, where mem is no name.
+
+298. **A run is not offered the tools nobody there can answer.**
+    AskUserQuestion, EnterPlanMode and ExitPlanMode were offered in every
+    -p run, where nobody answers a question (stream-json input carries
+    user messages, not answers) and nobody approves a plan: their schemas
+    were 3.5K of the 27K characters of tools sent with each
+    FrontierHarness request, a question only came back refused, and a
+    model that switched itself to plan mode could never leave it, every
+    later edit refused (2026-11-19, the FrontierHarness session).
+    AskUserQuestion is now offered where a person attends the session, or
+    where a PreToolUse hook of the person's may answer in their place;
+    plan mode's tools where a plan can be approved: a session somebody
+    attends, or a run in the background, whose permission questions the
+    agent view puts to a person. In a run started in plan mode, an
+    edit's refusal asks for the plan in the answer, not of ExitPlanMode.
