@@ -1628,3 +1628,16 @@ func TestPlanModeAndNotificationLines(t *testing.T) {
 		Meta:    map[string]any{"notSent": "you were at the terminal"}}, 0))
 	g.committedHas("plan mode on", "not sent: you were at the terminal").committedLacks("present it with ExitPlanMode", "reads what you write")
 }
+
+// A call of a tool there is not says so in one sentence on the screen: the
+// list of the tools there are is the model's.
+func TestUnknownToolLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	args := map[string]any{"x": 1}
+	g.ev(toolCall("c1", "Foo"), replyEnd(core.StopToolUse), toolStart("c1", "Foo", args))
+	g.ev(toolEnd("c1", "Foo", args, core.ToolResult{
+		Content: []core.Block{core.Text(`There is no tool named "Foo", so nothing ran. The tools you have are: Bash, Edit, Read.`)},
+		IsError: true, Meta: map[string]any{"unknownTool": true}}, 0))
+	g.committedHas(`There is no tool named "Foo", so nothing ran.`).committedLacks("The tools you have are")
+}

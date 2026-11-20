@@ -121,6 +121,9 @@ func (a *Agent) runTools(ctx context.Context, t *turn, rep *reply) roundOutcome 
 				list = sortedNames(names)
 			}
 			c.res = core.ErrorResult(fmt.Sprintf(a.texts.UnknownTool, u.Name, list))
+			// (The screen says the first sentence alone: the list of the
+			// tools is the model's.)
+			c.res.Meta = map[string]any{"unknownTool": true}
 			c.done = true
 		case bad:
 			c.res = core.ErrorResult(fmt.Sprintf(a.texts.BadInput, clip(raw, 400)))

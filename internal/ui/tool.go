@@ -790,6 +790,13 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 	case res.IsError:
 		failed = true
 		summary = join("failed", took)
+		if unknown, _ := res.Meta["unknownTool"].(bool); unknown {
+			// "There is no tool named ..., so nothing ran.": the list of
+			// the tools there are, after it, is the model's.
+			if i := strings.Index(text, " so nothing ran."); i > 0 {
+				text = text[:i+len(" so nothing ran.")]
+			}
+		}
 		under = s.clipHead(safeLines(text), s.limit(errorLines))
 	case res.Display != nil && res.Display.Kind == "diff":
 		// An edit is shown as its diff. The diff's own first line names
