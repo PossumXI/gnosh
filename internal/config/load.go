@@ -387,7 +387,16 @@ func (ld *loader) run() *Config {
 	p.LocalSettings = filepath.Join(p.DataDir, "settings.local.json")
 	ld.projectFiles = append(ld.projectFiles, p.LocalSettings)
 	if reads("local") {
-		ld.file(p.LocalSettings, LayerProject, "local", in.Cwd, true)
+		if linkedFile(in.FS, p.LocalSettings) {
+			// The file gnosh writes the person's saved approvals in is
+			// never a link: a repository's link to the person's own
+			// gnosh.json was read as the project's, and the next save left
+			// a copy of it in the repository (the settings-commands review
+			// of 2026-11-20).
+			ld.probs.warnf(p.LocalSettings, 0, "this is a link, and the file gnosh keeps your saved approvals in never is one, so it was not read, and nothing is saved there. Remove the link.")
+		} else {
+			ld.file(p.LocalSettings, LayerProject, "local", in.Cwd, true)
+		}
 	}
 
 	// --settings: a file, or the JSON itself.

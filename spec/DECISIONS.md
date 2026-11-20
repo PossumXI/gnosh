@@ -4412,3 +4412,18 @@ or kept with the reason said (27).
     know. And /output-style default took the setting away, so a style the
     person's gnosh.json or /config named won the next session; "default"
     is now kept as the choice it is.
+
+308. **The file of saved approvals is never a link, and git passes it
+    over.** .gnosh/settings.local.json was read and written through a
+    link: a repository's link to the person's own gnosh.json was read as
+    the project's, and the next save renamed a copy of it, keys and all,
+    into the repository; and .gnosh/.gitignore was written only when
+    gnosh made the folder, so a folder a work tree or the repository's
+    own agents made first left the person's approvals to be committed
+    (the settings-commands review of 2026-11-20). A linked file is now
+    neither read (a warning says so) nor written (the save says so), nor
+    is a data folder that leads out of the project written in; and each
+    save makes sure git passes the file over, with a line in the
+    repository's info/exclude (kept by git for this clone, never
+    committed) unless the folder's .gitignore covers it, as Claude Code
+    puts its own file in git's excludes.

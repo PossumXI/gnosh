@@ -827,6 +827,16 @@ func (l *live) editLocalRules(change func(lists map[string][]string)) error {
 func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) error) error {
 	path := l.cfg.Paths.LocalSettings
 	dir := filepath.Dir(path)
+	// Never through a link: a repository's .gnosh, or its settings file,
+	// linked to the person's own gnosh.json had a copy of it, keys and
+	// all, written into the repository (the settings-commands review of
+	// 2026-11-20).
+	if target := dataDirLeadsOut(l.cfg); target != "" {
+		return fmt.Errorf("the project's data folder %s is a link to %s, outside the project, so gnosh does not write there; remove the link", dir, target)
+	}
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a link, and the file gnosh keeps your saved approvals in never is one, so nothing was written; remove the link", path)
+	}
 	_, statErr := os.Stat(dir)
 	fresh := errors.Is(statErr, os.ErrNotExist)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -875,10 +885,79 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if err := config.WriteFileAtomic(path, content, 0o600); err != nil {
 		return err
 	}
+	keepOutOfGit(path)
 	// (What gnosh writes it has put in force already, unless the file
 	// held a change of the person's that was not yet taken in.)
 	l.sawOwnWrite(path, before)
 	return nil
+}
+
+// keepOutOfGit has git pass over the settings file gnosh writes, by a line
+// in the repository's info/exclude, which git keeps for this clone and
+// never commits, unless the data folder's own .gitignore already does. The
+// .gitignore was written only when gnosh made the folder, and a folder a
+// work tree or the repository's own agents made first left the file to be
+// committed with the person's saved approvals (the settings-commands
+// review of 2026-11-20). Claude Code puts its own file in git's excludes
+// the same way, on first write.
+func keepOutOfGit(path string) {
+	if data, err := os.ReadFile(filepath.Join(filepath.Dir(path), ".gitignore")); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if l := strings.TrimSpace(line); l == "*" || l == filepath.Base(path) || l == "/"+filepath.Base(path) {
+				return
+			}
+		}
+	}
+	top := ""
+	for d := filepath.Dir(path); ; d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			top = d
+			break
+		}
+		if d == filepath.Dir(d) {
+			return
+		}
+	}
+	gd := repoGitDir(top)
+	if gd == "" {
+		return
+	}
+	if data, err := os.ReadFile(filepath.Join(gd, "commondir")); err == nil {
+		// A linked work tree's excludes are the repository's.
+		common := strings.TrimSpace(string(data))
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(gd, common)
+		}
+		gd = filepath.Clean(common)
+	}
+	rel, err := filepath.Rel(top, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return
+	}
+	line := "/" + filepath.ToSlash(rel)
+	exclude := filepath.Join(gd, "info", "exclude")
+	if info, err := os.Lstat(exclude); err == nil && !info.Mode().IsRegular() {
+		return
+	}
+	data, _ := os.ReadFile(exclude)
+	for _, l := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(l) == line {
+			return
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(exclude), 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(exclude, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	lead := ""
+	if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
+		lead = "\n"
+	}
+	_, _ = f.WriteString(lead + "# gnosh keeps this clone's saved approvals here\n" + line + "\n")
 }
 
 // outsideTree says why a session or sub-agent with the work tree t may not change
