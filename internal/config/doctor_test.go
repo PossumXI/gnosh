@@ -3,7 +3,10 @@ package config
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -447,4 +450,15 @@ func TestDoctorSaysWhetherLanguageServersCanStart(t *testing.T) {
 	in.Trusted = false
 	findings = doctor(t, in, &fakeMachine{programs: []string{"gopls"}})
 	wantFinding(t, findings, "tools", Note, "the language server gopls (for .go) is installed, and waits for this folder to be trusted")
+
+	// A server whose env names a PATH is looked for there, as it is
+	// started, and not on gnosh's own.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "pyright-langserver"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg = `{` + box + `, "lspServers": {"gopls": {"command": "gopls", "env": {"PATH": "/nowhere"}, "extensionToLanguage": {".go": "go"}}, "pyright": {"command": "pyright-langserver", "env": {"PATH": ` + strconv.Quote(bin) + `}, "extensionToLanguage": {".py": "python"}}}}`
+	findings = doctor(t, withConfig(cfg), &fakeMachine{programs: []string{"gopls"}})
+	wantFinding(t, findings, "tools", Note, "the language server gopls (for .go) cannot start: gopls is not installed")
+	wantFinding(t, findings, "tools", Fine, "the language server pyright (for .py) is installed")
 }

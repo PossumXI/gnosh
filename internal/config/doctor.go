@@ -2,12 +2,29 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/gnosh-ai/gnosh/internal/execpath"
 )
+
+// givenPath is the PATH a program gnosh starts is given, when it is not
+// gnosh's own: the program's own env's, else the settings' env block's.
+func givenPath(cfg *Config, own map[string]string) (string, bool) {
+	if p, ok := own["PATH"]; ok {
+		return p, true
+	}
+	for _, v := range slices.Backward(cfg.Env) {
+		if v.Name == "PATH" && !v.Value.Empty() {
+			return v.Value.Reveal(), true
+		}
+	}
+	return "", false
+}
 
 // Level says how much a doctor finding matters.
 type Level int
@@ -330,7 +347,16 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		}
 		exts := strings.Join(slices.Sorted(maps.Keys(srv.Extensions)), " ")
 		// (LookPath takes a path from / as itself, as exec does.)
-		switch _, err := pr.LookPath(srv.Command); {
+		find := pr.LookPath
+		if path, ok := givenPath(cfg, srv.Env); ok {
+			find = func(name string) (string, error) {
+				if p, ok := execpath.Find(name, []string{"PATH=" + path}, ""); ok {
+					return p, nil
+				}
+				return "", errors.New("not on the PATH it is given")
+			}
+		}
+		switch _, err := find(srv.Command); {
 		case err != nil:
 			add("tools", Note, "the language server %s (for %s) cannot start: %s is not installed, or not on the PATH. (%s)", srv.Name, exts, srv.Command, srv.Origin)
 		case !cfg.Trusted:

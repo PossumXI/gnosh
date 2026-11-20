@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/execpath"
 )
 
 // Config says how to start a server and what to tell it.
@@ -129,8 +131,12 @@ const stderrWait = 2 * time.Second
 // Start starts the server and makes the protocol's opening exchange with
 // it (initialize, then initialized).
 func Start(ctx context.Context, cfg Config) (*Client, error) {
-	cmd := exec.Command(cfg.Command, cfg.Args...)
-	cmd.Dir, cmd.Env = cfg.Dir, cfg.Env
+	// The program on the PATH it is given (the settings' env block or the
+	// entry's own env may have changed it), not on gnosh's.
+	cmd, ok := execpath.Command(cfg.Command, cfg.Args, cfg.Env, cfg.Dir)
+	if !ok {
+		return nil, fmt.Errorf("%s could not be started: it is not a program on the PATH it is given", cfg.Command)
+	}
 	ownGroup(cmd)
 	errs := &tail{max: 16 << 10}
 	cmd.Stderr = errs

@@ -349,6 +349,21 @@ func TestStartAndStopAProcess(t *testing.T) {
 	if _, err := Start(ctx, Config{Command: filepath.Join(t.TempDir(), "no-such-server"), Root: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "could not be started") {
 		t.Errorf("a missing server: %v", err)
 	}
+
+	// A bare name is looked for on the PATH the server is given, not on
+	// this process's own, and not in a relative folder of it.
+	bin := t.TempDir()
+	if err := os.Symlink(exe, filepath.Join(bin, "fake-lsp-server")); err != nil {
+		t.Fatal(err)
+	}
+	c, err = Start(ctx, Config{Name: "self", Command: "fake-lsp-server", Env: []string{"PATH=.:" + bin, "GNOSH_FAKE_LSP=1"}, Root: t.TempDir()})
+	if err != nil {
+		t.Fatalf("a server on the PATH it is given: %v", err)
+	}
+	_ = c.Close()
+	if _, err := Start(ctx, Config{Command: "fake-lsp-server", Env: []string{"PATH=.", "GNOSH_FAKE_LSP=1"}, Dir: bin, Root: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "not a program on the PATH it is given") {
+		t.Errorf("a server in a relative PATH folder: %v", err)
+	}
 }
 
 // TestMain runs the test binary as a made-up server when asked to.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -262,6 +263,27 @@ func TestStartFailures(t *testing.T) {
 	_, err := Start(ctx, fake(t, "die"), Options{StartTimeout: 5 * time.Second})
 	if err == nil || !strings.Contains(err.Error(), "it cannot find its config") {
 		t.Errorf("a server that dies at once: %v, want what it wrote on its standard error", err)
+	}
+}
+
+// A server named by its bare name is looked for on the PATH its env gives
+// it, as Claude Code finds it, and not on this process's own.
+func TestStartFindsTheProgramOnItsOwnPath(t *testing.T) {
+	ctx := context.Background()
+	srv := fake(t, "plain")
+	bin := t.TempDir()
+	if err := os.Symlink(srv.Command, filepath.Join(bin, "fake-mcp-server")); err != nil {
+		t.Fatal(err)
+	}
+	srv.Command, srv.Env = "fake-mcp-server", map[string]string{"PATH": bin}
+	c, err := Start(ctx, srv, Options{StartTimeout: 10 * time.Second})
+	if err != nil {
+		t.Fatalf("a server on the PATH it is given: %v", err)
+	}
+	c.Close()
+	srv.Env = map[string]string{"PATH": "/nowhere"}
+	if _, err := Start(ctx, srv, Options{StartTimeout: 10 * time.Second}); err == nil || !strings.Contains(err.Error(), "not a program on the PATH the server is given") {
+		t.Errorf("a server not on the PATH it is given: %v", err)
 	}
 }
 

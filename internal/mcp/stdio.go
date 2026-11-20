@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/execpath"
 )
 
 // stdioTransport is a server gnosh starts, spoken to over its standard
@@ -46,13 +48,16 @@ const writeWait = 2 * time.Minute
 
 // startStdio starts the server.
 func startStdio(c *Client, srv Server, opt Options) (*stdioTransport, error) {
-	cmd := exec.Command(srv.Command, srv.Args...)
-	cmd.Dir = srv.Dir
 	env := append([]string(nil), srv.Environ...)
 	for k, v := range srv.Env {
 		env = append(env, k+"="+v)
 	}
-	cmd.Env = env
+	// The program on the PATH the server is given (its env may set one),
+	// as Claude Code finds it, not on gnosh's own.
+	cmd, ok := execpath.Command(srv.Command, srv.Args, env, srv.Dir)
+	if !ok {
+		return nil, fmt.Errorf("mcp: %s could not be started: it is not a program on the PATH the server is given", srv.Command)
+	}
 	// A group of its own, so that what it starts is stopped with it.
 	ownGroup(cmd)
 	t := &stdioTransport{c: c, name: srv.Name, cmd: cmd, errs: &capped{max: opt.MaxStderr},

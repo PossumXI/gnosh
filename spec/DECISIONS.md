@@ -4974,3 +4974,15 @@ or kept with the reason said (27).
     naming the program when it is not, and a note that it waits for the
     folder's trust in a folder that is not trusted (344), so that a server
     that never starts is not a mystery found only by its silence.
+
+346. **A started program is found on the PATH it is given.** A language
+    server or an MCP server named by its bare name is looked for on the
+    PATH of the environment it is started with (its entry's env, else the
+    settings' env block, else gnosh's own), as hooks in the exec form
+    already were, and as Claude Code finds it: Node looks a program up on
+    the PATH of the env it is given, while Go's exec looks only at the
+    process's own, so a server installed where only its env's PATH leads
+    did not start. Only absolute folders of it are looked in: an empty or
+    relative entry would be the folder the program starts in, which a
+    repository fills. The name stays the program's first argument.
+    gnosh doctor looks for a language server's program the same way.

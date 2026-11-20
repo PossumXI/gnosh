@@ -11,12 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/execpath"
 )
 
 // Options is what a Runner is given about the program and the machine
@@ -900,31 +901,10 @@ func isClosed(ch <-chan struct{}) bool {
 
 // program finds the program of a hook in the exec form: a name that holds
 // a slash is a path, from dir when it is relative, and a bare name is
-// looked for on the PATH the hook is given.
+// looked for in the absolute folders of the PATH the hook is given.
 func program(name string, env []string, dir string) (string, error) {
-	if strings.Contains(name, "/") {
-		if !filepath.IsAbs(name) {
-			name = filepath.Join(dir, name)
-		}
-		return name, nil
-	}
-	path := ""
-	for _, kv := range env {
-		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
-			path = v
-		}
-	}
-	for _, d := range filepath.SplitList(path) {
-		if !filepath.IsAbs(d) {
-			// An empty or relative entry would be the folder the hook
-			// works in, which a repository fills: it is passed over, as Go's
-			// own lookup does.
-			continue
-		}
-		p := filepath.Join(d, name)
-		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return p, nil
-		}
+	if p, ok := execpath.Find(name, env, dir); ok {
+		return p, nil
 	}
 	return "", fmt.Errorf("%s is not a program on the PATH the hook is given", name)
 }
