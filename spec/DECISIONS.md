@@ -4351,3 +4351,26 @@ or kept with the reason said (27).
     One file's first 100 imports are followed, one reading takes at most
     200 rule files, each cut said once, and the start shows the first ten
     warnings about instruction files and the count of the rest.
+
+303. **After a summary the instruction files are read again when one has
+    changed.** A summary gave back the instruction files as read at the
+    start, so an edit to CLAUDE.md, the GNOSH.md /init wrote or a rule
+    taken out never reached a running session, while /memory said a
+    change shows in the next session (the instruction-files review of
+    2026-11-20). As Claude Code reads its files again after /compact,
+    gnosh now reads them again after a summary when one has changed on
+    disk (Set.Changed, then Set.Reload in place), and gives the model
+    what is there now; /memory says so. A resumed session still begins
+    with the copy its first prompt carried.
+
+304. **Instruction text loses what is drawn as nothing, and a package
+    name is no broken import.** Tag characters, the controls of the
+    drawing order and runs of zero-width characters in an instruction
+    file reached the model as words nobody reading the file saw; they are
+    taken out as from a typed prompt (text.CleanInvisible), with a
+    warning when they could hide words or reorder them, and what emoji
+    and Persian write with joiners stays. And an "@types/node",
+    "@pytest.fixture" or "@docs" in a file's prose was warned about as a
+    missing import at every start: a missing import is now said only
+    when it was surely meant for a file, written from a folder (./ ../ ~/
+    /) or ending .md, .markdown or .txt (the same review).

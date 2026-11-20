@@ -815,8 +815,22 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	if l.instr != nil {
 		// The files given along the way are forgotten, so that each is
 		// given again when the model next works where it applies; the
-		// ones in effect from the start are given back now.
-		l.instr.Forget()
+		// ones in effect from the start are given back now, read again
+		// when one has changed since, as Claude Code reads them after a
+		// summary.
+		reread := false
+		if len(l.instr.Changed(ctx)) > 0 {
+			ws, err := l.instr.Reload(ctx)
+			if reread = err == nil; !reread && ctx.Err() == nil {
+				l.notice(agent.LevelWarning, "instructions", "The instruction files changed, and could not be read again after the summary ("+err.Error()+"), so those read before are given back.")
+			}
+			for _, w := range ws {
+				l.notice(agent.LevelWarning, "instructions", w.Text)
+			}
+		}
+		if !reread {
+			l.instr.Forget()
+		}
 		if text := l.startInstructions(); text != "" {
 			parts = append(parts, agent.Part{Source: "instructions", Text: text})
 		}

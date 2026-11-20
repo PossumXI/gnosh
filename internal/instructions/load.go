@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"path"
 	"strings"
+
+	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
 // loading is one pass of reading files into a Set: the start of the session,
@@ -435,7 +437,7 @@ func (l *loading) fetch(w want) (fetched, bool) {
 		switch {
 		case !errors.Is(pr.err, fs.ErrNotExist):
 			l.warn(WarnUnreadable, w.path, w.parent, fmt.Sprintf("%s could not be read: %s.", shown, reason(pr.err)))
-		case w.kind == KindImport && !bareWord(w.written):
+		case w.kind == KindImport && meantAsPath(w.written):
 			l.warn(WarnImportMissing, w.path, w.parent, fmt.Sprintf("%s imports @%s, but %s is not there.", plain(osPath(w.parent)), plain(w.written), shown))
 		case w.kind != KindImport && pr.linfo != nil:
 			// Something is there under the name: a link to nothing.
@@ -493,7 +495,7 @@ func (l *loading) fetch(w want) (fetched, bool) {
 		l.warn(WarnUnreadable, w.path, w.parent, fmt.Sprintf("%s could not be read: %s.", shown, reason(err)))
 		return fetched{}, false
 	}
-	text, binary, repaired := cleanText(data)
+	body, binary, repaired := cleanText(data)
 	if binary {
 		l.warn(WarnNotText, w.path, w.parent, fmt.Sprintf("%s is not text (it holds a zero byte), so it was not loaded.", shown))
 		return fetched{}, false
@@ -501,7 +503,18 @@ func (l *loading) fetch(w want) (fetched, bool) {
 	if repaired {
 		l.warn(WarnInvalidUTF8, w.path, w.parent, fmt.Sprintf("%s is not valid UTF-8; it was loaded with the bad bytes replaced.", shown))
 	}
-	return fetched{real: pr.real, info: info, text: text}, true
+	// What a terminal draws as nothing is taken out, as from a typed
+	// prompt: words in tag characters, or put in another order by the
+	// controls of the drawing order, are read by the model as instructions
+	// nobody reading the file saw (the instruction-files review of
+	// 2026-11-20).
+	if clean, found := text.CleanInvisible(body); found.Removed > 0 {
+		body = clean
+		if found.Hiding {
+			l.warn(WarnInvisible, w.path, w.parent, fmt.Sprintf("%s holds characters that are drawn as nothing and can hide words or change their order; they were taken out of what the model is given.", shown))
+		}
+	}
+	return fetched{real: pr.real, info: info, text: body}, true
 }
 
 // approve asks whether w may bring in the file at real, which lies outside
@@ -667,12 +680,24 @@ func (s *Set) excluded(p string) bool {
 	return false
 }
 
-// bareWord reports whether an import is written as a single word with no
-// slash, dot or tilde, like "@alice" or "@Override". Such a word is followed
-// when a file of that name is there and is otherwise taken for ordinary
-// text.
-func bareWord(written string) bool {
-	return !strings.ContainsAny(written, "/.~")
+// meantAsPath reports whether an import that names nothing there was
+// surely meant for a file, and so is worth a warning: one written from a
+// folder ("./", "../", "~/", "/") or with an instruction file's ending.
+// Any other ("@alice", "@Override", "@types/node", "@pytest.fixture") is
+// followed when a file of that name is there and is otherwise taken for
+// ordinary text: a package or a decorator in a file's prose was warned
+// about at every start (the instruction-files review of 2026-11-20).
+func meantAsPath(written string) bool {
+	for _, lead := range []string{"./", "../", "~/", "/"} {
+		if strings.HasPrefix(written, lead) {
+			return true
+		}
+	}
+	switch strings.ToLower(path.Ext(written)) {
+	case ".md", ".markdown", ".txt":
+		return true
+	}
+	return false
 }
 
 // reason says why a file-system call failed, without the path, which the

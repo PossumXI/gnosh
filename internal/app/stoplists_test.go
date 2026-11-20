@@ -111,3 +111,27 @@ func TestInstructionWarningsAreCounted(t *testing.T) {
 	}
 	has(t, "stderr", r.err, "…and 5 more warnings about instruction files")
 }
+
+// After a summary the instruction files are read again when one has
+// changed, as Claude Code reads them after /compact: the model is given
+// the file as it is now, not the copy read at the start.
+func TestSummaryReadsChangedInstructionsAgain(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "First."}, apptest.Reply{Text: "SUMMARY: little."}, apptest.Reply{Text: "Second."})
+	w.Write("AGENTS.md", "Sign each answer with a rose.\n")
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("hello")
+	s.see("First.")
+	w.Write("AGENTS.md", "Sign each answer with a yellow tulip.\n")
+	s.typeLine("/compact")
+	s.see("The conversation was summarized")
+	s.typeLine("go on")
+	s.see("Second.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := w.Model.Requests()
+	has(t, "the first request", string(reqs[0].Body), "with a rose")
+	last := string(reqs[len(reqs)-1].Body)
+	has(t, "the request after the summary", last, "with a yellow tulip")
+	hasNot(t, "the request after the summary", last, "with a rose")
+}

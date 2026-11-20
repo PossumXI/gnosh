@@ -190,8 +190,13 @@ func TestSmallHelpers(t *testing.T) {
 	}
 	same(t, "ancestors", ancestors("/a/b/c"), []string{"/", "/a", "/a/b", "/a/b/c"})
 	same(t, "ancestors of the top", ancestors("/"), []string{"/"})
-	if !bareWord("alice") || bareWord("a.md") || bareWord("a/b") || bareWord("~") {
-		t.Error("bareWord")
+	for written, want := range map[string]bool{
+		"alice": false, "types/node": false, "pytest.fixture": false, "docs": false,
+		"a.md": true, "docs/a.MD": true, "notes.txt": true, "./a": true, "../a": true, "~/a": true, "/etc/a": true,
+	} {
+		if meantAsPath(written) != want {
+			t.Errorf("meantAsPath(%q) = %v", written, !want)
+		}
 	}
 }
 

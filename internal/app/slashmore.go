@@ -372,7 +372,7 @@ func (l *live) slashMemory(ctx context.Context, c *SlashContext) error {
 		c.Say("Yours, for every project: %s", l.cfg.Context.Global[0].V)
 	}
 	c.Say("The project's, shared with whoever works on it: %s (/init has the model write it)", filepath.Join(l.cfg.Paths.ProjectRoot, "GNOSH.md"))
-	c.Say("They are read as a session starts, and a change shows in the next one. What the model keeps for itself between sessions is mem: /mem shows it.")
+	c.Say("They are read as a session starts, and read again after a summary (/compact) when one has changed. What the model keeps for itself between sessions is mem: /mem shows it.")
 	return nil
 }
 

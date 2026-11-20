@@ -291,6 +291,9 @@ const (
 	// WarnTooMany: a file imports more than importsMost files, or one
 	// reading found more than rulesMost rules; the rest were left out.
 	WarnTooMany WarningKind = "too_many"
+	// WarnInvisible: a file held characters drawn as nothing that can hide
+	// words or change their order; they were taken out.
+	WarnInvisible WarningKind = "invisible"
 )
 
 // importsMost is how many imports of one file are followed, and rulesMost
@@ -653,6 +656,34 @@ func (s *Set) Forget(paths ...string) {
 	// Searching a directory again costs a few lookups and loads only what
 	// is no longer held, so it is simplest to forget all the searches.
 	clear(s.walked)
+}
+
+// Reload reads again what Load read, in place of what the Set holds: the
+// files in effect from the start as they are on disk now, and none of the
+// late ones, which are given again as the model works where they apply.
+// It returns the warnings of the new reading that the old one did not
+// have. Claude Code reads its instruction files again after a summary;
+// without this an edit, a file /init wrote or a rule taken out never
+// reached a running session, and a summary gave back the copy read at
+// the start (the instruction-files review of 2026-11-20).
+func (s *Set) Reload(ctx context.Context) ([]Warning, error) {
+	n, err := Load(ctx, s.o)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var fresh []Warning
+	for _, w := range n.warnings {
+		if !s.warned[w] {
+			fresh = append(fresh, w)
+		}
+	}
+	s.files, s.warnings, s.warned = n.files, n.warnings, n.warned
+	s.loaded, s.approved = n.loaded, n.approved
+	s.rules, s.ruleAt, s.walked = n.rules, n.ruleAt, n.walked
+	s.stamps, s.fallback = n.stamps, n.fallback
+	return fresh, nil
 }
 
 // Changed returns the paths that are no longer as they were when the loader
