@@ -50,6 +50,10 @@ type printer struct {
 	inv     cli.Invocation
 	format  string
 	verbose bool
+	// retrySaid is the failure whose retries standard error was last told
+	// of: the next tries of the same failure go unsaid without --verbose
+	// (a model server down said the same paragraph every 15 seconds).
+	retrySaid string
 	// live says standard output is a terminal, where a person watches the
 	// words arrive. safe is what of the reply may be written there: its
 	// styles, and no other escape sequence (text.SafeStream).
@@ -553,7 +557,14 @@ func (f *printer) Event(ev any) {
 			f.inMessage = false
 			f.partialEnd(core.StopCancelled, core.Usage{})
 		}
-		f.stderr("%s", ev.Message)
+		// Said once a failure, as its tries go on (each in stream-json's
+		// api_retry lines, and on standard error with --verbose); said
+		// again when it is another, or after the model answered.
+		said := fmt.Sprintf("%s/%s/%s/%d", ev.Agent, ev.Purpose, ev.Kind, ev.Status)
+		if f.verbose || ev.Attempt <= 1 || ev.FellBack != "" || said != f.retrySaid {
+			f.stderr("%s", ev.Message)
+		}
+		f.retrySaid = said
 		f.line(retryLine{Type: "system", Subtype: "api_retry", UUID: newUUID(), SessionID: f.sessionID(),
 			Attempt: ev.Attempt, RetryDelayMS: ev.Wait.Milliseconds(), ErrorStatus: statusOrNil(ev.Status), Error: string(ev.Kind)})
 	case *agent.ToolEndEvent:

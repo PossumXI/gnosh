@@ -32,3 +32,30 @@ func TestSubAgentRetryKeepsTheMainReply(t *testing.T) {
 		t.Errorf("printed %q", got)
 	}
 }
+
+// A failure's tries are said once on standard error, without --verbose:
+// a model server that is down said the same paragraph every 15 seconds.
+// Another failure is said, and so is the same one after the model
+// answered (its count starts again); with --verbose every try is said.
+func TestRetriesSaidOnce(t *testing.T) {
+	for _, verbose := range []bool{false, true} {
+		var errs bytes.Buffer
+		f := newPrinter(newProgram(Options{Stdout: &bytes.Buffer{}, Stderr: &errs}), cli.Invocation{OutputFormat: cli.FormatText, Verbose: verbose})
+		down := func(n int) *agent.RetryEvent {
+			return &agent.RetryEvent{Purpose: "main", Attempt: n, Kind: "network", Message: "the server could not be reached (try " + string(rune('0'+n)) + ")"}
+		}
+		f.Event(down(1))
+		f.Event(down(2))
+		f.Event(down(3))
+		f.Event(&agent.RetryEvent{Purpose: "main", Attempt: 4, Kind: "overloaded", Status: 503, Message: "the server is busy"})
+		f.Event(down(1))
+		got := strings.Count(errs.String(), "could not be reached")
+		want := 2
+		if verbose {
+			want = 4
+		}
+		if got != want || !strings.Contains(errs.String(), "the server is busy") {
+			t.Errorf("verbose %v: said %d times, want %d:\n%s", verbose, got, want, errs.String())
+		}
+	}
+}
