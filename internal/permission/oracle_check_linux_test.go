@@ -1241,6 +1241,12 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 			}
 		}
 		switch name {
+		case ":":
+			// The trace reader leaves every ":" out (parseTrace: what
+			// stands after it may be another stage's lines), so it is not
+			// looked for. (Oracle seed 171: ": #${X:=x}; cat *", a ":"
+			// with a comment, as the engine read it.)
+			continue
 		case "[[":
 			// bash refuses a test it cannot make sense of, and runs
 			// nothing.
