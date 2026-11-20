@@ -21,7 +21,17 @@ func isInit() bool { return os.Getpid() == 1 }
 // bubblewrap has one: what is left to it is reaped, and when the program
 // ends it ends, which ends whatever is left (DECISIONS 372).
 func runChild(path string, argv []string) int {
-	signal.Notify(make(chan os.Signal, 1), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT)
+	// (One the process was started ignoring stays ignored, as the program
+	// is given it: taken here, it would come back to the program as the
+	// default, and end a command run under nohup at SIGHUP. The review of
+	// 2026-11-20.)
+	var take []os.Signal
+	for _, s := range []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT} {
+		if !signal.Ignored(s) {
+			take = append(take, s)
+		}
+	}
+	signal.Notify(make(chan os.Signal, 1), take...)
 	p, err := os.StartProcess(path, argv, &os.ProcAttr{Env: os.Environ(), Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gnosh: %s: %v\n", argv[0], err)

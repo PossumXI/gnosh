@@ -354,6 +354,43 @@ func TestSideQuestionWhileACallRuns(t *testing.T) {
 	}
 }
 
+// So too while the call waits on the gate, shown and not yet run: it is
+// not interrupted (seen under load: the call joined the running ones only
+// once the gate let it, and a side question asked between was told it was
+// interrupted).
+func TestSideQuestionWhileACallWaitsOnTheGate(t *testing.T) {
+	asked, release := make(chan struct{}), make(chan struct{})
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{tool("Bash", func(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+			return core.TextResult("done at last"), nil
+		})}
+		o.Gate = GateFunc(func(ctx context.Context, req GateRequest) (Decision, error) {
+			close(asked)
+			<-release
+			return Decision{Allow: true}, nil
+		})
+	})
+	r.model.push(use(tc("c1", "Bash", `{"command":"sleep 9"}`)))
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("run the slow thing") }()
+	<-asked
+	r.model.push(say("It waits for you."), say("All done."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "btw", Session: true, Prompt: "what is it doing?"})
+	if err != nil || res.Text != "It waits for you." {
+		t.Fatalf("result = %+v, err = %v", res, err)
+	}
+	reqs := r.model.requests()
+	side := reqs[len(reqs)-1]
+	last := side.Messages[len(side.Messages)-1]
+	if len(last.Blocks) != 2 || !strings.Contains(core.TextOf(last.Blocks[0].Content), "Still running: nobody interrupted this call") {
+		t.Errorf("the side question's last message: %+v", last)
+	}
+	close(release)
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("turn = %+v", res)
+	}
+}
+
 // A side request that gives way (Yield) is stopped when the session's own
 // next request wants the model, so a turn never waits behind it; one that
 // does not give way is waited for.

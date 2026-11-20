@@ -5678,3 +5678,33 @@ or kept with the reason said (27).
     a typed skill). Those never run come first, the costliest first, each
     with /skills <name> off (or name-only); then the rest, the most run
     first; and how many tokens the never-run ones take.
+
+378. **What the review of today's memory, sandbox and permission work
+    found is closed.** A read-only review of 456d17f, 536e8cb and
+    702f7f8 found no High hole in them, and one Medium in older code: the
+    resolver the permission engine is given (app resolvePath) tidied a
+    link's target as text, so "a/../hooks/pre-commit", with a a link to
+    .git/info, was taken to land beside the link, where the system writes
+    .git/hooks/pre-commit: a repository could have cp write a git hook,
+    unasked in acceptEdits, on a machine whose sandbox is off. It now walks
+    the target piece by piece from where the link is, as the file tools
+    already did (fstools.FollowLinks), and such a cp asks. The Lows: a
+    MEMORY.md could close the block it is given in with </AGENT-MEMORY> or
+    < /agent-memory (now any letter case and blanks are broken);
+    /fewer-permission-prompts counted calls the person had refused (now
+    only calls that ran count), and a number with no list shown in the
+    session was worked out again behind the person's back (now it asks for
+    the list first, or the rule's words with /permissions allow); the rules
+    it keeps are said with their invisible characters made visible; the
+    session store's folder is read as a folder, not a pattern. The sandbox's
+    first process takes over only the signals it was not started ignoring
+    (a command run under nohup kept SIGHUP ignored before). Read, Write
+    and Edit given to a kind of agent for its memory, where its tools list
+    leaves them out, now work on files in its memory folder only, links
+    followed, as Claude Code's docs do not forbid and a kind listed as only
+    reading would otherwise change the project, unasked in acceptEdits.
+    And, seen while testing these under load: a call is shown before the
+    gate is asked about it and joins the running ones only after, so a
+    side question asked between was told it was interrupted; the calls of
+    the round under way are now taken as still running until their end is
+    told.

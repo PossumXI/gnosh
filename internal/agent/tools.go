@@ -136,6 +136,19 @@ func (a *Agent) runTools(ctx context.Context, t *turn, rep *reply) roundOutcome 
 		}
 		r.calls = append(r.calls, c)
 	}
+	a.mu.Lock()
+	a.unfinished = map[string]bool{}
+	for _, c := range r.calls {
+		if !c.done {
+			a.unfinished[c.call.ID] = true
+		}
+	}
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.unfinished = nil
+		a.mu.Unlock()
+	}()
 
 	a.setPhase(PhaseTools, "running tool calls")
 	for i := 0; i < len(r.calls); {
@@ -885,6 +898,9 @@ func (r *round) record(c *callState) {
 			r.haltNow(why, c.call.Name)
 		}
 	}
+	a.mu.Lock()
+	delete(a.unfinished, c.call.ID)
+	a.mu.Unlock()
 	a.emit(&ToolEndEvent{
 		CallID: c.call.ID, Name: c.call.Name, Input: c.input, Result: c.res, Duration: c.dur,
 		Denied: c.denied, Unattended: c.unattended, Interrupted: c.interrupted, Ran: c.ran,

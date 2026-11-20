@@ -287,9 +287,14 @@ type Agent struct {
 	beforeAsk State
 	state     State
 	running   []RunningCall
-	totals    Totals
-	cachePrev cachePrint // the last main request, for Totals.Cache
-	context   ContextStatus
+	// unfinished are the calls of the round under way whose end has not
+	// been told yet: begun, asked about or running. A side question takes
+	// them as still running (side.go): a call is shown before the gate is
+	// asked about it, and only joins running after.
+	unfinished map[string]bool
+	totals     Totals
+	cachePrev  cachePrint // the last main request, for Totals.Cache
+	context    ContextStatus
 	// roomTaken is the room the calls of the round running now have
 	// taken (TakeRoom), and roomRound counts the rounds, so that what is
 	// given back late goes to the round it came from.

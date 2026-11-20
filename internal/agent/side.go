@@ -401,6 +401,11 @@ func (a *Agent) asideRequest(sr SideRequest, m Model) (*core.Request, error) {
 	for _, rc := range a.running {
 		running[rc.CallID] = true
 	}
+	// (And one shown and not yet run, which the gate is asked about: a
+	// side question asked then was told it was interrupted.)
+	for id := range a.unfinished {
+		running[id] = true
+	}
 	a.mu.Unlock()
 	for i := range msgs {
 		if msgs[i].Role != core.RoleUser || len(running) == 0 {
