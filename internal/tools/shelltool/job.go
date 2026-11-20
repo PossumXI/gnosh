@@ -217,7 +217,7 @@ func (j *job) launch(dir, name string) error {
 			}
 			script, arg = fileWrapper, j.cmdFile
 		}
-		cmd = exec.Command(m.shell, "-c", script, filepath.Base(m.shell), j.cwdFile, arg, m.opt.EnvFile)
+		cmd = exec.Command(m.shell, "-c", oomFirst+script, filepath.Base(m.shell), j.cwdFile, arg, m.opt.EnvFile)
 		cmd.Stdout, cmd.Stderr = w, w
 	} else {
 		// The command's own two streams are joined on the other machine

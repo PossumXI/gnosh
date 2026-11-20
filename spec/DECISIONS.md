@@ -4589,3 +4589,17 @@ or kept with the reason said (27).
     and the call says it was not started; a call whose turn was stopped
     while it was made starts nothing either. TaskStop of one id is not
     counted: a sub-agent not yet started has no task to stop.
+
+321. **On Linux a command is the first the kernel kills when memory runs
+    out.** The model's commands ran with the score gnosh had, so a runaway
+    build, a test that ate memory or a copy into a /tmp held in RAM could
+    have the kernel kill the model's server on the same machine, gnosh, or
+    the person's other work; the AI boxes lost llama-server and the user
+    managers that way (2026-10). Claude Code caps its commands' memory
+    with a cgroup when CLAUDE_CODE_TOOL_MEMORY_LIMIT says so; that needs a
+    cgroup the user may write, which a terminal over ssh seldom has. Every
+    command of the shell tool (Bash, Monitor, the person's own lines and
+    gnosh's helper commands) now starts with its shell setting its own
+    oom_score_adj to 1000, which needs no privilege and which everything
+    it starts inherits. gnosh's own score is untouched. A memory cap of
+    Claude Code's kind is left for when a box offers a writable cgroup.
