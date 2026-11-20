@@ -248,6 +248,9 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 		if n := m.sandboxHint(a, e, body); n != "" {
 			notes = append(notes, n)
 		}
+		if e.sandboxNote != "" {
+			notes = append(notes, e.sandboxNote)
+		}
 	}
 	notes = append(notes, far.notes...)
 	if len(e.alive) > 0 {

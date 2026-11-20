@@ -164,6 +164,9 @@ func (l *live) settingsChanged(ctx context.Context, info agent.RequestInfo) ([]a
 	if !changed || len(pending) == 0 {
 		return nil, nil
 	}
+	if pending = l.sandboxHeldSettings(pending); len(pending) == 0 {
+		return nil, nil
+	}
 	names := make([]string, len(pending))
 	for i, p := range pending {
 		names[i] = l.tilde(p)
@@ -300,4 +303,43 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 	l.flog.logf("settings", "%s changed: %s in force", which, strings.Join(done, " and "))
 	l.notice(agent.LevelInfo, "settings", fmt.Sprintf("%s changed: %s are in force now; the rest of what it says (hooks, env, options, the model) takes effect in a new session.", which, strings.Join(done, " and ")))
 	return parts
+}
+
+// sandboxHeldSettings leaves out of the changes to take in the project's
+// own settings files while the sandbox is on: a command in it may write
+// in the project's folder, and one that wrote a settings file there (one
+// that was not there to keep read-only) would have given itself rules
+// for the next call, asking out of the sandbox among them (the sandbox
+// review). They are read when the session starts again, and the person is
+// told so, once for each change. The person's own files go on as before.
+func (l *live) sandboxHeldSettings(pending []string) []string {
+	if l.st == nil || !l.st.sandboxOf(l.cfg).on {
+		return pending
+	}
+	project := []string{l.cfg.Paths.LocalSettings}
+	if p := filepath.Join(l.st.inputs.Cwd, "gnosh.json"); p != l.cfg.Paths.UserSettings {
+		project = append(project, p)
+	}
+	var keep, held []string
+	for _, p := range pending {
+		if slices.Contains(project, p) {
+			held = append(held, p)
+		} else {
+			keep = append(keep, p)
+		}
+	}
+	if len(held) > 0 {
+		w := &l.settings
+		w.mu.Lock()
+		for _, p := range held {
+			w.accepted[p] = w.stamps[p]
+		}
+		w.mu.Unlock()
+		names := make([]string, len(held))
+		for i, p := range held {
+			names[i] = l.tilde(p)
+		}
+		l.notice(agent.LevelWarning, "settings", fmt.Sprintf("%s changed during the session. With the sandbox on, a command in it could have written it, so it is not taken in now: it is read when the session starts again (/restart).", strings.Join(names, " and ")))
+	}
+	return keep
 }

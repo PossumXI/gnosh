@@ -5261,3 +5261,33 @@ or kept with the reason said (27).
     Left for the second part: whole folders for the guarded paths, a
     guarded path that does not exist yet, and git's other ways to its
     settings and hooks.
+
+358. **The sandbox, after its review (second part).** What the sandbox
+    keeps read-only is mounted as whole folders where it can be: gnosh's
+    .gnosh and Claude Code's .claude (settings, skills, kinds of agent,
+    commands, rules, hooks), .vscode, .idea, .ssh; a folder mounted so
+    cannot be renamed away and made again, as a file mounted inside it
+    could (mv .gnosh .g; mkdir .gnosh). git's own: a repository's hooks,
+    config, commondir, config.worktree and modules, any of which would
+    have git run something outside the sandbox the next time the person
+    runs git (core.fsmonitor in a config commondir leads to); in a work
+    tree, its .git file, and the repository's git folder made the
+    command's to write in, so that a commit works in the sandbox, with
+    those paths in it read-only; a folder that is a bare repository's
+    keeps its HEAD, config and hooks read-only, and a top-level config
+    file is read-only even with no HEAD. What bubblewrap cannot keep from
+    being made, where nothing was there to mount (Claude Code's .claude,
+    gnosh.json, .mcp.json, .lsp.json, a top-level HEAD, .git/commondir,
+    .git/config.worktree), is taken away after the sandboxed command that
+    made it, and the result says so, for the model (gnosh's own .gnosh,
+    which gnosh itself makes, is not among them). And with the sandbox
+    on, the project's own settings files (gnosh.json, the local one) that
+    change while the session runs are not taken in: a command in the
+    sandbox could have written one with rules for the next call, asking
+    out of the sandbox among them; the person is told, and they are read
+    at the next start. The Read and Edit rules' paths go into the
+    sandbox's lists as Claude Code adds them (Read deny: not to be read;
+    Edit deny: read-only; Edit allow: writable), those written out in
+    full or with a last /**. Left: a nested repository's or a submodule's
+    working copy's own .git, and the person's git settings outside the
+    session's folders, which are read-only to a sandboxed command anyway.

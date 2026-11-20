@@ -91,6 +91,9 @@ type ending struct {
 	swept    bool           // what the command left behind was stopped at once instead of being left running
 	unread   bool           // the last of the output had not been read when the command's end was recorded
 	finalDir string         // the directory the shell said it ended in, or empty
+	// sandboxNote says what the sandbox took away that the command made
+	// (Options.Sandbox.After), or is empty.
+	sandboxNote string
 }
 
 // failed reports whether the command counts as having failed.
@@ -132,6 +135,8 @@ type job struct {
 	// the command's own variables.
 	sandboxed  bool
 	sandboxEnv []string
+	// sandboxWas is what Options.Sandbox.Before returned for the command.
+	sandboxWas any
 	roots      []string // the session's folders, for the sandbox
 
 	sink atomic.Pointer[progressSink] // where live output goes while a call is listening
@@ -507,6 +512,9 @@ func (j *job) finish(why endReason, limit time.Duration) {
 		}
 	}
 	e.finalDir = j.finalDir()
+	if sb := m.opt.Sandbox; j.sandboxed && sb != nil && sb.After != nil {
+		e.sandboxNote = sb.After(j.sandboxWas)
+	}
 	if j.cmdFile != "" {
 		os.Remove(j.cmdFile)
 	}
@@ -766,5 +774,8 @@ func (j *job) sandbox(argv []string) ([]string, error) {
 		return nil, refusal("The command was not run: it would run in the sandbox, and the sandbox cannot start (" + err.Error() + ").")
 	}
 	j.sandboxEnv = env
+	if b := j.m.opt.Sandbox.Before; b != nil {
+		j.sandboxWas = b(j.roots)
+	}
 	return wrapped, nil
 }

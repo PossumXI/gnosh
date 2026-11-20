@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -110,6 +111,8 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 		Outside:     sandboxOutside(sc),
 		Unsandboxed: sc.AllowUnsandboxed,
 		Writes:      writes,
+		Before:      sandboxBefore,
+		After:       sandboxAfter,
 	}
 }
 
@@ -127,6 +130,9 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 		for _, name := range sandboxGuarded {
 			p.ReadOnly = append(p.ReadOnly, filepath.Join(root, name))
 		}
+		writes, guards := gitGuards(root)
+		p.Write = append(p.Write, writes...)
+		p.ReadOnly = append(p.ReadOnly, guards...)
 	}
 	// gnosh's own folders (its settings, its state, its sessions): but one
 	// that holds one of the session's folders (a work tree gnosh made
@@ -151,18 +157,120 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 
 // sandboxGuarded are the paths in each of the session's folders that a
 // sandboxed command may not change, since something runs or obeys them
-// outside the sandbox later, as Claude Code's sandbox keeps its own: the
-// settings, skills, kinds of agent, commands, rules and hooks of gnosh and
-// Claude Code, the MCP and language servers' files; the files a shell, git,
-// direnv or an editor reads as it starts there (the folder may be the
-// person's home); a repository's hooks and git settings. Only what is
-// there is kept so on Linux: bubblewrap mounts what exists.
+// outside the sandbox later, as Claude Code's sandbox keeps its own:
+// gnosh's and Claude Code's folders whole (settings, skills, kinds of
+// agent, commands, rules, hooks: a folder mounted read-only cannot be
+// renamed away and made again, as a file inside one could), the MCP and
+// language servers' files; the files a shell, git, direnv or an editor
+// reads as it starts there (the folder may be the person's home). Only
+// what is there is kept so on Linux, where bubblewrap mounts what exists:
+// what a command makes of these is taken away after it (sandboxMade).
+// git's own are gitGuards'.
 var sandboxGuarded = []string{
-	"gnosh.json", ".gnosh/settings.json", ".gnosh/settings.local.json", ".gnosh/skills", ".gnosh/agents", ".gnosh/commands", ".gnosh/rules", ".gnosh/hooks",
-	".claude/settings.json", ".claude/settings.local.json", ".claude/skills", ".claude/agents", ".claude/commands", ".claude/rules", ".claude/hooks",
-	".claude/workflows", ".claude/scheduled_tasks.json", ".mcp.json", ".lsp.json",
+	"gnosh.json", ".gnosh", ".claude", ".mcp.json", ".lsp.json",
 	".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig", ".envrc",
-	".vscode", ".idea", ".ssh", ".config/gnosh", ".git/hooks", ".git/config",
+	".vscode", ".idea", ".ssh", ".config/gnosh",
+}
+
+// sandboxMade are the paths in each of the session's folders that a
+// sandboxed command may not make where they were not there before it,
+// and are taken away after it if it did: gnosh's and Claude Code's
+// settings and folders (gnosh's own .gnosh, which gnosh itself makes, is
+// not among them), a top-level HEAD (which would make the folder a bare
+// repository whose config git then obeys), and git's way to settings
+// kept elsewhere.
+var sandboxMade = []string{"gnosh.json", ".claude", ".mcp.json", ".lsp.json", "HEAD", ".git/commondir", ".git/config.worktree"}
+
+// gitGuards are the git paths a command in root may not change (hooks,
+// settings, the ways to settings kept elsewhere, the submodules'), and
+// the git folders it must write in for git to work in a work tree of
+// another repository: the work tree's own, and the repository's, its
+// hooks and settings kept read-only. A folder that is a bare repository's
+// keeps its HEAD, config and hooks read-only too (the sandbox review).
+func gitGuards(root string) (writes, guards []string) {
+	names := []string{"hooks", "config", "commondir", "config.worktree", "modules"}
+	if info, err := os.Lstat(filepath.Join(root, "HEAD")); err == nil && !info.IsDir() {
+		for _, n := range []string{"HEAD", "config", "hooks"} {
+			guards = append(guards, filepath.Join(root, n))
+		}
+	} else if info, err := os.Lstat(filepath.Join(root, "config")); err == nil && info.Mode().IsRegular() {
+		guards = append(guards, filepath.Join(root, "config"))
+	}
+	dotgit := filepath.Join(root, ".git")
+	info, err := os.Lstat(dotgit)
+	switch {
+	case err != nil:
+		return writes, guards
+	case info.IsDir():
+		for _, n := range names {
+			guards = append(guards, filepath.Join(dotgit, n))
+		}
+		return writes, guards
+	}
+	// A work tree: .git is a file that names its git folder.
+	guards = append(guards, dotgit)
+	data, err := os.ReadFile(dotgit)
+	if err != nil {
+		return writes, guards
+	}
+	gd, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
+	if !ok {
+		return writes, guards
+	}
+	gd = strings.TrimSpace(gd)
+	if !filepath.IsAbs(gd) {
+		gd = filepath.Join(root, gd)
+	}
+	gd = filepath.Clean(gd)
+	common := gd
+	if c, err := os.ReadFile(filepath.Join(gd, "commondir")); err == nil {
+		cd := strings.TrimSpace(string(c))
+		if !filepath.IsAbs(cd) {
+			cd = filepath.Join(gd, cd)
+		}
+		common = filepath.Clean(cd)
+	}
+	writes = append(writes, gd, common)
+	for _, n := range names {
+		guards = append(guards, filepath.Join(common, n))
+	}
+	guards = append(guards, filepath.Join(gd, "config.worktree"), filepath.Join(gd, "commondir"), filepath.Join(gd, "gitdir"))
+	return writes, guards
+}
+
+// sandboxBefore notes which of sandboxMade are in the session's folders as
+// a sandboxed command starts.
+func sandboxBefore(roots []string) any {
+	was := map[string]bool{}
+	for _, root := range roots {
+		for _, name := range sandboxMade {
+			p := filepath.Join(root, name)
+			_, err := os.Lstat(p)
+			was[p] = err == nil
+		}
+	}
+	return was
+}
+
+// sandboxAfter takes away what the command made of sandboxMade, and says
+// so; nothing when it made none.
+func sandboxAfter(state any) string {
+	was, _ := state.(map[string]bool)
+	var gone []string
+	for _, p := range slices.Sorted(maps.Keys(was)) {
+		if was[p] {
+			continue
+		}
+		if _, err := os.Lstat(p); err == nil {
+			if os.RemoveAll(p) == nil {
+				gone = append(gone, p)
+			}
+		}
+	}
+	if len(gone) == 0 {
+		return ""
+	}
+	return "the sandbox took away what the command made of gnosh's, Claude Code's or git's settings, which would have been obeyed outside it: " + strings.Join(gone, ", ")
 }
 
 // excludedCall reports whether excludedCommands takes a command out of the

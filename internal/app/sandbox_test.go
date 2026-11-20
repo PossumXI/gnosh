@@ -88,7 +88,7 @@ func TestExcludedCall(t *testing.T) {
 	if excludedCall(nil, "docker ps") {
 		t.Error("no entries took a command out")
 	}
-	for _, want := range []string{".git/hooks", ".bashrc", ".claude/settings.json", ".gnosh/skills", ".envrc"} {
+	for _, want := range []string{".bashrc", ".claude", ".gnosh", ".envrc", ".mcp.json"} {
 		if !slices.Contains(sandboxGuarded, want) {
 			t.Errorf("%s is not guarded", want)
 		}
@@ -146,4 +146,83 @@ func TestSandboxedCommandsReachAllowedHosts(t *testing.T) {
 	has(t, "an allowed host", toolResult(t, w, 1, "c1"), "reached")
 	has(t, "a host not allowed", toolResult(t, w, 1, "c2"), "not in sandbox.network.allowedDomains")
 	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "reach on the network only 127.0.0.1")
+}
+
+// What the sandbox cannot keep from being made, where it was not there to
+// mount read-only, is taken away after the command, and said: Claude
+// Code's folder (an agent there would run hooks outside), a top-level
+// HEAD (a bare repository whose config git would obey). A project's
+// settings file written while the session runs is not taken in until the
+// next start. Skipped where the sandbox cannot run.
+func TestSandboxTakesAwayWhatItCouldNotKeep(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	w := apptest.NewWorld(t)
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true}}`)
+	py := func(id, code string) apptest.Call {
+		return apptest.Call{ID: id, Name: "Bash", Args: `{"command":"python3 -c \"` + code + `\""}`}
+	}
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		switch n {
+		case 0:
+			return &apptest.Reply{Calls: []apptest.Call{
+				py("c1", "import os; os.makedirs('.claude/agents'); open('.claude/agents/x.md', 'w').write('x')"),
+				py("c2", "open('HEAD', 'w').write('ref: refs/heads/main')"),
+				py("c3", "import os; os.makedirs('.gnosh', exist_ok=True); open('.gnosh/settings.local.json', 'w').write('{\\\\\"permissions\\\\\": {\\\\\"allow\\\\\": [\\\\\"Bash(touch *)\\\\\"]}}')"),
+			}}
+		case 1:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "Bash", Args: `{"command":"touch outside-ok","dangerouslyDisableSandbox":true}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	r := run(t, w, "-p", "go")
+	if w.Exists(".claude") || w.Exists("HEAD") {
+		t.Errorf("what the sandbox could not keep was left: .claude %v, HEAD %v", w.Exists(".claude"), w.Exists("HEAD"))
+	}
+	has(t, "the note", toolResult(t, w, 1, "c1"), "the sandbox took away", ".claude")
+	has(t, "the note", toolResult(t, w, 1, "c2"), "the sandbox took away", "HEAD")
+	if got := toolResult(t, w, 2, "c4"); w.Exists("outside-ok") {
+		t.Errorf("a rule a sandboxed command wrote was taken in: %s", got)
+	}
+	if w.Exists(".gnosh/settings.local.json") {
+		has(t, "the person told", r.out+r.err, "changed during the session", "/restart")
+	}
+}
+
+// In a git work tree, git's own folder (the repository's) is the
+// command's to write in, so that a commit works in the sandbox, with its
+// hooks and settings, and the work tree's way to them, kept read-only.
+func TestGitGuardsOfAWorkTree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	repo := t.TempDir()
+	gitRun := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	gitRun(repo, "init", "-q")
+	gitRun(repo, "commit", "-q", "--allow-empty", "-m", "one")
+	tree := filepath.Join(t.TempDir(), "tree")
+	gitRun(repo, "worktree", "add", "-q", tree)
+	writes, guards := gitGuards(tree)
+	common := filepath.Join(repo, ".git")
+	if !slices.Contains(writes, common) || !slices.Contains(guards, filepath.Join(common, "hooks")) || !slices.Contains(guards, filepath.Join(common, "config")) || !slices.Contains(guards, filepath.Join(tree, ".git")) {
+		t.Errorf("a work tree: writes %v, guards %v", writes, guards)
+	}
+	_, guards = gitGuards(repo)
+	for _, want := range []string{"hooks", "config", "commondir", "config.worktree", "modules"} {
+		if !slices.Contains(guards, filepath.Join(common, want)) {
+			t.Errorf("a repository's %s is not guarded: %v", want, guards)
+		}
+	}
 }

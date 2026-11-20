@@ -319,6 +319,13 @@ type Sandbox struct {
 	// Hosts are the only hosts a sandboxed command may reach, through a
 	// proxy its HTTP_PROXY names; none, no network at all.
 	Hosts []string
+	// Before is called as a sandboxed command starts, for the session's
+	// folders, and After as it ends, with what Before returned: what the
+	// sandbox could not keep from being made (a path that was not there to
+	// mount read-only) is taken away there, and After says so, for the
+	// model. Either may be nil.
+	Before func(roots []string) any
+	After  func(state any) string
 }
 
 // network says what of the network a sandboxed command reaches, for the
