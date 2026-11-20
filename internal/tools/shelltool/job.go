@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/envscrub"
 	"github.com/gnosh-ai/gnosh/internal/sandbox"
 )
 
@@ -263,6 +264,9 @@ func (j *job) launch(dir, name string) error {
 	// The mark goes last, where the settings' own env cannot take it out;
 	// the sandbox's own places for temporary files and caches before it.
 	cmd.Env = commandEnv(m.opt.Environ(), j.dir, append(append(slices.Clip(m.opt.Env), j.sandboxEnv...), m.markEntry()))
+	if m.opt.Scrub {
+		cmd.Env = envscrub.Env(cmd.Env)
+	}
 	cmd.Stdin = nil // the null device
 	// A session of its own: the shell leads a new process group, which is
 	// what gets signalled, and has no terminal, so nothing in it can stop

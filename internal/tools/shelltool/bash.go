@@ -54,7 +54,7 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	if err != nil {
 		return core.ErrorResult(err.Error()), nil
 	}
-	if t.person {
+	if t.person && !m.opt.PersonSandboxed {
 		// The person's own command, typed with !, runs as they typed it,
 		// outside the sandbox, as Claude Code runs it.
 		a.sandboxed = false

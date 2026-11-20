@@ -278,7 +278,9 @@ func (l *live) connectMCP(s *mcpServer, gen int) {
 		// hook may answer.)
 		opt.OnElicit = l.mcpElicit(s)
 	}
-	client, err := mcpConnect(ctx, s.cfg, l.cfg.Paths.ProjectRoot, l.p.o.Environ, l.roots, opt)
+	// (The server's own env, from its settings, is laid over the scrubbed
+	// one: that is how the person hands it what it needs.)
+	client, err := mcpConnect(ctx, s.cfg, l.cfg.Paths.ProjectRoot, l.p.childEnviron(), l.roots, opt)
 	if _, ok := errNeedsAuth(err); ok && s.own != "" {
 		// (A sign-in is kept for the session's servers, by name: /mcp
 		// login cannot see a sub-agent's own.)

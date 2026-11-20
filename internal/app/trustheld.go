@@ -239,5 +239,5 @@ func (l *live) gitRunsProgramsAt(dir string) bool {
 // it was, a variable the person had taken away stayed in (the config review
 // of 2026-11-19).
 func (l *live) ownCommandEnv() []string {
-	return overlayEnv(l.p.o.Environ, l.cfg.CommandEnv())
+	return l.p.childEnv(overlayEnv(l.p.o.Environ, l.cfg.CommandEnv()))
 }

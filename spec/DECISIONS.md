@@ -5802,3 +5802,35 @@ or kept with the reason said (27).
     (-p) uses it for itself alone, as it keeps no choice. A value the
     state file holds that this gnosh cannot read is left out, and the
     review reports as its level asks.
+
+384. **CLAUDE_CODE_SUBPROCESS_ENV_SCRUB.** Claude Code, with this
+    variable set to 1, starts its subprocesses (commands, hooks, stdio MCP
+    servers) without the credentials it was started with, and keeps them
+    for its own requests; its docs give the rules by example. gnosh does
+    the same (internal/envscrub; 1, true, yes or on): the shell's
+    commands, a skill's !`commands`, hooks, stdio MCP servers (their own
+    env from their settings laid over the scrubbed one, as that is how
+    the person hands them what they need), LSP servers, the status line,
+    the file suggestion command, gnokey and gnosh's own git (a
+    repository's git hooks run under it) start from the environment
+    with no variable whose name says credential (TOKEN, SECRET, PASSWORD,
+    PASSWD, PASSPHRASE, APIKEY, CREDENTIAL(S), API_KEY, ACCESS_KEY,
+    PRIVATE_KEY, AUTH_KEY, a long value under a name ending in KEY) or
+    whose value has a credential's shape (a key a service hands out: sk-,
+    ghp_, glpat-, AKIA... with a digit in what follows; a private key; a
+    JSON web token; a URL with a password in it), and no
+    CLAUDE_CONFIG_DIR, GNOSH_CONFIG_DIR or GNOSH_DATA_DIR; the settings'
+    env block's included. Kept, as in Claude Code: GITHUB_TOKEN, GH_TOKEN
+    and their Enterprise names, the proxies (HTTP(S)_PROXY, ALL_PROXY,
+    NO_PROXY), GIT_CONFIG_COUNT and GIT_CONFIG_KEY_n/VALUE_n; a package
+    index's URL (*INDEX_URL, *_REGISTRY, *_INDEX) without the name and
+    password in it; and a file's path, which is where a credential is
+    kept, not the credential (GOOGLE_APPLICATION_CREDENTIALS,
+    PASSWORD_STORE_DIR). gnosh started again by gnosh (/restart, a work
+    tree, the background) keeps them. With the scrub on, the sandbox
+    takes back filesystem.disabled from every file, and on Linux every
+    command runs in it: the person's ! commands too, excludedCommands,
+    the model's asking out of it and allowNestedUserNamespaces taken
+    back; /sandbox says so. Not built yet: Claude Code's own PID
+    namespace for commands when the sandbox is off on Linux (gnosh's
+    sandbox gives commands one of their own), and CLAUDE_CODE_SCRIPT_CAPS.

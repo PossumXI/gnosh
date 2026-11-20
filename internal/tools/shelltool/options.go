@@ -26,6 +26,15 @@ type Options struct {
 	// variable; "NAME" alone removes it.
 	Env []string
 
+	// Scrub takes the credentials out of each command's environment as it
+	// is in the end, Env's among them (envscrub;
+	// CLAUDE_CODE_SUBPROCESS_ENV_SCRUB).
+	Scrub bool
+	// PersonSandboxed runs the person's own commands (PersonsBash) in the
+	// sandbox too, where they otherwise run outside it, as Claude Code
+	// runs them with the scrub on, on Linux.
+	PersonSandboxed bool
+
 	// EnvFile is a shell file that runs before each command on this
 	// machine, when it is there and not empty: where SessionStart hooks
 	// write the variables later commands are to have (Claude Code's

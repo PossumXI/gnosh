@@ -60,6 +60,7 @@ func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []con
 		shell := shelltool.New(shelltool.Options{
 			Environ: func() []string { return slices.Clone(p.o.Environ) },
 			Env:     cfg.CommandEnv(),
+			Scrub:   p.scrubbing(),
 			Now:     p.now,
 			Hosts:   shellHosts(cfg),
 			Local:   p.whoAndWhere(),

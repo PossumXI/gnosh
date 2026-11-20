@@ -671,7 +671,7 @@ func (st *startup) hookOptions(cfg *config.Config) hooks.Options {
 		ProjectDir: cfg.Paths.ProjectRoot,
 		StartDir:   cfg.Paths.Cwd,
 		Untrusted:  !st.trusted,
-		Environ:    func() []string { return overlayEnv(base, extra) },
+		Environ:    func() []string { return st.p.childEnv(overlayEnv(base, extra)) },
 		Now:        st.p.now,
 		ToolNames:  st.p.toolNames(),
 		Guards:     guards,

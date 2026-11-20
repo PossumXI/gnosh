@@ -5,9 +5,12 @@ import (
 	"maps"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/envscrub"
 )
 
 // The time limits of a model request when nothing sets them (LM-1, LM-2,
@@ -111,6 +114,9 @@ func (ld *loader) finish() *Config {
 	}
 	cfg.HTTPHookURLs, cfg.HTTPHookEnvVars = b.hookURLs.list(), b.hookEnvVars.list()
 	cfg.Sandbox = b.sandbox.finish()
+	if envscrub.On([]string{envscrub.Var + "=" + ld.env[envscrub.Var]}) {
+		cfg.Sandbox.scrub(runtime.GOOS)
+	}
 	if b.statusLine.Set {
 		switch {
 		case cfg.Switches.SafeMode.V:

@@ -70,6 +70,22 @@ type Sandbox struct {
 	// (bwrapPath), at BwrapOrigin.
 	Bwrap       string
 	BwrapOrigin Origin
+	// Scrubbed is CLAUDE_CODE_SUBPROCESS_ENV_SCRUB in force (envscrub),
+	// which takes back, as Claude Code does, filesystem.disabled from
+	// every file, and on Linux what lets a command out (excludedCommands,
+	// the model asking out of it, allowNestedUserNamespaces): there every
+	// command runs in it, the person's own ! commands too.
+	Scrubbed bool
+}
+
+// scrub takes back what the scrub takes back (Scrubbed), on goos.
+func (s *Sandbox) scrub(goos string) {
+	s.Scrubbed = true
+	delete(s.Loosened, "filesystem.disabled")
+	if goos == "linux" {
+		s.Excluded, s.AllowUnsandboxed = nil, false
+		delete(s.Loosened, "allowNestedUserNamespaces")
+	}
 }
 
 // Loosenings are the sandbox's switches that let its commands do more,

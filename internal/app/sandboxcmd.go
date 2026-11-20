@@ -80,10 +80,16 @@ func (l *live) sandboxReport() string {
 	} else {
 		b.WriteString("\nMode: regular permissions: each command asks as it would without the sandbox.")
 	}
-	if sc.AllowUnsandboxed {
+	switch {
+	case sc.Scrubbed && runtime.GOOS == "linux":
+		b.WriteString("\nCLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set: every command runs in it, yours typed with ! too, none excluded and none asked out of it; filesystem.disabled is not taken.")
+	case sc.AllowUnsandboxed:
 		b.WriteString("\nA command that failed because of it may be run again outside it (dangerouslyDisableSandbox), judged as any command is. /sandbox strict takes that away.")
-	} else {
+	default:
 		b.WriteString("\nStrict: the model cannot ask a command out of it. /sandbox loose gives that back.")
+	}
+	if sc.Scrubbed && runtime.GOOS != "linux" {
+		b.WriteString("\nCLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set: filesystem.disabled is not taken.")
 	}
 	roots := l.roots
 	p := l.sandboxPolicy(roots, "", nil)

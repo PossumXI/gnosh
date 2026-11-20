@@ -104,7 +104,7 @@ func (st *startup) enterTree(ctx context.Context, trusted bool) int {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	t, start, err := makeTree(ctx, p.o.Environ, st.folder, st.cfg.Paths.DataDir, name, named)
+	t, start, err := makeTree(ctx, p.childEnviron(), st.folder, st.cfg.Paths.DataDir, name, named)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -271,7 +271,7 @@ func (st *startup) leaveTree() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	env, out := st.p.o.Environ, st.p.stderr
+	env, out := st.p.childEnviron(), st.p.stderr
 	what, err := treeHolds(ctx, env, &t.worktree)
 	why := ""
 	switch {

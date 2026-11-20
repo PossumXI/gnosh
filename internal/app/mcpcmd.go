@@ -382,7 +382,7 @@ func (p *program) mcpCheck(ctx context.Context, c mcp.Config, root string, st *s
 	if c.Type == "http" {
 		opt.Auth = &mcp.Authorizer{Logins: st.mcpLogins(), Server: c.URL, HTTP: &http.Client{Timeout: 30 * time.Second}}
 	}
-	client, err := mcpConnect(ctx, c, root, p.o.Environ, []string{root}, opt)
+	client, err := mcpConnect(ctx, c, root, p.childEnviron(), []string{root}, opt)
 	if _, ok := errNeedsAuth(err); ok {
 		return "wants a sign-in: gnosh mcp login " + c.Name
 	}
@@ -439,7 +439,7 @@ func (p *program) mcpSignIn(ctx context.Context, inv cli.Invocation, places mcpP
 	www := ""
 	probe := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(p.o.BuildID, "devel"), StartTimeout: st.cfg.Limits.MCPTimeout.V}
 	pctx, cancel := context.WithTimeout(ctx, st.cfg.Limits.MCPTimeout.V)
-	client, err := mcpConnect(pctx, c, places.root, p.o.Environ, []string{places.root}, probe)
+	client, err := mcpConnect(pctx, c, places.root, p.childEnviron(), []string{places.root}, probe)
 	cancel()
 	if na, ok := errNeedsAuth(err); ok {
 		www = na.WWWAuthenticate

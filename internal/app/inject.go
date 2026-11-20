@@ -157,7 +157,7 @@ func (l *live) runInjected(command, dir string) (string, int, error) {
 	// (BASH_ENV, SHELLOPTS, PS4, exported functions) is left out. Appended
 	// to the whole environment, a taken-away variable stayed (the config
 	// review of 2026-11-19).
-	cmd.Env = shelltool.CommandEnv(l.p.o.Environ, dir, l.cfg.CommandEnv())
+	cmd.Env = l.p.childEnv(shelltool.CommandEnv(l.p.o.Environ, dir, l.cfg.CommandEnv()))
 	cmd.WaitDelay = 2 * time.Second
 	groupOf(cmd)
 	out := &injectOut{stop: cancel}

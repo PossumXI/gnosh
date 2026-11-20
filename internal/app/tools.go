@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -74,6 +75,8 @@ func (l *live) buildTools() error {
 	so := shelltool.Options{
 		Environ:             func() []string { return slices.Clone(l.p.o.Environ) },
 		Env:                 l.cfg.CommandEnv(),
+		Scrub:               l.p.scrubbing(),
+		PersonSandboxed:     l.cfg.Sandbox.Scrubbed && runtime.GOOS == "linux",
 		EnvFile:             l.envFile(),
 		SpoolDir:            l.spoolDir(),
 		Now:                 l.p.now,
