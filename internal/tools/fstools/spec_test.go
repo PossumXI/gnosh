@@ -147,7 +147,7 @@ func TestDefaults(t *testing.T) {
 		EditMaxBytes: 32 << 20, DiffMaxBytes: 10 << 20, EditContextLines: 3,
 		GlobMaxResults: 100,
 		GrepHeadLimit:  250, GrepMaxContext: 1000, GrepMaxOutputBytes: 40 << 10, GrepMaxColumns: 500, GrepMaxLineBytes: 1 << 20, GrepMaxMultilineBytes: 32 << 20,
-		SearchTimeout: 20 * time.Second, SearchWorkers: d.SearchWorkers, IgnoreFiles: []string{".gitignore"},
+		SearchTimeout: 20 * time.Second, SearchWorkers: d.SearchWorkers, IgnoreFiles: []string{".gitignore", ".ignore", ".rgignore"},
 	}
 	if !reflect.DeepEqual(d, want) {
 		t.Errorf("Defaults() =\n%+v\nwant\n%+v", d, want)

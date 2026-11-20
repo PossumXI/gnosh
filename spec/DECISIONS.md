@@ -4636,3 +4636,15 @@ or kept with the reason said (27).
     would pass over. An empty multiline match after the last line break is
     no match. Grep's description now says that \b \w \d \s know ASCII only
     (Go's RE2) and names \p{L} and \p{N} for other scripts.
+
+324. **Searches read .ignore and .rgignore, and know more file types.**
+    Claude Code's Grep is ripgrep, which reads .ignore and .rgignore
+    beside .gitignore, with more weight in that order; gnosh read
+    .gitignore alone (the search-tools review of 2026-11-20). The default
+    ignore files are now .gitignore, .ignore and .rgignore, in that
+    rising weight, so a .rgignore can let in what .gitignore leaves out.
+    Grep's types gain cuda, erb, gradle and ps (powershell), java gains
+    .jsp, .jspx and .properties, docker matches any name holding
+    Dockerfile (api.Dockerfile, Dockerfile.dev) and Containerfile.*, and
+    sass names css. .gitignore still holds outside a git repository,
+    where ripgrep would read it only when told to.

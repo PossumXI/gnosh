@@ -1034,3 +1034,44 @@ func FuzzContainsFold(f *testing.F) {
 		}
 	})
 }
+
+// .ignore and .rgignore are read as ripgrep reads them, with more weight
+// than .gitignore: what .gitignore leaves out, .rgignore can let in.
+func TestSearchesReadIgnoreAndRgignore(t *testing.T) {
+	f := newFixture(t, Options{})
+	f.file(".gitignore", "kept.txt\n")
+	f.file(".ignore", "dropped.txt\n")
+	f.file(".rgignore", "!kept.txt\n")
+	for _, name := range []string{"kept.txt", "dropped.txt", "plain.txt"} {
+		f.file(name, "needle\n")
+	}
+	got := f.ok(f.grep, in{"pattern": "needle"})
+	mustContain(t, got, f.path("kept.txt"), f.path("plain.txt"))
+	mustNotContain(t, got, f.path("dropped.txt"))
+	if paths, _ := f.globbed(in{"pattern": "*.txt"}); !reflect.DeepEqual(sorted(paths), []string{"kept.txt", "plain.txt"}) {
+		t.Errorf("Glob listed %v", paths)
+	}
+}
+
+// The types the search-tools review of 2026-11-20 found missing or short.
+func TestMoreFileTypes(t *testing.T) {
+	for _, c := range []struct {
+		typ, name string
+		want      bool
+	}{
+		{"docker", "api.Dockerfile", true}, {"docker", "Dockerfile.dev", true}, {"docker", "Dockerfile", true},
+		{"java", "index.jsp", true}, {"java", "app.properties", true},
+		{"gradle", "build.gradle.kts", true}, {"cuda", "kernel.cu", true}, {"erb", "page.html.erb", true},
+		{"ps", "setup.ps1", true}, {"powershell", "mod.psm1", true}, {"sass", "a.sass", true},
+		{"java", "Main.kt", false},
+	} {
+		typ, ok := lookupFileType(c.typ)
+		if !ok {
+			t.Errorf("no type %q", c.typ)
+			continue
+		}
+		if got := typ.matches(c.name); got != c.want {
+			t.Errorf("type %s on %s: %v, want %v", c.typ, c.name, got, c.want)
+		}
+	}
+}

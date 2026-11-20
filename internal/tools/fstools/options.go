@@ -155,8 +155,9 @@ type Options struct {
 	SearchWorkers int
 
 	// IgnoreFiles are the names of the ignore files Glob and Grep read in
-	// every directory, in rising order of weight. Default: .gitignore
-	// alone. An empty, non-nil list reads none.
+	// every directory, in rising order of weight. Default: .gitignore,
+	// .ignore and .rgignore, the files ripgrep reads, and so Claude Code's
+	// Grep, with that weight. An empty, non-nil list reads none.
 	IgnoreFiles []string
 
 	// NoGitExclude stops Glob and Grep reading a repository's
@@ -226,7 +227,7 @@ func (o Options) withDefaults() Options {
 		o.SearchWorkers = min(runtime.GOMAXPROCS(0), 8)
 	}
 	if o.IgnoreFiles == nil {
-		o.IgnoreFiles = []string{".gitignore"}
+		o.IgnoreFiles = []string{".gitignore", ".ignore", ".rgignore"}
 	}
 	return o
 }
