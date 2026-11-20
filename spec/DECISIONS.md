@@ -4533,3 +4533,16 @@ or kept with the reason said (27).
     text with a shell command. The smaller model is not asked. Within 15
     minutes the same file is given again unless it is gone. Content past
     the 10 MiB WebFetch reads is not saved: the result says to use curl.
+
+317. **The model is told when a connected MCP server's tools could not
+    be loaded.** A server that connected and then failed to list its
+    tools was told to the person alone (a notice, /mcp), and the model,
+    asked to use it, found no tools and could only guess why; Claude
+    Code 2.1.329 tells Claude. gnosh now hands the model a note, the
+    server's error cut at 300 characters inside gnosh's tag, when one of
+    the session's own servers connects and cannot list its tools. A
+    server that never connects, and a sub-agent's own server, stay the
+    person's to see, as before. The same pass checked 2.1.329's other
+    fixes against gnosh: questions in a window of 12 rows show every
+    choice by scrolling (box-ui-check short), --help is whole when
+    piped, and a resumed session never shows a cut-off call as refused.

@@ -35,6 +35,7 @@
 #	ssh ai-remote bash -s -- repo < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- trusttype < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- imports < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- short < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -186,6 +187,8 @@
 #   imports     the project's AGENTS.md brings in ~/shared/notes.md: the
 #               person is asked once whether to load files from outside the
 #               project, 1 (Yes) loads it, and the model answers from it
+#   short       a window of 12 rows by 70: the question about a command
+#               shows every choice, and 1 answers it
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -197,10 +200,13 @@ S=gnosh-uicheck-$scenario
 flags=""
 hooks=""
 opts=""
+cols=110
+rows=40
 base=http://127.0.0.1:8080
 case "$scenario" in
 basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype | rewindsum | rewindsumb | imports) ;;
 bgfail) flags="agents" ;;
+short) cols=70 rows=12 ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
@@ -226,7 +232,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports, short)" >&2
 	exit 2
 	;;
 esac
@@ -449,7 +455,7 @@ if [ "$scenario" = restart ]; then
 	bin=$T/bin/gnosh
 fi
 envs="env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8"
-tmux new-session -d -s "$S" -x 110 -y 40 "$envs $bin $flags"
+tmux new-session -d -s "$S" -x "$cols" -y "$rows" "$envs $bin $flags"
 if [ "$scenario" = trusttype ]; then
 	# Someone types their first prompt as gnosh starts, a key every tenth
 	# of a second: the trust question waits for a pause, and the 2 in it
@@ -506,6 +512,21 @@ agents)
 	echo "=== watching it: $(screen | grep -o '1-[0-9] answers[^·]*' | head -1)"
 	tmux send-keys -t "$S" 1
 	done_when() { [ -s "$T/work/out/asked.txt" ] && screen | grep -q "done [0-9]"; }
+	;;
+short)
+	# A window of 12 rows by 70: the question about a command shows what
+	# it asks and every choice, and the first answers it (Claude Code
+	# 2.1.329 fixed panels and questions cut off in short windows).
+	tmux send-keys -t "$S" "Run exactly this command with the Bash tool, and nothing else: touch made.txt" Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		tmux capture-pane -p -t "$S" | grep -q "1\. Yes, this once" && break
+	done
+	sleep 1
+	echo "=== the question in 12 rows ($i s)"
+	tmux capture-pane -p -t "$S"
+	tmux send-keys -t "$S" 1
+	done_when() { [ -e "$T/work/made.txt" ] && screen | grep -q "done in"; }
 	;;
 basic)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter

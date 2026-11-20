@@ -290,6 +290,16 @@ func (l *live) connectMCP(s *mcpServer, gen int) {
 	if err != nil {
 		_ = client.Close()
 		fail("it connected, and its tools could not be listed: " + err.Error())
+		l.mcp.mu.Lock()
+		current := s.gen == gen
+		l.mcp.mu.Unlock()
+		if current && s.own == "" {
+			// The model is told too, as Claude Code tells it (2.1.329): a
+			// server it is asked to use is there, and has no tools.
+			_ = l.agent.Tell(agent.Note{Source: "mcp", Text: prompt.Wrap(fmt.Sprintf(
+				"The MCP server %s connected, but its tools could not be loaded (%s), so none of them are offered in this session. The user sees its state, and can connect it again, with /mcp.",
+				s.cfg.Name, oneLine(err.Error(), 300)))})
+		}
 		return
 	}
 	made := l.mcpToolsOf(s, tools)

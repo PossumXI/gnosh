@@ -589,3 +589,43 @@ func TestMCPListPrintsPlainToATerminal(t *testing.T) {
 		t.Errorf("plainText: %q, want %q", got, want)
 	}
 }
+
+// A server that connects and then cannot list its tools: the model is told
+// it is there without them, as Claude Code tells it, besides the notice to
+// the person; one that does not connect at all is the person's to see.
+func TestMCPToolsThatCannotBeListedAreSaidToTheModel(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Noted."})
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		var m struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		rw.Header().Set("Content-Type", "application/json")
+		switch m.Method {
+		case "initialize":
+			fmt.Fprintf(rw, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"shelf","version":"1"},"capabilities":{"tools":{}}}}`, m.ID)
+		case "tools/list":
+			fmt.Fprintf(rw, `{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message":"the index of tools is torn"}}`, m.ID)
+		default:
+			rw.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {
+		"shelf": {"type": "http", "url": "`+srv.URL+`/mcp"},
+		"ghostsrv": {"command": "/no/such/server"}
+	}}`)
+	run(t, w, "-p", "what can the shelf do?").wantCode(t, 0)
+	reqs := w.Model.Requests()
+	if len(reqs) == 0 {
+		t.Fatal("the model was asked nothing")
+	}
+	body := string(reqs[0].Body)
+	if !strings.Contains(body, "The MCP server shelf connected, but its tools could not be loaded") || !strings.Contains(body, "the index of tools is torn") {
+		t.Errorf("the model was not told of shelf's tools: %s", body)
+	}
+	if strings.Contains(body, "ghostsrv") {
+		t.Errorf("the model was told of a server that never connected: %s", body)
+	}
+}
