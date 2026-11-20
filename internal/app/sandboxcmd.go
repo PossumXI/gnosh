@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -146,7 +147,14 @@ func (l *live) sandboxLooseText(sc config.Sandbox) string {
 		}
 	}
 	if s := listValues(sc.UnixSockets); len(s) > 0 {
-		loose = append(loose, "network.allowUnixSockets: "+l.shownList(s))
+		line := "network.allowUnixSockets: " + l.shownList(s)
+		if runtime.GOOS == "linux" {
+			// (The filter refuses every new Unix socket or none: no path
+			// is opened by name, as Claude Code's /sandbox says since
+			// 2.1.329.)
+			line += ", which open nothing here, as Linux's sandbox lets Unix sockets all or none (network.allowAllUnixSockets)"
+		}
+		loose = append(loose, line)
 	}
 	if m := listValues(sc.MachLookup); len(m) > 0 {
 		loose = append(loose, "network.allowMachLookup: "+strings.Join(m, ", "))

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -348,7 +349,7 @@ func TestSandboxFilesLeftOpen(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(outside) })
 	w := apptest.NewWorld(t)
 	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "filesystem": {"disabled": true},
-		"network": {"allowLocalBinding": true}, "ignoreViolations": {"*": ["/etc/hosts"]}}}`)
+		"network": {"allowLocalBinding": true, "allowUnixSockets": ["/run/user/1000/agent.sock"]}, "ignoreViolations": {"*": ["/etc/hosts"]}}}`)
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		// (Each run's first request: the call; after its result, done.)
 		if !strings.Contains(string(r.Body), `"role":"tool"`) {
@@ -368,6 +369,10 @@ func TestSandboxFilesLeftOpen(t *testing.T) {
 	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
 	has(t, "/sandbox", r.out, "Files: left open (filesystem.disabled", "they ask as any command does",
 		"Loosened: network.allowLocalBinding", "Not reported when stopped (ignoreViolations): /etc/hosts for every command", "Network: through gnosh's proxy")
+	if runtime.GOOS == "linux" {
+		// (As Claude Code's /sandbox says since 2.1.329.)
+		has(t, "/sandbox on Linux", r.out, "network.allowUnixSockets: /run/user/1000/agent.sock, which open nothing here")
+	}
 }
 
 // A WebFetch(domain:...) deny rule refuses its host to a sandboxed
