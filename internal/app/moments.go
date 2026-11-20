@@ -1007,6 +1007,7 @@ func (l *live) stopHooks(ctx context.Context, end agent.TurnEnd) (agent.Verdict,
 		Event:                hooks.Stop,
 		StopHookActive:       end.Streak > 0,
 		LastAssistantMessage: end.Text,
+		Extra:                l.stopLists(),
 	})
 	switch {
 	case err != nil:

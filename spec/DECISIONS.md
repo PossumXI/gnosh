@@ -4292,3 +4292,18 @@ or kept with the reason said (27).
     attends, or a run in the background, whose permission questions the
     agent view puts to a person. In a run started in plan mode, an
     edit's refusal asks for the plan in the answer, not of ExitPlanMode.
+
+299. **Stop hooks are told what may still wake the session.** As Claude
+    Code's Stop and SubagentStop input (its hooks reference, read
+    2026-11-20), gnosh's carries background_tasks and session_crons, so
+    a hook can tell a session that is done from one that waits on work:
+    each command running in the background (type "shell", or "monitor"
+    for a Monitor's, as Claude Code 2.1.329 has it) and each background
+    sub-agent ("subagent", with its agent_type), as id, type, status
+    "running", description and command; and each scheduled prompt (from
+    CronCreate or /loop, and the self-paced loop's next run, given the
+    schedule that matches its minute) as id, schedule, recurring and
+    prompt. Text is cut at 1,000 characters with "… [+N chars]". Both
+    lists are the session's, for a sub-agent's hook too, and are empty,
+    never left out, when nothing runs or waits. /fork and /subtask runs,
+    which are programs of their own, are not listed.
