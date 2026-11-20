@@ -1613,10 +1613,17 @@ func TestBackgroundStartsInThePersonsWords(t *testing.T) {
 		Content: []core.Block{core.Text("The sub-agent is working in the background on: survey the tests. Its id is a7. Its report will come to you as a notice from gnosh when it ends; until then it is still running, so do not report what it found before that notice arrives.")},
 		Meta:    map[string]any{"status": "async_launched", "agentId": "a7", "agentType": "general-purpose"},
 	}, 0))
+	// A report shown without the id that ends it for the model.
+	fg := map[string]any{"description": "count the tests", "prompt": "Count them."}
+	g.ev(toolCall("c4", "Agent"), replyEnd(core.StopToolUse), toolStart("c4", "Agent", fg))
+	g.ev(toolEnd("c4", "Agent", fg, core.ToolResult{
+		Content: []core.Block{core.Text("There are 12 tests.\nAll of them pass.\n\n[agent id: a9]")},
+		Meta:    map[string]any{"status": "completed", "agentId": "a9"},
+	}, 0))
 	g.committedHas("its output goes to ~/.local/share/gnosh/x/bg1.out", "running in the background as bg1",
 		"watching as bg2", "its output goes to ~/.local/share/gnosh/x/bg2.out",
-		"Agent survey the tests · running in the background as a7").
-		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply", "do not report what it found")
+		"Agent survey the tests · running in the background as a7", "There are 12 tests.", "All of them pass.").
+		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply", "do not report what it found", "[agent id: a9]")
 }
 
 // EnterPlanMode and PushNotification say what came of them in the
