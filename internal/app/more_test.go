@@ -579,6 +579,28 @@ func TestCleanTitle(t *testing.T) {
 			t.Errorf("cleanTitle(%q) = %q, want %q", in, got, want)
 		}
 	}
+	// At most 200 characters, as Claude Code caps a name, counted as
+	// characters, not bytes.
+	if got := cleanTitle(strings.Repeat("é", 250)); got != strings.Repeat("é", 200) {
+		t.Errorf("a long name kept %d characters, want 200", len([]rune(got)))
+	}
+}
+
+// A name that is nothing once its invisible characters are taken out is
+// refused wherever a session is named, as Claude Code refuses it; a name
+// not given is no error.
+func TestInvisibleNameRefused(t *testing.T) {
+	if _, err := personsTitle("\u200b\u2060"); err == nil {
+		t.Errorf("an invisible name was taken")
+	}
+	if name, err := personsTitle("   "); err != nil || name != "" {
+		t.Errorf("no name given: %q, %v", name, err)
+	}
+	w := apptest.NewWorld(t)
+	r := run(t, w, "-p", "/rename \u200b\u200b")
+	has(t, "/rename of an invisible name", r.out+r.err, "that name is empty once its invisible characters are taken out")
+	r = run(t, w, "--name", "\u2060", "-p", "/status")
+	has(t, "--name of an invisible name", r.out+r.err, "--name: that name is empty")
 }
 
 // A PostToolUse hook's warning is said once: in the hook's own line with

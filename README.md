@@ -117,7 +117,19 @@ Built:
   trust service, unless those say so. A repository's loosening waits for
   the folder's trust. Paths the sandbox hides stay hidden: a credential
   is hidden last, whatever else opens it, and on macOS no folder holding
-  a hidden path can be renamed away.
+  a hidden path can be renamed away, no link on the way to a kept path
+  replaced, no volume mounted over one, no application's preferences
+  written, and no signal sent to a process outside the sandbox.
+- **Credentials kept from what gnosh starts:** Claude Code's
+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` starts the shell's commands,
+  hooks, MCP and LSP servers and the rest without the API keys, tokens
+  and passwords gnosh was started with (by their names or the shape of
+  their values; GitHub tokens, proxies and `GIT_CONFIG_*` stay, a
+  package index keeps its URL without the password), keeps the sandbox
+  from being loosened, and on Linux runs every command with a /proc of
+  its own; `CLAUDE_CODE_SCRIPT_CAPS` caps how often a script may run in
+  a session, and `CLAUDE_CODE_MCP_ALLOWLIST_ENV` starts MCP servers from
+  a bare environment.
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,

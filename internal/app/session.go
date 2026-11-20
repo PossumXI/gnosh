@@ -694,6 +694,10 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 // command line names, or a copy of it.
 func (l *live) openTranscript(ctx context.Context) error {
 	inv, cwd := l.inv, l.cfg.Paths.Cwd
+	if _, err := personsTitle(inv.Name); err != nil {
+		// (Before a session is made, which would be left with no name.)
+		return fmt.Errorf("--name: %w. Nothing was started", err)
+	}
 	if l.reopen != "" {
 		// The session that was just closed, again (a rewind), another
 		// session of the folder (/resume), or the copy /branch made.
@@ -894,7 +898,7 @@ func (l *live) nameSession() error {
 	if l.inv.Name == "" || l.source == "clear" {
 		return nil
 	}
-	name := cleanTitle(l.inv.Name)
+	name, _ := personsTitle(l.inv.Name) // (refused before: openTranscript)
 	if name == "" {
 		return nil
 	}

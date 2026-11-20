@@ -5860,4 +5860,21 @@ or kept with the reason said (27).
     on, runs under bubblewrap with the files as they are and a /proc of
     its own (--dev-bind / / --unshare-pid --proc /proc): tried on the
     devbox, it sees five processes, not gnosh's. Where bubblewrap cannot
-    make one, the person is told.
+    make one, the person is told. On macOS another process's environment
+    is not readable (sysctl's KERN_PROCARGS2 gives its arguments alone,
+    inside the sandbox and out: tried), so the scrub needs no more there.
+    /status says the scrub is on.
+
+386. **A session's name: 200 characters, and none that is invisible.**
+    Claude Code, from every place a session is named, replaces control
+    and invisible characters with spaces, caps the name at 200
+    characters, and refuses a name that is empty once the invisible
+    characters are out ("That name is empty once..."). gnosh cleaned
+    names the same way but cut them at 120 bytes, and took an invisible
+    name for no name (/rename showed the old one, /clear cleared
+    unnamed, gnosh session rename wrote an empty name). Now a name the
+    person gives (/rename, /clear, /branch, gnosh session rename,
+    --name) keeps up to 200 characters, and one that is nothing once its
+    invisible characters are out is refused, saying so; --name is
+    refused before a session is made. The name gnosh makes of a first
+    prompt stays as short as lists show it (120 bytes, with an ellipsis).
