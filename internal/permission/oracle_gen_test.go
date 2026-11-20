@@ -1088,4 +1088,6 @@ var attackLines = []string{
 	// A wrapper's flag value that may come to nothing: the next word is the value, the command one further (seed 174).
 	"nice -n $echo 5 git push origin ma..in", "nice -n $X 5 rm -rf build", "nice --adjustment $X 5 git push origin main", "ionice -c $X 2 git push origin main",
 	"timeout -s $X KILL 5 git push origin main", "sudo -u $X root git push origin main", "env -u $X HOME git push origin main", "flock -w $X 5 /tmp/l git push origin main",
+	// A pattern copied into a folder lands under the names it matches, not there yet (seed 176).
+	"cp * build/", "cp ${HOME:+* x}'' build/", "mv *.txt build", "cp -t build ./*.txt", "ln -s ./* build/", "install *.md build/",
 }

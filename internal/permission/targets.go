@@ -316,10 +316,10 @@ func fillTargets(f *cmdFacts, args []word) {
 		f.writes = ops
 	case "mv":
 		// mv takes its sources away, and writes them where it puts them.
-		sources, writes, lands := copiedInto("mv", args)
-		f.writes, f.lands = append(sources, writes...), lands
+		sources, writes, lands, from := copiedInto("mv", args)
+		f.writes, f.lands, f.landsFrom = append(sources, writes...), lands, from
 	case "cp", "ln", "install", "rsync", "scp":
-		f.reads, f.writes, f.lands = copiedInto(progKey(f.name), args)
+		f.reads, f.writes, f.lands, f.landsFrom = copiedInto(progKey(f.name), args)
 	case "sed":
 		// The script is the first operand unless -e or -f gave one.
 		hasE := false
@@ -418,7 +418,7 @@ func listFlag(words []word) string {
 // ("cp x/.env ." writes ./.env; a source's pattern stays a pattern there:
 // "cp x/.e* ." writes what .e* matches in the folder). install -d makes
 // every folder it is given.
-func copiedInto(name string, args []word) (sources, writes, lands []word) {
+func copiedInto(name string, args []word) (sources, writes, lands, landsFrom []word) {
 	var ops, dirs []word
 	makesDirs := false
 	rest := false
@@ -472,7 +472,7 @@ func copiedInto(name string, args []word) (sources, writes, lands []word) {
 	}
 	switch {
 	case makesDirs:
-		return nil, ops, nil
+		return nil, ops, nil, nil
 	case len(dirs) > 0:
 		sources = ops
 	case len(ops) > 0:
@@ -485,11 +485,11 @@ func copiedInto(name string, args []word) (sources, writes, lands []word) {
 		}
 		for _, src := range sources {
 			if into, ok := placedIn(dir, src, name == "scp" || name == "rsync"); ok {
-				lands = append(lands, into)
+				lands, landsFrom = append(lands, into), append(landsFrom, src)
 			}
 		}
 	}
-	return sources, writes, lands
+	return sources, writes, lands, landsFrom
 }
 
 // placedIn is the name the source src gets in the folder dir: dir, a

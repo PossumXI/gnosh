@@ -958,8 +958,30 @@ func (e *Engine) shellPaths(req *request) {
 		for _, w := range f.writes {
 			add(w, &writes)
 		}
-		for _, w := range f.lands {
+		for i, w := range f.lands {
 			add(w, &writes)
+			if i >= len(f.landsFrom) || !w.glob || !f.landsFrom[i].static() {
+				continue
+			}
+			// A pattern copied into a folder lands under the names of what
+			// it matches, which are not there yet: "cp * build/" writes
+			// build/a.txt, which build/* matched nothing of, and a deny rule
+			// on *.txt was passed by (oracle seed 176). Each match's name,
+			// in each folder the copy lands in, is held to the rules.
+			base := path.Base(w.joined())
+			var at, from []string
+			add(w, &at)
+			add(f.landsFrom[i], &from)
+			for _, a := range at {
+				if path.Base(a) != base {
+					continue // (a file in the folder already, which it matched)
+				}
+				for _, m := range from {
+					if b := path.Base(m); b != "." && b != ".." && b != "/" && b != base {
+						writes = append(writes, path.Join(path.Dir(a), b))
+					}
+				}
+			}
 		}
 		if trees, copies := treeOps(u.cmd.words); len(trees)+len(copies) > 0 {
 			e.treeGuards(trees, copies, dirs, req, &writes)
