@@ -236,6 +236,7 @@ func (s *slashSet) own() []SlashCommand {
 				return nil
 			}},
 		{Name: "permissions", Args: "[allow|ask|deny|remove <rule>]", Summary: "The permission mode, the folders, and every rule with where it came from; or add or take out a rule.", InRun: true, Run: l.slashPermissions},
+		{Name: "fewer-permission-prompts", Args: "[add <numbers>|all]", Summary: "The allow rules that would have spared this folder's sessions the most questions; keep the ones that only read.", InRun: true, Run: l.slashFewerPrompts},
 		{Name: "hooks", Summary: "Every hook that is configured, by the moment it runs at.", InRun: true, Run: l.slashHooks},
 		{Name: "output-style", Args: "[<style>]", Summary: "The output styles there are, or switch to one: how the model replies, from your next message on.", InRun: true, Run: l.slashOutputStyle},
 		{Name: "skills", Args: "[<name> on|name-only|user-invocable-only|off]", Summary: "Every skill there is, where it came from, and who may run it; or how far one is seen.", InRun: true, Run: l.slashSkills},

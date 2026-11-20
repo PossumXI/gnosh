@@ -77,6 +77,10 @@ type live struct {
 	// askIdle is the askUserQuestionTimeout option as it stands, as a
 	// duration in nanoseconds; zero for none (askuser.go).
 	askIdle atomic.Int64
+	// fewerLast is the list /fewer-permission-prompts last gave, which
+	// its add takes numbers of (fewerprompts.go).
+	fewerMu   sync.Mutex
+	fewerLast []askedRule
 
 	store  *transcript.Store
 	ts     *transcript.Session

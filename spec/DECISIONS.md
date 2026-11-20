@@ -5650,3 +5650,20 @@ or kept with the reason said (27).
     taken of it, the model's own window bounding it as any agent's. Any
     other value is not used, and /agents says so; the definition is used
     without it.
+
+376. **/fewer-permission-prompts, worked out by the engine.** Claude Code
+    ships it as a skill: the model scans the transcripts for common
+    read-only Bash and MCP calls and adds a prioritized allowlist to the
+    project's settings. gnosh's judges each Bash, MCP and WebFetch call of
+    the folder's newest 200 session files and their sub-agents' (at most
+    5000 calls) as manual mode would today (Engine.DecideAs), and groups
+    those that would be asked about by the widest rules their question
+    would offer (the prefix rule, "Bash(kubectl get *)", where the engine
+    finds one sensible), the most calls first, 20 at most, with a call
+    each as it was written. Which of them only read is the person's to
+    say, not a model's: `/fewer-permission-prompts add 1 3` (or `add all`)
+    keeps those, each as /permissions allow keeps one, in the project's
+    local settings file; a run of its own (gnosh -p) works the list out
+    again first, numbered the same. A model reading JSONL transcripts for
+    this, the way Claude Code's skill does, is slow and unsure on a small
+    local model; the engine's own judgement is the one that asks.

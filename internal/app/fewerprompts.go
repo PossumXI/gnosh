@@ -1,0 +1,215 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/permission"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
+	"github.com/gnosh-ai/gnosh/internal/transcript"
+)
+
+// /fewer-permission-prompts (DECISIONS 376), as Claude Code's: what in
+// this folder's sessions would be asked about now, and the allow rules
+// that would let it run without a question, the most used first, for the
+// person to keep the ones that only read. Claude Code's has the model scan
+// the transcripts and judge what reads; gnosh's own engine judges each
+// call the sessions made, as manual mode would today, and offers the rule
+// its question would have offered: the person, not a model, says which
+// rules only read.
+
+const (
+	fewerFiles = 200  // the newest session files looked through
+	fewerCalls = 5000 // the calls judged, at most
+	fewerShown = 20   // the rules listed
+)
+
+// askedRule is a set of allow rules, kept together, that would let calls
+// the folder's sessions made run without a question, with how many.
+type askedRule struct {
+	rules   []string
+	calls   int
+	example string // one such call, as it was written
+}
+
+// slashFewerPrompts is /fewer-permission-prompts: the list, or with add
+// and its numbers (or all), the rules kept, as /permissions allow keeps
+// one.
+func (l *live) slashFewerPrompts(ctx context.Context, c *SlashContext) error {
+	args := strings.Fields(c.Args)
+	if len(args) > 0 {
+		if args[0] != "add" || len(args) < 2 {
+			return errors.New("/fewer-permission-prompts takes nothing, to list the rules, or add and the numbers of the ones to keep (or all)")
+		}
+		l.fewerMu.Lock()
+		last := l.fewerLast
+		l.fewerMu.Unlock()
+		if len(last) == 0 {
+			// (A run of its own, as gnosh -p runs it: the list worked out
+			// again, from the same sessions, numbered the same.)
+			last, _ = l.askedRules(ctx)
+			if len(last) == 0 {
+				return errors.New("there is nothing to add: no call in this folder's sessions would be asked about now")
+			}
+		}
+		var pick []askedRule
+		if len(args) == 2 && args[1] == "all" {
+			pick = last
+		} else {
+			for _, a := range args[1:] {
+				n, err := strconv.Atoi(strings.TrimSuffix(a, ","))
+				if err != nil || n < 1 || n > len(last) {
+					return fmt.Errorf("%q is not one of the list's numbers (1 to %d)", oneLine(a, 20), len(last))
+				}
+				pick = append(pick, last[n-1])
+			}
+		}
+		for _, r := range pick {
+			for _, rule := range r.rules {
+				l.permissionsAct(c, "allow", rule)
+			}
+		}
+		return nil
+	}
+	found, sessions := l.askedRules(ctx)
+	l.fewerMu.Lock()
+	l.fewerLast = found
+	l.fewerMu.Unlock()
+	if len(found) == 0 {
+		c.Say("Of the commands, MCP tools and web pages in this folder's last %s, none would be asked about now in manual mode.", countWords(sessions, "session", "sessions"))
+		return nil
+	}
+	c.Say("These calls in this folder's last %s would be asked about now in manual mode; an allow rule lets every call it matches run without a question:", countWords(sessions, "session", "sessions"))
+	for i, r := range found {
+		line := fmt.Sprintf("%2d. %s · %s", i+1, visible(strings.Join(r.rules, ", ")), countWords(r.calls, "call", "calls"))
+		if r.example != "" {
+			line += ", as " + visible(oneLine(r.example, 80))
+		}
+		c.Say("%s", line)
+	}
+	c.Say("Keep only what reads and changes nothing: /fewer-permission-prompts add 1 3, or add all. Each is kept in %s, as /permissions allow keeps one; /permissions remove takes one out.", l.tilde(l.cfg.Paths.LocalSettings))
+	return nil
+}
+
+// askedRules judges the Bash, MCP and WebFetch calls of the folder's
+// newest sessions and their sub-agents' as manual mode would now, and
+// groups those that would be asked about by the rules their question would
+// offer, the most calls first; it says how many sessions it looked
+// through.
+func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
+	tools := map[string]core.Tool{}
+	for _, t := range l.own {
+		tools[t.Spec().Name] = t
+	}
+	for _, t := range l.allowedMCPTools() {
+		tools[t.Spec().Name] = t
+	}
+	files, sessions := l.recentSessionFiles()
+	byRules := map[string]*askedRule{}
+	judged := 0
+	for _, f := range files {
+		for e, err := range transcript.ReadFile(ctx, f, nil) {
+			if err != nil || ctx.Err() != nil {
+				break
+			}
+			if e.Type != transcript.TypeAssistant {
+				continue
+			}
+			for _, b := range e.Message.ToolUses() {
+				t := tools[b.Name]
+				if t == nil || !(b.Name == shelltool.BashName || b.Name == webFetchName || strings.HasPrefix(b.Name, "mcp__")) || judged >= fewerCalls {
+					continue
+				}
+				judged++
+				call := core.ToolCall{ID: b.ID, Name: b.Name, Input: b.Input}
+				act, err := describe(t, call, &core.ToolEnv{Cwd: firstOf(e.Cwd, l.cwd()), Roots: l.roots})
+				if err != nil {
+					continue
+				}
+				d := l.engine.DecideAs(permission.ModeDefault, b.Name, call, act)
+				if d.Behavior != permission.Ask {
+					continue
+				}
+				// The widest rules the question offers: the prefix rule
+				// ("kubectl get *") where the engine finds one sensible,
+				// so that the calls it covers count together.
+				var rules []string
+				for _, s := range d.Suggestions {
+					if s.Mode == "" && len(s.Rules) > 0 {
+						rules = s.Rules
+					}
+				}
+				if len(rules) == 0 {
+					continue
+				}
+				key := strings.Join(rules, "\x00")
+				r := byRules[key]
+				if r == nil {
+					r = &askedRule{rules: rules, example: firstOf(act.Command, act.URL)}
+					byRules[key] = r
+				}
+				r.calls++
+			}
+		}
+	}
+	var out []askedRule
+	for _, r := range byRules {
+		out = append(out, *r)
+	}
+	slices.SortFunc(out, func(a, b askedRule) int {
+		if a.calls != b.calls {
+			return b.calls - a.calls
+		}
+		return strings.Compare(strings.Join(a.rules, ","), strings.Join(b.rules, ","))
+	})
+	if len(out) > fewerShown {
+		out = out[:fewerShown]
+	}
+	return out, sessions
+}
+
+// recentSessionFiles are the session files of this folder and of the
+// project's root (where they differ), with their sub-agents', the newest
+// first, at most fewerFiles; and how many of them are sessions' own.
+func (l *live) recentSessionFiles() ([]string, int) {
+	type file struct {
+		path string
+		at   time.Time
+		own  bool
+	}
+	var found []file
+	seen := map[string]bool{}
+	for _, dir := range []string{l.store.ProjectDir(l.cfg.Paths.Cwd), l.store.ProjectDir(l.cfg.Paths.ProjectRoot)} {
+		if seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		own, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+		subs, _ := filepath.Glob(filepath.Join(dir, "*", "subagents", "*.jsonl"))
+		for i, path := range append(own, subs...) {
+			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+				found = append(found, file{path, info.ModTime(), i < len(own)})
+			}
+		}
+	}
+	slices.SortFunc(found, func(a, b file) int { return b.at.Compare(a.at) })
+	if len(found) > fewerFiles {
+		found = found[:fewerFiles]
+	}
+	paths, sessions := make([]string, len(found)), 0
+	for i, f := range found {
+		paths[i] = f.path
+		if f.own {
+			sessions++
+		}
+	}
+	return paths, sessions
+}
