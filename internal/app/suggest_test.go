@@ -128,6 +128,17 @@ func TestSuggestionText(t *testing.T) {
 		"/permissions":                         "",
 		"exit":                                 "",
 		"Quit":                                 "",
+		// Nothing to offer, written out (Claude Code 2.1.329 showed
+		// "_(no suggestion)_"); a placeholder's explanation after it is
+		// no prompt either.
+		"_(no suggestion)_":                   "",
+		"(nothing)\nThe task is done.":        "",
+		"[none]":                              "",
+		"Nothing.":                            "",
+		"N/A":                                 "",
+		"No clear next step.":                 "",
+		"_Run the tests_":                     "Run the tests",
+		"Nothing else failing? run the suite": "Nothing else failing? run the suite",
 	} {
 		if got := suggestionText(in); got != want {
 			t.Errorf("suggestionText(%q) = %q, want %q", in, got, want)
