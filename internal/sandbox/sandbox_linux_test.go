@@ -1,6 +1,9 @@
 package sandbox
 
 import (
+	"bufio"
+	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +12,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // A command under real bubblewrap: it writes in the folder it is given and
@@ -268,6 +273,104 @@ socket.socket(socket.AF_INET); print("inet")`
 	p.AllUnixSockets = true
 	if got := run(p); !strings.HasPrefix(got, "unix\npair") {
 		t.Errorf("every Unix socket let: %q", got)
+	}
+}
+
+// Behind the filter, gnosh is the sandbox's first process, in place of
+// bubblewrap's own init, which a command could attach to and have make a
+// Unix socket for it (the third sandbox review): not dumpable, so its
+// files under /proc are closed to an unprivileged command. It is an init
+// as bubblewrap's is: the command's status comes back, a signal's as 128
+// and its number; what the command leaves running ends with it; and a
+// SIGTERM to the process group reaches the command, which ends as it
+// likes, while the first process lets it be. Skipped where bubblewrap
+// cannot run.
+func TestFilterIsTheSandboxsInit(t *testing.T) {
+	if st := Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if !canFilter() {
+		t.Skip("no filter for this machine")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Policy{Write: []string{work}, Temp: temp, Filter: exe}
+	start := func(script string) *exec.Cmd {
+		t.Helper()
+		argv, err := Wrap(p, work, []string{"/bin/sh", "-c", script})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		return cmd
+	}
+	run := func(script string) string {
+		t.Helper()
+		out, _ := start(script).CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	status := func(script string) int {
+		t.Helper()
+		err := start(script).Run()
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return ee.ExitCode()
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return 0
+	}
+	got := run(`echo $$; tr -d '\n' < /proc/1/comm; echo; ls /proc/1/fd >/dev/null 2>&1 && echo open || echo closed`)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 3 || lines[0] == "1" || !strings.HasPrefix(filepath.Base(exe), lines[1]) {
+		t.Fatalf("the sandbox's first process: %q", got)
+	}
+	if os.Geteuid() != 0 && lines[2] != "closed" {
+		t.Errorf("the first process's files are open to the command: %q", got)
+	}
+	if s := status("exit 7"); s != 7 {
+		t.Errorf("exit 7 came back as %d", s)
+	}
+	if s := status("kill -TERM $$"); s != 128+int(syscall.SIGTERM) {
+		t.Errorf("a command a signal ended came back as %d", s)
+	}
+	began := time.Now()
+	if got := run("sleep 30 & echo left"); got != "left" || time.Since(began) > 10*time.Second {
+		t.Errorf("what the command left running held the sandbox %v: %q", time.Since(began), got)
+	}
+	cmd := start(`trap 'echo caught; exit 3' TERM; echo ready; sleep 30 & wait`)
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	r := bufio.NewReader(out)
+	if line, _ := r.ReadString('\n'); line != "ready\n" {
+		t.Fatalf("the command began with %q", line)
+	}
+	// (bubblewrap itself, of the group, ends at the SIGTERM: what the
+	// command did with its own is what is looked at.)
+	began = time.Now()
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	rest, _ := io.ReadAll(r)
+	_ = cmd.Wait()
+	if string(rest) != "caught\n" || time.Since(began) > 10*time.Second {
+		t.Errorf("SIGTERM to the group: %q after %v", rest, time.Since(began))
+	}
+	// A signal to the first process alone ends nothing.
+	if got := run("kill -TERM 1; kill -INT 1; kill -HUP 1; sleep 0.2; echo still"); got != "still" {
+		t.Errorf("the first process sent SIGTERM, SIGINT and SIGHUP: %q", got)
 	}
 }
 

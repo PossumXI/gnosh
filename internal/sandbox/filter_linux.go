@@ -45,6 +45,15 @@ func FilterMain(args []string) int {
 		fmt.Fprintf(os.Stderr, "gnosh: the sandbox could not refuse Unix sockets here (%v)\n", err)
 		return 126
 	}
+	if isInit() {
+		// The sandbox's first process (no relay before it): it stays, as
+		// the namespace's init, and starts the program from this thread,
+		// whose filter the program takes with it. Not dumpable, as an init
+		// a command could attach to would make sockets for it (bubblewrap's
+		// own init has no filter: the third sandbox review).
+		notDumpable()
+		return runChild(path, args)
+	}
 	err = syscall.Exec(path, args, os.Environ())
 	fmt.Fprintf(os.Stderr, "gnosh: %s: %v\n", args[0], err)
 	return 126

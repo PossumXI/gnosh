@@ -1,14 +1,12 @@
 package sandbox
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 )
 
 // RelayWord is the first word that makes gnosh, started inside the Linux
@@ -55,21 +53,14 @@ func RelayMain(args []string) int {
 			}()
 		}
 	}()
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	err = cmd.Run()
-	var ee *exec.ExitError
-	switch {
-	case err == nil:
-		return 0
-	case errors.As(err, &ee):
-		if st, ok := ee.Sys().(syscall.WaitStatus); ok && st.Signaled() {
-			return 128 + int(st.Signal())
-		}
-		return ee.ExitCode()
+	path, err := exec.LookPath(argv[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gnosh: %v\n", err)
+		return 127
 	}
-	fmt.Fprintf(os.Stderr, "gnosh: %v\n", err)
-	return 127
+	// (With the filter on it is the sandbox's first process, its init:
+	// bubblewrap's own, which a command could attach to, is not there.)
+	return runChild(path, argv)
 }
 
 // pipe copies between two connections until both are done.

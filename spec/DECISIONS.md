@@ -5561,3 +5561,27 @@ or kept with the reason said (27).
     socketpair can still be pointed by path at a datagram socket in
     sight; few are, the sandbox's /run, /dev and /tmp being its own, and
     pairs stay, as programs need them (367 said they reach nothing).
+
+372. **gnosh is the sandbox's first process, behind the filter.** From
+    the third sandbox review: bubblewrap's own init, the sandbox's pid
+    1, is dumpable and has no filter, so where any process of the same
+    user may be traced (kernel.yama.ptrace_scope 0, as Debian, Fedora
+    and RHEL ship) a command could attach to it, have it make a Unix
+    socket and take that with pidfd_getfd, past the filter of 367.
+    Wherever the filter is on, bubblewrap now runs with --as-pid-1, and
+    the first process is gnosh's: the relay to the proxy when there is
+    one (already not dumpable), or else the filter, which then stays,
+    not dumpable, and starts the command from its filtered thread
+    instead of becoming it. Either is the namespace's init as
+    bubblewrap's was: the command's status comes back (a signal's as
+    128 and its number), what it leaves running ends when it ends (as
+    with bubblewrap's init, checked), orphans are reaped, and SIGTERM,
+    SIGINT, SIGHUP and SIGQUIT are taken and let be, as the command,
+    of the same process group, is sent the same and ends as it likes
+    (the relay serves its connections meanwhile). Where bubblewrap is
+    too old for --as-pid-1, the filter's trial fails and the sandbox
+    runs without the filter, saying so (369). Tested under bubblewrap
+    0.9 as root and as nobody: the first process's files under /proc
+    are closed to an unprivileged command, and through gnosh a
+    sandboxed Bash call ran as pid 12 under the relay with Unix
+    sockets refused.

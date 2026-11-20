@@ -30,6 +30,15 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		a = append(a, "--unshare-user", "--disable-userns")
 	}
 	a = append(a, "--unshare-pid", "--unshare-ipc")
+	if filters(p) {
+		// gnosh, the relay or the filter, is the sandbox's first process,
+		// in place of bubblewrap's own init: that one is dumpable and has
+		// no filter, so where any process of the same user may be traced
+		// (kernel.yama.ptrace_scope 0, as on Debian and Fedora) a command
+		// could have it make a Unix socket for it (the third sandbox
+		// review).
+		a = append(a, "--as-pid-1")
+	}
 	if !p.Network {
 		a = append(a, "--unshare-net")
 	}
