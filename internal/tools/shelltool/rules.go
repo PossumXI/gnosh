@@ -499,6 +499,9 @@ var (
 		"nodename nor servname provided", "Network is unreachable", "Couldn't connect to server", "Connection refused",
 		"no such host", "dial tcp", "gnosh's sandbox did not let the command reach", "CONNECT tunnel failed"}
 	trustSigns = []string{"x509: ", "tls: failed to verify certificate"}
+	// (The error gnosh's filter gives a Unix socket on Linux, which
+	// nothing else in the sandbox gives.)
+	unixSigns = []string{"Address family not supported by protocol"}
 )
 
 // sandboxHint is the note under a sandboxed command that failed the way
@@ -542,6 +545,9 @@ func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
 	}
 	if sb.NoTrust && in(trustSigns) {
 		lets = append(lets, "check no certificate with macOS's trust service (Go's programs check them with it)")
+	}
+	if in(unixSigns) {
+		lets = append(lets, "open no Unix socket (an agent's, a database's, docker's)")
 	}
 	if len(lets) == 0 {
 		return ""

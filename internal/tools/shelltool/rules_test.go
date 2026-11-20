@@ -540,6 +540,9 @@ func TestSandboxHintAndIgnoredReports(t *testing.T) {
 		t.Errorf("a write only: %q", got)
 	}
 	sb.HidesReads = false
+	if got := hint("ssh-add -l", "Error connecting to agent: Address family not supported by protocol\n"); !strings.Contains(got, "open no Unix socket") {
+		t.Errorf("a Unix socket refused: %q", got)
+	}
 	sb.Writes = ""
 	if got := hint("touch /etc/x", "touch: /etc/x: Read-only file system\n"); got != "" {
 		t.Errorf("a write, with the files left open: %q", got)

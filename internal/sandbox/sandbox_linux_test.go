@@ -221,11 +221,64 @@ func TestBubblewrapHiddenStaysHidden(t *testing.T) {
 	}
 }
 
+// Under real bubblewrap, behind gnosh's filter (here the test binary), a
+// command may make no Unix socket, but a pair of its own, and an internet
+// one; every Unix socket let, it may. Skipped where bubblewrap or python3
+// cannot run.
+func TestBubblewrapRefusesUnixSockets(t *testing.T) {
+	if st := Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if !canFilter() {
+		t.Skip("no filter for this machine")
+	}
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := `import socket
+try:
+    socket.socket(socket.AF_UNIX); print("unix")
+except OSError as e:
+    print("no unix:", e.strerror)
+a, b = socket.socketpair(); print("pair")
+socket.socket(socket.AF_INET); print("inet")`
+	run := func(p Policy) string {
+		t.Helper()
+		argv, err := Wrap(p, work, []string{python, "-c", script})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, _ := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	p := Policy{Write: []string{work}, Temp: temp, Filter: exe}
+	if got := run(p); got != "no unix: Address family not supported by protocol\npair\ninet" {
+		t.Errorf("behind the filter: %q", got)
+	}
+	p.AllUnixSockets = true
+	if got := run(p); !strings.HasPrefix(got, "unix\npair") {
+		t.Errorf("every Unix socket let: %q", got)
+	}
+}
+
 // TestMain runs the test binary as the relay when bubblewrap starts it so,
 // as gnosh's own main does.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == RelayWord {
 		os.Exit(RelayMain(os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == FilterWord {
+		os.Exit(FilterMain(os.Args[2:]))
 	}
 	os.Exit(m.Run())
 }
@@ -259,7 +312,9 @@ func TestSandboxReachesAllowedHostsThroughTheProxy(t *testing.T) {
 	}
 	defer px.Close()
 	work := t.TempDir()
-	p := Policy{Write: []string{work}, Temp: temp, Proxy: sock, Relay: exe}
+	// (Behind the filter too: the relay, before it, makes its Unix
+	// sockets all the same.)
+	p := Policy{Write: []string{work}, Temp: temp, Proxy: sock, Relay: exe, Filter: exe}
 	fetch := func(url string) string {
 		t.Helper()
 		argv, err := Wrap(p, work, []string{curl, "-s", "-m", "10", url})

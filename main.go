@@ -44,6 +44,12 @@ func main() {
 		// the sandbox's proxy (internal/sandbox): nothing else is read.
 		os.Exit(sandbox.RelayMain(os.Args[2:]))
 	}
+	if len(os.Args) > 1 && os.Args[1] == sandbox.FilterWord {
+		// The same program again, inside the sandbox, putting on the
+		// filter that refuses the command new Unix sockets and becoming
+		// the command (internal/sandbox): nothing else is read.
+		os.Exit(sandbox.FilterMain(os.Args[2:]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "ssh" && !sshHelp(os.Args[2:]) {
 		// gnosh ssh: every word after ssh is ssh's, so nothing else is
 		// read first (internal/relay).

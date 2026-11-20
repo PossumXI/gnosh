@@ -28,7 +28,7 @@ func check(s Setup) Status {
 	trial := []string{"/bin/sh", "-c", ":"}
 	p := Policy{HostProc: s.HostProc, blockUserns: !s.HostProc}
 	if p.blockUserns && try(bwrapArgs(bwrap, p, dir, trial, statPath)) == "" {
-		return Status{OK: true, Tool: bwrap, UsernsRefused: true}
+		return withFilter(Status{OK: true, Tool: bwrap, UsernsRefused: true})
 	}
 	p.blockUserns = false
 	if said := try(bwrapArgs(bwrap, p, dir, trial, statPath)); said != "" {
@@ -43,6 +43,19 @@ func check(s Setup) Status {
 		// (With the machine's /proc, bubblewrap has no /proc of the
 		// sandbox's own to set the limit in: the setting's own cost.)
 		st.Weaker = "this bubblewrap cannot keep sandboxed commands from making user namespaces of their own (that takes bubblewrap 0.8 or later)"
+	}
+	return withFilter(st)
+}
+
+// withFilter adds to the status what the sandbox cannot do here for want
+// of a filter for the machine.
+func withFilter(st Status) Status {
+	if st.OK && !canFilter() {
+		no := "nothing keeps sandboxed commands from opening Unix sockets on this machine (gnosh's filter is for amd64 and arm64)"
+		if st.Weaker != "" {
+			no = st.Weaker + ", and " + no
+		}
+		st.Weaker = no
 	}
 	return st
 }

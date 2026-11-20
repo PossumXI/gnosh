@@ -101,6 +101,10 @@ type Policy struct {
 	MachLookup []string
 	// Bwrap is bubblewrap's path, when the settings name one (bwrapPath).
 	Bwrap string
+	// Filter is gnosh's own program, run inside on Linux to refuse the
+	// command new Unix sockets before it becomes the command (filter.go),
+	// unless AllUnixSockets; "" for no filter.
+	Filter string
 
 	// blockUserns refuses it user namespaces: set by Wrap, where the
 	// machine's bubblewrap can and the policy does not let it make them.

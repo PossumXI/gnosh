@@ -31,6 +31,9 @@ func RelayMain(args []string) int {
 		return 2
 	}
 	socket, argv := args[0], args[1:]
+	// (The relay makes Unix sockets, which the command may not: it is
+	// not to be attached to and made to make one for it.)
+	notDumpable()
 	ln, err := net.Listen("tcp", relayListen)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gnosh: the sandbox's way to its proxy could not be opened (%v)\n", err)

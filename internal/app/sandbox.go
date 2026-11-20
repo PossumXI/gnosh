@@ -255,6 +255,13 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 	p.AllUnixSockets = sc.Loose("network.allowAllUnixSockets")
 	p.LocalBinding = sc.Loose("network.allowLocalBinding")
 	p.UnixSockets, p.MachLookup = listValues(sc.UnixSockets), listValues(sc.MachLookup)
+	if runtime.GOOS == "linux" {
+		// gnosh itself, run inside to refuse the command new Unix sockets
+		// (DECISIONS 367; allowAllUnixSockets lifts it).
+		if exe, err := os.Executable(); err == nil {
+			p.Filter = exe
+		}
+	}
 	return p
 }
 

@@ -28,6 +28,9 @@ func TestMain(m *testing.M) {
 		// it: here the test binary.)
 		os.Exit(sandbox.RelayMain(os.Args[2:]))
 	}
+	if len(os.Args) > 1 && os.Args[1] == sandbox.FilterWord {
+		os.Exit(sandbox.FilterMain(os.Args[2:]))
+	}
 	os.Exit(m.Run())
 }
 

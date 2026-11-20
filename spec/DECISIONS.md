@@ -5467,3 +5467,31 @@ or kept with the reason said (27).
     (100.64.0.0/10) and every address of the machine's own interfaces, its
     public ones among them. The model is told that, with nobody there, a
     host no rule names goes as the permission mode says.
+
+367. **A filter refuses sandboxed commands new Unix sockets on Linux.**
+    Claude Code's Linux sandbox has a seccomp filter that refuses
+    socket(AF_UNIX, ...) (sandbox.network.allowAllUnixSockets lifts it);
+    gnosh only kept /run out of sight, so a socket elsewhere in sight (an
+    editor's server or an agent under the home folder) could be reached
+    and could run what it was told outside the sandbox. gnosh now puts
+    such a filter on the command itself: bubblewrap runs gnosh again as
+    `gnosh sandbox-filter <argv>`, which sets no_new_privs, installs a
+    classic BPF program with prctl(PR_SET_SECCOMP) on its own thread and
+    becomes the command (execve keeps the filter for it and what it
+    starts). The program refuses socket(AF_UNIX) and io_uring_setup
+    (whose rings make sockets past a seccomp filter) with EAFNOSUPPORT,
+    "Address family not supported by protocol", which the note under a
+    failed command recognises; 32-bit calls the same, socketcall(2)
+    whole; an x32 call or one of an unknown architecture kills the
+    process; socketpair stays (its sockets reach nothing outside). It is
+    made for amd64 and arm64; elsewhere the startup notice and /sandbox
+    say nothing keeps Unix sockets from commands. The relay to the proxy,
+    which must make Unix sockets, runs before the filter, and sets itself
+    not dumpable so that a command cannot attach to it. gnosh's own
+    program is mounted read-only in sight wherever it lies (under the
+    real /tmp, in a denied folder), last, so that a sandboxed command
+    cannot change what runs outside later. Tested with a BPF interpreter
+    over both machines' programs and under real bubblewrap, as root and
+    as nobody (Python: a Unix socket refused, a pair and an internet
+    socket made, every Unix socket let with allowAllUnixSockets; curl
+    through the relay with the filter on).

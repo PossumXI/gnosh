@@ -58,17 +58,13 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 			// sandbox's.)
 			a = append(a, p.Relay, RelayWord, p.Proxy)
 		}
-		return append(a, argv...)
+		return append(a, filterFirst(p, argv)...)
 	}
 	if p.Temp != "" && there(p.Temp) {
 		a = append(a, "--bind", p.Temp, "/tmp")
 	}
 	for _, w := range kept(p.Write, there) {
 		a = append(a, "--bind", w, w)
-	}
-	if _, ok := insideTemp(p); ok && p.Relay != "" && there(p.Relay) {
-		// (gnosh may itself be under the real /tmp, out of sight inside.)
-		a = append(a, "--ro-bind", p.Relay, p.Relay)
 	}
 	for _, r := range kept(p.ReadOnly, there) {
 		a = append(a, "--ro-bind", r, r)
@@ -150,6 +146,21 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 	for _, h := range present(p.Hidden, there) {
 		hide(h)
 	}
+	// gnosh's own program, which runs inside as the relay and the filter:
+	// in sight wherever it lies (under the real /tmp, in a denied folder),
+	// and not for the command to change, as it runs outside later too.
+	var self []string
+	if _, ok := insideTemp(p); ok && p.Relay != "" {
+		self = append(self, p.Relay)
+	}
+	if filters(p) && p.Filter != p.Relay {
+		self = append(self, p.Filter)
+	}
+	for _, s := range self {
+		if there(s) {
+			a = append(a, "--ro-bind", s, s)
+		}
+	}
 	for _, d := range emptied {
 		a = append(a, "--remount-ro", d)
 	}
@@ -160,7 +171,21 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		// sandbox's /tmp.
 		a = append(a, p.Relay, RelayWord, inside)
 	}
-	return append(a, argv...)
+	return append(a, filterFirst(p, argv)...)
+}
+
+// filters reports whether the command is to run behind the filter that
+// refuses it new Unix sockets.
+func filters(p Policy) bool { return p.Filter != "" && !p.AllUnixSockets && canFilter() }
+
+// filterFirst is argv as the sandbox runs it: through gnosh's filter,
+// which then becomes it, where the policy has one; after the relay, which
+// must make Unix sockets.
+func filterFirst(p Policy, argv []string) []string {
+	if !filters(p) {
+		return argv
+	}
+	return append([]string{p.Filter, FilterWord}, argv...)
 }
 
 // insideTemp is the proxy's socket as the sandbox sees it: in its /tmp,
