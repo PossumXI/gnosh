@@ -170,6 +170,16 @@ func (l *live) lateInstructionsFor(ctx context.Context, instr *instructions.Set,
 	if path == "" {
 		return nil
 	}
+	return l.lateInstructionsAt(ctx, instr, path)
+}
+
+// lateInstructionsAt is lateInstructionsFor for the file at path, however
+// the model came to look at it: with a file tool, or a shell command that
+// counts as a read (shellread.go).
+func (l *live) lateInstructionsAt(ctx context.Context, instr *instructions.Set, path string) []agent.Part {
+	if instr == nil {
+		return nil
+	}
 	files, warnings := instr.ForPath(ctx, path)
 	for _, w := range warnings {
 		l.notice(agent.LevelWarning, "instructions", w.Text)

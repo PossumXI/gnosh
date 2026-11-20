@@ -539,6 +539,12 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 	var v agent.ToolVerdict
 	var errs []error
 	v.Context = append(v.Context, l.lateInstructionsFor(ctx, instr, done)...)
+	if path := shellRead(done); path != "" && fstools.MarkRead(env(), path) == nil {
+		// A file viewed with cat, head, grep and the like counts as read,
+		// as in Claude Code: it may be edited, and its folder's
+		// instruction files arrive (shellread.go).
+		v.Context = append(v.Context, l.lateInstructionsAt(ctx, instr, path)...)
+	}
 	v.Context = append(v.Context, l.skillsForFile(done)...)
 	for _, c := range contribs {
 		if c.c.AfterTool == nil {

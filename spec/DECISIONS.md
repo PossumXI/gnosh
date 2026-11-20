@@ -4462,3 +4462,16 @@ or kept with the reason said (27).
     In a run they now hold for the run, and say so; /effort max holds
     for the session it is given in, and says so. /config, the command
     for settings, still keeps what it is told, in a run too.
+
+312. **A file viewed with cat counts as read.** As Claude Code's tools
+    reference has it ("Edit tool behavior"), a file viewed with cat, nl,
+    bat, batcat, head, tail, sed -n 'X,Yp', grep, egrep, fgrep or rg, on
+    one file with no pipe or redirection (one simple command, as
+    shellquote.Split reads it), on this machine, in the foreground, that
+    ended well and printed something, counts as read: it may be edited or
+    written over without a separate Read (fstools.MarkRead), and the
+    instruction files of its folder and the rules that name it arrive as
+    after a Read. A small model reads with cat as often as with Read, and
+    its Edit was refused until it read the file again: a round lost each
+    time. A command whose words gnosh cannot read plainly (a grep with -e
+    or -f, a tail -f, several files) does not count.
