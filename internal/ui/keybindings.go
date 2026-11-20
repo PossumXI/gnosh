@@ -324,7 +324,7 @@ func (s *session) rebound(k term.Key) bool {
 			if pair[0] == c {
 				held := k
 				s.keyHeld, s.keyHeldAt = &held, s.now()
-				s.flash(k.String() + " … (the next key ends the chord)")
+				s.flash(keyLabel(k) + " … (the next key ends the chord)")
 				return true
 			}
 		}
@@ -449,4 +449,103 @@ func (s *session) openKeybindings(line string) bool {
 		s.keysNow()
 	}
 	return true
+}
+
+// keyActionWords say what each action does, in the words of the list of
+// keys (help).
+var keyActionWords = map[string]string{
+	"app:redraw":               "draw the bottom of the screen again",
+	"app:toggleTodos":          "hide or show the task list",
+	"app:toggleTranscript":     "the whole transcript: every thought, call and result",
+	"history:search":           "search the history",
+	"history:previous":         "the history, back",
+	"history:next":             "the history, forward",
+	"chat:cancel":              "stop the turn",
+	"chat:clearInput":          "clear the box",
+	"chat:killAgents":          "twice within 3 seconds: stop the background sub-agents",
+	"chat:cycleMode":           "the next permission mode",
+	"chat:modelPicker":         "switch the model, keeping what is typed",
+	"chat:thinkingToggle":      "thinking on or off (or the next level)",
+	"chat:submit":              "send",
+	"chat:sendNow":             "while a turn runs: send, and have it read now, not after the turn",
+	"chat:newline":             "new line",
+	"chat:undo":                "undo in the box",
+	"chat:externalEditor":      "edit the prompt in your editor",
+	"chat:stash":               "put the prompt aside, and bring it back",
+	"task:background":          "move the running command to the background",
+	"transcript:exit":          "leave the transcript",
+	"transcript:toggleShowAll": "in the transcript: all of each long part",
+}
+
+// ownKeys are the rows of the list of keys for what the keybindings file
+// binds, as gnosh takes it now: each key or chord, and what it does.
+func (s *session) ownKeys() [][2]string {
+	s.keysNow()
+	if s.keys == nil {
+		return nil
+	}
+	b := s.keys.b
+	words := func(action, ctx string) string {
+		w := ""
+		switch name, command := strings.CutPrefix(action, "command:"); {
+		case action == "":
+			w = "taken away: it does nothing"
+		case command:
+			w = "runs /" + name
+		default:
+			w = keyActionWords[action]
+			if w == "" {
+				w = action
+			}
+		}
+		if ctx == "Transcript" {
+			w += " (in the transcript)"
+		}
+		return w
+	}
+	var rows [][2]string
+	for _, ctx := range []string{"Global", "Chat", "Transcript"} {
+		var one [][2]string
+		for k, action := range b.byCtx[ctx] {
+			one = append(one, [2]string{keyLabel(k), words(action, ctx)})
+		}
+		for pair, action := range b.chords[ctx] {
+			one = append(one, [2]string{keyLabel(pair[0]) + " " + keyLabel(pair[1]), words(action, ctx)})
+		}
+		slices.SortFunc(one, func(a, b [2]string) int { return strings.Compare(a[0], b[0]) })
+		rows = append(rows, one...)
+	}
+	return rows
+}
+
+// keyLabel writes a key as the list of keys writes one: Ctrl+Y, Alt+P,
+// Shift+Tab, Ctrl+Enter, Esc, F5, Space.
+func keyLabel(k term.Key) string {
+	var parts []string
+	for _, m := range []struct {
+		bit  term.Mod
+		name string
+	}{{term.ModCtrl, "Ctrl"}, {term.ModAlt, "Alt"}, {term.ModShift, "Shift"}, {term.ModSuper, "Super"}, {term.ModHyper, "Hyper"}, {term.ModMeta, "Meta"}} {
+		if k.Mod&m.bit != 0 {
+			parts = append(parts, m.name)
+		}
+	}
+	name := ""
+	switch {
+	case k.Code == term.KeyRune && k.Rune == ' ':
+		name = "Space"
+	case k.Code == term.KeyRune && k.Rune != 0:
+		name = string(k.Rune)
+		if len(parts) > 0 {
+			name = strings.ToUpper(name)
+		}
+	case k.Code == term.KeyRune:
+		name = k.Text
+	default:
+		name = k.Code.String()
+		if name != "" {
+			name = strings.ToUpper(name[:1]) + name[1:]
+		}
+	}
+	return strings.Join(append(parts, name), "+")
 }

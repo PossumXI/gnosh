@@ -4564,3 +4564,14 @@ or kept with the reason said (27).
     poppler (not on box 1, box 2 or the Mac today) Read says to install
     poppler-utils. The functions are Options.PDFPages and PDFText, nil
     meaning poppler, so that tests and other front ends may put their own.
+
+319. **The list of keys shows the person's own.** gnosh takes Claude
+    Code's keybindings.json, and its key hints and the list of keys (?)
+    named only gnosh's own keys, so a key the person bound, or took away,
+    was nowhere to be seen; Claude Code 2.1.329 made its hints follow the
+    file. The list of keys now ends with "Yours, from <file>": each key
+    and chord the file binds, in Global, Chat and Transcript, with what it
+    does here in the list's own words, "runs /<name>" for a command, and
+    "taken away: it does nothing" for null. The hints elsewhere (about 140
+    names of keys in the screen's own sentences) still name gnosh's keys,
+    which keep working beside the person's unless taken away.

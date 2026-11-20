@@ -1257,15 +1257,29 @@ func (s *session) help() {
 	for _, r := range rows {
 		wide = max(wide, s.m.Width(r[0]))
 	}
+	own := s.ownKeys()
+	for _, r := range own {
+		wide = max(wide, s.m.Width(r[0]))
+	}
 	s.begin(blkText)
 	s.put(th.ToolName.Render("Keys"))
-	for _, r := range rows {
-		key := r[0] + strings.Repeat(" ", wide-s.m.Width(r[0]))
-		rest := strings.Repeat(" ", wide+4)
-		if s.cols < wide+24 {
-			rest = "    "
+	list := func(rows [][2]string) {
+		for _, r := range rows {
+			key := r[0] + strings.Repeat(" ", wide-s.m.Width(r[0]))
+			rest := strings.Repeat(" ", wide+4)
+			if s.cols < wide+24 {
+				rest = "    "
+			}
+			s.put(wrap(s.m, th.Quiet.Render(r[1]), s.cols, "  "+key+"  ", rest)...)
 		}
-		s.put(wrap(s.m, th.Quiet.Render(r[1]), s.cols, "  "+key+"  ", rest)...)
+	}
+	list(rows)
+	if len(own) > 0 {
+		// The person's own keys, as Claude Code's hints follow its
+		// keybindings.json (2.1.329): what each does here, in the words
+		// of the list above.
+		s.put(wrap(s.m, th.ToolName.Render("Yours, from "+showPath(s.cwd, s.home, s.keys.path)), s.cols, "", "  ")...)
+		list(own)
 	}
 	var missing []string
 	if _, ok := s.c.(sheller); !ok {

@@ -254,3 +254,65 @@ func TestKeyBindingsFileThatIsAPipe(t *testing.T) {
 		t.Fatal("the session waited on a named pipe for its keybindings")
 	}
 }
+
+// The list of keys (? in an empty box) shows the person's own keys after
+// gnosh's: what each does here, a key taken away, a command, a chord.
+func TestKeyBindingsInTheListOfKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := os.WriteFile(path, []byte(`{"bindings": [
+		{"context": "Chat", "bindings": {"ctrl+k": "chat:stash", "ctrl+s": null, "ctrl+y": "command:compact", "ctrl+x ctrl+o": "app:toggleTranscript"}},
+		{"context": "Transcript", "bindings": {"ctrl+q": "transcript:exit"}}
+	]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := newRig(t, 100, 40, text.NoColor, func(c *controls) {
+		c.info.Keybindings = path
+		c.info.Commands = append(c.info.Commands, "compact")
+	})
+	g.keys(`"?"`)
+	g.committedHas("Keys", "Yours, from "+path)
+	// Under that line, each key with what it does, on its own row.
+	var yours []string
+	for i, l := range g.committed {
+		if strings.Contains(l, "Yours, from") {
+			yours = g.committed[i+1:]
+		}
+	}
+	for _, want := range [][2]string{
+		{"Ctrl+K", "put the prompt aside, and bring it back"},
+		{"Ctrl+S", "taken away: it does nothing"},
+		{"Ctrl+Y", "runs /compact"},
+		{"Ctrl+X Ctrl+O", "the whole transcript: every thought, call and result"},
+		{"Ctrl+Q", "leave the transcript (in the transcript)"},
+	} {
+		found := false
+		for _, l := range yours {
+			if strings.HasPrefix(strings.TrimSpace(l), want[0]+" ") && strings.Contains(l, want[1]) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no row %q %q under the person's keys:\n%s", want[0], want[1], strings.Join(yours, "\n"))
+		}
+	}
+}
+
+func TestKeyLabel(t *testing.T) {
+	for _, c := range []struct {
+		key  term.Key
+		want string
+	}{
+		{term.Key{Code: term.KeyRune, Rune: 'y', Mod: term.ModCtrl}, "Ctrl+Y"},
+		{term.Key{Code: term.KeyRune, Rune: 'p', Mod: term.ModAlt}, "Alt+P"},
+		{term.Key{Code: term.KeyTab, Mod: term.ModShift}, "Shift+Tab"},
+		{term.Key{Code: term.KeyEnter, Mod: term.ModCtrl}, "Ctrl+Enter"},
+		{term.Key{Code: term.KeyEscape}, "Esc"},
+		{term.Key{Code: term.KeyF5}, "F5"},
+		{term.Key{Code: term.KeyRune, Rune: ' ', Mod: term.ModCtrl}, "Ctrl+Space"},
+		{term.Key{Code: term.KeyRune, Rune: 'q', Text: "q"}, "q"},
+	} {
+		if got := keyLabel(c.key); got != c.want {
+			t.Errorf("keyLabel(%+v) = %q, want %q", c.key, got, c.want)
+		}
+	}
+}
