@@ -186,6 +186,10 @@ func TestGrepMultiline(t *testing.T) {
 		{"only the matches", in{"pattern": `return \d\n\}`, "output_mode": "content", "multiline": true, "-o": true}, p + "\n3:return 1\n4:}\n7:return 2\n8:}\n"},
 		{"a match that ends with a line break", in{"pattern": `middle\n`, "output_mode": "content", "multiline": true}, p + "\n5:middle\n"},
 		{"ignoring case", in{"pattern": `START\nFUNC`, "output_mode": "content", "multiline": true, "-i": true}, p + "\n1:start\n2:func a() {\n"},
+		// Nothing is after the last line break: no empty line is there to
+		// match (the search-tools review of 2026-11-20).
+		{"no empty line after the last", in{"pattern": `^$`, "multiline": true}, "No matches found in " + p + ".\n"},
+		{"no blank line after the last", in{"pattern": `^\s*$`, "output_mode": "count", "multiline": true}, "No matches found in " + p + ".\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,6 +199,12 @@ func TestGrepMultiline(t *testing.T) {
 			}
 		})
 	}
+	t.Run("an empty line is found", func(t *testing.T) {
+		q := f.file("gap.txt", "a\n\nb\n")
+		if got, want := f.ok(f.grep, in{"pattern": `^$`, "output_mode": "content", "multiline": true, "path": q}), q+"\n2:\n"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
 	t.Run("CRLF files", func(t *testing.T) {
 		q := f.file("crlf.txt", "one\r\ntwo\r\nthree\r\n")
 		got := f.ok(f.grep, in{"pattern": `one\ntwo`, "output_mode": "content", "multiline": true, "path": q})
@@ -358,6 +368,44 @@ func TestGrepWhatIsLeftOut(t *testing.T) {
 		// Rules from above still hold below a directory that is searched.
 		if got := names(f, in{"pattern": "needle", "path": f.path("sub")}); !reflect.DeepEqual(got, []string{"sub/keep.gen"}) {
 			t.Errorf("below sub: %v", got)
+		}
+		// A glob reaches what it names, hidden or ignored, as ripgrep's
+		// does; .git stays out, and a binary file is still not searched
+		// (the search-tools review of 2026-11-20).
+		for _, c := range []struct {
+			glob string
+			want []string
+		}{
+			{"ignored.txt", []string{"ignored.txt"}},
+			{".hidden*", []string{".hidden.txt"}},
+			{"*.gen", []string{"sub/keep.gen", "sub/made.gen"}},
+			{"build/**", []string{"build/out.txt"}},
+			{".config/*.txt", []string{".config/settings.txt"}},
+			{"HEAD", nil},
+			{"binary.dat", nil},
+		} {
+			if got := names(f, in{"pattern": "needle", "glob": c.glob}); !reflect.DeepEqual(got, c.want) {
+				t.Errorf("glob %q found %v, want %v", c.glob, got, c.want)
+			}
+		}
+	})
+	t.Run("a negated glob leaves out directories too", func(t *testing.T) {
+		f := newFixture(t, Options{})
+		for _, name := range []string{"vendor/lib.go", "src/vendor/x.go", "src/a.go", "app.min.js", "app.js", "vendor.txt"} {
+			f.file(name, "needle\n")
+		}
+		for _, c := range []struct {
+			glob string
+			want []string
+		}{
+			{"!vendor", []string{"app.js", "app.min.js", "src/a.go", "vendor.txt"}},
+			{"!vendor/", []string{"app.js", "app.min.js", "src/a.go", "vendor.txt"}},
+			{"!*.min.js", []string{"app.js", "src/a.go", "src/vendor/x.go", "vendor.txt", "vendor/lib.go"}},
+			{"!src/vendor", []string{"app.js", "app.min.js", "src/a.go", "vendor.txt", "vendor/lib.go"}},
+		} {
+			if got := names(f, in{"pattern": "needle", "glob": c.glob}); !reflect.DeepEqual(got, c.want) {
+				t.Errorf("glob %q found %v, want %v", c.glob, got, c.want)
+			}
 		}
 	})
 	t.Run("ignore rules off", func(t *testing.T) {

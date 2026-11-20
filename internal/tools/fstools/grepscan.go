@@ -416,12 +416,15 @@ func (s *scanSpec) scanWhole(ctx context.Context, r io.Reader, res *fileScan, em
 		return nil
 	}
 	if s.mode == modeFiles {
-		if s.re.Match(data) {
+		if m := s.re.FindAllIndex(data, 2); len(m) > 0 && !(len(m) == 1 && emptyAtEnd(m[0], data)) {
 			res.matched, res.count = true, 1
 		}
 		return nil
 	}
 	matches := s.re.FindAllIndex(data, -1)
+	if n := len(matches); n > 0 && emptyAtEnd(matches[n-1], data) {
+		matches = matches[:n-1]
+	}
 	if len(matches) == 0 {
 		return nil
 	}
@@ -655,4 +658,12 @@ func (lr *lineReader) next() (line []byte, terminated bool, ok bool) {
 			return waiting, false, true
 		}
 	}
+}
+
+// emptyAtEnd reports whether a match is the empty one after the line break
+// that ends data. No line is there, as a search line by line finds none,
+// so it is no match: (?m)^$ and ^\s*$ found it in nearly every file and
+// pinned it on the last line (the search-tools review of 2026-11-20).
+func emptyAtEnd(m []int, data []byte) bool {
+	return m[0] == m[1] && m[0] == len(data) && len(data) > 0 && data[len(data)-1] == '\n'
 }

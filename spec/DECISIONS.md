@@ -4616,3 +4616,23 @@ or kept with the reason said (27).
     folded tool calls, the first shortened block, the recap of a session
     opened again) and the view's own line (the keys that go back and that
     show all) follow it. Other hints keep gnosh's keys.
+
+323. **Searches reach what is spelled out, and leave out what is.** The
+    search-tools review of 2026-11-20 found Glob's description promising
+    that ignored files are found by naming them, while a file an ignore
+    rule covered by its own name (.env, *.log) was never listed; Grep's
+    glob applied after hidden and ignored files were dropped, so glob
+    ".env*" found nothing and blamed the glob, though ripgrep's glob
+    "always overrides any other ignore logic"; a negated glob without a
+    slash ("!vendor") left the vendor directory in; and multiline ^$ found
+    the empty spot after a file's last line break, so nearly every file
+    matched. Glob keeps its default (ignore rules honoured, unlike Claude
+    Code's) but lists a name the pattern spells out in full, file or
+    directory on the way, whatever the rules say (.env, **/.env,
+    **/dist/app.js); Grep's glob reaches the hidden and ignored files it
+    names, and a glob with a slash the directories on its way; a negated
+    glob leaves out directories of that name and all below them, "!x/"
+    directories alone; the walk asks a new over hook of every entry it
+    would pass over. An empty multiline match after the last line break is
+    no match. Grep's description now says that \b \w \d \s know ASCII only
+    (Go's RE2) and names \p{L} and \p{N} for other scripts.

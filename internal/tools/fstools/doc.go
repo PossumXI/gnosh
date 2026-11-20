@@ -232,7 +232,10 @@
 // Options.GlobSkipHidden change the last two. (Claude Code's Glob does
 // not honour ignore rules by default; this one does because the brief for
 // this package asks for it.) A directory named outright, in path or at
-// the start of the pattern, is searched whatever the rules say about it.
+// the start of the pattern, is searched whatever the rules say about it,
+// and so is a name the pattern spells out in full anywhere in it: .env,
+// **/.env and **/dist/app.js list those files though .gitignore names
+// them.
 //
 // # Grep
 //
@@ -254,8 +257,11 @@
 // options turn the first, second and fourth of those off. A file or
 // directory given as path is searched whatever it is called. glob keeps
 // the files whose name matches (or, for a glob with a slash, whose path
-// below the search directory does; a leading "!" turns it round); type
-// keeps one kind of file from the table in filetypes.go.
+// below the search directory does), and reaches them even where they are
+// hidden or ignored, as ripgrep's glob does; a leading "!" turns it round,
+// and then leaves out directories it names as well ("!vendor"; "!vendor/"
+// directories only). type keeps one kind of file from the table in
+// filetypes.go.
 //
 // The three modes: files_with_matches lists the files that have a match;
 // count lists each such file with its number of matching lines (of
