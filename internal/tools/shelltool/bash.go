@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,6 +60,11 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 		// The person's own command, typed with !, runs as they typed it,
 		// outside the sandbox, as Claude Code runs it.
 		a.sandboxed = false
+	}
+	if !t.person {
+		if why := m.capped(a.command); why != "" {
+			return core.ErrorResult(why), nil
+		}
 	}
 	if env == nil || !filepath.IsAbs(env.Cwd) {
 		return core.ToolResult{}, errors.New("shelltool: the tool was given no working directory to run the command in")
@@ -484,4 +491,32 @@ func compose(headline, body string, notes []string, ran bool) string {
 		text += "[" + note + "]"
 	}
 	return text
+}
+
+// capped counts the model's command against Options.ScriptCaps, and says
+// why it may not run when a cap it falls under is used up; then nothing
+// is counted.
+func (m *Manager) capped(command string) string {
+	if len(m.opt.ScriptCaps) == 0 {
+		return ""
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var under []string
+	for _, text := range slices.Sorted(maps.Keys(m.opt.ScriptCaps)) {
+		if text == "" || !strings.Contains(command, text) {
+			continue
+		}
+		if most := max(m.opt.ScriptCaps[text], 0); m.capRuns[text] >= most {
+			return fmt.Sprintf("The command was not run: a command holding %q may run %d time(s) in this session (CLAUDE_CODE_SCRIPT_CAPS), and that many have run.", text, most)
+		}
+		under = append(under, text)
+	}
+	if len(under) > 0 && m.capRuns == nil {
+		m.capRuns = map[string]int{}
+	}
+	for _, text := range under {
+		m.capRuns[text]++
+	}
+	return ""
 }

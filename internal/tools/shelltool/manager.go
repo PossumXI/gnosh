@@ -73,6 +73,7 @@ type Manager struct {
 	remote    map[string]bool // calls described that name another machine, by id: they never go to the background
 	kept      []keptFile      // output files of finished foreground commands, oldest first
 	keptBytes int64           // how much disk those files take
+	capRuns   map[string]int  // the model's commands let run, by the text of Options.ScriptCaps they hold
 
 	wg sync.WaitGroup // every goroutine the manager has started
 

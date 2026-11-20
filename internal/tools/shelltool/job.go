@@ -241,6 +241,8 @@ func (j *job) launch(dir, name string) error {
 				return fail(err)
 			}
 			argv = wrapped
+		} else if m.opt.Isolate != nil {
+			argv = m.opt.Isolate(argv)
 		}
 		cmd = exec.Command(argv[0], argv[1:]...)
 		cmd.Stdout, cmd.Stderr = w, w

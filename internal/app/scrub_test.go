@@ -1,7 +1,9 @@
 package app
 
 import (
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -60,4 +62,53 @@ func TestScrubTakesBackSandboxLoosenings(t *testing.T) {
 	if !strings.Contains(r.out, "Files: left open") {
 		t.Errorf("without the scrub, filesystem.disabled is not in force:\n%s", r.out)
 	}
+}
+
+// A stdio MCP server starts from the scrubbed environment with the scrub
+// on, and from the baseline alone with CLAUDE_CODE_MCP_ALLOWLIST_ENV on;
+// its own env from its settings is laid over either.
+func TestMCPServerEnvironment(t *testing.T) {
+	w := apptest.NewWorld(t)
+	seen := w.Home + "/server-env.txt"
+	server := w.Script(w.Home+"/bin/env-server.sh", "env > "+seen+"\n"+fakeMCPServer)
+	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"own": {"command": "`+server+`", "env": {"SERVER_KEY": "given"}}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
+	for _, c := range []struct {
+		env       []string
+		has, lack []string
+	}{
+		{[]string{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1"}, []string{"PLAIN=hello", "SERVER_KEY=given"}, []string{"NPM_TOKEN="}},
+		{[]string{"CLAUDE_CODE_MCP_ALLOWLIST_ENV=1"}, []string{"SERVER_KEY=given", "HOME="}, []string{"PLAIN=hello", "NPM_TOKEN="}},
+		{nil, []string{"PLAIN=hello", "NPM_TOKEN=abc123", "SERVER_KEY=given"}, nil},
+	} {
+		o := testOptions(w, "-p", "/mcp")
+		o.Environ = append(append(o.Environ, "PLAIN=hello", "NPM_TOKEN=abc123"), c.env...)
+		r := runWith(t, t.Context(), o).wantCode(t, 0)
+		has(t, "/mcp", r.out, "own: connected")
+		got := w.Read(seen)
+		has(t, "the server's environment with "+strings.Join(c.env, " "), got, c.has...)
+		hasNot(t, "the server's environment with "+strings.Join(c.env, " "), got, c.lack...)
+	}
+}
+
+// On Linux, with the scrub on and the sandbox off, a command runs in a PID
+// namespace of its own: gnosh's process is not in its /proc.
+func TestScrubGivesCommandsTheirOwnPIDs(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux's alone")
+	}
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	probe := `{"command": "test -e /proc/` + strconv.Itoa(os.Getpid()) + ` && echo [seen] || echo [unseen]"}`
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: probe}}}, apptest.Reply{Text: "ok"},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: probe}}}, apptest.Reply{Text: "ok"},
+	)
+	o := testOptions(w, "-y", "-p", "look")
+	o.Environ = append(o.Environ, "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	has(t, "with the scrub", toolResult(t, w, 1, "c1"), "[unseen]")
+	run(t, w, "-y", "-p", "look").wantCode(t, 0)
+	has(t, "without it", toolResult(t, w, 3, "c1"), "[seen]")
 }

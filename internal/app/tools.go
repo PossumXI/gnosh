@@ -77,6 +77,7 @@ func (l *live) buildTools() error {
 		Env:                 l.cfg.CommandEnv(),
 		Scrub:               l.p.scrubbing(),
 		PersonSandboxed:     l.cfg.Sandbox.Scrubbed && runtime.GOOS == "linux",
+		ScriptCaps:          l.scriptCaps(),
 		EnvFile:             l.envFile(),
 		SpoolDir:            l.spoolDir(),
 		Now:                 l.p.now,
@@ -99,6 +100,9 @@ func (l *live) buildTools() error {
 		so.Misread = misreadGno
 	}
 	so.Sandbox = l.shellSandbox()
+	if l.p.scrubbing() && runtime.GOOS == "linux" {
+		so.Isolate = l.pidIsolation()
+	}
 	if l.interactive || l.inv.Command == cli.CmdPrint {
 		// A session somebody attends is told when a background command
 		// ends, and so is a run, which waits for the background work its

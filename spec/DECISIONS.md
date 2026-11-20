@@ -5831,6 +5831,33 @@ or kept with the reason said (27).
     takes back filesystem.disabled from every file, and on Linux every
     command runs in it: the person's ! commands too, excludedCommands,
     the model's asking out of it and allowNestedUserNamespaces taken
-    back; /sandbox says so. Not built yet: Claude Code's own PID
-    namespace for commands when the sandbox is off on Linux (gnosh's
-    sandbox gives commands one of their own), and CLAUDE_CODE_SCRIPT_CAPS.
+    back; /sandbox says so. CLAUDE_CODE_SCRIPT_CAPS and
+    CLAUDE_CODE_MCP_ALLOWLIST_ENV are 385.
+
+385. **CLAUDE_CODE_MCP_ALLOWLIST_ENV and CLAUDE_CODE_SCRIPT_CAPS.** Two
+    of Claude Code's companions to the scrub (384). With
+    CLAUDE_CODE_MCP_ALLOWLIST_ENV on, a stdio MCP server starts from a
+    baseline alone, what a program needs to run as the person (PATH,
+    HOME, USER, LOGNAME, SHELL, TERM, LANG, LANGUAGE, LC_*, TZ, the
+    temporary folder's variables, the XDG folders), with its own env
+    from its settings laid over it, in place of the environment gnosh
+    was started with; Claude Code's docs say "a safe baseline
+    environment" and name none, so the list is gnosh's. With the scrub
+    on, CLAUDE_CODE_SCRIPT_CAPS, a JSON object of whole numbers by a
+    text ({"deploy.sh": 2}), caps how many of the model's commands
+    holding each text may run in the session, its sub-agents' with it:
+    one more is refused, saying which cap; the text is matched as it is
+    written, so "./deploy.sh $(x)" counts, and what runs a script again
+    by other means (xargs, find -exec) is not seen, as Claude Code's
+    docs say of theirs. The person's own ! commands are not counted. A
+    value that cannot be read caps nothing, and the person is told. And
+    the scrub's PID namespace: on Linux, Claude Code runs commands with
+    the scrub in a PID namespace of their own, and without one the scrub
+    would mean little there, since a command reads the environment of the
+    person's other processes, gnosh's and the shell that started it among
+    them, through /proc (/proc/<pid>/environ). gnosh's sandbox gives its
+    commands one already; a command that runs outside it, with the scrub
+    on, runs under bubblewrap with the files as they are and a /proc of
+    its own (--dev-bind / / --unshare-pid --proc /proc): tried on the
+    devbox, it sees five processes, not gnosh's. Where bubblewrap cannot
+    make one, the person is told.

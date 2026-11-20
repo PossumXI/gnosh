@@ -34,6 +34,19 @@ type Options struct {
 	// sandbox too, where they otherwise run outside it, as Claude Code
 	// runs them with the scrub on, on Linux.
 	PersonSandboxed bool
+	// ScriptCaps are, by a text a command holds, how many of the model's
+	// commands holding it may run in the session (Claude Code's
+	// CLAUDE_CODE_SCRIPT_CAPS, with the scrub on): one more is refused.
+	// The text is matched as it is written, so "deploy.sh $(x)" counts
+	// for deploy.sh; what runs it again by other means (xargs, find -exec)
+	// is not seen.
+	ScriptCaps map[string]int
+	// Isolate, when set, is given the program line of each command on this
+	// machine that runs outside the sandbox, and returns the one to run in
+	// its place: on Linux with the scrub on, one with a PID namespace of
+	// its own, so that it reads no other process's environment through
+	// /proc, as Claude Code runs it.
+	Isolate func(argv []string) []string
 
 	// EnvFile is a shell file that runs before each command on this
 	// machine, when it is there and not empty: where SessionStart hooks

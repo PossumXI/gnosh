@@ -57,3 +57,15 @@ func TestOn(t *testing.T) {
 		}
 	}
 }
+
+// The baseline an MCP server starts from with CLAUDE_CODE_MCP_ALLOWLIST_ENV
+// on: what a program needs to run as the person, and nothing else.
+func TestBaseline(t *testing.T) {
+	got := Baseline([]string{"PATH=/usr/bin", "HOME=/home/u", "LANG=en_US.UTF-8", "LC_ALL=C", "TMPDIR=/tmp/u", "PLAIN=hello", "AWS_PROFILE=x", "GITHUB_TOKEN=ghp_x"})
+	if strings.Join(got, " ") != "PATH=/usr/bin HOME=/home/u LANG=en_US.UTF-8 LC_ALL=C TMPDIR=/tmp/u" {
+		t.Errorf("Baseline = %q", got)
+	}
+	if !Switch([]string{AllowlistVar + "=on"}, AllowlistVar) || Switch([]string{AllowlistVar + "=0"}, AllowlistVar) {
+		t.Errorf("the allowlist switch is not read as gnosh's switches are")
+	}
+}

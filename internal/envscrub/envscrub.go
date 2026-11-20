@@ -27,20 +27,7 @@ const Var = "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"
 // On reports whether the environment turns the scrub on: Var set to 1
 // (or true, yes, on, as gnosh takes its other switches), the last setting
 // winning.
-func On(environ []string) bool {
-	on := false
-	for _, kv := range environ {
-		if name, value, ok := strings.Cut(kv, "="); ok && name == Var {
-			switch strings.ToLower(strings.TrimSpace(value)) {
-			case "1", "true", "yes", "on":
-				on = true
-			default:
-				on = false
-			}
-		}
-	}
-	return on
-}
+func On(environ []string) bool { return Switch(environ, Var) }
 
 // Env is environ without its credentials, in its order; a package index's
 // URL keeps its place without the name and password in it.
@@ -180,4 +167,51 @@ func withoutUser(value string) string {
 		return value
 	}
 	return strings.Join(words, " ")
+}
+
+// AllowlistVar is Claude Code's switch for the stdio MCP servers'
+// environment: with it on (1, true, yes, on), a server starts from
+// Baseline alone, its own env from its settings laid over it, in place of
+// the environment gnosh was started with.
+const AllowlistVar = "CLAUDE_CODE_MCP_ALLOWLIST_ENV"
+
+// Baseline is the part of environ a program needs to run as the person
+// and nothing more: where programs are (PATH), who the person is and
+// where their home is, their shell, terminal, language and time zone,
+// the temporary folder, and the XDG folders.
+func Baseline(environ []string) []string {
+	var out []string
+	for _, kv := range environ {
+		name, _, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		switch name {
+		case "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG", "LANGUAGE", "TZ", "TMPDIR", "TMP", "TEMP",
+			"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "SYSTEMROOT", "USERPROFILE":
+			out = append(out, kv)
+		default:
+			if strings.HasPrefix(name, "LC_") {
+				out = append(out, kv)
+			}
+		}
+	}
+	return out
+}
+
+// Switch reports whether the variable name is on in environ: 1, true,
+// yes or on, the last setting winning.
+func Switch(environ []string, name string) bool {
+	on := false
+	for _, kv := range environ {
+		if n, value, ok := strings.Cut(kv, "="); ok && n == name {
+			switch strings.ToLower(strings.TrimSpace(value)) {
+			case "1", "true", "yes", "on":
+				on = true
+			default:
+				on = false
+			}
+		}
+	}
+	return on
 }
