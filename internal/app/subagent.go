@@ -219,6 +219,7 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if background {
 		subCtx = l.ctx
 	}
+	stopsAt := l.bgStopsNow()
 	s, err := l.newSub(subCtx, parent, t.owner, def, call.ID, strings.TrimSpace(in.Model), background, "")
 	if err != nil {
 		return core.ErrorResult("No sub-agent was started: " + strings.TrimRight(err.Error(), ".") + "."), nil
@@ -230,7 +231,15 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 		}
 	}
 	if background {
-		return l.startBackground(s, in), nil
+		if ctx.Err() != nil {
+			// The turn was stopped while it was being made ready.
+			s.close()
+			return core.ErrorResult("No sub-agent was started: the turn was stopped while it was being made ready."), nil
+		}
+		if whileSubIsMade != nil {
+			whileSubIsMade(l)
+		}
+		return l.startBackground(s, in, stopsAt), nil
 	}
 	defer s.close()
 	started := l.p.now()

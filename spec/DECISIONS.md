@@ -4575,3 +4575,17 @@ or kept with the reason said (27).
     "taken away: it does nothing" for null. The hints elsewhere (about 140
     names of keys in the screen's own sentences) still name gnosh's keys,
     which keep working beside the person's unless taken away.
+
+320. **A sub-agent stopped while it is made ready does not start.** Agent
+    in the background and SendMessage make the sub-agent (its session
+    file, its agent, its own MCP servers, which can take seconds) before
+    it joins the list of background sub-agents; Ctrl+X Ctrl+K in that
+    while stopped the others and missed it, and it ran on, and Esc on the
+    turn did not keep it from starting. Claude Code 2.1.329 fixed the
+    like of it ("a background agent ran on when stopped while being
+    resumed"). The session now counts the times its background sub-agents
+    are all stopped (bgStops, under bgMu); a sub-agent made ready starts
+    only if the count is what it was before it was made, else it is closed
+    and the call says it was not started; a call whose turn was stopped
+    while it was made starts nothing either. TaskStop of one id is not
+    counted: a sub-agent not yet started has no task to stop.

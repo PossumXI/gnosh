@@ -195,9 +195,11 @@ type live struct {
 	// statusLine runs the configured status line command, or is nil.
 	statusLine *statusLiner
 	// bgAgents are the sub-agents running in the background, and bgWG
-	// counts their goroutines.
+	// counts their goroutines. bgStops counts the times they were all
+	// stopped, under bgMu (bgStopsNow).
 	bgMu     sync.Mutex
 	bgAgents []*bgAgent
+	bgStops  int64
 	bgWG     sync.WaitGroup
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
