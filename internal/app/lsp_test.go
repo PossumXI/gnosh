@@ -177,7 +177,8 @@ func TestLanguageServerKeepsToReadRules(t *testing.T) {
 	w.Deny("Read(./secret.go)")
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		if n == 0 {
-			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "LSP", Args: `{"operation":"goToDefinition","filePath":"main.go","line":3,"character":6}`}}}
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "LSP", Args: `{"operation":"goToDefinition","filePath":"main.go","line":3,"character":6}`},
+				{ID: "c2", Name: "LSP", Args: `{"operation":"hover","filePath":"main.go","line":3,"character":6}`}}}
 		}
 		return &apptest.Reply{Text: "Done."}
 	})
@@ -186,6 +187,13 @@ func TestLanguageServerKeepsToReadRules(t *testing.T) {
 	has(t, "the definition", got, "secret.go:1:1")
 	if strings.Contains(got, "hunter2") {
 		t.Errorf("a line the deny rule keeps from the model was shown: %s", got)
+	}
+	// A hover describes what is defined, here in the file the model may
+	// not read (a constant's value, say): it is not shown.
+	hover := toolResult(t, w, 1, "c2")
+	has(t, "the hover", hover, "defined in secret.go", "is not shown")
+	if strings.Contains(hover, "func main()") {
+		t.Errorf("the hover of what a denied file defines was shown: %s", hover)
 	}
 }
 

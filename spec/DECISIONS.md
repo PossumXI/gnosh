@@ -5028,3 +5028,25 @@ or kept with the reason said (27).
     path. A URL with no host name fits nothing. gnosh doctor looks for a
     language server's program at the path it names, when its PATH is its
     own, and no longer calls a missing one installed.
+
+350. **Language servers, the second review.** A second fresh-eyes review
+    (2026-11-20, of 344) found these, fixed so. A hover describes what is
+    defined, a constant's value among it: when what is at the place is
+    defined in a file the Read deny rules or the read block keep from the
+    model, the hover is not shown (the definition is asked for first). The
+    symbols and calls of such a file are left out of the LSP tool's
+    lists, their names being its text; its paths are still shown, as
+    places, without their lines. Each server keeps its own record of the
+    diagnostics the model knows: one server's change had taken another's
+    files out of a shared record, and that one's next change then told
+    every old problem as new. A file with no record when it changes
+    (its server answered too late for opened) takes what the server last
+    said of it before the change. The file's text is read once the
+    server's slot is held, so an older text cannot be sent as the newer.
+    A writer to a server waits for the one before it only as long as its
+    own context lets (a channel and not a mutex): the reader, answering a
+    request itself, had waited behind a writer held up by a server that
+    read nothing. A diagnostic's source is clipped as its message is.
+    Left, and known: a server's message about a file the model may read
+    can quote what another file holds (a constant's value in a type
+    error); that file's problems are told, words and all.

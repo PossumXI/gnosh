@@ -453,3 +453,19 @@ func TestSettleWaitsForItsVersion(t *testing.T) {
 	}
 	_ = f
 }
+
+// A writer waiting for another, which a server that reads nothing holds up,
+// gives up when its own context ends: the reader, answering a request
+// itself, among them (the second review).
+func TestSendGivesUpBehindAnotherWriter(t *testing.T) {
+	c, _ := newFake(t, standard)
+	c.writing <- struct{}{} // another writer, stuck
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	began := time.Now()
+	err := c.send(ctx, message{Method: "x"})
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(began) > 5*time.Second {
+		t.Errorf("send behind a stuck writer: %v after %v", err, time.Since(began))
+	}
+	<-c.writing
+}

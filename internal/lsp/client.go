@@ -57,8 +57,12 @@ type Client struct {
 	in       *os.File  // the server's standard input
 	errs     *tail     // what it wrote on its standard error
 
-	wmu    sync.Mutex
-	broken error // a write gave up partway: nothing more is sent
+	// writing is the one slot for a writer: a channel and not a mutex, so
+	// that a writer waiting behind one held up by a server that reads
+	// nothing gives up when its own context ends (the reader, answering a
+	// request itself, among them; the second review).
+	writing chan struct{}
+	broken  error // a write gave up partway: nothing more is sent
 
 	mu      sync.Mutex
 	next    int64
@@ -199,7 +203,7 @@ func newClient(cfg Config, in *os.File) *Client {
 	return &Client{name: name, root: cfg.Root, settings: cfg.Settings, stopWait: cfg.StopWait, in: in, errs: &tail{},
 		pending: map[int64]chan reply{}, docs: map[string]*document{}, diags: map[string]published{},
 		changed: make(chan struct{}), done: make(chan struct{}), exited: make(chan struct{}),
-		answering: make(chan struct{}, answersAtOnce)}
+		answering: make(chan struct{}, answersAtOnce), writing: make(chan struct{}, 1)}
 }
 
 // Name is the server's name.
@@ -472,8 +476,12 @@ func (c *Client) send(ctx context.Context, m message) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	c.wmu.Lock()
-	defer c.wmu.Unlock()
+	select {
+	case c.writing <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-c.writing }()
 	if c.broken != nil {
 		return c.broken
 	}

@@ -63,12 +63,8 @@ type lspServers struct {
 	list []*lspServer
 	mu   sync.Mutex
 	// closed says the session has stopped its servers: none starts again.
+	// mu also guards each server's base.
 	closed bool
-	// base is each file's diagnostics as the model last knew them, or as
-	// they were when the file was read: a change's new problems are what
-	// is not in it, and a problem a server published late, after the
-	// change before, is told with the next (the language servers review).
-	base map[string][]lsp.Diagnostic
 	// toldUntrusted says the person was told the servers wait for trust.
 	toldUntrusted bool
 }
@@ -89,13 +85,21 @@ type lspServer struct {
 	// at a time, so that what was before it and what came after are told
 	// apart.
 	editing chan struct{}
+	// base is each file's diagnostics from this server as the model last
+	// knew them, or as they were when the file was read: a change's new
+	// problems are what is not in it, and a problem the server published
+	// late, after the change before, is told with the next (the language
+	// servers review). Each server has its own: one server's change once
+	// took another's files out of a shared one (the second review).
+	// lspServers.mu guards it.
+	base map[string][]lsp.Diagnostic
 }
 
 // newLSPServers makes the session's servers, none started.
 func newLSPServers(l *live, cfgs []config.LSPServer) *lspServers {
-	s := &lspServers{l: l, base: map[string][]lsp.Diagnostic{}}
+	s := &lspServers{l: l}
 	for _, c := range cfgs {
-		s.list = append(s.list, &lspServer{cfg: c, editing: make(chan struct{}, 1)})
+		s.list = append(s.list, &lspServer{cfg: c, editing: make(chan struct{}, 1), base: map[string][]lsp.Diagnostic{}})
 	}
 	return s
 }
@@ -313,7 +317,7 @@ func (s *lspServers) opened(path string) {
 		defer done()
 		if c.Settle(settle, path, synced, lspQuiet) {
 			s.mu.Lock()
-			s.base[path] = c.Diagnostics()[path]
+			srv.base[path] = c.Diagnostics()[path]
 			s.mu.Unlock()
 		}
 	})
@@ -328,10 +332,6 @@ func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
 	if srv == nil {
 		return nil
 	}
-	text, ok := readFileFor(path)
-	if !ok {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(ctx, lspEditWait)
 	defer cancel()
 	c, err := s.clientOf(ctx, srv)
@@ -343,6 +343,23 @@ func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
 		return nil
 	}
 	defer release()
+	// The text is read once the slot is held: read before, it could be
+	// older than another change's that took the slot first, and be sent
+	// as the newer (the second review).
+	text, ok := readFileFor(path)
+	if !ok {
+		return nil
+	}
+	s.mu.Lock()
+	if _, known := srv.base[path]; !known {
+		// What the server said of the file before this change, when it
+		// said it too late for opened (a first load can take a while):
+		// otherwise the file's old problems would count as new.
+		if d, said := c.Diagnostics()[path]; said {
+			srv.base[path] = d
+		}
+	}
+	s.mu.Unlock()
 	s.refresh(ctx, c, path)
 	synced, err := c.Sync(ctx, path, lang, text)
 	if err != nil || !synced.Sent || !srv.cfg.Diagnostics {
@@ -355,14 +372,14 @@ func (s *lspServers) changed(ctx context.Context, path string) []agent.Part {
 	done()
 	after := c.Diagnostics()
 	s.mu.Lock()
-	issues := newIssues(s.base, after)
-	for p := range s.base {
+	issues := newIssues(srv.base, after)
+	for p := range srv.base {
 		if _, still := after[p]; !still {
-			delete(s.base, p)
+			delete(srv.base, p)
 		}
 	}
 	for p, d := range after {
-		s.base[p] = d
+		srv.base[p] = d
 	}
 	s.mu.Unlock()
 	// What a file the Read deny rules or the read block keep from the
@@ -451,8 +468,8 @@ func (s *lspServers) issuesText(server string, issues []issue) (lead, list strin
 			sev = lsp.SeverityError
 		}
 		msg := clipText(strings.Join(strings.Fields(is.d.Message), " "), lspMessageMost)
-		if is.d.Source != "" {
-			msg += " (" + is.d.Source + ")"
+		if src := clipText(strings.Join(strings.Fields(is.d.Source), " "), 40); src != "" {
+			msg += " (" + src + ")"
 		}
 		fmt.Fprintf(&b, "%s:%d:%d: %s: %s\n", s.l.shownPath(is.path), line, char, sev, msg)
 	}

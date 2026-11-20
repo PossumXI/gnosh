@@ -193,6 +193,11 @@ func (t *lspTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 		out = strings.TrimSpace(h)
 		if out == "" {
 			out = "The server has nothing to say of that place: put line and character on a symbol's name."
+		} else if where := t.s.deniedDefinition(ctx, c, in.FilePath, pos); where != "" {
+			// A hover describes what is defined elsewhere, a constant's
+			// value among it: one defined in a file the model may not
+			// read is not shown (the second review).
+			out = "What is there is defined in " + where + ", which the Read deny rules or the read block keep from you, so the server's description of it is not shown."
 		}
 		out = clipText(out, 8000)
 	case "documentSymbol":
@@ -234,6 +239,13 @@ type lspFormat struct {
 	shown int
 }
 
+// denied reports whether the file at the URI is one the Read deny rules
+// or the read block keep from the model.
+func (f *lspFormat) denied(uri string) bool {
+	path := lsp.URIPath(uri)
+	return path != "" && f.l.engine != nil && f.l.engine.ReadDenied(path)
+}
+
 // place is a location as the model is shown it.
 func (f *lspFormat) place(loc lsp.Location) string {
 	path := lsp.URIPath(loc.URI)
@@ -273,10 +285,15 @@ func (f *lspFormat) locations(locs []lsp.Location, none string) string {
 	return b.String()
 }
 
-// symbols lists symbols, a symbol's own indented under it.
+// symbols lists symbols, a symbol's own indented under it: but those of a
+// file the Read deny rules or the read block keep from the model, whose
+// names are its text.
 func (f *lspFormat) symbols(syms []lsp.Symbol, depth int, withContainer bool) string {
 	var b strings.Builder
 	for _, s := range syms {
+		if f.denied(s.Location.URI) {
+			continue
+		}
 		if f.shown == lspResultsMost {
 			b.WriteString("... and more: narrow the query.\n")
 			return b.String()
@@ -304,6 +321,7 @@ func (f *lspFormat) calls(calls []lsp.Call, incoming bool) string {
 		return "It calls nothing the server knows of."
 	}
 	var b strings.Builder
+	calls = slices.DeleteFunc(slices.Clone(calls), func(c lsp.Call) bool { return f.denied(c.Item.URI) })
 	for i, c := range calls {
 		if i == lspResultsMost {
 			fmt.Fprintf(&b, "... and %d more.\n", len(calls)-i)
@@ -333,4 +351,24 @@ func clipText(s string, n int) string {
 		n--
 	}
 	return s[:n] + " [...]"
+}
+
+// deniedDefinition is the path, as the model is shown it, of a file the
+// Read deny rules or the read block keep from the model in which what is
+// at pos in path is defined, or "" when there is none (or the server
+// cannot say).
+func (s *lspServers) deniedDefinition(ctx context.Context, c *lsp.Client, path string, pos lsp.Position) string {
+	if s.l.engine == nil {
+		return ""
+	}
+	locs, err := c.Definition(ctx, path, pos)
+	if err != nil {
+		return ""
+	}
+	for _, loc := range locs {
+		if p := lsp.URIPath(loc.URI); p != "" && s.l.engine.ReadDenied(p) {
+			return s.l.shownPath(p)
+		}
+	}
+	return ""
 }
