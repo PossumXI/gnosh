@@ -129,9 +129,12 @@ func boxScale(src image.Image, w, h int) *image.NRGBA {
 	whole, isNRGBA := src.(*image.NRGBA)
 	var band *image.NRGBA
 	dst := image.NewNRGBA(image.Rect(0, 0, w, h))
+	// (The products are taken in 64 bits: on a 32-bit machine dx*sw
+	// overflows for a picture 25 million pixels wide.)
+	scaled := func(i, of, by int) int { return int(int64(i) * int64(of) / int64(by)) }
 	for dy := 0; dy < h; dy++ {
-		y0 := dy * sh / h
-		y1 := max(y0+1, (dy+1)*sh/h)
+		y0 := scaled(dy, sh, h)
+		y1 := max(y0+1, scaled(dy+1, sh, h))
 		n, top := whole, b.Min.Y+y0 // the rows y0 to y1, and where they start in n
 		if !isNRGBA {
 			if band == nil || band.Rect.Dy() < y1-y0 {
@@ -142,8 +145,8 @@ func boxScale(src image.Image, w, h int) *image.NRGBA {
 		}
 		left := n.Rect.Min.X
 		for dx := 0; dx < w; dx++ {
-			x0 := dx * sw / w
-			x1 := max(x0+1, (dx+1)*sw/w)
+			x0 := scaled(dx, sw, w)
+			x1 := max(x0+1, scaled(dx+1, sw, w))
 			var r, g, bl, a uint64
 			for y := y0; y < y1; y++ {
 				off := n.PixOffset(left+x0, top+y-y0)

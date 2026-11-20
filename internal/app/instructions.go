@@ -106,8 +106,12 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 	}
 	if allow, _ := l.outsideImports(); allow {
 		// The person let this project's files bring in files from
-		// outside it (importsok.go).
-		o.ApproveImport = func(from, target string) bool { return true }
+		// outside it (importsok.go): those the read block would let the
+		// file tools read, as a file the model wrote could name any
+		// (the blocks review of 2026-11-20).
+		o.ApproveImport = func(from, target string) bool {
+			return l.engine == nil || !l.engine.ReadDenied(target)
+		}
 	}
 	if c.Off {
 		// Safe mode: no instruction file is read at all.

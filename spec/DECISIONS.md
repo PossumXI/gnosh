@@ -4878,3 +4878,28 @@ or kept with the reason said (27).
     skills, sub-agents, commands and rules. The blocks are a step of
     their own (StageBlock), after the deny rules and before everything
     that could pass a call.
+
+341. **The blocks, after their review.** A fresh-eyes review of 340
+    (2026-11-20) found three ways round the read block and other faults,
+    fixed so: (a) the project's folders of skills, sub-agents, commands
+    and rules count as gnosh's own only above the working directory, in a
+    trusted folder, and where their links lead inside the project (a
+    repository's .claude/skills leading to / had let every read through);
+    the session's own folder is added once its id is known, not every past
+    session's. (b) A shell command is asked about where it runs too: the
+    shell's own folder and every folder the line moves to (cd, pushd, env
+    -C, git -C), where a grep -r or a find with no path reads. (c) The
+    block's question about a shell command is put only where the command
+    would have run: a dangerous removal stays critical, plan mode's
+    question stays the person's. The folders counted are compared where
+    their links lead too (/tmp is /private/tmp on macOS); the project's
+    additional directories stay through a change of the settings files;
+    a folder the person adds that the project names too is the person's;
+    a subfolder's gnosh.json and .gnosh/settings.local.json are settings
+    files too, compared as the disk compares names; an import of an
+    instruction file outside the project, which the person allowed, is
+    still held to the read block; a notebook keeps under what one result
+    may hold (335), as text does. Left as Claude Code leaves it: a
+    program that opens files of its own (python -c, curl file://) is not
+    held by the read block, which can only trace the commands it knows;
+    Claude Code's sandbox is what holds those, and gnosh has none.

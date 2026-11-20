@@ -12,10 +12,11 @@ func blockOptions(mode Mode, reads, writes bool) Options {
 	o := testOptions(mode, rules{allow: []string{"Read(//etc/**)", "Edit(//etc/**)", "Bash"}})
 	o.Layers = append(o.Layers,
 		Layer{Scope: ScopeCLI, Name: "additional directories", Dirs: []string{"/shared"}},
-		Layer{Scope: ScopeProject, FromProject: true, Name: "the project's additional directories", Dirs: []string{"/theirs"}})
+		Layer{Scope: ScopeCLI, FromProject: true, Name: "the project's additional directories", Dirs: []string{"/theirs"}})
 	o.BlockReads, o.BlockWrites = reads, writes
-	o.OwnReads = []string{"/home/u/.local/share/gnosh/sessions/proj", "/home/u/.config/gnosh/skills"}
+	o.OwnReads = []string{"/home/u/.config/gnosh/skills"}
 	o.SettingsFiles = []string{"/home/u/.config/gnosh/gnosh.json", "/proj/gnosh.json", "/proj/.gnosh/settings.local.json"}
+	o.SettingsNames = []string{"gnosh.json", ".gnosh/settings.local.json"}
 	return o
 }
 
@@ -28,6 +29,7 @@ func blockOptions(mode Mode, reads, writes bool) Options {
 func TestReadBlockRefusesFileToolsOutside(t *testing.T) {
 	for _, mode := range []Mode{ModeDefault, ModeAcceptEdits, ModeBypass, ModeDontAsk, ModePlan} {
 		e := mustEngine(t, blockOptions(mode, true, false))
+		e.AddOwnRead("/home/u/.local/share/gnosh/sessions/proj/abc")
 		for _, c := range []struct{ tool, path string }{
 			{"Read", "/etc/passwd"}, {"Grep", "/etc"}, {"Glob", "/home/u"}, {"Read", "/theirs/a.txt"},
 			{"Read", "/home/u/.config/gnosh/gnosh.json"},
@@ -95,6 +97,9 @@ func TestWriteBlockRefusesFileToolsOutside(t *testing.T) {
 			{"NotebookEdit", "/tmp/n.ipynb", "outside the working directories"},
 			{"Write", "/proj/gnosh.json", "settings file"},
 			{"Edit", "/proj/.gnosh/settings.local.json", "settings file"},
+			// A subfolder's are the settings of a session started there.
+			{"Write", "/proj/sub/gnosh.json", "settings file"},
+			{"Write", "/proj/sub/.gnosh/settings.local.json", "settings file"},
 		} {
 			d := file(e, c.tool, c.path)
 			if d.Behavior != Deny || d.Stage != StageBlock || !strings.Contains(d.Reason, c.says) || !strings.Contains(d.Reason, "blockWritesOutsideWorkingDirectories") {
@@ -146,5 +151,67 @@ func TestReadBlockAsksAboutShellReadsOutside(t *testing.T) {
 				t.Errorf("%s: %q = %+v, want it not blocked", mode, cmd, d)
 			}
 		}
+	}
+}
+
+// The read block's question about a shell command covers the folders the
+// line runs in, not only the files it names (cd, env -C, git -C, and the
+// shell's own folder), as a grep -r or a find with no path reads there
+// (the blocks review of 2026-11-20).
+func TestReadBlockAsksWhereACommandRuns(t *testing.T) {
+	e := mustEngine(t, blockOptions(ModeBypass, true, false))
+	for _, cmd := range []string{"cd /home/u/.ssh && grep -r PRIVATE", "env -C /home/u grep -r token", "git -C /etc log", "cd .. && ls"} {
+		if d := bash(e, cmd); d.Behavior != Ask || d.Stage != StageBlock || !strings.Contains(d.Reason, "runs in") {
+			t.Errorf("%q = %+v, want the block's question about where it runs", cmd, d)
+		}
+	}
+	if d := bash(e, "cd /proj/sub && grep -r x"); d.Stage == StageBlock {
+		t.Errorf("a line that stays inside: %+v", d)
+	}
+	e.SetCwd("/srv")
+	if d := bash(e, "grep -r x"); d.Behavior != Ask || d.Stage != StageBlock {
+		t.Errorf("a command in a shell that stands outside: %+v", d)
+	}
+}
+
+// The block's question never softens what the other steps found: a
+// dangerous removal stays critical, plan mode's question stays the
+// person's, and a deny rule stays a refusal.
+func TestReadBlockLeavesStricterAnswers(t *testing.T) {
+	e := mustEngine(t, blockOptions(ModeBypass, true, false))
+	if d := bash(e, "cat /etc/hostname; rm -rf ~"); !d.Critical {
+		t.Errorf("a dangerous removal beside a read outside: %+v", d)
+	}
+	p := mustEngine(t, blockOptions(ModePlan, true, false))
+	if d := bash(p, "cat /etc/x > notes"); d.Behavior != Ask || !d.PersonOnly || d.Stage == StageBlock {
+		t.Errorf("plan mode's question: %+v", d)
+	}
+	o := blockOptions(ModeBypass, true, false)
+	o.Layers[0].Deny = []string{"Bash(cat *)"}
+	if d := bash(mustEngine(t, o), "cat /etc/hosts"); d.Behavior != Deny || d.Stage != StageDeny {
+		t.Errorf("a deny rule: %+v", d)
+	}
+}
+
+// The folders the blocks count are compared also where their links lead
+// (/tmp is /private/tmp on macOS), and the project's added folders stay
+// where a change of the settings files leaves the person's.
+func TestBlockFoldersFollowLinksAndStay(t *testing.T) {
+	o := blockOptions(ModeBypass, true, true)
+	o.Layers[1].Dirs = []string{"/tmp/x"}
+	o.Resolve = fakeFS{links: map[string]string{"/tmp": "/private/tmp"}}.resolve
+	e := mustEngine(t, o)
+	for _, tool := range []string{"Read", "Write"} {
+		if d := file(e, tool, "/tmp/x/a.txt"); d.Stage == StageBlock {
+			t.Errorf("%s in an added folder reached by a link: %+v", tool, d)
+		}
+	}
+	e.RemoveLayers(ScopeProject)
+	found := false
+	for _, d := range e.Dirs() {
+		found = found || d == "/theirs"
+	}
+	if !found {
+		t.Errorf("the project's added folder went with a reload of the settings: %v", e.Dirs())
 	}
 }

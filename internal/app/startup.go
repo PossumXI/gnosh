@@ -454,9 +454,10 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	}
 	// The additional directories, the person's and the project's apart:
 	// the blocks outside the working directories do not count those only
-	// the project's own files add.
+	// the project's own files add. (Both under the command line's scope,
+	// which a change of the settings files mid-session leaves in place.)
 	mine := permission.Layer{Scope: permission.ScopeCLI, Name: "additional directories"}
-	theirs := permission.Layer{Scope: permission.ScopeProject, FromProject: true, Name: "the project's additional directories"}
+	theirs := permission.Layer{Scope: permission.ScopeCLI, FromProject: true, Name: "the project's additional directories"}
 	for _, d := range cfg.Permissions.Dirs {
 		if slices.Contains(cfg.Permissions.ProjectDirs, d.V) {
 			theirs.Dirs = append(theirs.Dirs, d.V)
@@ -471,7 +472,8 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	}
 	o.BlockReads, o.BlockWrites = cfg.Permissions.BlockReads.V, cfg.Permissions.BlockWrites.V
 	if o.BlockReads || o.BlockWrites {
-		o.OwnReads, o.SettingsFiles = st.ownReads(cfg), settingsFiles(cfg)
+		o.OwnReads, o.SettingsFiles = ownReads(cfg), settingsFiles(cfg)
+		o.SettingsNames = []string{"gnosh.json", filepath.Join(filepath.Base(cfg.Paths.DataDir), "settings.local.json")}
 		if s := strings.TrimSpace(st.inputs.Flags.Settings); s != "" && !strings.HasPrefix(s, "{") {
 			o.SettingsFiles = append(o.SettingsFiles, st.p.absFrom(s))
 		}
@@ -480,21 +482,29 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 }
 
 // ownReads are gnosh's own files that the read block lets the file tools
-// reach all the same (permission.Options.OwnReads): the project's sessions,
-// where a command's saved output, a fetched page and a pasted picture are
-// kept, and the folders of skills, sub-agents, commands and rules, the
-// person's and the project's, which may lie above the working directory.
-func (st *startup) ownReads(cfg *config.Config) []string {
-	// (From cfg, not st.cfg: the rules are checked, with these options,
-	// while the config is still being loaded.)
-	root := st.runState
-	if root == "" {
-		root = cfg.Paths.StateDir
-	}
-	out := []string{(&transcript.Store{Dir: root}).ProjectDir(cfg.Paths.Cwd)}
+// reach all the same (permission.Options.OwnReads): the folders of
+// skills, sub-agents, commands and rules, the person's, and the project's
+// that lie above the working directory, in a trusted folder and really
+// inside the project once their links are followed: a repository's
+// .claude/skills that leads to / would otherwise let every read through
+// (the blocks review of 2026-11-20). The session's own folder is added
+// once it is known (live.ownSession).
+func ownReads(cfg *config.Config) []string {
+	var out []string
+	root := cfg.Paths.ProjectRoot
 	for _, kind := range []string{"skills", "agents", "commands", "rules"} {
 		out = append(out, userDefDirs(cfg, kind)...)
-		out = append(out, projectDefDirs(cfg, kind, nil)...)
+		if !cfg.Trusted || root == "" {
+			continue
+		}
+		for _, d := range projectDefDirs(cfg, kind, nil) {
+			if within(d, cfg.Paths.Cwd) {
+				continue // (readable as the working directory's own)
+			}
+			if real, err := filepath.EvalSymlinks(d); err == nil && within(real, root) {
+				out = append(out, d)
+			}
+		}
 	}
 	return out
 }

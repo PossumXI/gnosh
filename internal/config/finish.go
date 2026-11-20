@@ -74,7 +74,7 @@ func (ld *loader) finish() *Config {
 			continue
 		}
 		flags.add(op{kind: KindAddDir, text: "additional directory " + dir, origin: o, feature: FeaturePermissions, what: "an additional directory",
-			apply: func(b *builder) { addItem(&b.dirs, dir, o) }})
+			apply: func(b *builder) { b.addDir(dir, o) }})
 	}
 	for _, o := range flags.ops {
 		b.run(o)
@@ -447,7 +447,15 @@ func (ld *loader) permissions() Permissions {
 	perm := Permissions{Dirs: b.dirs, BypassDisabled: b.bypassDisabled, DenyInsteadOfPrompting: b.denyInstead,
 		BlockReads: b.blockReads, BlockWrites: b.blockWrites}
 	for _, d := range b.dirs {
-		if d.Origin.File != "" && slices.Contains(ld.projectFiles, d.Origin.File) {
+		// The project's only when no file or flag of the person's named it
+		// too: --add-dir and the person's own files are read after the
+		// project's gnosh.json, which named it first (the blocks review of
+		// 2026-11-20).
+		mine := false
+		for _, o := range b.dirNamed[d.V] {
+			mine = mine || o.File == "" || !slices.Contains(ld.projectFiles, o.File)
+		}
+		if !mine {
 			perm.ProjectDirs = append(perm.ProjectDirs, d.V)
 		}
 	}

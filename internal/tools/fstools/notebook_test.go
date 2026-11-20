@@ -1,6 +1,7 @@
 package fstools
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -204,4 +205,21 @@ func TestNotebookEditReviewed(t *testing.T) {
 			t.Errorf("a picture went as %s", b.MediaType)
 		}
 	}
+}
+
+// A notebook is shown whole or not at all, and recorded as read whole, so
+// it keeps under what one result may hold for the model (ReadResultMost)
+// as a text file does: with outputs left out first, and refused when its
+// cells alone come to more (the blocks review of 2026-11-20).
+func TestReadNotebookKeepsUnderTheResultCap(t *testing.T) {
+	f := newFixture(t, Options{ReadResultMost: func(context.Context) int { return 420 }})
+	p := f.file("sums.ipynb", sampleNotebook(t))
+	got := f.ok(f.read, in{"file_path": p})
+	mustContain(t, got, "Its outputs were left out")
+	if strings.Contains(got, "NameError") {
+		t.Error("the outputs were shown over the cap")
+	}
+	g := newFixture(t, Options{ReadResultMost: func(context.Context) int { return 100 }})
+	q := g.file("sums.ipynb", sampleNotebook(t))
+	g.fails(g.read, in{"file_path": q}, "whose cells alone come to", "the 100 bytes one call shows")
 }

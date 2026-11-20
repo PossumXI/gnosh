@@ -501,6 +501,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		return l, err
 	}
 	l.allowSpool()
+	l.ownSession()
 	if err := l.loadInstructions(ctx); err != nil {
 		return l, err
 	}
@@ -673,6 +674,7 @@ func (l *live) openTranscript(ctx context.Context) error {
 			return fmt.Errorf("the session %s could not be opened again: %w", l.reopen, err)
 		}
 		l.ts = ts
+		l.ownSession()
 		// What is written from here on is written in this folder.
 		l.ts.SetCwd(cwd)
 		// (/resume opens a session whose conversation is not on the
@@ -789,6 +791,7 @@ func (l *live) openTranscript(ctx context.Context) error {
 		ts, l.source = copied, "fork"
 	}
 	l.ts = ts
+	l.ownSession()
 	// What is written from here on is written in this folder, which may
 	// not be the one the session's last entry was (another folder's
 	// session opened by its id, a shell that had moved, or /cd).
@@ -1210,6 +1213,16 @@ func (l *live) envOn(name string) bool {
 		return true
 	}
 	return false
+}
+
+// ownSession lets the read block through to the session's own folder,
+// where its commands' saved output, fetched pages and pasted pictures are
+// kept (permission.Engine.AddOwnRead): this session's alone, not every
+// past one of the project.
+func (l *live) ownSession() {
+	if l.engine != nil && l.ts != nil && l.st != nil {
+		l.engine.AddOwnRead(l.st.dirs(l.ts.ID()).Session)
+	}
 }
 
 // cwd is the session's working directory as it stands.

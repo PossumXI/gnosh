@@ -166,7 +166,7 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	case args.pages != "":
 		return refused(failf("%s: pages is for PDF files, and %s is not one. Use offset and limit to read part of a text file.", o.ReadName, loc.abs))
 	case ext == ".ipynb":
-		return t.readNotebook(env, &loc, file, info, head, atEnd)
+		return t.readNotebook(ctx, env, &loc, file, info, head, atEnd)
 	}
 	if media := imageType(head); media != "" {
 		return t.readImage(ctx, env, &loc, file, info, head, atEnd, media)

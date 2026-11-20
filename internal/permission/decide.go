@@ -715,6 +715,25 @@ func (e *Engine) decideLocked(tool string, call core.ToolCall, action core.Actio
 }
 
 func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) Decision {
+	var req *request
+	d := e.decideSteps(canon, call, action, &req)
+	if d.Behavior == Allow && req != nil {
+		// The read block's question about a shell command (block.go) is
+		// put only where the command would have run: anything stricter
+		// that the steps found (a dangerous removal, plan mode's question
+		// for the person, a refusal) stands as it is (the blocks review
+		// of 2026-11-20).
+		if bd, ok := e.shellBlocked(req); ok {
+			return bd
+		}
+	}
+	return d
+}
+
+// decideSteps goes through the steps of a decision, all but the read
+// block's question about a shell command, and puts in made the call's
+// request once it is worked out.
+func (e *Engine) decideSteps(canon string, call core.ToolCall, action core.Action, made **request) Decision {
 	if off := e.toolOff(canon); off != nil {
 		if off.rule != nil {
 			return Decision{Behavior: Deny, Stage: StageTool, Rule: off.rule.Rule.String(), Source: off.rule.layer.Name,
@@ -723,14 +742,16 @@ func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) De
 		return Decision{Behavior: Deny, Stage: StageTool, Reason: canon + " is switched off: " + off.why + "."}
 	}
 	req := e.newRequest(canon, call, action)
+	*made = req
 
 	// 1. Deny rules, from every layer.
 	if c := e.match(ListDeny, req); c != nil {
 		return Decision{Behavior: Deny, Stage: StageDeny, Rule: c.Rule.String(), Source: c.layer.Name,
 			Reason: "The deny rule " + c.Rule.String() + " from " + c.layer.Name + " refuses this."}
 	}
-	// 1b. The blocks outside the working directories (block.go), which no
-	// ask rule turns into a question and no mode or allow rule passes.
+	// 1b. The blocks of the file tools outside the working directories
+	// (block.go), which no ask rule turns into a question and no mode or
+	// allow rule passes.
 	if d, ok := e.blocked(req); ok {
 		return d
 	}

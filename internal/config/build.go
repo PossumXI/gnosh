@@ -54,7 +54,9 @@ type builder struct {
 	denyInstead    Value[bool]
 	blockReads     Value[bool]
 	blockWrites    Value[bool]
-	dirs           []ListItem
+	// dirNamed are the places that named each additional directory.
+	dirNamed map[string][]Origin
+	dirs     []ListItem
 
 	env           map[string]EnvVar
 	skillOver     map[string]Value[string] // the person's own files
@@ -332,6 +334,16 @@ func (b *builder) addRule(which string, r Rule, scope, file, dir string) {
 	}
 }
 
+// addDir adds an additional directory, and keeps every place that named
+// it (ProjectDirs tells the project's apart from the person's by them).
+func (b *builder) addDir(dir string, o Origin) {
+	addItem(&b.dirs, dir, o)
+	if b.dirNamed == nil {
+		b.dirNamed = map[string][]Origin{}
+	}
+	b.dirNamed[dir] = append(b.dirNamed[dir], o)
+}
+
 // setEnv sets a variable of the env block. A later file wins.
 func (b *builder) setEnv(v EnvVar) {
 	if have, ok := b.env[v.Name]; ok && v.Origin.Layer < have.Origin.Layer {
@@ -496,7 +508,12 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 	}
 	if !ok(KindAddDir) {
 		b.dirs = slices.DeleteFunc(b.dirs, func(d ListItem) bool {
-			if from(d.Origin) {
+			// (Kept when the person named it too.)
+			theirs := from(d.Origin)
+			for _, o := range b.dirNamed[d.V] {
+				theirs = theirs && from(o)
+			}
+			if theirs {
 				note("additional directory")
 				return true
 			}

@@ -46,7 +46,7 @@ func (s *source) settingsPermissions(f jfield) {
 				}
 				dir, at := absPath(d.str, s.home, s.cwd), s.at(d.line)
 				s.add(op{kind: KindAddDir, text: "additional directory " + dir, origin: at, feature: FeaturePermissions, what: "an additional directory",
-					apply: func(b *builder) { addItem(&b.dirs, dir, at) }})
+					apply: func(b *builder) { b.addDir(dir, at) }})
 			}
 		case "disableBypassPermissionsMode":
 			if m.val.kind != jString || m.val.str != "disable" {

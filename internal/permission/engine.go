@@ -110,8 +110,11 @@ type Options struct {
 	OwnReads []string
 	// SettingsFiles are the settings files the write block refuses
 	// wherever they are, the working directories too: one could lift the
-	// block.
+	// block. SettingsNames are the ends of a path that make a file one
+	// wherever it is ("gnosh.json", ".gnosh/settings.local.json"): a
+	// subfolder's is the settings of a session started there.
 	SettingsFiles []string
+	SettingsNames []string
 	// Resolve follows symbolic links in a cleaned absolute path and
 	// returns where it really leads; for a path that does not exist yet
 	// it resolves the part that does. Nil means the paths the engine is
@@ -173,6 +176,8 @@ type Engine struct {
 	// pass over and keep, each as given and with its links followed.
 	blockReads, blockWrites bool
 	ownReads, settingsFiles []string
+	settingsNames           []string
+	links                   *sync.Map // a folder's links, looked up once (block.go linked)
 	layers                  []*layer
 	session                 *layer
 	saved                   *layer
@@ -221,8 +226,10 @@ func New(o Options) (*Engine, error) {
 		gitRuns:  o.GitRunsPrograms,
 		repoOf:   o.RepoOf,
 
-		blockReads:  o.BlockReads,
-		blockWrites: o.BlockWrites,
+		blockReads:    o.BlockReads,
+		blockWrites:   o.BlockWrites,
+		settingsNames: o.SettingsNames,
+		links:         &sync.Map{},
 	}
 	e.ownReads = withLinks(o.OwnReads, o.Resolve)
 	e.settingsFiles = withLinks(o.SettingsFiles, o.Resolve)
@@ -705,8 +712,9 @@ func (e *Engine) ReadDenied(p string) bool {
 	req := &request{}
 	ps := e.expand(req, []string{p})
 	if e.blockReads {
+		dirs := e.blockDirs()
 		for _, q := range ps {
-			if e.outsideBlock(q) && !e.ownRead(q) {
+			if outside(dirs, q) && !e.ownRead(q) {
 				return true
 			}
 		}

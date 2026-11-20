@@ -415,6 +415,16 @@ func TestSettingsBlocksOutsideWorkingDirectories(t *testing.T) {
 	if cfg.Permissions.BlockReads.Set || cfg.Permissions.BlockWrites.Set {
 		t.Errorf("false sets nothing: %+v", cfg.Permissions)
 	}
+	// A folder the project names and the person adds too (--add-dir, read
+	// after the project's file) is the person's.
+	both := newFS().put(projJSON, `{"permissions": {"additionalDirectories": ["/srv/theirs"]}}`)
+	both.mkdir("/srv/theirs")
+	in := inputs(both)
+	in.Flags.AddDirs = []string{"/srv/theirs"}
+	cfg = mustLoad(t, in)
+	if len(cfg.Permissions.ProjectDirs) != 0 || len(cfg.Permissions.Dirs) != 1 {
+		t.Errorf("a folder both named: dirs %+v, the project's %v", cfg.Permissions.Dirs, cfg.Permissions.ProjectDirs)
+	}
 }
 
 // The hooks in force come back out in Claude Code's shape, for a hook

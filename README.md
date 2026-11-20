@@ -74,7 +74,10 @@ Built:
   tools are `mcp__<server>__<tool>`, and a server may ask you for a few
   values in the middle of a call, Claude Code's elicitation).
 - **Permissions:** modes, plan mode included (the model presents its plan
-  with ExitPlanMode and you approve it), and rules. The model's own
+  with ExitPlanMode and you approve it), and rules; Claude Code's
+  `blockReadsOutsideWorkingDirectories` and
+  `blockWritesOutsideWorkingDirectories` keep the file tools inside the
+  working directories in every mode, `-y` too. The model's own
   questions (AskUserQuestion) can close by themselves after a while
   without a key, so that a session you left goes on
   (`"options": {"askUserQuestionTimeout": "5m"}`, or 60s or 10m).

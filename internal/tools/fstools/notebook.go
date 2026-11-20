@@ -2,6 +2,7 @@ package fstools
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -372,8 +373,18 @@ func clipRunes(s string, n int) string {
 }
 
 // readNotebook gives a notebook's cells and outputs.
-func (t *readTool) readNotebook(env *core.ToolEnv, loc *location, file *os.File, info os.FileInfo, head []byte, atEnd bool) (core.ToolResult, error) {
+func (t *readTool) readNotebook(ctx context.Context, env *core.ToolEnv, loc *location, file *os.File, info os.FileInfo, head []byte, atEnd bool) (core.ToolResult, error) {
 	o := t.opts
+	// The most one call shows: Read's own limit, or what one result may
+	// hold for the model where that is less (ReadResultMost), since a
+	// notebook is recorded as read whole (the blocks review of
+	// 2026-11-20).
+	most := o.ReadMaxBytes
+	if o.ReadResultMost != nil {
+		if m := o.ReadResultMost(ctx); m > 0 && m < most {
+			most = m
+		}
+	}
 	if info.Size() > nbMaxBytes {
 		return refused(failf("%s is a notebook of %s, more than the %s %s reads. Look at some of its cells with a shell command (jq '.cells[0:10]' on it, for one).", loc.abs, byteSize(info.Size()), byteSize(nbMaxBytes), o.ReadName))
 	}
@@ -391,13 +402,13 @@ func (t *readTool) readNotebook(env *core.ToolEnv, loc *location, file *os.File,
 	}
 	v := doc.view(o, loc.abs, true)
 	note := ""
-	if len(v.text) > o.ReadMaxBytes {
+	if len(v.text) > most {
 		v = doc.view(o, loc.abs, false)
 		note = "[Its outputs were left out: with them it is more than one call shows.]\n"
 	}
-	if len(v.text) > o.ReadMaxBytes {
+	if len(v.text) > most {
 		return refused(failf("%s is a notebook of %s whose cells alone come to %s, more than the %s one call shows. Look at some of its cells with a shell command (jq '.cells[0:10]' on it, for one), or find what you need with %s.",
-			loc.abs, countOf(len(doc.cells), "cell", "cells"), byteSize(int64(len(v.text))), byteSize(int64(o.ReadMaxBytes)), o.GrepName))
+			loc.abs, countOf(len(doc.cells), "cell", "cells"), byteSize(int64(len(v.text))), byteSize(int64(most)), o.GrepName))
 	}
 	sum := sha256.Sum256(data)
 	sessionOf(env).saw(loc.real, sighting{info: info, sum: &sum, lines: -1, whole: true})

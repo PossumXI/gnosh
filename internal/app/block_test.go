@@ -1,10 +1,14 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/config"
 )
 
 // Claude Code's blocks, set in the person's gnosh.json, hold in
@@ -43,4 +47,37 @@ func TestBlocksOutsideTheWorkingDirectories(t *testing.T) {
 	r := run(t, w, "-p", "/permissions")
 	r.wantCode(t, 0)
 	has(t, "/permissions", r.out, "The file tools read or change nothing outside these folders, in every mode", "blockReadsOutsideWorkingDirectories")
+}
+
+// The project's folders of skills, sub-agents, commands and rules above
+// the working directory count as gnosh's own for the read block only in a
+// trusted folder, and only where they really are inside the project: a
+// repository's .claude/skills that is a link to / lets nothing through
+// (the blocks review of 2026-11-20).
+func TestOwnReadsLeaveOutLinksOutOfTheProject(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "sub")
+	for _, d := range []string{filepath.Join(root, ".gnosh", "skills"), filepath.Join(root, ".claude"), sub} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("/", filepath.Join(root, ".claude", "skills")); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Trusted: true, Paths: config.Paths{Home: t.TempDir(), Cwd: sub, ProjectRoot: root, ConfigDir: t.TempDir()}}
+	got := ownReads(cfg)
+	if !slices.Contains(got, filepath.Join(root, ".gnosh", "skills")) {
+		t.Errorf("the project's own skills folder above the working directory is left out: %v", got)
+	}
+	if slices.Contains(got, filepath.Join(root, ".claude", "skills")) || slices.Contains(got, "/") {
+		t.Errorf("a link out of the project counts as gnosh's own: %v", got)
+	}
+	cfg.Trusted = false
+	if slices.Contains(ownReads(cfg), filepath.Join(root, ".gnosh", "skills")) {
+		t.Error("an untrusted project's folders count as gnosh's own")
+	}
 }
