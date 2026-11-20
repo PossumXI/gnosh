@@ -427,6 +427,44 @@ func TestSettingsBlocksOutsideWorkingDirectories(t *testing.T) {
 	}
 }
 
+// allowedHttpHookUrls and httpHookAllowedEnvVars merge across files, a
+// project's even in a folder that is not trusted (they only take a power
+// away); not given is nil, and an empty list is in force.
+func TestSettingsHTTPHookLimits(t *testing.T) {
+	values := func(items []ListItem) []string {
+		if items == nil {
+			return nil
+		}
+		out := []string{}
+		for _, it := range items {
+			out = append(out, it.V)
+		}
+		return out
+	}
+	fsys := newFS().put(userJSON, `{"allowedHttpHookUrls": ["https://hooks.example.com/*"], "httpHookAllowedEnvVars": ["TOKEN"]}`).
+		put(projJSON, `{"allowedHttpHookUrls": ["http://localhost:*", "https://hooks.example.com/*"], "httpHookAllowedEnvVars": []}`)
+	for _, trusted := range []bool{true, false} {
+		in := inputs(fsys)
+		in.Trusted = trusted
+		cfg := mustLoad(t, in)
+		if got := values(cfg.HTTPHookURLs); strings.Join(got, " ") != "https://hooks.example.com/* http://localhost:*" {
+			t.Errorf("trusted %v: urls %q", trusted, got)
+		}
+		if got := values(cfg.HTTPHookEnvVars); strings.Join(got, " ") != "TOKEN" || cfg.HTTPHookEnvVars[0].Origin.File != userJSON {
+			t.Errorf("trusted %v: env vars %q", trusted, got)
+		}
+	}
+	cfg := mustLoad(t, inputs(newFS().put(projJSON, `{"allowedHttpHookUrls": []}`)))
+	if cfg.HTTPHookURLs == nil || len(cfg.HTTPHookURLs) != 0 || cfg.HTTPHookEnvVars != nil {
+		t.Errorf("an empty list is in force, and one not given is nil: %#v, %#v", cfg.HTTPHookURLs, cfg.HTTPHookEnvVars)
+	}
+	for _, bad := range []string{`{"allowedHttpHookUrls": "https://x/*"}`, `{"allowedHttpHookUrls": [1]}`, `{"httpHookAllowedEnvVars": [""]}`} {
+		if _, problems := load(t, withConfig(bad)); len(problems) == 0 || !strings.Contains(showProblems(problems), "is a list of the") {
+			t.Errorf("%s: %s", bad, showProblems(problems))
+		}
+	}
+}
+
 // The hooks in force come back out in Claude Code's shape, for a hook
 // runner that reads that shape.
 func TestHooksJSON(t *testing.T) {

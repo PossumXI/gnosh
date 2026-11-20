@@ -70,6 +70,12 @@
 //	                 with an "if" filter if it likes (one permission rule)
 //	env              variables for the commands and hooks gnosh starts
 //	disableAllHooks  true switches every hook off, and the status line
+//	allowedHttpHookUrls, httpHookAllowedEnvVars
+//	                 the URL patterns an http hook may post to (* is any
+//	                 run of characters), and the variables its headers may
+//	                 take beside its own allowedEnvVars: every file's list
+//	                 merged, a project's in a folder not yet trusted too,
+//	                 and an empty list lets none
 //	statusLine       {"type": "command", "command": ..., "padding": ...,
 //	                 "refreshInterval": ...}: a command whose output is the
 //	                 status line under the prompt; a program to run, so a

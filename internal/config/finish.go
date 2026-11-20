@@ -109,6 +109,7 @@ func (ld *loader) finish() *Config {
 	default:
 		cfg.Hooks = b.hooks
 	}
+	cfg.HTTPHookURLs, cfg.HTTPHookEnvVars = b.hookURLs.list(), b.hookEnvVars.list()
 	if b.statusLine.Set {
 		switch {
 		case cfg.Switches.SafeMode.V:

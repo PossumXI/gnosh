@@ -87,7 +87,9 @@ Built:
   without a key, so that a session you left goes on
   (`"options": {"askUserQuestionTimeout": "5m"}`, or 60s or 10m).
 - **Hooks:** command hooks in the shell and exec forms, in the background
-  too, http hooks, mcp_tool hooks, prompt hooks (a rule or a condition
+  too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
+  to, and their headers to the variables `httpHookAllowedEnvVars` names,
+  when those are set), mcp_tool hooks, prompt hooks (a rule or a condition
   the model judges, `{"ok": false, "reason": ...}` blocking as a command
   hook's answer would) and agent hooks (the same question put to a
   sub-agent that may read, search and run commands first), with Claude

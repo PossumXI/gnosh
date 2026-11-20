@@ -4986,3 +4986,20 @@ or kept with the reason said (27).
     relative entry would be the folder the program starts in, which a
     repository fills. The name stays the program's first argument.
     gnosh doctor looks for a language server's program the same way.
+
+347. **Limits on http hooks.** Claude Code's allowedHttpHookUrls and
+    httpHookAllowedEnvVars, read as its settings reference has them: lists
+    merged across every file that gives them, in force once any file does,
+    an empty list included (no http hook runs; no header takes a variable).
+    An http hook whose URL fits none of the patterns (* is any run of
+    characters; scheme and host whatever their case, a host's trailing
+    dot no part of it) is passed over as if it were not there, as Claude
+    Code passes it over, and the startup check warns of it, so that a
+    guard that never runs is not a mystery. A URL with a user name in it
+    fits no pattern: in http://localhost:80@elsewhere/ the host is
+    elsewhere, though "http://localhost:*" fits the text. A header takes a
+    variable only when both the hook's allowedEnvVars and the list name
+    it. They only take a power away, so a project's lists count in a
+    folder that is not trusted too (KindRestriction), as the blocks do: a
+    project's list can widen the person's own only for hooks that run,
+    and a project's hooks wait for trust.

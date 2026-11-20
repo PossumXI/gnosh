@@ -673,7 +673,22 @@ func (st *startup) hookOptions(cfg *config.Config) hooks.Options {
 		Now:        st.p.now,
 		ToolNames:  st.p.toolNames(),
 		Guards:     guards,
+		// (nil stays nil: no file gives the list, and nothing is limited.)
+		HTTPURLs:    listValues(cfg.HTTPHookURLs),
+		HTTPEnvVars: listValues(cfg.HTTPHookEnvVars),
 	}
+}
+
+// listValues is the values of a config list, nil for nil.
+func listValues(items []config.ListItem) []string {
+	if items == nil {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.V)
+	}
+	return out
 }
 
 // overlayEnv lays the env block of the settings over an environment:

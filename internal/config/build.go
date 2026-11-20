@@ -47,6 +47,9 @@ type builder struct {
 	// attribution is what commits and pull requests are signed with; a
 	// later file wins.
 	attribution Value[Attribution]
+	// hookURLs and hookEnvVars are allowedHttpHookUrls and
+	// httpHookAllowedEnvVars, every file's merged.
+	hookURLs, hookEnvVars allowList
 
 	layers []*RuleLayer
 	mode   Value[string]
@@ -508,6 +511,14 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 	if !ok(KindRestriction) && b.blockWrites.Set && from(b.blockWrites.Origin) {
 		note("blockWritesOutsideWorkingDirectories")
 		b.blockWrites = Value[bool]{}
+	}
+	if !ok(KindRestriction) {
+		if b.hookURLs.drop(from) {
+			note("allowedHttpHookUrls")
+		}
+		if b.hookEnvVars.drop(from) {
+			note("httpHookAllowedEnvVars")
+		}
 	}
 	if !ok(KindAddDir) {
 		b.dirs = slices.DeleteFunc(b.dirs, func(d ListItem) bool {

@@ -469,7 +469,8 @@ func (e *ConfigError) Error() string {
 //     relative path.
 //
 // And as warnings: a matcher that fits no tool gnosh has (when
-// Options.ToolNames is given), or none of the values its event can have.
+// Options.ToolNames is given), or none of the values its event can have;
+// an http hook whose URL Options.HTTPURLs does not let it post to.
 func Check(cfg Config, opts Options) []Problem {
 	out := slices.Clone(cfg.problems)
 	tools := newToolNames(opts.Renamed, opts.Guards)
@@ -489,6 +490,10 @@ func Check(cfg Config, opts Options) []Problem {
 			}
 			out = append(out, Problem{Source: h.Source, Message: msg + " Remove it until gnosh has the event."})
 			continue
+		}
+		if h.URL != "" && opts.HTTPURLs != nil && !URLAllowed(h.URL, opts.HTTPURLs) {
+			shown, _, _ := strings.Cut(h.URL, "?") // (a query may hold a key)
+			out = append(out, Problem{Source: h.Source, Warning: true, Message: fmt.Sprintf("the http hook %s posts to %s, which allowedHttpHookUrls does not let an http hook post to, so it never runs.", h.label(), shown)})
 		}
 		if h.Global && startsWithRelativePath(h.Command) {
 			out = append(out, Problem{Source: h.Source, Message: fmt.Sprintf("the command of the hook %s starts with a relative path. A hook's command is found from the folder a session works in, and this hook applies in every folder. Write the full path, or a command found on PATH.", h.label())})

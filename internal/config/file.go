@@ -45,7 +45,7 @@ func readFile(s *source, data []byte) {
 		}
 		given[f.key] = f
 	}
-	for _, key := range []string{"providers", "models", "model", "smallModel", "fallbackModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "fileSuggestion", "attribution", "includeCoAuthoredBy", "agent", "skillOverrides", "lspServers"} {
+	for _, key := range []string{"providers", "models", "model", "smallModel", "fallbackModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "allowedHttpHookUrls", "httpHookAllowedEnvVars", "statusLine", "fileSuggestion", "attribution", "includeCoAuthoredBy", "agent", "skillOverrides", "lspServers"} {
 		f, ok := given[key]
 		if !ok {
 			continue
@@ -77,6 +77,8 @@ func readFile(s *source, data []byte) {
 			s.fileSuggestion(f)
 		case "lspServers":
 			s.lspServers(f)
+		case "allowedHttpHookUrls", "httpHookAllowedEnvVars":
+			s.hookAllowList(f)
 		case "attribution":
 			s.attribution(f)
 		case "includeCoAuthoredBy":

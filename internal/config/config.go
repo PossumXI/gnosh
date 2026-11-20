@@ -64,6 +64,18 @@ type Config struct {
 	// HooksOff says why Hooks is empty although AllHooks is not: "safe
 	// mode", or the setting that switched them off. Empty otherwise.
 	HooksOff string
+	// HTTPHookURLs is Claude Code's allowedHttpHookUrls, the lists of all
+	// the files that give it, merged: an http hook runs only when its URL
+	// fits one of the patterns. Nil when no file gives it (any URL), empty
+	// but not nil when the files give only empty lists (no http hook
+	// runs). It only takes a power away, so a project's counts in a folder
+	// that is not trusted too.
+	HTTPHookURLs []ListItem
+	// HTTPHookEnvVars is Claude Code's httpHookAllowedEnvVars, merged the
+	// same way: an http hook's header takes a variable only when both the
+	// hook's own allowedEnvVars and this list name it. Nil when no file
+	// gives it.
+	HTTPHookEnvVars []ListItem
 	// StatusLine is the command whose output is the status line under the
 	// prompt (Claude Code's statusLine), or nil. It is nil in safe mode
 	// and when disableAllHooks is set, as hooks are; StatusLineOff then

@@ -130,6 +130,17 @@ type Options struct {
 	// its tools, and returns the sub-agent's last message (the app's
 	// agenthook.go). Without it an agent hook could not run.
 	Agent func(ctx context.Context, model, task string) (string, error)
+
+	// HTTPURLs is Claude Code's allowedHttpHookUrls: when not nil, an
+	// http hook runs only when its URL fits one of these patterns (see
+	// urlAllowed), and any other is passed over as if it were not there,
+	// as Claude Code passes it over; Check warns of it. Empty but not
+	// nil: no http hook runs.
+	HTTPURLs []string
+	// HTTPEnvVars is Claude Code's httpHookAllowedEnvVars: when not nil,
+	// an http hook's header takes a variable only when both the hook's
+	// own allowedEnvVars and this list name it.
+	HTTPEnvVars []string
 }
 
 const (
@@ -592,6 +603,11 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 		if h.Agent && in.NoAgentHooks {
 			continue
 		}
+		if h.URL != "" && !r.urlAllowed(h.URL) {
+			// (allowedHttpHookUrls does not let it post there: it is not
+			// run, as in Claude Code, and Check has warned of it.)
+			continue
+		}
 		matched, guardOnly := true, false
 		switch info.subject {
 		case toolName:
@@ -953,7 +969,7 @@ func (r *Runner) post(ctx context.Context, h Hook, body []byte, env []string, li
 	}
 	for name, val := range h.Headers {
 		req.Header.Set(name, os.Expand(val, func(v string) string {
-			if slices.Contains(h.AllowedEnvVars, v) {
+			if slices.Contains(h.AllowedEnvVars, v) && (r.opts.HTTPEnvVars == nil || slices.Contains(r.opts.HTTPEnvVars, v)) {
 				return vars[v]
 			}
 			return ""
