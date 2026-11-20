@@ -95,9 +95,10 @@ type Probes struct {
 	// Exists reports whether a file is there.
 	Exists func(path string) bool
 	// Sandbox tries the operating system's sandbox once: whether it can
-	// run here, why not, and the program that makes it. Nil: it is not
+	// run here, why not, the program that makes it, and what it cannot do
+	// here that it does elsewhere (an old bubblewrap). Nil: it is not
 	// looked at.
-	Sandbox func() (ok bool, why, tool string)
+	Sandbox func() (ok bool, why, tool, weaker string)
 	// TryHost logs in to a declared host and runs nothing there. It
 	// returns the directory a command would start in, or, when a command
 	// could not be run there, why not in plain words. It reaches another
@@ -346,13 +347,19 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 	}
 	// The sandbox, when the settings turn it on.
 	if cfg.Sandbox.Enabled && pr.Sandbox != nil {
-		switch ok, why, tool := pr.Sandbox(); {
+		switch ok, why, tool, weaker := pr.Sandbox(); {
 		case ok:
 			auto := "each asks as it would without it"
-			if cfg.Sandbox.AutoAllow {
+			switch {
+			case cfg.Sandbox.AutoAllow && cfg.Sandbox.Loose("filesystem.disabled"):
+				auto = "each asks as it would without it, autoAllowBashIfSandboxed or not, as the files are left open (filesystem.disabled)"
+			case cfg.Sandbox.AutoAllow:
 				auto = "they run without asking (autoAllowBashIfSandboxed)"
 			}
 			add("tools", Fine, "the sandbox is on: the shell's commands run in it (%s), and %s. (%s)", tool, auto, cfg.Sandbox.Origin)
+			if weaker != "" {
+				add("tools", Note, "the sandbox here: %s.", weaker)
+			}
 		case cfg.Sandbox.FailIfUnavailable:
 			add("tools", Fail, "the sandbox is on, with failIfUnavailable, and cannot run here: %s. (%s)", why, cfg.Sandbox.Origin)
 		default:

@@ -45,13 +45,13 @@ func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []con
 			_, err := os.Stat(path)
 			return err == nil
 		},
-		Sandbox: func() (bool, string, string) {
+		Sandbox: func() (bool, string, string, string) {
 			setup := sandbox.Setup{}
 			if cfg != nil {
 				setup = sandboxSetup(cfg.Sandbox)
 			}
 			st := sandbox.CheckWith(setup)
-			return st.OK, st.Why, st.Tool
+			return st.OK, st.Why, st.Tool, st.Weaker
 		},
 	}
 	if tryHosts && cfg != nil && len(cfg.Hosts) > 0 {

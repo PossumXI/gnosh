@@ -475,10 +475,14 @@ func TestDoctorSaysHowTheSandboxStands(t *testing.T) {
 		t.Helper()
 		cfg, problems, _ := Load(withConfig(`{` + box + `, "sandbox": ` + text + `}`))
 		pr := (&fakeMachine{}).probes()
-		pr.Sandbox = func() (bool, string, string) { return ok, "bubblewrap is not installed", "/usr/bin/bwrap" }
+		pr.Sandbox = func() (bool, string, string, string) {
+			return ok, "bubblewrap is not installed", "/usr/bin/bwrap", "this bubblewrap cannot keep sandboxed commands from making user namespaces of their own"
+		}
 		return Doctor(context.Background(), cfg, problems, pr)
 	}
 	wantFinding(t, check(`{"enabled": true, "autoAllowBashIfSandboxed": true}`, true), "tools", Fine, "the sandbox is on: the shell's commands run in it (/usr/bin/bwrap)", "they run without asking")
+	wantFinding(t, check(`{"enabled": true}`, true), "tools", Note, "the sandbox here: this bubblewrap cannot keep sandboxed commands from making user namespaces")
+	wantFinding(t, check(`{"enabled": true, "autoAllowBashIfSandboxed": true, "filesystem": {"disabled": true}}`, true), "tools", Fine, "each asks as it would without it, autoAllowBashIfSandboxed or not")
 	wantFinding(t, check(`{"enabled": true}`, false), "tools", Note, "the sandbox is on and cannot run here: bubblewrap is not installed")
 	wantFinding(t, check(`{"enabled": true, "failIfUnavailable": true}`, false), "tools", Fail, "with failIfUnavailable, and cannot run here")
 }
