@@ -3630,10 +3630,24 @@ func (e *Engine) wrappedAt(v *bashView, spec wrapSpec, args []word, nest nesting
 						spliced = true
 					}
 				}
-				// next hands over the word after the flag.
+				// next hands over the word after the flag. A word that may
+				// come to nothing (an unquoted $X that is empty) is not
+				// there for the wrapper: the word after it is then the
+				// value, and the command starts one further on ("nice -n
+				// $X 5 git push" runs git push; oracle seed 174), which is
+				// read too.
 				next := func(k byte) {
 					if i+1 < len(args) {
 						hand(k, args[i+1], args[i+2:])
+						if mayVanish(args[i+1]) && i+2 < len(args) {
+							switch k {
+							case 's':
+								hand(k, args[i+2], args[i+3:])
+							case 'a':
+								v.setOpaque("a wrapper is given arguments computed when the command runs")
+							}
+							work = append(work, state{i + 3, pos})
+						}
 					}
 					i++
 				}

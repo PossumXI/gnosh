@@ -1085,4 +1085,7 @@ var attackLines = []string{
 	"set", "PAGER=rm set", "! { set; }", "f() { set; }; f", "seq \"$(set)\"", "git push `set` a{b,c}d", "echo \"$(set)\" | head -1", "ls \"$(set | grep PS4)\"", "printf '%s' \"$PS4\"; ls",
 	// A ! after an assignment is a command's name, not the shell's word (seed 174).
 	"eval x=1 ! ", "eval x=1 ! ls", "eval 'x=1 y=2 !' && ls", "bash -c 'x=1 ! ls'", "eval '! x=1 ls'", "eval ! ! ls",
+	// A wrapper's flag value that may come to nothing: the next word is the value, the command one further (seed 174).
+	"nice -n $echo 5 git push origin ma..in", "nice -n $X 5 rm -rf build", "nice --adjustment $X 5 git push origin main", "ionice -c $X 2 git push origin main",
+	"timeout -s $X KILL 5 git push origin main", "sudo -u $X root git push origin main", "env -u $X HOME git push origin main", "flock -w $X 5 /tmp/l git push origin main",
 }
