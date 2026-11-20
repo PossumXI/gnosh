@@ -1,6 +1,7 @@
 package instructions
 
 import (
+	"io/fs"
 	"slices"
 	"strings"
 	"testing"
@@ -144,4 +145,55 @@ func TestFenceOfARepository(t *testing.T) {
 	}))
 	same(t, "files", paths(s.Files()), []string{"/home/jae/CLAUDE.md", "/home/jae/notes/todo.md"})
 	same(t, "refused", refused(s.Warnings()), []string{"/home/jae/.ssh/config"})
+}
+
+// The home folder's ~/.claude holds Claude Code's own files for the
+// person (its CLAUDE.md, its rules), which gnosh does not read (CFG-20,
+// DECISIONS 245); a walk up from a project below the home folder read
+// them as the project's. A CLAUDE.md in the home folder itself is read,
+// as one in any folder above the project.
+func TestHomeDotFoldersAreNotTheProjects(t *testing.T) {
+	files := map[string]string{
+		"/home/jae/proj/.git/HEAD":      "ref: refs/heads/main\n",
+		"/home/jae/proj/CLAUDE.md":      "proj\n",
+		"/home/jae/CLAUDE.md":           "home file\n",
+		"/home/jae/.claude/CLAUDE.md":   "claude code's own\n",
+		"/home/jae/.claude/rules/r.md":  "claude code's rule\n",
+		"/home/jae/proj/.claude/r2.txt": "",
+	}
+	o := homeOptions(files)
+	o.Cwd = "/home/jae/proj"
+	o.Owned = func(fs.FileInfo) bool { return true }
+	s := load(t, o)
+	same(t, "from a project below home", paths(s.Files()), []string{"/home/jae/CLAUDE.md", "/home/jae/proj/CLAUDE.md"})
+	o.Cwd = "/home/jae"
+	s = load(t, o)
+	same(t, "started in home", paths(s.Files()), []string{"/home/jae/CLAUDE.md"})
+}
+
+// A work tree of the project, as gnosh makes for a sub-agent, holds the
+// project's own files again at its top: they are not given again as
+// nested files when the sub-agent reads there, as Claude Code does not;
+// a file deeper in the tree is read as usual.
+func TestWorkTreeTopsAreNotReadAgain(t *testing.T) {
+	s := load(t, Options{
+		Cwd:          "/p",
+		Home:         "/home/jae",
+		ProjectNames: []string{"CLAUDE.md"},
+		DotDirs:      []string{".gnosh"},
+		Trusted:      true,
+		Trees:        "/p/.gnosh/worktrees",
+		FS: tree(map[string]string{
+			"/p/.git/HEAD":                                  "ref: refs/heads/main\n",
+			"/p/CLAUDE.md":                                  "main\n",
+			"/p/.gnosh/worktrees/agent-1/.git":              "gitdir: /p/.git/worktrees/agent-1\n",
+			"/p/.gnosh/worktrees/agent-1/CLAUDE.md":         "main, a copy\n",
+			"/p/.gnosh/worktrees/agent-1/.gnosh/rules/r.md": "a rule, a copy\n",
+			"/p/.gnosh/worktrees/agent-1/api/CLAUDE.md":     "api\n",
+			"/p/.gnosh/worktrees/agent-1/api/x.go":          "",
+		}),
+	})
+	same(t, "from the start", paths(s.Files()), []string{"/p/CLAUDE.md"})
+	late, _ := touch(s, "/p/.gnosh/worktrees/agent-1/api/x.go")
+	same(t, "late in the tree", paths(late), []string{"/p/.gnosh/worktrees/agent-1/api/CLAUDE.md"})
 }

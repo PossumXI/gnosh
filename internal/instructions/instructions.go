@@ -131,6 +131,14 @@ type Options struct {
 	// the model instructions. Nil means the host's test: the owner is the
 	// account gnosh runs as, or root.
 	Owned func(info fs.FileInfo) bool
+	// Trees is a directory below the working directory whose folders are
+	// work trees of the project (gnosh's own, for sub-agents that work in
+	// one): the files at the top of each, and in Trees itself, are copies
+	// of the project's own and are not read again as nested files, as
+	// Claude Code does not read a work tree's top CLAUDE.md or rules for a
+	// sub-agent working there. What lies deeper in a tree is read as
+	// usual. Empty means none.
+	Trees string
 
 	// MaxDepth is how many imports may follow one another. Zero means
 	// DefaultMaxDepth; a negative number turns imports off.
@@ -314,8 +322,10 @@ type Set struct {
 	realCwd, realRoot string
 	// realHome is the home directory with its links followed, and secret
 	// the places in it where the person keeps keys (secretNames).
-	realHome     string
-	secret       []string
+	realHome string
+	secret   []string
+	// realTrees is Options.Trees with its links followed, or "".
+	realTrees    string
 	userFiles    []string
 	projectFiles []string
 	exclude      []pattern
@@ -483,6 +493,13 @@ func newSet(o Options) (*Set, error) {
 
 	s.realCwd = s.d.resolveLoose(s.cwd)
 	s.realRoot = s.d.resolveLoose(s.root)
+	if o.Trees != "" {
+		trees, err := absPath("the work trees' folder", o.Trees)
+		if err != nil {
+			return nil, err
+		}
+		s.realTrees = s.d.resolveLoose(trees)
+	}
 	if s.home != "" {
 		s.realHome = s.d.resolveLoose(s.home)
 		for _, name := range secretNames {
@@ -554,6 +571,11 @@ func (s *Set) ForPath(ctx context.Context, p string) ([]File, []Warning) {
 		for _, part := range parts {
 			shown, at = path.Join(shown, part), path.Join(at, part)
 			if s.walked[at] {
+				continue
+			}
+			if s.realTrees != "" && (at == s.realTrees || path.Dir(at) == s.realTrees) {
+				// A work tree's top holds the project's own files again.
+				s.walked[at] = true
 				continue
 			}
 			l.dir(shown, true, p)

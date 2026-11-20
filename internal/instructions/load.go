@@ -178,9 +178,10 @@ func (l *loading) dir(dir string, late bool, trigger string) {
 	if late {
 		t.reason, t.late, t.trigger = ReasonNested, true, trigger
 	}
+	dots := l.dots(dir)
 	for _, name := range s.o.ProjectNames {
 		l.named(t, path.Join(dir, name))
-		for _, dot := range s.o.DotDirs {
+		for _, dot := range dots {
 			l.named(t, path.Join(dir, dot, name))
 		}
 	}
@@ -189,12 +190,12 @@ func (l *loading) dir(dir string, late bool, trigger string) {
 		ft.kind = KindFallback
 		for _, name := range s.o.FallbackNames {
 			l.named(ft, path.Join(dir, name))
-			for _, dot := range s.o.DotDirs {
+			for _, dot := range dots {
 				l.named(ft, path.Join(dir, dot, name))
 			}
 		}
 	}
-	for _, dot := range s.o.DotDirs {
+	for _, dot := range dots {
 		l.rulesDir(path.Join(dir, dot, s.o.RulesDir), t)
 	}
 	lt := t
@@ -202,6 +203,20 @@ func (l *loading) dir(dir string, late bool, trigger string) {
 	for _, name := range s.o.LocalNames {
 		l.named(lt, path.Join(dir, name))
 	}
+}
+
+// dots are the dot directories read in dir: none in the home directory,
+// whose ~/.claude holds Claude Code's own files for the person, which gnosh
+// does not read (the person's own are gnosh's, CFG-20 and DECISIONS 245),
+// and which a walk up from a project below the home directory read as the
+// project's (the instruction-files review of 2026-11-20).
+func (l *loading) dots(dir string) []string {
+	if s := l.s; s.realHome != "" {
+		if real, err := l.k.realDir(dir); err == nil && real == s.realHome {
+			return nil
+		}
+	}
+	return l.s.o.DotDirs
 }
 
 // above reports whether dir lies above the project root, going by where its
@@ -235,7 +250,7 @@ func (l *loading) hasMain(dir string) bool {
 		if l.present(dir, path.Join(dir, name), above) {
 			return true
 		}
-		for _, dot := range s.o.DotDirs {
+		for _, dot := range l.dots(dir) {
 			if l.present(dir, path.Join(dir, dot, name), above) {
 				return true
 			}

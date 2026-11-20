@@ -252,6 +252,9 @@ func TestScheduledPromptWaitsForACommand(t *testing.T) {
 	s.see("Type a prompt and Enter.")
 	s.typeLine("remind me to say pong in a minute")
 	s.see("Scheduled.")
+	// (/cd refuses while the turn is still ending: the reply is on the
+	// screen a moment before the turn's last line.)
+	s.see("-- done in")
 	s.typeLine("/cd ../lib")
 	s.see("Trust " + lib + "?")
 	clk.add(time.Minute)

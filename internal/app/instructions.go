@@ -62,6 +62,7 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 		LocalNames:   c.LocalNames,
 		DotDirs:      c.DotDirs,
 		Trusted:      true,
+		Trees:        filepath.Join(l.cfg.Paths.DataDir, worktreesDir),
 		MaxDepth:     c.ImportDepth,
 		MaxBytes:     c.MaxFileBytes,
 		LateMaxChars: c.NestedMaxChars,

@@ -4326,3 +4326,18 @@ or kept with the reason said (27).
     ~/.config/gh, ~/.netrc, ~/.git-credentials, ~/.docker, ~/.kube),
     which the warning names as such. The person's own files keep their
     freedom.
+
+301. **A walk up reads no ~/.claude, and a work tree's top is not read
+    again.** Walking up from a project below the home folder read the
+    home folder's .claude as a project's dot folder: Claude Code's own
+    ~/.claude/CLAUDE.md and ~/.claude/rules reached every session as
+    "project instructions", against DECISIONS 245, and path rules there
+    matched against the home folder (the instruction-files review of
+    2026-11-20). The home folder's dot folders are now passed over; a
+    CLAUDE.md in the home folder itself is read, as one in any folder
+    above the project. And a sub-agent working in a work tree of gnosh's
+    (under the data folder's worktrees) was given the tree's top
+    instruction files and rules again, copies of the project's own, as
+    nested files to follow over them; as in Claude Code, the files at a
+    work tree's top are not read for it, and those deeper in the tree
+    are, as usual.
