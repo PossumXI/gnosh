@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"sync"
@@ -87,6 +88,14 @@ func startStdio(c *Client, srv Server, opt Options) (*stdioTransport, error) {
 	if err != nil {
 		in.Close()
 		out.Close()
+		// (In words, where Go's are "fork/exec /x: no such file or
+		// directory": seen at startup on the devbox's screen.)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return nil, fmt.Errorf("mcp: %s could not be started: there is no such program", srv.Command)
+		case errors.Is(err, fs.ErrPermission):
+			return nil, fmt.Errorf("mcp: %s could not be started: it is not a program this user may run", srv.Command)
+		}
 		return nil, fmt.Errorf("mcp: %s could not be started: %w", srv.Command, err)
 	}
 	t.in, t.out = in, out

@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -160,6 +162,51 @@ type head struct {
 	// several lines, the code of a Gno call. code says it is code.
 	body []string
 	code bool
+}
+
+// mcpName splits an MCP tool's name, mcp__server__tool, into the server's
+// and the tool's.
+func mcpName(name string) (server, tool string, ok bool) {
+	rest, ok := strings.CutPrefix(name, "mcp__")
+	if !ok {
+		return "", "", false
+	}
+	server, tool, ok = strings.Cut(rest, "__")
+	return server, tool, ok && server != "" && tool != ""
+}
+
+// argsInOrder is a call's arguments as key: value, in the order they were
+// written, at most n of them: a string quoted and cut short, a number or
+// a yes or no as it is, anything else left out. Arguments still being
+// written give what has arrived.
+func argsInOrder(raw []byte, n int) string {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return ""
+	}
+	var parts []string
+	for dec.More() && len(parts) < n {
+		k, err := dec.Token()
+		key, ok := k.(string)
+		if err != nil || !ok {
+			break
+		}
+		var v any
+		if dec.Decode(&v) != nil {
+			break
+		}
+		switch v := v.(type) {
+		case string:
+			v = oneLine(v)
+			if r := []rune(v); len(r) > 60 {
+				v = string(r[:60]) + "…"
+			}
+			parts = append(parts, oneLine(key)+": "+strconv.Quote(v))
+		case float64, bool:
+			parts = append(parts, fmt.Sprintf("%s: %v", oneLine(key), v))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // argsOf reads a call's arguments, as far as they are a JSON object.
@@ -477,6 +524,14 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 			}
 		}
 	default:
+		if server, tool, ok := mcpName(name); ok {
+			// As Claude Code names an MCP tool's call: the server and the
+			// tool, then the first arguments as they were written (it read
+			// "mcp__echo__echo echo of the MCP server echo").
+			h.name = oneLine(server) + " - " + oneLine(tool) + " (MCP)"
+			h.arg = argsInOrder(raw, 3)
+			break
+		}
 		if action != nil && strings.TrimSpace(action.Summary) != "" {
 			h.arg = oneLine(action.Summary)
 			break

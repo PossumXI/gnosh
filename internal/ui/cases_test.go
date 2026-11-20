@@ -1571,3 +1571,19 @@ func TestBashCallWithNoCommand(t *testing.T) {
 	g.ev(toolEnd("c1", "Bash", args, core.ToolResult{Content: []core.Block{core.Text("This call did not run: command is missing: give the shell command to run.")}, IsError: true}, 0))
 	g.committedHas("Bash", "command is missing").committedLacks("✗ $")
 }
+
+// An MCP tool's call is named as Claude Code names it: the server and the
+// tool, then the first arguments as they were written.
+func TestMCPCallHeading(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"echo it" <Enter>`).start()
+	raw := []byte(`{"text": "hello from the model", "times": 2, "nested": {"a": 1}}`)
+	g.ev(toolCall("c1", "mcp__echo__say_it"), replyEnd(core.StopToolUse), &agent.ToolStartEvent{CallID: "c1", Name: "mcp__echo__say_it", Input: raw})
+	g.liveHas(`echo - say_it (MCP) text: "hello from the model", times: 2`).liveLacks("mcp__echo__say_it")
+	if s, tl, ok := mcpName("mcp__a_b__c__d"); !ok || s != "a_b" || tl != "c__d" {
+		t.Errorf("mcpName: %q %q %v", s, tl, ok)
+	}
+	if _, _, ok := mcpName("mcp__nothing"); ok {
+		t.Error("a name with no tool was taken")
+	}
+}

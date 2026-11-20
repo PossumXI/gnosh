@@ -640,14 +640,17 @@ func (s *session) running() string {
 		if h.shell {
 			return "running " + firstNonEmpty(h.arg, "a command")
 		}
+		// (The name as the call's heading gives it: an MCP tool's as
+		// Claude Code names it.)
+		name := firstNonEmpty(h.name, oneLine(c.name))
 		if h.arg != "" {
-			return "running " + oneLine(c.name) + " " + h.arg
+			return "running " + name + " " + h.arg
 		}
-		return "running " + oneLine(c.name)
+		return "running " + name
 	}
 	names := make([]string, len(started))
 	for i, c := range started {
-		names[i] = oneLine(c.name)
+		names[i] = firstNonEmpty(s.headOf(c.name, c.input, &c.action).name, oneLine(c.name))
 	}
 	return fmt.Sprintf("running %d tool calls: %s", len(started), strings.Join(names, ", "))
 }
