@@ -114,7 +114,16 @@ func FromJSON(text string) ([]Def, error) {
 					return nil, fmt.Errorf("the agent %q's mcpServers %s", name, why)
 				}
 				d.MCPServers = servers
-			case "memory", "autoCompactWindow":
+			case "memory":
+				var s string
+				if string(val) != "null" && json.Unmarshal(val, &s) != nil {
+					return nil, bad("user, project or local")
+				}
+				if why := memoryScope(s); why != "" {
+					return nil, fmt.Errorf("the agent %q: %s", name, why)
+				}
+				d.Memory = s
+			case "autoCompactWindow":
 				if string(val) != "null" {
 					d.Other = append(d.Other, key)
 				}

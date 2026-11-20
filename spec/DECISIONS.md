@@ -5602,3 +5602,35 @@ or kept with the reason said (27).
     it): Spotlight reads what the command may not, and mdfind's queries,
     a match at a time, could spell a denied file out (checked: refused,
     mdfind finds nothing). allowMachLookup can name them again.
+
+374. **A kind of agent may keep a memory.** Claude Code's subagents take
+    `memory: user | project | local`: a folder of their own that outlasts
+    their sessions (its docs: the subagent's system prompt holds the first
+    200 lines or 25 KB of MEMORY.md, whichever comes first, with
+    instructions to keep it, and Read, Write and Edit are enabled for
+    it); gnosh refused a definition with it by name. It now keeps one:
+    for a definition of gnosh's own (its folders, --agents), the user's in
+    gnosh's config folder (agent-memory/<name>), a project's in
+    .gnosh/agent-memory/<name>, a local one in
+    .gnosh/agent-memory-local/<name> (made with a .gitignore of "*"); for
+    one from a .claude folder, Claude Code's places (~/.claude/agent-memory,
+    .claude/agent-memory, .claude/agent-memory-local), so that both keep
+    one memory of the same agent. Each sub-agent of the kind is told, last
+    in its system prompt, where the folder is, what to keep there and
+    how, and is given the beginning of its MEMORY.md (defused, as a report
+    is, and unable to close its block); Read, Write and Edit are its
+    whatever its tools list says, unless its disallowedTools takes them.
+    The notes, the Markdown files under an agent-memory folder of
+    .claude, .gnosh or gnosh's config folder, are left out of the
+    protected paths, as Claude Code leaves them: a change to one asks as
+    any edit does (acceptEdits lets one in the project be written); what
+    else lies there is protected as before. The folder gnosh makes may
+    hold no link below the person's or the project's folder, and
+    MEMORY.md is read without following one, as a project could otherwise
+    lead an agent's notes anywhere, or a file of the person's into its
+    prompt; such a folder keeps the sub-agent from starting, and says why.
+    The folder is not one of the sub-agent's working folders: its
+    commands, in the sandbox, do not write there. CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+    turns memories off, as in Claude Code. A session run as such an agent
+    (--agent) is refused, saying so, as it was. A name with a slash, or .
+    or .., keeps a definition with a memory from being used.

@@ -100,10 +100,16 @@ type Def struct {
 	// one of its own, Inline (an entry in the shape .mcp.json writes one,
 	// under Name), connected while the agent runs.
 	MCPServers []MCPServer
-	// Other lists the fields of the frontmatter that change what the
-	// sub-agent is or may do and that this package only notes: memory. A
-	// caller that cannot honour one must say so, and not run the agent as
-	// if the field were not there.
+	// Memory is where the agent keeps a memory of its own, a folder that
+	// outlasts its sessions (memory): "user", across every project;
+	// "project", in the project, shared with whoever works on it; "local",
+	// in the project, kept out of version control; or "" for none.
+	Memory string
+	// Other lists the fields of a definition that change what the
+	// sub-agent is or may do and that this package only notes:
+	// autoCompactWindow, in --agents' JSON. A caller that cannot honour
+	// one must say so, and not run the agent as if the field were not
+	// there.
 	Other []string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
@@ -472,9 +478,13 @@ func Parse(text string) (d Def, reason string) {
 			}
 			d.MCPServers = servers
 		case "memory":
-			if f.scalar != "" || len(f.items) > 0 || f.nested {
-				d.Other = append(d.Other, f.key)
+			if len(f.items) > 0 || f.nested {
+				return d, "its memory is not one word: user, project or local"
 			}
+			if why := memoryScope(f.scalar); why != "" {
+				return d, why
+			}
+			d.Memory = f.scalar
 		default:
 			// A setting gnosh knows, in another letter case
 			// ("disallowedtools"), would be passed over, and the agent run
@@ -518,8 +528,20 @@ func (d Def) problem() string {
 		return fmt.Sprintf("the name %q cannot be an agent's: a name does not start with a dash, holds no colon, and is at most 256 characters long", clip(d.Name, 80))
 	case d.Description == "":
 		return fmt.Sprintf("the agent %q has no description, which is what says when to use it", d.Name)
+	case d.Memory != "" && (strings.ContainsAny(d.Name, `/\`+"\x00") || d.Name == "." || d.Name == ".."):
+		return fmt.Sprintf("the agent %q keeps a memory, in a folder named as the agent is, and its name names no folder", clip(d.Name, 80))
 	}
 	return ""
+}
+
+// memoryScope says what is wrong with a memory field's word, or "": it is
+// user, project or local (or nothing, for none).
+func memoryScope(s string) string {
+	switch s {
+	case "", "user", "project", "local":
+		return ""
+	}
+	return fmt.Sprintf("its memory is %q, and a memory is user, project or local", clip(s, 40))
 }
 
 func clip(s string, n int) string {

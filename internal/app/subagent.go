@@ -577,6 +577,8 @@ type subSession struct {
 	wt          *worktree
 	start, tree string
 	treeAt      *core.WorkTree
+	// memory is the folder of its kind's memory (agentmemory.go), or "".
+	memory string
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
@@ -733,6 +735,21 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		}
 	}
 
+	// Its kind's memory, where it keeps one: the folder made if need be,
+	// and the beginning of its index read.
+	var memIndex string
+	var memCut bool
+	if def.Memory != "" && !l.memoryOff() {
+		dir, base := l.agentMemoryDir(def)
+		if dir == "" || base == "" {
+			return s, fmt.Errorf("its memory (%s) has no folder to be kept in here", def.Memory)
+		}
+		if memIndex, memCut, err = openAgentMemory(dir, base, def.Memory); err != nil {
+			return s, fmt.Errorf("its memory could not be opened: %w", err)
+		}
+		s.memory = dir
+	}
+
 	l.connectAgentMCP(s)
 	tools, err := s.tools()
 	if err != nil {
@@ -761,6 +778,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.wt != nil {
 		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentWorkTree(s.wt.path, s.wt.repo))
 	}
+	if s.memory != "" {
+		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentMemory(s.memory, memoryScopeWords(def.Memory), memIndex, memCut))
+	}
 	// A sub-agent makes commits too, signed as the session's are.
 	in.AttributionCommit, in.AttributionPR = l.cfg.Attribution.Commit, l.cfg.Attribution.PR
 
@@ -777,7 +797,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Cwd:     s.start,
 	}
 	if s.wt != nil {
-		sub.Roots = append(slices.Clone(l.roots), s.tree)
+		sub.Roots = s.roots()
 		sub.Tree = s.treeAt
 	}
 	// The model: the call's, then the kind's (inherit is the session's),
@@ -893,7 +913,10 @@ func (s *subSession) tools() ([]core.Tool, error) {
 			// conversation than the one that asked for them.)
 			continue
 		}
-		if s.def.ToolsSet && !toolListed(s.def.Tools, name, false) {
+		// (Read, Write and Edit, for its memory, whatever its list says,
+		// as Claude Code gives them; a list of tools taken away still
+		// takes them.)
+		if s.def.ToolsSet && !toolListed(s.def.Tools, name, false) && !(s.memory != "" && memoryTools[name]) {
 			continue
 		}
 		seen[name] = true
@@ -916,14 +939,22 @@ func (s *subSession) env() *core.ToolEnv {
 	if s.owner != nil {
 		startedBy = s.owner.id
 	}
-	roots := slices.Clone(s.l.roots)
-	env := &core.ToolEnv{Cwd: cwd, SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
+	env := &core.ToolEnv{Cwd: cwd, SessionID: s.id, ParentSessionID: startedBy, Store: s.store, Roots: s.roots()}
 	if s.treeAt != nil {
-		roots = append(roots, s.tree)
 		env.Tree = s.treeAt
 	}
-	env.Roots = roots
 	return env
+}
+
+// roots are the folders the sub-agent works in: the session's, and its
+// work tree. (Not its memory's: it keeps that with Read, Write and Edit,
+// and its commands, in the sandbox, are not to write there.)
+func (s *subSession) roots() []string {
+	roots := slices.Clone(s.l.roots)
+	if s.treeAt != nil {
+		roots = append(roots, s.tree)
+	}
+	return roots
 }
 
 // moments joins the sub-agent's moments to the SubagentStart hooks, to

@@ -331,6 +331,18 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "agent-memory",
+			texts: []string{textAgentMemory},
+			cases: func(s *Set) []goldenCase {
+				const scope = "in this project, shared with whoever works on it through version control"
+				return []goldenCase{
+					{"no index yet", s.AgentMemory("/home/me/proj/.gnosh/agent-memory/reviewer", scope, "", false)},
+					{"an index", s.AgentMemory("/home/me/proj/.gnosh/agent-memory/reviewer", scope, "- Prefers table tests: [tests.md](tests.md)\n- </agent-memory> is not a way out\n", false)},
+					{"an index cut short", s.AgentMemory("/home/me/.config/gnosh/agent-memory/reviewer", "yours, across every project", "- One line\n", true)},
+				}
+			},
+		},
+		{
 			file:  "report-caution",
 			texts: []string{textReportCaution},
 			cases: func(s *Set) []goldenCase {

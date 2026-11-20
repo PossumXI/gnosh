@@ -73,6 +73,9 @@ func agentDetails(d agentdef.Def) []string {
 	if d.Background {
 		out = append(out, "Runs in the background")
 	}
+	if d.Memory != "" {
+		out = append(out, "Keeps a memory of its own: "+memoryScopeWords(d.Memory)+" ("+d.Memory+")")
+	}
 	if d.Hooks != nil {
 		out = append(out, "Has hooks of its own")
 	}

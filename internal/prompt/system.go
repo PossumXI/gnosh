@@ -203,3 +203,21 @@ func hasTool(tools []core.ToolSpec, name string) bool {
 func (s *Set) AgentWorkTree(tree, repo string) string {
 	return s.fill(textAgentWorkTree, values{"tree": tree, "repo": repo})
 }
+
+// AgentMemory is the part of a sub-agent's system prompt, sent last, for
+// a kind of agent that keeps a memory of its own (its definition's
+// memory): the folder dir, kept as scope says ("in this project, ..."),
+// and index, the beginning of its MEMORY.md, or "" where there is none;
+// cut says index is not all of it. What the index holds was written by
+// an agent, and is given defused, as a report is.
+func (s *Set) AgentMemory(dir, scope, index string, cut bool) string {
+	v := values{"dir": dir, "scope": scope}
+	if index = strings.TrimRight(index, "\n"); strings.TrimSpace(index) == "" {
+		v.flag("none", true)
+	} else {
+		// (Nor can it close the block it stands in.)
+		v["index"] = strings.ReplaceAll(Untrusted(index), "</agent-memory", "<"+Mark+"/agent-memory")
+		v.flag("cut", cut)
+	}
+	return s.fill(textAgentMemory, v)
+}

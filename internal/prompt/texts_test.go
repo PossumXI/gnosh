@@ -167,6 +167,9 @@ var budgets = map[string]int{
 	textStyleConcise:   180,
 	textStyleExplain:   220,
 	textStyleLearning:  320,
+	// (Only in the system prompt of a sub-agent whose kind keeps a
+	// memory.)
+	textAgentMemory: 220,
 }
 
 func TestBudgets(t *testing.T) {

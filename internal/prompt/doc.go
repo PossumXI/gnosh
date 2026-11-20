@@ -147,7 +147,9 @@
 // adds it to SystemInput.Append, last, for a sub-agent that works in a git
 // work tree of its own. It says where the work tree is, that a path into
 // the person's checkout means the same file in the work tree, and that
-// the sub-agent's changes stay there.
+// the sub-agent's changes stay there. agent-memory (AgentMemory) is
+// added the same way for a kind of agent that keeps a memory of its own:
+// the folder, what to keep there, and the beginning of its MEMORY.md.
 //
 // # The two texts about mem
 //

@@ -289,3 +289,36 @@ func TestSettingInAnotherCase(t *testing.T) {
 		t.Errorf("a definition with an unknown key: %q", reason)
 	}
 }
+
+// memory is user, project or local, in a file and in --agents' JSON; any
+// other word, or a name that names no folder, keeps the definition from
+// being used (DECISIONS 374).
+func TestParseMemory(t *testing.T) {
+	file := func(name, memory string) string {
+		return "---\nname: " + name + "\ndescription: Reviews.\nmemory: " + memory + "\n---\nReview.\n"
+	}
+	for _, scope := range []string{"user", "project", "local"} {
+		if d, reason := Parse(file("reviewer", scope)); reason != "" || d.Memory != scope || len(d.Other) != 0 {
+			t.Errorf("memory: %s: %q, %+v", scope, reason, d)
+		}
+	}
+	if _, reason := Parse(file("reviewer", "forever")); !strings.Contains(reason, "user, project or local") {
+		t.Errorf("memory: forever: %q", reason)
+	}
+	if _, reason := Parse(file("team/reviewer", "project")); !strings.Contains(reason, "names no folder") {
+		t.Errorf("a name with a slash, with a memory: %q", reason)
+	}
+	if _, reason := Parse(file("team/reviewer", "")); reason != "" {
+		t.Errorf("a name with a slash, without a memory: %q", reason)
+	}
+	defs, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "local"}}`)
+	if err != nil || len(defs) != 1 || defs[0].Memory != "local" || len(defs[0].Other) != 0 {
+		t.Errorf("memory in JSON: %v %+v", err, defs)
+	}
+	if _, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "always"}}`); err == nil || !strings.Contains(err.Error(), "user, project or local") {
+		t.Errorf("memory: always, in JSON: %v", err)
+	}
+	if defs, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "autoCompactWindow": 40000}}`); err != nil || len(defs) != 1 || strings.Join(defs[0].Other, ",") != "autoCompactWindow" {
+		t.Errorf("autoCompactWindow in JSON: %v %+v", err, defs)
+	}
+}

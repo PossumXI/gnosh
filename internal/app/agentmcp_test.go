@@ -186,10 +186,12 @@ You greet people.
 // The /agents browser says what each kind is given and how it runs.
 func TestAgentDetails(t *testing.T) {
 	d := agentdef.Def{Name: "x", Tools: []string{"Read", "mcp__greet__*"}, ToolsSet: true, Disallowed: []string{"Bash"}, Model: "small", MaxTurns: 5,
-		MCPServers: []agentdef.MCPServer{{Name: "github"}, {Name: "greet", Inline: json.RawMessage(`{"command":"x"}`)}}, Isolation: "worktree", Background: true, Other: []string{"memory"}}
+		MCPServers: []agentdef.MCPServer{{Name: "github"}, {Name: "greet", Inline: json.RawMessage(`{"command":"x"}`)}}, Isolation: "worktree", Background: true,
+		Memory: "project", Other: []string{"autoCompactWindow"}}
 	got := strings.Join(agentDetails(d), "\n")
 	for _, want := range []string{"Tools: Read, mcp__greet__*", "Not: Bash", "Model: small", "At most 5 replies", "MCP servers: github (the session's), greet (its own)",
-		"Works in a git work tree of its own", "Runs in the background", "Asks for memory, which gnosh does not have"} {
+		"Works in a git work tree of its own", "Runs in the background", "Keeps a memory of its own: kept in this project and shared with whoever works on it through version control (project)",
+		"Asks for autoCompactWindow, which gnosh does not have"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the details lack %q:\n%s", want, got)
 		}

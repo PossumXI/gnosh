@@ -142,7 +142,11 @@ Built:
 - **Sub-agents** in the foreground and, in a session, in the background:
   general-purpose, Explore, Plan and your own, given more to do once they
   end with SendMessage. Your own may name MCP servers (`mcpServers`): the
-  session's, or servers of their own, connected only while they run.
+  session's, or servers of their own, connected only while they run. And
+  they may keep a memory (`memory: user`, `project` or `local`): a folder
+  of notes that outlasts their sessions, whose `MEMORY.md` each starts
+  with, as Claude Code's do (one shared with Claude Code for a kind
+  defined in a `.claude` folder).
 - **`mem`** and frames, with the close check, `/goal`, the slide, peers'
   turn locks, and `gnosh mem`.
 - **Commands:** `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json,

@@ -102,6 +102,7 @@ const (
 	textMissingResult    = "missing-result"
 	textReportCaution    = "report-caution"
 	textAgentWorkTree    = "agent-work-tree"
+	textAgentMemory      = "agent-memory"
 	textCloseEnteredHere = "close-entered-here"
 	textCloseUnbacked    = "close-unbacked"
 	textCloseNotMade     = "close-not-made"
@@ -166,6 +167,8 @@ func specs() []spec {
 			when: "A part of the system prompt only when the session has the Deliver tool: name a deliverable before making it."},
 		{name: textAgentWorkTree, kind: KindSystem, need: []string{"tree", "repo"},
 			when: "Last in the system prompt of a sub-agent that works in a git work tree of its own (isolation worktree): where the work tree is, and that its changes stay there."},
+		{name: textAgentMemory, kind: KindSystem, need: []string{"dir", "scope"}, may: []string{"index", "none", "cut"},
+			when: "Last in the system prompt of a sub-agent whose definition keeps a memory (memory): its folder, what to keep there, and the start of its MEMORY.md as it stands."},
 
 		{name: textEnvironment, kind: KindLine, need: []string{"date", "cwd"},
 			may:  []string{"began", "summed", "weekday", "user", "machine", "user_only", "machine_only", "platform", "branch", "repo", "nogit", "status", "unread", "why", "dirs", "hosts"},
