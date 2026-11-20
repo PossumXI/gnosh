@@ -620,7 +620,7 @@ func (r *round) start(c *callState) {
 // (stopped ends then too) and when the round is ended for another reason.
 func (a *Agent) exec(stopped, ctx context.Context, turn string, idx int, tool core.Tool, call core.ToolCall, env *core.ToolEnv, began time.Time, gone *late, out chan<- execDone) {
 	d := execDone{idx: idx}
-	res, err, crash, stack := runTool(ctx, tool, call, env)
+	res, crash, stack, err := runTool(ctx, tool, call, env)
 	switch {
 	case crash != nil:
 		a.panicked("the tool "+call.Name, crash, stack)
@@ -755,14 +755,14 @@ func sayable(content []core.Block) []core.Block {
 }
 
 // runTool calls a tool and catches a panic in it.
-func runTool(ctx context.Context, tool core.Tool, call core.ToolCall, env *core.ToolEnv) (res core.ToolResult, err error, crash any, stack []byte) {
+func runTool(ctx context.Context, tool core.Tool, call core.ToolCall, env *core.ToolEnv) (res core.ToolResult, crash any, stack []byte, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			crash, stack = p, debug.Stack()
 		}
 	}()
 	res, err = tool.Run(ctx, call, env)
-	return res, err, nil, nil
+	return res, nil, nil, err
 }
 
 // cleanResult passes a result through the wiring's function, and keeps the

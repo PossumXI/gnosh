@@ -657,7 +657,7 @@ func TestAskBefore(t *testing.T) {
 			{Key: "yes", Label: "Yes: use this folder's settings"},
 		},
 	}
-	ask := func(keys string) (agent.Answer, error, *loop) {
+	ask := func(keys string) (agent.Answer, *loop, error) {
 		at := &clock{at: stamp}
 		l := &loop{t: t, ft: newFakeTerm(80, 30, vtest.AllAnswers), c: newControls(), now: at.Now}
 		l.u = l.make()
@@ -681,14 +681,14 @@ func TestAskBefore(t *testing.T) {
 		l.keys(keys)
 		select {
 		case r := <-got:
-			return r.ans, r.err, l
+			return r.ans, l, r.err
 		case <-time.After(20 * time.Second):
 			t.Fatal("the question was not answered")
 		}
-		return agent.Answer{}, nil, l
+		return agent.Answer{}, l, nil
 	}
 
-	ans, err, l := ask(`<Enter>`)
+	ans, l, err := ask(`<Enter>`)
 	if err != nil || ans.Choice != "no" {
 		t.Fatalf("Enter answered %+v, %v: no must be first", ans, err)
 	}
@@ -698,13 +698,13 @@ func TestAskBefore(t *testing.T) {
 	if text := l.ft.text(); !strings.Contains(text, "? Trust this folder? No: start with my own settings only") || strings.Contains(text, "Enter choose") {
 		t.Errorf("after the question the terminal holds:\n%s", text)
 	}
-	if ans, err, _ = ask(`<Down> <Enter>`); err != nil || ans.Choice != "yes" {
+	if ans, _, err = ask(`<Down> <Enter>`); err != nil || ans.Choice != "yes" {
 		t.Fatalf("Down Enter answered %+v, %v", ans, err)
 	}
-	if ans, err, _ = ask(`<Esc>`); err != nil || ans.Choice != "no" {
+	if ans, _, err = ask(`<Esc>`); err != nil || ans.Choice != "no" {
 		t.Fatalf("Esc answered %+v, %v", ans, err)
 	}
-	if _, err, l = ask(`<Ctrl+C>`); err == nil {
+	if _, l, err = ask(`<Ctrl+C>`); err == nil {
 		t.Fatal("Ctrl+C answered the question")
 	}
 	if l.ft.closed != 1 {

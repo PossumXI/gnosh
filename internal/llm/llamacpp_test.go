@@ -377,7 +377,7 @@ func TestLlamaCppModels(t *testing.T) {
 				io.WriteString(w, `{"data":[{"id":"m"}]}`)
 				return
 			}
-			http.Error(w, `{"error":{"code":401,"message":"Invalid API Key","type":"authentication_error"}}`, 401)
+			http.Error(w, `{"error":{"code":401,"message":"Invalid API Key","type":"authentication_error"}}`, http.StatusUnauthorized)
 		})
 		_, err := f.provider(TypeLlamaCpp, nil).(core.ModelLister).Models(context.Background())
 		wantFailure(t, err, core.ErrAuth)
@@ -508,7 +508,7 @@ func TestLlamaCppLoad(t *testing.T) {
 	f.waitClosed()
 
 	off := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
-		http.Error(w, `{"error":{"code":501,"message":"This server does not support slots endpoint.","type":"not_supported_error"}}`, 501)
+		http.Error(w, `{"error":{"code":501,"message":"This server does not support slots endpoint.","type":"not_supported_error"}}`, http.StatusNotImplemented)
 	})
 	if _, err := off.provider(TypeLlamaCpp, nil).(core.LoadReporter).Load(context.Background(), ""); err == nil {
 		t.Errorf("a server without /slots gave no error")

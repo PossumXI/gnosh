@@ -330,7 +330,7 @@ func TestPasteWhileSomethingElseHasTheKeys(t *testing.T) {
 // asks to let it run (the TUI review of 2026-11-19).
 func TestQuestionShowsInvisibleCharacters(t *testing.T) {
 	q := permission("q1")
-	q.Text = "  $ cat /tmp/‮txt.exe​\nWhy gnosh asks: no rule allows it."
+	q.Text = "  $ cat /tmp/\u202etxt.exe\u200b\nWhy gnosh asks: no rule allows it."
 	g := newRig(t, 80, 30, text.NoColor)
 	g.keys(`"go" <Enter>`).start()
 	g.ev(&agent.QuestionEvent{Question: q})

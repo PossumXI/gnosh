@@ -246,9 +246,8 @@ func broken(kind core.ErrorKind, status int) step {
 
 // fakeTool is a tool whose behaviour a test writes.
 type fakeTool struct {
-	name     string
-	parallel *bool // nil: the tool does not say, so it runs alone
-	run      func(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error)
+	name string
+	run  func(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error)
 }
 
 func (f *fakeTool) Spec() core.ToolSpec {
