@@ -142,3 +142,17 @@ func TestFocusOffOutweighsAFileAfterFocusOn(t *testing.T) {
 	s.exit()
 	has(t, "the state file", w.Read(filepath.Join(w.DataDir(), "state.json")), `"viewMode": "default"`)
 }
+
+// A bare /theme says the theme as it is now, after a /theme in the same
+// session; it said the one the session started with.
+func TestThemeSaysTheThemeNow(t *testing.T) {
+	w := apptest.NewWorld(t)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/theme light")
+	s.see("theme is light")
+	s.typeLine("/theme")
+	s.see("The theme is light:")
+	s.typeLine("/exit")
+	s.exit()
+}

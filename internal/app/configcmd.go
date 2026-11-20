@@ -476,7 +476,17 @@ func (l *live) viewModeSet() string {
 func (l *live) slashTheme(ctx context.Context, c *SlashContext) error {
 	name := strings.ToLower(strings.TrimSpace(c.Args))
 	if name == "" {
-		c.Say("The theme is %s: auto (for the background the terminal says it has), dark, light, or ansi (the terminal's own sixteen colours). /theme <name> sets it.", firstOf(l.cfg.Options.Theme.V, "auto"))
+		// As it is now: what /theme set in this session, else what the
+		// session started with (the start value was said after a change).
+		now := firstOf(l.cfg.Options.Theme.V, "auto")
+		l.configMu.Lock()
+		raw, ok := l.configNow["theme"]
+		l.configMu.Unlock()
+		var set string
+		if ok && json.Unmarshal(raw, &set) == nil && set != "" {
+			now = set
+		}
+		c.Say("The theme is %s: auto (for the background the terminal says it has), dark, light, or ansi (the terminal's own sixteen colours). /theme <name> sets it.", now)
 		return nil
 	}
 	set := *c
