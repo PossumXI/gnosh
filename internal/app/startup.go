@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -750,10 +749,6 @@ func checkExcludes(cfg *config.Config) []config.Problem {
 	return out
 }
 
-// resolvePath follows the symbolic links of a cleaned absolute path and
-// returns where it really leads. For a path that does not exist yet it
-// resolves the part that does, and a link that points at nothing is
-// followed to where it points: a write through it would land there.
 // repoGitDir is the permission engine's RepoOf: the git directory of the
 // repository that holds dir, as git finds it going up from dir (a .git
 // folder, or the folder a .git file names), with its links followed; ""
@@ -792,52 +787,17 @@ func repoGitDir(dir string) string {
 	}
 }
 
+// resolvePath follows the symbolic links of a cleaned absolute path and
+// returns where it really leads. For a path that does not exist yet it
+// resolves the part that does, and a link that points at nothing is
+// followed to where it points: a write through it would land there. A
+// link's target is walked piece by piece from where the link is, as the
+// system walks it: tidied as text first, "a/../hooks/pre-commit" with a a
+// link to .git/info was hooks/pre-commit beside the link, where the
+// system writes .git/hooks/pre-commit (the review of 2026-11-20).
 func resolvePath(p string) (string, error) {
-	return resolveDepth(filepath.Clean(p), 0)
-}
-
-func resolveDepth(p string, depth int) (string, error) {
-	if depth > 40 {
-		return "", fmt.Errorf("%s leads through too many symbolic links", p)
-	}
-	rest := ""
-	for cur := p; ; {
-		real, err := filepath.EvalSymlinks(cur)
-		if err == nil {
-			return filepath.Join(real, rest), nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", err
-		}
-		if li, lerr := os.Lstat(cur); lerr == nil && li.Mode()&fs.ModeSymlink != 0 {
-			target, rerr := os.Readlink(cur)
-			if rerr != nil {
-				return "", rerr
-			}
-			if !filepath.IsAbs(target) {
-				// The target is read from the folder the link is in, as
-				// the system reads it: that folder as it really is, past
-				// the links on the way to it ("d/../.." is not the text's
-				// folder when d is a link).
-				dir, derr := resolveDepth(filepath.Dir(cur), depth+1)
-				if derr != nil {
-					return "", derr
-				}
-				target = filepath.Join(dir, target)
-			}
-			real, err := resolveDepth(filepath.Clean(target), depth+1)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(real, rest), nil
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return p, nil
-		}
-		rest = filepath.Join(filepath.Base(cur), rest)
-		cur = parent
-	}
+	real, _, err := fstools.FollowLinks(p)
+	return real, err
 }
 
 // globPaths expands a file name pattern the way a shell would, to cleaned
