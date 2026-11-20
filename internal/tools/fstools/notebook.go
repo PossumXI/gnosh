@@ -41,6 +41,8 @@ const (
 type nbDoc struct {
 	root  map[string]any
 	cells []any
+	// bom says the file began with a byte order mark, which it keeps.
+	bom bool
 }
 
 // parseNotebook reads a notebook of nbformat 4.
@@ -70,7 +72,7 @@ func parseNotebook(data []byte) (*nbDoc, error) {
 			return nil, fmt.Errorf("its cell %d says no cell_type", i+1)
 		}
 	}
-	return &nbDoc{root: root, cells: cells}, nil
+	return &nbDoc{root: root, cells: cells, bom: bytes.HasPrefix(data, []byte(utf8BOM))}, nil
 }
 
 // language is the notebook's language, as its metadata names it, or "".
@@ -152,7 +154,13 @@ func (d *nbDoc) format() (string, error) {
 	if err := enc.Encode(d.root); err != nil {
 		return "", err
 	}
-	return b.String(), nil
+	// Go's encoder writes U+2028 and U+2029 escaped, which Jupyter does
+	// not: they go back as the characters (JSON allows them in a string).
+	out := lineSeparatorsBack(b.String())
+	if d.bom {
+		out = utf8BOM + out
+	}
+	return out, nil
 }
 
 // nbText joins a notebook text field: a string, or a list of strings.
@@ -295,6 +303,15 @@ func (d *nbDoc) outputText(o *Options, out any, v *nbView) string {
 				}
 				return r
 			}, nbText(raw)))
+			if err == nil && imageType(pic) != media {
+				// What the bytes are, not what the notebook says they are:
+				// a provider refuses a picture of another kind than named.
+				if actual := imageType(pic); actual != "" {
+					media = actual
+				} else {
+					err = errors.New("not a picture")
+				}
+			}
 			switch {
 			case err != nil:
 				parts = append(parts, fmt.Sprintf("[a picture, %s, that cannot be decoded]", media))
@@ -393,4 +410,30 @@ func (t *readTool) readNotebook(env *core.ToolEnv, loc *location, file *os.File,
 		res.Meta["realPath"] = loc.real
 	}
 	return res, nil
+}
+
+// lineSeparatorsBack writes U+2028 and U+2029 back as themselves where
+// Go's encoder escaped them, and leaves every other escape as it is: a
+// backslash escaped before "u2028" is text, not an escape.
+func lineSeparatorsBack(s string) string {
+	if !strings.Contains(s, `\u202`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		if rest := s[i+1:]; strings.HasPrefix(rest, "u2028") || strings.HasPrefix(rest, "u2029") {
+			b.WriteString(map[string]string{"u2028": "\u2028", "u2029": "\u2029"}[rest[:5]])
+			i += 5
+			continue
+		}
+		b.WriteByte(s[i])
+		b.WriteByte(s[i+1])
+		i++
+	}
+	return b.String()
 }

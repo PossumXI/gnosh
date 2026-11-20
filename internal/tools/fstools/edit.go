@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -35,7 +36,7 @@ old_string must be in the file character for character: same indentation, same s
 
 old_string must pick out one place. If it is found more than once the call is refused: add surrounding lines until it is unique, or set replace_all to change every occurrence.
 
-The lines being changed must have been shown to this session by %[1]s, and the file must not have changed on disk since; otherwise the call is refused and says what to read. The file keeps its line endings (a line break in old_string matches LF and CRLF alike), its byte order mark and its permissions. When old_string is not found, the error says where the closest text is and how it differs.
+The lines being changed must have been shown to this session by %[1]s; otherwise the call is refused and says what to read. A file read whole that has changed on disk since may still be edited where old_string is found exactly once in it as it is now: the result then says the rest holds changes not yet seen. The file keeps its line endings (a line break in old_string matches LF and CRLF alike), its byte order mark and its permissions. When old_string is not found, the error says where the closest text is and how it differs.
 
 To make a new file or replace a whole one, use %[2]s.`,
 		o.ReadName, o.WriteName)
@@ -186,6 +187,12 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 	if f := o.writable(o.EditName, &loc); f != nil {
 		return c, f
 	}
+	if strings.EqualFold(filepath.Ext(loc.abs), ".ipynb") {
+		// Read shows a notebook's cells, not its JSON, and a cell's text
+		// put into the JSON as it is breaks the file (the review of the
+		// day's code, 2026-11-20).
+		return c, failf("%s is a Jupyter notebook. Nothing was changed. Change its cells with %s.", loc.abs, o.NotebookEditName)
+	}
 	rec, known := sessionOf(env).record(loc.real)
 	if !known {
 		return c, failf("This session has not read %s. Nothing was changed. Read it with %s first, then edit.", loc.abs, o.ReadName)
@@ -207,6 +214,12 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 	// touches that place alone and keeps the other changes, and the reply
 	// says they are there. Any other case is told to read it again.
 	c.stale = !rec.unchanged(info, content)
+	if c.stale && !rec.all {
+		// Of a file read only in part, the edit could land in lines never
+		// shown, which the same edit of the unchanged file is refused for
+		// (the review of the day's code, 2026-11-20).
+		return c, staleFailure(o, &loc)
+	}
 	if looksBinary(content) {
 		return c, failf("%s looks like a binary file, and %s only changes text. Nothing was changed.", loc.abs, o.EditName)
 	}

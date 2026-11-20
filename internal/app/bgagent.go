@@ -85,9 +85,11 @@ func (l *live) startBackground(s *subSession, in agentInput, stopsAt int64) core
 		return core.ErrorResult("The sub-agent was not started: the sub-agents in the background were stopped while it was being made ready.")
 	}
 	l.bgAgents = append(l.bgAgents, b)
+	// (Counted under the lock: a stop's Wait comes after its own look at
+	// the list, so it never meets the count going up from nothing.)
+	l.bgWG.Add(1)
 	l.bgMu.Unlock()
 	l.noteBackground()
-	l.bgWG.Add(1)
 	go func() {
 		defer l.bgWG.Done()
 		defer close(b.done)

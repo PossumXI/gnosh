@@ -98,6 +98,9 @@ type grepQuery struct {
 	// globDirs says a negated glob ended with a slash: it leaves out
 	// directories of that name, and not files.
 	globDirs bool
+	// globNamed are the directory names a glob spells out in full, the
+	// hidden or ignored directories it may take the search into.
+	globNamed map[string]bool
 	// typ, when not nil, is the kind of file to search.
 	typ *fileType
 	// root is the file or directory to search.
@@ -279,6 +282,7 @@ func (t *grepTool) plan(call core.ToolCall, env *core.ToolEnv) (*grepQuery, *fai
 			return nil, failf("%s: %v.", o.GrepName, strings.Replace(patternProblem(err, q.globText), "the pattern", "the glob", 1))
 		}
 		q.glob = g
+		q.globNamed = namesIn(text).dirs
 	}
 	typeName, _, f := a.text("type")
 	if f != nil {
@@ -344,17 +348,21 @@ func (q *grepQuery) enters(rel string) bool {
 // overrides reports whether the glob reaches an entry that is hidden or
 // that the ignore rules leave out: ripgrep's glob "always overrides any
 // other ignore logic", so that glob ".env*" finds .env.local, and
-// "*.log" the logs an ignore rule leaves out. A glob with a slash also
-// enters the directories on its way.
+// "*.log" the logs an ignore rule leaves out. A hidden or ignored
+// directory is entered only when the glob spells out its name on the way
+// (build/**, .config/*.txt): **/*.py, which any directory could hold the
+// files of, would otherwise take the search through every .venv and
+// node_modules (the review of the day's code, 2026-11-20).
 func (q *grepQuery) overrides(rel string, isDir bool) bool {
 	if q.glob == nil || q.globNot {
 		return false
 	}
-	if q.globBase {
-		return q.glob.Match(rel[strings.LastIndexByte(rel, '/')+1:])
-	}
+	name := rel[strings.LastIndexByte(rel, '/')+1:]
 	if isDir {
-		return q.glob.MatchPrefix(rel)
+		return q.globNamed[name] && (q.globBase || q.glob.MatchPrefix(rel))
+	}
+	if q.globBase {
+		return q.glob.Match(name)
 	}
 	return q.glob.Match(rel)
 }

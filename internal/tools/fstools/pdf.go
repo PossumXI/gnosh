@@ -42,12 +42,24 @@ func popplerPages(ctx context.Context, path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	return pagesFrom(out)
+}
+
+// pagesFrom reads the number of pages in what pdfinfo printed.
+func pagesFrom(out string) (int, error) {
+	// The last line that says so: a title or a subject, which pdfinfo
+	// prints before it, can hold a line of its own (the review of the
+	// day's code, 2026-11-20).
+	pages := ""
 	for _, line := range strings.Split(out, "\n") {
 		if rest, ok := strings.CutPrefix(line, "Pages:"); ok {
-			return strconv.Atoi(strings.TrimSpace(rest))
+			pages = strings.TrimSpace(rest)
 		}
 	}
-	return 0, errors.New("pdfinfo did not say how many pages it has")
+	if pages == "" {
+		return 0, errors.New("pdfinfo did not say how many pages it has")
+	}
+	return strconv.Atoi(pages)
 }
 
 // popplerText is the text of pages first to last of a PDF, by pdftotext:

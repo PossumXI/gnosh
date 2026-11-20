@@ -389,6 +389,23 @@ func TestGrepWhatIsLeftOut(t *testing.T) {
 			}
 		}
 	})
+	t.Run("a glob that any directory could hold enters no hidden or ignored one", func(t *testing.T) {
+		f := newFixture(t, Options{})
+		f.file(".gitignore", "node_modules/\n")
+		f.file("src/a.py", "needle\n")
+		f.file(".venv/lib/site.py", "needle\n")
+		f.file("node_modules/pkg/x.py", "needle\n")
+		if got := names(f, in{"pattern": "needle", "glob": "**/*.py"}); !reflect.DeepEqual(got, []string{"src/a.py"}) {
+			t.Errorf("glob **/*.py found %v, want only src/a.py", got)
+		}
+		// Spelled out, they are entered.
+		if got := names(f, in{"pattern": "needle", "glob": "node_modules/**/*.py"}); !reflect.DeepEqual(got, []string{"node_modules/pkg/x.py"}) {
+			t.Errorf("glob node_modules/**/*.py found %v", got)
+		}
+		if got := names(f, in{"pattern": "needle", "glob": ".venv/**"}); !reflect.DeepEqual(got, []string{".venv/lib/site.py"}) {
+			t.Errorf("glob .venv/** found %v", got)
+		}
+	})
 	t.Run("a negated glob leaves out directories too", func(t *testing.T) {
 		f := newFixture(t, Options{})
 		for _, name := range []string{"vendor/lib.go", "src/vendor/x.go", "src/a.go", "app.min.js", "app.js", "vendor.txt"} {

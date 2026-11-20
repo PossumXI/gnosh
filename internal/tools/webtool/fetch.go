@@ -227,7 +227,14 @@ func Fetch(ctx context.Context, raw string, o Options) (Page, error) {
 		// No type, or bytes of no type named: the first bytes say what
 		// they are, so that a PDF or a picture sent as octet-stream is
 		// known as one (Claude Code 2.1.329 fixed the same in its own).
-		if sniffed, _, _ := mime.ParseMediaType(http.DetectContentType(body)); media == "" || sniffed != "application/octet-stream" {
+		// Text it is only when all of it is: a shell installer with its
+		// archive after the script begins as text (the review of the
+		// day's code, 2026-11-20).
+		sniffed, _, _ := mime.ParseMediaType(http.DetectContentType(body))
+		if strings.HasPrefix(sniffed, "text/") && (!utf8.Valid(body) || bytes.IndexByte(body, 0) >= 0) {
+			sniffed = "application/octet-stream"
+		}
+		if media == "" || sniffed != "application/octet-stream" {
 			media = sniffed
 		}
 	}

@@ -123,8 +123,8 @@ func TestWebFetchKeepsWhatIsNotText(t *testing.T) {
 	run(t, w, "-y", "-p", "fetch the files").wantCode(t, 0)
 
 	first := toolResult(t, w, 4, "c1")
-	has(t, "the PDF's result", first, "is a PDF (application/pdf", "pdftotext")
-	saved := regexp.MustCompile(`saved to (\S+\.pdf)\.`).FindStringSubmatch(first)
+	has(t, "the PDF's result", first, "is a PDF (application/pdf", "Read that file for its text")
+	saved := regexp.MustCompile(`saved to (\S+\.pdf)[.:]`).FindStringSubmatch(first)
 	if saved == nil {
 		t.Fatalf("no file is named in %q", first)
 	}
@@ -134,7 +134,7 @@ func TestWebFetchKeepsWhatIsNotText(t *testing.T) {
 	if info, err := os.Stat(saved[1]); err != nil || info.Mode().Perm() != 0o600 {
 		t.Errorf("the saved file: %v, %v", info, err)
 	}
-	has(t, "the PDF asked for again", toolResult(t, w, 4, "c2"), "saved to "+saved[1]+".")
+	has(t, "the PDF asked for again", toolResult(t, w, 4, "c2"), "saved to "+saved[1]+":")
 	has(t, "the picture's result", toolResult(t, w, 4, "c3"), "is a picture (image/png", ".png: Read that file to see it.")
 	has(t, "the long video's result", toolResult(t, w, 4, "c4"), "longer than the 10.0 MB WebFetch keeps", "curl through Bash")
 	if n := fetched.Load(); n != 3 {

@@ -150,3 +150,58 @@ func readNB(t *testing.T, f *fixture, p string) *nbDoc {
 	}
 	return doc
 }
+
+// The review of the day's code (2026-11-20): new_source is needed but to
+// delete; a notebook without ids is read again after an insert; a line
+// separator in a cell, and the text \u2028, and a byte order mark, come
+// back as they were; a notebook that is not UTF-8 is not changed; a
+// picture is sent as what its bytes are; Edit leaves notebooks to
+// NotebookEdit.
+func TestNotebookEditReviewed(t *testing.T) {
+	f := newFixture(t, Options{})
+	p := f.file("sums.ipynb", sampleNotebook(t))
+	f.ok(f.read, in{"file_path": p})
+	f.fails(f.nbedit, in{"notebook_path": p, "cell_id": "sum0002"}, "needs new_source")
+	f.fails(f.edit, in{"file_path": p, "old_string": "print(1 + 2)", "new_string": "print(2)"}, "is a Jupyter notebook", "NotebookEdit")
+
+	old := f.file("old.ipynb", `{"cells": [{"cell_type": "code", "execution_count": 1, "metadata": {}, "outputs": [], "source": ["a = 1"]}, {"cell_type": "code", "execution_count": 2, "metadata": {}, "outputs": [], "source": ["b = 2"]}], "metadata": {}, "nbformat": 4, "nbformat_minor": 2}`+"\n")
+	f.ok(f.read, in{"file_path": old})
+	f.ok(f.nbedit, in{"notebook_path": old, "new_source": "z = 0", "cell_type": "code", "edit_mode": "insert"})
+	f.fails(f.nbedit, in{"notebook_path": old, "cell_id": "cell-2", "new_source": "x"}, "to be read again", "have moved")
+	f.ok(f.read, in{"file_path": old})
+	f.ok(f.nbedit, in{"notebook_path": old, "cell_id": "cell-2", "new_source": "a = 10"})
+	if src := nbText(readNB(t, f, old).cell(1)["source"]); src != "a = 10" {
+		t.Errorf("cell-2 after the read again holds %q", src)
+	}
+	// A replace in a notebook without ids moves nothing.
+	f.ok(f.nbedit, in{"notebook_path": old, "cell_id": "cell-3", "new_source": "b = 20"})
+
+	sep := "\uFEFF" + `{"cells": [{"cell_type": "markdown", "id": "a", "metadata": {}, "source": ["one` + "\u2028" + `two \\u2028 three"]}, {"cell_type": "markdown", "id": "b", "metadata": {}, "source": ["x"]}], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}` + "\n"
+	q := f.file("sep.ipynb", sep)
+	f.ok(f.read, in{"file_path": q})
+	f.ok(f.nbedit, in{"notebook_path": q, "cell_id": "b", "new_source": "y"})
+	got := f.content(q)
+	if !strings.HasPrefix(got, "\uFEFF{") {
+		t.Errorf("the byte order mark was lost: %q", got[:min(10, len(got))])
+	}
+	mustContain(t, got, "one\u2028two \\\\u2028 three")
+	if src := nbText(readNB(t, f, q).cell(0)["source"]); src != "one\u2028two \\u2028 three" {
+		t.Errorf("the cell with the line separator holds %q", src)
+	}
+
+	latin := f.file("latin.ipynb", "{\"cells\": [{\"cell_type\": \"markdown\", \"id\": \"a\", \"metadata\": {}, \"source\": [\"caf\xe9\"]}], \"metadata\": {}, \"nbformat\": 4, \"nbformat_minor\": 5}\n")
+	f.ok(f.read, in{"file_path": latin})
+	f.fails(f.nbedit, in{"notebook_path": latin, "cell_id": "a", "new_source": "x"}, "not valid UTF-8")
+
+	jpeg := base64.StdEncoding.EncodeToString([]byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"))
+	pics := f.file("pics.ipynb", `{"cells": [{"cell_type": "code", "execution_count": 1, "id": "c", "metadata": {}, "source": [], "outputs": [`+
+		`{"output_type": "display_data", "metadata": {}, "data": {"image/png": "`+jpeg+`"}},`+
+		`{"output_type": "display_data", "metadata": {}, "data": {"image/png": "`+base64.StdEncoding.EncodeToString([]byte("not a picture"))+`"}}]}], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}`+"\n")
+	res := f.run(f.read, in{"file_path": pics})
+	mustContain(t, core.TextOf(res.Content), "[picture 1, image/jpeg, given below]", "[a picture, image/png, that cannot be decoded]")
+	for _, b := range res.Content {
+		if b.Type == core.BlockImage && b.MediaType != "image/jpeg" {
+			t.Errorf("a picture went as %s", b.MediaType)
+		}
+	}
+}

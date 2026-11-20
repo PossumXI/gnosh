@@ -4673,3 +4673,30 @@ or kept with the reason said (27).
     the notebook's cells have them, and writes the notebook as Jupyter
     does (keys in order, one space of indent, numbers as they were). It
     costs every session's prompt its description, about 200 tokens.
+
+326. **The review of the day's code.** A fresh-eyes review of 2026-11-20's
+    commits (90765d3 to e7d8365) found: Grep's glob, made to reach hidden
+    and ignored files in 69e039f, entered every hidden or ignored directory
+    for a glob starting **/ (**/*.py walked .venv and node_modules, and big
+    trees ran into the time limit) — a directory is now entered past those
+    rules only when the glob spells out its name; Ctrl+X Ctrl+K with no
+    sub-agent listed did not count as a stop, so one being made ready
+    started — the stop now always counts; a Read of a notebook let Edit
+    put a cell's text into the notebook's JSON as it is — Edit now leaves
+    notebooks to NotebookEdit; an edit of a changed file read only in part
+    could land in lines never shown — the changed-file case now wants the
+    file read whole; NotebookEdit without new_source emptied the cell — it
+    is needed but to delete; cells named by number (no ids) moved under an
+    insert or delete while the notebook counted as seen — such a notebook
+    is to be read again first; a notebook's picture went out as the kind
+    the notebook named — it goes as what its bytes are, or not at all; a
+    notebook that is not UTF-8 was rewritten with U+FFFD — refused; U+2028
+    and U+2029 came back escaped and a byte order mark was dropped — kept;
+    both whole notebooks went into the session's file with each edit — not
+    past DiffMaxBytes; a hook that rewrote a notebook after NotebookEdit
+    left it counted stale — it is looked at as after Write and Edit; an
+    octet-stream body that begins as text went to the small model whole —
+    text only when all of it is; a PDF title could fake its page count —
+    pdfinfo's last Pages line counts; the start of a background sub-agent
+    added to the wait group after the lock — under it. WebFetch's note for
+    a PDF now says to Read the file.

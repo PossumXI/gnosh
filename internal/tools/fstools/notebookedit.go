@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -48,6 +49,8 @@ type nbEdit struct {
 	at, total int
 	// cleared says a code cell replaced had outputs or a run count.
 	cleared bool
+	// ids says the notebook's cells carry ids, which do not move.
+	ids bool
 }
 
 // plan reads the call and the notebook, and makes the change.
@@ -62,7 +65,7 @@ func (t *notebookEditTool) plan(call core.ToolCall, env *core.ToolEnv) (*nbEdit,
 	if f != nil {
 		return nil, f
 	}
-	source, _, f := a.text("new_source")
+	source, gotSource, f := a.text("new_source")
 	if f != nil {
 		return nil, f
 	}
@@ -91,6 +94,10 @@ func (t *notebookEditTool) plan(call core.ToolCall, env *core.ToolEnv) (*nbEdit,
 		return nil, failf("%s: a cell inserted needs its cell_type, code or markdown. Nothing was changed.", name)
 	case mode != "insert" && id == "":
 		return nil, failf("%s: %s needs the cell_id of the cell, as %s shows it. Nothing was changed.", name, mode, o.ReadName)
+	case mode != "delete" && !gotSource:
+		// (Left out, it would have emptied the cell: the review of the
+		// day's code, 2026-11-20.)
+		return nil, failf("%s: %s needs new_source, the cell's new text. Nothing was changed.", name, mode)
 	}
 	loc, f := o.locateFile(env, name, path)
 	if f != nil {
@@ -122,8 +129,13 @@ func (t *notebookEditTool) plan(call core.ToolCall, env *core.ToolEnv) (*nbEdit,
 	if !rec.unchanged(info, data) {
 		return e, staleFailure(o, &loc)
 	}
+	if !utf8.Valid(data) {
+		// As Claude Code's NotebookEdit refuses one: written back as
+		// UTF-8, every byte that does not decode would be lost.
+		return e, failf("%s is not valid UTF-8. Nothing was changed. Change it with a shell command that keeps its encoding.", loc.abs)
+	}
 	if !rec.all {
-		return e, failf("%s has been read only in part. Nothing was changed. Read it whole with %s first.", loc.abs, o.ReadName)
+		return e, failf("%s is to be read again before it is changed: its cells have no ids, and the numbers of those after the last one inserted or deleted have moved. Nothing was changed. Read it with %s first.", loc.abs, o.ReadName)
 	}
 	doc, err := parseNotebook(data)
 	if err != nil {
@@ -180,11 +192,17 @@ func (t *notebookEditTool) plan(call core.ToolCall, env *core.ToolEnv) (*nbEdit,
 		e.name = doc.cellName(e.at)
 	}
 	e.total = len(doc.cells)
+	e.ids = doc.usesIDs()
 	after, err := doc.format()
 	if err != nil {
 		return e, failf("%s could not be written out: %v. Nothing was changed.", loc.abs, err)
 	}
 	e.before, e.after = string(data), after
+	if int64(len(e.before)+len(e.after)) > o.DiffMaxBytes {
+		// (Both whole notebooks would go into the session's file with
+		// every call: the review of the day's code, 2026-11-20.)
+		e.shown = false
+	}
 	e.same = bytes.Equal(data, []byte(after))
 	switch mode {
 	case "replace":
@@ -267,7 +285,12 @@ func (t *notebookEditTool) Run(ctx context.Context, call core.ToolCall, env *cor
 		return refused(f)
 	}
 	sum := sha256.Sum256([]byte(e.after))
-	sessionOf(env).wrote(e.loc.real, info, sum, true, nil, lineCount(e.after))
+	// Where cells have no ids their names are their numbers, and an
+	// insert or a delete moves those of the cells after it: the notebook
+	// is then to be read again before the next change, so that no cell is
+	// named by a number that now belongs to another.
+	seenWhole := e.mode == "replace" || e.ids
+	sessionOf(env).wrote(e.loc.real, info, sum, seenWhole, nil, lineCount(e.after))
 
 	var text string
 	switch e.mode {

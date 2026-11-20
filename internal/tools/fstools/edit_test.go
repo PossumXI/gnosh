@@ -187,11 +187,18 @@ func TestEditOfAFileChangedBehindItsBack(t *testing.T) {
 		t.Fatalf("the file holds %q", got)
 	}
 
-	// Changed after a read of only part of it: size and time tell. The
-	// match decides; afterwards only the edited line is known.
+	// Changed after a read of only part of it: the edit could land in
+	// lines never shown, so it is to be read again (the review of the
+	// day's code, 2026-11-20). Read whole, then changed, it goes through,
+	// and afterwards only the edited line is known.
 	q := f.file("long.txt", manyLines(30))
 	f.ok(f.read, in{"file_path": q, "limit": 5})
 	if err := os.WriteFile(q, []byte(manyLines(31)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.fails(f.edit, in{"file_path": q, "old_string": "line 2\n", "new_string": "x\n"}, "has changed on disk", "Read it again")
+	f.ok(f.read, in{"file_path": q})
+	if err := os.WriteFile(q, []byte(manyLines(32)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	f.ok(f.edit, in{"file_path": q, "old_string": "line 2\n", "new_string": "x\n"})

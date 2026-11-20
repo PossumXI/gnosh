@@ -232,7 +232,9 @@ func TestTasksListsEndedSubAgents(t *testing.T) {
 // were stopped.
 func TestSendMessageStoppedWhileItIsMade(t *testing.T) {
 	old := whileSubIsMade
-	whileSubIsMade = func(l *live) { l.stopBackgroundAgents(0) }
+	// (Through the control the interface's Ctrl+X Ctrl+K calls, which
+	// with no sub-agent listed yet still stops the one being made.)
+	whileSubIsMade = func(l *live) { (&controls{l: l}).StopBackgroundAgents() }
 	defer func() { whileSubIsMade = old }()
 	w := apptest.NewWorld(t)
 	idRe := regexp.MustCompile(`\[agent id: ([0-9a-f-]+)\]`)

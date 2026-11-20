@@ -639,7 +639,7 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 	path := ""
 	var before os.FileInfo
 	names := fstools.Defaults()
-	if !done.Result.IsError && (done.Call.Name == names.WriteName || done.Call.Name == names.EditName) {
+	if !done.Result.IsError && (done.Call.Name == names.WriteName || done.Call.Name == names.EditName || done.Call.Name == names.NotebookEditName) {
 		if path = touchedPath(done); path != "" {
 			before, _ = os.Stat(path)
 		}

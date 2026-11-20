@@ -1839,9 +1839,10 @@ func (c *controls) StopBackground() {
 func (c *controls) StopBackgroundAgents() int {
 	l := c.cur()
 	n := len(l.backgroundAgents())
-	if n > 0 {
-		l.stopBackgroundAgents(10 * time.Second)
-	}
+	// Even with none listed: one may be being made ready, and the stop
+	// keeps it from starting (bgStops; the review of the day's code,
+	// 2026-11-20).
+	l.stopBackgroundAgents(10 * time.Second)
 	return n
 }
 

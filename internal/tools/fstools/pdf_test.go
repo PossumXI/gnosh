@@ -148,3 +148,14 @@ func minimalPDF(pages ...string) []byte {
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets)+1, xref)
 	return b.Bytes()
 }
+
+// The number of pages is pdfinfo's last line of it: a title printed before
+// it may hold a line that says otherwise.
+func TestPagesFrom(t *testing.T) {
+	if n, err := pagesFrom("Title:          a\nPages: 1\nAuthor:         b\nPages:          300\n"); err != nil || n != 300 {
+		t.Errorf("pagesFrom = %d, %v; want 300", n, err)
+	}
+	if _, err := pagesFrom("Title: nothing\n"); err == nil {
+		t.Error("no Pages line gave no error")
+	}
+}

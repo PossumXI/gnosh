@@ -108,6 +108,12 @@ func TestFetch(t *testing.T) {
 		w.Header()["Content-Type"] = nil
 		w.Write([]byte("%PDF-1.4\n%%EOF\n"))
 	})
+	// A shell installer with its archive after the script: it begins as
+	// text, and is not.
+	mux.HandleFunc("/installer", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write([]byte("#!/bin/sh\nexec tail -n +3 \"$0\" | tar xz\n\x1f\x8b\x08\x00\xff\xfe\x00\x00"))
+	})
 	mux.HandleFunc("/latin", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-thing")
 		w.Write([]byte{'a', 0xe9, 'b'})
@@ -160,6 +166,10 @@ func TestFetch(t *testing.T) {
 	p, err = Fetch(ctx, srv.URL+"/untyped-pdf", o)
 	if err != nil || p.ContentType != "application/pdf" || p.Body == nil {
 		t.Errorf("a PDF sent with no type: %+v, %v", p, err)
+	}
+	p, err = Fetch(ctx, srv.URL+"/installer", o)
+	if err != nil || p.Body == nil || p.Text != "" || p.ContentType != "application/octet-stream" {
+		t.Errorf("an installer that begins as text: %+v, %v", p, err)
 	}
 	p, err = Fetch(ctx, srv.URL+"/latin", o)
 	if err != nil || p.ContentType != "application/x-thing" || string(p.Body) != "a\xe9b" || p.Text != "" {

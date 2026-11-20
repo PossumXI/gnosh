@@ -310,7 +310,7 @@ func savedNote(p webtool.Page, file string) string {
 	case "image/png", "image/jpeg", "image/gif", "image/webp":
 		return fmt.Sprintf("%s is a picture (%s), not text, so it was saved to %s: Read that file to see it.", p.URL, what, file)
 	case "application/pdf":
-		return fmt.Sprintf("%s is a PDF (%s), not text, so it was saved to %s. Turn it into text with a shell command (pdftotext, for one) and read that.", p.URL, what, file)
+		return fmt.Sprintf("%s is a PDF (%s), not text, so it was saved to %s: Read that file for its text.", p.URL, what, file)
 	}
 	return fmt.Sprintf("%s is not text (%s), so it was saved to %s, for shell commands to work with.", p.URL, what, file)
 }
