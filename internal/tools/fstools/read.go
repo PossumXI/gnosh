@@ -39,7 +39,7 @@ Each line comes back as its number, a tab, then the line. The number and the tab
 
 One call shows at most %[2]d lines (or the limit you give) and at most %[3]d bytes of text. When the file has more, a note at the end says so and gives the offset to continue from. A line longer than %[4]d characters is cut and marked. For a large file, read the part you need with offset and limit, or find it first with %[5]s.
 
-PNG, JPEG, GIF and WebP images come back as pictures. A PDF comes back as its text, page by page: one of more than %[7]d pages is read with pages, at most %[8]d at a time. A Jupyter notebook (.ipynb) comes back as its cells, each with its id, and their outputs; change a cell with %[9]s. A directory or a binary file is not read: the result says what it is. An empty file and an offset past the end give a short notice, not an error.
+PNG, JPEG, GIF and WebP images come back as pictures, a large one shrunk to fit what a model is shown. A PDF comes back as its text, page by page: one of more than %[7]d pages is read with pages, at most %[8]d at a time. A Jupyter notebook (.ipynb) comes back as its cells, each with its id, and their outputs; change a cell with %[9]s. A directory or a binary file is not read: the result says what it is. An empty file and an offset past the end give a short notice, not an error.
 
 %[1]s and %[6]s only change what this session has been shown, so read a file before changing it.`,
 		o.EditName, o.ReadDefaultLines, o.ReadMaxBytes, o.ReadMaxLineChars, o.GrepName, o.WriteName, pdfWholeMost, pdfCallMost, o.NotebookEditName)
@@ -338,36 +338,55 @@ func readMeta(loc *location, shown, start, total int, more bool) map[string]any 
 // readImage returns an image file as a picture.
 func (t *readTool) readImage(ctx context.Context, env *core.ToolEnv, loc *location, file *os.File, info os.FileInfo, head []byte, atEnd bool, media string) (core.ToolResult, error) {
 	o := t.opts
-	tooBig := failf("%s is an image of %s, more than the %s that %s hands to a model, and %s does not shrink images. Make a smaller copy with an image tool and read that.",
-		loc.abs, byteSize(max(info.Size(), int64(len(head)))), byteSize(o.ReadMaxImageBytes), o.ReadName, o.ReadName)
-	if info.Size() > o.ReadMaxImageBytes {
-		return refused(tooBig)
+	tooBig := func(why string) (core.ToolResult, error) {
+		return refused(failf("%s is an image of %s, more than the %s that %s hands to a model, and %s. Make a smaller copy with an image tool and read that.",
+			loc.abs, byteSize(max(info.Size(), int64(len(head)))), byteSize(o.ReadMaxImageBytes), o.ReadName, why))
+	}
+	readMost := max(o.ReadMaxImageBytes, imageReadMost)
+	if info.Size() > readMost {
+		return tooBig("it is too large to shrink here")
 	}
 	data := append([]byte(nil), head...)
 	if !atEnd {
 		if err := ctx.Err(); err != nil {
 			return core.ToolResult{}, fmt.Errorf("%s of %s stopped: %w", o.ReadName, loc.abs, context.Cause(ctx))
 		}
-		rest, err := io.ReadAll(io.LimitReader(file, o.ReadMaxImageBytes-int64(len(data))+1))
+		rest, err := io.ReadAll(io.LimitReader(file, readMost-int64(len(data))+1))
 		if err != nil {
 			return refused(failf("%s could not be read: %v.", loc.abs, underlying(err)))
 		}
 		data = append(data, rest...)
 	}
-	if int64(len(data)) > o.ReadMaxImageBytes {
-		return refused(tooBig)
+	if int64(len(data)) > readMost {
+		return tooBig("it is too large to shrink here")
 	}
 	sum := sha256.Sum256(data)
-	sessionOf(env).saw(loc.real, sighting{info: info, sum: &sum, lines: -1, whole: true})
 	kind := strings.ToUpper(strings.TrimPrefix(media, "image/"))
-	res := core.ToolResult{Content: []core.Block{
-		core.Text(fmt.Sprintf("[%s: a %s image, %s.]", loc.abs, kind, byteSize(int64(len(data))))),
-		{Type: core.BlockImage, MediaType: media, Data: data},
-	}}
-	res.Meta = map[string]any{
-		"type": "image",
-		"file": map[string]any{"filePath": loc.abs, "type": media, "originalSize": len(data)},
+	said := fmt.Sprintf("[%s: a %s image, %s.]", loc.abs, kind, byteSize(int64(len(data))))
+	sent, sentMedia := data, media
+	// Larger than a model takes, or than a model is shown: shrunk
+	// (shrink.go), as Claude Code shrinks it.
+	small, shrank, err := shrinkImage(data, media, o.ReadMaxImageBytes)
+	switch {
+	case shrank:
+		sent, sentMedia = small.data, small.media
+		said = fmt.Sprintf("[%s: a %s image, %s, %dx%d, shown shrunk to %dx%d (%s, %s).]", loc.abs, kind, byteSize(int64(len(data))),
+			small.fromW, small.fromH, small.width, small.height, strings.ToUpper(strings.TrimPrefix(small.media, "image/")), byteSize(int64(len(small.data))))
+	case int64(len(data)) > o.ReadMaxImageBytes && err != nil:
+		return tooBig("it could not be shrunk: " + err.Error())
+	case int64(len(data)) > o.ReadMaxImageBytes:
+		return tooBig(o.ReadName + " does not shrink a " + kind + " image")
 	}
+	sessionOf(env).saw(loc.real, sighting{info: info, sum: &sum, lines: -1, whole: true})
+	res := core.ToolResult{Content: []core.Block{
+		core.Text(said),
+		{Type: core.BlockImage, MediaType: sentMedia, Data: sent},
+	}}
+	about := map[string]any{"filePath": loc.abs, "type": sentMedia, "originalSize": len(data)}
+	if shrank {
+		about["dimensions"] = map[string]any{"originalWidth": small.fromW, "originalHeight": small.fromH, "displayWidth": small.width, "displayHeight": small.height}
+	}
+	res.Meta = map[string]any{"type": "image", "file": about}
 	if loc.real != loc.abs {
 		res.Meta["realPath"] = loc.real
 	}

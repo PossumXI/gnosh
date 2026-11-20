@@ -4720,3 +4720,21 @@ or kept with the reason said (27).
     and quoted where they hold spaces; a shell line and a search are left
     alone. The keys list names Ctrl+V. A picture over Read's 5 MiB is
     still refused, as Read refuses it.
+
+328. **Read shrinks a large picture.** Read refused a picture over 5 MiB
+    ("Read does not shrink images"), and handed on every smaller one at
+    its full size; Claude Code's Read resizes and recompresses a large
+    image to fit the model's limits. A Retina screenshot passes 5 MiB, and
+    pictures now come into prompts by Ctrl+V and by dragging (327); a
+    local model's count of tokens for a picture grows with its pixels. A
+    PNG, JPEG or GIF longer than 1568 pixels on a side (what a model is
+    shown at most) or larger than ReadMaxImageBytes is now decoded (files
+    up to 64 MiB, pictures up to 50 million pixels: a larger one is
+    refused, not held) and scaled down to fit 1568, each pixel the average
+    of those it covers weighted by their opacity; it stays a PNG where that
+    fits and is otherwise a JPEG of quality 85 on white, a JPEG staying a
+    JPEG. The line before it says what it was and what it is now
+    ("3000x2000, shown shrunk to 1568x1045 (PNG, 412 KiB)"), and the meta
+    carries both sizes. WebP, which Go does not decode, goes as it is, or
+    is refused past the limit; a picture that cannot be decoded but fits
+    goes as it is, as before. Notebook pictures are not shrunk.

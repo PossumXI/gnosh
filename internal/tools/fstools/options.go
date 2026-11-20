@@ -51,7 +51,8 @@ type Options struct {
 	ReadCountBytes int64
 
 	// ReadMaxImageBytes is the largest image file Read returns as a
-	// picture. Default 5 MiB. Read does not shrink images.
+	// picture. Default 5 MiB. A larger PNG, JPEG or GIF is shrunk to fit,
+	// and so is one longer than 1568 pixels on a side (shrink.go).
 	ReadMaxImageBytes int64
 
 	// PDFPages and PDFText read a PDF for Read (pdf.go): how many pages it

@@ -130,10 +130,12 @@
 // there), a device, socket or pipe, and a file that looks binary (a NUL
 // byte in its first 8 KiB) are errors that say what the thing is. PNG,
 // JPEG, GIF and WebP files, told by their first bytes, come back as an
-// image block after a line of text, up to Options.ReadMaxImageBytes;
-// Read does not shrink a larger one. PDFs and notebooks are refused as
-// not supported yet. The arguments pages and allow_large, which Claude
-// Code's Read takes, are accepted and not acted on.
+// image block after a line of text, up to Options.ReadMaxImageBytes; a
+// PNG, JPEG or GIF longer than 1568 pixels on a side or larger than that
+// is shrunk to fit (shrink.go), and a WebP larger than that is refused.
+// A PDF comes back as its text by pages (pdf.go), a notebook as its cells
+// (notebook.go). allow_large, which Claude Code's Read takes, is accepted
+// and not acted on.
 //
 // # Write
 //
