@@ -778,8 +778,13 @@ func (e *Engine) shellPaths(req *request) {
 			// ~+ is the directory the shell is in, ~- the one it was in
 			// before and ~2 one that pushd put by: each is one of those
 			// the line may be in.
-			if w.joined() != "~+"+rest && !v.moves {
-				return // no cd on the line: the word stays as it is written
+			if !v.moves && !stackTop(w) {
+				// No cd on the line: ~- is OLDPWD, which the shell is not
+				// given, and ~2 a place the stack does not have, so the
+				// word stays as it is written. (~+, ~0, ~+0 and ~-0 are
+				// the directory the shell is in, the one place the stack
+				// always holds: oracle seed 172.)
+				return
 			}
 			for _, d := range dirs {
 				part := litOf(d + rest)
@@ -1234,6 +1239,22 @@ func dirTilde(w word) (rest string, ok bool) {
 		return "", false
 	}
 	return l[i:], true
+}
+
+// stackTop reports whether a word dirTilde takes is the directory the
+// shell is in on a line that has not moved: ~+ is that directory, and ~0,
+// ~+0 and ~-0 (any count of zeros) are the first and the last of the
+// directory stack, which is that directory alone until a pushd.
+func stackTop(w word) bool {
+	head, _, _ := strings.Cut(w.joined(), "/")
+	digits := strings.TrimPrefix(head, "~")
+	if digits == "+" {
+		return true
+	}
+	if strings.HasPrefix(digits, "+") || strings.HasPrefix(digits, "-") {
+		digits = digits[1:]
+	}
+	return digits != "" && strings.Trim(digits, "0") == ""
 }
 
 // allLit reports whether a word is made of literal text alone.

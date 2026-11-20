@@ -379,6 +379,14 @@ func TestShellAttacks(t *testing.T) {
 		{"$OLDPWD is where the line was, also after a cd that goes nowhere", ModeBypass, attackGuards, "cd .; cat $OLDPWD/.env", Deny},
 		{"~1 is a directory pushd put by", ModeBypass, attackGuards, "pushd src >/dev/null; cat ~1/.env", Deny},
 		{"~-0 is a directory pushd put by", ModeBypass, attackGuards, "pushd src; cat ~-0/.env", Deny},
+		// The directory stack always holds the directory the shell is in,
+		// so ~0, ~+0 and ~-0 are it on a line with no cd (oracle seed 172:
+		// "type-t main > ~0/.bashrc" made .bashrc).
+		{"~0 is the directory the line is in", ModeBypass, attackGuards, "cat ~0/.env", Deny},
+		{"~+0 is the directory the line is in", ModeBypass, attackGuards, "cat ~+0/.env", Deny},
+		{"~-0 is the directory the line is in", ModeBypass, attackGuards, "cat ~-00/.env", Deny},
+		{"~0 is the directory the line is in, for a write too", ModeBypass, attackGuards, "echo x > ~0/build/out.o", Deny},
+		{"a write through ~0 to a file gnosh guards asks", "", rules{allow: []string{"Bash"}}, "type-t main > ~0/.bashrc > out.txt", Ask},
 		{"what is not written of the program's name may be a blank", ModeBypass, attackGuards, "printf -v s ' '; cat${s}.env", Deny},
 		{"what is not written of the program's name may be a blank", ModeBypass, attackGuards, "cat$X.env", Deny},
 		// A program gnosh knows nothing about, handed the file by name.
@@ -874,7 +882,9 @@ func TestShellAttacks(t *testing.T) {
 		"printf -v s ' '; rm${s}-rf${s}/", "rm$X-rf$X/", "eval \"rm${X}-rf${X}/\"", "rm${X}-rf${X}*", "sudo rm$X-r$X..", "rmdir$X/", "sudo $RM -rf /", "env $X -rf ~", "timeout 5 rm$X-rf$X/", "nice ${RM:-rm} -rf /", "sudo -n $RM -rf ..",
 		"nohup $(which rm) -rf ~", "command $RM -rf /", "xargs $RM -rf / < /dev/null", "env X=1 $RM -rf /",
 		// The directory the line was in before.
-		"cd src; rm -rf ~-", "cd src && rm -rf $OLDPWD", "cd /tmp; rm -rf ~-/..", "cd src; rm -rf \"$OLDPWD\"/*", "cd src; rm -rf ~-/", "pushd src; rm -rf ~1", "pushd /tmp; rm -rf ~1/..", "pushd src; rm -rf ~-0/*"} {
+		"cd src; rm -rf ~-", "cd src && rm -rf $OLDPWD", "cd /tmp; rm -rf ~-/..", "cd src; rm -rf \"$OLDPWD\"/*", "cd src; rm -rf ~-/", "pushd src; rm -rf ~1", "pushd /tmp; rm -rf ~1/..", "pushd src; rm -rf ~-0/*",
+		// ~0, ~+0 and ~-0 are the directory the line is in.
+		"rm -rf ~0", "rm -rf ~0/*", "rm -rf ~+0/*", "rmdir ~-0", "rm -rf ~00/"} {
 		if d := bash(engine(t, ModeBypass, rules{}), cmd); !d.Critical {
 			t.Errorf("%q: not flagged as a dangerous removal (%s)", cmd, d.Reason)
 		}
