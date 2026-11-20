@@ -840,6 +840,8 @@ func TestAgentMemory(t *testing.T) {
 	if tools := strings.Join(toolNamesOf(off), ","); tools != "Grep" {
 		t.Errorf("the sub-agent's tools with memory off: %s", tools)
 	}
+	// /agents as text says what the kind's file sets, under it.
+	has(t, "/agents", run(t, w, "--trust-folder", "-p", "/agents").wantCode(t, 0).out, "  reviewer (", "    Tools: Grep · Model: the session's", "Keeps a memory of its own")
 	w.Model.Done()
 }
 

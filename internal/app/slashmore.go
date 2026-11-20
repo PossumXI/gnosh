@@ -372,6 +372,11 @@ func (l *live) slashAgents(ctx context.Context, c *SlashContext) error {
 			about = "(no description)"
 		}
 		c.Say("  %s (%s): %s", d.Name, where, about)
+		if d.Scope != "built-in" {
+			// What the picker shows of it, on a line: its tools, its model
+			// and the rest of what its file sets.
+			c.Say("    %s", visible(oneLine(strings.Join(agentDetails(d), " · "), 600)))
+		}
 	}
 	c.Say("A new kind is a Markdown file in %s, or in .gnosh/agents/ in a trusted project; ask the model to write one.", filepath.Join(l.cfg.Paths.ConfigDir, "agents"))
 	return nil
