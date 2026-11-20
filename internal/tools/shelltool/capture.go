@@ -222,7 +222,6 @@ func clean(b []byte) string {
 	return stripSGR(foldOverstrikes(strings.ToValidUTF8(string(b), "\uFFFD")))
 }
 
-
 // incompleteSuffix returns how many bytes at the end of b are the start of
 // a UTF-8 sequence whose rest is missing: 0 to 3. Bytes that could never
 // become a character count as complete, so that they are shown, as U+FFFD,
