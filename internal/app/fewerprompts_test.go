@@ -26,15 +26,21 @@ func TestFewerPermissionPrompts(t *testing.T) {
 		apptest.Reply{Text: "Done."},
 		// Refused, as nobody is there to ask.
 		apptest.Reply{Calls: []apptest.Call{{ID: "c5", Name: "Bash", Args: `{"command":"docker run --rm busybox"}`}}},
-		apptest.Reply{Text: "It was refused."})
+		apptest.Reply{Text: "It was refused."},
+		// A sub-agent's call counts too: its session file is kept apart.
+		apptest.Reply{Calls: []apptest.Call{{ID: "c6", Name: "Agent", Args: `{"subagent_type":"general-purpose","description":"list releases","prompt":"List the releases."}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "s1", Name: "Bash", Args: `{"command":"helm list"}`}}},
+		apptest.Reply{Text: "No releases."},
+		apptest.Reply{Text: "Delegated."})
 	run(t, w, "-y", "-p", "look around").wantCode(t, 0)
 	run(t, w, "-p", "run a container").wantCode(t, 0)
+	run(t, w, "-y", "-p", "delegate it").wantCode(t, 0)
 	few := func(args string) result {
 		t.Helper()
 		return run(t, w, "--trust-folder", "-p", strings.TrimSpace("/fewer-permission-prompts "+args))
 	}
 	list := few("").wantCode(t, 0).out
-	has(t, "the list", list, "would be asked about now in manual mode", " 1. Bash(kubectl get *) · 2 calls, as kubectl get pods", " 2. Bash(terraform plan) · 1 call", "/fewer-permission-prompts add 1 3")
+	has(t, "the list", list, "would be asked about now in manual mode", " 1. Bash(kubectl get *) · 2 calls, as kubectl get pods", "Bash(terraform plan) · 1 call", "Bash(helm list) · 1 call", "/fewer-permission-prompts add 1 3")
 	hasNot(t, "the list", list, "Bash(ls", "docker")
 	// A number with no list shown in the run: not worked out again behind
 	// the person's back.
@@ -57,7 +63,7 @@ func TestFewerPermissionPrompts(t *testing.T) {
 	s.exit()
 	has(t, "the local file", w.Read(local), `"allow"`, "kubectl get")
 	after := few("").wantCode(t, 0).out
-	has(t, "the list after", after, " 1. Bash(terraform plan)")
+	has(t, "the list after", after, "Bash(terraform plan)", "Bash(helm list)")
 	hasNot(t, "the list after", after, "kubectl")
 	w.Model.Done()
 }

@@ -193,7 +193,10 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 
 // recentSessionFiles are the session files in dirs (a session store's
 // folders of projects), with their sub-agents', the newest first, at most
-// fewerFiles; and how many of them are sessions' own.
+// fewerFiles; and how many of them are sessions' own. A session's
+// sub-agents keep theirs as a session store does, under
+// <session>/subagents/projects/<folder>/ (subagentsDir). Each folder is
+// read as a folder, not a pattern: a [ or * in the store's path is a name.
 func recentSessionFiles(dirs []string) ([]string, int) {
 	type file struct {
 		path string
@@ -201,26 +204,34 @@ func recentSessionFiles(dirs []string) ([]string, int) {
 		own  bool
 	}
 	var found []file
+	add := func(path string, own bool) {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			found = append(found, file{path, info.ModTime(), own})
+		}
+	}
 	seen := map[string]bool{}
 	for _, dir := range dirs {
 		if seen[dir] {
 			continue
 		}
 		seen[dir] = true
-		// (Read as folders, not patterns: a [ or * in the store's path
-		// is a name.)
-		own := jsonlIn(dir)
-		var subs []string
-		if entries, err := os.ReadDir(dir); err == nil {
-			for _, d := range entries {
-				if d.IsDir() {
-					subs = append(subs, jsonlIn(filepath.Join(dir, d.Name(), "subagents"))...)
+		entries, _ := os.ReadDir(dir)
+		for _, d := range entries {
+			path := filepath.Join(dir, d.Name())
+			if !d.IsDir() {
+				if strings.HasSuffix(d.Name(), ".jsonl") {
+					add(path, true)
 				}
+				continue
 			}
-		}
-		for i, path := range append(own, subs...) {
-			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
-				found = append(found, file{path, info.ModTime(), i < len(own)})
+			subs := filepath.Join(path, "subagents", "projects")
+			folders, _ := os.ReadDir(subs)
+			for _, f := range folders {
+				if f.IsDir() {
+					for _, p := range jsonlIn(filepath.Join(subs, f.Name())) {
+						add(p, false)
+					}
+				}
 			}
 		}
 	}
@@ -238,15 +249,6 @@ func recentSessionFiles(dirs []string) ([]string, int) {
 	return paths, sessions
 }
 
-// lastSessions says how many sessions were looked through, after "last":
-// "session" for one, "12 sessions".
-func lastSessions(n int) string {
-	if n == 1 {
-		return "session"
-	}
-	return countWords(n, "session", "sessions")
-}
-
 // jsonlIn are the session files in a folder.
 func jsonlIn(dir string) []string {
 	entries, err := os.ReadDir(dir)
@@ -260,4 +262,13 @@ func jsonlIn(dir string) []string {
 		}
 	}
 	return out
+}
+
+// lastSessions says how many sessions were looked through, after "last":
+// "session" for one, "12 sessions".
+func lastSessions(n int) string {
+	if n == 1 {
+		return "session"
+	}
+	return countWords(n, "session", "sessions")
 }

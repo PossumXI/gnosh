@@ -106,6 +106,12 @@ func TestMemoryOnlyTool(t *testing.T) {
 	if err := os.Symlink(base, filepath.Join(dir, "out")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(dir, "a/b/c/d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("a/b/c/d", filepath.Join(dir, "l")); err != nil {
+		t.Fatal(err)
+	}
 	tool := memoryOnly{Tool: describedTool{}, dir: dir}
 	env := &core.ToolEnv{Cwd: base}
 	for path, inside := range map[string]bool{
@@ -115,6 +121,9 @@ func TestMemoryOnlyTool(t *testing.T) {
 		filepath.Join(base, "main.go"):    false,
 		filepath.Join(dir, "out/main.go"): false,
 		filepath.Join(dir, "../x.md"):     false,
+		// A link in the folder, then climbing: the tool tidies the text
+		// first, and writes the project's main.go.
+		filepath.Join(dir, "l/../../../../main.go"): false,
 	} {
 		call := core.ToolCall{Name: "Write", Input: json.RawMessage(`{"file_path":` + strconv.Quote(path) + `}`)}
 		_, err := tool.Describe(call, env)
@@ -128,12 +137,22 @@ func TestMemoryOnlyTool(t *testing.T) {
 	}
 }
 
-// describedTool is a file tool that says yes to everything.
+// describedTool is a file tool that says yes to everything, and reads
+// its file_path as the file tools do: from the folder the call is in,
+// the text tidied.
 type describedTool struct{}
 
 func (describedTool) Spec() core.ToolSpec { return core.ToolSpec{Name: "Write"} }
-func (describedTool) Describe(core.ToolCall, *core.ToolEnv) (core.Action, error) {
-	return core.Action{Kind: core.ActionEdit}, nil
+func (describedTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
+	var in struct {
+		FilePath string `json:"file_path"`
+	}
+	_ = json.Unmarshal(call.Input, &in)
+	p := in.FilePath
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(env.Cwd, p)
+	}
+	return core.Action{Kind: core.ActionEdit, Paths: []string{filepath.Clean(p)}}, nil
 }
 func (describedTool) Run(context.Context, core.ToolCall, *core.ToolEnv) (core.ToolResult, error) {
 	return core.TextResult("written"), nil
