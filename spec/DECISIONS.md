@@ -5754,3 +5754,18 @@ or kept with the reason said (27).
     screen's per-tool lines are Claude Code's way too, and the words would
     only move. And /sandbox on Linux names the links on the way to a kept
     path that 379 leaves unkept there, with what they lead to kept.
+
+381. **No volume mounted over a folder on macOS.** Tried on scratch files
+    on a Mac: under the sandbox's profile a command could lay a disk image
+    of its own over a kept folder (hdiutil attach -mountpoint .claude,
+    diskutil mount -mountPoint, diskutil image attach --mountPoint), or at
+    one not there yet that it made; the mount is made by a service
+    outside the sandbox, and gnosh, or git through a .git/hooks so
+    covered, would then obey its files. Seatbelt's (deny file-mount),
+    which those services ask the sandbox about, now stands whenever the
+    files are confined: each of the three is refused under gnosh's own
+    profile, and ordinary work and hdiutil create still run. A volume
+    mounted where macOS puts one, under /Volumes, is not stopped, and
+    covers nothing. On Linux the sandbox has a mount namespace of its own
+    and no new privileges, so a mount there (fusermount's) is the
+    sandbox's alone.

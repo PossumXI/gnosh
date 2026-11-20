@@ -90,6 +90,14 @@ func seatbeltProfile(p Policy) string {
 	if p.FilesystemOff {
 		return b.String()
 	}
+	// No volume put over a folder (hdiutil attach -mountpoint, diskutil
+	// mount -mountPoint, diskutil image attach --mountPoint): the mount is
+	// made by a service outside the sandbox, which asks the sandbox only
+	// this, so a disk image of the command's own over a kept folder (a
+	// .claude, a .git/hooks) gave gnosh, or git, its files there (tried on
+	// scratch files on a Mac, 2026-11-20). A volume mounted where macOS
+	// puts one, under /Volumes, is not stopped, and covers nothing.
+	b.WriteString("(deny file-mount)\n")
 	b.WriteString("(deny file-write*)\n(allow file-write*\n")
 	for _, w := range append(append([]string(nil), p.Write...), p.Temp) {
 		if w != "" {
