@@ -614,7 +614,14 @@ func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
 	if w := mu.model.Info.ContextWindow; w > 0 {
 		window = "context window " + tokenCount(w) + " tokens"
 	}
-	c.Say("The model is %s at %s (%s%s), from the next request on. The choice is saved for later sessions; -m names another for one run.", ref, mu.model.Address, window, thinking)
+	saved := "The choice is saved for later sessions; -m names another for one run."
+	if mv := l.cfg.Large.Model; mv.Set && (mv.Origin.Layer == config.LayerProject || mv.Origin.Layer == config.LayerEnv) {
+		// (It said saved for later sessions where what set the model
+		// here outranks the saved choice: the settings-commands review
+		// of 2026-11-20.)
+		saved = fmt.Sprintf("The choice is saved, but %s sets the model here, and later sessions here take that.", mv.Origin.String())
+	}
+	c.Say("The model is %s at %s (%s%s), from the next request on. %s", ref, mu.model.Address, window, thinking, saved)
 	return nil
 }
 
@@ -1062,7 +1069,7 @@ func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
 		case !found:
 			c.Say("No rule %s is in force; /permissions lists them.", want)
 		case len(elsewhere) > 0:
-			c.Say("%s, which gnosh does not write (it may hold your comments): take it out there, and it goes when gnosh starts next.", strings.Join(elsewhere, "; "))
+			c.Say("%s, which gnosh does not write (it may hold your comments): take it out there, and it goes once the file is saved, as gnosh reads it again before its next request.", strings.Join(elsewhere, "; "))
 		}
 	default:
 		c.Say("%s", usage)

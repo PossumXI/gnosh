@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -244,9 +245,20 @@ func (l *live) optionRows() []config.OptionValue {
 func jsonText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		return s
+		return shownValue(s)
 	}
 	return string(raw)
+}
+
+// shownValue is a value as /config shows it: an address that carries a
+// user name, a password or a query string without them, as the listing
+// shows it; /config key=value said it back whole (the settings-commands
+// review of 2026-11-20).
+func shownValue(s string) string {
+	if u, err := url.Parse(s); err == nil && u.Scheme != "" && u.Host != "" && (u.User != nil || u.RawQuery != "") {
+		return config.DisplayURL(s)
+	}
+	return s
 }
 
 // listOptions says every option's value in this session and what set it.
@@ -299,7 +311,7 @@ func pendingNote(r config.OptionValue, saved map[string]json.RawMessage) string 
 	shown := buf.String()
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		shown = s
+		shown = shownValue(s)
 	}
 	if r.Origin.Layer > config.LayerState {
 		return "(set with /config to " + shown + "; what sets it here outranks that)"

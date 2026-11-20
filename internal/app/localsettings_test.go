@@ -112,3 +112,15 @@ func TestProjectServersNotThroughALink(t *testing.T) {
 		t.Errorf("written through the link:\n%s", got)
 	}
 }
+
+// /config says back an address without its password or query string, as
+// its listing shows it; it was said back whole (the settings-commands
+// review of 2026-11-20).
+func TestConfigHidesAnAddressesSecret(t *testing.T) {
+	w := apptest.NewWorld(t)
+	r := run(t, w, "-p", "/config webSearchUrl=https://me:s3cret-pw@search.example/q?key=k3y-abc").wantCode(t, 0)
+	has(t, "/config's reply", r.out, "https://search.example/q?…")
+	hasNot(t, "/config's reply", r.out+r.err, "s3cret-pw", "k3y-abc")
+	r = run(t, w, "-p", "/config webSearchUrl").wantCode(t, 0)
+	hasNot(t, "/config webSearchUrl", r.out+r.err, "s3cret-pw", "k3y-abc")
+}
