@@ -1408,8 +1408,11 @@ func (f *plain) Event(ev any) {
 			how = "failed"
 		case agent.EndHalted:
 			how = "ended"
+			if ev.Result.Planned {
+				how = "done" // (a tool ended the turn as it meant to)
+			}
 			if d := strings.TrimSpace(ev.Result.Detail); d != "" {
-				how = "ended (" + visible(oneLine(d, 160)) + ")"
+				how += " (" + visible(oneLine(d, 160)) + ")"
 			}
 		case agent.EndModelStopped:
 			how = "the model chose to stop"

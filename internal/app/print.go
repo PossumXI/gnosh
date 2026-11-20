@@ -1254,7 +1254,7 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) && f.structuredErr != "":
 		fail("error_max_structured_output_retries", "structured_output_retry_exhausted", f.structuredErr)
-	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped:
+	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped, res.Reason == agent.EndHalted && res.Planned:
 		obj.Subtype, obj.Result, obj.TerminalReason = "success", ptr(dropEchoedLine(res.Text)), "completed"
 		obj.StructuredOutput = f.structured
 	case res.Reason == agent.EndRefused:

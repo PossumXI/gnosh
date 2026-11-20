@@ -103,6 +103,12 @@ func (l *live) sandboxReport() string {
 	if len(guarded) > 0 {
 		fmt.Fprintf(&b, "\nRead-only within them: %s.", l.shownList(guarded))
 	}
+	if runtime.GOOS == "linux" {
+		// (On macOS a link on the way is kept too: DECISIONS 379.)
+		if links := sandbox.LinksOnTheWay(p); len(links) > 0 {
+			fmt.Fprintf(&b, "\nNot kept, being links a command could replace (a mount cannot be put on a link): %s; what they lead to is.", l.shownList(links))
+		}
+	}
 	deny := listValues(sc.DenyRead)
 	if l.engine != nil {
 		read, _, _ := l.engine.SandboxPaths()

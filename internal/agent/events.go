@@ -116,6 +116,9 @@ type TurnResult struct {
 	// Driver is the driver that halted the turn or at whose checkpoint the
 	// model stopped.
 	Driver string
+	// Planned is, for EndHalted, that the tool that ended the turn meant
+	// to (MetaPlanned): the turn is done, nothing went wrong.
+	Planned bool
 	// Err is the failure of an EndFailed turn, in plain words.
 	Err error
 	// ErrorKind sorts that failure: "rate_limit", "overloaded",

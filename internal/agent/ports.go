@@ -446,6 +446,15 @@ type Concurrent interface {
 // sent.
 const MetaHalt = "gnosh.halt"
 
+// MetaPlanned is the key of core.ToolResult.Meta by which a tool that ends
+// the turn (MetaHalt) says that the end is what the call was for, not
+// something gone wrong: a /loop's run that has scheduled the next one, a
+// move into or out of a work tree. Its value is true. The turn's result
+// says so (TurnResult.Planned), its notice is information, not a warning,
+// and the front ends show the turn as done. Only the harness's own tools
+// set it.
+const MetaPlanned = "gnosh.planned"
+
 // StopWork is the error a moment returns to stop the work it stands before,
 // as a hook's "continue": false does: the session's start refuses the
 // prompt it stands before and every one after it (a sub-agent's start, its

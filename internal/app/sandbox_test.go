@@ -112,6 +112,19 @@ func TestSlashSandbox(t *testing.T) {
 	if st := sandbox.Check(); st.OK {
 		r = run(t, w, "-p", "/sandbox").wantCode(t, 0)
 		has(t, "/sandbox with it on", r.out, "The sandbox is on", "Mode: auto-allow", "Writes: ", "Network: through gnosh's proxy")
+		hasNot(t, "/sandbox with no link on the way", r.out, "Not kept")
+		// A guarded file kept by a link (direnv's .envrc in a shared
+		// place): on Linux the link is not kept, and /sandbox says so.
+		w.Write(w.Home+"/shared/envrc", "export A=1\n")
+		if err := os.Symlink(w.Home+"/shared/envrc", w.Path(".envrc")); err != nil {
+			t.Fatal(err)
+		}
+		r = run(t, w, "-p", "/sandbox").wantCode(t, 0)
+		if runtime.GOOS == "linux" {
+			has(t, "/sandbox with a link on the way", r.out, "Not kept, being links a command could replace", ".envrc")
+		} else {
+			hasNot(t, "/sandbox with a link on the way, kept", r.out, "Not kept")
+		}
 	}
 	run(t, w, "-p", "/sandbox strict").wantCode(t, 0)
 	if local := w.Read(".gnosh/settings.local.json"); !strings.Contains(local, `"allowUnsandboxedCommands": false`) || !strings.Contains(local, `"enabled": true`) {

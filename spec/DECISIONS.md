@@ -5738,3 +5738,19 @@ or kept with the reason said (27).
     other reading calls; and a kind of agent's list of the fields gnosh
     could not honour, empty since its memory and its compact window came
     in, is gone with the code that read it.
+
+380. **A tool says when it ends the turn on purpose.** A self-paced
+    /loop's ScheduleWakeup and the work tree moves end the turn as they
+    mean to, and the front ends told those ends from a halt by their tool
+    names: the screen showed the loop's as done and the moves' as a
+    quieter notice, the plain front end said "ended", and the agent's own
+    notice was a warning for all. Such a tool now puts MetaPlanned beside
+    MetaHalt; the turn's result says Planned; the agent's notice is
+    information ("The turn ended: ..."); the screen shows done, the plain
+    front end "-- done (why)", and a print run would report success (none
+    of these tools is offered there now). The other half of the cleanup
+    review's point, each tool writing the words the screen shows for its
+    result in place of the screen's case for each tool, is not done: the
+    screen's per-tool lines are Claude Code's way too, and the words would
+    only move. And /sandbox on Linux names the links on the way to a kept
+    path that 379 leaves unkept there, with what they lead to kept.

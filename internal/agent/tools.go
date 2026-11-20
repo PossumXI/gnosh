@@ -59,6 +59,7 @@ type roundOutcome struct {
 	stopped bool   // the person stopped the turn
 	halt    string // why the turn must end, or empty
 	haltBy  string
+	planned bool  // the end is what the call that asked for it was for
 	err     error // the log could not be written
 }
 
@@ -83,6 +84,7 @@ type round struct {
 	gaveUp  bool
 	halt    string
 	haltBy  string
+	planned bool
 	err     error
 	timer   *time.Timer
 	grace   <-chan time.Time
@@ -178,7 +180,7 @@ func (a *Agent) runTools(ctx context.Context, t *turn, rep *reply) roundOutcome 
 	if f := a.opts.Moments.AfterRound; f != nil && r.err == nil && r.halt == "" && !r.stopped && ctx.Err() == nil {
 		r.afterRound(f)
 	}
-	return roundOutcome{calls: r.calls, stopped: r.stopped || ctx.Err() != nil, halt: r.halt, haltBy: r.haltBy, err: r.err}
+	return roundOutcome{calls: r.calls, stopped: r.stopped || ctx.Err() != nil, halt: r.halt, haltBy: r.haltBy, planned: r.planned, err: r.err}
 }
 
 // afterRound tells the AfterRound moment how the round's calls went, once
@@ -604,16 +606,16 @@ func (r *round) refuse(c *callState, dec Decision) {
 		Reason: reason, Unattended: dec.Unattended,
 	})
 	if dec.Halt {
-		r.haltNow("the person refused permission for "+c.call.Name, "permission")
+		r.haltNow("the person refused permission for "+c.call.Name, "permission", false)
 	}
 	r.record(c)
 }
 
 // haltNow ends the turn once this round's results are stored. Calls that
 // are running are told to stop, and calls that have not started do not.
-func (r *round) haltNow(why, by string) {
+func (r *round) haltNow(why, by string, planned bool) {
 	if r.halt == "" {
-		r.halt, r.haltBy = why, by
+		r.halt, r.haltBy, r.planned = why, by, planned
 	}
 	r.cancel()
 	r.startGrace()
@@ -823,7 +825,7 @@ func (r *round) finish(d execDone) {
 	}
 	c.parts = append(c.parts, d.verdict.Context...)
 	if d.verdict.Halt {
-		r.haltNow(firstNonEmpty(d.verdict.Reason, "a hook ended the turn after "+c.call.Name), "after-tool")
+		r.haltNow(firstNonEmpty(d.verdict.Reason, "a hook ended the turn after "+c.call.Name), "after-tool", false)
 	}
 	r.record(c)
 }
@@ -895,7 +897,8 @@ func (r *round) record(c *callState) {
 	}
 	if c.ran {
 		if why, ok := c.res.Meta[MetaHalt].(string); ok && strings.TrimSpace(why) != "" {
-			r.haltNow(why, c.call.Name)
+			planned, _ := c.res.Meta[MetaPlanned].(bool)
+			r.haltNow(why, c.call.Name, planned)
 		}
 	}
 	a.mu.Lock()

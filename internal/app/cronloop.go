@@ -231,7 +231,7 @@ func (t *wakeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	// The turn ends with the round, as the run's work is done when it
 	// schedules the next: a model that went on would only wait.
 	res := core.TextResult(text)
-	res.Meta = map[string]any{agent.MetaHalt: "the loop's next run is at " + when, "nextRun": when, "wait": wait}
+	res.Meta = map[string]any{agent.MetaHalt: "the loop's next run is at " + when, agent.MetaPlanned: true, "nextRun": when, "wait": wait}
 	if reason != "" {
 		// The model's reason, under the call (where a notice of its own
 		// said the next run's time again, seen on the devbox's screen).

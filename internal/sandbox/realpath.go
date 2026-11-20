@@ -98,6 +98,15 @@ func way(s string, in func(string) bool) (links, absent []string) {
 	return links, absent
 }
 
+// LinksOnTheWay are the links on the way to the paths the policy keeps
+// from the command that the command could replace (onTheWay): on Linux
+// they are not kept from it, a mount cannot be put on a link, which
+// /sandbox says.
+func LinksOnTheWay(p Policy) []string {
+	links, _ := onTheWay(p)
+	return links
+}
+
 // onTheWay is, for the paths the policy keeps from the command (read-only,
 // denied, hidden), what lies on the way to them that the command could
 // change (way): the links, to be kept read-only by their own names, and

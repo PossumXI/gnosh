@@ -1693,7 +1693,7 @@ func TestLoopWakeupLines(t *testing.T) {
 		Content: []core.Block{core.Text("The loop's next run is at 19:20, in 10 minutes. This turn ends here: the run starts by itself then.")},
 		Meta:    map[string]any{"nextRun": "19:20", "wait": "10 minutes"},
 		Notes:   []string{"nothing changes before then"}}, 0))
-	g.ev(&agent.TurnEndEvent{Result: agent.TurnResult{Reason: agent.EndHalted, Driver: "ScheduleWakeup",
+	g.ev(&agent.TurnEndEvent{Result: agent.TurnResult{Reason: agent.EndHalted, Driver: "ScheduleWakeup", Planned: true,
 		Detail: "the loop's next run is at 19:20", Rounds: 1, Duration: 2 * time.Second}})
 	g.committedHas("ScheduleWakeup · next run at 19:20, in 10 minutes", "nothing changes before then", "done in 2s").
 		committedLacks("This turn ends here", "The turn was ended", "check the clock")

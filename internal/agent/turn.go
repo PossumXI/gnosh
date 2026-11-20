@@ -54,6 +54,7 @@ type outcome struct {
 	reason    EndReason
 	detail    string
 	driver    string
+	planned   bool
 	objection string
 	err       error
 	kind      string
@@ -238,7 +239,7 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 			case ro.stopped:
 				return stoppedOutcome()
 			case ro.halt != "":
-				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy}
+				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy, planned: ro.planned}
 			}
 			if ctx.Err() != nil {
 				// Stopped as the round's tools ended: the turn ends as
@@ -820,6 +821,7 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 		Reason:      out.reason,
 		Detail:      out.detail,
 		Driver:      out.driver,
+		Planned:     out.planned,
 		Objection:   out.objection,
 		Err:         out.err,
 		ErrorKind:   out.kind,
@@ -880,8 +882,13 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 	case EndFailed:
 		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelError, Source: "loop", Text: strings.TrimSpace("The turn failed. " + res.Detail)})
 	case EndHalted:
-		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelWarning, Source: firstNonEmpty(res.Driver, "loop"),
-			Text: "The turn was ended: " + firstNonEmpty(res.Detail, "no reason was given") + "."})
+		level, words := LevelWarning, "The turn was ended: "
+		if res.Planned {
+			// (A tool ended it as it meant to.)
+			level, words = LevelInfo, "The turn ended: "
+		}
+		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: level, Source: firstNonEmpty(res.Driver, "loop"),
+			Text: words + firstNonEmpty(res.Detail, "no reason was given") + "."})
 	case EndModelStopped:
 		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelWarning, Source: "driver:" + res.Driver, Text: fmt.Sprintf(
 			"The model chose to stop. Its reason: %s\nWhat held the turn open: %s",

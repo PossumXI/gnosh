@@ -162,7 +162,7 @@ func (t *enterTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	}
 	l.restartWhy.Store(ptrTo("The session moves into the git work tree " + tree.path + ": gnosh starts again there." + l.loopEndsNote()))
 	res := core.TextResult(text)
-	res.Meta = map[string]any{agent.MetaHalt: "the session moves into the work tree " + tree.path}
+	res.Meta = map[string]any{agent.MetaHalt: "the session moves into the work tree " + tree.path, agent.MetaPlanned: true}
 	return res, nil
 }
 
@@ -254,7 +254,7 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	}
 	l.restartWhy.Store(ptrTo("The session goes back to " + tree.from + ": gnosh starts again there." + l.loopEndsNote()))
 	res := core.TextResult(text)
-	res.Meta = map[string]any{agent.MetaHalt: "the session leaves the work tree " + tree.path}
+	res.Meta = map[string]any{agent.MetaHalt: "the session leaves the work tree " + tree.path, agent.MetaPlanned: true}
 	return res, nil
 }
 

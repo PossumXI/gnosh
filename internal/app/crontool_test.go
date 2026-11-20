@@ -146,7 +146,7 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.typeLine("/loop check the build")
 	s.see("The prompt runs now, and again when the model says")
 	s.see("  waiting on CI")
-	s.see("the loop's next run is at 10:02")
+	s.see("-- done (the loop's next run is at 10:02)") // (planned: not "ended")
 	clk.add(2 * time.Minute)
 	s.see("The self-paced /loop runs again")
 	s.see("Checked again.")
