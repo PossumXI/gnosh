@@ -4475,3 +4475,15 @@ or kept with the reason said (27).
     its Edit was refused until it read the file again: a round lost each
     time. A command whose words gnosh cannot read plainly (a grep with -e
     or -f, a tail -f, several files) does not count.
+
+313. **A cycle of three or four rounds is a loop too.** The guard that
+    tells a model it repeats itself knew one round made again (more than
+    five of the last ten) and two taking turns (a full window of two
+    kinds), and a model that went round the same three commands, with the
+    same results, a hundred times over, was under both bars (the
+    FrontierHarness session, 2026-11-20: mailman under a context cap).
+    The guard now also sees a cycle of three or four rounds come round
+    three times in a row, the same calls with the same results, and tells
+    the model so, quoting the cycle, in the person's words for a
+    repetition (repeat.md). As before it never ends the turn, and counts
+    afresh after it speaks.

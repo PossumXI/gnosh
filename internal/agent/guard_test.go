@@ -375,3 +375,26 @@ func TestCutAndWithheldRepliesAreLeftAlone(t *testing.T) {
 		})
 	}
 }
+
+// Three calls going round, each a third of the window, are under both
+// bars; three times round in a row is a loop all the same (the
+// FrontierHarness session, 2026-11-20: the same three commands for a
+// hundred calls).
+func TestRepetitionOfACycleOfThree(t *testing.T) {
+	r := newRig(t, func(o *Options) { o.Tools = []core.Tool{tool("Bash", nil)} })
+	cmds := []string{"ls", "pwd", "date"}
+	r.model.answer(func(req *core.Request, n int) step {
+		if strings.Contains(lastUserText(req), "went round the same 3 rounds") {
+			return say("stopping")
+		}
+		return use(tc(fmt.Sprintf("c%d", n), "Bash", fmt.Sprintf(`{"command":%q}`, cmds[n%3])))
+	})
+	res := r.run("look around")
+	if res.Reason != EndCompleted || r.model.count() != 10 {
+		t.Fatalf("result = %+v after %d requests", res, r.model.count())
+	}
+	nudges := ownPrompts(r.log, "nudge:repeat")
+	if len(nudges) != 1 || !strings.Contains(nudges[0], `{"command":"ls"}`) || !strings.Contains(nudges[0], `{"command":"date"}`) {
+		t.Errorf("nudges = %q", nudges)
+	}
+}

@@ -42,6 +42,9 @@ func loopTexts(set *prompt.Set, mem bool, path string) (agent.Texts, error) {
 	format(&t.RepeatNudge, "repeat", map[string]string{"calls": "%[3]s"})
 	// The loop gives: how many rounds were looked at, and the two calls.
 	format(&t.RepeatPair, "repeat", map[string]string{"calls": "%[2]s"})
+	// The loop gives: how many rounds were looked at, how many make the
+	// cycle, and its rounds.
+	format(&t.RepeatCycle, "repeat", map[string]string{"calls": "%[3]s"})
 	// The loop gives: the marker, and how many times in a row.
 	format(&t.Checkpoint, "checkpoint", map[string]string{"marker": "%[1]s", "count": "%[2]d"})
 	// The loop gives: the check's name, and the error.
