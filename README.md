@@ -112,9 +112,12 @@ Built:
   `allowNestedUserNamespaces`, `bwrapPath`, `filesystem.disabled` and
   `network.allowUnixSockets`/`allowAllUnixSockets`/`allowLocalBinding`/
   `allowMachLookup`; as in Claude Code, sandboxed commands may make no
-  user namespace of their own on Linux, and cannot reach macOS's
-  certificate trust service, unless those say so. A repository's
-  loosening waits for the folder's trust.
+  user namespace and open no new Unix socket on Linux (gnosh puts a
+  seccomp filter on them itself), and cannot reach macOS's certificate
+  trust service, unless those say so. A repository's loosening waits for
+  the folder's trust. Paths the sandbox hides stay hidden: a credential
+  is hidden last, whatever else opens it, and on macOS no folder holding
+  a hidden path can be renamed away.
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,
