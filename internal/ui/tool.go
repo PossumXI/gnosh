@@ -910,6 +910,19 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 			}
 			return summary, under
 		}
+	case "EnterPlanMode":
+		if on, _ := meta["planMode"].(bool); on {
+			return "plan mode on", nil
+		}
+	case "PushNotification":
+		// The result's words are the model's ("the user ... reads what
+		// you write").
+		if why, _ := meta["notSent"].(string); why != "" {
+			return "not sent: " + oneLine(why), nil
+		}
+		if strings.HasPrefix(text, "Notification sent") {
+			return "sent", nil
+		}
 	case "AskUserQuestion":
 		// The answers stand in the question's own record just above: the
 		// result's words for the model said them again, cut short.

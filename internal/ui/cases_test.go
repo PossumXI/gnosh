@@ -1611,3 +1611,20 @@ func TestBackgroundStartsInThePersonsWords(t *testing.T) {
 		"watching as bg2", "its output goes to ~/.local/share/gnosh/x/bg2.out").
 		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply")
 }
+
+// EnterPlanMode and PushNotification say what came of them in the
+// person's words, not the model's.
+func TestPlanModeAndNotificationLines(t *testing.T) {
+	g := newRig(t, 120, 30, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	g.ev(toolCall("c1", "EnterPlanMode"), replyEnd(core.StopToolUse), toolStart("c1", "EnterPlanMode", map[string]any{}))
+	g.ev(toolEnd("c1", "EnterPlanMode", map[string]any{}, core.ToolResult{
+		Content: []core.Block{core.Text("Plan mode is on: read, search and think, and change nothing. When the plan is ready, present it with ExitPlanMode.")},
+		Meta:    map[string]any{"planMode": true}}, 0))
+	push := map[string]any{"message": "done"}
+	g.ev(toolCall("c2", "PushNotification"), replyEnd(core.StopToolUse), toolStart("c2", "PushNotification", push))
+	g.ev(toolEnd("c2", "PushNotification", push, core.ToolResult{
+		Content: []core.Block{core.Text("Notification not sent: the user is at the terminal and reads what you write.")},
+		Meta:    map[string]any{"notSent": "you were at the terminal"}}, 0))
+	g.committedHas("plan mode on", "not sent: you were at the terminal").committedLacks("present it with ExitPlanMode", "reads what you write")
+}

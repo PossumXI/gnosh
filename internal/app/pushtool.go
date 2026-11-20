@@ -62,8 +62,15 @@ func (t *pushTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		return core.ErrorResult("The message is empty: nothing was sent."), nil
 	}
 	l := t.l
+	// (Meta "notSent" says why, for the screen, in the person's words: the
+	// result's are the model's, "the user ... reads what you write".)
+	notSent := func(text, why string) core.ToolResult {
+		res := core.TextResult(text)
+		res.Meta = map[string]any{"notSent": why}
+		return res
+	}
 	if last := l.pushLast.Load(); last != nil && l.p.now().Sub(*last) < pushEvery {
-		return core.TextResult("Notification not sent: one was sent less than a minute ago."), nil
+		return notSent("Notification not sent: one was sent less than a minute ago.", "one went out under a minute ago"), nil
 	}
 	reply := make(chan string, 1)
 	l.deliver(&PushEvent{Message: msg, Reply: reply})
@@ -72,10 +79,15 @@ func (t *pushTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		if strings.HasPrefix(said, "sent") {
 			now := l.p.now()
 			l.pushLast.Store(&now)
+			return core.TextResult("Notification " + said + "."), nil
 		}
-		return core.TextResult("Notification " + said + "."), nil
+		why := "nothing here reaches you with one"
+		if strings.Contains(said, "at the terminal") {
+			why = "you were at the terminal"
+		}
+		return notSent("Notification "+said+".", why), nil
 	case <-time.After(pushWait):
-		return core.TextResult("Notification not sent: this session's interface does not send notifications."), nil
+		return notSent("Notification not sent: this session's interface does not send notifications.", "this screen sends none"), nil
 	case <-ctx.Done():
 		return core.ErrorResult("The call was stopped before the notification was sent."), nil
 	}

@@ -49,7 +49,10 @@ func (t *enterPlanTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	if err := t.l.setMode(permission.ModePlan); err != nil {
 		return core.ErrorResult("Plan mode could not be switched on: " + strings.TrimRight(err.Error(), ".") + "."), nil
 	}
-	return core.TextResult("Plan mode is on: read, search and think, and change nothing. When the plan is ready, present it with ExitPlanMode; the user approves it or asks for changes."), nil
+	res := core.TextResult("Plan mode is on: read, search and think, and change nothing. When the plan is ready, present it with ExitPlanMode; the user approves it or asks for changes.")
+	// (For the screen, which says it in the person's words.)
+	res.Meta = map[string]any{"planMode": true}
+	return res, nil
 }
 
 // planApproved says a plan can be approved in this session, so that plan
