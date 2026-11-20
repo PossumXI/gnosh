@@ -1,6 +1,7 @@
 package instructions
 
 import (
+	"fmt"
 	"io/fs"
 	"slices"
 	"strings"
@@ -196,4 +197,47 @@ func TestWorkTreeTopsAreNotReadAgain(t *testing.T) {
 	same(t, "from the start", paths(s.Files()), []string{"/p/CLAUDE.md"})
 	late, _ := touch(s, "/p/.gnosh/worktrees/agent-1/api/x.go")
 	same(t, "late in the tree", paths(late), []string{"/p/.gnosh/worktrees/agent-1/api/CLAUDE.md"})
+}
+
+// One file follows at most importsMost imports, and one reading takes at
+// most rulesMost rule files; what is left out is said once.
+func TestImportsAndRulesAreCapped(t *testing.T) {
+	files := map[string]string{"/p/.git/HEAD": "ref: refs/heads/main\n"}
+	var b strings.Builder
+	for i := range importsMost + 50 {
+		fmt.Fprintf(&b, "@n/%d.md\n", i)
+		files[fmt.Sprintf("/p/n/%d.md", i)] = "n\n"
+	}
+	files["/p/CLAUDE.md"] = b.String()
+	for i := range rulesMost + 10 {
+		files[fmt.Sprintf("/p/.claude/rules/r%03d.md", i)] = "rule\n"
+	}
+	s := load(t, Options{
+		Cwd:          "/p",
+		ProjectNames: []string{"CLAUDE.md"},
+		DotDirs:      []string{".claude"},
+		Trusted:      true,
+		FS:           tree(files),
+	})
+	imports, rules := 0, 0
+	for _, f := range s.Files() {
+		switch f.Kind {
+		case KindImport:
+			imports++
+		case KindRule:
+			rules++
+		}
+	}
+	if imports != importsMost || rules != rulesMost {
+		t.Errorf("%d imports and %d rules loaded, want %d and %d", imports, rules, importsMost, rulesMost)
+	}
+	var many []string
+	for _, w := range s.Warnings() {
+		if w.Kind == WarnTooMany {
+			many = append(many, w.Text)
+		}
+	}
+	if len(many) != 2 || !strings.Contains(many[0]+many[1], "imports 150 files, so only its first 100") || !strings.Contains(many[0]+many[1], "More than 200 rule files") {
+		t.Errorf("the warnings: %q", many)
+	}
 }

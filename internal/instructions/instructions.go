@@ -288,6 +288,19 @@ const (
 	// WarnCut: a late file was longer than Options.LateMaxChars and the
 	// model was given only its start.
 	WarnCut WarningKind = "cut"
+	// WarnTooMany: a file imports more than importsMost files, or one
+	// reading found more than rulesMost rules; the rest were left out.
+	WarnTooMany WarningKind = "too_many"
+)
+
+// importsMost is how many imports of one file are followed, and rulesMost
+// how many rule files one reading takes: a repository's AGENTS.md of half
+// a million "@x/1 @x/2 …" cost as many lookups and warnings at each start,
+// and a rules folder linked to the top of the repository made every .md
+// in it a rule (the instruction-files review of 2026-11-20).
+const (
+	importsMost = 100
+	rulesMost   = 200
 )
 
 // Warning is something that went wrong with one file. Loading goes on past

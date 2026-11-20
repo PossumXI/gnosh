@@ -4341,3 +4341,13 @@ or kept with the reason said (27).
     nested files to follow over them; as in Claude Code, the files at a
     work tree's top are not read for it, and those deeper in the tree
     are, as usual.
+
+302. **One folder's instruction files cost a bounded amount.** Nothing
+    capped what a repository's instruction files could cost: an AGENTS.md
+    of half a million "@x/1 @x/2 …" was as many lookups and as many
+    warnings on the screen at every start, and a rules folder linked to
+    the top of the repository made every .md in it, node_modules' READMEs
+    too, a rule given whole (the instruction-files review of 2026-11-20).
+    One file's first 100 imports are followed, one reading takes at most
+    200 rule files, each cut said once, and the start shows the first ten
+    warnings about instruction files and the count of the rest.

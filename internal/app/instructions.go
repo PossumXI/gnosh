@@ -31,7 +31,14 @@ func (l *live) loadInstructions(ctx context.Context) error {
 		return err
 	}
 	l.instr = set
-	for _, w := range set.Warnings() {
+	ws := set.Warnings()
+	for i, w := range ws {
+		if i == warningsShown && len(ws) > warningsShown+1 {
+			// A folder with thousands of troubled files flooded the
+			// screen (the instruction-files review of 2026-11-20).
+			l.notice(agent.LevelWarning, "instructions", fmt.Sprintf("…and %d more warnings about instruction files, left unshown.", len(ws)-warningsShown))
+			break
+		}
 		l.notice(agent.LevelWarning, "instructions", w.Text)
 	}
 	// Long files given at the start take room from every request, and a
@@ -48,6 +55,10 @@ func (l *live) loadInstructions(ctx context.Context) error {
 // largeInstructions is the length, in characters, past which the
 // instruction files given at the start are said to be long.
 const largeInstructions = 40_000
+
+// warningsShown is how many warnings about the instruction files read at
+// the start are shown, one by one, before the count of the rest.
+const warningsShown = 10
 
 // readInstructions reads the instruction files as the config says to. A
 // sub-agent has a reading of its own: which of the files that load along

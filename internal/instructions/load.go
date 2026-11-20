@@ -21,6 +21,8 @@ type loading struct {
 	// scanned holds the real paths of the rules directories this pass has
 	// read, so that a link that leads back into one is not followed round.
 	scanned map[string]bool
+	// rules counts the rule files this pass has taken (rulesMost).
+	rules int
 }
 
 // begin starts a pass. The Set must be locked.
@@ -354,6 +356,11 @@ func (l *loading) rulesDir(dir string, t want) {
 		case child.info.IsDir():
 			l.rulesDir(p, t)
 		case strings.HasSuffix(e.Name(), ".md"):
+			if l.rules >= rulesMost {
+				l.warn(WarnTooMany, dir, "", fmt.Sprintf("More than %d rule files were found, so those after the first %d, %s among them, were not read.", rulesMost, rulesMost, plain(osPath(p))))
+				return
+			}
+			l.rules++
 			l.rule(p, t)
 		}
 	}
@@ -575,6 +582,10 @@ func (l *loading) imports(w want, real, unit, text string) {
 	refs := scanImports(text)
 	if len(refs) == 0 {
 		return
+	}
+	if len(refs) > importsMost {
+		l.warn(WarnTooMany, w.path, w.parent, fmt.Sprintf("%s imports %d files, so only its first %d imports were followed.", plain(osPath(w.path)), len(refs), importsMost))
+		refs = refs[:importsMost]
 	}
 	// A relative import is relative to the file it is written in. For a
 	// file reached through a link that is where the link leads, since that

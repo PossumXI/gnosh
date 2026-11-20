@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -92,4 +93,21 @@ func TestStopListsCutLongText(t *testing.T) {
 	if got := clipped("short"); got != "short" {
 		t.Errorf("clipped(short) = %q", got)
 	}
+}
+
+// A folder whose instruction files bring many warnings shows the first
+// ten and the count of the rest, not all of them (the instruction-files
+// review of 2026-11-20: a file of half a million imports flooded it).
+func TestInstructionWarningsAreCounted(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
+	var b strings.Builder
+	for i := range 15 {
+		fmt.Fprintf(&b, "@missing/%d.md\n", i)
+	}
+	w.Write("AGENTS.md", b.String())
+	r := run(t, w, "-p", "hi").wantCode(t, 0)
+	if n := strings.Count(r.err, " is not there."); n != warningsShown {
+		t.Errorf("%d import warnings shown, want %d:\n%s", n, warningsShown, r.err)
+	}
+	has(t, "stderr", r.err, "…and 5 more warnings about instruction files")
 }
