@@ -435,3 +435,16 @@ func TestDoctorSaysWhetherPDFsAreRead(t *testing.T) {
 	findings := doctor(t, withConfig("{"+box+"}"), &fakeMachine{programs: []string{"pdftotext"}})
 	wantFinding(t, findings, "tools", Note, "PDFs are not read as text", "poppler-utils")
 }
+
+// gnosh doctor says whether each language server's program is there, and,
+// in a folder that is not trusted, that the servers wait for it.
+func TestDoctorSaysWhetherLanguageServersCanStart(t *testing.T) {
+	cfg := `{` + box + `, "lspServers": {"gopls": {"command": "gopls", "extensionToLanguage": {".go": "go"}}, "pyright": {"command": "pyright-langserver", "extensionToLanguage": {".py": "python"}}}}`
+	findings := doctor(t, withConfig(cfg), &fakeMachine{programs: []string{"gopls"}})
+	wantFinding(t, findings, "tools", Fine, "the language server gopls (for .go) is installed")
+	wantFinding(t, findings, "tools", Note, "the language server pyright (for .py) cannot start: pyright-langserver is not installed")
+	in := withConfig(cfg)
+	in.Trusted = false
+	findings = doctor(t, in, &fakeMachine{programs: []string{"gopls"}})
+	wantFinding(t, findings, "tools", Note, "the language server gopls (for .go) is installed, and waits for this folder to be trusted")
+}

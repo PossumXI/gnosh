@@ -4967,3 +4967,10 @@ or kept with the reason said (27).
     reading starts, a send whose context ended sends nothing and leaves
     the next writer's deadline alone, and the server's requests are
     answered sixteen at a time.
+
+345. **gnosh doctor and the language servers.** For each server of
+    lspServers, doctor says whether its program can be started (found on
+    the PATH, or the path it names is there): fine when it is, a note
+    naming the program when it is not, and a note that it waits for the
+    folder's trust in a folder that is not trusted (344), so that a server
+    that never starts is not a mystery found only by its silence.

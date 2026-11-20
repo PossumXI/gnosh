@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -319,6 +320,23 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 			add("tools", Fine, "PDFs are read as text: poppler's pdfinfo and pdftotext are installed.")
 		} else {
 			add("tools", Note, "PDFs are not read as text: Read takes it with poppler's pdfinfo and pdftotext, which are not installed (apt install poppler-utils; brew install poppler).")
+		}
+	}
+	// The language servers (lspServers): each one's program, found as it
+	// would be started, and that they wait for the folder's trust.
+	for _, srv := range cfg.LSPServers {
+		if pr.LookPath == nil {
+			break
+		}
+		exts := strings.Join(slices.Sorted(maps.Keys(srv.Extensions)), " ")
+		// (LookPath takes a path from / as itself, as exec does.)
+		switch _, err := pr.LookPath(srv.Command); {
+		case err != nil:
+			add("tools", Note, "the language server %s (for %s) cannot start: %s is not installed, or not on the PATH. (%s)", srv.Name, exts, srv.Command, srv.Origin)
+		case !cfg.Trusted:
+			add("tools", Note, "the language server %s (for %s) is installed, and waits for this folder to be trusted, as it would read the folder's code. (%s)", srv.Name, exts, srv.Origin)
+		default:
+			add("tools", Fine, "the language server %s (for %s) is installed: it starts with the first file of those it is for. (%s)", srv.Name, exts, srv.Origin)
 		}
 	}
 	for _, s := range []struct {
