@@ -1607,9 +1607,16 @@ func TestBackgroundStartsInThePersonsWords(t *testing.T) {
 		Content: []core.Block{core.Text("Monitor bg2 watches: watch the log. What the command prints comes to you as notices from gnosh. Go on with other work, or end your reply to wait for the lines.")},
 		Meta:    map[string]any{"taskId": "bg2", "persistedOutputPath": "/home/jae/.local/share/gnosh/x/bg2.out"},
 	}, 0))
+	sub := map[string]any{"description": "survey the tests", "prompt": "Survey the tests.", "run_in_background": true}
+	g.ev(toolCall("c3", "Agent"), replyEnd(core.StopToolUse), toolStart("c3", "Agent", sub))
+	g.ev(toolEnd("c3", "Agent", sub, core.ToolResult{
+		Content: []core.Block{core.Text("The sub-agent is working in the background on: survey the tests. Its id is a7. Its report will come to you as a notice from gnosh when it ends; until then it is still running, so do not report what it found before that notice arrives.")},
+		Meta:    map[string]any{"status": "async_launched", "agentId": "a7", "agentType": "general-purpose"},
+	}, 0))
 	g.committedHas("its output goes to ~/.local/share/gnosh/x/bg1.out", "running in the background as bg1",
-		"watching as bg2", "its output goes to ~/.local/share/gnosh/x/bg2.out").
-		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply")
+		"watching as bg2", "its output goes to ~/.local/share/gnosh/x/bg2.out",
+		"Agent survey the tests · running in the background as a7").
+		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply", "do not report what it found")
 }
 
 // EnterPlanMode and PushNotification say what came of them in the

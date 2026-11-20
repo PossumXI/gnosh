@@ -945,6 +945,17 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		// The answers stand in the question's own record just above: the
 		// result's words for the model said them again, cut short.
 		return "answered", nil
+	case "Agent", "Task", "SendMessage":
+		// A sub-agent started, or given more to do, in the background:
+		// its id, in the person's words (the result's are the model's:
+		// "do not report what it found before that notice arrives").
+		if status, _ := meta["status"].(string); status == "async_launched" {
+			summary = "running in the background"
+			if id, _ := meta["agentId"].(string); id != "" {
+				summary += " as " + oneLine(id)
+			}
+			return summary, nil
+		}
 	case "ScheduleWakeup":
 		// When the loop runs next (the result's "This turn ends here" is
 		// the model's); the model's reason is the call's note.
