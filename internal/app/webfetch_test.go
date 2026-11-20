@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"os"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -73,4 +76,68 @@ func TestWebFetch(t *testing.T) {
 	}
 	// localhost: refused before anything is fetched or anybody is asked.
 	has(t, "the fetch from localhost", toolResult(t, w, 7, "c4"), "use curl through the shell")
+}
+
+// What is not text is kept in a file of the session's, named for what it
+// is, and the model is told where, without the smaller model: a picture to
+// Read, a PDF to turn into text. Asked again within the 15 minutes, it is
+// the same file, not fetched again; one too long to keep whole is not
+// kept at all.
+func TestWebFetchKeepsWhatIsNotText(t *testing.T) {
+	pdf := []byte("%PDF-1.7\n%%EOF\n")
+	png := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0}
+	var fetched atomic.Int32
+	old := fetchPage
+	fetchPage = func(ctx context.Context, raw string, o webtool.Options) (webtool.Page, error) {
+		fetched.Add(1)
+		switch {
+		case strings.HasSuffix(raw, "/paper"):
+			return webtool.Page{URL: raw, Code: 200, Status: "OK", ContentType: "application/pdf", Bytes: len(pdf), Body: pdf}, nil
+		case strings.HasSuffix(raw, "/huge"):
+			return webtool.Page{URL: raw, Code: 200, Status: "OK", ContentType: "video/mp4", Bytes: 10 << 20, Cut: true, Body: make([]byte, 16)}, nil
+		}
+		return webtool.Page{URL: raw, Code: 200, Status: "OK", ContentType: "image/png", Bytes: len(png), Body: png}, nil
+	}
+	defer func() { fetchPage = old }()
+
+	w := apptest.NewWorld(t)
+	main := 0
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if strings.Contains(string(r.Body), "<page>") {
+			t.Errorf("a file that is not text went to the smaller model")
+			return &apptest.Reply{Text: "?"}
+		}
+		main++
+		switch main {
+		case 1:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "WebFetch", Args: `{"url":"https://files.example.org/paper","prompt":"what does it say?"}`}}}
+		case 2:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "WebFetch", Args: `{"url":"https://files.example.org/paper","prompt":"and the title?"}`}}}
+		case 3:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "WebFetch", Args: `{"url":"https://files.example.org/logo","prompt":"describe it"}`}}}
+		case 4:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c4", Name: "WebFetch", Args: `{"url":"https://files.example.org/huge","prompt":"watch it"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-y", "-p", "fetch the files").wantCode(t, 0)
+
+	first := toolResult(t, w, 4, "c1")
+	has(t, "the PDF's result", first, "is a PDF (application/pdf", "pdftotext")
+	saved := regexp.MustCompile(`saved to (\S+\.pdf)\.`).FindStringSubmatch(first)
+	if saved == nil {
+		t.Fatalf("no file is named in %q", first)
+	}
+	if got, err := os.ReadFile(saved[1]); err != nil || !bytes.Equal(got, pdf) {
+		t.Errorf("the saved file holds %q, %v", got, err)
+	}
+	if info, err := os.Stat(saved[1]); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the saved file: %v, %v", info, err)
+	}
+	has(t, "the PDF asked for again", toolResult(t, w, 4, "c2"), "saved to "+saved[1]+".")
+	has(t, "the picture's result", toolResult(t, w, 4, "c3"), "is a picture (image/png", ".png: Read that file to see it.")
+	has(t, "the long video's result", toolResult(t, w, 4, "c4"), "longer than the 10.0 MB WebFetch keeps", "curl through Bash")
+	if n := fetched.Load(); n != 3 {
+		t.Errorf("the files were fetched %d times, want 3 (the PDF once)", n)
+	}
 }

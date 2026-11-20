@@ -4517,3 +4517,19 @@ or kept with the reason said (27).
     sessions editing one file in turn now both land, the later on top of
     the earlier, where before the later was refused. Write still refuses
     a changed file: it replaces the whole.
+
+316. **WebFetch keeps what is not text in a file.** WebFetch refused a
+    picture, a PDF or an archive with "WebFetch reads text only", so the
+    model had to fetch it again with curl to look at it; Claude Code saves
+    such content to a local file and says where (its 2.1.329 fixed PDFs
+    and pictures sent as application/octet-stream being saved as .bin).
+    webtool now gives back the bytes of what is not text (a media type of
+    bytes, or not UTF-8, or holding a zero byte), with the type read from
+    the first bytes when the server named none or only octet-stream; the
+    app saves them to <session>/tool-results/WebFetch-*.<ext> (0600, the
+    folder Read may read without a question), names the extension by type
+    (else the address's own plain one, else .bin), and tells the model
+    what it is and where: Read shows a picture, a PDF is to be turned into
+    text with a shell command. The smaller model is not asked. Within 15
+    minutes the same file is given again unless it is gone. Content past
+    the 10 MiB WebFetch reads is not saved: the result says to use curl.

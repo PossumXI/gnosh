@@ -542,6 +542,12 @@ Behaviour:
 - A redirect to a **different host** is not followed: the result names the
   original URL and the target, and the model fetches the target itself.
 - `CLAUDE_CODE_DISABLE_WEB_FETCH=1` removes the tool.
+- Content that is not text (a PDF, a picture) is saved to a local file, and
+  the result says where; one sent as `application/octet-stream` is named by
+  what it is (2.1.329 fixed PDFs and pictures sent that way being saved as
+  `.bin`). gnosh saves it into the session's folder for tool output, which
+  Read may read without a question, reads the type from the first bytes,
+  and does not put the prompt to the small model.
 - Request headers: Claude Code sends a `User-Agent` starting `Claude-User`
   and an `Accept` header preferring Markdown. gnosh sends its own
   `User-Agent` and the same `Accept` preference.
