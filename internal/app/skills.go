@@ -87,10 +87,14 @@ func userDefDirs(cfg *config.Config, kind string) []string {
 // the project begins, the closest first, and then in more, the folders
 // that were added to the session. In each folder gnosh's own comes first.
 func projectDefDirs(cfg *config.Config, kind string, more []string) []string {
+	// (Started in the home folder, its .claude folder is the person's own:
+	// its definitions are not the folder's, to be held until it is
+	// trusted, nor read twice.)
+	user := userDefDirs(cfg, kind)
 	var dirs []string
 	add := func(dir string) {
 		for _, d := range []string{filepath.Join(dir, ownDir, kind), filepath.Join(dir, theirDir, kind)} {
-			if !slices.Contains(dirs, d) {
+			if !slices.Contains(dirs, d) && !slices.Contains(user, d) {
 				dirs = append(dirs, d)
 			}
 		}

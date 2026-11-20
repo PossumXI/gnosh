@@ -72,3 +72,17 @@ func TestLowerWindow(t *testing.T) {
 		}
 	}
 }
+
+// Started in the home folder, its .claude folder's definitions are the
+// person's own: not the folder's (held until it is trusted), nor read
+// twice; its .gnosh folder is still the folder's.
+func TestHomeFolderDefinitionsAreThePersons(t *testing.T) {
+	cfg := &config.Config{Paths: config.Paths{Home: "/h", Cwd: "/h", ProjectRoot: "/h", ConfigDir: "/h/.config/gnosh"}}
+	if got := strings.Join(projectDefDirs(cfg, "agents", nil), " "); got != "/h/.gnosh/agents" {
+		t.Errorf("in the home folder: %s", got)
+	}
+	cfg.Paths.Cwd, cfg.Paths.ProjectRoot = "/h/proj", "/h/proj"
+	if got := strings.Join(projectDefDirs(cfg, "skills", nil), " "); got != "/h/proj/.gnosh/skills /h/proj/.claude/skills" {
+		t.Errorf("in a project: %s", got)
+	}
+}
