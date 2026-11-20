@@ -411,8 +411,13 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 		if p := oneLine(get("pages")); p != "" {
 			h.arg += " (pages " + p + ")"
 		}
-	case "Write", "Edit", "MultiEdit", "NotebookEdit":
+	case "Write", "Edit", "MultiEdit":
 		h.arg = path("file_path")
+	case "NotebookEdit":
+		h.arg = path("notebook_path")
+		if id := oneLine(get("cell_id")); id != "" {
+			h.arg += " (cell " + id + ")"
+		}
 	case "Glob", "Grep":
 		h.arg = oneLine(get("pattern"))
 		if g := get("glob"); g != "" {

@@ -78,7 +78,7 @@ type startup struct {
 // as Claude Code writes it, WebFetch(domain:...) say, was refused.
 func ownTools() []string {
 	d := fstools.Defaults()
-	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
+	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, d.NotebookEditName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
 		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, enterTreeName, exitTreeName, cronCreateName, cronListName, cronDeleteName, scheduleWakeupName, pushName, skillToolName, gnokeyToolName}
 }
 

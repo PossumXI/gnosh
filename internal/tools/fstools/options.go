@@ -14,15 +14,16 @@ import (
 // set below one takes its default too, except where a field says what a
 // negative value means.
 type Options struct {
-	// ReadName, WriteName, EditName, GlobName and GrepName are the names
-	// the model calls the tools by, which are also the names permission
-	// rules and hooks use. Defaults: "Read", "Write", "Edit", "Glob",
-	// "Grep".
-	ReadName  string
-	WriteName string
-	EditName  string
-	GlobName  string
-	GrepName  string
+	// ReadName, WriteName, EditName, GlobName, GrepName and
+	// NotebookEditName are the names the model calls the tools by, which
+	// are also the names permission rules and hooks use. Defaults: "Read",
+	// "Write", "Edit", "Glob", "Grep", "NotebookEdit".
+	ReadName         string
+	WriteName        string
+	EditName         string
+	GlobName         string
+	GrepName         string
+	NotebookEditName string
 
 	// HomeDir is what a leading "~/" in a path argument stands for. When
 	// it is empty, which is the default, a path that starts with "~" is
@@ -195,6 +196,7 @@ func (o Options) withDefaults() Options {
 	text(&o.EditName, "Edit")
 	text(&o.GlobName, "Glob")
 	text(&o.GrepName, "Grep")
+	text(&o.NotebookEditName, "NotebookEdit")
 	num(&o.ReadDefaultLines, 2000)
 	num(&o.ReadMaxBytes, 100_000)
 	num(&o.ReadMaxLineChars, 2000)
@@ -246,6 +248,7 @@ func New(opts Options) []core.Tool {
 		&editTool{opts: &o, sys: sys},
 		&globTool{opts: &o},
 		&grepTool{opts: &o},
+		&notebookEditTool{opts: &o, sys: sys},
 	}
 }
 

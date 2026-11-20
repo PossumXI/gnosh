@@ -645,6 +645,10 @@ rather than under `~/.claude/plans/`.
 
 Covered by `Edit(path)` permission rules. Refuses a file that is not UTF-8.
 
+gnosh: built (DECISIONS 325). Cells are named by their `id`, or `cell-N`
+where a notebook older than nbformat 4.5 has none; Read shows the name of
+each cell.
+
 ## 16. Monitor (P2)
 
 Input `{ description: string; timeout_ms: number; command?: string; ws?: { url: string; protocols?: string[] } }`

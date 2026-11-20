@@ -39,10 +39,10 @@ Each line comes back as its number, a tab, then the line. The number and the tab
 
 One call shows at most %[2]d lines (or the limit you give) and at most %[3]d bytes of text. When the file has more, a note at the end says so and gives the offset to continue from. A line longer than %[4]d characters is cut and marked. For a large file, read the part you need with offset and limit, or find it first with %[5]s.
 
-PNG, JPEG, GIF and WebP images come back as pictures. A PDF comes back as its text, page by page: one of more than %[7]d pages is read with pages, at most %[8]d at a time. A directory, a binary file or a notebook is not read: the result says what it is. An empty file and an offset past the end give a short notice, not an error.
+PNG, JPEG, GIF and WebP images come back as pictures. A PDF comes back as its text, page by page: one of more than %[7]d pages is read with pages, at most %[8]d at a time. A Jupyter notebook (.ipynb) comes back as its cells, each with its id, and their outputs; change a cell with %[9]s. A directory or a binary file is not read: the result says what it is. An empty file and an offset past the end give a short notice, not an error.
 
 %[1]s and %[6]s only change what this session has been shown, so read a file before changing it.`,
-		o.EditName, o.ReadDefaultLines, o.ReadMaxBytes, o.ReadMaxLineChars, o.GrepName, o.WriteName, pdfWholeMost, pdfCallMost)
+		o.EditName, o.ReadDefaultLines, o.ReadMaxBytes, o.ReadMaxLineChars, o.GrepName, o.WriteName, pdfWholeMost, pdfCallMost, o.NotebookEditName)
 	return core.ToolSpec{
 		Name:        o.ReadName,
 		Description: desc,
@@ -163,7 +163,7 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	case args.pages != "":
 		return refused(failf("%s: pages is for PDF files, and %s is not one. Use offset and limit to read part of a text file.", o.ReadName, loc.abs))
 	case ext == ".ipynb":
-		return refused(failf("%s is a Jupyter notebook, which %s cannot read yet. Look at its cells with a shell command (jq, for one).", loc.abs, o.ReadName))
+		return t.readNotebook(env, &loc, file, info, head, atEnd)
 	}
 	if media := imageType(head); media != "" {
 		return t.readImage(ctx, env, &loc, file, info, head, atEnd, media)

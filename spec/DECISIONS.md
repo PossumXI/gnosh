@@ -4648,3 +4648,24 @@ or kept with the reason said (27).
     Dockerfile (api.Dockerfile, Dockerfile.dev) and Containerfile.*, and
     sass names css. .gitignore still holds outside a git repository,
     where ripgrep would read it only when told to.
+
+325. **Read takes notebooks, and NotebookEdit changes their cells.** Read
+    refused a Jupyter notebook ("cannot read yet") and gnosh had no
+    NotebookEdit, so a model edited a notebook's JSON by hand, or with a
+    script. Claude Code's Read gives a notebook's cells with their
+    outputs, pictures among them, and its NotebookEdit replaces, inserts
+    or deletes one cell by id. gnosh's Read now gives each cell under a
+    line naming its number, its id (cell-N where a notebook of nbformat
+    4.4 or older has none), its kind and its run, then its outputs: text,
+    stderr marked, an error with its traceback cleaned of colour codes and
+    cut to its last 20 lines, and up to 4 pictures as pictures; one output
+    is cut at 4,000 characters; a notebook whose text passes what one call
+    shows comes without its outputs, and past that is refused with a jq
+    command to read some cells. NotebookEdit (notebook_path, cell_id,
+    new_source, cell_type, edit_mode) wants the notebook read whole and
+    unchanged since, as Write does, is judged by Edit's rules, goes
+    through the same lock, checkpoint and atomic write, clears a replaced
+    code cell's outputs and run count, gives an inserted cell an id where
+    the notebook's cells have them, and writes the notebook as Jupyter
+    does (keys in order, one space of indent, numbers as they were). It
+    costs every session's prompt its description, about 200 tokens.

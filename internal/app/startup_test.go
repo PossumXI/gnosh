@@ -138,7 +138,7 @@ func TestConfigMistakesStopStartup(t *testing.T) {
 		}, []string{"/proj/gnosh.json:3:", `"frobnicate" is not a key gnosh knows`}},
 		{"a rule for a tool that does not exist", func(w *apptest.World) []string {
 			return []string{"--allowedTools", "NoSuchTool(x)", "--"}
-		}, []string{"--allowedTools:", `"NoSuchTool" is not a tool gnosh has`, "Read, Write, Edit, Glob, Grep, Bash, TaskStop"}},
+		}, []string{"--allowedTools:", `"NoSuchTool" is not a tool gnosh has`, "Read, Write, Edit, Glob, Grep, NotebookEdit, Bash, TaskStop"}},
 		{"two mistakes are both told", own(`  "frobnicate": true,`, `  "options": {"noSuchOption": 3}`), []string{"has 2 mistakes", "gnosh.json:4:", "gnosh.json:5:"}},
 	}
 	for _, tc := range cases {

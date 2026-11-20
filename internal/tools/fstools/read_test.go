@@ -315,9 +315,10 @@ func TestReadRefusesWhatIsNotText(t *testing.T) {
 		p := f.file("plain.txt", "text\n")
 		f.fails(f.read, in{"file_path": p, "pages": "1-3"}, "pages is for PDF files", "offset and limit")
 	})
-	t.Run("notebook", func(t *testing.T) {
-		p := f.file("nb.ipynb", `{"cells": []}`)
-		f.fails(f.read, in{"file_path": p}, "Jupyter notebook", "cannot read yet")
+	t.Run("a notebook that is not one", func(t *testing.T) {
+		p := f.file("nb.ipynb", `{"worksheets": []}`)
+		f.fails(f.read, in{"file_path": p}, "could not be read as a notebook", "nbformat 3")
+		f.fails(f.read, in{"file_path": f.file("bad.ipynb", `{"cells": 3}`)}, "no list of cells")
 	})
 	t.Run("directory", func(t *testing.T) {
 		d := f.mkdir("some/dir")
