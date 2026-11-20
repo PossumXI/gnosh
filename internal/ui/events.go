@@ -144,6 +144,10 @@ func (s *session) handle(ev any) {
 			// turnEnd says how the turn ended, with its times, right after.
 			break
 		}
+		if ev.Source == agent.SourceProviderBack && s.retries > 0 {
+			// (alive says it, with the tries counted: it was said twice.)
+			break
+		}
 		s.notice(ev.Level, ev.Text)
 	case *agent.NoteEvent:
 		if ev.Note.Notice != "" {

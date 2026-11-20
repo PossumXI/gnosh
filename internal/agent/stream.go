@@ -204,6 +204,10 @@ func whatHappened(pe *core.ProviderError) string {
 		s = "asked for fewer requests"
 	case core.ErrOverloaded:
 		s = "said it is too busy"
+		if strings.Contains(strings.ToLower(pe.Message), "loading model") {
+			// (llama.cpp's 503 while its model loads.)
+			s = "is loading its model"
+		}
 	case core.ErrAuth:
 		s = "refused the key: it is missing, wrong, or not allowed to do this"
 	case core.ErrInvalidRequest:
@@ -438,6 +442,11 @@ func (a *Agent) count(t *turn, purpose string, m Model, rep *reply) {
 	a.mu.Unlock()
 }
 
+// SourceProviderBack is the source of the notice that a provider answers
+// again after it stopped: a front end that says so in its own words (the
+// full screen, which counts the tries) leaves it out.
+const SourceProviderBack = "provider-back"
+
 // alive notes that the provider has sent something: it is there. The
 // clock of its failures (rs.since) runs on until a reply is whole: one
 // that sends a little of every reply and then fails the same way each
@@ -452,7 +461,7 @@ func (a *Agent) alive(m Model) {
 	a.answeredBy[modelKey(m)] = true
 	a.live.Store(modelKey(m))
 	if a.rs.down && !a.rs.since.IsZero() {
-		a.notice(LevelInfo, "provider", fmt.Sprintf("%s is answering again, %s after it stopped.", m.label(), span(a.clock.Now().Sub(a.rs.since))))
+		a.notice(LevelInfo, SourceProviderBack, fmt.Sprintf("%s is answering again, %s after it stopped.", m.label(), span(a.clock.Now().Sub(a.rs.since))))
 	}
 	a.rs.down = false
 }

@@ -1548,3 +1548,15 @@ func TestAskUserQuestionAnsweredLine(t *testing.T) {
 	}, 0))
 	g.committedHas("answered").committedLacks("The user answered", "more lines not shown")
 }
+
+// A provider that answers again after failed tries is said to once on the
+// screen, with the tries counted: the agent's own notice of it is left out
+// (it was said twice).
+func TestProviderBackSaidOnce(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"hello" <Enter>`).start()
+	g.ev(&agent.RetryEvent{Purpose: "main", Attempt: 1, Kind: core.ErrServer, Status: 500, Message: "the server failed on its own side (HTTP 500). Trying again in 5s."})
+	g.ev(&agent.NoticeEvent{Level: agent.LevelInfo, Source: agent.SourceProviderBack, Text: "the server is answering again, 5s after it stopped."})
+	g.ev(said("Back.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
+	g.committedHas("answers again, after 1 failed try").committedLacks("is answering again")
+}
