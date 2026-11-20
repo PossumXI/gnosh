@@ -33,6 +33,8 @@ func TestSandboxedCommandsRunWithoutAsking(t *testing.T) {
 	w := apptest.NewWorld(t)
 	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true}}`)
 	w.Write(".claude/settings.json", "{}\n")
+	w.Write("secret.txt", "hunter2\n")
+	w.Deny("Read(./secret.txt)")
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		if n == 0 {
 			return &apptest.Reply{Calls: []apptest.Call{
@@ -41,6 +43,9 @@ func TestSandboxedCommandsRunWithoutAsking(t *testing.T) {
 				// (A write gnosh cannot see in the command: the sandbox
 				// keeps the settings file read-only all the same.)
 				{ID: "c3", Name: "Bash", Args: `{"command":"python3 -c \"open('.claude/settings.json', 'a').write('x')\""}`},
+				// (A read gnosh cannot see: the Read deny rule's path is
+				// kept from the sandbox all the same.)
+				{ID: "c4", Name: "Bash", Args: `{"command":"python3 -c \"print('[' + open('secret.txt').read() + ']')\""}`},
 			}}
 		}
 		return &apptest.Reply{Text: "Done."}
@@ -57,6 +62,9 @@ func TestSandboxedCommandsRunWithoutAsking(t *testing.T) {
 	if got := w.Read(".claude/settings.json"); got != "{}\n" {
 		t.Errorf("a sandboxed command changed a settings file: %q", got)
 	}
+	if got := toolResult(t, w, 1, "c4"); strings.Contains(got, "hunter2") || !strings.Contains(got, "Permission denied") {
+		t.Errorf("a sandboxed command read what a Read rule denies: %s", got)
+	}
 	has(t, "what the model is told of Bash", string(w.Model.Requests()[0].Body), "In the sandbox:", "dangerouslyDisableSandbox")
 }
 
@@ -70,6 +78,8 @@ func TestExcludedCall(t *testing.T) {
 		"docker ps; rm x": false, "docker ps | cat": false, "docker build . > log": false, "docker $(x)": false, "cd x && docker ps": false,
 		"git clone https://example.com/r vendor/lib": true, "git clone https://example.com/r ~/tools": false, "git worktree add ../x": false,
 		"npm run web:dev": true, "npm run web:prod": false, "sudo docker ps": false, "": false,
+		"docker ps 2>&1": true, "docker\tps": false, "docker\u00a0ps": false,
+		"git --git-dir=x status": false, "git clone --template=./t https://example.com/r x": false, "git -c core.fsmonitor=x status": false, "git -Cx status": false,
 	} {
 		if got := excludedCall(entries, cmd); got != want {
 			t.Errorf("excludedCall(%q) = %v", cmd, got)

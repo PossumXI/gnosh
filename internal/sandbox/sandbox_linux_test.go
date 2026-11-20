@@ -23,7 +23,7 @@ func TestBubblewrapForReal(t *testing.T) {
 		t.Skip(st.Why)
 	}
 	work, outside, home := t.TempDir(), t.TempDir(), t.TempDir()
-	temp, err := PrivateTemp(t.TempDir())
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +78,12 @@ func TestBubblewrapForReal(t *testing.T) {
 	if got := run(`cat /tmp/kept.txt`); got != "t" {
 		t.Errorf("the next command's /tmp: %q", got)
 	}
+	// The machine's sockets under /run are out of sight.
+	if _, err := os.Stat("/run"); err == nil {
+		if got := run(`ls -A /run | wc -l`); got != "0" {
+			t.Errorf("/run inside the sandbox holds %s entries", got)
+		}
+	}
 	// (bash, for its /dev/tcp.)
 	if bash, err := exec.LookPath("bash"); err == nil {
 		probe := "(exec 3<>/dev/tcp/127.0.0.1/" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port) + ") 2>/dev/null && echo reached || echo unreached"
@@ -121,7 +127,7 @@ func TestSandboxReachesAllowedHostsThroughTheProxy(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("reached")) }))
 	defer srv.Close()
-	temp, err := PrivateTemp(t.TempDir())
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
 	if err != nil {
 		t.Fatal(err)
 	}

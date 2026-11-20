@@ -12,7 +12,6 @@ package sandbox
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -31,10 +30,10 @@ type Policy struct {
 	// DenyRead are paths it may not read, and AllowRead paths inside them
 	// it may read after all.
 	DenyRead, AllowRead []string
-	// Temp is the sandbox's own temporary folder, the person's, kept from
-	// one command to the next: /tmp inside the sandbox on Linux (the real
-	// /tmp out of sight), and a folder it may write in on macOS, where
-	// TMPDIR names it.
+	// Temp is the sandbox's own temporary folder, the session's alone,
+	// kept from one command to the next: /tmp inside the sandbox on Linux
+	// (the real /tmp out of sight), and a folder it may write in on macOS,
+	// where TMPDIR names it.
 	Temp string
 	// Expose are files of gnosh's own the command's shell must reach: the
 	// one it writes its last working directory to (Write), and the scripts
@@ -76,25 +75,6 @@ func Env(p Policy) []string {
 		env = append(env, "NO_PROXY=", "no_proxy=")
 	}
 	return env
-}
-
-// PrivateTemp makes, or checks, the person's own temporary folder for
-// sandboxed commands under dir (the system's temporary folder): one the
-// person owns, which nobody else can open, and no link. It returns its
-// path.
-func PrivateTemp(dir string) (string, error) {
-	p := filepath.Join(dir, "gnosh-sandbox-"+uidText())
-	if err := os.Mkdir(p, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-		return "", err
-	}
-	info, err := os.Lstat(p)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ownedByMe(info) {
-		return "", errors.New(p + " is not a folder of the person's own that nobody else can open, so it cannot be the sandbox's temporary folder")
-	}
-	return p, nil
 }
 
 // present is the paths of a list that are there, absolute, cleaned, each

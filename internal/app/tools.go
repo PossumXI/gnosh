@@ -372,7 +372,9 @@ func (l *live) closeShell() {
 		}
 	case <-time.After(60 * time.Second):
 		l.p.warnf("the session's commands had not all stopped after a minute; gnosh goes on without waiting for them.")
+		return // (their sandbox's folder is left to them)
 	}
+	l.closeSandbox()
 }
 
 // gnoRunTool is the GnoVM feature's tool that runs Gno, mem's calls among

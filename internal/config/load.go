@@ -340,6 +340,7 @@ func (ld *loader) file(path string, layer Layer, scope, ruleDir string, project 
 		return false
 	}
 	src := ld.source(path, layer, scope, filepath.Dir(path), ruleDir)
+	src.theirs = project
 	readFile(src, data)
 	ld.apply(src, File{Path: path, Role: "settings", Scope: scope}, project)
 	return true

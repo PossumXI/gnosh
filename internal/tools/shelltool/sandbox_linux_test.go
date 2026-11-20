@@ -27,7 +27,7 @@ func TestCommandsRunInTheSandbox(t *testing.T) {
 		t.Skip("no /var/tmp to make a folder outside the sandbox in")
 	}
 	t.Cleanup(func() { os.RemoveAll(outside) })
-	temp, err := sandbox.PrivateTemp(t.TempDir())
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
 	if err != nil {
 		t.Fatal(err)
 	}

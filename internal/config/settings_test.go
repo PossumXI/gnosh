@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -625,8 +627,26 @@ func TestSettingsSandbox(t *testing.T) {
 	if sb := mustLoad(t, in).Sandbox; !sb.Enabled || sb.AutoAllow || !sb.AllowUnsandboxed {
 		t.Errorf("a repository's own: %+v", sb)
 	}
-	if sb := mustLoad(t, inputs(newFS().put(userJSON, `{"sandbox": {"enabled": true}}`).put(localJSON, `{"sandbox": {"enabled": false}}`))).Sandbox; sb.Enabled {
-		t.Errorf("the person's later file did not turn it off: %+v", sb)
+	// The person's own local file (the one their gnosh wrote, by its note)
+	// turns it off; one the repository shipped cannot.
+	off := `{"sandbox": {"enabled": false}}`
+	fsOff := newFS().put(userJSON, `{"sandbox": {"enabled": true}}`).put(localJSON, off)
+	for _, trusted := range []bool{true, false} {
+		in := inputs(fsOff)
+		in.Trusted = trusted
+		if sb := mustLoad(t, in).Sandbox; !sb.Enabled {
+			t.Errorf("trusted %v: a local file the repository shipped turned the person's sandbox off: %+v", trusted, sb)
+		}
+	}
+	sum := sha256.Sum256([]byte(off))
+	fsOff.put(localWriteNote(mustLoad(t, inputs(fsOff)).Paths.StateDir, localJSON), hex.EncodeToString(sum[:])+"\n")
+	if sb := mustLoad(t, inputs(fsOff)).Sandbox; sb.Enabled {
+		t.Errorf("the person's own later file did not turn it off: %+v", sb)
+	}
+	in = inputs(newFS().put(userJSON, `{"sandbox": {"autoAllowBashIfSandboxed": true}}`).put(projJSON, `{"sandbox": {"enabled": true}}`))
+	in.Trusted = false
+	if sb := mustLoad(t, in).Sandbox; !sb.Enabled || sb.AutoAllow {
+		t.Errorf("the person's auto-allow went with a repository's sandbox: %+v", sb)
 	}
 	if sb := mustLoad(t, inputs(newFS())).Sandbox; sb.Enabled || !sb.AllowUnsandboxed {
 		t.Errorf("nothing said: %+v", sb)

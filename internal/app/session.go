@@ -492,7 +492,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	}
 	// A sandbox the settings turn on that cannot run here: a notice, or,
 	// with failIfUnavailable, no session.
-	if note, stop := sandboxNotice(l.cfg); stop != nil {
+	if note, stop := l.sandboxNotice(); stop != nil {
 		return l, stop
 	} else if note != "" {
 		l.notice(agent.LevelWarning, "sandbox", note)
@@ -1538,9 +1538,6 @@ func (l *live) close(reason string) {
 		waitGroup(&l.bg, 15*time.Second)
 		l.closeMCP()
 		l.lspSrv.close()
-		if l.sandboxProxy != nil {
-			_ = l.sandboxProxy.Close()
-		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		for _, c := range slices.Backward(l.contribs) {
 			if c.c.Close == nil {

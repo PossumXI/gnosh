@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,12 +26,31 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		a = append(a, "--unshare-net")
 	}
 	a = append(a, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc")
+	// The machine's sockets out of sight: a read-only mount does not stop
+	// a connection to one, and systemd's (a job outside, as root with its
+	// private socket), D-Bus's and docker's lie under /run (the sandbox
+	// review). (/var/run is a link to it where it is not a folder.)
+	for _, r := range []string{"/run", "/var/run"} {
+		if isDir, ok := stat(r); ok && isDir && !isLink(r) {
+			a = append(a, "--tmpfs", r)
+		}
+	}
 	if p.Temp != "" && there(p.Temp) {
 		a = append(a, "--bind", p.Temp, "/tmp")
 	}
 	for _, w := range kept(p.Write, there) {
 		a = append(a, "--bind", w, w)
 	}
+	if _, ok := insideTemp(p); ok && p.Relay != "" && there(p.Relay) {
+		// (gnosh may itself be under the real /tmp, out of sight inside.)
+		a = append(a, "--ro-bind", p.Relay, p.Relay)
+	}
+	for _, r := range kept(p.ReadOnly, there) {
+		a = append(a, "--ro-bind", r, r)
+	}
+	// gnosh's own files after the read-only paths, which may hold them
+	// (the session's folder under gnosh's data folder): the shell must
+	// write where it ends up.
 	for _, e := range p.Expose {
 		if e.Path == "" || !there(e.Path) {
 			continue
@@ -40,13 +60,6 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		} else {
 			a = append(a, "--ro-bind", e.Path, e.Path)
 		}
-	}
-	if _, ok := insideTemp(p); ok && p.Relay != "" && there(p.Relay) {
-		// (gnosh may itself be under the real /tmp, out of sight inside.)
-		a = append(a, "--ro-bind", p.Relay, p.Relay)
-	}
-	for _, r := range kept(p.ReadOnly, there) {
-		a = append(a, "--ro-bind", r, r)
 	}
 	denied := kept(p.DenyRead, there)
 	// A denied folder is an empty one, made read-only last: the paths
@@ -69,6 +82,33 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		if slices.ContainsFunc(denied, func(d string) bool { return r != d && under(r, d) }) {
 			a = append(a, "--ro-bind", r, r)
 			opened = append(opened, r)
+		}
+	}
+	// The folders it writes in, and gnosh's own files, inside a denied
+	// path come back as they were: a denyRead of the home folder had taken
+	// the project from it, and the files its shell needs (the sandbox
+	// review).
+	for _, w := range kept(p.Write, there) {
+		if slices.ContainsFunc(denied, func(d string) bool { return under(w, d) }) {
+			a = append(a, "--bind", w, w)
+			opened = append(opened, w)
+		}
+	}
+	for _, e := range p.Expose {
+		if e.Path != "" && there(e.Path) && slices.ContainsFunc(denied, func(d string) bool { return under(e.Path, d) }) {
+			if e.Write {
+				a = append(a, "--bind", e.Path, e.Path)
+			} else {
+				a = append(a, "--ro-bind", e.Path, e.Path)
+			}
+		}
+	}
+	if len(opened) > 0 {
+		// (And the read-only paths inside those, again.)
+		for _, r := range kept(p.ReadOnly, there) {
+			if slices.ContainsFunc(opened, func(o string) bool { return r != o && under(r, o) }) {
+				a = append(a, "--ro-bind", r, r)
+			}
 		}
 	}
 	// A denied path inside one opened again stays denied: the narrower
@@ -102,4 +142,10 @@ func insideTemp(p Policy) (string, bool) {
 		return "", false
 	}
 	return filepath.Join("/tmp", rel), true
+}
+
+// isLink reports whether the path is a symbolic link.
+func isLink(p string) bool {
+	info, err := os.Lstat(p)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }

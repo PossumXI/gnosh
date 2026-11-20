@@ -5215,3 +5215,49 @@ or kept with the reason said (27).
     its deniedDomains do not. The model is told the hosts it may reach;
     /sandbox names them. Not built: Claude Code's tlsTerminate, the
     socket and local-binding switches, its own proxy ports, and SOCKS.
+
+357. **The sandbox, after its review (first part).** A fresh-eyes review
+    of 352-353 (2026-11-20) found ways out, closed so. The engine and the
+    shell tool now take the sandbox from one state worked out once per
+    session (on, it can run, and the session's own temporary folder was
+    made), so neither lets a command go as sandboxed that the other runs
+    outside: a temporary folder that could not be made had left the
+    engine letting commands run without asking and the shell running
+    them outside. The engine reads dangerouslyDisableSandbox as the tool
+    does, failing safe: "true" in quotes, or anything but false, is
+    asking out. The temporary folder is the session's own (a fresh name,
+    removed at the end), not one per person: one repository's commands
+    could leave in the caches another's builds then trust, and a folder
+    another user made first would have stopped the sandbox. On Linux
+    /run (and /var/run where it is a folder) is an empty folder inside:
+    a read-only mount does not stop a connection to a socket, and
+    systemd's (a job outside, as root through its private socket),
+    D-Bus's and docker's lie there. On macOS the profile denies Apple
+    Events to other applications, launchd jobs (job-creation) and Launch
+    Services (open), and the terminals (/dev/tty, /dev/ttys*), which a
+    command has none of its own and another tab's is not its to read or
+    to draw on. bwrap and sandbox-exec are found in /usr/bin and /bin
+    alone, never on the PATH, where a sandboxed command could leave one
+    that makes no sandbox. A local settings file the repository shipped
+    (one gnosh did not write) is the repository's: it cannot turn the
+    person's sandbox off; and the person's autoAllowBashIfSandboxed goes
+    with their own sandbox, not one a repository turned on. A denyRead
+    over a working folder (Claude Code's own example, ~/ with "."
+    opened again) no longer takes the folder from its commands: the
+    folders they write in and gnosh's own files are opened again after
+    the denies, and a narrower deny inside still holds. gnosh's own files
+    (the one the shell writes where it ended) are made writable after the
+    read-only paths, which may hold them. The Read and Edit rules' paths
+    are taken as written: a deny rule's are folded for matching, and the
+    folded path was not there to hide on a case-sensitive disk (a hidden
+    file now reads as "Permission denied"). excludedCommands keeps in the
+    sandbox a git command with --git-dir, --work-tree, --template, -c,
+    -C and the like, and any command with a tab or a character outside
+    plain ASCII; 2>&1 no longer keeps a command in. The person's own
+    commands typed with ! run outside the sandbox, as Claude Code runs
+    them. The model is told the truth: /tmp is the session's own on
+    Linux, $TMPDIR on macOS, and a call asked out of the sandbox is
+    judged as any command is (an allow rule or the mode may let it run).
+    Left for the second part: whole folders for the guarded paths, a
+    guarded path that does not exist yet, and git's other ways to its
+    settings and hooks.

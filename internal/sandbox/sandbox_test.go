@@ -1,8 +1,6 @@
 package sandbox
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -33,8 +31,8 @@ func TestBwrapArgs(t *testing.T) {
 	}
 	got := strings.Join(bwrapArgs("bwrap", p, "/w/sub/", []string{"/bin/bash", "-c", "x"}, fs), " ")
 	want := "bwrap --die-with-parent --unshare-pid --unshare-ipc --unshare-net --ro-bind / / --dev /dev --proc /proc" +
-		" --bind /t /tmp --bind /w /w --bind /x/cwd /x/cwd --ro-bind /x/env.sh /x/env.sh" +
-		" --ro-bind /w/.gnosh /w/.gnosh --ro-bind /w/gnosh.json /w/gnosh.json" +
+		" --bind /t /tmp --bind /w /w" +
+		" --ro-bind /w/.gnosh /w/.gnosh --ro-bind /w/gnosh.json /w/gnosh.json --bind /x/cwd /x/cwd --ro-bind /x/env.sh /x/env.sh" +
 		" --tmpfs /home/u --ro-bind /home/u/proj /home/u/proj" +
 		" --ro-bind /dev/null /home/u/proj/.env --remount-ro /home/u --chdir /w/sub -- /bin/bash -c x"
 	if got != want {
@@ -61,49 +59,26 @@ func TestSeatbeltProfile(t *testing.T) {
 	}
 	got := seatbeltProfile(p)
 	for _, piece := range []string{
-		"(version 1)\n(allow default)\n(deny network*)\n(deny file-write*)\n(allow file-write*\n",
+		"(version 1)\n(allow default)\n", "(deny network*)\n(deny file-write*)\n(allow file-write*\n",
 		`(subpath "/Users/u/proj")`, `(subpath "/Users/u/we\"ird\\dir")`, `(subpath "/private/tmp/gnosh-sandbox-501")`,
 		`(literal "/private/var/x/cwd")`, `(literal "/dev/null")`, `(regex #"^/dev/fd/[0-9]+$")`,
+		"(deny appleevent-send)\n(deny job-creation)\n", `(global-name "com.apple.coreservices.launchservicesd")`,
+		`(deny file-read* file-write* (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))`,
 		"(deny file-write*\n  (subpath \"/Users/u/proj/.gnosh\"))",
-		"(deny file-read*\n  (subpath \"/Users/u\")\n  (subpath \"/Users/u/proj/.env\"))\n(allow file-read*\n  (subpath \"/Users/u/proj\"))\n(deny file-read*\n  (subpath \"/Users/u/proj/.env\"))\n",
+		"(deny file-read*\n  (subpath \"/Users/u\")\n  (subpath \"/Users/u/proj/.env\"))\n(allow file-read*\n  (subpath \"/Users/u/proj\")\n",
+		"(deny file-read*\n  (subpath \"/Users/u/proj/.env\"))\n",
 	} {
 		if !strings.Contains(got, piece) {
 			t.Errorf("the profile has no %q:\n%s", piece, got)
 		}
 	}
-	if strings.Contains(got, "env.sh") {
+	if strings.Contains(got, `(literal "/private/var/x/env.sh")`) {
 		t.Errorf("a file only read was made writable:\n%s", got)
+	}
+	if strings.Index(got, `(literal "/private/var/x/cwd")`) < strings.Index(got, `(subpath "/Users/u/proj/.gnosh")`) {
+		t.Errorf("gnosh's own file is made writable before the read-only paths, which would take it back:\n%s", got)
 	}
 	if strings.Contains(seatbeltProfile(Policy{Network: true}), "network") {
 		t.Error("the network was denied though the policy gives it")
-	}
-}
-
-// The sandbox's temporary folder is the person's own, nobody else's to
-// open, and no link.
-func TestPrivateTemp(t *testing.T) {
-	dir := t.TempDir()
-	p, err := PrivateTemp(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info, err := os.Lstat(p); err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
-		t.Fatalf("the folder: %v, %v", info, err)
-	}
-	if again, err := PrivateTemp(dir); err != nil || again != p {
-		t.Errorf("made again: %q, %v", again, err)
-	}
-	if err := os.Chmod(p, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := PrivateTemp(dir); err == nil {
-		t.Error("a folder others can open was taken")
-	}
-	other := t.TempDir()
-	if err := os.Symlink(t.TempDir(), filepath.Join(other, filepath.Base(p))); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := PrivateTemp(other); err == nil {
-		t.Error("a link was taken for the folder")
 	}
 }

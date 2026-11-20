@@ -58,6 +58,7 @@ func (l *live) slashSandbox(ctx context.Context, c *SlashContext) error {
 func (l *live) sandboxReport() string {
 	sc := l.cfg.Sandbox
 	st := sandbox.Check()
+	state := l.st.sandboxOf(l.cfg)
 	var b strings.Builder
 	switch {
 	case !sc.Enabled:
@@ -66,8 +67,8 @@ func (l *live) sandboxReport() string {
 			fmt.Fprintf(&b, "\nIt could not run here as things are: %s.", st.Why)
 		}
 		return b.String()
-	case !st.OK:
-		fmt.Fprintf(&b, "The sandbox is on (%s) and cannot run here: %s. The shell's commands run outside it, asking as they would without it.", sc.Origin, st.Why)
+	case !state.on:
+		fmt.Fprintf(&b, "The sandbox is on (%s) and cannot run here: %s. The shell's commands run outside it, asking as they would without it.", sc.Origin, state.why)
 		return b.String()
 	}
 	fmt.Fprintf(&b, "The sandbox is on (%s): the shell's commands on this machine run in it, under %s.", sc.Origin, st.Tool)
@@ -77,7 +78,7 @@ func (l *live) sandboxReport() string {
 		b.WriteString("\nMode: regular permissions: each command asks as it would without the sandbox.")
 	}
 	if sc.AllowUnsandboxed {
-		b.WriteString("\nA command that failed because of it may be run again outside it (dangerouslyDisableSandbox), after asking. /sandbox strict takes that away.")
+		b.WriteString("\nA command that failed because of it may be run again outside it (dangerouslyDisableSandbox), judged as any command is. /sandbox strict takes that away.")
 	} else {
 		b.WriteString("\nStrict: the model cannot ask a command out of it. /sandbox loose gives that back.")
 	}

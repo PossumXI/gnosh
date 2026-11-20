@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -50,6 +51,40 @@ func TestSandboxAllows(t *testing.T) {
 		d := call(c.e, c.tool, c.cmd, c.kv...)
 		if d.Behavior != c.want || d.Stage != c.stage {
 			t.Errorf("%s: %s at %s (%s), want %s at %s", c.name, d.Behavior, d.Stage, d.Reason, c.want, c.stage)
+		}
+	}
+}
+
+// The Read and Edit rules' paths, for the sandbox's lists: those written
+// out in full or with a last /**, as written (a deny rule's are folded for
+// matching); not a pattern, not a "!" rule.
+func TestSandboxPaths(t *testing.T) {
+	e := engine(t, ModeDefault, rules{
+		deny:  []string{"Read(./.env)", "Read(~/.ssh/**)", "Read(*.pem)", "Edit(./Build/**)", "Bash(rm *)"},
+		allow: []string{"Edit(//srv/out/**)", "Read(./docs/**)"},
+	})
+	read, write, allow := e.SandboxPaths()
+	if strings.Join(read, " ") != "/proj/.env /home/u/.ssh" || strings.Join(write, " ") != "/proj/Build" || strings.Join(allow, " ") != "/srv/out" {
+		t.Errorf("read %q, write %q, allow %q", read, write, allow)
+	}
+}
+
+// The model's asking out of the sandbox counts however it is written, as
+// the shell tool reads it: "true" in quotes is out too.
+func TestSandboxAskedOutInAnySpelling(t *testing.T) {
+	o := testOptions(ModeDefault, rules{})
+	o.Sandbox = Sandbox{On: true, AutoAllow: true, Outside: func(command string, asked bool) bool { return asked }}
+	e := mustEngine(t, o)
+	for _, v := range []any{true, "true", "TRUE", " true ", 1, "yes"} {
+		in := input("command", "make build", "dangerouslyDisableSandbox", v)
+		if d := e.Decide("Bash", core.ToolCall{Name: "Bash", Input: in}, core.Action{Kind: core.ActionExecute, Command: "make build"}); d.Stage == StageSandbox {
+			t.Errorf("asked out with %#v, and still let run as sandboxed", v)
+		}
+	}
+	for _, v := range []any{false, "false", ""} {
+		in := input("command", "make build", "dangerouslyDisableSandbox", v)
+		if d := e.Decide("Bash", core.ToolCall{Name: "Bash", Input: in}, core.Action{Kind: core.ActionExecute, Command: "make build"}); d.Stage != StageSandbox {
+			t.Errorf("not asked out with %#v, and not let run as sandboxed: %s", v, d.Stage)
 		}
 	}
 }

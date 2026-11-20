@@ -32,6 +32,8 @@ import (
 type startup struct {
 	p   *program
 	inv cli.Invocation
+	// sandbox is the session's sandbox, worked out once (sandbox.go).
+	sandbox sandboxState
 
 	// attended says a person is there to be asked: the session is an
 	// interactive one, and its front end can be typed into.
@@ -470,7 +472,7 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 			o.Layers = append(o.Layers, ly)
 		}
 	}
-	o.Sandbox = sandboxPermission(cfg)
+	o.Sandbox = st.sandboxPermission(cfg)
 	o.BlockReads, o.BlockWrites = cfg.Permissions.BlockReads.V, cfg.Permissions.BlockWrites.V
 	if o.BlockReads || o.BlockWrites {
 		o.OwnReads, o.SettingsFiles = ownReads(cfg), settingsFiles(cfg)

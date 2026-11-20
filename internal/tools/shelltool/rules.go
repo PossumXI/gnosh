@@ -508,9 +508,9 @@ func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
 	if !slices.ContainsFunc(sandboxSigns, func(s string) bool { return strings.Contains(body, s) }) {
 		return ""
 	}
-	said := "it ran in the sandbox, which lets it write only in " + sb.Writes + " and /tmp and " + sb.network()
+	said := "it ran in the sandbox, which lets it write only in " + sb.Writes + " and " + sb.network()
 	if sb.Unsandboxed {
-		return said + ": if that is what stopped it, run it again with " + argNoSandbox + " set to true, and the person is asked"
+		return said + ": if that is what stopped it, run it again with " + argNoSandbox + " set to true (that call is judged as any command is)"
 	}
 	return said + ", and which cannot be left in this session: if that is what stopped it, tell the person"
 }

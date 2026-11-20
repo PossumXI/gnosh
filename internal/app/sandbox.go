@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -22,9 +23,52 @@ import (
 // excludedCommands names it or the model asked out of it, and with
 // autoAllowBashIfSandboxed such a command needs no approval.
 
-// sandboxOn reports whether the sandbox is on and can run here.
-func sandboxOn(cfg *config.Config) bool {
-	return cfg.Sandbox.Enabled && sandbox.Check().OK
+// sandboxState is the sandbox as the session has it, worked out once:
+// on when the settings turn it on, it can run here, and the session's own
+// temporary folder could be made. The permission engine and the shell
+// tool both take it from here, so that neither lets a command go as
+// sandboxed that the other runs outside (the sandbox review: a temporary
+// folder that could not be made had left the engine letting commands run
+// without asking, and the shell running them outside).
+type sandboxState struct {
+	once sync.Once
+	on   bool
+	// why says why not, when the settings turn it on.
+	why string
+	// temp is the session's own temporary folder (made with a name of its
+	// own, the person's alone, removed when the session ends): one per
+	// session, so that one repository's commands cannot leave in the
+	// caches of another's.
+	temp string
+}
+
+// sandboxOf works the session's sandbox out, the first time it is asked.
+func (st *startup) sandboxOf(cfg *config.Config) *sandboxState {
+	s := &st.sandbox
+	s.once.Do(func() {
+		if !cfg.Sandbox.Enabled {
+			return
+		}
+		if c := sandbox.Check(); !c.OK {
+			s.why = c.Why
+			return
+		}
+		temp, err := os.MkdirTemp("", "gnosh-sandbox-")
+		if err != nil {
+			s.why = "its temporary folder could not be made (" + err.Error() + ")"
+			return
+		}
+		s.on, s.temp = true, temp
+	})
+	return s
+}
+
+// sandboxPermission is what the permission engine is told of the sandbox.
+func (st *startup) sandboxPermission(cfg *config.Config) permission.Sandbox {
+	if !st.sandboxOf(cfg).on {
+		return permission.Sandbox{}
+	}
+	return permission.Sandbox{On: true, AutoAllow: cfg.Sandbox.AutoAllow, Outside: sandboxOutside(cfg.Sandbox)}
 }
 
 // sandboxOutside is the test, shared by the shell tool and the engine, of
@@ -36,32 +80,25 @@ func sandboxOutside(sc config.Sandbox) func(command string, asked bool) bool {
 	}
 }
 
-// sandboxPermission is what the permission engine is told of the sandbox.
-func sandboxPermission(cfg *config.Config) permission.Sandbox {
-	if !sandboxOn(cfg) {
-		return permission.Sandbox{}
-	}
-	return permission.Sandbox{On: true, AutoAllow: cfg.Sandbox.AutoAllow, Outside: sandboxOutside(cfg.Sandbox)}
-}
-
 // shellSandbox is the shell tool's sandbox, or nil when it is off or
 // cannot run here (the person was told at startup, sandboxNotice).
 func (l *live) shellSandbox() *shelltool.Sandbox {
 	sc := l.cfg.Sandbox
-	if !sandboxOn(l.cfg) {
+	state := l.st.sandboxOf(l.cfg)
+	if !state.on {
 		return nil
 	}
-	temp, err := sandbox.PrivateTemp(os.TempDir())
-	if err != nil {
-		l.notice(agent.LevelWarning, "sandbox", "The sandbox has no temporary folder ("+err.Error()+"), so commands run outside it, asking as they would without it.")
-		return nil
-	}
+	temp := state.temp
 	hosts := listValues(sc.AllowedDomains)
 	if len(hosts) > 0 {
 		if err := l.startSandboxProxy(temp); err != nil {
 			l.notice(agent.LevelWarning, "sandbox", "The sandbox's proxy could not start ("+err.Error()+"), so sandboxed commands reach no host on the network.")
 			hosts = nil
 		}
+	}
+	writes := "the session's folders and /tmp (this session's own)"
+	if runtime.GOOS != "linux" {
+		writes = "the session's folders and $TMPDIR (this session's own)"
 	}
 	return &shelltool.Sandbox{
 		Hosts: hosts,
@@ -72,7 +109,7 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 		},
 		Outside:     sandboxOutside(sc),
 		Unsandboxed: sc.AllowUnsandboxed,
-		Writes:      "the session's folders",
+		Writes:      writes,
 	}
 }
 
@@ -101,6 +138,14 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 	}
 	p.ReadOnly = append(append(p.ReadOnly, settingsFiles(l.cfg)...), listValues(sc.DenyWrite)...)
 	p.DenyRead, p.AllowRead = listValues(sc.DenyRead), listValues(sc.AllowRead)
+	if l.engine != nil {
+		// The Read and Edit rules' paths, as Claude Code adds them: a
+		// Read(./.env) deny rule keeps .env from a script's cat too.
+		read, write, allow := l.engine.SandboxPaths()
+		p.DenyRead = append(p.DenyRead, read...)
+		p.ReadOnly = append(p.ReadOnly, write...)
+		p.Write = append(p.Write, allow...)
+	}
 	return p
 }
 
@@ -128,8 +173,19 @@ var sandboxGuarded = []string{
 // the middle any text.
 func excludedCall(entries []config.ListItem, command string) bool {
 	c := strings.TrimSpace(command)
-	if c == "" || len(entries) == 0 || strings.ContainsAny(c, ";&|<>()$`{}\n\\") {
+	// (A redirection that only joins one stream to another is no file.)
+	for _, dup := range []string{" 2>&1", " 1>&2", " >&2"} {
+		c = strings.TrimSuffix(c, dup)
+	}
+	if c == "" || len(entries) == 0 || strings.ContainsAny(c, ";&|<>()$`{}\n\\\t\r\v\f") {
 		return false
+	}
+	for _, r := range c {
+		if r > 127 {
+			// (A space of another kind, or a letter that looks like one
+			// of the entry's: plain text alone is matched.)
+			return false
+		}
 	}
 	words := strings.Fields(c)
 	switch words[0] {
@@ -137,10 +193,18 @@ func excludedCall(entries []config.ListItem, command string) bool {
 		return false
 	case "git":
 		// A clone or a new work tree writes a whole tree of files where its
-		// path points: one outside the folder stays in the sandbox.
+		// path points: one outside the folder stays in the sandbox; and
+		// the options that point git at another repository, another
+		// template (whose hooks would run outside) or another program stay
+		// in too (the sandbox review).
 		for _, w := range words[1:] {
 			if strings.HasPrefix(w, "/") || strings.HasPrefix(w, "~") || strings.Contains(w, "..") {
 				return false
+			}
+			for _, opt := range []string{"--git-dir", "--work-tree", "--template", "--exec-path", "--upload-pack", "--receive-pack", "--config", "-c", "-C", "--separate-git-dir", "--reference"} {
+				if w == opt || strings.HasPrefix(w, opt+"=") || len(opt) == 2 && strings.HasPrefix(w, opt) {
+					return false
+				}
 			}
 		}
 	}
@@ -188,18 +252,29 @@ func ruleContentFits(pattern, command string) bool {
 // sandboxNotice is what the person is told at startup of a sandbox the
 // settings turn on that cannot run here, and the error that stops gnosh
 // when failIfUnavailable says to.
-func sandboxNotice(cfg *config.Config) (notice string, stop error) {
-	if !cfg.Sandbox.Enabled {
-		return "", nil
-	}
-	st := sandbox.Check()
-	if st.OK {
+func (l *live) sandboxNotice() (notice string, stop error) {
+	cfg := l.cfg
+	state := l.st.sandboxOf(cfg)
+	if !cfg.Sandbox.Enabled || state.on {
 		return "", nil
 	}
 	if cfg.Sandbox.FailIfUnavailable {
-		return "", &sandboxError{why: st.Why, origin: cfg.Sandbox.Origin.String()}
+		return "", &sandboxError{why: state.why, origin: cfg.Sandbox.Origin.String()}
 	}
-	return "The sandbox is on (" + cfg.Sandbox.Origin.String() + ") and cannot run here: " + st.Why + ". Commands run outside it, asking as they would without it.", nil
+	return "The sandbox is on (" + cfg.Sandbox.Origin.String() + ") and cannot run here: " + state.why + ". Commands run outside it, asking as they would without it.", nil
+}
+
+// closeSandbox stops the session's proxy and removes its temporary folder,
+// once its commands are gone.
+func (l *live) closeSandbox() {
+	if l.sandboxProxy != nil {
+		_ = l.sandboxProxy.Close()
+	}
+	if l.st != nil {
+		if t := l.st.sandbox.temp; t != "" {
+			_ = os.RemoveAll(t)
+		}
+	}
 }
 
 // sandboxError stops gnosh where the sandbox must run and cannot.

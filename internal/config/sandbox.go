@@ -54,9 +54,12 @@ type sandboxBuild struct {
 	// projectOn are the project's files that turn it on; person, the
 	// person's own that turn it on or off, in the order they apply (a
 	// later file wins).
-	projectOn                                  []Origin
-	person                                     []sandboxToggle
-	failIfOff, noUnsandboxed, autoOn, autoOff  []Origin
+	projectOn                                 []Origin
+	person                                    []sandboxToggle
+	failIfOff, noUnsandboxed, autoOn, autoOff []Origin
+	// autoOnTheirs are a repository's files that turn auto-allow on: in
+	// force only with the sandbox the repository's own files turned on.
+	autoOnTheirs                               []Origin
 	excluded, allowWrite, denyWrite, allowRead allowList
 	denyRead, allowedDomains, deniedDomains    allowList
 }
@@ -90,7 +93,9 @@ func (s *source) sandbox(f jfield) {
 		s.errorf(f.line, "\"sandbox\" is an object of the sandbox's settings ({\"enabled\": true, ...}), and here it is %s.", f.val.kind.word())
 		return
 	}
-	theirs := s.scope == "project"
+	// (A local file the repository shipped is the repository's too: the
+	// sandbox review found its "enabled": false taken for the person's.)
+	theirs := s.theirs || s.scope == "project"
 	for _, m := range s.unique(f.val, "sandbox.") {
 		o := s.at(m.line)
 		switch m.key {
@@ -141,6 +146,8 @@ func (s *source) sandboxSwitch(key string, v, theirs bool, o Origin) {
 		put(KindRestriction, func(b *sandboxBuild) *[]Origin { return &b.failIfOff })
 	case key == "allowUnsandboxedCommands" && !v:
 		put(KindRestriction, func(b *sandboxBuild) *[]Origin { return &b.noUnsandboxed })
+	case key == "autoAllowBashIfSandboxed" && v && theirs:
+		put(KindAllowRule, func(b *sandboxBuild) *[]Origin { return &b.autoOnTheirs })
 	case key == "autoAllowBashIfSandboxed" && v:
 		put(KindAllowRule, func(b *sandboxBuild) *[]Origin { return &b.autoOn })
 	case key == "autoAllowBashIfSandboxed":
@@ -244,6 +251,7 @@ func (b *sandboxBuild) sweep(ok func(string) bool, from func(Origin) bool, note 
 	drop(KindRestriction, "sandbox.allowUnsandboxedCommands", &b.noUnsandboxed)
 	drop(KindRestriction, "sandbox.autoAllowBashIfSandboxed", &b.autoOff)
 	drop(KindAllowRule, "sandbox.autoAllowBashIfSandboxed", &b.autoOn)
+	drop(KindAllowRule, "sandbox.autoAllowBashIfSandboxed", &b.autoOnTheirs)
 	lists := []struct {
 		kind, what string
 		l          *allowList
@@ -267,15 +275,26 @@ func (b *sandboxBuild) sweep(ok func(string) bool, from func(Origin) bool, note 
 // or the last of the person's own files to say turned it on.
 func (b *sandboxBuild) finish() Sandbox {
 	var out Sandbox
+	personOn := false
 	if n := len(b.person); n > 0 && b.person[n-1].on {
-		out.Enabled, out.Origin = true, b.person[n-1].o
+		out.Enabled, out.Origin, personOn = true, b.person[n-1].o, true
 	}
 	if n := len(b.projectOn); n > 0 && !out.Enabled {
 		out.Enabled, out.Origin = true, b.projectOn[n-1]
 	}
 	out.FailIfUnavailable = len(b.failIfOff) > 0
 	out.AllowUnsandboxed = len(b.noUnsandboxed) == 0
-	out.AutoAllow = len(b.autoOn) > 0 && len(b.autoOff) == 0
+	// Running without asking is the person's when the sandbox is theirs;
+	// with a sandbox only a repository turned on it is the repository's
+	// (trusted) word alone: the person's auto-allow was given for their
+	// own sandbox (the sandbox review).
+	switch {
+	case len(b.autoOff) > 0:
+	case personOn:
+		out.AutoAllow = len(b.autoOn) > 0 || len(b.autoOnTheirs) > 0
+	default:
+		out.AutoAllow = len(b.autoOnTheirs) > 0
+	}
 	out.Excluded = b.excluded.items
 	out.AllowWrite, out.DenyWrite = b.allowWrite.items, b.denyWrite.items
 	out.AllowRead, out.DenyRead = b.allowRead.items, b.denyRead.items

@@ -54,6 +54,11 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	if err != nil {
 		return core.ErrorResult(err.Error()), nil
 	}
+	if t.person {
+		// The person's own command, typed with !, runs as they typed it,
+		// outside the sandbox, as Claude Code runs it.
+		a.sandboxed = false
+	}
 	if env == nil || !filepath.IsAbs(env.Cwd) {
 		return core.ToolResult{}, errors.New("shelltool: the tool was given no working directory to run the command in")
 	}

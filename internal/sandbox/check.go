@@ -56,12 +56,12 @@ func try(argv []string) string {
 	return ""
 }
 
-// lookFor finds a program on the PATH or in the system's own folders.
+// lookFor finds a program in the system's own folders, never on the PATH:
+// a folder there a sandboxed command can write (a virtualenv's, a
+// project's node_modules/.bin) could hold a program of that name that
+// makes no sandbox at all (the sandbox review).
 func lookFor(name string) string {
-	if p, err := exec.LookPath(name); err == nil {
-		return p
-	}
-	for _, dir := range []string{"/usr/bin", "/bin", "/usr/local/bin"} {
+	for _, dir := range []string{"/usr/bin", "/bin"} {
 		p := filepath.Join(dir, name)
 		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
 			return p
