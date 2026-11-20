@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
+	"github.com/gnosh-ai/gnosh/internal/sandbox"
 )
 
 // TestMain lets the test binary play a language server (fakeLSP) when a
@@ -21,6 +22,11 @@ func TestMain(m *testing.M) {
 	if os.Getenv("APPTEST_FAKE_LSP") == "1" {
 		fakeLSP(os.Stdin, os.Stdout)
 		os.Exit(0)
+	}
+	if len(os.Args) > 1 && os.Args[1] == sandbox.RelayWord {
+		// (The sandbox's relay is the program itself, as gnosh's main has
+		// it: here the test binary.)
+		os.Exit(sandbox.RelayMain(os.Args[2:]))
 	}
 	os.Exit(m.Run())
 }

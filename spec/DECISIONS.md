@@ -5180,3 +5180,38 @@ or kept with the reason said (27).
     session's next start (/restart): the shell tool and the permission
     engine take the sandbox as the session starts. It works in a gnosh -p
     run too.
+
+356. **The sandbox's network: allowed hosts through gnosh's proxy.**
+    Claude Code's sandbox.network.allowedDomains and deniedDomains, read
+    as its settings reference has them (a name, *.name for the names
+    below it and not itself, an address with IPv6 in brackets, each with
+    :port for that port alone; a denied entry wins). With hosts allowed,
+    the session starts a proxy outside the sandbox (internal/sandbox
+    proxy.go): CONNECT for HTTPS and anything else over TCP, plain HTTP
+    for http:// addresses, no redirect followed, and any other host
+    refused with a 403 whose body says why and how to allow it, which is
+    what the model reads. A host whose every address is this machine's
+    own or its network's (a name that leads to 127.0.0.1, a cloud's
+    metadata address) is refused unless it is named as an address or as
+    localhost: an allowed name of the internet's may not become a way to
+    the machine's own servers. The proxy dials the address it checked.
+    A sandboxed command is told the proxy in HTTP_PROXY and HTTPS_PROXY
+    (both spellings) with NO_PROXY empty, since inside the sandbox even
+    the loopback is its own. On Linux the sandbox keeps its own network,
+    and the proxy listens on a socket in the sandbox's temporary folder,
+    its /tmp; inside, gnosh itself (the same program, with the first word
+    sandbox-relay, dispatched before anything else in main as
+    gnovm-worker is) listens on 127.0.0.1:3128 and carries each
+    connection to that socket, then runs the command and returns its
+    status, so no socat is needed, where Claude Code needs it; the
+    program is mounted read-only in the sandbox, which matters when it
+    lies under the real /tmp. On macOS the proxy listens on this
+    machine's loopback, and the Seatbelt profile lets the command reach
+    that one port and nothing else (checked on macOS 27 by hand). A host
+    not in the lists is refused: Claude Code asks the person about a new
+    host, by mode, and gnosh does not yet; its strictAllowlist is taken
+    and changes nothing. A repository's allowedDomains waits for the
+    folder's trust (the address kind: sending work off this computer);
+    its deniedDomains do not. The model is told the hosts it may reach;
+    /sandbox names them. Not built: Claude Code's tlsTerminate, the
+    socket and local-binding switches, its own proxy ports, and SOCKS.

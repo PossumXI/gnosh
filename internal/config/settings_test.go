@@ -631,13 +631,27 @@ func TestSettingsSandbox(t *testing.T) {
 	if sb := mustLoad(t, inputs(newFS())).Sandbox; sb.Enabled || !sb.AllowUnsandboxed {
 		t.Errorf("nothing said: %+v", sb)
 	}
+	// The network's lists: a repository's allowed hosts wait for trust,
+	// its denied ones do not.
+	net := newFS().put(userJSON, `{"sandbox": {"network": {"allowedDomains": ["github.com", "*.npmjs.org"], "strictAllowlist": true}}}`).
+		put(projJSON, `{"sandbox": {"network": {"allowedDomains": ["evil.example"], "deniedDomains": ["bad.npmjs.org"]}}}`)
+	in = inputs(net)
+	in.Trusted = false
+	if sb := mustLoad(t, in).Sandbox; values(sb.AllowedDomains) != "github.com *.npmjs.org" || values(sb.DeniedDomains) != "bad.npmjs.org" {
+		t.Errorf("untrusted: allowed %q, denied %q", values(sb.AllowedDomains), values(sb.DeniedDomains))
+	}
+	if sb := mustLoad(t, inputs(net)).Sandbox; values(sb.AllowedDomains) != "github.com *.npmjs.org evil.example" {
+		t.Errorf("trusted: allowed %q", values(sb.AllowedDomains))
+	}
 
 	for bad, says := range map[string]string{
-		`{"sandbox": {"network": {"allowedDomains": ["x.com"]}}}`: "a setting Claude Code has and gnosh has not built. A sandboxed command reaches no network",
-		`{"sandbox": {"enabled": "yes"}}`:                         `"sandbox.enabled" is true or false`,
-		`{"sandbox": {"bogus": 1}}`:                               "not a key gnosh reads under \"sandbox\"",
-		`{"sandbox": {"filesystem": {"allowWrite": "/x"}}}`:       "is a list of paths",
-		`{"sandbox": true}`:                                       "\"sandbox\" is an object",
+		`{"sandbox": {"credentials": {}}}`:                      "a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"network": {"tlsTerminate": {}}}}`:        "\"sandbox.network.tlsTerminate\" is a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"network": {"allowedDomains": "x.com"}}}`: "is a list of hosts",
+		`{"sandbox": {"enabled": "yes"}}`:                       `"sandbox.enabled" is true or false`,
+		`{"sandbox": {"bogus": 1}}`:                             "not a key gnosh reads under \"sandbox\"",
+		`{"sandbox": {"filesystem": {"allowWrite": "/x"}}}`:     "is a list of paths",
+		`{"sandbox": true}`:                                     "\"sandbox\" is an object",
 	} {
 		if _, problems := load(t, withConfig(bad)); !strings.Contains(showProblems(problems), says) {
 			t.Errorf("%s: %s", bad, showProblems(problems))

@@ -26,6 +26,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/gnovm"
 	"github.com/gnosh-ai/gnosh/internal/relay"
+	"github.com/gnosh-ai/gnosh/internal/sandbox"
 	"github.com/gnosh-ai/gnosh/internal/ui"
 )
 
@@ -37,6 +38,11 @@ func main() {
 	// touched by anything a user's settings could change.
 	if len(os.Args) > 1 && os.Args[1] == "gnovm-worker" {
 		os.Exit(gnovm.WorkerMain())
+	}
+	if len(os.Args) > 1 && os.Args[1] == sandbox.RelayWord {
+		// The same program again, inside the sandbox, as the way out to
+		// the sandbox's proxy (internal/sandbox): nothing else is read.
+		os.Exit(sandbox.RelayMain(os.Args[2:]))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "ssh" && !sshHelp(os.Args[2:]) {
 		// gnosh ssh: every word after ssh is ssh's, so nothing else is

@@ -28,6 +28,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/jsonschema"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/sandbox"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 	"github.com/gnosh-ai/gnosh/internal/trust"
@@ -45,6 +46,11 @@ type live struct {
 
 	// lspSrv are the session's language servers (lsp.go).
 	lspSrv *lspServers
+	// sandboxProxy is the sandbox's way out to the hosts the settings
+	// allow, and sandboxNet what a sandboxed command is told of it
+	// (sandbox.go); nil and empty when there is none.
+	sandboxProxy *sandbox.Proxy
+	sandboxNet   struct{ proxy, relay string }
 
 	// agentsSeen is when the person last looked at the runs in the
 	// background from the session (its start, or the agent view opened
@@ -1532,6 +1538,9 @@ func (l *live) close(reason string) {
 		waitGroup(&l.bg, 15*time.Second)
 		l.closeMCP()
 		l.lspSrv.close()
+		if l.sandboxProxy != nil {
+			_ = l.sandboxProxy.Close()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		for _, c := range slices.Backward(l.contribs) {
 			if c.c.Close == nil {

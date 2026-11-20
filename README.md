@@ -97,8 +97,11 @@ Built:
   (`dangerouslyDisableSandbox`), and `excludedCommands`,
   `allowUnsandboxedCommands`, `failIfUnavailable` and
   `filesystem.allowWrite`/`denyWrite`/`allowRead`/`denyRead` are read as
-  Claude Code's. Not built yet: `sandbox.network` (no domain is let
-  through) and `credentials`.
+  Claude Code's; `network.allowedDomains` (and `deniedDomains`) let a
+  sandboxed command reach those hosts through gnosh's own proxy, and no
+  other (no socat needed: gnosh relays itself). `/sandbox` says how it
+  stands and chooses its mode. Not built yet: `credentials`, and asking
+  about a new host (it is refused).
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,

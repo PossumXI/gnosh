@@ -43,6 +43,12 @@ type Policy struct {
 	// Network lets it reach the network. Without it there is none, but
 	// for the loopback of its own (Linux) where nothing listens.
 	Network bool
+	// Proxy is the sandbox's way out to the hosts the settings allow
+	// (proxy.go), when there is one: on Linux the proxy's socket, which
+	// must be in Temp, reached through Relay (gnosh itself, run inside the
+	// sandbox: relay.go); on macOS the proxy's address on this machine
+	// ("localhost:port"), the one Seatbelt lets the command reach.
+	Proxy, Relay string
 }
 
 // Exposed is a file of gnosh's own a sandboxed command reaches.
@@ -60,7 +66,16 @@ var ErrUnsupported = errors.New("gnosh has no sandbox for this system: it sandbo
 // (read-only to it) cannot hold.
 func Env(p Policy) []string {
 	tmp := sandboxTmp(p)
-	return []string{"TMPDIR=" + tmp, "XDG_CACHE_HOME=" + filepath.Join(tmp, ".cache")}
+	env := []string{"TMPDIR=" + tmp, "XDG_CACHE_HOME=" + filepath.Join(tmp, ".cache")}
+	if u := proxyURL(p); u != "" {
+		// Every request through the proxy, the sandbox's own loopback's
+		// too (there is nothing on it but the relay).
+		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+			env = append(env, name+"="+u)
+		}
+		env = append(env, "NO_PROXY=", "no_proxy=")
+	}
+	return env
 }
 
 // PrivateTemp makes, or checks, the person's own temporary folder for

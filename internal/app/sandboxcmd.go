@@ -102,7 +102,15 @@ func (l *live) sandboxReport() string {
 	if len(sc.Excluded) > 0 {
 		fmt.Fprintf(&b, "\nRun outside it (excludedCommands): %s.", strings.Join(listValues(sc.Excluded), ", "))
 	}
-	b.WriteString("\nNetwork: none. (sandbox.network, Claude Code's way of letting domains through, is not built.)")
+	if hosts := listValues(sc.AllowedDomains); len(hosts) > 0 {
+		fmt.Fprintf(&b, "\nNetwork: only %s, through gnosh's proxy", strings.Join(hosts, ", "))
+		if denied := listValues(sc.DeniedDomains); len(denied) > 0 {
+			fmt.Fprintf(&b, ", never %s", strings.Join(denied, ", "))
+		}
+		b.WriteString("; any other host is refused (sandbox.network.allowedDomains).")
+	} else {
+		b.WriteString("\nNetwork: none. sandbox.network.allowedDomains lets hosts through, by gnosh's proxy.")
+	}
 	return b.String()
 }
 

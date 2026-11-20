@@ -1,10 +1,13 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/config"
@@ -53,7 +56,15 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 		l.notice(agent.LevelWarning, "sandbox", "The sandbox has no temporary folder ("+err.Error()+"), so commands run outside it, asking as they would without it.")
 		return nil
 	}
+	hosts := listValues(sc.AllowedDomains)
+	if len(hosts) > 0 {
+		if err := l.startSandboxProxy(temp); err != nil {
+			l.notice(agent.LevelWarning, "sandbox", "The sandbox's proxy could not start ("+err.Error()+"), so sandboxed commands reach no host on the network.")
+			hosts = nil
+		}
+	}
 	return &shelltool.Sandbox{
+		Hosts: hosts,
 		Wrap: func(dir string, roots, argv []string, expose []sandbox.Exposed) ([]string, []string, error) {
 			p := l.sandboxPolicy(roots, temp, expose)
 			out, err := sandbox.Wrap(p, dir, argv)
@@ -73,7 +84,7 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 // settings deny.
 func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Exposed) sandbox.Policy {
 	sc := l.cfg.Sandbox
-	p := sandbox.Policy{Temp: temp, Expose: expose}
+	p := sandbox.Policy{Temp: temp, Expose: expose, Proxy: l.sandboxNet.proxy, Relay: l.sandboxNet.relay}
 	p.Write = append(append(p.Write, roots...), listValues(sc.AllowWrite)...)
 	for _, root := range roots {
 		for _, name := range sandboxGuarded {
@@ -196,4 +207,32 @@ type sandboxError struct{ why, origin string }
 
 func (e *sandboxError) Error() string {
 	return "the sandbox is on (" + e.origin + "), with failIfUnavailable, and cannot run here: " + e.why
+}
+
+// startSandboxProxy starts the sandbox's proxy for the session: on Linux
+// at a socket in the sandbox's temporary folder (its /tmp), reached
+// through gnosh itself run inside as the relay; on macOS on this machine's
+// loopback, the one address Seatbelt lets a sandboxed command reach.
+func (l *live) startSandboxProxy(temp string) error {
+	sc := l.cfg.Sandbox
+	d := sandbox.Domains{Allowed: listValues(sc.AllowedDomains), Denied: listValues(sc.DeniedDomains)}
+	network, address := "tcp", "127.0.0.1:0"
+	relay := ""
+	if runtime.GOOS == "linux" {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		network, address, relay = "unix", filepath.Join(temp, fmt.Sprintf("proxy-%d-%d.sock", os.Getpid(), time.Now().UnixNano()%1e9)), exe
+	}
+	p, err := sandbox.ListenProxy(network, address, d)
+	if err != nil {
+		return err
+	}
+	p.Told = func(host, why string) {
+		l.flog.logf("sandbox", "a sandboxed command was not let reach %s: %s", host, why)
+	}
+	l.sandboxProxy = p
+	l.sandboxNet.proxy, l.sandboxNet.relay = p.Addr().String(), relay
+	return nil
 }

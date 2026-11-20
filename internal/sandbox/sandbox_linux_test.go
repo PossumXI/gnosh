@@ -2,6 +2,8 @@ package sandbox
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,5 +91,63 @@ func TestBubblewrapForReal(t *testing.T) {
 		if out, _ := exec.Command(bash, "-c", probe).CombinedOutput(); strings.TrimSpace(string(out)) != "reached" {
 			t.Errorf("the listener is not reachable even outside the sandbox: %s", out)
 		}
+	}
+}
+
+// TestMain runs the test binary as the relay when bubblewrap starts it so,
+// as gnosh's own main does.
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == RelayWord {
+		os.Exit(RelayMain(os.Args[2:]))
+	}
+	os.Exit(m.Run())
+}
+
+// With a proxy, a sandboxed command reaches an allowed host through it
+// (the relay, gnosh itself, carrying the sandbox's own loopback to the
+// proxy's socket), and no other: the proxy says why. Skipped where
+// bubblewrap or curl cannot run.
+func TestSandboxReachesAllowedHostsThroughTheProxy(t *testing.T) {
+	if st := Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	curl, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("no curl")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("reached")) }))
+	defer srv.Close()
+	temp, err := PrivateTemp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(temp, "proxy-test.sock")
+	px, err := ListenProxy("unix", sock, Domains{Allowed: []string{"127.0.0.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer px.Close()
+	work := t.TempDir()
+	p := Policy{Write: []string{work}, Temp: temp, Proxy: sock, Relay: exe}
+	fetch := func(url string) string {
+		t.Helper()
+		argv, err := Wrap(p, work, []string{curl, "-s", "-m", "10", url})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd.Env = append(os.Environ(), Env(p)...)
+		out, _ := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	if got := fetch(srv.URL); got != "reached" {
+		t.Errorf("an allowed host through the proxy: %q", got)
+	}
+	if got := fetch("http://elsewhere.example/"); !strings.Contains(got, "not in sandbox.network.allowedDomains") {
+		t.Errorf("a host not allowed: %q", got)
 	}
 }

@@ -40,6 +40,11 @@ type Sandbox struct {
 	// write, and paths it may not; AllowRead and DenyRead, the same for
 	// reading. Each is absolute.
 	AllowWrite, DenyWrite, AllowRead, DenyRead []ListItem
+	// AllowedDomains are the hosts a sandboxed command may reach, through
+	// gnosh's proxy, and DeniedDomains those it may not whatever else says
+	// (network.allowedDomains and network.deniedDomains): a name,
+	// *.name, or an address, each with :port for that port alone.
+	AllowedDomains, DeniedDomains []ListItem
 }
 
 // sandboxBuild is the sandbox settings as the builder gathers them: for
@@ -53,7 +58,7 @@ type sandboxBuild struct {
 	person                                     []sandboxToggle
 	failIfOff, noUnsandboxed, autoOn, autoOff  []Origin
 	excluded, allowWrite, denyWrite, allowRead allowList
-	denyRead                                   allowList
+	denyRead, allowedDomains, deniedDomains    allowList
 }
 
 // sandboxToggle is one of the person's files turning the sandbox on or
@@ -71,11 +76,12 @@ var sandboxKeys = []keyDef{
 	{"allowUnsandboxedCommands", "", "false: the model cannot ask for a command to run outside the sandbox", fromClaudeCode},
 	{"excludedCommands", "", "commands that run outside the sandbox, as a Bash(...) rule's content", fromClaudeCode},
 	{"filesystem", "", "allowWrite, denyWrite, allowRead and denyRead: lists of paths", fromClaudeCode},
+	{"network", "", "allowedDomains and deniedDomains: the hosts a sandboxed command may reach through gnosh's proxy, and those it may not", fromClaudeCode},
 }
 
 // sandboxNotBuilt are the keys of Claude Code's "sandbox" gnosh has not
 // built.
-var sandboxNotBuilt = []string{"network", "credentials", "ignoreViolations", "enableWeakerNestedSandbox", "enableWeakerNetworkIsolation",
+var sandboxNotBuilt = []string{"credentials", "ignoreViolations", "enableWeakerNestedSandbox", "enableWeakerNetworkIsolation",
 	"allowAppleEvents", "allowNestedUserNamespaces", "bwrapPath", "socatPath", "ripgrep"}
 
 // sandbox reads the "sandbox" key.
@@ -102,13 +108,11 @@ func (s *source) sandbox(f jfield) {
 			}
 		case "filesystem":
 			s.sandboxFilesystem(m)
+		case "network":
+			s.sandboxNetwork(m)
 		default:
 			if slices.Contains(sandboxNotBuilt, m.key) {
-				why := ""
-				if m.key == "network" {
-					why = " A sandboxed command reaches no network at all; one that needs it runs outside the sandbox, after asking (dangerouslyDisableSandbox)."
-				}
-				s.errorf(m.line, "\"sandbox.%s\" is a setting Claude Code has and gnosh has not built.%s Take it out of this file.", m.key, why)
+				s.errorf(m.line, "\"sandbox.%s\" is a setting Claude Code has and gnosh has not built. Take it out of this file.", m.key)
 				continue
 			}
 			s.errorf(m.line, "%s is not a key gnosh reads under \"sandbox\". The keys are: %s.", showName(m.key), keyNames(sandboxKeys))
@@ -249,6 +253,8 @@ func (b *sandboxBuild) sweep(ok func(string) bool, from func(Origin) bool, note 
 		{KindAddDir, "sandbox.filesystem.allowRead", &b.allowRead},
 		{KindRestriction, "sandbox.filesystem.denyWrite", &b.denyWrite},
 		{KindRestriction, "sandbox.filesystem.denyRead", &b.denyRead},
+		{KindAddress, "sandbox.network.allowedDomains", &b.allowedDomains},
+		{KindRestriction, "sandbox.network.deniedDomains", &b.deniedDomains},
 	}
 	for _, l := range lists {
 		if !ok(l.kind) && l.l.drop(from) {
@@ -273,5 +279,42 @@ func (b *sandboxBuild) finish() Sandbox {
 	out.Excluded = b.excluded.items
 	out.AllowWrite, out.DenyWrite = b.allowWrite.items, b.denyWrite.items
 	out.AllowRead, out.DenyRead = b.allowRead.items, b.denyRead.items
+	out.AllowedDomains, out.DeniedDomains = b.allowedDomains.items, b.deniedDomains.items
 	return out
+}
+
+// sandboxNetwork reads "sandbox.network": the hosts a sandboxed command
+// may reach through gnosh's proxy, and those it may not. A host outside
+// the lists is refused: gnosh asks nobody about a new host, as Claude
+// Code's strictAllowlist has it, which is taken and changes nothing.
+func (s *source) sandboxNetwork(f jfield) {
+	if f.val.kind != jObject {
+		s.errorf(f.line, "\"sandbox.network\" is an object (allowedDomains, deniedDomains), and here it is %s.", f.val.kind.word())
+		return
+	}
+	for _, m := range s.unique(f.val, "sandbox.network.") {
+		o := s.at(m.line)
+		switch m.key {
+		case "allowedDomains", "deniedDomains":
+			m.key = "network." + m.key
+			items, ok := s.sandboxList(m, "hosts: a name, *.name for the names below it, or an address, each with :port for that port alone")
+			if !ok || len(items) == 0 {
+				continue
+			}
+			kind, list := KindAddress, func(b *builder) *allowList { return &b.sandbox.allowedDomains }
+			if m.key == "network.deniedDomains" {
+				kind, list = KindRestriction, func(b *builder) *allowList { return &b.sandbox.deniedDomains }
+			}
+			s.add(op{kind: kind, text: "sandbox." + m.key + ": " + strings.Join(items, ", "), origin: o, what: "a sandbox setting",
+				apply: func(b *builder) { list(b).add(items, o) }})
+		case "strictAllowlist":
+			if m.val.kind != jBool {
+				s.errorf(m.line, "\"sandbox.network.strictAllowlist\" is true or false, and here it is %s.", m.val.kind.word())
+			}
+		case "allowManagedDomainsOnly", "tlsTerminate", "allowUnixSockets", "allowAllUnixSockets", "allowLocalBinding", "httpProxyPort", "socksProxyPort", "allowMachLookup":
+			s.errorf(m.line, "\"sandbox.network.%s\" is a setting Claude Code has and gnosh has not built. Take it out of this file.", m.key)
+		default:
+			s.errorf(m.line, "%s is not a key gnosh reads under \"sandbox.network\". The keys are allowedDomains, deniedDomains and strictAllowlist.", showName(m.key))
+		}
+	}
 }

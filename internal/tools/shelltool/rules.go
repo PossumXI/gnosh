@@ -493,6 +493,7 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 // write outside the folders it may write in, a name or an address it
 // cannot reach.
 var sandboxSigns = []string{"Read-only file system", "Operation not permitted", "Could not resolve host", "Temporary failure in name resolution",
+	"gnosh's sandbox did not let the command reach", "CONNECT tunnel failed",
 	"Name or service not known", "nodename nor servname provided", "Network is unreachable", "Couldn't connect to server", "Connection refused",
 	"no such host", "dial tcp"}
 
@@ -507,7 +508,7 @@ func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
 	if !slices.ContainsFunc(sandboxSigns, func(s string) bool { return strings.Contains(body, s) }) {
 		return ""
 	}
-	said := "it ran in the sandbox, which lets it write only in " + sb.Writes + " and /tmp and reach no network"
+	said := "it ran in the sandbox, which lets it write only in " + sb.Writes + " and /tmp and " + sb.network()
 	if sb.Unsandboxed {
 		return said + ": if that is what stopped it, run it again with " + argNoSandbox + " set to true, and the person is asked"
 	}

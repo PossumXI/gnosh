@@ -1,7 +1,11 @@
 package app
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -103,4 +107,33 @@ func TestSlashSandbox(t *testing.T) {
 	}
 	r = run(t, w, "-p", "/sandbox maybe")
 	has(t, "a word it does not take", r.out+r.err, "/sandbox takes auto, regular, off, strict or loose")
+}
+
+// With network.allowedDomains, a sandboxed command reaches the hosts
+// named through gnosh's proxy, and no other; the model is told which.
+// Skipped where the sandbox or curl cannot run.
+func TestSandboxedCommandsReachAllowedHosts(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "reached") }))
+	defer srv.Close()
+	w := apptest.NewWorld(t)
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "network": {"allowedDomains": ["127.0.0.1"]}}}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if n == 0 {
+			return &apptest.Reply{Calls: []apptest.Call{
+				{ID: "c1", Name: "Bash", Args: `{"command":"curl -s -m 10 ` + srv.URL + `/x"}`},
+				{ID: "c2", Name: "Bash", Args: `{"command":"curl -s -m 10 http://elsewhere.example/"}`},
+			}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-p", "fetch").wantCode(t, 0)
+	has(t, "an allowed host", toolResult(t, w, 1, "c1"), "reached")
+	has(t, "a host not allowed", toolResult(t, w, 1, "c2"), "not in sandbox.network.allowedDomains")
+	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "reach on the network only 127.0.0.1")
 }

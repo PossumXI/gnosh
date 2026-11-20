@@ -3,6 +3,7 @@ package sandbox
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // bwrapArgs is the bubblewrap command line that runs argv in dir under the
@@ -39,6 +40,10 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		} else {
 			a = append(a, "--ro-bind", e.Path, e.Path)
 		}
+	}
+	if _, ok := insideTemp(p); ok && p.Relay != "" && there(p.Relay) {
+		// (gnosh may itself be under the real /tmp, out of sight inside.)
+		a = append(a, "--ro-bind", p.Relay, p.Relay)
 	}
 	for _, r := range kept(p.ReadOnly, there) {
 		a = append(a, "--ro-bind", r, r)
@@ -77,5 +82,24 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		a = append(a, "--remount-ro", d)
 	}
 	a = append(a, "--chdir", filepath.Clean(dir), "--")
+	if inside, ok := insideTemp(p); ok && p.Relay != "" {
+		// The way out to the proxy: gnosh, run inside, relays the
+		// sandbox's own loopback to the proxy's socket, which is in the
+		// sandbox's /tmp.
+		a = append(a, p.Relay, RelayWord, inside)
+	}
 	return append(a, argv...)
+}
+
+// insideTemp is the proxy's socket as the sandbox sees it: in its /tmp,
+// which is Temp.
+func insideTemp(p Policy) (string, bool) {
+	if p.Proxy == "" || p.Temp == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(p.Temp, p.Proxy)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	return filepath.Join("/tmp", rel), true
 }

@@ -56,7 +56,7 @@ How long it may run:
 	fmt.Fprintf(&b, "\n- Do not keep a process alive by ending the command with &. It stays tied to this call's output and is reported as left running; %s is the way.", argBackground)
 
 	if sb := o.Sandbox; sb != nil {
-		fmt.Fprintf(&b, "\n\nIn the sandbox:\n- Commands on this machine run in a sandbox: they write only in %s and in /tmp (their own, kept from one command to the next), reach no network, and read everything else as usual.", sb.Writes)
+		fmt.Fprintf(&b, "\n\nIn the sandbox:\n- Commands on this machine run in a sandbox: they write only in %s and in /tmp (their own, kept from one command to the next), %s, and read everything else as usual.", sb.Writes, sb.network())
 		if sb.Unsandboxed {
 			fmt.Fprintf(&b, "\n- A command that failed because of the sandbox (\"Read-only file system\" or \"Operation not permitted\" on a write elsewhere, a name that does not resolve, a connection that cannot be made) may be run again outside it with %s set to true. The person is asked first. Do not set it for a command that has not failed that way.", argNoSandbox)
 		} else {

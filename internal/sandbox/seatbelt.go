@@ -17,6 +17,10 @@ func seatbeltProfile(p Policy) string {
 	b.WriteString("(version 1)\n(allow default)\n")
 	if !p.Network {
 		b.WriteString("(deny network*)\n")
+		if p.Proxy != "" {
+			// The one way out: the proxy, on this machine.
+			b.WriteString("(allow network-outbound (remote ip " + sbString(strings.Replace(p.Proxy, "127.0.0.1:", "localhost:", 1)) + "))\n")
+		}
 	}
 	b.WriteString("(deny file-write*)\n(allow file-write*\n")
 	for _, w := range append(append([]string(nil), p.Write...), p.Temp) {
