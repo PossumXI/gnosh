@@ -96,7 +96,7 @@ next:
 const box = `"providers": {"qwen": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:8080"}}, "models": {"qwen/qwen3.8-27b": {"contextWindow": 262144}}, "model": "qwen/qwen3.8-27b"`
 
 func TestDoctorAllWell(t *testing.T) {
-	m := &fakeMachine{}
+	m := &fakeMachine{programs: []string{"pdfinfo", "pdftotext"}}
 	findings := doctor(t, withConfig("{"+box+"}"), m)
 	if !CanRun(findings) {
 		t.Errorf("a good setup can run a turn: %v", findings)
@@ -111,6 +111,7 @@ func TestDoctorAllWell(t *testing.T) {
 	wantFinding(t, findings, "models", Fine, "model: qwen/qwen3.8-27b", "thinking on")
 	wantFinding(t, findings, "models", Fine, "small model: not chosen", "the session's model does the side jobs")
 	wantFinding(t, findings, "tools", Fine, "needs no outside program")
+	wantFinding(t, findings, "tools", Fine, "PDFs are read as text")
 	wantFinding(t, findings, "trust", Fine, "no settings of its own")
 	wantFinding(t, findings, "environment", Fine)
 }
@@ -427,4 +428,10 @@ func showFindings(findings []Finding) string {
 		all = append(all, f.String())
 	}
 	return strings.Join(all, "\n")
+}
+
+// Without poppler a PDF is not read, and doctor says what to install.
+func TestDoctorSaysWhetherPDFsAreRead(t *testing.T) {
+	findings := doctor(t, withConfig("{"+box+"}"), &fakeMachine{programs: []string{"pdftotext"}})
+	wantFinding(t, findings, "tools", Note, "PDFs are not read as text", "poppler-utils")
 }

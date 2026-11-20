@@ -309,6 +309,18 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 	// connected to, as a provider's is, and is sent nothing: an embedding
 	// server holds a model, which nothing of doctor's may disturb.
 	add("tools", Fine, "file search (Glob, Grep) is gnosh's own and needs no outside program.")
+	// Read gives a PDF's text with poppler's two programs, where they are
+	// installed: without them a PDF is not read, which is worth knowing
+	// before a model is asked to read one.
+	if pr.LookPath != nil {
+		_, info := pr.LookPath("pdfinfo")
+		_, text := pr.LookPath("pdftotext")
+		if info == nil && text == nil {
+			add("tools", Fine, "PDFs are read as text: poppler's pdfinfo and pdftotext are installed.")
+		} else {
+			add("tools", Note, "PDFs are not read as text: Read takes it with poppler's pdfinfo and pdftotext, which are not installed (apt install poppler-utils; brew install poppler).")
+		}
+	}
 	for _, s := range []struct {
 		name, down string
 		v          Value[string]

@@ -4780,3 +4780,11 @@ or kept with the reason said (27).
     counted nor shown again, with -o too. A match across two pieces is
     still not found, and ^ and $ still match at a piece's edges, as
     Options.GrepMaxLineBytes says.
+
+333. **gnosh doctor says whether PDFs are read.** Read gives a PDF's text
+    only where poppler's pdfinfo and pdftotext are installed (318), and
+    none of box 1, box 2 or the Mac has them; a model asked to read a PDF
+    there is told to install them only once it has tried. gnosh doctor
+    now says it under tools: "PDFs are read as text" when both are on the
+    PATH, else a note naming the package (apt install poppler-utils; brew
+    install poppler).
