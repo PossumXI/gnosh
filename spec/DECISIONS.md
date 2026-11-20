@@ -4700,3 +4700,23 @@ or kept with the reason said (27).
     pdfinfo's last Pages line counts; the start of a background sub-agent
     added to the wait group after the lock — under it. WebFetch's note for
     a PDF now says to Read the file.
+
+327. **Pictures go into the prompt box: Ctrl+V, and files dragged in.**
+    gnosh sent a picture with a prompt only when the person typed an @
+    mention of its file; Claude Code's Ctrl+V pastes the picture on the
+    clipboard as a chip, and a picture file dragged into the terminal is
+    attached (spec/cc/interactive.md 2.7). Ctrl+V in the prompt box now
+    asks the session for the clipboard's picture: on macOS osascript
+    writes it as PNG to a file of its own, on a Linux desktop wl-paste or
+    xclip hands it out (clipboard.PictureTool, ReadPicture; none over ssh,
+    where the clipboard is the person's own machine's, and the flash says
+    to drag the file in instead); the session keeps it as
+    <session>/pictures/image-N.png and the box gets "@image-N", which the
+    @ mentions read as that file (a resumed session too) and send as the
+    picture, as an @ mention of a picture already did. A bracketed paste
+    that is nothing but the paths of picture files (.png .jpg .jpeg .gif
+    .webp, spaces escaped or quoted, or file:// addresses), as terminals
+    paste dragged files, becomes @ mentions of them, ~ for the home folder
+    and quoted where they hold spaces; a shell line and a search are left
+    alone. The keys list names Ctrl+V. A picture over Read's 5 MiB is
+    still refused, as Read refuses it.

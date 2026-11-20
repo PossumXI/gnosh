@@ -470,6 +470,17 @@ func (s *session) box(ev term.Event, k *term.Key) {
 		case k.IsKey(term.KeyTab, term.ModShift):
 			s.cycleMode()
 			return
+		case k.Is('v', term.ModCtrl) && s.ed.Mode() == editor.ModePrompt:
+			s.pastePicture()
+			return
+		}
+	}
+	if p, ok := ev.(term.Paste); ok && s.ed.Mode() == editor.ModePrompt && !s.ed.Searching() {
+		// Files dragged in: their paths become @ mentions (picture.go).
+		if text, ok := s.picturePaths(p.Text); ok {
+			p.Text = text
+			ev = p
+			s.flash("The picture goes with the prompt.")
 		}
 	}
 	s.ed.SetBusy(s.busy || s.cmdRun != "")
@@ -1256,6 +1267,7 @@ func (s *session) help() {
 		{"Ctrl+T", "hide or show the task list"},
 		{"Ctrl+G", "edit the prompt in your editor (also Ctrl+X Ctrl+E)"},
 		{"Ctrl+S", "put the prompt aside, and bring it back"},
+		{"Ctrl+V", "paste the picture on the clipboard (or drag a picture's file in)"},
 		{"Ctrl+L", "draw the bottom of the screen again"},
 		{"Ctrl+Z", "suspend gnosh; fg brings it back"},
 		{"/config editorMode=vim", "vim's keys in the box: Esc for NORMAL mode, i to type, v to select"},

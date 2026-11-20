@@ -104,6 +104,9 @@ func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.P
 		}
 		path := raw
 		switch {
+		case l.pastedPicture(raw) != "":
+			// A picture pasted into the box (picture.go).
+			path = l.pastedPicture(raw)
 		case path == "~" || strings.HasPrefix(path, "~/"):
 			path = filepath.Join(l.cfg.Paths.Home, path[1:])
 		case !filepath.IsAbs(path):

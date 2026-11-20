@@ -224,6 +224,8 @@
 //	                       comes back into the box with a line that says so (cc 2.6)
 //	?                      in an empty box: write the keys into the scrollback (cc 2.2)
 //	Ctrl+G, Ctrl+X Ctrl+E  edit the box's text in the person's own editor (cc 2.3)
+//	Ctrl+V                 the picture on this machine's clipboard into the box, as @image-N
+//	                       (cc 2.7); a paste of picture files' paths becomes @ mentions of them
 //	Ctrl+X Ctrl+K          twice within three seconds: stop every sub-agent that runs in the
 //	                       background; the background commands go on (cc 3)
 //	every other key        as in the editor: see its table
