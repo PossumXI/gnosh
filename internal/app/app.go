@@ -402,7 +402,7 @@ var built = []string{
 	"session list", "session show", "session last", "session rename",
 	"session --json",
 	"prompt show", "prompt path", "prompt export", "prompt export --force",
-	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",
+	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages", "--include-hook-events",
 	"--reasoning-effort", "--small-model", "--fallback-model",
 	"--permission-mode",
 	"--permission-mode=default", "--permission-mode=plan", "--permission-mode=acceptEdits",

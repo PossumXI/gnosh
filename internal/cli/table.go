@@ -270,6 +270,9 @@ func Default() *Table {
 	partial := t.add(&flag{names: "--include-partial-messages", group: groupPrint, pri: 1, printOnly: true,
 		help: "With --output-format stream-json: also write the replies as they arrive, as the Messages API's streaming events (stream_event lines).",
 		set:  func(i *Invocation, _ flagValue) { i.IncludePartialMessages = true }})
+	hookEvents := t.add(&flag{names: "--include-hook-events", group: groupPrint, pri: 1, printOnly: true,
+		help: "With --output-format stream-json: also write each hook's start and end (system lines hook_started and hook_response); the SessionStart hooks' are written without it.",
+		set:  func(i *Invocation, _ flagValue) { i.IncludeHookEvents = true }})
 	noPersist := t.add(&flag{names: "--no-session-persistence", group: groupPrint, pri: 1, printOnly: true,
 		help: "Keep nothing of the run: its session is not saved, and cannot be resumed.",
 		set:  func(i *Invocation, _ flagValue) { i.NoSessionPersistence = true }})
@@ -285,7 +288,7 @@ func Default() *Table {
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents, asAgent,
 		cwd, worktree, settings, settingSrc, mcpConfig, strictMCP, channels, devChannels, safeMode, bare, noSlash, debug, debugFile, verbose,
-		printMode, output, input, goal, maxTurns, smallModel, partial, replay, schema, prompts, noPersist,
+		printMode, output, input, goal, maxTurns, smallModel, partial, hookEvents, replay, schema, prompts, noPersist,
 		help, version,
 	}
 

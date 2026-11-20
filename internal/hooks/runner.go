@@ -117,6 +117,12 @@ type Options struct {
 	// when it ended, from a goroutine of its own. Nil drops it.
 	Background func(Background)
 
+	// Lifecycle is told as each hook starts and as it ends (Life), from
+	// the goroutine that runs it, for Claude Code's stream-json lines
+	// hook_started and hook_response. It must not block. Nil tells
+	// nothing.
+	Lifecycle func(Life)
+
 	// MCP calls a tool of a connected MCP server for an mcp_tool hook,
 	// and returns the text it answered with, and whether the tool said it
 	// failed. Nil: such a hook could not run.
@@ -468,6 +474,8 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	for i, h := range sel {
 		stdin, env := feed(h)
 		all.Go(func() {
+			id := r.lifeStart(&in)
+			defer func() { r.lifeEnd(id, &in, procs[i]) }()
 			if h.URL != "" {
 				procs[i] = r.post(ctx, h.Hook, stdin, env, timeoutFor(h.Event, h.Timeout))
 				return

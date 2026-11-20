@@ -476,6 +476,10 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	hc, _ := hooksConfig(l.cfg)
 	ho := st.hookOptions(l.cfg)
 	ho.Background = l.backgroundHook
+	if l.inv.Command == cli.CmdPrint && l.inv.OutputFormat == cli.FormatStreamJSON {
+		// Each hook's start and end, for stream-json (HookLifeEvent).
+		ho.Lifecycle = func(life hooks.Life) { l.deliver(&HookLifeEvent{Life: life}) }
+	}
 	ho.MCP = l.mcpHookCall
 	ho.Prompt = l.promptHookAsk
 	ho.Agent = l.agentHookRun

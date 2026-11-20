@@ -5495,3 +5495,17 @@ or kept with the reason said (27).
     as nobody (Python: a Unix socket refused, a pair and an internet
     socket made, every Unix socket let with allowAllUnixSockets; curl
     through the relay with the filter on).
+
+368. **Hook events in stream-json.** Claude Code's `--include-hook-events`
+    (with `--output-format stream-json`): each hook's start and end as
+    system lines `hook_started` {hook_id, hook_name, hook_event} and
+    `hook_response` {…, output, stdout, stderr, exit_code, outcome:
+    success | error | cancelled}, one ID for both; the SessionStart
+    hooks' are written without the flag, as Claude Code writes them (gnosh
+    has no Setup moment). hook_name is the moment and what its matcher was
+    tested against ("PostToolUse:Bash", "SessionStart:startup"). The
+    hooks runner tells Options.Lifecycle from each hook's goroutine, a
+    background hook's end when it is done; the session sends it on as an
+    event only in a stream-json run. `hook_progress` (a long hook's
+    output as it comes) is not written: gnosh reads a hook's output when
+    it ends.

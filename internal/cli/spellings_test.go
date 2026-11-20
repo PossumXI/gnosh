@@ -113,7 +113,7 @@ func (u flagUse) around() (before, args []string) {
 	if u.f.id == idFork {
 		before = append(before, "-C")
 	}
-	if u.f.id == "--include-partial-messages" {
+	if u.f.id == "--include-partial-messages" || u.f.id == "--include-hook-events" {
 		before = append(before, "--output-format", "stream-json")
 	}
 	switch u.f.id {

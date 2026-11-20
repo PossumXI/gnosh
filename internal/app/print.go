@@ -637,6 +637,12 @@ func (f *printer) Event(ev any) {
 	case *CapEvent:
 		f.capped, f.cappedTurn = true, ev.Turn
 		f.stderr("the run has had its %d turns of the model (--max-turns) and stops here.", ev.Turns)
+	case *HookLifeEvent:
+		// As Claude Code: the SessionStart hooks' always, the others'
+		// with --include-hook-events (no hook_progress lines).
+		if f.inv.IncludeHookEvents || ev.Life.Event == hooks.SessionStart {
+			f.line(hookLineOf(f, ev.Life))
+		}
 	case *agent.TurnEndEvent:
 		f.offer(ev.Result)
 	case *agent.PromptReturnedEvent:
@@ -880,6 +886,44 @@ type infoLine struct {
 	SessionID string `json:"session_id"`
 	Content   string `json:"content"`
 	Level     string `json:"level"`
+}
+
+// HookLifeEvent is a hook's start or end, for stream-json's hook_started
+// and hook_response lines.
+type HookLifeEvent struct {
+	Life hooks.Life
+}
+
+// hookLine is a system line of a hook's: hook_started, or hook_response
+// with what it wrote and how it ended.
+type hookLine struct {
+	Type      string  `json:"type"`
+	Subtype   string  `json:"subtype"`
+	UUID      string  `json:"uuid"`
+	SessionID string  `json:"session_id"`
+	HookID    string  `json:"hook_id"`
+	HookName  string  `json:"hook_name"`
+	HookEvent string  `json:"hook_event"`
+	Output    *string `json:"output,omitempty"`
+	Stdout    *string `json:"stdout,omitempty"`
+	Stderr    *string `json:"stderr,omitempty"`
+	ExitCode  *int    `json:"exit_code,omitempty"`
+	Outcome   string  `json:"outcome,omitempty"`
+}
+
+// hookLineOf is the line for a hook's start or end.
+func hookLineOf(f *printer, life hooks.Life) hookLine {
+	f.init()
+	l := hookLine{Type: "system", Subtype: "hook_started", UUID: newUUID(), SessionID: f.sessionID(),
+		HookID: life.ID, HookName: life.Name, HookEvent: string(life.Event)}
+	if life.Ended {
+		out := life.Stdout + life.Stderr
+		l.Subtype, l.Output, l.Stdout, l.Stderr, l.Outcome = "hook_response", &out, &life.Stdout, &life.Stderr, life.Outcome
+		if life.ExitCode >= 0 {
+			l.ExitCode = &life.ExitCode
+		}
+	}
+	return l
 }
 
 type retryLine struct {

@@ -207,6 +207,10 @@ Print mode
       With --output-format stream-json: also write the replies as they arrive,
       as the Messages API's streaming events (stream_event lines). (Not built
       yet.)
+  --include-hook-events
+      With --output-format stream-json: also write each hook's start and end
+      (system lines hook_started and hook_response); the SessionStart hooks'
+      are written without it. (Not built yet.)
   --replay-user-messages
       With --input-format and --output-format stream-json: write each user
       message read back on standard output, as a user line with isReplay. (Not
