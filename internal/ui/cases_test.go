@@ -1507,3 +1507,16 @@ func TestNotesUnderTheCall(t *testing.T) {
 		g.show("a note under an edit")
 	})
 }
+
+// The mode the session changes itself in the middle of a turn (a plan
+// approved) shows at once, not when the turn ends: the screen said plan
+// mode while it asked about an edit after the approval.
+func TestModeChangedByTheSession(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`<Shift+Tab> <Shift+Tab>`).liveHas("plan mode")
+	g.keys(`"plan it" <Enter>`).start()
+	_ = g.c.SetMode("default")
+	g.ev(&app.ModeEvent{Mode: "default"})
+	// (The status line's; the hint Shift+Tab left still names plan mode.)
+	g.liveHas("manual mode ·").liveLacks("plan mode ·")
+}

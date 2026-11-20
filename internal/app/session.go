@@ -1185,6 +1185,7 @@ func (l *live) setMode(m permission.Mode) error {
 	}
 	if now := l.engine.Mode(); now != before {
 		l.flog.logf("permission", "the permission mode is now %s (it was %s)", now, before)
+		l.deliver(&ModeEvent{Mode: string(now)})
 		l.statusLine.poke()
 		told := slices.Clone(l.contribs)
 		l.subMu.Lock()

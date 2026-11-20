@@ -94,6 +94,9 @@ func (s *session) handle(ev any) {
 	case *app.ServerLoadEvent:
 		// What the model server is doing while the reply has not begun.
 		s.load = ev.Text
+	case *app.ModeEvent:
+		// The session changed the mode itself, in the middle of a turn.
+		s.mode = ev.Mode
 	case *agent.ThinkingEvent:
 		s.thinking(ev.Text)
 	case *agent.TextEvent:
