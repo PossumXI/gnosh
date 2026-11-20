@@ -95,6 +95,12 @@ func (l *live) showHooks(in hooks.Input, out hooks.Outcome) {
 	}
 	source := "hook:" + string(in.Event)
 	for _, m := range out.SystemMessages {
+		if in.ToolUseID != "" && slices.ContainsFunc(out.Records, func(r hooks.Record) bool { return strings.Contains(r.String(), m) }) {
+			// (Shown whole with the call, in the hook's own line: as a
+			// warning too it stood above the call, twice over. Seen on the
+			// devbox's screen.)
+			continue
+		}
 		l.notice(agent.LevelWarning, source, m)
 	}
 	for _, w := range out.Warnings {

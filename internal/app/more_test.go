@@ -580,3 +580,30 @@ func TestCleanTitle(t *testing.T) {
 		}
 	}
 }
+
+// A PostToolUse hook's warning is said once: in the hook's own line with
+// the call, where it is whole there; a warning too long for that line is
+// said in full as well (seen on the devbox's screen: the same words above
+// the call and under it).
+func TestToolHookWarningSaidOnce(t *testing.T) {
+	w := apptest.NewWorld(t)
+	long := strings.Repeat("the lint found a long list of things to look at ", 6)
+	short := w.Script(w.Home+"/hooks/short.sh", `echo '{"systemMessage": "lint: 2 warnings"}'`)
+	lng := w.Script(w.Home+"/hooks/long.sh", `echo '{"systemMessage": "`+long+`"}'`)
+	w.Hook("PostToolUse", "Bash", short)
+	w.Hook("PostToolUse", "Bash", lng)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if !strings.Contains(string(r.Body), `"role":"tool"`) {
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"true"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	r := run(t, w, "-y", "-p", "go")
+	r.wantCode(t, 0)
+	if n := strings.Count(r.err, "lint: 2 warnings"); n != 1 {
+		t.Errorf("the short warning was said %d times:\n%s", n, r.err)
+	}
+	if n := strings.Count(r.err, strings.TrimSpace(long)); n != 1 {
+		t.Errorf("the long warning was said whole %d times:\n%s", n, r.err)
+	}
+}
