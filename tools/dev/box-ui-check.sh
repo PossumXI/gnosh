@@ -34,6 +34,7 @@
 #	ssh ai-remote bash -s -- bgfail < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- repo < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- trusttype < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- imports < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -182,6 +183,9 @@
 #   trusttype   "fix the 2 failing tests" typed as the trust question comes
 #               up does not answer it; 1 (No) after a pause, and the words
 #               are in the prompt box (no model)
+#   imports     the project's AGENTS.md brings in ~/shared/notes.md: the
+#               person is asked once whether to load files from outside the
+#               project, 1 (Yes) loads it, and the model answers from it
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -195,7 +199,7 @@ hooks=""
 opts=""
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype | rewindsum | rewindsumb) ;;
+basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype | rewindsum | rewindsumb | imports) ;;
 bgfail) flags="agents" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
@@ -222,7 +226,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports)" >&2
 	exit 2
 	;;
 esac
@@ -257,6 +261,13 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = imports ]; then
+	# A project file that brings in a file from outside the project: the
+	# person is asked once whether to load it (DECISIONS 305).
+	mkdir -p "$T/home/shared"
+	printf 'The shared word is PELICAN.\n' > "$T/home/shared/notes.md"
+	printf 'Read @~/shared/notes.md before you answer.\n' > "$T/work/AGENTS.md"
+fi
 if [ "$scenario" = trustmcp ] || [ "$scenario" = trusttype ]; then
 	# A folder whose only own content is an MCP server and a skill that
 	# lets a command run without asking: the trust question names both
@@ -823,6 +834,13 @@ trusttype)
 	# (Under "before": the question, still up after the typing.)
 	tmux send-keys -t "$S" "1"
 	done_when() { tmux capture-pane -p -t "$S" | grep -q "> fix the 2 failing tests" && screen | grep -q "Trust this folder? No"; }
+	;;
+imports)
+	# (The question is on the screen above, under "before".)
+	tmux send-keys -t "$S" "1"
+	sleep 2
+	tmux send-keys -t "$S" "What is the shared word? Answer with that one word and call no tool." Enter
+	done_when() { screen | grep -q "PELICAN" && screen | grep -q "done in" && ls "$T"/data/gnosh/imports/*.json >/dev/null 2>&1; }
 	;;
 trustmcp)
 	# (The question is on the screen above, under "before".)
