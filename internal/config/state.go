@@ -2,14 +2,19 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/filelock"
 )
 
 // State is what the user chose inside gnosh, kept between sessions: the
@@ -176,11 +181,31 @@ func WriteState(fsys WriteFS, path string, st State) error {
 }
 
 // UpdateState changes the state file: it reads the file as it is now,
-// hands the State to change, and writes the result. Reading again just
+// hands the State to change, and writes the result, one gnosh at a time
+// (a lock beside the file, on the machine's own disk). Reading again just
 // before writing keeps what another session saved a moment ago. If the
 // file could not be understood, change starts from an empty State and the
-// unreadable file is replaced.
+// unreadable file is replaced; a file that is there and cannot be read is
+// left as it is, and nothing is written, since what it holds would be
+// lost (the settings-commands review of 2026-11-20: two gnosh saving at
+// once lost one choice, and a file gnosh could not read was replaced
+// whole by the one new choice).
 func UpdateState(fsys WriteFS, path string, change func(*State)) error {
+	if _, ok := fsys.(OS); ok {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return fmt.Errorf("the state file %s was not written: its directory could not be made: %w", path, err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		release, err := filelock.File(ctx, path+".lock")
+		if err != nil {
+			return fmt.Errorf("the state file %s is being written by another gnosh: %w", path, err)
+		}
+		defer release()
+	}
+	if _, err := fsys.ReadFile(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("the state file %s could not be read (%v), so it was not written: what it holds would be lost", path, err)
+	}
 	st, _ := ReadState(fsys, path)
 	st.Thinking = maps.Clone(st.Thinking)
 	st.Options = maps.Clone(st.Options)

@@ -234,7 +234,9 @@ func TestWriteStateRefusesWhatTheReaderWould(t *testing.T) {
 	}
 }
 
-// Several sessions saving at once never leave a file that cannot be read.
+// Several sessions saving at once never leave a file that cannot be read,
+// and none loses another's choice: they write one at a time (the
+// settings-commands review of 2026-11-20).
 func TestStateWritersAtOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	var wg sync.WaitGroup
@@ -257,12 +259,34 @@ func TestStateWritersAtOnce(t *testing.T) {
 	}
 	wg.Wait()
 	st, problems := ReadState(OS{}, path)
-	if len(problems) != 0 || len(st.Thinking) == 0 {
-		t.Errorf("after the writers: %+v %v", st, problems)
+	if len(problems) != 0 || len(st.Thinking) != 8 {
+		t.Errorf("after the writers, a choice was lost: %+v %v", st, problems)
 	}
 	names, _ := os.ReadDir(filepath.Dir(path))
-	if len(names) != 1 {
-		t.Errorf("temporary files were left behind: %v", names)
+	var left []string
+	for _, n := range names {
+		if n.Name() != "state.json" && n.Name() != "state.json.lock" {
+			left = append(left, n.Name())
+		}
+	}
+	if len(left) != 0 {
+		t.Errorf("temporary files were left behind: %v", left)
+	}
+}
+
+// A state file that is there and cannot be read is left as it is, and
+// nothing is written: replacing it would lose what it holds.
+func TestStateNotReadNotReplaced(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.Mkdir(path, 0o700); err != nil { // (Cannot be read, even by root.)
+		t.Fatal(err)
+	}
+	err := UpdateState(OS{}, path, func(st *State) { _ = st.SetModel("model", ModelRef{Provider: "p", ID: "m"}) })
+	if err == nil || !strings.Contains(err.Error(), "could not be read") {
+		t.Errorf("UpdateState over a file it cannot read: %v", err)
+	}
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		t.Errorf("what was there was replaced: %v %v", info, err)
 	}
 }
 
