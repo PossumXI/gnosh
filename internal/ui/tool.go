@@ -751,9 +751,19 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 			// person sees that from the heading standing alone.
 			lines = nil
 		}
-		under = s.clipTail(lines, s.limit(tailLines))
 		code, hasCode := metaInt(res.Meta, "exitCode")
 		id, _ := res.Meta["backgroundTaskId"].(string)
+		if id != "" && !res.IsError {
+			// Started in the background: what the model is told of it
+			// (where to read, that it will be told) is the model's; the
+			// person reads where its output goes (seen on the devbox's
+			// screen: the model's words, then the same said again).
+			lines = nil
+			if file, _ := res.Meta["persistedOutputPath"].(string); file != "" {
+				lines = []string{"its output goes to " + showPath(s.cwd, s.home, file)}
+			}
+		}
+		under = s.clipTail(lines, s.limit(tailLines))
 		last := ""
 		switch {
 		case id != "":
@@ -889,6 +899,17 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		}
 	case "gnovm_run":
 		return "", s.clipHead(safeLines(text), s.limit(receiptLines))
+	case "Monitor":
+		// A Monitor started: its id and where its output goes, in the
+		// person's words (the result's are the model's: "comes to you as
+		// notices ... end your reply to wait").
+		if id, _ := meta["taskId"].(string); id != "" {
+			summary = "watching as " + oneLine(id)
+			if file, _ := meta["persistedOutputPath"].(string); file != "" {
+				under = s.body([]string{"its output goes to " + showPath(s.cwd, s.home, file)})
+			}
+			return summary, under
+		}
 	case "AskUserQuestion":
 		// The answers stand in the question's own record just above: the
 		// result's words for the model said them again, cut short.

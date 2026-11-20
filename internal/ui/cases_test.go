@@ -1587,3 +1587,27 @@ func TestMCPCallHeading(t *testing.T) {
 		t.Error("a name with no tool was taken")
 	}
 }
+
+// A command started in the background, and a Monitor, are shown in the
+// person's words: where the output goes, and the id; not the model's
+// ("Read that file... You will be told when it ends", "comes to you as
+// notices... end your reply"), which the screen showed, and then said again.
+func TestBackgroundStartsInThePersonsWords(t *testing.T) {
+	g := newRig(t, 120, 30, text.NoColor)
+	g.keys(`"start them" <Enter>`).start()
+	bash := map[string]any{"command": "make watch", "run_in_background": true}
+	g.ev(toolCall("c1", "Bash"), replyEnd(core.StopToolUse), toolStart("c1", "Bash", bash))
+	g.ev(toolEnd("c1", "Bash", bash, core.ToolResult{
+		Content: []core.Block{core.Text("Started in the background as bg1 (process group 42).\nIts output is collected in /home/jae/.local/share/gnosh/x/bg1.out. Read that file to see it; TaskStop stops the command. You will be told when it ends.")},
+		Meta:    map[string]any{"backgroundTaskId": "bg1", "persistedOutputPath": "/home/jae/.local/share/gnosh/x/bg1.out"},
+	}, 0))
+	mon := map[string]any{"command": "tail -f log", "description": "watch the log"}
+	g.ev(toolCall("c2", "Monitor"), replyEnd(core.StopToolUse), toolStart("c2", "Monitor", mon))
+	g.ev(toolEnd("c2", "Monitor", mon, core.ToolResult{
+		Content: []core.Block{core.Text("Monitor bg2 watches: watch the log. What the command prints comes to you as notices from gnosh. Go on with other work, or end your reply to wait for the lines.")},
+		Meta:    map[string]any{"taskId": "bg2", "persistedOutputPath": "/home/jae/.local/share/gnosh/x/bg2.out"},
+	}, 0))
+	g.committedHas("its output goes to ~/.local/share/gnosh/x/bg1.out", "running in the background as bg1",
+		"watching as bg2", "its output goes to ~/.local/share/gnosh/x/bg2.out").
+		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply")
+}
