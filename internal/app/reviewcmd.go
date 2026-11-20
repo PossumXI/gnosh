@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 )
 
@@ -86,7 +87,7 @@ func (l *live) slashSimplify(ctx context.Context, c *SlashContext) error {
 // Code's /code-review takes first, and what each asks of the model; medium
 // asks nothing more.
 var reviewLevels = map[string]string{
-	"low":    "Report only what you are most sure of: at most three findings.",
+	"low":    "Report only what you are most sure of.",
 	"medium": "",
 	"high":   "Be thorough: read every changed function and what calls it, and report what you are less sure of too, saying how sure you are.",
 	"xhigh":  "Be thorough: read every changed function and what calls it, and report what you are less sure of too, saying how sure you are.",
@@ -95,21 +96,34 @@ var reviewLevels = map[string]string{
 
 // review sends the model a review of the branch's changes to make. task
 // takes the range in words and its diff command. What the person typed
-// after the command is, for /review, an optional level word and --fix,
-// and for any of them, what to look at in particular.
+// after the command is, for /review, an optional level word, --fix and
+// --max-findings, and for any of them, what to look at in particular.
 func (l *live) review(ctx context.Context, c *SlashContext, name, task string) error {
 	if !l.st.trusted {
 		return fmt.Errorf("/%s runs git, and this folder is not trusted: a repository's own settings can name programs git runs. gnosh trust trusts it", name)
 	}
-	var level string
-	fix := false
+	var level, findings string
+	fix, chose := false, false
 	var focus []string
-	for i, w := range strings.Fields(c.Args) {
-		switch _, isLevel := reviewLevels[w]; {
+	words := strings.Fields(c.Args)
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		_, isLevel := reviewLevels[w]
+		v, eq := strings.CutPrefix(w, "--max-findings=")
+		switch {
 		case name == "review" && w == "--fix":
 			fix = true
 		case name == "review" && i == 0 && isLevel:
 			level = w
+		case name == "review" && (eq || w == "--max-findings"):
+			if !eq && i+1 < len(words) {
+				i++
+				v = words[i]
+			}
+			if v == "" || v != "default" && !config.ValidReviewMaxFindings(v) {
+				return fmt.Errorf("--max-findings takes a number from 1 to 1000, all, or default (as many as the level asks), not %q", oneLine(v, 20))
+			}
+			findings, chose = strings.TrimPrefix(v, "default"), true
 		default:
 			focus = append(focus, w)
 		}
@@ -118,12 +132,25 @@ func (l *live) review(ctx context.Context, c *SlashContext, name, task string) e
 	if err != nil {
 		return err
 	}
+	if chose {
+		l.keepReviewFindings(c, findings)
+	} else {
+		findings = l.reviewFindings()
+	}
 	text := fmt.Sprintf(task, r.what, "`"+r.diff+"`")
 	if fix {
 		text = strings.TrimSuffix(text, reviewNoChange) + reviewFix
 	}
 	if more := reviewLevels[level]; more != "" {
 		text += "\n\n" + more
+	}
+	switch {
+	case findings == "all":
+		text += "\n\nReport every finding, however small or unsure, the most important first."
+	case findings != "":
+		text += "\n\nReport at most " + findings + " findings, the most important first."
+	case level == "low":
+		text += "\n\nReport at most three findings."
 	}
 	if name == "security-review" && hasGnoCode(l.cfg.Paths.ProjectRoot, l.cfg.Paths.Cwd) {
 		if g := l.gnoGuides(); len(g) == 2 {
@@ -146,6 +173,35 @@ func (l *live) review(ctx context.Context, c *SlashContext, name, task string) e
 	}
 	return c.Send(agent.Prompt{Hidden: true, Source: name, Text: prompt.Wrap(text),
 		Notice: "/" + name + ": the model is " + doing + "."})
+}
+
+// keepReviewFindings keeps a --max-findings choice ("" for default) for
+// the rest of the session and, in a session somebody attends, for later
+// ones, as Claude Code keeps it until --max-findings default.
+func (l *live) keepReviewFindings(c *SlashContext, v string) {
+	l.reviewCap.Store(&v)
+	switch v {
+	case "":
+		c.Say("/code-review reports as many findings as its level asks again.")
+	case "all":
+		c.Say("/code-review reports every finding from now on (--max-findings default goes back).")
+	default:
+		c.Say("/code-review reports at most %s findings from now on (--max-findings default goes back).", v)
+	}
+	l.saveState(c, func(st *config.State) error {
+		st.ReviewMaxFindings = v
+		return nil
+	})
+}
+
+// reviewFindings is the --max-findings choice in force: the session's
+// own, else the one kept from an earlier session; "" for none.
+func (l *live) reviewFindings() string {
+	if v := l.reviewCap.Load(); v != nil {
+		return *v
+	}
+	st, _ := config.ReadState(config.OS{}, l.cfg.Paths.StateFile)
+	return st.ReviewMaxFindings
 }
 
 // reviewNoChange is how the review tasks end: no file is to change.

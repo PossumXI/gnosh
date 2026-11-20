@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -82,4 +83,33 @@ func TestReviewCommands(t *testing.T) {
 	// The level words and --fix are /review's own: elsewhere they are words.
 	run(t, w, "--trust-folder", "-p", "/security-review high --fix").wantCode(t, 0)
 	has(t, "/security-review high --fix", asked(), "Change no file", "look at this in particular: high --fix")
+
+	// --max-findings, as Claude Code's: a number or all, for this run
+	// alone in a run, kept for later sessions in one somebody attends,
+	// until default; low's three give way to it.
+	run(t, w, "--trust-folder", "-p", "/code-review low --max-findings 5 the parser").wantCode(t, 0)
+	has(t, "--max-findings 5", asked(), "Report at most 5 findings", "look at this in particular: the parser")
+	hasNot(t, "--max-findings 5", asked(), "at most three findings", "in particular: --max-findings", "in particular: 5")
+	run(t, w, "--trust-folder", "-p", "/code-review").wantCode(t, 0)
+	hasNot(t, "a run's choice, not kept", asked(), "Report at most 5")
+	r = run(t, w, "--trust-folder", "-p", "/code-review --max-findings 0")
+	has(t, "a number it does not take", r.out+r.err, "--max-findings takes a number from 1 to 1000, all, or default")
+	s := sitWith(t, w, nil, "--trust-folder")
+	s.typeLine("/code-review --max-findings=all")
+	s.see("/code-review reports every finding from now on")
+	s.see("Nothing real.")
+	s.typeLine("/exit")
+	s.exit()
+	has(t, "the state file", w.Read(filepath.Join(w.DataDir(), "state.json")), `"reviewMaxFindings": "all"`)
+	run(t, w, "--trust-folder", "-p", "/code-review").wantCode(t, 0)
+	has(t, "a kept choice", asked(), "Report every finding")
+	s = sitWith(t, w, nil, "--trust-folder")
+	s.typeLine("/code-review --max-findings default")
+	s.see("as many findings as its level asks again")
+	s.see("Nothing real.")
+	s.typeLine("/exit")
+	s.exit()
+	run(t, w, "--trust-folder", "-p", "/code-review low").wantCode(t, 0)
+	has(t, "back to the level's", asked(), "Report at most three findings")
+	hasNot(t, "back to the level's", asked(), "Report every finding")
 }

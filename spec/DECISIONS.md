@@ -5787,4 +5787,18 @@ or kept with the reason said (27).
     signal (target same-sandbox)) now keeps it to its own, its children
     and its shell still signalled (tried on a Mac). A server a command
     left running in the background is stopped through gnosh, as on
-    Linux.
+    Linux. What is left different: on macOS a command still reads the
+    person's other processes' command lines (pgrep -lf); Seatbelt's
+    process-info rule does not hide them (tried).
+
+383. **/code-review --max-findings.** Claude Code's /code-review takes
+    --max-findings <n>, or all for every finding, and keeps the choice
+    until --max-findings default. gnosh's /review (and /code-review)
+    takes it the same way, as --max-findings n or --max-findings=n, from
+    1 to 1000: the model is told to report at most n findings, the most
+    important first, or every one; low's three give way to it. The
+    choice is kept in the user's state file (reviewMaxFindings, beside
+    the models /model keeps), from a session somebody attends; a run
+    (-p) uses it for itself alone, as it keeps no choice. A value the
+    state file holds that this gnosh cannot read is left out, and the
+    review reports as its level asks.

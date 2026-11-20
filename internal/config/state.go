@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,10 @@ type State struct {
 	// as the JSON value a config file's "options" would hold. They are
 	// read as gnosh.json's are.
 	Options map[string]json.RawMessage
+	// ReviewMaxFindings is how many findings /code-review reports, chosen
+	// with --max-findings: a number, or "all". Empty means no choice: as
+	// many as the review's level asks.
+	ReviewMaxFindings string
 
 	// extra holds keys this gnosh does not know, so that writing the file
 	// back does not drop what another version put there.
@@ -63,10 +68,11 @@ type stateFile struct {
 	Thinking          map[string]string          `json:"thinking,omitempty"`
 	AutoCompactWindow int                        `json:"autoCompactWindow,omitempty"`
 	Options           map[string]json.RawMessage `json:"options,omitempty"`
+	ReviewMaxFindings string                     `json:"reviewMaxFindings,omitempty"`
 }
 
 // stateKeys are the keys of stateFile, which extra never holds.
-var stateKeys = []string{"version", "models", "thinking", "autoCompactWindow", "options"}
+var stateKeys = []string{"version", "models", "thinking", "autoCompactWindow", "options", "reviewMaxFindings"}
 
 // ReadState reads the state file. A file that is not there gives an empty
 // State. A file that cannot be read or understood also gives an empty
@@ -88,6 +94,11 @@ func ReadState(fsys FS, path string) (State, []Problem) {
 		return warn("the state file is not JSON gnosh can read, so the model and thinking level chosen earlier are not in force. Choosing them again with /model writes a new file.")
 	}
 	st := State{Model: f.Models.Model, SmallModel: f.Models.SmallModel, Thinking: f.Thinking, AutoCompactWindow: f.AutoCompactWindow, Options: f.Options, read: maps.Clone(f.Options)}
+	if ValidReviewMaxFindings(f.ReviewMaxFindings) {
+		// (One this gnosh cannot read is left out, not an error: /code-
+		// review then reports as its level asks.)
+		st.ReviewMaxFindings = f.ReviewMaxFindings
+	}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(data, &all) == nil {
 		for _, k := range stateKeys {
@@ -119,6 +130,9 @@ func (st State) check() error {
 	if w := st.AutoCompactWindow; w != 0 && (w < 100000 || w > 1000000) {
 		return fmt.Errorf("the auto-compact window %d is not between 100000 and 1000000", w)
 	}
+	if !ValidReviewMaxFindings(st.ReviewMaxFindings) {
+		return fmt.Errorf("%q is not a number of findings (or all)", st.ReviewMaxFindings)
+	}
 	for key, raw := range st.Options {
 		if key == "autoCompactWindow" {
 			return errors.New("autoCompactWindow has a slot of its own")
@@ -133,6 +147,17 @@ func (st State) check() error {
 		}
 	}
 	return nil
+}
+
+// ValidReviewMaxFindings reports whether s is a number of findings for
+// /code-review to report: a whole number from 1 to 1000, "all", or ""
+// for no choice.
+func ValidReviewMaxFindings(s string) bool {
+	if s == "" || s == "all" {
+		return true
+	}
+	n, err := strconv.Atoi(s)
+	return err == nil && n >= 1 && n <= 1000 && strconv.Itoa(n) == s
 }
 
 // validModelRef reports whether s has the form provider/id.
@@ -151,7 +176,7 @@ func WriteState(fsys WriteFS, path string, st State) error {
 	var f stateFile
 	f.Version = stateVersion
 	f.Models.Model, f.Models.SmallModel = st.Model, st.SmallModel
-	f.Thinking, f.AutoCompactWindow, f.Options = st.Thinking, st.AutoCompactWindow, st.Options
+	f.Thinking, f.AutoCompactWindow, f.Options, f.ReviewMaxFindings = st.Thinking, st.AutoCompactWindow, st.Options, st.ReviewMaxFindings
 	known, err := json.Marshal(f)
 	if err != nil {
 		return fmt.Errorf("the state file %s was not written: %w", path, err)

@@ -81,6 +81,10 @@ type live struct {
 	// its add takes numbers of (fewerprompts.go).
 	fewerMu   sync.Mutex
 	fewerLast []askedRule
+	// reviewCap is the /code-review --max-findings choice made in this
+	// session ("" for default), or nil for none: the state file's holds
+	// then (reviewcmd.go).
+	reviewCap atomic.Pointer[string]
 
 	store  *transcript.Store
 	ts     *transcript.Session
