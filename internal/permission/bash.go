@@ -3094,21 +3094,45 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 				v.setOpaque("hash -p names a program computed when the command runs")
 			}
 		})
-		// The names after the file run that file from here on, with
+		// The names after the options run the file from here on, with
 		// whatever words follow them: "hash -p /bin/rm ls; ls -rf x" is
-		// rm -rf x. They are read like aliases (useAlias).
-		for i, a := range args {
-			if l := a.lit(); !a.static() || len(l) < 2 || l[0] != '-' || l[1] == '-' || !strings.Contains(l, "p") {
+		// rm -rf x. The options are read as bash's getopts reads them,
+		// and each -p's file is taken for the names, as bash takes the
+		// last: "hash -p h -p /bin/mv zz" made zz mv, while only the first
+		// was read (oracle seed 168). A word computed when the command
+		// runs may be such an option. They are read like aliases
+		// (useAlias).
+		var files []string
+		i := 0
+		for ; i < len(args); i++ {
+			a := args[i]
+			l := a.lit()
+			if !a.static() {
+				v.setOpaque("hash is given a word computed when the command runs, which may name the program a later name runs")
+				break
+			}
+			if len(l) < 2 || l[0] != '-' {
+				break
+			}
+			if l == "--" {
+				i++
+				break
+			}
+			if k := strings.IndexByte(l, 'p'); k > 0 {
+				if k+1 < len(l) {
+					files = append(files, l[k+1:])
+				} else if i+1 < len(args) {
+					i++
+					files = append(files, e.unsetValue(args[i]))
+				}
+			}
+		}
+		for _, n := range args[min(i, len(args)):] {
+			if !n.static() || strings.HasPrefix(n.joined(), "-") {
 				continue
 			}
-			file, names := "", args[min(i+1, len(args)):]
-			if k := strings.IndexByte(a.lit(), 'p'); k+1 < len(a.lit()) {
-				file = a.lit()[k+1:]
-			} else if len(names) > 0 {
-				file, names = e.unsetValue(names[0]), names[1:]
-			}
-			for _, n := range names {
-				if file == "" || !n.static() || strings.HasPrefix(n.joined(), "-") {
+			for _, file := range files {
+				if file == "" {
 					continue
 				}
 				if v.aliases == nil {
@@ -3116,7 +3140,6 @@ func (e *Engine) derive(v *bashView, c *simpleCmd, prev *simpleCmd, depth int) {
 				}
 				v.aliases[n.joined()] = append(v.aliases[n.joined()], file)
 			}
-			break
 		}
 		for _, a := range args {
 			if !a.static() || a.glob {

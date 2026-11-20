@@ -4442,3 +4442,14 @@ or kept with the reason said (27).
     theirs and is in force. A file the repository brought, or one anyone
     changed since gnosh wrote it, is the project's, held until the folder
     is trusted, as before.
+
+310. **hash's options are read as bash reads them.** "hash -p FILE NAME"
+    makes NAME run FILE from then on, and the engine read it as an alias,
+    but from the first -p only, where bash's getopts keeps the last:
+    "hash -p h -p /bin/mv zz; zz * v z" moved what a deny rule guards
+    while the engine took zz for h (oracle seed 168). The options are
+    now read to their end as getopts reads them (a word that is not an
+    option, or --), every -p's file is taken for each name after them,
+    so that each file the name may run is judged, and a word computed
+    when the command runs among hash's words makes the line one that
+    cannot be read.

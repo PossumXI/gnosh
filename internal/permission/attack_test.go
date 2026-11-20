@@ -208,6 +208,9 @@ func TestShellAttacks(t *testing.T) {
 		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=\nmake build; zz rl1d; zz zz r\\m x", Deny},
 		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=' '\nzz zz zz rm x", Deny},
 		{"hash -p makes ls run another file", ModeBypass, attackGuards, "hash -p /usr/bin/rm ls; ls x", Deny},
+		// bash keeps the last -p; only the first was read (oracle seed 168).
+		{"hash's last -p is the file", ModeBypass, attackGuards, "hash -p h -p /usr/bin/mv zz; zz build x", Deny},
+		{"hash's -p in one word, the last", ModeBypass, attackGuards, "hash -ph -p/usr/bin/mv zz; zz build x", Deny},
 		{"mapfile -C runs its callback", ModeBypass, attackGuards, "mapfile -C 'rm' -c 1 a <<< x", Deny},
 		{"compgen -C runs its argument", ModeBypass, attackGuards, "compgen -C 'rm x'", Deny},
 		// A pattern that a ".." takes back out is the directory it stands
