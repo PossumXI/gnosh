@@ -213,7 +213,7 @@ func (s *slashSet) own() []SlashCommand {
 			Run: func(ctx context.Context, c *SlashContext) error { return l.slashThink(c, true) }},
 		{Name: "no_think", Aliases: []string{"nothink", "no-think"}, Summary: "The least thinking the model has, for every later request. It sticks.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error { return l.slashThink(c, false) }},
-		{Name: "effort", Args: "[level|max|auto]", Summary: "Show or set how much the model thinks: one of its levels, max for the most, or auto for its own default. It sticks.", InRun: true, Run: l.slashEffort},
+		{Name: "effort", Args: "[level|max|auto]", Summary: "Show or set how much the model thinks: one of its levels, max for the most (this session only), or auto for its own default. A level is kept for later sessions.", InRun: true, Run: l.slashEffort},
 		{Name: "model", Args: "[provider/model [level]]", Summary: "List the models, or switch to one. The choice is saved.", InRun: true, Run: l.slashModel},
 		{Name: "status", Summary: "What this session is, what it is doing, and every setting with where it came from.", InRun: true, Run: l.slashStatus},
 		{Name: "release-notes", Summary: "The changes this build of gnosh was made from, newest first.", InRun: true, Run: l.slashReleaseNotes},
@@ -332,6 +332,9 @@ func (l *live) modelRef() (config.ModelRef, bool) {
 // user's state file. A choice that cannot be saved still holds for this
 // session, and the person is told.
 func (l *live) saveState(c *SlashContext, change func(*config.State) error) {
+	if !l.keepsChoices() {
+		return
+	}
 	var inner error
 	err := config.UpdateState(config.OS{}, l.cfg.Paths.StateFile, func(st *config.State) { inner = change(st) })
 	if err == nil {
@@ -340,6 +343,22 @@ func (l *live) saveState(c *SlashContext, change func(*config.State) error) {
 	if err != nil {
 		c.Say("The choice holds for this session, but it could not be saved for later ones: %v", err)
 	}
+}
+
+// keepsChoices reports whether a choice made with /model, /effort or /think
+// is kept for later sessions: not in a run, whose commands are its own
+// (Claude Code keeps none made under -p; gnosh -p "/model x" changed the
+// default of every later session: the settings-commands review of
+// 2026-11-20).
+func (l *live) keepsChoices() bool { return l.interactive }
+
+// later is how long such a choice holds, said after "from the next request
+// on".
+func (l *live) later() string {
+	if l.keepsChoices() {
+		return "in this session and in later ones"
+	}
+	return "in this run only: a run keeps no choice for later sessions"
 }
 
 // slashThink is /think and /no_think: the model's most or least thinking,
@@ -361,7 +380,7 @@ func (l *live) slashThink(c *SlashContext, most bool) error {
 	}
 	l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, level) })
 	levels := c.Agent.Model().Levels
-	c.Say("Thinking is %s for %s, from the next request on, in this session and in later ones.", level, ref)
+	c.Say("Thinking is %s for %s, from the next request on, %s.", level, ref, l.later())
 	if len(levels) > 2 {
 		c.Say("Its levels are %s; /model %s <level> sets one in between.", strings.Join(levels, ", "), ref)
 	}
@@ -439,6 +458,7 @@ func (l *live) slashEffort(ctx context.Context, c *SlashContext) error {
 	}
 	m := c.Agent.Model()
 	word := strings.ToLower(strings.TrimSpace(c.Args))
+	typedMax := word == "max"
 	switch word {
 	case "", "status":
 		if len(m.Levels) == 0 {
@@ -453,7 +473,7 @@ func (l *live) slashEffort(ctx context.Context, c *SlashContext) error {
 			return err
 		}
 		l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, "") })
-		c.Say("Thinking for %s is the model's own default, from the next request on, in this session and in later ones.", ref)
+		c.Say("Thinking for %s is the model's own default, from the next request on, %s.", ref, l.later())
 		return nil
 	case "max":
 		if len(m.Levels) > 0 {
@@ -469,8 +489,14 @@ func (l *live) slashEffort(ctx context.Context, c *SlashContext) error {
 	if _, err := c.Agent.SetThinking(word); err != nil {
 		return err
 	}
+	if typedMax {
+		// The most a model thinks holds for the session alone, as in
+		// Claude Code: it was kept for every later session.
+		c.Say("Thinking is %s for %s, from the next request on, in this session only: the most a model thinks is not kept for later sessions.", word, ref)
+		return nil
+	}
 	l.saveState(c, func(st *config.State) error { return st.SetThinking(ref, word) })
-	c.Say("Thinking is %s for %s, from the next request on, in this session and in later ones.", word, ref)
+	c.Say("Thinking is %s for %s, from the next request on, %s.", word, ref, l.later())
 	return nil
 }
 
@@ -615,7 +641,9 @@ func (l *live) slashModel(ctx context.Context, c *SlashContext) error {
 		window = "context window " + tokenCount(w) + " tokens"
 	}
 	saved := "The choice is saved for later sessions; -m names another for one run."
-	if mv := l.cfg.Large.Model; mv.Set && (mv.Origin.Layer == config.LayerProject || mv.Origin.Layer == config.LayerEnv) {
+	if !l.keepsChoices() {
+		saved = "It holds for this run only: a run keeps no choice for later sessions."
+	} else if mv := l.cfg.Large.Model; mv.Set && (mv.Origin.Layer == config.LayerProject || mv.Origin.Layer == config.LayerEnv) {
 		// (It said saved for later sessions where what set the model
 		// here outranks the saved choice: the settings-commands review
 		// of 2026-11-20.)

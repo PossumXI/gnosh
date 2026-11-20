@@ -4453,3 +4453,12 @@ or kept with the reason said (27).
     so that each file the name may run is judged, and a word computed
     when the command runs among hash's words makes the line one that
     cannot be read.
+
+311. **A run keeps no choice, and max holds for the session.** /model,
+    /effort, /think and /no_think given to a run (gnosh -p "/model x")
+    saved the choice for every later session, and /effort max was kept
+    too, where Claude Code keeps no choice made under -p and holds max
+    for the session alone (the settings-commands review of 2026-11-20).
+    In a run they now hold for the run, and say so; /effort max holds
+    for the session it is given in, and says so. /config, the command
+    for settings, still keeps what it is told, in a run too.
