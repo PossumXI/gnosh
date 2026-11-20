@@ -4758,3 +4758,16 @@ or kept with the reason said (27).
     true lists the ignored files, as Claude Code does by default; false,
     or not set, keeps gnosh's way. A value that is neither is a warning
     and not used. Grep, as in Claude Code, honours .gitignore either way.
+
+331. **Four more of Claude Code's variables are read.**
+    CLAUDE_CODE_DISABLE_WEB_FETCH=1 leaves WebFetch out of the session's
+    tools; CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS sets how long a fetched page
+    is kept (0 keeps none; default 15 minutes) and
+    CLAUDE_CODE_WEBFETCH_DEADLINE_MS how long a download may take (0 no
+    limit; default 5 minutes), both read as the others of config's limits
+    are, from the shell or a settings file's env block; and
+    CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1 keeps every command in the
+    session's working directory: a cd in a command does not carry over to
+    the next, and the result says so (shelltool Options.NoCarryCwd).
+    Claude Code documents all four (its tools reference and env vars);
+    gnosh read none of them.

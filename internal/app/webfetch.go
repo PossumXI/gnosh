@@ -59,9 +59,13 @@ type webFetchInput struct {
 	Offset int    `json:"offset"`
 }
 
-// webFetchTool is the tool of one session.
+// webFetchTool is the tool of one session. cacheFor is how long a page is
+// kept (CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS; 0 keeps none) and deadline how
+// long one may take to download (CLAUDE_CODE_WEBFETCH_DEADLINE_MS; 0 is
+// no limit).
 type webFetchTool struct {
-	l *live
+	l                  *live
+	cacheFor, deadline time.Duration
 
 	mu    sync.Mutex
 	cache map[string]cachedPage
@@ -130,7 +134,11 @@ func (t *webFetchTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	key := u.String()
 	c, cached := t.cached(key)
 	if !cached {
-		page, err := fetchPage(ctx, key, webtool.Options{UserAgent: "gnosh/" + firstOf(t.l.p.o.BuildID, "devel")})
+		timeout := t.deadline
+		if timeout <= 0 {
+			timeout = -1 // (no bound)
+		}
+		page, err := fetchPage(ctx, key, webtool.Options{UserAgent: "gnosh/" + firstOf(t.l.p.o.BuildID, "devel"), Timeout: timeout})
 		if err != nil {
 			return core.ErrorResult(fmt.Sprintf("%s was not fetched: %v.", key, err)), nil
 		}
@@ -212,7 +220,7 @@ func (t *webFetchTool) cached(key string) (cachedPage, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	c, ok := t.cache[key]
-	if !ok || t.l.p.now().Sub(c.at) > webFetchCacheFor {
+	if !ok || t.l.p.now().Sub(c.at) >= t.cacheFor {
 		return cachedPage{}, false
 	}
 	if c.saved != "" {
@@ -231,7 +239,7 @@ func (t *webFetchTool) keep(key string, c cachedPage) {
 	}
 	now := t.l.p.now()
 	for k, old := range t.cache {
-		if now.Sub(old.at) > webFetchCacheFor {
+		if now.Sub(old.at) >= t.cacheFor {
 			delete(t.cache, k)
 		}
 	}

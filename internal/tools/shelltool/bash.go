@@ -294,6 +294,8 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 		}
 	case ownExit && e.finalDir == "":
 		notes = append(notes, "the shell did not say where it ended (the command replaced it with exec, or set an EXIT trap of its own), so the working directory is still "+stampText(env.Cwd))
+	case ownExit && where.to != "" && m.opt.NoCarryCwd:
+		notes = append(notes, "the working directory stays "+stampText(env.Cwd)+": a change of directory does not carry over to the next command here (CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR)")
 	case ownExit && where.to != "":
 		res.Cwd = where.to
 		notes = append(notes, "working directory is now "+stampText(where.to))

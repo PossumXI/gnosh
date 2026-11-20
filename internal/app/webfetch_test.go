@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -139,5 +140,50 @@ func TestWebFetchKeepsWhatIsNotText(t *testing.T) {
 	has(t, "the long video's result", toolResult(t, w, 4, "c4"), "longer than the 10.0 MB WebFetch keeps", "curl through Bash")
 	if n := fetched.Load(); n != 3 {
 		t.Errorf("the files were fetched %d times, want 3 (the PDF once)", n)
+	}
+}
+
+// Claude Code's WebFetch variables: CLAUDE_CODE_DISABLE_WEB_FETCH=1 leaves
+// the tool out; CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0 keeps no page, so the
+// same page asked for twice is fetched twice; CLAUDE_CODE_WEBFETCH_DEADLINE_MS
+// is the download's bound, 0 none.
+func TestWebFetchVariables(t *testing.T) {
+	off := apptest.NewWorld(t, apptest.Reply{Text: "Fine."})
+	o := testOptions(off, "-p", "hello")
+	o.Environ = append(o.Environ, "CLAUDE_CODE_DISABLE_WEB_FETCH=1")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	if body := string(off.Model.Requests()[0].Body); strings.Contains(body, `"name":"WebFetch"`) {
+		t.Error("WebFetch is offered with CLAUDE_CODE_DISABLE_WEB_FETCH=1")
+	}
+
+	var fetched atomic.Int32
+	var timeouts []string
+	old := fetchPage
+	fetchPage = func(ctx context.Context, raw string, o webtool.Options) (webtool.Page, error) {
+		fetched.Add(1)
+		timeouts = append(timeouts, o.Timeout.String())
+		return webtool.Page{URL: raw, Code: 200, Status: "OK", ContentType: "text/plain", Bytes: 5, Text: "hello"}, nil
+	}
+	defer func() { fetchPage = old }()
+	w := apptest.NewWorld(t)
+	main := 0
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if strings.Contains(string(r.Body), "<page>") {
+			return &apptest.Reply{Text: "It says hello."}
+		}
+		main++
+		if main <= 2 {
+			return &apptest.Reply{Calls: []apptest.Call{{ID: fmt.Sprintf("c%d", main), Name: "WebFetch", Args: `{"url":"https://docs.example.org/page","prompt":"what?"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	o = testOptions(w, "-y", "-p", "fetch it twice")
+	o.Environ = append(o.Environ, "CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0", "CLAUDE_CODE_WEBFETCH_DEADLINE_MS=0")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	if n := fetched.Load(); n != 2 {
+		t.Errorf("with no cache the page was fetched %d times, want 2", n)
+	}
+	if len(timeouts) == 0 || timeouts[0] != "-1ns" {
+		t.Errorf("a deadline of 0 gave the fetch the timeouts %v, want no bound (-1ns)", timeouts)
 	}
 }

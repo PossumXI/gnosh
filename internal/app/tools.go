@@ -81,6 +81,7 @@ func (l *live) buildTools() error {
 		MaxTimeout:          limits.BashMaxTimeout.V,
 		TimeoutToBackground: true,
 		NoBackground:        l.inv.Bare || l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1",
+		NoCarryCwd:          l.p.env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] == "1",
 		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
 		MaxOutputChars:      bashOutputChars(l.cfg),
 		NoOutputTool:        true,
@@ -110,7 +111,10 @@ func (l *live) buildTools() error {
 	}
 	l.shell = shelltool.New(so)
 	all = append(all, l.wrapStop(l.shell.Tools())...)
-	all = append(all, &webFetchTool{l: l})
+	if l.p.env["CLAUDE_CODE_DISABLE_WEB_FETCH"] != "1" {
+		// (CLAUDE_CODE_DISABLE_WEB_FETCH=1 turns it off, as in Claude Code.)
+		all = append(all, &webFetchTool{l: l, cacheFor: limits.WebFetchCacheTTL.V, deadline: limits.WebFetchDeadline.V})
+	}
 	if u := strings.TrimRight(l.cfg.Options.WebSearchURL.V, "/"); u != "" {
 		// (Only with a search server named: see websearch.go.)
 		all = append(all, &webSearchTool{l: l, base: u})

@@ -506,7 +506,8 @@ func TestClaudeCodeVariables(t *testing.T) {
 	def := mustLoad(t, in).Limits
 	if def.APITimeout.Set || def.BashDefaultTimeout.V != 2*time.Minute || def.BashMaxTimeout.V != 10*time.Minute || def.BashMaxOutput.V != 30000 ||
 		def.MaxOutputTokens.Set || def.FileReadMaxTokens.V != 25000 || def.GlobTimeout.Set || def.AutoCompactPct.Set ||
-		def.MCPTimeout.V != 30*time.Second || def.MCPToolTimeout.Set || def.MCPMaxOutputTokens.V != 25000 {
+		def.MCPTimeout.V != 30*time.Second || def.MCPToolTimeout.Set || def.MCPMaxOutputTokens.V != 25000 ||
+		def.WebFetchCacheTTL.V != 15*time.Minute || def.WebFetchDeadline.V != 5*time.Minute {
 		t.Errorf("defaults: %+v", def)
 	}
 
@@ -514,7 +515,8 @@ func TestClaudeCodeVariables(t *testing.T) {
 		"API_TIMEOUT_MS=30000", "BASH_DEFAULT_TIMEOUT_MS=60000", "BASH_MAX_TIMEOUT_MS=900000", "BASH_MAX_OUTPUT_LENGTH=50000",
 		"CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000", "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000", "CLAUDE_CODE_GLOB_TIMEOUT_SECONDS=20",
 		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80",
-		"MCP_TIMEOUT=5000", "MCP_TOOL_TIMEOUT=60000", "MAX_MCP_OUTPUT_TOKENS=1000", "CLAUDE_CODE_GLOB_NO_IGNORE=true")
+		"MCP_TIMEOUT=5000", "MCP_TOOL_TIMEOUT=60000", "MAX_MCP_OUTPUT_TOKENS=1000", "CLAUDE_CODE_GLOB_NO_IGNORE=true",
+		"CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0", "CLAUDE_CODE_WEBFETCH_DEADLINE_MS=90000")
 	cfg, problems := load(t, in)
 	if cfg == nil || len(problems) != 0 {
 		t.Fatalf("good values load without a word:\n%s", showProblems(problems))
@@ -524,7 +526,7 @@ func TestClaudeCodeVariables(t *testing.T) {
 		l.MaxOutputTokens.V != 8000 || l.FileReadMaxTokens.V != 10000 || l.GlobTimeout.V != 20*time.Second ||
 		cfg.Options.AutoCompactWindow.V != 150000 || l.AutoCompactPct.V != 80 ||
 		l.MCPTimeout.V != 5*time.Second || l.MCPToolTimeout.V != time.Minute || l.MCPMaxOutputTokens.V != 1000 ||
-		!l.GlobNoIgnore.Set || !l.GlobNoIgnore.V {
+		!l.GlobNoIgnore.Set || !l.GlobNoIgnore.V || !l.WebFetchCacheTTL.Set || l.WebFetchCacheTTL.V != 0 || l.WebFetchDeadline.V != 90*time.Second {
 		t.Errorf("limits: %+v", l)
 	}
 	if o := l.BashMaxOutput.Origin; o.Layer != LayerEnv || o.Name != "$BASH_MAX_OUTPUT_LENGTH" {

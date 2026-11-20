@@ -39,6 +39,14 @@ type Limits struct {
 	// GlobTimeout is CLAUDE_CODE_GLOB_TIMEOUT_SECONDS: how long a file
 	// search may run. Not set means the search tool's own limit.
 	GlobTimeout Value[time.Duration]
+	// WebFetchCacheTTL is CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS: how long a
+	// fetched page is kept for another call; 0 keeps none. Default: 15
+	// minutes.
+	WebFetchCacheTTL Value[time.Duration]
+	// WebFetchDeadline is CLAUDE_CODE_WEBFETCH_DEADLINE_MS: how long a page
+	// may take to download, its redirects with it; 0 is no limit. Default:
+	// 5 minutes.
+	WebFetchDeadline Value[time.Duration]
 	// GlobNoIgnore is CLAUDE_CODE_GLOB_NO_IGNORE: true lists, in a Glob,
 	// the files .gitignore leaves out, as Claude Code's Glob does by
 	// default. Not set, or false, leaves them out, as gnosh's Glob does.
@@ -71,6 +79,8 @@ var limitVars = []struct{ name, what, from string }{
 	{"MAX_THINKING_TOKENS", "tokens a model may think before a reply; 0 turns thinking off", fromClaudeCode},
 	{"CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", "the most one read returns", fromClaudeCode},
 	{"CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "seconds a file search may run", fromClaudeCode},
+	{"CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS", "milliseconds a fetched page is kept for another call; 0 keeps none", fromClaudeCode},
+	{"CLAUDE_CODE_WEBFETCH_DEADLINE_MS", "milliseconds a page may take to download; 0 is no limit", fromClaudeCode},
 	{"CLAUDE_CODE_GLOB_NO_IGNORE", "true lists in a Glob the files .gitignore leaves out, as Claude Code's Glob does by default", fromClaudeCode},
 	{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "tokens of context before room is made; outranks the autoCompactWindow option", fromClaudeCode},
 	{"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "a percentage of that window; earlier only", fromClaudeCode},
@@ -141,6 +151,8 @@ func (ld *loader) limits() Limits {
 		BashMaxTimeout:     Value[time.Duration]{V: 10 * time.Minute},
 		BashMaxOutput:      Value[int]{V: 30000},
 		FileReadMaxTokens:  Value[int]{V: 25000},
+		WebFetchCacheTTL:   Value[time.Duration]{V: 15 * time.Minute},
+		WebFetchDeadline:   Value[time.Duration]{V: 5 * time.Minute},
 		MCPTimeout:         Value[time.Duration]{V: 30 * time.Second},
 		MCPMaxOutputTokens: Value[int]{V: 25000},
 	}
@@ -187,6 +199,12 @@ func (ld *loader) limits() Limits {
 	}
 	if n, o, ok := ld.whole("CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", 1); ok {
 		l.GlobTimeout.put(time.Duration(n)*time.Second, o)
+	}
+	if n, o, ok := ld.whole("CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS", 0); ok {
+		l.WebFetchCacheTTL.put(ms(n), o)
+	}
+	if n, o, ok := ld.whole("CLAUDE_CODE_WEBFETCH_DEADLINE_MS", 0); ok {
+		l.WebFetchDeadline.put(ms(n), o)
 	}
 	if text, o, ok := ld.limitVar("CLAUDE_CODE_GLOB_NO_IGNORE"); ok {
 		switch strings.ToLower(strings.TrimSpace(text)) {

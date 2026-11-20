@@ -137,6 +137,24 @@ func TestWorkingDirectoryCarriesOver(t *testing.T) {
 	}
 }
 
+// With NoCarryCwd (CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1) a command's
+// cd does not carry over: the session stays where it was, and is told so.
+func TestWorkingDirectoryDoesNotCarryOver(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{NoCarryCwd: true})
+	env, sub, _ := project(t)
+	res := bash(t, m, env, "cd sub; pwd")
+	if res.Cwd != "" {
+		t.Errorf("Cwd = %q, want the session to stay", res.Cwd)
+	}
+	if got := printed(res); !strings.HasPrefix(got, filepath.Dir(sub)) {
+		t.Errorf("the command itself did not move: %q", got)
+	}
+	if !hasNote(res, "does not carry over to the next command here") {
+		t.Errorf("no note says the session stays: %s", core.TextOf(res.Content))
+	}
+}
+
 func TestWorkingDirectoryThroughALinkedRoot(t *testing.T) {
 	t.Parallel()
 	m := newManager(t, Options{})

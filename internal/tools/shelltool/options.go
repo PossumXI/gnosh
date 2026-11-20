@@ -75,6 +75,11 @@ type Options struct {
 	// moves a command to the background does nothing.
 	NoBackground bool
 
+	// NoCarryCwd keeps every command in the session's working directory:
+	// a cd in one does not carry over to the next, as Claude Code's
+	// CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1 has it.
+	NoCarryCwd bool
+
 	// TermGrace is how long a command being stopped has between SIGTERM and
 	// SIGKILL. Default: 2 seconds.
 	TermGrace time.Duration
