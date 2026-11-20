@@ -385,7 +385,10 @@ func (ld *loader) run() *Config {
 	// writes there (saved approvals).
 	ld.dataDir()
 	p.LocalSettings = filepath.Join(p.DataDir, "settings.local.json")
-	ld.projectFiles = append(ld.projectFiles, p.LocalSettings)
+	own := ld.ownLocal(p.LocalSettings)
+	if !own {
+		ld.projectFiles = append(ld.projectFiles, p.LocalSettings)
+	}
 	if reads("local") {
 		if linkedFile(in.FS, p.LocalSettings) {
 			// The file gnosh writes the person's saved approvals in is
@@ -395,7 +398,9 @@ func (ld *loader) run() *Config {
 			// of 2026-11-20).
 			ld.probs.warnf(p.LocalSettings, 0, "this is a link, and the file gnosh keeps your saved approvals in never is one, so it was not read, and nothing is saved there. Remove the link.")
 		} else {
-			ld.file(p.LocalSettings, LayerProject, "local", in.Cwd, true)
+			// (The person's own while it holds what their gnosh wrote:
+			// localwrite.go.)
+			ld.file(p.LocalSettings, LayerProject, "local", in.Cwd, !own)
 		}
 	}
 

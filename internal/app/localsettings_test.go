@@ -52,3 +52,45 @@ func TestLocalSettingsKeptOutOfGit(t *testing.T) {
 		t.Errorf("the line is there %d times", n)
 	}
 }
+
+// In a folder the person has not trusted, the approvals they saved are in
+// force, in a run too, while the file holds what their gnosh wrote there,
+// as Claude Code reads its own local file; held as the repository's, they
+// went out of force at the next reading of the settings. A file the
+// repository brought, or anyone changed, stays the project's, held until
+// the folder is trusted (the settings-commands review of 2026-11-20).
+func TestSavedApprovalsHoldInAnUntrustedFolder(t *testing.T) {
+	w := apptest.NewWorld(t)
+	local := filepath.Join(w.Dir, ".gnosh", "settings.local.json")
+	has(t, "the save", run(t, w, "-p", "/permissions allow Bash(touch made.txt)").wantCode(t, 0).out, "is in force")
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Made."})
+	run(t, w, "-p", "make it").wantCode(t, 0)
+	if !w.Exists("made.txt") {
+		t.Errorf("the saved approval was not in force in the next run:\n%s", w.Read(local))
+	}
+
+	// The same rule in a file gnosh did not write: held.
+	w = apptest.NewWorld(t)
+	w.Write(".gnosh/settings.local.json", `{"permissions": {"allow": ["Bash(touch made.txt)"]}}`+"\n")
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Could not."})
+	run(t, w, "-p", "make it").wantCode(t, 0)
+	if w.Exists("made.txt") {
+		t.Error("a repository's local file was in force in a folder that is not trusted")
+	}
+
+	// And a file gnosh wrote that someone changed since: held.
+	w = apptest.NewWorld(t)
+	run(t, w, "-p", "/permissions allow Bash(ls *)").wantCode(t, 0)
+	w.Write(".gnosh/settings.local.json", strings.Replace(w.Read(".gnosh/settings.local.json"), "Bash(ls *)", "Bash(touch made.txt)", 1))
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"touch made.txt"}`}}},
+		apptest.Reply{Text: "Could not."})
+	run(t, w, "-p", "make it").wantCode(t, 0)
+	if w.Exists("made.txt") {
+		t.Error("a local file changed since gnosh wrote it was in force in a folder that is not trusted")
+	}
+}

@@ -885,6 +885,9 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if err := config.WriteFileAtomic(path, content, 0o600); err != nil {
 		return err
 	}
+	if err := config.NoteLocalWrite(l.cfg.Paths.StateDir, path, content); err != nil {
+		l.flog.logf("config", "%v", err)
+	}
 	keepOutOfGit(path)
 	// (What gnosh writes it has put in force already, unless the file
 	// held a change of the person's that was not yet taken in.)

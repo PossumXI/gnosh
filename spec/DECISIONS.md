@@ -4427,3 +4427,18 @@ or kept with the reason said (27).
     repository's info/exclude (kept by git for this clone, never
     committed) unless the folder's .gitignore covers it, as Claude Code
     puts its own file in git's excludes.
+
+309. **Saved approvals are the person's own in a folder they have not
+    trusted.** The local settings file was always read as the
+    repository's, so in a folder not trusted (a fresh repository is one,
+    and nobody is asked) an approval saved with "Yes, and don't ask
+    again" or /permissions allow went out of force at the next reading
+    of the settings (a hand edit of gnosh.json, another gnosh saving),
+    the person was asked again, a run never had it, and /permissions said
+    it was in force (the settings-commands review of 2026-11-20). As
+    Claude Code reads its own local file as the person's, gnosh now notes
+    what it writes there, as a digest in the person's state folder, which
+    no project can write; while the file holds just that it is read as
+    theirs and is in force. A file the repository brought, or one anyone
+    changed since gnosh wrote it, is the project's, held until the folder
+    is trusted, as before.
