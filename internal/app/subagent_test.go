@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -802,9 +803,11 @@ func toolMessageWith(w *apptest.World, want string) string {
 // CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 it has none of that (DECISIONS 374).
 func TestAgentMemory(t *testing.T) {
 	note := `{"file_path":".gnosh/agent-memory/reviewer/tests.md","content":"Table tests, as the user asked.\n"}`
-	w := apptest.NewWorld(t,
+	w := apptest.NewWorld(t)
+	w.Model.Add(
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"subagent_type":"reviewer","description":"review","prompt":"Review main.go."}`}}},
-		apptest.Reply{Calls: []apptest.Call{{ID: "s1", Name: "Write", Args: note}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "s1", Name: "Write", Args: note},
+			{ID: "s2", Name: "Write", Args: `{"file_path":` + strconv.Quote(w.Path("main.go")) + `,"content":"package main\n"}`}}},
 		apptest.Reply{Text: "REVIEWED-31"},
 		apptest.Reply{Text: "Done."},
 		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Agent", Args: `{"subagent_type":"reviewer","description":"review","prompt":"Again."}`}}},
@@ -832,6 +835,12 @@ func TestAgentMemory(t *testing.T) {
 	if got := w.Read(".gnosh/agent-memory/reviewer/tests.md"); got != "Table tests, as the user asked.\n" {
 		t.Errorf("the note written: %q", got)
 	}
+	// Its list leaves Write out: Write is its memory's only (the review of
+	// 2026-11-20).
+	if w.Exists("main.go") {
+		t.Errorf("a kind whose list leaves Write out wrote a project file")
+	}
+	has(t, "the refused write", toolResult(t, w, 2, "c2"), "has Write for its memory only")
 	o := testOptions(w, "--trust-folder", "--permission-mode", "acceptEdits", "-p", "again")
 	o.Environ = append(o.Environ, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	runWith(t, context.Background(), o).wantCode(t, 0)

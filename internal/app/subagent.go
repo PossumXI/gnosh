@@ -919,11 +919,15 @@ func (s *subSession) tools() ([]core.Tool, error) {
 			// conversation than the one that asked for them.)
 			continue
 		}
-		// (Read, Write and Edit, for its memory, whatever its list says,
-		// as Claude Code gives them; a list of tools taken away still
-		// takes them.)
-		if s.def.ToolsSet && !toolListed(s.def.Tools, name, false) && !(s.memory != "" && memoryTools[name]) {
-			continue
+		if s.def.ToolsSet && !toolListed(s.def.Tools, name, false) {
+			// Read, Write and Edit, for its memory, whatever its list
+			// says, as Claude Code gives them, but for files in the memory
+			// folder only (memoryOnly); a list of tools taken away still
+			// takes them.
+			if s.memory == "" || !memoryTools[name] {
+				continue
+			}
+			t = memoryOnly{Tool: t, dir: s.memory}
 		}
 		seen[name] = true
 		out = append(out, t)

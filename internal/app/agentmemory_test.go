@@ -1,13 +1,17 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/config"
+	"github.com/gnosh-ai/gnosh/internal/core"
 )
 
 // A memory's index is given as far as its first 200 lines or 25 KB go,
@@ -85,4 +89,52 @@ func TestHomeFolderDefinitionsAreThePersons(t *testing.T) {
 	if got := strings.Join(projectDefDirs(cfg, "skills", nil), " "); got != "/h/proj/.gnosh/skills /h/proj/.claude/skills" {
 		t.Errorf("in a project: %s", got)
 	}
+}
+
+// A file tool given for the memory alone refuses a file outside the
+// memory folder, a relative one or one through a link, before anybody is
+// asked, and lets one inside it through to the tool.
+func TestMemoryOnlyTool(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(base, ".gnosh", "agent-memory", "rev")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(base, filepath.Join(dir, "out")); err != nil {
+		t.Fatal(err)
+	}
+	tool := memoryOnly{Tool: describedTool{}, dir: dir}
+	env := &core.ToolEnv{Cwd: base}
+	for path, inside := range map[string]bool{
+		filepath.Join(dir, "MEMORY.md"):   true,
+		".gnosh/agent-memory/rev/a.md":    true,
+		"main.go":                         false,
+		filepath.Join(base, "main.go"):    false,
+		filepath.Join(dir, "out/main.go"): false,
+		filepath.Join(dir, "../x.md"):     false,
+	} {
+		call := core.ToolCall{Name: "Write", Input: json.RawMessage(`{"file_path":` + strconv.Quote(path) + `}`)}
+		_, err := tool.Describe(call, env)
+		if inside != (err == nil) {
+			t.Errorf("%s: Describe said %v", path, err)
+		}
+		res, _ := tool.Run(context.Background(), call, env)
+		if inside == res.IsError {
+			t.Errorf("%s: Run said %+v", path, res)
+		}
+	}
+}
+
+// describedTool is a file tool that says yes to everything.
+type describedTool struct{}
+
+func (describedTool) Spec() core.ToolSpec { return core.ToolSpec{Name: "Write"} }
+func (describedTool) Describe(core.ToolCall, *core.ToolEnv) (core.Action, error) {
+	return core.Action{Kind: core.ActionEdit}, nil
+}
+func (describedTool) Run(context.Context, core.ToolCall, *core.ToolEnv) (core.ToolResult, error) {
+	return core.TextResult("written"), nil
 }

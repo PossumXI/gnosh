@@ -2,6 +2,8 @@ package app
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/config"
+	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 )
 
 // An agent's memory (DECISIONS 374), as Claude Code's subagents have one:
@@ -168,4 +172,64 @@ func openAgentMemory(dir, base, scope string) (index string, cut bool, err error
 		lines, cut = lines[:memoryIndexLines], true
 	}
 	return strings.Join(lines, ""), cut, nil
+}
+
+// memoryOnly is a file tool a kind of agent is given for its memory alone,
+// its tools list leaving the tool out: a call on a file outside the memory
+// folder, links followed, is refused (the review of 2026-11-20: a kind
+// listed as reading only, given Write for its notes, could otherwise
+// change the project, unasked in acceptEdits).
+type memoryOnly struct {
+	core.Tool
+	dir string
+}
+
+// Describe is the tool's own, but for a file outside the memory folder,
+// which it refuses: the call cannot run, and the gate is asked about
+// what it was aimed at, as for any call that cannot.
+func (t memoryOnly) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
+	act, err := core.Action{Kind: core.ActionOther}, error(nil)
+	if d, ok := t.Tool.(core.Describer); ok {
+		act, err = d.Describe(call, env)
+	}
+	if why := t.outside(call, env); why != "" {
+		return act, errors.New(why)
+	}
+	return act, err
+}
+
+// Run refuses a file outside the memory folder, and is the tool's own
+// otherwise.
+func (t memoryOnly) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+	if why := t.outside(call, env); why != "" {
+		return core.ErrorResult(why), nil
+	}
+	return t.Tool.Run(ctx, call, env)
+}
+
+// outside says why the call's file is not in the memory folder, or "".
+func (t memoryOnly) outside(call core.ToolCall, env *core.ToolEnv) string {
+	name := t.Tool.Spec().Name
+	why := fmt.Sprintf("This kind of agent has %s for its memory only, the folder %s: its tools list leaves %s out for any other file.", name, t.dir, name)
+	var in struct {
+		FilePath string `json:"file_path"`
+	}
+	_ = json.Unmarshal(call.Input, &in)
+	p := strings.TrimSpace(in.FilePath)
+	if p == "" {
+		return why
+	}
+	if !filepath.IsAbs(p) {
+		if env == nil || env.Cwd == "" {
+			return why
+		}
+		// (Joined as text, not tidied: a .. after a link is the link's.)
+		p = strings.TrimRight(env.Cwd, "/") + "/" + p
+	}
+	real, _, err := fstools.FollowLinks(p)
+	dir, _, derr := fstools.FollowLinks(t.dir)
+	if err != nil || derr != nil || real != dir && !strings.HasPrefix(real, strings.TrimRight(dir, "/")+"/") {
+		return why
+	}
+	return ""
 }
