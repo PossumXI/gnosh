@@ -28,7 +28,7 @@ func check(s Setup) Status {
 	trial := []string{"/bin/sh", "-c", ":"}
 	p := Policy{HostProc: s.HostProc, blockUserns: !s.HostProc}
 	if p.blockUserns && try(bwrapArgs(bwrap, p, dir, trial, statPath)) == "" {
-		return withFilter(Status{OK: true, Tool: bwrap, UsernsRefused: true})
+		return withFilter(Status{OK: true, Tool: bwrap, UsernsRefused: true}, bwrap, p, dir, s.Filter)
 	}
 	p.blockUserns = false
 	if said := try(bwrapArgs(bwrap, p, dir, trial, statPath)); said != "" {
@@ -44,18 +44,25 @@ func check(s Setup) Status {
 		// sandbox's own to set the limit in: the setting's own cost.)
 		st.Weaker = "this bubblewrap cannot keep sandboxed commands from making user namespaces of their own (that takes bubblewrap 0.8 or later)"
 	}
-	return withFilter(st)
+	return withFilter(st, bwrap, p, dir, s.Filter)
 }
 
-// withFilter adds to the status what the sandbox cannot do here for want
-// of a filter for the machine.
-func withFilter(st Status) Status {
-	if st.OK && !canFilter() {
-		no := "nothing keeps sandboxed commands from opening Unix sockets on this machine (gnosh's filter is for amd64 and arm64)"
-		if st.Weaker != "" {
-			no = st.Weaker + ", and " + no
+// withFilter tries the filter for Unix sockets once, where the setup names
+// the program that puts it on: where it cannot be put on (a kernel or a
+// container that refuses it), the sandbox runs without it and says so, as
+// Claude Code's does with no filter, rather than refuse every command.
+func withFilter(st Status, bwrap string, p Policy, dir, filter string) Status {
+	switch {
+	case filter == "":
+	case !canFilter():
+		st.NoFilter = "nothing keeps sandboxed commands from opening Unix sockets on this machine (gnosh's filter is for amd64 and arm64)"
+	default:
+		p.Filter = filter
+		if said := try(bwrapArgs(bwrap, p, dir, []string{"/bin/sh", "-c", ":"}, statPath)); said != "" {
+			st.NoFilter = "the filter that keeps sandboxed commands from opening Unix sockets cannot be put on here (" + said + "), so they can open them"
+		} else {
+			st.Filters = true
 		}
-		st.Weaker = no
 	}
 	return st
 }
@@ -68,6 +75,10 @@ func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 		return nil, errors.New(st.Why)
 	}
 	p.blockUserns = st.UsernsRefused && !p.UserNamespaces && !p.HostProc
+	if !st.Filters {
+		// (It could not be put on here: said at startup and in /sandbox.)
+		p.Filter = ""
+	}
 	return bwrapArgs(st.Tool, p, dir, argv, statPath), nil
 }
 

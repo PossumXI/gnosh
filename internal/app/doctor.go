@@ -46,12 +46,12 @@ func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []con
 			return err == nil
 		},
 		Sandbox: func() (bool, string, string, string) {
-			setup := sandbox.Setup{}
+			setup, userns := sandbox.Setup{}, false
 			if cfg != nil {
-				setup = sandboxSetup(cfg.Sandbox)
+				setup, userns = sandboxSetup(cfg.Sandbox), cfg.Sandbox.Loose("allowNestedUserNamespaces")
 			}
 			st := sandbox.CheckWith(setup)
-			return st.OK, st.Why, st.Tool, st.Weaker
+			return st.OK, st.Why, st.Tool, st.Notes(userns)
 		},
 	}
 	if tryHosts && cfg != nil && len(cfg.Hosts) > 0 {

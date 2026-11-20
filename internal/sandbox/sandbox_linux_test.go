@@ -271,6 +271,33 @@ socket.socket(socket.AF_INET); print("inet")`
 	}
 }
 
+// Where the filter cannot be put on (here a program that only fails), the
+// sandbox still runs, without it, and says so, rather than refuse every
+// command; where it can, it is on. Skipped where bubblewrap cannot run.
+func TestFilterThatCannotBePutOn(t *testing.T) {
+	if st := Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	if !canFilter() {
+		t.Skip("no filter for this machine")
+	}
+	st := CheckWith(Setup{Filter: "/bin/false"})
+	if !st.OK || st.Filters || !strings.Contains(st.NoFilter, "cannot be put on here") || !strings.Contains(st.Notes(true), "Unix sockets") {
+		t.Errorf("a filter that cannot be put on: %+v", st)
+	}
+	argv, err := Wrap(Policy{Filter: "/bin/false", Temp: t.TempDir()}, "/", []string{"/bin/true"})
+	if err != nil || strings.Contains(strings.Join(argv, " "), FilterWord) {
+		t.Errorf("the command still runs behind it: %q %v", argv, err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := CheckWith(Setup{Filter: exe}); !st.OK || !st.Filters || st.NoFilter != "" {
+		t.Errorf("gnosh's own filter: %+v", st)
+	}
+}
+
 // TestMain runs the test binary as the relay when bubblewrap starts it so,
 // as gnosh's own main does.
 func TestMain(m *testing.M) {

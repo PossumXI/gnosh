@@ -112,14 +112,16 @@ type Policy struct {
 }
 
 // Setup is what of a policy decides whether the sandbox can run here:
-// which bubblewrap, and whether it mounts a /proc of its own.
+// which bubblewrap, whether it mounts a /proc of its own, and the program
+// that puts on the filter for Unix sockets, which is tried too.
 type Setup struct {
 	Bwrap    string
 	HostProc bool
+	Filter   string
 }
 
 // SetupOf is the policy's setup.
-func SetupOf(p Policy) Setup { return Setup{Bwrap: p.Bwrap, HostProc: p.HostProc} }
+func SetupOf(p Policy) Setup { return Setup{Bwrap: p.Bwrap, HostProc: p.HostProc, Filter: p.Filter} }
 
 // Exposed is a file of gnosh's own a sandboxed command reaches.
 type Exposed struct {

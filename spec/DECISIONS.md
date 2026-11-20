@@ -5509,3 +5509,15 @@ or kept with the reason said (27).
     event only in a stream-json run. `hook_progress` (a long hook's
     output as it comes) is not written: gnosh reads a hook's output when
     it ends.
+
+369. **The sandbox runs without the Unix socket filter where it cannot be
+    put on.** The check tried bubblewrap but not the filter (367): where
+    a kernel or a container refuses prctl's seccomp, every sandboxed
+    command would have failed with "the sandbox could not refuse Unix
+    sockets here". The check now tries `gnosh sandbox-filter /bin/sh -c :`
+    once too (Setup carries the filter's program, gnosh's own path, left
+    out where allowAllUnixSockets lets every socket); where it fails, the
+    sandbox runs without the filter and says so at startup, in /sandbox
+    and in doctor (Status.NoFilter, apart from the user namespace note,
+    which allowNestedUserNamespaces makes moot), as Claude Code's sandbox
+    runs where its filter is missing and says so.

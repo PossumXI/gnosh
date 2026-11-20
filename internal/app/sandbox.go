@@ -99,7 +99,21 @@ func (st *sandboxState) sandboxFound(list []string) []string {
 // sandboxSetup is what of the settings decides whether the sandbox can
 // run here: which bubblewrap, and whether it has a /proc of its own.
 func sandboxSetup(sc config.Sandbox) sandbox.Setup {
-	return sandbox.Setup{Bwrap: sc.Bwrap, HostProc: sc.Loose("enableWeakerNestedSandbox")}
+	return sandbox.Setup{Bwrap: sc.Bwrap, HostProc: sc.Loose("enableWeakerNestedSandbox"), Filter: sandboxFilter(sc)}
+}
+
+// sandboxFilter is the program that puts the filter for Unix sockets on a
+// sandboxed command: gnosh itself, on Linux, unless every Unix socket is
+// let (DECISIONS 367).
+func sandboxFilter(sc config.Sandbox) string {
+	if runtime.GOOS != "linux" || sc.Loose("network.allowAllUnixSockets") {
+		return ""
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return exe
 }
 
 // sandboxOf works the session's sandbox out, the first time it is asked.
@@ -114,9 +128,7 @@ func (st *startup) sandboxOf(cfg *config.Config) *sandboxState {
 			s.why = c.Why
 			return
 		}
-		if !cfg.Sandbox.Loose("allowNestedUserNamespaces") {
-			s.weaker = c.Weaker
-		}
+		s.weaker = c.Notes(cfg.Sandbox.Loose("allowNestedUserNamespaces"))
 		temp, err := os.MkdirTemp("", "gnosh-sandbox-")
 		if err != nil {
 			s.why = "its temporary folder could not be made (" + err.Error() + ")"
@@ -255,13 +267,9 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 	p.AllUnixSockets = sc.Loose("network.allowAllUnixSockets")
 	p.LocalBinding = sc.Loose("network.allowLocalBinding")
 	p.UnixSockets, p.MachLookup = listValues(sc.UnixSockets), listValues(sc.MachLookup)
-	if runtime.GOOS == "linux" {
-		// gnosh itself, run inside to refuse the command new Unix sockets
-		// (DECISIONS 367; allowAllUnixSockets lifts it).
-		if exe, err := os.Executable(); err == nil {
-			p.Filter = exe
-		}
-	}
+	// gnosh itself, run inside to refuse the command new Unix sockets
+	// (DECISIONS 367; allowAllUnixSockets lifts it).
+	p.Filter = sandboxFilter(sc)
 	return p
 }
 

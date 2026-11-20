@@ -20,10 +20,25 @@ type Status struct {
 	// sandbox-exec's.
 	Tool string
 	// UsernsRefused says the sandbox refuses its commands user namespaces
-	// of their own (bubblewrap's --disable-userns, from 0.8); where it
-	// cannot, Weaker says so, for the person.
-	UsernsRefused bool
-	Weaker        string
+	// of their own (bubblewrap's --disable-userns, from 0.8), and Filters
+	// that the filter for Unix sockets can be put on them here. Where the
+	// first cannot, Weaker says so, and where the second cannot, NoFilter,
+	// for the person.
+	UsernsRefused, Filters bool
+	Weaker, NoFilter       string
+}
+
+// Notes is what the sandbox cannot do here, in a sentence: Weaker, unless
+// the settings let user namespaces anyway (userns), and NoFilter.
+func (st Status) Notes(userns bool) string {
+	var out []string
+	if st.Weaker != "" && !userns {
+		out = append(out, st.Weaker)
+	}
+	if st.NoFilter != "" {
+		out = append(out, st.NoFilter)
+	}
+	return strings.Join(out, ", and ")
 }
 
 var (
