@@ -458,23 +458,21 @@ func ensureDataDir(cfg *config.Config) {
 // for the model.
 func (l *live) sandboxNetworkText(network bool) string {
 	sc := l.cfg.Sandbox
-	hosts := listValues(sc.AllowedDomains)
-	switch {
-	case !network:
+	if !network {
 		return "reach no network"
-	case sc.Strict && len(hosts) == 0:
-		return "reach no host on the network but those WebFetch(domain:...) allow rules name, through a proxy HTTP_PROXY and HTTPS_PROXY name"
+	}
+	reach := "reach the network only through a proxy that HTTP_PROXY and HTTPS_PROXY name (a program that ignores those reaches nothing), which lets through "
+	let := "the hosts WebFetch(domain:...) allow rules name"
+	if hosts := listValues(sc.AllowedDomains); len(hosts) > 0 {
+		let = strings.Join(hosts, ", ") + " and " + let
+	}
+	switch {
 	case sc.Strict:
-		return "reach on the network only " + strings.Join(hosts, ", ") + " (and the hosts WebFetch(domain:...) allow rules name), through a proxy HTTP_PROXY and HTTPS_PROXY name"
+		return reach + let + ", and no other host"
+	case !l.interactive:
+		return reach + let + ", and refuses any other host, as nobody is here to be asked about it"
 	}
-	reach := "reach the network through a proxy HTTP_PROXY and HTTPS_PROXY name (a program that ignores those reaches nothing)"
-	if len(hosts) > 0 {
-		reach += ", " + strings.Join(hosts, ", ") + " let through at once"
-	}
-	if !l.interactive {
-		return reach + ", and any other host refused, as nobody is here to be asked about it"
-	}
-	return reach + ", any other host waiting while the person is asked about it"
+	return reach + let + " at once, and any other host once the person allows it (the command waits while they are asked)"
 }
 
 // askNetHost asks the person whether a sandboxed command may reach a host
@@ -500,7 +498,7 @@ func (l *live) askNetHost(ctx context.Context, host string, port int) (bool, str
 		Lead: "A command running in the sandbox wants to reach " + host + " (port " + strconv.Itoa(port) + "), which no setting lets it reach.",
 		Questions: []FormQuestion{{Question: q, Header: "Network", NoOther: true,
 			Options: []FormOption{{Label: yes, Description: "for this session"}, {Label: keep, Description: "keeps WebFetch(domain:" + host + ") for this project"}, {Label: refuse}}}}}
-	ans, err := l.agent.Ask(ctx, agent.Question{Kind: questionKind, Title: "A sandboxed command wants to reach " + host, Text: form.Lead, Data: form})
+	ans, err := l.agent.Ask(ctx, agent.Question{Kind: questionKind, Title: "Let a sandboxed command reach " + host + "?", Text: form.Lead, Data: form})
 	if err != nil {
 		return false, no + "the question was not answered"
 	}

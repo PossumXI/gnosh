@@ -146,7 +146,7 @@ func TestSandboxedCommandsReachAllowedHosts(t *testing.T) {
 	run(t, w, "-p", "fetch").wantCode(t, 0)
 	has(t, "an allowed host", toolResult(t, w, 1, "c1"), "reached")
 	has(t, "a host not allowed", toolResult(t, w, 1, "c2"), "not in sandbox.network.allowedDomains")
-	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "127.0.0.1 let through at once", "any other host refused, as nobody is here to be asked")
+	has(t, "what the model is told", string(w.Model.Requests()[0].Body), "which lets through 127.0.0.1 and the hosts WebFetch", "refuses any other host, as nobody is here to be asked")
 }
 
 // What the sandbox cannot keep from being made, where it was not there to
