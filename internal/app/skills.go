@@ -205,6 +205,11 @@ func defFindings(cfg *config.Config, trusted bool) []config.Finding {
 		} else {
 			add("agents", config.Fine, "the sub-agent kind %s is defined in %s", d.Name, d.Source)
 		}
+		if d.CompactWindowUnused != "" {
+			// (As Claude Code, the kind runs without it, which says so
+			// only in its debug log; "200k" is read as 200 there.)
+			add("agents", config.Note, "the sub-agent kind %s's autoCompactWindow, %s, is not used: it is a whole number of tokens, %d or more", d.Name, d.CompactWindowUnused, agentdef.MinCompactWindow)
+		}
 	}
 	for _, sk := range defs.Skipped() {
 		add("agents", config.Note, "%s defines no kind of sub-agent: %s", sk.Path, sk.Reason)

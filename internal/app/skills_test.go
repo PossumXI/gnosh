@@ -314,7 +314,7 @@ func TestDefinitionFolders(t *testing.T) {
 	w := apptest.NewWorld(t)
 	own := w.Write(w.ConfigDir()+"/agents/reviewer.md", agentFile("reviewer", "gnosh's own reviewer."))
 	w.Write(w.Home+"/.claude/agents/reviewer.md", agentFile("reviewer", "Claude Code's reviewer."))
-	theirs := w.Write(w.Home+"/.claude/agents/tester.md", agentFile("tester", "Runs the tests."))
+	theirs := w.Write(w.Home+"/.claude/agents/tester.md", "---\nname: tester\ndescription: Runs the tests.\nautoCompactWindow: 200k\n---\nDo as asked.\n")
 	project := w.Write(".gnosh/agents/fixer.md", agentFile("fixer", "The project's fixer."))
 	w.Write(".claude/agents/fixer.md", agentFile("fixer", "The project's other fixer."))
 	skillOwn := w.Write(w.ConfigDir()+"/skills/ship/SKILL.md", shipSkill)
@@ -326,6 +326,8 @@ func TestDefinitionFolders(t *testing.T) {
 		"the sub-agent kind general-purpose is gnosh's own",
 		"the sub-agent kind reviewer is defined in "+own,
 		"the sub-agent kind tester is defined in "+theirs,
+		// (Claude Code reads "200k" as 200 and says so only in its debug log.)
+		"the sub-agent kind tester's autoCompactWindow, 200k, is not used: it is a whole number of tokens, 100000 or more",
 		"the skill ship is "+skillOwn,
 		"this folder defines 1 kind of sub-agent and 2 skills of its own, which are not read because the folder is not trusted")
 	hasNot(t, "doctor in a folder that is not trusted", r.out, "fixer", "deploy", "lint", "Claude Code's reviewer")
