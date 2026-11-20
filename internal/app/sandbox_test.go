@@ -328,7 +328,7 @@ func TestSandboxHidesCredentials(t *testing.T) {
 		t.Errorf("a file a hidden pattern matches was read: %s", got)
 	}
 	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
-	has(t, "/sandbox", r.out, "Credentials hidden:", "/proj/**/.env (1 path found when the session started")
+	has(t, "/sandbox", r.out, "Credentials hidden, whatever else opens them:", "/proj/**/.env (1 path found when the session started")
 }
 
 // With filesystem.disabled the sandbox leaves the files open: a command
@@ -367,7 +367,7 @@ func TestSandboxFilesLeftOpen(t *testing.T) {
 	}
 	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
 	has(t, "/sandbox", r.out, "Files: left open (filesystem.disabled", "they ask as any command does",
-		"Loosened: network.allowLocalBinding", "Not reported when stopped (ignoreViolations): /etc/hosts for *", "Network: through gnosh's proxy")
+		"Loosened: network.allowLocalBinding", "Not reported when stopped (ignoreViolations): /etc/hosts for every command", "Network: through gnosh's proxy")
 }
 
 // A WebFetch(domain:...) deny rule refuses its host to a sandboxed

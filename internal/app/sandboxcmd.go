@@ -114,14 +114,14 @@ func (l *live) sandboxReport() string {
 		}
 	}
 	if files, vars := listValues(sc.HiddenFiles), listValues(sc.HiddenVars); len(files)+len(vars) > 0 {
-		b.WriteString("\nCredentials hidden:")
+		var parts []string
 		if len(files) > 0 {
-			fmt.Fprintf(&b, " %s (not to be read, whatever else opens them)", l.shownFound(files))
+			parts = append(parts, l.shownFound(files))
 		}
 		if len(vars) > 0 {
-			fmt.Fprintf(&b, " %s (not given)", strings.Join(vars, ", "))
+			parts = append(parts, "the variables "+strings.Join(vars, ", ")+", not given")
 		}
-		b.WriteString(".")
+		fmt.Fprintf(&b, "\nCredentials hidden, whatever else opens them: %s.", strings.Join(parts, "; "))
 	}
 	if len(sc.Excluded) > 0 {
 		fmt.Fprintf(&b, "\nRun outside it (excludedCommands): %s.", strings.Join(listValues(sc.Excluded), ", "))
@@ -157,7 +157,11 @@ func (l *live) sandboxLooseText(sc config.Sandbox) string {
 	if n := len(sc.IgnoreViolations); n > 0 {
 		var what []string
 		for _, iv := range sc.IgnoreViolations {
-			what = append(what, iv.What+" for "+iv.Command)
+			if iv.Command == "*" {
+				what = append(what, iv.What+" for every command")
+			} else {
+				what = append(what, iv.What+" for a command holding "+iv.Command)
+			}
 		}
 		fmt.Fprintf(&b, "\nNot reported when stopped (ignoreViolations): %s.", strings.Join(what, ", "))
 	}
