@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/text"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
 
@@ -117,8 +118,19 @@ func (l *live) slashContext(ctx context.Context, c *SlashContext) error {
 }
 
 // cleanTitle makes a session's name of what was typed: one line, of a
-// length a list can show.
+// length a list can show, with no control character, and nothing drawn as
+// nothing: a name, or a first prompt a name is made of, pasted from
+// coloured output kept its escape sequences, which lists then wrote out
+// (the settings-commands review of 2026-11-20; Claude Code takes such
+// characters out of a name too).
 func cleanTitle(s string) string {
+	s, _ = text.CleanInvisible(text.Strip(s))
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return ' '
+		}
+		return r
+	}, s)
 	return oneLine(strings.Join(strings.Fields(s), " "), 120)
 }
 

@@ -563,3 +563,20 @@ func TestUserPromptExpansionHook(t *testing.T) {
 		t.Errorf("the model was asked although the hook blocked the expansion")
 	}
 }
+
+// A session's name keeps no escape sequence, control character or
+// character drawn as nothing, whatever it was made of (the
+// settings-commands review of 2026-11-20).
+func TestCleanTitle(t *testing.T) {
+	for in, want := range map[string]string{
+		"fix the  flaky\ttest":                "fix the flaky test",
+		"fix \x1b[31mthe\x1b[0m bug":          "fix the bug",
+		"title\x1b]0;owned\x07 here":          "title here",
+		"bell\x07 and \u0085next and \u009bx": "bell and next and x",
+		"right‮to left":                       "rightto left",
+	} {
+		if got := cleanTitle(in); got != want {
+			t.Errorf("cleanTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

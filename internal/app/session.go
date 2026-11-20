@@ -861,7 +861,11 @@ func (l *live) nameSession() error {
 	if l.inv.Name == "" || l.source == "clear" {
 		return nil
 	}
-	if _, err := l.ts.Append(transcript.TitleEntry(l.inv.Name, transcript.SourceUser)); err != nil {
+	name := cleanTitle(l.inv.Name)
+	if name == "" {
+		return nil
+	}
+	if _, err := l.ts.Append(transcript.TitleEntry(name, transcript.SourceUser)); err != nil {
 		return fmt.Errorf("the session could not be named: %w", err)
 	}
 	return nil
