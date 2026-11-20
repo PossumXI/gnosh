@@ -64,7 +64,7 @@ func (l *live) loadInstructions(ctx context.Context) error {
 			"The instruction files given to the model at the start come to %s characters, over %s: they take room from every request, and a model follows a long text less well. /memory lists them.",
 			thousands(n), thousands(largeInstructions)))
 	}
-	l.instructionsLoaded(set.Files(), "")
+	l.instructionsLoaded(set.Files(), "", "")
 	return nil
 }
 
@@ -120,9 +120,11 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 }
 
 // instructionsLoaded fires the InstructionsLoaded hooks for files that
-// were just loaded. Nothing those hooks say is read, and they are not
-// waited for.
-func (l *live) instructionsLoaded(files []instructions.File, trigger string) {
+// were just loaded, for the reason each was, or for reason when it is
+// given ("compact": given again after a summary, as Claude Code's are).
+// A rule loaded for the files it names carries its patterns, as globs.
+// Nothing those hooks say is read, and they are not waited for.
+func (l *live) instructionsLoaded(files []instructions.File, trigger, reason string) {
 	if l.hooks == nil || !l.hooks.has(hooks.InstructionsLoaded) {
 		return
 	}
@@ -131,9 +133,12 @@ func (l *live) instructionsLoaded(files []instructions.File, trigger string) {
 			Event:           hooks.InstructionsLoaded,
 			FilePath:        f.Path,
 			MemoryType:      string(f.Scope),
-			LoadReason:      string(f.Reason),
+			LoadReason:      firstOf(reason, string(f.Reason)),
 			TriggerFilePath: trigger,
 			ParentFilePath:  f.Parent,
+		}
+		if f.Reason == instructions.ReasonRuleMatch && len(f.Globs) > 0 && reason == "" {
+			in.Extra = map[string]any{"globs": f.Globs}
 		}
 		l.background(func(ctx context.Context) { _, _ = l.hooks.run(ctx, in) })
 	}
@@ -171,7 +176,7 @@ func (l *live) lateInstructionsFor(ctx context.Context, instr *instructions.Set,
 	if len(files) == 0 {
 		return nil
 	}
-	l.instructionsLoaded(files, path)
+	l.instructionsLoaded(files, path, "")
 	text := instructions.RenderFiles(files)
 	if strings.TrimSpace(text) == "" {
 		return nil

@@ -16,6 +16,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
@@ -87,14 +88,29 @@ func (l *live) slashContext(ctx context.Context, c *SlashContext) error {
 		c.Say("%s", row)
 	}
 	if l.instr != nil {
-		c.Say("The instruction files in effect from the start:")
-		n := 0
+		// Those given as the model went to work where they apply are
+		// listed apart: they were listed as in effect from the start
+		// (the instruction-files review of 2026-11-20).
+		var start, late []instructions.File
 		for _, f := range l.instr.Files() {
-			c.Say("      %s  %s", f.Path, thousands(est(f.Text)))
-			n++
+			if f.Late {
+				late = append(late, f)
+			} else {
+				start = append(start, f)
+			}
 		}
-		if n == 0 {
+		c.Say("The instruction files in effect from the start:")
+		for _, f := range start {
+			c.Say("      %s  %s", f.Path, thousands(est(f.Text)))
+		}
+		if len(start) == 0 {
 			c.Say("      none")
+		}
+		if len(late) > 0 {
+			c.Say("Given along the way, for the work they apply to:")
+			for _, f := range late {
+				c.Say("      %s  %s", f.Path, thousands(est(f.Text)))
+			}
 		}
 	}
 	return nil

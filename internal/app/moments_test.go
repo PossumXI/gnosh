@@ -224,6 +224,25 @@ func TestTheRarerHookEventsFire(t *testing.T) {
 			t.Errorf("the hooks that ran: %q", got)
 		}
 	})
+	t.Run("instruction files given again after a summary", func(t *testing.T) {
+		w := apptest.NewWorld(t, apptest.Reply{Text: "The first answer."}, apptest.Reply{Text: "SUMMARY: nothing much."})
+		w.Write("AGENTS.md", "A rule.\n")
+		eventLog(w, "InstructionsLoaded")
+		s := sit(t, w)
+		s.see("Type a prompt and Enter.")
+		s.typeLine("remember this")
+		s.see("The first answer.")
+		s.typeLine("/compact")
+		s.see("The conversation was summarized")
+		// (The hooks are not waited for: a session that ends at once may
+		// end before one has run.)
+		waitFor(t, "InstructionsLoaded after the summary", func() bool {
+			return strings.Contains(strings.Join(loggedEvents(t, w), "\n"), "InstructionsLoaded compact")
+		})
+		has(t, "the hooks that ran", strings.Join(loggedEvents(t, w), "\n"), "InstructionsLoaded session_start")
+		s.typeLine("/exit")
+		s.exit()
+	})
 	t.Run("a session that waits for its person", func(t *testing.T) {
 		defer func(a, i time.Duration) { askNotifyAfter, idleNotifyAfter = a, i }(askNotifyAfter, idleNotifyAfter)
 		askNotifyAfter, idleNotifyAfter = 50*time.Millisecond, 50*time.Millisecond

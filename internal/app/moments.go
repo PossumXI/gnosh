@@ -833,6 +833,13 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 		}
 		if text := l.startInstructions(); text != "" {
 			parts = append(parts, agent.Part{Source: "instructions", Text: text})
+			var given []instructions.File
+			for _, f := range l.instr.Files() {
+				if !f.Late {
+					given = append(given, f)
+				}
+			}
+			l.instructionsLoaded(given, "", "compact")
 		}
 	}
 	if text := l.startAgentTypes(); text != "" {
