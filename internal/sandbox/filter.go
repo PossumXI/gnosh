@@ -66,8 +66,11 @@ var filterArches = map[string]filterArch{
 // with EAFNOSUPPORT, and io_uring_setup, whose rings make sockets where
 // the filter does not look; the same of the 32-bit calls, socketcall
 // whole; an x32 call, or one of an architecture the filter does not
-// know, kills the process. socketpair(2) stays: its sockets reach
-// nothing outside.
+// know, kills the process. socketpair(2) stays, as programs need it: a
+// stream pair reaches nothing outside, but a datagram one can still be
+// pointed (connect, sendto) at a datagram socket in sight by its path,
+// and few are, the sandbox's /run, /dev and /tmp being its own (the second
+// sandbox review).
 func unixFilter(a filterArch) []sockFilter {
 	deny := uint32(seccompErrno | eafnosupport)
 	prog := []insn{

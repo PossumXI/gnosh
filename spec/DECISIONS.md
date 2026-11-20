@@ -5537,3 +5537,27 @@ or kept with the reason said (27).
     against its own estimate as how much it under-counts; only when the
     provider says nothing, or nothing it says moves anything, does it guess
     as before, so a request is never sent again as it was.
+
+371. **What the third sandbox review found is closed.** A narrower read
+    of the Unix socket filter (367, 369) and of the guards against moving
+    things out (365). On macOS a folder cloned whole (clonefile(2)) took
+    the denied and hidden files in it along, readable: Seatbelt asks
+    about the folder only (365's "a clone of a denied file was refused"
+    held for a file, not for a folder that holds one). With anything
+    denied or hidden, the profile now refuses cloning a folder; files are
+    still cloned one by one (cp -c, cp -cR, ditto --clone), each asked
+    about (checked with sandbox-exec on macOS 27). On Linux the relay
+    connected to the proxy's socket by its path in the /tmp the command
+    writes, so a command could put a link to another socket in its place
+    (docker's, an agent's) and reach that through the relay, past the
+    filter. The socket is now mounted read-only onto itself, with the
+    files left open too: a mount point is neither deleted nor renamed,
+    and a socket on a read-only mount still takes connections. On macOS
+    what allowRead opens again inside a denied folder could be deleted or
+    moved out; rename and delete now come back only where writing does,
+    as the read-only mount keeps such a path in place on Linux. Where
+    gnosh cannot find its own program the filter was dropped without a
+    word; the startup notice and /sandbox now say so. A datagram
+    socketpair can still be pointed by path at a datagram socket in
+    sight; few are, the sandbox's /run, /dev and /tmp being its own, and
+    pairs stay, as programs need them (367 said they reach nothing).

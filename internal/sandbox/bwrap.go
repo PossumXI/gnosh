@@ -52,6 +52,9 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 		}
 	}
 	if p.FilesystemOff {
+		if p.Proxy != "" && p.Relay != "" && there(p.Proxy) {
+			a = append(a, "--ro-bind", p.Proxy, p.Proxy) // (pinned: below)
+		}
 		a = append(a, "--chdir", filepath.Clean(dir), "--")
 		if p.Proxy != "" && p.Relay != "" {
 			// (The proxy's socket where it is: the machine's /tmp is the
@@ -145,6 +148,15 @@ func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(stri
 	// away, and moves with a folder renamed that holds it).
 	for _, h := range present(p.Hidden, there) {
 		hide(h)
+	}
+	// The proxy's socket, pinned where the relay finds it: in the /tmp the
+	// command writes, it could put a link to another socket in its place
+	// (docker's, an agent's), and the relay, which may make Unix sockets,
+	// would connect to that (the second sandbox review). A mount point is
+	// neither deleted nor renamed, and a socket on a read-only mount
+	// still takes connections.
+	if inside, ok := insideTemp(p); ok && p.Relay != "" && there(p.Proxy) {
+		a = append(a, "--ro-bind", p.Proxy, inside)
 	}
 	// gnosh's own program, which runs inside as the relay and the filter:
 	// in sight wherever it lies (under the real /tmp, in a denied folder),

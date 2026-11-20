@@ -359,4 +359,26 @@ func TestSandboxReachesAllowedHostsThroughTheProxy(t *testing.T) {
 	if got := fetch("http://elsewhere.example/"); !strings.Contains(got, "not in sandbox.network.allowedDomains") {
 		t.Errorf("a host not allowed: %q", got)
 	}
+	// The proxy's socket cannot be swapped for another: deleted, moved
+	// or written over with a link to some other socket, the relay would
+	// connect to that one (the second sandbox review). It stays, and the
+	// way out is still the proxy.
+	other := filepath.Join(t.TempDir(), "other.sock")
+	ln, err := net.Listen("unix", other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	in := "/tmp/" + filepath.Base(sock)
+	swap := "rm -f " + in + "; mv " + in + " /tmp/moved.sock; ln -sf " + other + " " + in + "; " + curl + " -s -m 10 " + srv.URL
+	argv, err := Wrap(p, work, []string{"/bin/sh", "-c", swap})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = append(os.Environ(), Env(p)...)
+	out, _ := cmd.CombinedOutput()
+	if got := string(out); !strings.HasSuffix(strings.TrimSpace(got), "reached") || strings.Count(got, "busy") < 2 {
+		t.Errorf("the proxy's socket swapped from inside: %q", got)
+	}
 }

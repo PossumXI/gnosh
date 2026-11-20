@@ -114,8 +114,19 @@ func seatbeltProfile(p Policy) string {
 		opened = append(opened, e.Path)
 	}
 	rule("deny file-write-unlink", p.DenyRead)
+	// Moving and deleting come back only where writing does: what is
+	// opened again to be read only (allowRead, a file of gnosh's it reads)
+	// stays where it is, as its read-only mount keeps it on Linux (the
+	// second sandbox review: a file allowRead opened in a denied folder
+	// was deleted, and moved out).
+	writes := append([]string(nil), p.Write...)
+	for _, e := range p.Expose {
+		if e.Write {
+			writes = append(writes, e.Path)
+		}
+	}
 	var inside, again []string
-	for _, o := range opened {
+	for _, o := range writes {
 		for _, d := range p.DenyRead {
 			if o != "" && d != "" && o != d && under(o, d) {
 				inside = append(inside, o)
@@ -178,6 +189,15 @@ func seatbeltProfile(p Policy) string {
 			lits[i] = "  (literal " + sbString(h) + ")"
 		}
 		b.WriteString("(deny file-write-unlink\n" + strings.Join(lits, "\n") + ")\n")
+	}
+	if len(p.DenyRead) > 0 || len(p.Hidden) > 0 {
+		// No folder cloned whole: clonefile(2) copies a folder's tree in
+		// the kernel, and Seatbelt asks only about the folder, so a copy of
+		// one the command may read brought the denied and hidden files in
+		// it out, readable (the second sandbox review, tested). A file is
+		// still cloned one by one (cp -c, ditto --clone), where each is
+		// asked about.
+		b.WriteString("(deny file-clone (vnode-type DIRECTORY))\n")
 	}
 	return b.String()
 }

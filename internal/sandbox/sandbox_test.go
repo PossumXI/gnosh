@@ -108,7 +108,7 @@ func TestBwrapLoosenings(t *testing.T) {
 	open := Policy{FilesystemOff: true, Write: []string{"/w"}, DenyRead: []string{"/home/u"}, Temp: "/t",
 		Expose: []Exposed{{Path: "/x/cwd", Write: true}}, Proxy: "/t/proxy.sock", Relay: "/gnosh"}
 	want := "bwrap --die-with-parent --unshare-pid --unshare-ipc --unshare-net --bind / / --dev /dev --proc /proc --tmpfs /run" +
-		" --chdir /w -- /gnosh " + RelayWord + " /t/proxy.sock /bin/sh -c x"
+		" --ro-bind /t/proxy.sock /t/proxy.sock --chdir /w -- /gnosh " + RelayWord + " /t/proxy.sock /bin/sh -c x"
 	if got := args(open); got != want {
 		t.Errorf("the files left open:\n got %s\nwant %s", got, want)
 	}
@@ -208,5 +208,19 @@ func TestSeatbeltKeepsFoldersInPlace(t *testing.T) {
 	}
 	if strings.Index(got, "(allow file-write-unlink") > strings.Index(got, "(deny file-write*\n  (subpath \"/Users/u/proj/.gnosh\"))") {
 		t.Errorf("the unlinks opened again come after the read-only paths, and open them:\n%s", got)
+	}
+	// No folder cloned whole, which would take a denied file in it along;
+	// and what is opened again only to be read is not moved or deleted
+	// either (the third review).
+	p.AllowRead = append(p.AllowRead, "/Users/u/notes")
+	got = seatbeltProfile(p)
+	if !strings.Contains(got, "(deny file-clone (vnode-type DIRECTORY))") {
+		t.Errorf("folders may be cloned:\n%s", got)
+	}
+	if i := strings.Index(got, "(allow file-write-unlink"); i < 0 || strings.Contains(got[i:i+strings.Index(got[i:], ")\n")], "/Users/u/notes") {
+		t.Errorf("a path opened again to be read may be moved or deleted:\n%s", got)
+	}
+	if strings.Contains(seatbeltProfile(Policy{Write: []string{"/w"}}), "file-clone") {
+		t.Errorf("folders refused cloning with nothing denied or hidden")
 	}
 }
