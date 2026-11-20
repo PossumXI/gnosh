@@ -866,6 +866,9 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		}
 		c.Say("skills       %s", firstOf(strings.Join(names, ", "), "none; /skills says where they go"))
 	}
+	if l.p.scrubbing() {
+		c.Say("scrub        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: the commands, hooks and servers gnosh starts get no credential it was started with")
+	}
 	for i, line := range l.switchedOff(m) {
 		label := "off"
 		if i > 0 {

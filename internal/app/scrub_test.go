@@ -39,6 +39,12 @@ func TestSubprocessEnvScrub(t *testing.T) {
 	runWith(t, t.Context(), o).wantCode(t, 0)
 	has(t, "a command's environment, as it was", toolResult(t, w, 3, "c1"), "[abc123|from-settings|hello|https://u:pw@pypi.example/simple|")
 	has(t, "a hook's environment, as it was", w.Read(seen), "NPM_TOKEN=abc123", "SET_TOKEN=from-settings")
+
+	// /status says the scrub is on, and only then.
+	o = testOptions(w, "-p", "/status")
+	o.Environ = append(o.Environ, "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1")
+	has(t, "/status with the scrub", runWith(t, t.Context(), o).wantCode(t, 0).out, "scrub        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB")
+	hasNot(t, "/status without it", run(t, w, "-p", "/status").wantCode(t, 0).out, "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB")
 }
 
 // With the scrub on, the sandbox's settings that let a command out are
