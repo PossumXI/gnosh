@@ -1560,3 +1560,14 @@ func TestProviderBackSaidOnce(t *testing.T) {
 	g.ev(said("Back.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
 	g.committedHas("answers again, after 1 failed try").committedLacks("is answering again")
 }
+
+// A Bash call that came whole with no command is named as any call is,
+// its failure on its line, not drawn as a prompt with nothing after it.
+func TestBashCallWithNoCommand(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"look" <Enter>`).start()
+	args := map[string]any{"cmd": "ls"}
+	g.ev(toolCall("c1", "Bash"), replyEnd(core.StopToolUse), toolStart("c1", "Bash", args))
+	g.ev(toolEnd("c1", "Bash", args, core.ToolResult{Content: []core.Block{core.Text("This call did not run: command is missing: give the shell command to run.")}, IsError: true}, 0))
+	g.committedHas("Bash", "command is missing").committedLacks("✗ $")
+}

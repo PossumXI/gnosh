@@ -385,6 +385,12 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 		if command == "" && action != nil {
 			command = action.Command
 		}
+		if strings.TrimSpace(command) == "" && args != nil {
+			// A call that came whole with no command ("cmd", as a model
+			// may write it) is named as any call is, not drawn as a prompt
+			// with nothing after it (seen on the devbox's screen).
+			break
+		}
 		h.shell = true
 		lines := safeLines(command)
 		if len(lines) > 0 {
