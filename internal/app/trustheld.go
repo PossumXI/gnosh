@@ -69,7 +69,7 @@ func userMCPHoldings(cfg *config.Config) []trust.Holding {
 		if json.Unmarshal(servers[name], &e) != nil || e.Command == "" {
 			continue
 		}
-		out = append(out, trust.Holding{Kind: trust.KindMCPLocal, File: path,
+		out = append(out, trust.Holding{Kind: trust.KindMCPLocal, File: path, Own: true,
 			Text: "your MCP server " + name + " (" + strings.Join(append([]string{e.Command}, e.Args...), " ") + "), which would start in this folder and read what is there"})
 	}
 	return out
@@ -86,7 +86,7 @@ func lspHoldings(cfg *config.Config) []trust.Holding {
 	for _, srv := range cfg.LSPServers {
 		line := strings.Join(append([]string{srv.Command}, srv.Args...), " ")
 		out = append(out, trust.Holding{Kind: trust.KindLSP, Text: "your language server " + srv.Name + " (" + line + "), which would read this folder's code and may run some of it",
-			File: srv.Origin.File, Line: srv.Origin.Line})
+			File: srv.Origin.File, Line: srv.Origin.Line, Own: true})
 	}
 	return out
 }

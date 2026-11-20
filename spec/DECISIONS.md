@@ -5334,3 +5334,15 @@ or kept with the reason said (27).
     SessionStart hook writes into the environment file is set again by
     that file inside the sandbox: such a credential is the hook's to
     keep out.
+
+362. **The trust question sets the person's own servers apart.** Seen
+    on the devbox's screen: with only the person's own MCP server held
+    (351), the trust question said the folder's own settings "would add"
+    it, and its No said "start with your own settings only", though the
+    server, the person's own, waits for the yes too. A holding of the
+    person's own (their language servers, their MCP servers gnosh starts)
+    is now listed apart, as settings of their own that would run programs
+    in the folder; the risk said for it is that programs of their own
+    started there read what the folder holds; and No says those wait
+    ("No: not now, my own servers here waiting too"). gnosh trust's report
+    lists them too, as now running in the folder.

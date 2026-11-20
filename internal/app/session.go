@@ -1996,12 +1996,18 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 	var ask []func(trust.Question) (yes, quit bool)
 	if asker, ok := front.(Asker); ok && interactive {
 		ask = append(ask, func(q trust.Question) (bool, bool) {
+			no := "No: start with my own settings only"
+			if len(q.Yours) > 0 {
+				// (Those of the person's own that would run in the folder
+				// wait for the yes too.)
+				no = "No: not now, my own servers here waiting too"
+			}
 			ans, err := asker.AskBefore(agent.Question{
 				Kind:  "trust",
 				Title: "Trust this folder?",
 				Text:  q.String(),
 				Choices: []agent.Choice{
-					{Key: "no", Label: "No: start with my own settings only"},
+					{Key: "no", Label: no},
 					{Key: "yes", Label: "Yes: use this folder's settings"},
 				},
 			})
