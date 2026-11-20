@@ -4500,3 +4500,20 @@ or kept with the reason said (27).
     feature keys); and twelve rounds in a row made of no more than three
     kinds of round, in any order, are a loop too, told as a cycle. As
     before the guard never ends the turn.
+
+315. **A file changed on disk can still be edited where old_string
+    picks out one place in it as it is now.** Edit refused any file that
+    had changed since the session read it, so a formatter, a build step
+    or a sub-agent touching the file cost a full read before every edit;
+    Claude Code lets the edit through when old_string matches the
+    current content exactly and once, and notes in the result that the
+    file carries other changes (its tools reference, "Edit tool
+    behavior"). Edit now does the same: the match is made on the file as
+    it is, the edit touches that place alone, the reply says the rest
+    holds changes the session has not seen and to read again before an
+    edit that depends on what is around it, and only the lines the edit
+    put in count as seen afterwards. Not found, or found more than once,
+    even with replace_all, it is to be read again, as before. Two
+    sessions editing one file in turn now both land, the later on top of
+    the earlier, where before the later was refused. Write still refuses
+    a changed file: it replaces the whole.

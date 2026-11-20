@@ -46,6 +46,10 @@ type change struct {
 	lines      []int
 	edits      []lineEdit
 	rec        fileRecord
+	// stale says the file had changed on disk since the session last
+	// read it: the edit goes where old_string matches the file as it is
+	// now, as Claude Code lets it (edit.go).
+	stale bool
 }
 
 // action is the change as a permission check sees it.

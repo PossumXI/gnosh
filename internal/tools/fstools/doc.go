@@ -179,9 +179,13 @@
 // is found (left to right, none overlapping) is replaced. An empty
 // old_string, and one equal to new_string, are refused.
 //
-// The session must have been shown every line the edit touches, and the
-// file must not have changed on disk since. A file read only in part can
-// be edited in the part that was read.
+// The session must have been shown every line the edit touches. A file
+// read only in part can be edited in the part that was read. A file that
+// has changed on disk since can still be edited where old_string matches
+// it as it is now, at one place: the reply says the rest holds changes
+// the session has not seen, and only the lines the edit put in count as
+// seen afterwards. Not found, or found more than once, it is to be read
+// again.
 //
 // Edit keeps everything it does not replace exactly as it was: the bytes
 // before, between and after the replacements, the byte order mark, a

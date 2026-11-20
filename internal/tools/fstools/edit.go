@@ -201,9 +201,12 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 		return c, failf("%s is %s, more than the %s that %s takes on. Nothing was changed. Use a shell command to change it.", loc.abs, byteSize(info.Size()), byteSize(o.EditMaxBytes), o.EditName)
 	}
 	c.old = info
-	if !rec.unchanged(info, content) {
-		return c, staleFailure(o, &loc)
-	}
+	// A file changed on disk since the session read it may still be
+	// edited where old_string matches it as it is now, once, as Claude
+	// Code lets it (its tools reference, "Edit tool behavior"): the edit
+	// touches that place alone and keeps the other changes, and the reply
+	// says they are there. Any other case is told to read it again.
+	c.stale = !rec.unchanged(info, content)
 	if looksBinary(content) {
 		return c, failf("%s looks like a binary file, and %s only changes text. Nothing was changed.", loc.abs, o.EditName)
 	}
@@ -224,6 +227,9 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 
 	starts := findAll(view.text, oldLF)
 	if len(starts) == 0 {
+		if c.stale {
+			return c, staleFailure(o, &loc)
+		}
 		return c, missingText(o, &loc, view.text, oldLF, len(view.cr) > 0)
 	}
 
@@ -241,6 +247,11 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 		at = s
 		c.edits = append(c.edits, lineEdit{first: line, last: line + spanLines, delta: delta})
 	}
+	if len(starts) > 1 && c.stale {
+		// (Of a changed file only one place, plainly picked out: every
+		// place, with replace_all, may lie in lines never shown.)
+		return c, staleFailure(o, &loc)
+	}
 	if len(starts) > 1 && !all {
 		return c, failf("old_string is found %d times in %s (at %s). Nothing was changed. Add more of the surrounding text to old_string so that it picks out one place, or set replace_all to true to change every one.",
 			len(starts), loc.abs, editLines(c.edits, false))
@@ -255,7 +266,9 @@ func (t *editTool) plan(call core.ToolCall, env *core.ToolEnv) (*change, *failur
 	}
 	var unseen []lineEdit
 	for _, e := range c.edits {
-		if !rec.sees(span{e.first, e.last}) {
+		// (Of a changed file the lines seen are where they were: the
+		// match on the file as it is now is what counts.)
+		if !c.stale && !rec.sees(span{e.first, e.last}) {
 			unseen = append(unseen, e)
 		}
 	}
@@ -358,11 +371,19 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	// The session has seen what it had seen before, moved to where those
 	// lines now are, and it has seen the text it put in.
 	lines := lineCount(strings.TrimPrefix(c.after, utf8BOM))
-	seen := []span(nil)
-	if !c.rec.all {
+	seen, all := []span(nil), c.rec.all
+	switch {
+	case c.stale:
+		// Of a file that had changed, only the text the edit put in is
+		// known: the rest is to be read again before an edit there.
+		all = false
+		for i, e := range c.edits {
+			seen = addSpan(seen, span{c.lines[i], max(c.lines[i], c.lines[i]+(e.last-e.first)+e.delta)})
+		}
+	case !c.rec.all:
 		seen = shiftSpans(c.rec.seen, c.edits)
 	}
-	sessionOf(env).wrote(c.loc.real, info, sha256.Sum256([]byte(c.after)), c.rec.all, seen, lines)
+	sessionOf(env).wrote(c.loc.real, info, sha256.Sum256([]byte(c.after)), all, seen, lines)
 
 	var text strings.Builder
 	fmt.Fprintf(&text, "Edited %s%s: %s, at %s", c.loc.abs, c.loc.viaLink(), countOf(c.count, "replacement", "replacements"), newLines(c.lines))
@@ -378,6 +399,9 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		text.WriteString(snippet)
 	} else {
 		text.WriteString(".")
+	}
+	if c.stale {
+		text.WriteString(" " + c.loc.abs + " had changed on disk since this session last read it: the edit went where old_string matches it as it is now, and the rest of the file holds changes this session has not seen. Read it again before an edit that depends on what is around it.")
 	}
 	res := core.TextResult(text.String())
 	res.Display = c.display()
