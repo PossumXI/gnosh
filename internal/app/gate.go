@@ -671,12 +671,29 @@ func (l *live) permissionQuestion(call core.ToolCall, action core.Action, d perm
 		choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: label})
 	}
 	choices = append(choices, agent.Choice{Key: "no", Label: "No (alone it stops the turn; with words after it, the model reads them and carries on)"})
+	// (An MCP tool by the name its call has on the screen; the rules keep
+	// the tool's own name.)
+	name := call.Name
+	if server, tool, ok := MCPToolParts(call.Name); ok {
+		name = server + " - " + tool + " (MCP)"
+	}
 	return agent.Question{
 		Kind:    "permission",
-		Title:   "Allow " + call.Name + "?",
+		Title:   "Allow " + name + "?",
 		Text:    strings.TrimRight(b.String(), "\n"),
 		Choices: choices,
 	}
+}
+
+// MCPToolParts splits an MCP tool's name, mcp__server__tool, into the
+// server's and the tool's.
+func MCPToolParts(name string) (server, tool string, ok bool) {
+	rest, ok := strings.CutPrefix(name, "mcp__")
+	if !ok {
+		return "", "", false
+	}
+	server, tool, ok = strings.Cut(rest, "__")
+	return server, tool, ok && server != "" && tool != ""
 }
 
 // planQuestion is the question ExitPlanMode puts: the plan, and whether to

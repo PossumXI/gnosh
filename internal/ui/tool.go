@@ -164,17 +164,6 @@ type head struct {
 	code bool
 }
 
-// mcpName splits an MCP tool's name, mcp__server__tool, into the server's
-// and the tool's.
-func mcpName(name string) (server, tool string, ok bool) {
-	rest, ok := strings.CutPrefix(name, "mcp__")
-	if !ok {
-		return "", "", false
-	}
-	server, tool, ok = strings.Cut(rest, "__")
-	return server, tool, ok && server != "" && tool != ""
-}
-
 // argsInOrder is a call's arguments as key: value, in the order they were
 // written, at most n of them: a string quoted and cut short, a number or
 // a yes or no as it is, anything else left out. Arguments still being
@@ -524,7 +513,7 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 			}
 		}
 	default:
-		if server, tool, ok := mcpName(name); ok {
+		if server, tool, ok := app.MCPToolParts(name); ok {
 			// As Claude Code names an MCP tool's call: the server and the
 			// tool, then the first arguments as they were written (it read
 			// "mcp__echo__echo echo of the MCP server echo").

@@ -1580,10 +1580,10 @@ func TestMCPCallHeading(t *testing.T) {
 	raw := []byte(`{"text": "hello from the model", "times": 2, "nested": {"a": 1}}`)
 	g.ev(toolCall("c1", "mcp__echo__say_it"), replyEnd(core.StopToolUse), &agent.ToolStartEvent{CallID: "c1", Name: "mcp__echo__say_it", Input: raw})
 	g.liveHas(`echo - say_it (MCP) text: "hello from the model", times: 2`).liveLacks("mcp__echo__say_it")
-	if s, tl, ok := mcpName("mcp__a_b__c__d"); !ok || s != "a_b" || tl != "c__d" {
-		t.Errorf("mcpName: %q %q %v", s, tl, ok)
+	if s, tl, ok := app.MCPToolParts("mcp__a_b__c__d"); !ok || s != "a_b" || tl != "c__d" {
+		t.Errorf("MCPToolParts: %q %q %v", s, tl, ok)
 	}
-	if _, _, ok := mcpName("mcp__nothing"); ok {
+	if _, _, ok := app.MCPToolParts("mcp__nothing"); ok {
 		t.Error("a name with no tool was taken")
 	}
 }
