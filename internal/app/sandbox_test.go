@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -78,4 +79,28 @@ func TestExcludedCall(t *testing.T) {
 			t.Errorf("%s is not guarded", want)
 		}
 	}
+}
+
+// /sandbox says how the sandbox stands, and saves a mode chosen to the
+// project's local settings, in force from the next start.
+func TestSlashSandbox(t *testing.T) {
+	w := apptest.NewWorld(t)
+	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
+	has(t, "/sandbox with it off", r.out, "The sandbox is off", "/sandbox auto")
+	r = run(t, w, "-p", "/sandbox auto").wantCode(t, 0)
+	has(t, "/sandbox auto", r.out, "Saved to", "settings.local.json", "/restart")
+	local := w.Read(".gnosh/settings.local.json")
+	if !strings.Contains(local, `"enabled": true`) || !strings.Contains(local, `"autoAllowBashIfSandboxed": true`) {
+		t.Errorf("the local settings: %s", local)
+	}
+	if st := sandbox.Check(); st.OK {
+		r = run(t, w, "-p", "/sandbox").wantCode(t, 0)
+		has(t, "/sandbox with it on", r.out, "The sandbox is on", "Mode: auto-allow", "Writes: ", "Network: none")
+	}
+	run(t, w, "-p", "/sandbox strict").wantCode(t, 0)
+	if local := w.Read(".gnosh/settings.local.json"); !strings.Contains(local, `"allowUnsandboxedCommands": false`) || !strings.Contains(local, `"enabled": true`) {
+		t.Errorf("strict lost the mode: %s", local)
+	}
+	r = run(t, w, "-p", "/sandbox maybe")
+	has(t, "a word it does not take", r.out+r.err, "/sandbox takes auto, regular, off, strict or loose")
 }

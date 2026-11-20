@@ -352,7 +352,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 			if cfg.Sandbox.AutoAllow {
 				auto = "they run without asking (autoAllowBashIfSandboxed)"
 			}
-			add("tools", Fine, "the sandbox is on (%s): the shell's commands run in it, under %s, and %s. (%s)", tool, filepath.Base(tool), auto, cfg.Sandbox.Origin)
+			add("tools", Fine, "the sandbox is on: the shell's commands run in it (%s), and %s. (%s)", tool, auto, cfg.Sandbox.Origin)
 		case cfg.Sandbox.FailIfUnavailable:
 			add("tools", Fail, "the sandbox is on, with failIfUnavailable, and cannot run here: %s. (%s)", why, cfg.Sandbox.Origin)
 		default:

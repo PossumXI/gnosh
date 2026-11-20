@@ -5165,3 +5165,18 @@ or kept with the reason said (27).
     permission engine's own questions still catch where it can see the
     write. Claude Code's handling of a top-level HEAD, objects and refs
     (a bare repository made in the folder) is not built.
+
+355. **/sandbox.** Claude Code's /sandbox is a panel: its Config and
+    Dependencies tabs say how the sandbox stands, its Mode and Overrides
+    tabs choose auto-allow or regular permissions and whether a command
+    may fall back to running unsandboxed, saved to the project's local
+    settings. gnosh's /sandbox says the same in a few lines (on or off and
+    from which file, the program that makes it or why it cannot run, the
+    mode, strict or not, where commands write, what is read-only within
+    those folders, what may not be read, the excluded commands, and that
+    there is no network), and takes a word for the choice: auto, regular,
+    off, strict, loose, saved to .gnosh/settings.local.json as Claude Code
+    saves to .claude/settings.local.json. The choice is in force from the
+    session's next start (/restart): the shell tool and the permission
+    engine take the sandbox as the session starts. It works in a gnosh -p
+    run too.
