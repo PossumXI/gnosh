@@ -107,6 +107,7 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 		return nil, err
 	}
 	j := newJob(m, a, cwd)
+	j.roots = env.Roots
 	if cwd != env.Cwd {
 		j.gone = env.Cwd
 	}
@@ -239,6 +240,9 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 	}
 	if !person {
 		notes = append(notes, m.hints(a, e, body, own && !far.unsure && e.reaped && e.sig == 0)...)
+		if n := m.sandboxHint(a, e, body); n != "" {
+			notes = append(notes, n)
+		}
 	}
 	notes = append(notes, far.notes...)
 	if len(e.alive) > 0 {

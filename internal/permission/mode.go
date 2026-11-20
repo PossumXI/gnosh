@@ -101,6 +101,9 @@ const (
 	StageAllow Stage = "allow-rule"
 	// StageMode: no rule spoke; the mode decided.
 	StageMode Stage = "mode"
+	// StageSandbox: a shell command that runs in the operating system's
+	// sandbox was let run, as Options.Sandbox says (sandbox.go).
+	StageSandbox Stage = "sandbox"
 	// StageHook: a PreToolUse hook decided (see Decision.WithHook).
 	StageHook Stage = "hook"
 )

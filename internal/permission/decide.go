@@ -783,6 +783,9 @@ func (e *Engine) decideSteps(canon string, call core.ToolCall, action core.Actio
 	// 4. Allow rules, then what the mode lets run.
 	switch req.info.class {
 	case classShell:
+		if d, ok := e.sandboxAllows(req); ok {
+			return d
+		}
 		return e.decideShell(req)
 	case classFileRead:
 		return e.decideRead(req)

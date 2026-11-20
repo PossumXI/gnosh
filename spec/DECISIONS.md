@@ -5099,3 +5099,48 @@ or kept with the reason said (27).
     exists, and making a place for it would change the folder). Which
     commands run in it, and what they may do without asking, is the shell
     tool's and the permission engine's (353).
+
+353. **The sandbox, joined to the shell and the permissions.** With
+    Claude Code's "sandbox": {"enabled": true}, the shell's commands on
+    this machine run in the sandbox of 352, writing in the session's
+    folders (and filesystem.allowWrite) and a /tmp of their own, and
+    reaching no network. The settings files gnosh reads, gnosh.json,
+    .gnosh/, .claude/settings*.json, .mcp.json and .lsp.json in each
+    folder, a repository's .git/hooks and .git/config, and
+    filesystem.denyWrite stay read-only to them, since each would widen
+    what runs next, or run outside the sandbox the next time git does;
+    filesystem.denyRead hides paths and allowRead opens paths inside
+    them again. A command excludedCommands names runs outside it: a
+    single plain command fitting an entry as a Bash(...) rule's content
+    does, never a list, a pipe, a redirection, a substitution, a cd,
+    sudo, eval or xargs, nor a git command with a path that leads
+    elsewhere (Claude Code keeps those in). The model is told of the
+    sandbox in the Bash tool's description, and a command that fails
+    with what the sandbox makes commands say gets a note under it; it may
+    ask to run one again outside the sandbox (dangerouslyDisableSandbox,
+    offered unless allowUnsandboxedCommands is false), and that call is
+    judged as any command is. With autoAllowBashIfSandboxed a command
+    that runs in the sandbox needs no approval, as if an allow rule
+    covered it: after the deny rules, the ask rules (a bare Bash one
+    included, where Claude Code passes it over: stricter) and the checks
+    no allow rule passes (a protected file, a dangerous removal), which
+    hold as for every command, where Claude Code lets most of them
+    through; never in plan mode, for a command on another machine, or
+    for a Monitor's. The engine and the shell tool decide which commands
+    run outside by the one test. A sandbox the settings turn on that
+    cannot run here (no bubblewrap, a system that will not let it make
+    its namespaces) is a notice at startup, and the commands run outside
+    it, asking as they would without it; with failIfUnavailable gnosh
+    does not start. gnosh doctor says how it stands. In the settings, a
+    project's file can turn the sandbox on and narrow it before the
+    folder is trusted (enabled, failIfUnavailable,
+    allowUnsandboxedCommands false, autoAllowBashIfSandboxed false, the
+    deny lists), and never turn the person's off; what widens it waits
+    for the trust (autoAllowBashIfSandboxed true, excludedCommands,
+    allowWrite, allowRead). Paths are Claude Code's: /x and //x from the
+    root, ~/x from home, ./x or x from the project's root in a project's
+    file and from the person's config folder in their own. Not built:
+    sandbox.network (no domain is let through: Claude Code's proxy and
+    its questions about new hosts), credentials, ignoreViolations, the
+    Read and Edit rules' paths added to the sandbox's lists, the read
+    block's paths, and /sandbox.

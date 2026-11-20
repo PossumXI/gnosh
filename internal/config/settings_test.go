@@ -576,3 +576,71 @@ func TestSettingsHTTPHook(t *testing.T) {
 		t.Errorf("a header's value is shown:\n%s", cfg.String())
 	}
 }
+
+// The sandbox settings: Claude Code's paths (~/x, ./x from the file's
+// project or from the person's config folder); what only takes a power
+// away is in force from a repository's file before trust, what gives one
+// waits for it; a repository cannot turn the person's sandbox off; the
+// person's later file can; keys gnosh has not built say so.
+func TestSettingsSandbox(t *testing.T) {
+	values := func(items []ListItem) string {
+		var out []string
+		for _, it := range items {
+			out = append(out, it.V)
+		}
+		return strings.Join(out, " ")
+	}
+	fsys := newFS().put(userJSON, `{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "excludedCommands": ["docker *"],
+		"filesystem": {"allowWrite": ["~/.kube", "./out", "//srv/build/**"], "denyRead": ["~/.aws/credentials"]}}}`).
+		put(projJSON, `{"sandbox": {"enabled": false, "autoAllowBashIfSandboxed": true, "excludedCommands": ["rm *"], "allowUnsandboxedCommands": false,
+		"filesystem": {"allowWrite": ["/etc"], "denyWrite": ["./secret"], "denyRead": [".env"]}}}`)
+	for _, trusted := range []bool{false, true} {
+		in := inputs(fsys)
+		in.Trusted = trusted
+		cfg, problems := load(t, in)
+		if cfg == nil {
+			t.Fatalf("refused: %s", showProblems(problems))
+		}
+		sb := cfg.Sandbox
+		if !sb.Enabled || !sb.AutoAllow || sb.AllowUnsandboxed || sb.FailIfUnavailable {
+			t.Errorf("trusted %v: %+v", trusted, sb)
+		}
+		wantExcl, wantWrite := "docker *", "/home/dev/.kube /home/dev/.config/gnosh/out /srv/build"
+		if trusted {
+			wantExcl, wantWrite = "docker * rm *", wantWrite+" /etc"
+		}
+		if values(sb.Excluded) != wantExcl || values(sb.AllowWrite) != wantWrite {
+			t.Errorf("trusted %v: excluded %q, allowWrite %q", trusted, values(sb.Excluded), values(sb.AllowWrite))
+		}
+		if values(sb.DenyWrite) != "/work/proj/secret" || values(sb.DenyRead) != "/home/dev/.aws/credentials /work/proj/.env" {
+			t.Errorf("trusted %v: denyWrite %q, denyRead %q", trusted, values(sb.DenyWrite), values(sb.DenyRead))
+		}
+		wantProblem(t, problems, Warning, projJSON, 0, "does not turn the sandbox off")
+	}
+
+	// A repository turns it on for itself before trust, and cannot turn
+	// on running without asking; the person's later file turns it off.
+	in := inputs(newFS().put(projJSON, `{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true}}`))
+	in.Trusted = false
+	if sb := mustLoad(t, in).Sandbox; !sb.Enabled || sb.AutoAllow || !sb.AllowUnsandboxed {
+		t.Errorf("a repository's own: %+v", sb)
+	}
+	if sb := mustLoad(t, inputs(newFS().put(userJSON, `{"sandbox": {"enabled": true}}`).put(localJSON, `{"sandbox": {"enabled": false}}`))).Sandbox; sb.Enabled {
+		t.Errorf("the person's later file did not turn it off: %+v", sb)
+	}
+	if sb := mustLoad(t, inputs(newFS())).Sandbox; sb.Enabled || !sb.AllowUnsandboxed {
+		t.Errorf("nothing said: %+v", sb)
+	}
+
+	for bad, says := range map[string]string{
+		`{"sandbox": {"network": {"allowedDomains": ["x.com"]}}}`: "a setting Claude Code has and gnosh has not built. A sandboxed command reaches no network",
+		`{"sandbox": {"enabled": "yes"}}`:                         `"sandbox.enabled" is true or false`,
+		`{"sandbox": {"bogus": 1}}`:                               "not a key gnosh reads under \"sandbox\"",
+		`{"sandbox": {"filesystem": {"allowWrite": "/x"}}}`:       "is a list of paths",
+		`{"sandbox": true}`:                                       "\"sandbox\" is an object",
+	} {
+		if _, problems := load(t, withConfig(bad)); !strings.Contains(showProblems(problems), says) {
+			t.Errorf("%s: %s", bad, showProblems(problems))
+		}
+	}
+}

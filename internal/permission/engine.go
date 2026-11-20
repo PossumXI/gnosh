@@ -115,6 +115,9 @@ type Options struct {
 	// subfolder's is the settings of a session started there.
 	SettingsFiles []string
 	SettingsNames []string
+	// Sandbox is how Bash commands run in the operating system's sandbox
+	// (sandbox.go); its zero value is no sandbox.
+	Sandbox Sandbox
 	// Resolve follows symbolic links in a cleaned absolute path and
 	// returns where it really leads; for a path that does not exist yet
 	// it resolves the part that does. Nil means the paths the engine is
@@ -156,6 +159,7 @@ type layer struct {
 // Engine decides, for each tool call, whether it runs, is refused, or a
 // person is asked first. It is safe for use from several goroutines.
 type Engine struct {
+	sandbox   Sandbox
 	mu        *sync.RWMutex
 	mode      Mode
 	cwd       string // the primary working directory
@@ -229,6 +233,7 @@ func New(o Options) (*Engine, error) {
 		blockReads:    o.BlockReads,
 		blockWrites:   o.BlockWrites,
 		settingsNames: o.SettingsNames,
+		sandbox:       o.Sandbox,
 		links:         &sync.Map{},
 	}
 	e.ownReads = withLinks(o.OwnReads, o.Resolve)

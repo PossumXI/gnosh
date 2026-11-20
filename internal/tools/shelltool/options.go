@@ -3,6 +3,8 @@ package shelltool
 import (
 	"os"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/sandbox"
 )
 
 // Options sets up a Manager. The zero value is usable: every field has a
@@ -28,6 +30,11 @@ type Options struct {
 	// write the variables later commands are to have (Claude Code's
 	// CLAUDE_ENV_FILE). Empty means none.
 	EnvFile string
+
+	// Sandbox, when not nil, runs this machine's commands inside the
+	// operating system's sandbox (internal/sandbox), but those it says run
+	// outside it.
+	Sandbox *Sandbox
 
 	// SpoolDir is the directory in which the manager makes a directory of
 	// its own for output files. Close removes what the manager made, never
@@ -289,4 +296,23 @@ func (o Options) withDefaults() Options {
 	}
 	o.LongSleep = max(o.LongSleep, 0)
 	return o
+}
+
+// Sandbox is how commands run inside the operating system's sandbox.
+type Sandbox struct {
+	// Wrap returns the program and arguments that run argv, in dir, inside
+	// the sandbox, for a session whose folders are roots, reaching the
+	// files of gnosh's own given (the one its shell writes its last
+	// directory to, the scripts it reads), and the variables to set beside
+	// the command's own (where its temporary files and caches go). An
+	// error is why the command cannot be sandboxed.
+	Wrap func(dir string, roots, argv []string, expose []sandbox.Exposed) (wrapped []string, env []string, err error)
+	// Outside reports whether a command runs outside the sandbox: one
+	// excludedCommands names, or, with asked, one the model asked to
+	// (dangerouslyDisableSandbox), when Unsandboxed lets it.
+	Outside func(command string, asked bool) bool
+	// Unsandboxed offers dangerouslyDisableSandbox to the model.
+	Unsandboxed bool
+	// Writes says where a sandboxed command may write, for the model.
+	Writes string
 }

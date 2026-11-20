@@ -94,6 +94,10 @@ type Probes struct {
 	LookPath func(name string) (string, error)
 	// Exists reports whether a file is there.
 	Exists func(path string) bool
+	// Sandbox tries the operating system's sandbox once: whether it can
+	// run here, why not, and the program that makes it. Nil: it is not
+	// looked at.
+	Sandbox func() (ok bool, why, tool string)
 	// TryHost logs in to a declared host and runs nothing there. It
 	// returns the directory a command would start in, or, when a command
 	// could not be run there, why not in plain words. It reaches another
@@ -338,6 +342,21 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 			add("tools", Fine, "PDFs are read as text: poppler's pdfinfo and pdftotext are installed.")
 		} else {
 			add("tools", Note, "PDFs are not read as text: Read takes it with poppler's pdfinfo and pdftotext, which are not installed (apt install poppler-utils; brew install poppler).")
+		}
+	}
+	// The sandbox, when the settings turn it on.
+	if cfg.Sandbox.Enabled && pr.Sandbox != nil {
+		switch ok, why, tool := pr.Sandbox(); {
+		case ok:
+			auto := "each asks as it would without it"
+			if cfg.Sandbox.AutoAllow {
+				auto = "they run without asking (autoAllowBashIfSandboxed)"
+			}
+			add("tools", Fine, "the sandbox is on (%s): the shell's commands run in it, under %s, and %s. (%s)", tool, filepath.Base(tool), auto, cfg.Sandbox.Origin)
+		case cfg.Sandbox.FailIfUnavailable:
+			add("tools", Fail, "the sandbox is on, with failIfUnavailable, and cannot run here: %s. (%s)", why, cfg.Sandbox.Origin)
+		default:
+			add("tools", Note, "the sandbox is on and cannot run here: %s; commands run outside it, asking as they would without it. (%s)", why, cfg.Sandbox.Origin)
 		}
 	}
 	// The language servers (lspServers): each one's program, found as it

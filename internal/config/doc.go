@@ -70,6 +70,14 @@
 //	                 with an "if" filter if it likes (one permission rule)
 //	env              variables for the commands and hooks gnosh starts
 //	disableAllHooks  true switches every hook off, and the status line
+//	sandbox          {"enabled": true, ...}: the shell's commands run in
+//	                 the operating system's sandbox (bubblewrap on Linux,
+//	                 Seatbelt on macOS): writes only in the working
+//	                 folders, no network; autoAllowBashIfSandboxed,
+//	                 excludedCommands, allowUnsandboxedCommands,
+//	                 failIfUnavailable, filesystem.allowWrite/denyWrite/
+//	                 allowRead/denyRead. A project's file can turn it on
+//	                 and narrow it before trust, never turn it off
 //	allowedHttpHookUrls, httpHookAllowedEnvVars
 //	                 the URL patterns an http hook may post to (* is any
 //	                 run of characters), and the variables its headers may

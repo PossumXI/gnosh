@@ -488,3 +488,28 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 	}
 	return notes
 }
+
+// sandboxSigns are what a command says when the sandbox stopped it: a
+// write outside the folders it may write in, a name or an address it
+// cannot reach.
+var sandboxSigns = []string{"Read-only file system", "Operation not permitted", "Could not resolve host", "Temporary failure in name resolution",
+	"Name or service not known", "nodename nor servname provided", "Network is unreachable", "Couldn't connect to server", "Connection refused",
+	"no such host", "dial tcp"}
+
+// sandboxHint is the note under a sandboxed command that failed the way
+// the sandbox makes commands fail: what the sandbox lets it do, and the
+// way out of it, where there is one.
+func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
+	sb := m.opt.Sandbox
+	if !a.sandboxed || sb == nil || e.reason != endExited || e.code == 0 {
+		return ""
+	}
+	if !slices.ContainsFunc(sandboxSigns, func(s string) bool { return strings.Contains(body, s) }) {
+		return ""
+	}
+	said := "it ran in the sandbox, which lets it write only in " + sb.Writes + " and /tmp and reach no network"
+	if sb.Unsandboxed {
+		return said + ": if that is what stopped it, run it again with " + argNoSandbox + " set to true, and the person is asked"
+	}
+	return said + ", and which cannot be left in this session: if that is what stopped it, tell the person"
+}

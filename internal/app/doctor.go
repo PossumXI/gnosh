@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/llm"
+	"github.com/gnosh-ai/gnosh/internal/sandbox"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
@@ -43,6 +44,10 @@ func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []con
 		Exists: func(path string) bool {
 			_, err := os.Stat(path)
 			return err == nil
+		},
+		Sandbox: func() (bool, string, string) {
+			st := sandbox.Check()
+			return st.OK, st.Why, st.Tool
 		},
 	}
 	if tryHosts && cfg != nil && len(cfg.Hosts) > 0 {

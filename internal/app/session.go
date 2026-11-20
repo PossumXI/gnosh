@@ -484,6 +484,13 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	if err != nil {
 		return l, fmt.Errorf("the hooks cannot be run as they are configured:\n%w", err)
 	}
+	// A sandbox the settings turn on that cannot run here: a notice, or,
+	// with failIfUnavailable, no session.
+	if note, stop := sandboxNotice(l.cfg); stop != nil {
+		return l, stop
+	} else if note != "" {
+		l.notice(agent.LevelWarning, "sandbox", note)
+	}
 	l.hooks = &hookRunner{l: l, r: runner}
 	if l.asAgent != nil {
 		// The hooks of the kind the session runs as hold for all of it.

@@ -95,6 +95,7 @@ func (l *live) buildTools() error {
 	if slices.Contains(so.ToolNames, gnoRunTool) {
 		so.Misread = misreadGno
 	}
+	so.Sandbox = l.shellSandbox()
 	if l.interactive || l.inv.Command == cli.CmdPrint {
 		// A session somebody attends is told when a background command
 		// ends, and so is a run, which waits for the background work its

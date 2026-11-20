@@ -50,6 +50,8 @@ type builder struct {
 	// hookURLs and hookEnvVars are allowedHttpHookUrls and
 	// httpHookAllowedEnvVars, every file's merged.
 	hookURLs, hookEnvVars allowList
+	// sandbox is the sandbox settings (sandbox.go).
+	sandbox sandboxBuild
 
 	layers []*RuleLayer
 	mode   Value[string]
@@ -512,6 +514,7 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 		note("blockWritesOutsideWorkingDirectories")
 		b.blockWrites = Value[bool]{}
 	}
+	b.sandbox.sweep(ok, from, note)
 	if !ok(KindHookOff) {
 		if b.hookURLs.drop(from) {
 			note("allowedHttpHookUrls")

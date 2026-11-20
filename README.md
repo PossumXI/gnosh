@@ -87,6 +87,18 @@ Built:
   questions (AskUserQuestion) can close by themselves after a while
   without a key, so that a session you left goes on
   (`"options": {"askUserQuestionTimeout": "5m"}`, or 60s or 10m).
+- **Sandbox:** Claude Code's `"sandbox": {"enabled": true}` runs the
+  shell's commands inside the operating system's own sandbox (bubblewrap
+  on Linux, Seatbelt on macOS): they write only in the session's folders
+  and a /tmp of their own, and reach no network. With
+  `"autoAllowBashIfSandboxed": true` such a command runs without asking
+  (the deny and ask rules and gnosh's own checks still hold); one that
+  fails because of the sandbox can be run again outside it, after asking
+  (`dangerouslyDisableSandbox`), and `excludedCommands`,
+  `allowUnsandboxedCommands`, `failIfUnavailable` and
+  `filesystem.allowWrite`/`denyWrite`/`allowRead`/`denyRead` are read as
+  Claude Code's. Not built yet: `sandbox.network` (no domain is let
+  through) and `credentials`.
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,

@@ -72,6 +72,9 @@ type Config struct {
 	// runs). A project's waits for the folder's trust, as its
 	// disableAllHooks does: it would switch off the person's own hooks.
 	HTTPHookURLs []ListItem
+	// Sandbox is the sandbox settings: whether the shell's commands run in
+	// the operating system's sandbox, and what they may do there.
+	Sandbox Sandbox
 	// HTTPHookEnvVars is Claude Code's httpHookAllowedEnvVars, merged the
 	// same way: an http hook's header takes a variable only when both the
 	// hook's own allowedEnvVars and this list name it. Nil when no file

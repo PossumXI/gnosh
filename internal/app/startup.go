@@ -470,6 +470,7 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 			o.Layers = append(o.Layers, ly)
 		}
 	}
+	o.Sandbox = sandboxPermission(cfg)
 	o.BlockReads, o.BlockWrites = cfg.Permissions.BlockReads.V, cfg.Permissions.BlockWrites.V
 	if o.BlockReads || o.BlockWrites {
 		o.OwnReads, o.SettingsFiles = ownReads(cfg), settingsFiles(cfg)

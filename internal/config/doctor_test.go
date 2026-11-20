@@ -466,3 +466,19 @@ func TestDoctorSaysWhetherLanguageServersCanStart(t *testing.T) {
 	findings = doctor(t, withConfig(cfg), &fakeMachine{programs: []string{"gopls"}})
 	wantFinding(t, findings, "tools", Note, "the language server pyright (for .py) cannot start")
 }
+
+// gnosh doctor says how the sandbox stands when the settings turn it on:
+// fine when it runs, a note when it cannot, a failure with
+// failIfUnavailable.
+func TestDoctorSaysHowTheSandboxStands(t *testing.T) {
+	check := func(text string, ok bool) []Finding {
+		t.Helper()
+		cfg, problems, _ := Load(withConfig(`{` + box + `, "sandbox": ` + text + `}`))
+		pr := (&fakeMachine{}).probes()
+		pr.Sandbox = func() (bool, string, string) { return ok, "bubblewrap is not installed", "/usr/bin/bwrap" }
+		return Doctor(context.Background(), cfg, problems, pr)
+	}
+	wantFinding(t, check(`{"enabled": true, "autoAllowBashIfSandboxed": true}`, true), "tools", Fine, "the sandbox is on (/usr/bin/bwrap)", "they run without asking")
+	wantFinding(t, check(`{"enabled": true}`, false), "tools", Note, "the sandbox is on and cannot run here: bubblewrap is not installed")
+	wantFinding(t, check(`{"enabled": true, "failIfUnavailable": true}`, false), "tools", Fail, "with failIfUnavailable, and cannot run here")
+}
