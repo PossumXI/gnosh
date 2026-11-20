@@ -1,6 +1,7 @@
 package fstools
 
 import (
+	"context"
 	"runtime"
 	"time"
 
@@ -51,6 +52,13 @@ type Options struct {
 	// ReadMaxImageBytes is the largest image file Read returns as a
 	// picture. Default 5 MiB. Read does not shrink images.
 	ReadMaxImageBytes int64
+
+	// PDFPages and PDFText read a PDF for Read (pdf.go): how many pages it
+	// has, and the text of pages first to last, each page ended by a form
+	// feed. Nil means poppler's pdfinfo and pdftotext, found on the PATH
+	// when they are wanted; Read says so when they are not there.
+	PDFPages func(ctx context.Context, path string) (int, error)
+	PDFText  func(ctx context.Context, path string, first, last int) (string, error)
 
 	// EditMaxBytes is the largest file Edit changes. Edit holds the whole
 	// file in memory, twice. Default 32 MiB.

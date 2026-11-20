@@ -4546,3 +4546,21 @@ or kept with the reason said (27).
     fixes against gnosh: questions in a window of 12 rows show every
     choice by scrolling (box-ui-check short), --help is whole when
     piped, and a resumed session never shows a cut-off call as refused.
+
+318. **Read gives a PDF's text, by pages.** Read refused every PDF ("cannot
+    read yet"), and accepted pages without honouring it. Claude Code's
+    Read takes a PDF of at most 10 pages whole and a longer one only by
+    pages, at most 20 a call, rendering pages with poppler's pdftoppm.
+    gnosh's Read now gives the text instead, which every model reads and
+    which costs far less of the context than pictures: pdfinfo for the
+    number of pages, pdftotext -layout for pages first to last (a minute
+    each at most, 16 MiB of output at most), each page under a [page N]
+    line, its lines cut as a text file's are; pages that would take one
+    call past its 100,000 bytes are left for the next call, which the
+    result names ("read on with pages \"4-8\""); a PDF with no text in the
+    pages asked for (a scan) is said to be one, with the pdftoppm command
+    that makes a picture of a page to Read. pages is offered in Read's
+    schema ("3", "1-5"); ranges past the end are cut to it. Without
+    poppler (not on box 1, box 2 or the Mac today) Read says to install
+    poppler-utils. The functions are Options.PDFPages and PDFText, nil
+    meaning poppler, so that tests and other front ends may put their own.

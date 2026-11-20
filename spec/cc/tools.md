@@ -133,6 +133,11 @@ Behaviour:
   and recompressed to fit the model's limits; over 128 MB is refused. (P2)
 - **PDFs**: short ones whole; longer than 10 pages only by `pages`; page
   rendering needs `pdftoppm` (error text `pdftoppm is not installed`). (P2)
+  gnosh gives a PDF's text instead of pictures of its pages, by poppler's
+  `pdfinfo` and `pdftotext`, under the same limits (whole up to 10 pages,
+  at most 20 pages a call), each page headed `[page N]`; pages past what
+  one call shows are named for the next call, a page with no text (a scan)
+  is said to be one, and without poppler Read says to install it.
 - **Notebooks** (`.ipynb`): all cells with outputs; more than 256 KB of cells
   or over the token limit is an error; a file over 100 MB is refused. (P2)
 

@@ -1463,3 +1463,18 @@ func TestEscTypedWithAKeyDeclines(t *testing.T) {
 		}
 	}
 }
+
+// A Read of a PDF says which of its pages it read, and of how many.
+func TestReadOfAPDFSaysItsPages(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	g.keys(`"read the paper" <Enter>`).start()
+	part := map[string]any{"file_path": "/home/jae/src/proj/paper.pdf", "pages": "3-5"}
+	whole := map[string]any{"file_path": "/home/jae/src/proj/short.pdf"}
+	g.ev(toolCall("c1", "Read"), toolCall("c2", "Read"), replyEnd(core.StopToolUse))
+	g.ev(toolStart("c1", "Read", part), toolStart("c2", "Read", whole))
+	g.ev(toolEnd("c1", "Read", part, core.ToolResult{Content: []core.Block{core.Text("[page 3]\nx\n")},
+		Meta: map[string]any{"type": "pdf", "file": map[string]any{"numPages": 12, "firstPage": 3, "lastPage": 5}}}, 0))
+	g.ev(toolEnd("c2", "Read", whole, core.ToolResult{Content: []core.Block{core.Text("[page 1]\nx\n")},
+		Meta: map[string]any{"type": "pdf", "file": map[string]any{"numPages": 4, "firstPage": 1, "lastPage": 4}}}, 0))
+	g.once("Read paper.pdf (pages 3-5)").committedHas("pages 3-5 of 12", "4 pages of a PDF")
+}

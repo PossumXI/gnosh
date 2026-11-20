@@ -311,14 +311,6 @@ func TestReadRefusesWhatIsNotText(t *testing.T) {
 		p := f.file("wide.txt", "\xff\xfeh\x00i\x00\n\x00")
 		f.fails(f.read, in{"file_path": p}, "looks like a binary file", "UTF-16", "iconv")
 	})
-	t.Run("PDF", func(t *testing.T) {
-		p := f.file("doc.pdf", "%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n")
-		f.fails(f.read, in{"file_path": p}, "is a PDF", "cannot read yet", "pdftotext")
-		// By content, whatever the name; and by name, whatever the content.
-		f.fails(f.read, in{"file_path": f.file("renamed.txt", "%PDF-1.4\nstuff")}, "is a PDF")
-		f.fails(f.read, in{"file_path": f.file("empty.PDF", "not really")}, "is a PDF")
-		f.fails(f.read, in{"file_path": p, "pages": "1-3"}, "is a PDF", "cannot read yet")
-	})
 	t.Run("pages on a file that is not a PDF", func(t *testing.T) {
 		p := f.file("plain.txt", "text\n")
 		f.fails(f.read, in{"file_path": p, "pages": "1-3"}, "pages is for PDF files", "offset and limit")

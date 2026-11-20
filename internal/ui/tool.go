@@ -408,6 +408,9 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 		case hasLim:
 			h.arg += fmt.Sprintf(" (first %s)", count(lim, "line", "lines"))
 		}
+		if p := oneLine(get("pages")); p != "" {
+			h.arg += " (pages " + p + ")"
+		}
 	case "Write", "Edit", "MultiEdit", "NotebookEdit":
 		h.arg = path("file_path")
 	case "Glob", "Grep":
@@ -755,6 +758,20 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 	switch name {
 	case "Read":
 		file, _ := meta["file"].(map[string]any)
+		if kind, _ := meta["type"].(string); kind == "pdf" {
+			// A PDF: which of its pages were read.
+			if total, ok := metaInt(file, "numPages"); ok {
+				first, _ := metaInt(file, "firstPage")
+				last, _ := metaInt(file, "lastPage")
+				switch {
+				case first <= 1 && last >= total:
+					return count(total, "page", "pages") + " of a PDF", nil
+				case first >= last:
+					return fmt.Sprintf("page %d of %s", first, grouped(total)), nil
+				}
+				return fmt.Sprintf("pages %d-%d of %s", first, last, grouped(total)), nil
+			}
+		}
 		n, ok := metaInt(file, "numLines")
 		if !ok {
 			return count(strings.Count(strings.TrimRight(text, "\n"), "\n")+1, "line", "lines"), nil
