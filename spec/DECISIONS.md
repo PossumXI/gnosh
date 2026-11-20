@@ -4388,3 +4388,15 @@ or kept with the reason said (27).
     this project's sessions, runs included, and a no leaves them out with
     no warning at each start. Where keys and passwords are kept is never
     offered nor loaded, whatever the answer.
+
+306. **mem keeps no wallet's recovery phrase, nor a key in hex.** The
+    secret filter on what the agent keeps in mem knew API keys, tokens,
+    PEM keys and named passwords, but let a 24-word recovery phrase
+    through, and a private key in lowercase hex (the gno review of
+    2026-11-19). It now knows twelve or more words in a row from the
+    BIP-0039 English list (numbers between them, as a phrase is written
+    down, aside; prose is held together by words the list has not), and
+    64 hex digits in a text that names a key (priv…, secret, seed,
+    wallet, signing, mnemonic, key…): a digest alone, a checksum, stays
+    keepable. The word list is BIP-0039's own (PROVENANCE.md). What the
+    person keeps with /mem is not held to it, as before.
