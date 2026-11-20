@@ -94,3 +94,21 @@ func TestSavedApprovalsHoldInAnUntrustedFolder(t *testing.T) {
 		t.Error("a local file changed since gnosh wrote it was in force in a folder that is not trusted")
 	}
 }
+
+// gnosh mcp add -s project and remove do not write through a project's
+// .mcp.json that is a link out of the project: a "project" server became
+// one of the person's own, started in every project (the
+// settings-commands review of 2026-11-20).
+func TestProjectServersNotThroughALink(t *testing.T) {
+	w := apptest.NewWorld(t)
+	theirs := w.Home + "/elsewhere/mcp.json"
+	w.Write(theirs, `{"mcpServers": {}}`+"\n")
+	if err := os.Symlink(theirs, filepath.Join(w.Dir, ".mcp.json")); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, w, "mcp", "add", "-s", "project", "greeter", "--", "echo", "hi").wantCode(t, 1)
+	has(t, "the refusal", r.err, "is a link to", "outside the project", "nothing was added")
+	if got := w.Read(theirs); strings.Contains(got, "greeter") {
+		t.Errorf("written through the link:\n%s", got)
+	}
+}
