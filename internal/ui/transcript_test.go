@@ -233,4 +233,3 @@ func TestTranscriptViewPersonsShellOutput(t *testing.T) {
 	g.keys(`<End>`)
 	g.viewHas("help line D")
 }
-
