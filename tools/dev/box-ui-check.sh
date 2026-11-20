@@ -218,6 +218,12 @@ suggest) opts='"promptSuggestionEnabled": true, ' ;;
 askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
 focus) opts='"viewMode": "focus", ' ;;
 failhint) base=http://127.0.0.1:9 ;;
+sandbox)
+	# (The sandbox on, its commands run without asking; -y lets the
+	# retry outside it run.)
+	flags="-y"
+	hooks="\"sandbox\": { \"enabled\": true, \"autoAllowBashIfSandboxed\": true },"
+	;;
 secreview) flags="--trust-folder" ;;
 simplify) flags="--permission-mode acceptEdits --trust-folder" ;;
 agent) flags="--agent Explore" ;;
@@ -236,7 +242,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports, short, notebook)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports, short, notebook, sandbox)" >&2
 	exit 2
 	;;
 esac
@@ -873,6 +879,13 @@ invisible)
 failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
+	;;
+sandbox)
+	# A write outside the project fails in the sandbox; the model is to
+	# run it again outside, as the Bash tool's description says.
+	mkdir -p "$T/outside"
+	tmux send-keys -t "$S" "With one Bash command, write the word done into the file $T/outside/out.txt, like this: echo done > $T/outside/out.txt. If the sandbox stops it, do what the Bash tool's description says to do. Then say done." Enter
+	done_when() { [ -s "$T/outside/out.txt" ]; }
 	;;
 trusttype)
 	# (Under "before": the question, still up after the typing.)
