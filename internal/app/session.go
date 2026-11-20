@@ -1181,6 +1181,37 @@ func (l *live) setMode(m permission.Mode) error {
 	return nil
 }
 
+// envVar is one of Claude Code's variables, from the env block of the
+// settings files, where Claude Code reads it too, or else from the shell.
+// A variable of notFromProjects is not taken from a project's own file.
+func (l *live) envVar(name string) string {
+	if l.cfg != nil {
+		if e, ok := l.cfg.EnvEntry(name); ok && !(notFromProjects[name] && e.Origin.Layer == config.LayerProject) {
+			return e.Value.Reveal()
+		}
+	}
+	return l.p.env[name]
+}
+
+// notFromProjects are the variables gnosh reads that Claude Code passes
+// over in the env block of a project's own settings files, the project's
+// and the local one (its settings reference, "Variables Claude Code
+// ignores in env"): they are the person's to set.
+var notFromProjects = map[string]bool{
+	"CLAUDE_CODE_DISABLE_FILE_MENTIONS": true,
+}
+
+// envOn reports whether one of Claude Code's on/off variables is on, read
+// as Claude Code reads one: 1, true, yes or on, in any case (the review of
+// 2026-11-20: gnosh took only "1", and only from the shell).
+func (l *live) envOn(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(l.envVar(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // cwd is the session's working directory as it stands.
 func (l *live) cwd() string {
 	if l.agent != nil {

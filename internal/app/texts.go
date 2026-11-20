@@ -90,7 +90,8 @@ func loopTexts(set *prompt.Set, mem bool, path string) (agent.Texts, error) {
 
 // maxResultBytes is the most text one tool result may carry to the model,
 // whatever the tool itself let through. Every tool of gnosh's own has a
-// smaller limit; this one is the net under them all.
+// smaller limit (Read's, even with allow_large, is a tenth under it:
+// readResultMost); this one is the net under them all.
 const maxResultBytes = 400_000
 
 // markEscape is the mark written as a JSON escape, which is how a model

@@ -71,8 +71,8 @@ func (l *live) cronOff() string {
 	switch {
 	case !l.interactive:
 		return "Scheduled prompts are an attended session's: a run ends with its prompt."
-	case l.p.env["CLAUDE_CODE_DISABLE_CRON"] == "1":
-		return "Scheduled prompts are off (CLAUDE_CODE_DISABLE_CRON=1)."
+	case l.envOn("CLAUDE_CODE_DISABLE_CRON"):
+		return "Scheduled prompts are off (CLAUDE_CODE_DISABLE_CRON)."
 	}
 	return ""
 }

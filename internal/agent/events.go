@@ -719,3 +719,13 @@ func (c ContextStatus) Room() int {
 	}
 	return c.Point - c.Used
 }
+
+// ResultMost is the most tokens one tool result may take before the loop
+// cuts it, a quarter of the window (fitResultToWindow), or 0 while the
+// window is not known, when nothing is cut.
+func (c ContextStatus) ResultMost() int {
+	if !c.Known || c.Window <= 0 {
+		return 0
+	}
+	return c.Window / resultShare
+}

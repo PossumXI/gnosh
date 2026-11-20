@@ -60,7 +60,7 @@ const (
 // mentions, each with what it brings.
 func (l *live) mentionLines(ctx context.Context, info agent.LineInfo) ([]agent.Part, error) {
 	if verbatim, _ := info.Prompt.Meta[metaVerbatim].(bool); verbatim || info.Prompt.Hidden ||
-		l.p.env["CLAUDE_CODE_DISABLE_FILE_MENTIONS"] == "1" || !strings.Contains(info.Prompt.Text, "@") {
+		l.envOn("CLAUDE_CODE_DISABLE_FILE_MENTIONS") || !strings.Contains(info.Prompt.Text, "@") {
 		return nil, nil
 	}
 	read := l.readTool()

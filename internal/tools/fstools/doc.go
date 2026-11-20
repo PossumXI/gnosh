@@ -134,8 +134,11 @@
 // PNG, JPEG or GIF longer than 1568 pixels on a side or larger than that
 // is shrunk to fit (shrink.go), and a WebP larger than that is refused.
 // A PDF comes back as its text by pages (pdf.go), a notebook as its cells
-// (notebook.go). allow_large, which Claude Code's Read takes, is accepted
-// and not acted on.
+// (notebook.go). allow_large, as Claude Code's Read takes it, reads past
+// the usual limits as far as Options.ReadRoom says the context has room
+// for. Every text Read stops short of Options.ReadResultMost, line
+// numbers and all: the loop would cut a longer result, and the lines Read
+// records as read must be the lines the model is shown.
 //
 // # Write
 //

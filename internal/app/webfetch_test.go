@@ -144,8 +144,9 @@ func TestWebFetchKeepsWhatIsNotText(t *testing.T) {
 }
 
 // Claude Code's WebFetch variables: CLAUDE_CODE_DISABLE_WEB_FETCH=1 leaves
-// the tool out; CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0 keeps no page, so the
-// same page asked for twice is fetched twice; CLAUDE_CODE_WEBFETCH_DEADLINE_MS
+// the tool out; CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0 keeps the default, as
+// Claude Code's reference says, so the same page asked for twice is
+// fetched once; CLAUDE_CODE_WEBFETCH_DEADLINE_MS
 // is the download's bound, 0 none.
 func TestWebFetchVariables(t *testing.T) {
 	off := apptest.NewWorld(t, apptest.Reply{Text: "Fine."})
@@ -154,6 +155,14 @@ func TestWebFetchVariables(t *testing.T) {
 	runWith(t, t.Context(), o).wantCode(t, 0)
 	if body := string(off.Model.Requests()[0].Body); strings.Contains(body, `"name":"WebFetch"`) {
 		t.Error("WebFetch is offered with CLAUDE_CODE_DISABLE_WEB_FETCH=1")
+	}
+	// As Claude Code reads it: "true" as well as 1, and from the env block
+	// of a settings file as well as from the shell.
+	blocked := apptest.NewWorld(t, apptest.Reply{Text: "Fine."})
+	blocked.Settings(`{"env": {"CLAUDE_CODE_DISABLE_WEB_FETCH": "True"}}`)
+	runWith(t, t.Context(), testOptions(blocked, "-p", "hello")).wantCode(t, 0)
+	if body := string(blocked.Model.Requests()[0].Body); strings.Contains(body, `"name":"WebFetch"`) {
+		t.Error("WebFetch is offered with CLAUDE_CODE_DISABLE_WEB_FETCH=True in the settings' env block")
 	}
 
 	var fetched atomic.Int32
@@ -180,8 +189,8 @@ func TestWebFetchVariables(t *testing.T) {
 	o = testOptions(w, "-y", "-p", "fetch it twice")
 	o.Environ = append(o.Environ, "CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0", "CLAUDE_CODE_WEBFETCH_DEADLINE_MS=0")
 	runWith(t, t.Context(), o).wantCode(t, 0)
-	if n := fetched.Load(); n != 2 {
-		t.Errorf("with no cache the page was fetched %d times, want 2", n)
+	if n := fetched.Load(); n != 1 {
+		t.Errorf("with a cache time of 0 (the default kept) the page was fetched %d times, want 1", n)
 	}
 	if len(timeouts) == 0 || timeouts[0] != "-1ns" {
 		t.Errorf("a deadline of 0 gave the fetch the timeouts %v, want no bound (-1ns)", timeouts)

@@ -38,7 +38,7 @@ The page is turned into Markdown, and a separate, smaller model reads it with yo
 - url: http or https, on the open web. http is upgraded to https. A host on this machine or on a private network (localhost, a name without a dot, 192.168.x.x and the like) is refused: use curl through Bash for those.
 - A redirect to another host is not followed: the result says where it leads, and you can fetch that address yourself.
 - At most 100,000 characters of a page are read in one call; the result says how much is left, and offset reads on from there.
-- A page is kept for 15 minutes, so asking again about the same page fetches nothing new.
+- A page is kept for a while, so asking again about the same page soon fetches nothing new.
 - What is not text (a picture, a PDF, an archive) is saved to a file, and the result says where: Read shows a picture.
 - Each fetch asks the user first, unless they have allowed the site.`
 
@@ -57,7 +57,7 @@ type webFetchInput struct {
 }
 
 // webFetchTool is the tool of one session. cacheFor is how long a page is
-// kept (CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS; 0 keeps none) and deadline how
+// kept (CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS, 15 minutes) and deadline how
 // long one may take to download (CLAUDE_CODE_WEBFETCH_DEADLINE_MS; 0 is
 // no limit).
 type webFetchTool struct {
@@ -211,8 +211,8 @@ func (t *webFetchTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	return res, nil
 }
 
-// cached is the page kept for key, if it was fetched in the last 15
-// minutes and, when it was saved to a file, the file is still there.
+// cached is the page kept for key, if it was fetched less than cacheFor
+// ago and, when it was saved to a file, the file is still there.
 func (t *webFetchTool) cached(key string) (cachedPage, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

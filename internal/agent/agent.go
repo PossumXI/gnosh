@@ -290,6 +290,10 @@ type Agent struct {
 	totals    Totals
 	cachePrev cachePrint // the last main request, for Totals.Cache
 	context   ContextStatus
+	// roomTaken is the room the calls of the round running now have
+	// taken (TakeRoom), and roomRound counts the rounds, so that what is
+	// given back late goes to the round it came from.
+	roomTaken, roomRound int
 
 	// The rest belongs to the session's goroutine alone.
 	settled      bool
@@ -771,6 +775,38 @@ func (a *Agent) Context() ContextStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.context
+}
+
+// TakeRoom is for a tool call whose result may fill what is left of the
+// context, as Read's with allow_large: it returns how many tokens, at
+// most most, the call may use of the room left before room has to be
+// made (ContextStatus.Room), less what the other calls of the same round
+// took, since none of their results is counted yet. give hands back,
+// once the call is done, what it did not use. Before the conversation is
+// first counted there is no room.
+func (a *Agent) TakeRoom(most int) (n int, give func(unused int)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	n = max(min(a.context.Room()-a.roomTaken, most), 0)
+	a.roomTaken += n
+	round := a.roomRound
+	return n, func(unused int) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.roomRound == round {
+			a.roomTaken -= min(max(unused, 0), n)
+		}
+	}
+}
+
+// newRoomRound starts a round of tool calls for TakeRoom: the room the
+// last count left is whole again, since what the last round's calls took
+// has been counted since.
+func (a *Agent) newRoomRound() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.roomTaken = 0
+	a.roomRound++
 }
 
 // SetCwd moves the session's working directory, as a command's cd does in

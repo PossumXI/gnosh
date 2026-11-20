@@ -47,7 +47,7 @@ func (l *live) backgroundOff(owner *subSession) string {
 	switch {
 	case owner != nil:
 		return "a sub-agent waits for the sub-agents it starts"
-	case l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1":
+	case l.envOn("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"):
 		return "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS is set"
 	case l.inv.Bare:
 		return "minimal mode (--bare) has no background work"

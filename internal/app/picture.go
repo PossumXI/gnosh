@@ -21,11 +21,13 @@ import (
 // for the session, a resumed one too.
 
 // ErrNoPicture says the clipboard holds no picture; ErrNoClipboard that
-// this machine has no clipboard gnosh can read (the person came over ssh,
-// or no tool for it is installed).
+// this machine has no clipboard gnosh can read (no tool for it is
+// installed); ErrClipboardFar that the person came over ssh, and their
+// clipboard is on their own machine.
 var (
-	ErrNoPicture   = clipboard.ErrNoPicture
-	ErrNoClipboard = errors.New("no clipboard of this machine can be read")
+	ErrNoPicture    = clipboard.ErrNoPicture
+	ErrNoClipboard  = errors.New("no clipboard of this machine can be read")
+	ErrClipboardFar = errors.New("the clipboard is on the machine ssh came from")
 )
 
 // pictureName is the name a pasted picture is mentioned by.
@@ -91,6 +93,9 @@ func (l *live) keepPicture(data []byte, ending string) (string, error) {
 // why there is none.
 func (c *controls) PastePicture(ctx context.Context) (string, error) {
 	l := c.cur()
+	if clipboard.OverSSH(l.p.getenv) {
+		return "", ErrClipboardFar
+	}
 	tool := clipboard.PictureTool(runtime.GOOS, l.p.getenv, l.p.lookPath)
 	if tool == nil {
 		return "", ErrNoClipboard

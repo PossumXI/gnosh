@@ -91,6 +91,7 @@ type round struct {
 func (a *Agent) runTools(ctx context.Context, t *turn, rep *reply) roundOutcome {
 	su := a.setup()
 	uses := rep.msg.ToolUses()
+	a.newRoomRound()
 	r := &round{a: a, t: t, ctx: ctx, done: make(chan execDone, len(uses))}
 	r.rctx, r.cancel = context.WithCancel(ctx)
 	defer r.cancel()

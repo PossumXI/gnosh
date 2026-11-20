@@ -579,6 +579,19 @@ func (p Permissions) Rules(which string) []Rule {
 	return out
 }
 
+// EnvEntry returns what the env block of the settings files gives a
+// variable, with the file it came from, and whether it gives one: Claude
+// Code sets its own process's environment from that block, so its
+// variables may come from there as well as from the shell.
+func (c *Config) EnvEntry(name string) (EnvVar, bool) {
+	for _, v := range c.Env {
+		if v.Name == name {
+			return v, true
+		}
+	}
+	return EnvVar{}, false
+}
+
 // CommandEnv returns the env block in the form a command's environment is
 // built from: "NAME=value" sets a variable, and "NAME" alone takes it
 // away. It holds the values themselves, so it is for starting commands and

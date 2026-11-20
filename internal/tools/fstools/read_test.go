@@ -619,8 +619,10 @@ func TestReadNamesWithOddCharacters(t *testing.T) {
 // room for (Options.ReadRoom), as Claude Code's does; without the room, or
 // without the argument, the usual limits hold.
 func TestReadAllowLarge(t *testing.T) {
-	room := 50_000
-	f := newFixture(t, Options{ReadMaxBytes: 1000, ReadRoom: func(context.Context) int { return room }})
+	room, used := 50_000, []int{}
+	f := newFixture(t, Options{ReadMaxBytes: 1000, ReadRoom: func(context.Context) (int, func(int)) {
+		return room, func(n int) { used = append(used, n) }
+	}})
 	p := f.file("big.txt", manyLines(1500))
 	got := f.ok(f.read, in{"file_path": p})
 	mustContain(t, got, "This call stopped at the 1000 bytes one call may show")
@@ -628,6 +630,11 @@ func TestReadAllowLarge(t *testing.T) {
 	mustContain(t, got, "1500\tline 1500\n")
 	if strings.Contains(got, "To read on") {
 		t.Errorf("a whole read with allow_large says to read on: %s", got[len(got)-200:])
+	}
+	// What the call used is handed back, line numbers and all, so the
+	// rest of the room can go to another call.
+	if body, _, _ := strings.Cut(got, "\n["); len(used) != 1 || used[0] != len(body) {
+		t.Errorf("used = %v, want [%d]", used, len(body))
 	}
 	// A limit given still holds.
 	got = f.ok(f.read, in{"file_path": p, "allow_large": true, "limit": 10})
@@ -640,4 +647,39 @@ func TestReadAllowLarge(t *testing.T) {
 	g := newFixture(t, Options{ReadMaxBytes: 1000})
 	q := g.file("big.txt", manyLines(1500))
 	mustContain(t, g.ok(g.read, in{"file_path": q, "allow_large": true}), "allow_large finds no more room than that here")
+}
+
+// A Read never returns more than the loop lets through whole
+// (Options.ReadResultMost), with allow_large or without, counting the line
+// numbers: a longer result would be cut on its way to the model while
+// Read recorded every line as read, and a whole-file Write would then drop
+// the lines the model never saw (the review of 2026-11-20).
+func TestReadStopsShortOfWhatTheLoopCuts(t *testing.T) {
+	const most = 3000
+	f := newFixture(t, Options{
+		ReadMaxBytes:   100_000,
+		ReadRoom:       func(context.Context) (int, func(int)) { return 1 << 20, func(int) {} },
+		ReadResultMost: func(context.Context) int { return most },
+	})
+	// Short lines, so that the line numbers weigh: 1500 lines of two
+	// bytes are 4,500 bytes of text, and more than 10,000 shown.
+	var b strings.Builder
+	for range 1500 {
+		b.WriteString("x\n")
+	}
+	p := f.file("short.txt", b.String())
+	for _, large := range []bool{false, true} {
+		got := f.ok(f.read, in{"file_path": p, "allow_large": large})
+		body, _, _ := strings.Cut(got, "\n[")
+		if len(body) > most || len(body) < most-10 {
+			t.Errorf("allow_large %v: %d bytes of lines, want just under %d", large, len(body), most)
+		}
+		mustContain(t, got, "one result may hold for this model", "To read on")
+		// Only what was shown counts as read: the file is not replaced
+		// whole.
+		f.fails(f.write, in{"file_path": p, "content": "y\n"}, "would be replaced whole")
+	}
+	if f.content(p) != b.String() {
+		t.Error("the file was written")
+	}
 }

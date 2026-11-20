@@ -191,9 +191,11 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 
 	// allow_large: the whole file, or as much as the context has room for,
 	// past the usual limits.
-	maxBytes, large := o.ReadMaxBytes, false
+	maxBytes, large, used := o.ReadMaxBytes, false, 0
 	if args.allowLarge && o.ReadRoom != nil {
-		if room := min(o.ReadRoom(ctx), readLargeMost); room > maxBytes {
+		room, done := o.ReadRoom(ctx)
+		defer func() { done(used) }()
+		if room = min(room, readLargeMost); room > maxBytes {
 			maxBytes, large = room, true
 			if !args.limitGiven {
 				args.limit = math.MaxInt32
@@ -206,6 +208,9 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		maxBytes: maxBytes,
 		maxChars: o.ReadMaxLineChars,
 		sum:      sha256.New(),
+	}
+	if o.ReadResultMost != nil {
+		tr.maxOut = o.ReadResultMost(ctx)
 	}
 	tr.sum.Write(head)
 	if bytes.HasPrefix(head, []byte(utf8BOM)) {
@@ -268,6 +273,7 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 		total = tr.lineNo
 	}
 	more := !atEnd || tr.lastShown < tr.lineNo
+	used = tr.out.Len()
 	var out strings.Builder
 	out.WriteString(tr.out.String())
 	var notes []string
@@ -286,6 +292,8 @@ func (t *readTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 			note += fmt.Sprintf("; the file goes on (it is %s, and its lines were not all counted).", byteSize(info.Size()))
 		}
 		switch {
+		case tr.stoppedByOut:
+			note += fmt.Sprintf(" This call stopped at the %s one result may hold for this model.", byteSize(int64(tr.maxOut)))
 		case tr.stoppedByBytes && large:
 			note += fmt.Sprintf(" This call stopped at the %s the context has room for now, with allow_large.", byteSize(int64(maxBytes)))
 		case tr.stoppedByBytes:
@@ -383,12 +391,22 @@ func (t *readTool) readImage(ctx context.Context, env *core.ToolEnv, loc *locati
 	sent, sentMedia := data, media
 	// Larger than a model takes, or than a model is shown: shrunk
 	// (shrink.go), as Claude Code shrinks it.
-	small, shrank, err := shrinkImage(data, media, o.ReadMaxImageBytes)
+	small, shrank, err := shrinkImage(ctx, data, media, o.ReadMaxImageBytes)
 	switch {
 	case shrank:
 		sent, sentMedia = small.data, small.media
-		said = fmt.Sprintf("[%s: a %s image, %s, %dx%d, shown shrunk to %dx%d (%s, %s).]", loc.abs, kind, byteSize(int64(len(data))),
-			small.fromW, small.fromH, small.width, small.height, strings.ToUpper(strings.TrimPrefix(small.media, "image/")), byteSize(int64(len(small.data))))
+		how := "shrunk to"
+		switch {
+		case small.turned && small.width == small.fromW && small.height == small.fromH:
+			how = "turned upright, as its EXIF orientation says, at"
+		case small.turned:
+			how = "turned upright, as its EXIF orientation says, and shrunk to"
+		}
+		said = fmt.Sprintf("[%s: a %s image, %s, %dx%d, shown %s %dx%d (%s, %s).]", loc.abs, kind, byteSize(int64(len(data))),
+			small.fromW, small.fromH, how, small.width, small.height, strings.ToUpper(strings.TrimPrefix(small.media, "image/")), byteSize(int64(len(small.data))))
+		if media == "image/gif" {
+			said = strings.TrimSuffix(said, ".]") + "; of a GIF, the first frame only.]"
+		}
 	case int64(len(data)) > o.ReadMaxImageBytes && err != nil:
 		return tooBig("it could not be shrunk: " + err.Error())
 	case int64(len(data)) > o.ReadMaxImageBytes:
@@ -472,6 +490,7 @@ type textRead struct {
 	limit    int // most lines to show
 	maxBytes int // most bytes of text to show
 	maxChars int // most characters of one line to show
+	maxOut   int // most bytes of the page, line numbers and all (0: none)
 
 	// The page.
 	out            strings.Builder
@@ -481,6 +500,7 @@ type textRead struct {
 	shownBytes     int
 	full           bool // the page takes no more lines
 	stoppedByBytes bool // ... because of maxBytes
+	stoppedByOut   bool // ... because of maxOut
 	crlf, lf       int  // line endings among the lines shown
 	bom            bool // the file starts with a byte order mark
 	bad            int  // stretches of bytes shown as U+FFFD
@@ -576,11 +596,16 @@ func (r *textRead) endLine(terminated bool) {
 			text += cutMark(dropped)
 		}
 		cost := len(text) + 1
-		if r.shown > 0 && r.shownBytes+cost > r.maxBytes {
+		num := strconv.Itoa(r.lineNo)
+		switch {
+		case r.shown > 0 && r.shownBytes+cost > r.maxBytes:
 			r.full = true
 			r.stoppedByBytes = true
-		} else {
-			r.out.WriteString(strconv.Itoa(r.lineNo))
+		case r.shown > 0 && r.maxOut > 0 && r.out.Len()+len(num)+1+cost > r.maxOut:
+			r.full = true
+			r.stoppedByOut = true
+		default:
+			r.out.WriteString(num)
 			r.out.WriteByte('\t')
 			r.out.WriteString(text)
 			r.out.WriteByte('\n')

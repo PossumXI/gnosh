@@ -56,10 +56,21 @@ type webSearchInput struct {
 type webSearchTool struct {
 	l    *live
 	base string // the server's address, without a slash at its end
+	// noFetch says WebFetch is off (CLAUDE_CODE_DISABLE_WEB_FETCH), so
+	// that neither the description nor a result sends the model to it.
+	noFetch bool
 }
 
+// readWithFetch is the line of WebSearch's description, and of the end of
+// its results, that sends the model to WebFetch for a page.
+const readWithFetch = " Read a page you want with WebFetch."
+
 func (t *webSearchTool) Spec() core.ToolSpec {
-	return core.ToolSpec{Name: webSearchName, Description: webSearchDescription, InputSchema: webSearchSchema}
+	desc := webSearchDescription
+	if t.noFetch {
+		desc = strings.Replace(desc, readWithFetch, "", 1)
+	}
+	return core.ToolSpec{Name: webSearchName, Description: desc, InputSchema: webSearchSchema}
 }
 
 // read reads a call's arguments and says, in words for the model, what is
@@ -175,7 +186,9 @@ func (t *webSearchTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 		}
 		list = append(list, map[string]string{"title": title, "url": r.URL})
 	}
-	b.WriteString("Read a page with WebFetch.")
+	if !t.noFetch {
+		b.WriteString(strings.TrimSpace(readWithFetch))
+	}
 	meta["results"] = list
 	res := core.TextResult(b.String())
 	res.Meta = meta

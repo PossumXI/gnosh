@@ -46,7 +46,7 @@ func TestWebSearch(t *testing.T) {
 		t.Fatalf("with webSearchUrl the session has no WebSearch tool: %v", toolNamesOf(w.Model.Requests()[0]))
 	}
 	got := toolResult(t, w, 1, "c1")
-	has(t, "the results", got, `Results for "golang docs"`, "1. Go docs", "https://go.dev/doc/", "Documentation for Go.", "2. Go blog", "https://blog.go.dev/post", "Read a page with WebFetch")
+	has(t, "the results", got, `Results for "golang docs"`, "1. Go docs", "https://go.dev/doc/", "Documentation for Go.", "2. Go blog", "https://blog.go.dev/post", "Read a page you want with WebFetch")
 	hasNot(t, "a blocked host", got, "spam.example", "buy now")
 	if len(asked) != 1 || asked[0] != "golang docs" {
 		t.Errorf("the server was asked %q", asked)

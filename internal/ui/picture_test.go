@@ -18,7 +18,7 @@ func TestCtrlVPastesAPicture(t *testing.T) {
 	answers := []struct {
 		name string
 		err  error
-	}{{"image-1", nil}, {"", app.ErrNoPicture}}
+	}{{"image-1", nil}, {"", app.ErrNoPicture}, {"image-2", nil}, {"", app.ErrClipboardFar}}
 	n := 0
 	g := newRig(t, 100, 24, text.NoColor, func(c *controls) {
 		c.picture = func(context.Context) (string, error) {
@@ -37,10 +37,19 @@ func TestCtrlVPastesAPicture(t *testing.T) {
 	if got := g.box(); got != "what is in @image-1 " {
 		t.Errorf("a clipboard with no picture changed the box: %q", got)
 	}
+	// Right after a word, a space goes first: an @ glued to a word is no
+	// mention, and the picture would not go.
+	g.keys(`"and?" <Ctrl+V>`)
+	if got := g.box(); got != "what is in @image-1 and? @image-2 " {
+		t.Errorf("after a word the box holds %q", got)
+	}
+	// Over ssh the clipboard is the person's own machine's.
+	g.keys(`<Ctrl+V>`)
+	g.liveHas("Over ssh")
 	// Without a clipboard to read.
 	h := newRig(t, 100, 24, text.NoColor)
 	h.keys(`<Ctrl+V>`)
-	h.liveHas("cannot read here")
+	h.liveHas("finds no way to read this machine's clipboard")
 }
 
 // Picture files dragged into the terminal, which pastes their paths, are
@@ -82,5 +91,20 @@ func TestDraggedPicturesAreMentioned(t *testing.T) {
 	paste(sh, two)
 	if got := sh.box(); got != "!open "+two {
 		t.Errorf("in a shell line: %q", got)
+	}
+	// A path a line, as some terminals drop several files; and after a
+	// word, a space first.
+	lines := newRig(t, 100, 24, text.NoColor)
+	lines.keys(`"see"`)
+	paste(lines, two+"\n"+strings.ReplaceAll(one, " ", `\ `)+"\n")
+	if got, want := lines.box(), `see @`+two+` @"`+one+`" `; got != want {
+		t.Errorf("paths a line: %q, want %q", got, want)
+	}
+	// No more than a prompt brings (10): eleven are left as they are.
+	many := strings.TrimSpace(strings.Repeat(two+" ", 11))
+	k := newRig(t, 100, 24, text.NoColor)
+	paste(k, many)
+	if got := k.box(); got != many {
+		t.Errorf("eleven paths became %q", got)
 	}
 }

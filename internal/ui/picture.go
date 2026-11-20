@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/app"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
@@ -38,33 +40,63 @@ func (s *session) pastePicture() {
 	defer cancel()
 	name, err := pp.PastePicture(ctx)
 	switch {
+	case errors.Is(err, app.ErrClipboardFar):
+		s.flash("Over ssh, the clipboard Ctrl+V would read is on your own machine, out of gnosh's reach. Put the picture in a file here and mention it with @.")
 	case errors.Is(err, app.ErrNoClipboard):
-		s.flash("Ctrl+V pastes a picture from the clipboard of the machine gnosh runs on, which it cannot read here (over ssh the clipboard is your own machine's). Drag the picture's file in, or mention it with @.")
+		s.flash("gnosh finds no way to read this machine's clipboard (it uses wl-paste or xclip). Drag the picture's file in, or mention it with @.")
 	case errors.Is(err, app.ErrNoPicture):
 		s.flash("The clipboard holds no picture. Text is pasted with the terminal's own paste.")
 	case err != nil:
 		s.flash("The picture could not be pasted: " + err.Error() + ".")
 	default:
-		s.ed.Handle(term.Paste{Text: "@" + name + " "})
+		s.ed.Handle(term.Paste{Text: s.spaced("@" + name + " ")})
 		s.flash("The picture goes with the prompt as @" + name + ".")
 	}
+}
+
+// spaced puts a space before mentions that would otherwise follow the
+// character before the cursor with none between: an @ glued to a word
+// mentions nothing (app's mentionWord takes one at the start or after a
+// space), though gnosh would have said the picture goes.
+func (s *session) spaced(mentions string) string {
+	text, at := s.ed.Text(), s.ed.Cursor()
+	if at <= 0 || at > len(text) {
+		return mentions
+	}
+	if r, _ := utf8.DecodeLastRuneInString(text[:at]); unicode.IsSpace(r) {
+		return mentions
+	}
+	return " " + mentions
 }
 
 // pictureEndings are the endings of the picture files a paste of paths
 // may name.
 var pictureEndings = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
 
+// picturesAtOnce is the most picture files one paste of paths becomes
+// mentions of: as many as one prompt brings (app's maxMentions).
+const picturesAtOnce = 10
+
 // picturePaths turns a paste that is nothing but the paths of picture
 // files (as a terminal pastes files dragged into it: the spaces in them
-// escaped, or quoted, or as file:// addresses) into @ mentions of them,
-// and reports whether it was one.
+// escaped, or quoted, or as file:// addresses, on one line or a line
+// each) into @ mentions of them, and reports whether it was one. No more
+// are taken than a prompt brings (app's maxMentions, 10): an eleventh
+// would be said to go, and would not.
 func (s *session) picturePaths(text string) (string, bool) {
 	text = strings.TrimSpace(text)
-	if text == "" || len(text) > 8192 || strings.Contains(text, "\n") && strings.Count(text, "\n") > 20 {
+	if text == "" || len(text) > 8192 {
 		return "", false
 	}
-	words, err := shellquote.Split(text)
-	if err != nil || len(words) == 0 || len(words) > 20 {
+	var words []string
+	for _, line := range strings.Split(text, "\n") {
+		w, err := shellquote.Split(strings.TrimSuffix(line, "\r"))
+		if err != nil {
+			return "", false
+		}
+		words = append(words, w...)
+	}
+	if len(words) == 0 || len(words) > picturesAtOnce {
 		return "", false
 	}
 	out := make([]string, 0, len(words))

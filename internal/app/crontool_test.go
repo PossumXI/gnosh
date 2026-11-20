@@ -117,7 +117,7 @@ func TestScheduledPromptsOffered(t *testing.T) {
 	s.typeLine("hi")
 	s.see("ok")
 	s.typeLine("/loop 5m check")
-	s.see("Scheduled prompts are off (CLAUDE_CODE_DISABLE_CRON=1).")
+	s.see("Scheduled prompts are off (CLAUDE_CODE_DISABLE_CRON).")
 	s.typeLine("/exit")
 	s.exit()
 	if body := string(w.Model.Requests()[1].Body); strings.Contains(body, `"CronCreate"`) {

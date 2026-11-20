@@ -267,7 +267,7 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 // person's permissions. Safe mode reads none but gnosh's own.
 func (l *live) agentDefs() *agentdef.Set {
 	set := agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.defRoots()), l.st.agents)
-	if l.p.env["CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS"] == "1" {
+	if l.envOn("CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS") {
 		// Claude Code's switch for its two looking kinds: gnosh's own go.
 		set = set.WithoutBuiltin("Explore", "Plan")
 	}
@@ -784,9 +784,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	// then CLAUDE_CODE_SUBAGENT_MODEL, which with
 	// CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 is over the first two.
 	name := firstOf(model, def.Model)
-	envModel := strings.TrimSpace(l.p.env["CLAUDE_CODE_SUBAGENT_MODEL"])
+	envModel := strings.TrimSpace(l.envVar("CLAUDE_CODE_SUBAGENT_MODEL"))
 	switch {
-	case envModel != "" && l.p.env["CLAUDE_CODE_SUBAGENT_MODEL_FORCE"] == "1":
+	case envModel != "" && l.envOn("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"):
 		name = envModel
 	case name == "" && !def.InheritModel:
 		name = envModel

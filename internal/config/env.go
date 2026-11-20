@@ -40,8 +40,9 @@ type Limits struct {
 	// search may run. Not set means the search tool's own limit.
 	GlobTimeout Value[time.Duration]
 	// WebFetchCacheTTL is CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS: how long a
-	// fetched page is kept for another call; 0 keeps none. Default: 15
-	// minutes.
+	// fetched page is kept for another call. Default: 15 minutes, which 0
+	// keeps too, as in Claude Code (its reference: "0, a decimal, or any
+	// other spelling keeps the default").
 	WebFetchCacheTTL Value[time.Duration]
 	// WebFetchDeadline is CLAUDE_CODE_WEBFETCH_DEADLINE_MS: how long a page
 	// may take to download, its redirects with it; 0 is no limit. Default:
@@ -79,7 +80,7 @@ var limitVars = []struct{ name, what, from string }{
 	{"MAX_THINKING_TOKENS", "tokens a model may think before a reply; 0 turns thinking off", fromClaudeCode},
 	{"CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", "the most one read returns", fromClaudeCode},
 	{"CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", "seconds a file search may run", fromClaudeCode},
-	{"CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS", "milliseconds a fetched page is kept for another call; 0 keeps none", fromClaudeCode},
+	{"CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS", "milliseconds a fetched page is kept for another call", fromClaudeCode},
 	{"CLAUDE_CODE_WEBFETCH_DEADLINE_MS", "milliseconds a page may take to download; 0 is no limit", fromClaudeCode},
 	{"CLAUDE_CODE_GLOB_NO_IGNORE", "true lists in a Glob the files .gitignore leaves out, as Claude Code's Glob does by default", fromClaudeCode},
 	{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "tokens of context before room is made; outranks the autoCompactWindow option", fromClaudeCode},
@@ -200,7 +201,7 @@ func (ld *loader) limits() Limits {
 	if n, o, ok := ld.whole("CLAUDE_CODE_GLOB_TIMEOUT_SECONDS", 1); ok {
 		l.GlobTimeout.put(time.Duration(n)*time.Second, o)
 	}
-	if n, o, ok := ld.whole("CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS", 0); ok {
+	if n, o, ok := ld.whole("CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS", 1); ok {
 		l.WebFetchCacheTTL.put(ms(n), o)
 	}
 	if n, o, ok := ld.whole("CLAUDE_CODE_WEBFETCH_DEADLINE_MS", 0); ok {

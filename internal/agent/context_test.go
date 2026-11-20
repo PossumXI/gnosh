@@ -876,3 +876,38 @@ func TestManualCompact(t *testing.T) {
 	}
 	r.checkLog()
 }
+
+// The calls of one round share the context's room (TakeRoom): what one
+// takes the next cannot have, until it is handed back or a new round
+// begins, and none takes more than it asks for. What a call of an old
+// round hands back late is not counted in the new one. A result may take
+// a quarter of a known window (ResultMost), and any of an unknown one.
+func TestTakeRoomIsSharedWithinARound(t *testing.T) {
+	a := &Agent{}
+	if n, _ := a.TakeRoom(100); n != 0 {
+		t.Errorf("before the first count: %d tokens, want none", n)
+	}
+	a.context = ContextStatus{Window: 1000, Known: true, Point: 800, Used: 300}
+	a.newRoomRound()
+	n1, give1 := a.TakeRoom(400)
+	n2, _ := a.TakeRoom(400)
+	if n1 != 400 || n2 != 100 {
+		t.Errorf("took %d and %d of 500, want 400 and 100", n1, n2)
+	}
+	give1(300)
+	n3, give3 := a.TakeRoom(1000)
+	if n3 != 300 {
+		t.Errorf("after 300 handed back: %d, want 300", n3)
+	}
+	a.newRoomRound()
+	give3(300)
+	if n, _ := a.TakeRoom(1000); n != 500 {
+		t.Errorf("a new round: %d, want the 500 left", n)
+	}
+	if got := a.context.ResultMost(); got != 250 {
+		t.Errorf("ResultMost = %d, want a quarter of 1000", got)
+	}
+	if got := (ContextStatus{Window: 1000}).ResultMost(); got != 0 {
+		t.Errorf("ResultMost of an assumed window = %d, want 0", got)
+	}
+}

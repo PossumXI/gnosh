@@ -470,7 +470,9 @@ func (s *session) box(ev term.Event, k *term.Key) {
 		case k.IsKey(term.KeyTab, term.ModShift):
 			s.cycleMode()
 			return
-		case k.Is('v', term.ModCtrl) && s.ed.Mode() == editor.ModePrompt:
+		case k.Is('v', term.ModCtrl) && s.ed.Mode() == editor.ModePrompt && !s.ed.Searching():
+			// (Not into the history search, which would take @image-N
+			// for what to look for.)
 			s.pastePicture()
 			return
 		}
@@ -478,7 +480,7 @@ func (s *session) box(ev term.Event, k *term.Key) {
 	if p, ok := ev.(term.Paste); ok && s.ed.Mode() == editor.ModePrompt && !s.ed.Searching() {
 		// Files dragged in: their paths become @ mentions (picture.go).
 		if text, ok := s.picturePaths(p.Text); ok {
-			p.Text = text
+			p.Text = s.spaced(text)
 			ev = p
 			s.flash("The picture goes with the prompt.")
 		}

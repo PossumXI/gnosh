@@ -4799,3 +4799,57 @@ or kept with the reason said (27).
     search it, its line numbers and lines as the text is; one larger than
     GrepMaxMultilineBytes is counted among the files too large, not
     decoded. Read still shows such a file as binary, with the iconv hint.
+
+335. **Read stops short of the loop's cuts.** Every tool result is cut on
+    its way to the model, to a quarter of the window (fitResultToWindow)
+    and to 400,000 bytes (maxResultBytes). Read with allow_large (329) was
+    let past both, and so was a plain Read on a window of 128K or less: the
+    model got the head and the tail while Read recorded every line as
+    read, so a whole-file Write passed the partial-read refusal and dropped
+    the lines it never saw (the pictures/large review of 2026-11-20). Read
+    now stops a tenth under both (Options.ReadResultMost), counting the
+    line numbers, with its usual note and offset to read on; the calls of
+    one round share the room allow_large may fill (agent.TakeRoom), each
+    handing back what it did not use, since none of their results is
+    counted until the round ends.
+
+336. **Pictures in the prompt, the review's fixes.** @image-N, and the
+    mentions a drag of picture files becomes, get a space before them when
+    the cursor follows a word: an @ glued to a word is no mention, and the
+    picture did not go though gnosh said it would. Ctrl+V says over ssh
+    that the clipboard is the person's own machine's (a dragged path names
+    a file there, not here), and elsewhere which tools it needs. Ctrl+V in
+    the history search does nothing. A drag of paths a line each is taken;
+    one of more than ten (what a prompt brings) is left as text. A
+    clipboard tool stopped by the time limit gives no picture even when
+    what it handed out begins as a PNG, and on macOS too a picture over 64
+    MiB is refused.
+
+337. **Photos are turned upright.** Go's JPEG decoder leaves EXIF alone and
+    its encoder writes none, so a phone's photo that Read shrank reached
+    the model on its side (the pictures/large review of 2026-11-20); and a
+    model server that decodes without EXIF would show one that fit on its
+    side too. Read now reads the EXIF orientation (1 to 8) and turns the
+    picture as it says, re-encoding a turned photo even when it fits, and
+    says so. Shrinking holds the decoded picture once (rows are made
+    NRGBA a band at a time), decodes at most 25 million pixels (was 50),
+    one picture at a time, and stops waiting when the call is stopped. A
+    GIF is shrunk at its first frame's own size, not stretched to its
+    canvas, and the result says only the first frame is shown.
+
+338. **Claude Code's switches are read as Claude Code reads them.**
+    CLAUDE_CODE_DISABLE_WEB_FETCH, CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR,
+    CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, CLAUDE_CODE_DISABLE_CRON,
+    CLAUDE_CODE_DISABLE_FILE_MENTIONS, CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS
+    and CLAUDE_CODE_SUBAGENT_MODEL_FORCE were on only at exactly "1", and
+    only from the shell. Its env vars reference: "set 1, true, yes, or on
+    to turn it on ... in any casing"; and a settings file's env block sets
+    them too. gnosh now reads them so (live.envOn, from the env block
+    first), CLAUDE_CODE_SUBAGENT_MODEL with them; CLAUDE_CODE_DISABLE_FILE_MENTIONS
+    is not taken from a project's own files, which Claude Code ignores for
+    it. With WebFetch off, WebSearch no longer sends the model to it.
+
+339. **CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0 keeps the default.** gnosh read 0
+    as "keep no page"; Claude Code's reference says it takes plain digits
+    only, and "0, a decimal, or any other spelling keeps the default" (15
+    minutes). gnosh now does the same, with a warning doctor shows.

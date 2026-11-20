@@ -60,8 +60,18 @@ type Options struct {
 	// that calls has room for, which the app works out. Read then reads
 	// the whole file, or as much of it as that, in one call, as Claude
 	// Code's allow_large does. Nil, or no more than ReadMaxBytes, leaves
-	// allow_large without effect.
-	ReadRoom func(ctx context.Context) int
+	// allow_large without effect. done is called once the Read is over,
+	// with the bytes it returned, so that the rest of the room may go to
+	// another call of the same round.
+	ReadRoom func(ctx context.Context) (room int, done func(used int))
+
+	// ReadResultMost, when not nil, says the most bytes one Read result
+	// may hold, line numbers and all, before the loop that called it cuts
+	// it (to a quarter of the model's window, say), or 0 for no such
+	// limit. Read stops short of it, as at ReadMaxBytes, so that the lines
+	// it records as read are the lines the model is shown: Write takes a
+	// file read whole to be known whole.
+	ReadResultMost func(ctx context.Context) int
 
 	// PDFPages and PDFText read a PDF for Read (pdf.go): how many pages it
 	// has, and the text of pages first to last, each page ended by a form

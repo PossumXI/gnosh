@@ -26,11 +26,17 @@ const pictureMost = 64 << 20
 // pngMark is how a PNG file begins.
 var pngMark = []byte("\x89PNG\r\n\x1a\n")
 
+// OverSSH reports whether the person came in over ssh, so that their
+// clipboard is on another machine.
+func OverSSH(getenv func(string) string) bool {
+	return getenv("SSH_CONNECTION") != "" || getenv("SSH_CLIENT") != "" || getenv("SSH_TTY") != ""
+}
+
 // PictureTool is the program, with its arguments, that hands out the
 // picture on this machine's clipboard: nil when the person's terminal is on
 // another machine, or this one has none. Its arguments are as Tool's.
 func PictureTool(goos string, getenv func(string) string, look func(string) (string, error)) []string {
-	if getenv("SSH_CONNECTION") != "" || getenv("SSH_CLIENT") != "" || getenv("SSH_TTY") != "" {
+	if OverSSH(getenv) {
 		return nil
 	}
 	try := func(name string, args ...string) []string {
@@ -78,15 +84,16 @@ func ReadPicture(ctx context.Context, tool []string, env []string) ([]byte, erro
 	switch {
 	case len(data) > pictureMost:
 		return nil, fmt.Errorf("the picture is larger than %d MiB", pictureMost>>20)
-	case bytes.HasPrefix(data, pngMark):
-		return data, nil
+	case werr != nil && ctx.Err() != nil:
+		// (Before the PNG's first bytes are looked at: a tool stopped
+		// in the middle has handed out the start of a picture.)
+		return nil, fmt.Errorf("%s took too long", filepath.Base(tool[0]))
 	case rerr != nil:
 		return nil, rerr
-	case ctx.Err() != nil:
-		return nil, fmt.Errorf("%s took too long", filepath.Base(tool[0]))
+	case werr == nil && bytes.HasPrefix(data, pngMark):
+		return data, nil
 	}
 	// (wl-paste and xclip fail when the clipboard has no PNG to give.)
-	_ = werr
 	return nil, ErrNoPicture
 }
 
@@ -124,6 +131,9 @@ func macPicture(ctx context.Context, osascript string, env []string) ([]byte, er
 	}
 	if err != nil {
 		return nil, fmt.Errorf("osascript: %v", err)
+	}
+	if info, err := os.Stat(path); err == nil && info.Size() > pictureMost {
+		return nil, fmt.Errorf("the picture is larger than %d MiB", pictureMost>>20)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

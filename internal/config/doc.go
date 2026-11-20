@@ -260,7 +260,9 @@
 // CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS,
 // CLAUDE_CODE_GLOB_TIMEOUT_SECONDS, CLAUDE_CODE_GLOB_NO_IGNORE (gnosh's
 // Glob honours .gitignore unless it is true, the opposite of Claude Code's
-// default), CLAUDE_CODE_AUTO_COMPACT_WINDOW,
+// default), CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS,
+// CLAUDE_CODE_WEBFETCH_DEADLINE_MS, MCP_TIMEOUT, MCP_TOOL_TIMEOUT,
+// MAX_MCP_OUTPUT_TOKENS, CLAUDE_CODE_AUTO_COMPACT_WINDOW,
 // CLAUDE_AUTOCOMPACT_PCT_OVERRIDE and CLAUDE_CODE_SAFE_MODE, of which one
 // in the env block of a config file wins over the shell's; and
 // ANTHROPIC_API_KEY and OPENAI_API_KEY, from the shell's environment

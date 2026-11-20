@@ -48,7 +48,7 @@ func (t looker) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, er
 // is not in the list at all.
 func (l *live) buildTools() error {
 	limits := l.cfg.Limits
-	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied, ReadRoom: l.readRoom}
+	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied, ReadRoom: l.readRoom, ReadResultMost: l.readResultMost}
 	if limits.FileReadMaxTokens.V > 0 {
 		// The limit is given in tokens, and the file tools count bytes: a
 		// token is about four of them.
@@ -80,8 +80,8 @@ func (l *live) buildTools() error {
 		DefaultTimeout:      limits.BashDefaultTimeout.V,
 		MaxTimeout:          limits.BashMaxTimeout.V,
 		TimeoutToBackground: true,
-		NoBackground:        l.inv.Bare || l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1",
-		NoCarryCwd:          l.p.env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] == "1",
+		NoBackground:        l.inv.Bare || l.envOn("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"),
+		NoCarryCwd:          l.envOn("CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"),
 		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
 		MaxOutputChars:      bashOutputChars(l.cfg),
 		NoOutputTool:        true,
@@ -111,13 +111,14 @@ func (l *live) buildTools() error {
 	}
 	l.shell = shelltool.New(so)
 	all = append(all, l.wrapStop(l.shell.Tools())...)
-	if l.p.env["CLAUDE_CODE_DISABLE_WEB_FETCH"] != "1" {
-		// (CLAUDE_CODE_DISABLE_WEB_FETCH=1 turns it off, as in Claude Code.)
+	noFetch := l.envOn("CLAUDE_CODE_DISABLE_WEB_FETCH")
+	if !noFetch {
+		// (CLAUDE_CODE_DISABLE_WEB_FETCH turns it off, as in Claude Code.)
 		all = append(all, &webFetchTool{l: l, cacheFor: limits.WebFetchCacheTTL.V, deadline: limits.WebFetchDeadline.V})
 	}
 	if u := strings.TrimRight(l.cfg.Options.WebSearchURL.V, "/"); u != "" {
 		// (Only with a search server named: see websearch.go.)
-		all = append(all, &webSearchTool{l: l, base: u})
+		all = append(all, &webSearchTool{l: l, base: u, noFetch: noFetch})
 	}
 	// gnosh's own tools, as a sub-agent starts from them.
 	l.own = l.own[:0]
@@ -473,17 +474,46 @@ func misreadGno(command string, programs []string) string {
 	return ""
 }
 
+// bytesPerToken is how the loop counts text it has not had counted by a
+// server: three bytes a token.
+const bytesPerToken = 3
+
 // readRoom is how many bytes of text a Read with allow_large may return:
 // about what the calling agent's context has room for before room has to
-// be made, at three bytes a token, as Claude Code sizes allow_large to the
-// room left in the context.
-func (l *live) readRoom(ctx context.Context) int {
-	a := agent.FromContext(ctx)
+// be made, as Claude Code sizes allow_large to the room left in the
+// context. The calls of one round share that room (agent.TakeRoom), and
+// none takes more than one result may hold (readResultMost).
+func (l *live) readRoom(ctx context.Context) (int, func(used int)) {
+	a := l.callerOf(ctx)
 	if a == nil {
-		a = l.agent
+		return 0, func(int) {}
 	}
-	if a == nil {
-		return 0
+	n, give := a.TakeRoom(l.readResultMost(ctx) / bytesPerToken)
+	return n * bytesPerToken, func(used int) {
+		give(n - (used+bytesPerToken-1)/bytesPerToken)
 	}
-	return a.Context().Room() * 3
+}
+
+// readResultMost is the most bytes one Read result may hold: a tenth
+// under the cuts every tool result gets on its way to the model, to a
+// quarter of the window (in the agent loop) and to maxResultBytes, so that
+// Read stops before them and what it records as read is what the model is
+// shown. The tenth is for Read's own note and the loop's rounding.
+func (l *live) readResultMost(ctx context.Context) int {
+	most := maxResultBytes
+	if a := l.callerOf(ctx); a != nil {
+		if t := a.Context().ResultMost(); t > 0 {
+			most = min(most, t*bytesPerToken)
+		}
+	}
+	return most * 9 / 10
+}
+
+// callerOf is the agent whose tool call ctx belongs to: a sub-agent's own,
+// or the session's.
+func (l *live) callerOf(ctx context.Context) *agent.Agent {
+	if a := agent.FromContext(ctx); a != nil {
+		return a
+	}
+	return l.agent
 }
