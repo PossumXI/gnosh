@@ -83,3 +83,18 @@ func TestFocusViewTurnedOver(t *testing.T) {
 		t.Errorf("a bare /focus in focus view was sent as %q, want /focus off", sent)
 	}
 }
+
+// In focus view a call with a note for the person (the new problems an
+// edit brought) is written whole, its note under it, not folded away.
+func TestFocusViewKeepsNotes(t *testing.T) {
+	g := newRig(t, 100, 30, text.NoColor)
+	g.s.setView("focus")
+	g.keys(`"fix it" <Enter>`).start()
+	edit := map[string]any{"file_path": "/home/jae/src/proj/a.go", "old_string": "b", "new_string": "c"}
+	g.ev(toolCall("c1", "Edit"), replyEnd(core.StopToolUse), toolStart("c1", "Edit", edit), toolEnd("c1", "Edit", edit, core.ToolResult{
+		Content: []core.Block{core.Text("edited")},
+		Display: &core.Display{Kind: "diff", Path: "/home/jae/src/proj/a.go", Before: "a\nb\n", After: "a\nc\n"},
+		Notes:   []string{"Found 1 new diagnostic issue in 1 file (gopls)."},
+	}, 0))
+	g.committedHas("Edit a.go", "Found 1 new diagnostic issue in 1 file (gopls).")
+}
