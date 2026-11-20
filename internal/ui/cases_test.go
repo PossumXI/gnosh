@@ -1534,3 +1534,17 @@ func TestPlanApprovedLine(t *testing.T) {
 	}, 0))
 	g.committedHas("approved · manual mode", "the plan is kept in ~/.local/share/gnosh/plans/1.md").committedLacks("carry the plan out")
 }
+
+// An answered AskUserQuestion's call says "answered": the answers stand in
+// the question's own record above it, and the result's words for the
+// model said them again, cut short.
+func TestAskUserQuestionAnsweredLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"set it up" <Enter>`).start()
+	args := map[string]any{"questions": []any{map[string]any{"question": "Which database?", "header": "Database", "options": []any{}}}}
+	g.ev(toolCall("c1", "AskUserQuestion"), replyEnd(core.StopToolUse), toolStart("c1", "AskUserQuestion", args))
+	g.ev(toolEnd("c1", "AskUserQuestion", args, core.ToolResult{
+		Content: []core.Block{core.Text("The user answered:\n1. Which database?\n   Answer: Postgres\n2. Which checks?\n   Answer: Unit tests")},
+	}, 0))
+	g.committedHas("answered").committedLacks("The user answered", "more lines not shown")
+}

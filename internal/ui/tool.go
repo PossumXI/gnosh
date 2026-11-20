@@ -839,6 +839,10 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		}
 	case "gnovm_run":
 		return "", s.clipHead(safeLines(text), s.limit(receiptLines))
+	case "AskUserQuestion":
+		// The answers stand in the question's own record just above: the
+		// result's words for the model said them again, cut short.
+		return "answered", nil
 	case "ExitPlanMode":
 		// The plan approved, in the person's words (the result is the
 		// model's: "carry the plan out").
