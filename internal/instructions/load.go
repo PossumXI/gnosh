@@ -52,15 +52,61 @@ type want struct {
 	// under is a directory outside the project root that was approved as a
 	// whole: what really lies inside it needs no further asking.
 	under string
+	// fence is the directory, link-free, that a project's file may bring
+	// files in from without asking (fenceAt); "" means the project root.
+	fence string
 }
 
 // outside reports whether the file or directory at real, a link-free path,
-// lies somewhere that w may not read from without asking.
+// lies somewhere that w may not read from without asking. Where the person
+// keeps keys is such a place for a project's file wherever its fence is.
 func (w want) outside(s *Set, real string) bool {
-	if w.free || within(real, s.realRoot) {
+	if w.free {
+		return false
+	}
+	if s.secretPath(real) {
+		return true
+	}
+	fence := w.fence
+	if fence == "" {
+		fence = s.realRoot
+	}
+	if within(real, fence) {
 		return false
 	}
 	return w.under == "" || !within(real, w.under)
+}
+
+// fenceAt is the directory, with its links followed, that a project's file
+// found in dir may bring files in from without asking: the top of the
+// repository it lies in below the project root, a repository cloned or
+// vendored there being a project of its own; otherwise the project root;
+// otherwise, where the root is the home directory, a directory that holds
+// it or the top of the disk, dir itself. A session started in one of those
+// made every key the person has, and every other project's files, a
+// nested CLAUDE.md's to import (the instruction-files review of
+// 2026-11-20).
+func (l *loading) fenceAt(dir string) string {
+	s := l.s
+	real, err := l.k.realDir(dir)
+	if err != nil {
+		real = dir
+	}
+	for d := real; d != s.realRoot && within(d, s.realRoot) && !s.wide(d); d = path.Dir(d) {
+		if l.repoTop(d) {
+			return d
+		}
+	}
+	if !s.wide(s.realRoot) {
+		return s.realRoot
+	}
+	return real
+}
+
+// repoTop reports whether d, a link-free directory, is the top of a git
+// work tree.
+func (l *loading) repoTop(d string) bool {
+	return l.k.probe(path.Join(d, ".git")).err == nil
 }
 
 // fetched is a file that was found, allowed and read.
@@ -126,6 +172,9 @@ func (l *loading) dir(dir string, late bool, trigger string) {
 	s := l.s
 	above := l.above(dir)
 	t := want{scope: ScopeProject, kind: KindMain, reason: ReasonStart, base: dir, above: above, free: above}
+	if !above {
+		t.fence = l.fenceAt(dir)
+	}
 	if late {
 		t.reason, t.late, t.trigger = ReasonNested, true, trigger
 	}
@@ -389,14 +438,18 @@ func (l *loading) fetch(w want) (fetched, bool) {
 	}
 	if w.outside(s, pr.real) && !l.approve(w, pr.real) {
 		from := w.path
-		text := fmt.Sprintf("%s leads, through a link, to %s, which is outside the project; that was not approved, so it was not loaded.", shown, plain(osPath(pr.real)))
+		where := "which is outside the project"
+		if s.secretPath(pr.real) {
+			where = "where keys and passwords are kept"
+		}
+		text := fmt.Sprintf("%s leads, through a link, to %s, %s; that was not approved, so it was not loaded.", shown, plain(osPath(pr.real)), where)
 		if w.kind == KindImport {
 			from = w.parent
 			target := plain(osPath(pr.real))
 			if w.path != pr.real {
 				target = fmt.Sprintf("%s (which leads, through a link, to %s)", shown, target)
 			}
-			text = fmt.Sprintf("%s imports %s, which is outside the project; that was not approved, so it was not loaded.", plain(osPath(w.parent)), target)
+			text = fmt.Sprintf("%s imports %s, %s; that was not approved, so it was not loaded.", plain(osPath(w.parent)), target, where)
 		}
 		l.warn(WarnImportRefused, pr.real, from, text)
 		return fetched{}, false
@@ -532,6 +585,7 @@ func (l *loading) imports(w want, real, unit, text string) {
 			depth:   w.depth + 1,
 			unit:    unit,
 			free:    w.scope == ScopeUser,
+			fence:   w.fence,
 		}
 		switch {
 		case written == "~" || strings.HasPrefix(written, "~/"):

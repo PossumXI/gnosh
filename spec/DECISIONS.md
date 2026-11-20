@@ -4307,3 +4307,22 @@ or kept with the reason said (27).
     lists are the session's, for a sub-agent's hook too, and are empty,
     never left out, when nothing runs or waits. /fork and /subtask runs,
     which are programs of their own, are not listed.
+
+300. **A nested instruction file is fenced at its own repository.** What
+    a project's instruction file could import, or reach through a link
+    (the file itself, a rules folder), without asking was the project
+    root's; a session started in the home folder, a folder above it or
+    at the top of the disk made that every key the person has: a cloned
+    repository's CLAUDE.md below it with "@../../.ssh/id_ed25519" put the
+    key into the model's context, as standing instructions, the first
+    time the model read a file there, and nobody was asked (the
+    instruction-files review of 2026-11-20). A project's file is now
+    fenced at the top of the repository it lies in below the project
+    root (one cloned or vendored there is a project of its own); else at
+    the project root, as before; else, where the root is the home
+    folder, a folder that holds it or the top of the disk, at its own
+    folder. And whatever its fence, a project's file never brings in what
+    lies where keys and passwords are kept (~/.ssh, ~/.gnupg, ~/.aws,
+    ~/.config/gh, ~/.netrc, ~/.git-credentials, ~/.docker, ~/.kube),
+    which the warning names as such. The person's own files keep their
+    freedom.

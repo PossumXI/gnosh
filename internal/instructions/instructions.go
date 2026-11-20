@@ -312,9 +312,13 @@ type Set struct {
 	// followed.
 	cwd, root, home   string
 	realCwd, realRoot string
-	userFiles         []string
-	projectFiles      []string
-	exclude           []pattern
+	// realHome is the home directory with its links followed, and secret
+	// the places in it where the person keeps keys (secretNames).
+	realHome     string
+	secret       []string
+	userFiles    []string
+	projectFiles []string
+	exclude      []pattern
 
 	files    []File
 	warnings []Warning
@@ -479,6 +483,12 @@ func newSet(o Options) (*Set, error) {
 
 	s.realCwd = s.d.resolveLoose(s.cwd)
 	s.realRoot = s.d.resolveLoose(s.root)
+	if s.home != "" {
+		s.realHome = s.d.resolveLoose(s.home)
+		for _, name := range secretNames {
+			s.secret = append(s.secret, path.Join(s.realHome, name))
+		}
+	}
 	if !within(s.realCwd, s.realRoot) {
 		return nil, fmt.Errorf("instructions: the working directory %s is not inside the project root %s", osPath(s.cwd), osPath(s.root))
 	}
@@ -670,6 +680,28 @@ func absPath(what, p string) (string, error) {
 // osPath turns one of the package's slash-separated paths into the host's
 // form.
 func osPath(p string) string { return filepath.FromSlash(p) }
+
+// secretNames are the places under the home directory where keys and
+// passwords are kept: ssh's and gpg's keys, cloud, GitHub, container and
+// cluster credentials, and the passwords of .netrc and git's store.
+var secretNames = []string{".ssh", ".gnupg", ".aws", ".config/gh", ".netrc", ".git-credentials", ".docker", ".kube"}
+
+// secretPath reports whether real, a link-free path, lies in one of the
+// places the person keeps keys in.
+func (s *Set) secretPath(real string) bool {
+	for _, d := range s.secret {
+		if within(real, d) {
+			return true
+		}
+	}
+	return false
+}
+
+// wide reports whether d, a link-free directory, is the home directory, a
+// directory that holds it, or the top of the disk.
+func (s *Set) wide(d string) bool {
+	return d == "/" || (s.realHome != "" && within(s.realHome, d))
+}
 
 // within reports whether p is dir or lies under it. Both are cleaned,
 // absolute, slash-separated paths.
