@@ -117,6 +117,15 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	args := strings.Fields(c.Args)
 	switch {
 	case len(args) == 2 && args[0] == "stop":
+		if found, wake := l.unschedule(args[1]); found {
+			if wake {
+				l.endSelfLoop("its next run was cancelled")
+				c.Say("The self-paced /loop's next run, %s, is cancelled, and the loop is over.", args[1])
+				return nil
+			}
+			c.Say("The scheduled prompt %s is cancelled.", args[1])
+			return nil
+		}
 		if b := l.findBackgroundAgent(args[1]); b != nil {
 			l.stopBackgroundAgent(b)
 			c.Say("The background sub-agent %s is stopped: %s", b.id, oneLine(b.desc, 100))
@@ -182,6 +191,28 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 			c.Say("     The model can give %s more to do (SendMessage to its id): ask it to.", strings.Join(more, ", "))
 		}
 	}
+	// The prompts the session has scheduled (CronCreate, /loop) and the
+	// goal it works towards, as Claude Code 2.1.329's /tasks has them.
+	scheduled := l.scheduled()
+	now := l.p.now()
+	for _, t := range scheduled {
+		if t.wake {
+			c.Say("%s  the self-paced /loop's next run, at %s: %s", t.id, whenText(t.next, now), oneLine(t.prompt, 100))
+			continue
+		}
+		how := "recurring"
+		if !t.recurring {
+			how = "once"
+		}
+		who := "a scheduled prompt"
+		if t.loop {
+			who = "/loop's prompt"
+		}
+		c.Say("%s  %s, %q %s, next run %s: %s", t.id, who, t.sched, how, whenText(t.next, now), oneLine(t.prompt, 100))
+	}
+	if goal := l.statusFacts()["goal"]; goal != "" {
+		c.Say("goal  %s (/goal clear ends it)", oneLine(goal, 100))
+	}
 	// The runs /background and /fork started from this folder, from any
 	// session: they outlive the session that started them.
 	for _, r := range l.backgroundRuns() {
@@ -203,7 +234,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		}
 	}
 	if l.shell == nil {
-		if len(agents) == 0 {
+		if len(agents) == 0 && len(scheduled) == 0 {
 			c.Say("This session runs no commands, so none runs in the background.")
 		} else {
 			c.Say("/tasks stop <id> stops one.")
@@ -212,7 +243,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	}
 	tasks := l.shell.Tasks()
 	if len(tasks) == 0 {
-		if len(agents) == 0 {
+		if len(agents) == 0 && len(scheduled) == 0 {
 			c.Say("No command has run in the background in this session. Ctrl+B moves one that is running into the background.")
 		} else {
 			c.Say("/tasks stop <id> stops one.")
@@ -236,7 +267,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		c.Say("%s  %s: %s", t.ID, state, oneLine(t.Command, 100))
 		c.Say("     its output: %s (%s)", t.OutputFile, byteCount(t.OutputBytes))
 	}
-	if running > 0 || len(agents) > 0 {
+	if running > 0 || len(agents) > 0 || len(scheduled) > 0 {
 		c.Say("/tasks stop <id> stops one.")
 	}
 	return nil

@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -267,6 +268,35 @@ func TestScheduledPromptWaitsForACommand(t *testing.T) {
 	s.see("was not trusted")
 	s.see("Scheduled task ")
 	s.see("pong")
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// /tasks lists the prompts scheduled in the session, as Claude Code
+// 2.1.329's does, and /tasks stop with one's id cancels it.
+func TestTasksListsScheduledPrompts(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "CronCreate", Args: `{"cron":"*/5 * * * *","prompt":"check the build"}`}}},
+		apptest.Reply{Text: "Scheduled."},
+	)
+	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
+	s := sitWith(t, w, func(o *Options) { o.Now = clk.Now })
+	s.see("Type a prompt and Enter.")
+	s.typeLine("check the build every five minutes")
+	s.see("Scheduled.")
+	s.see("-- done in")
+	s.typeLine("/tasks")
+	s.see(`a scheduled prompt, "*/5 * * * *" recurring, next run`)
+	s.see("check the build")
+	s.see("/tasks stop <id> stops one.")
+	m := regexp.MustCompile(`(\S+)  a scheduled prompt`).FindStringSubmatch(s.out.String())
+	if m == nil {
+		t.Fatalf("no id in:\n%s", s.out.String())
+	}
+	s.typeLine("/tasks stop " + m[1])
+	s.see("The scheduled prompt " + m[1] + " is cancelled.")
+	s.typeLine("/tasks")
+	s.see("No command has run in the background in this session.")
 	s.typeLine("/exit")
 	s.exit()
 }
