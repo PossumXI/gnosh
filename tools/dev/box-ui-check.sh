@@ -36,6 +36,7 @@
 #	ssh ai-remote bash -s -- trusttype < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- imports < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- short < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- notebook < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -189,6 +190,8 @@
 #               project, 1 (Yes) loads it, and the model answers from it
 #   short       a window of 12 rows by 70: the question about a command
 #               shows every choice, and 1 answers it
+#   notebook    (acceptEdits) the model reads sums.ipynb (cells, ids,
+#               outputs) and changes its code cell with NotebookEdit
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -207,6 +210,7 @@ case "$scenario" in
 basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype | rewindsum | rewindsumb | imports) ;;
 bgfail) flags="agents" ;;
 short) cols=70 rows=12 ;;
+notebook) flags="--permission-mode acceptEdits" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
@@ -232,7 +236,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports, short)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports, short, notebook)" >&2
 	exit 2
 	;;
 esac
@@ -267,6 +271,19 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = notebook ]; then
+	cat > "$T/work/sums.ipynb" <<'JSON'
+{
+ "cells": [
+  {"cell_type": "markdown", "id": "intro01", "metadata": {}, "source": ["# Sums"]},
+  {"cell_type": "code", "execution_count": 1, "id": "sum0002", "metadata": {}, "outputs": [{"name": "stdout", "output_type": "stream", "text": ["3\n"]}], "source": ["print(1 + 2)"]}
+ ],
+ "metadata": {"language_info": {"name": "python"}},
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
+JSON
+fi
 if [ "$scenario" = imports ]; then
 	# A project file that brings in a file from outside the project: the
 	# person is asked once whether to load it (DECISIONS 305).
@@ -512,6 +529,12 @@ agents)
 	echo "=== watching it: $(screen | grep -o '1-[0-9] answers[^·]*' | head -1)"
 	tmux send-keys -t "$S" 1
 	done_when() { [ -s "$T/work/out/asked.txt" ] && screen | grep -q "done [0-9]"; }
+	;;
+notebook)
+	# (acceptEdits) The model reads a notebook, its cells and outputs, and
+	# changes one cell with NotebookEdit; the file stays a notebook.
+	tmux send-keys -t "$S" "Read sums.ipynb, then use the NotebookEdit tool to change the code cell so that it prints 2 + 2 instead of 1 + 2. Then say what the cell printed before." Enter
+	done_when() { grep -q '2 + 2' "$T/work/sums.ipynb" 2>/dev/null && screen | grep -q "done in"; }
 	;;
 short)
 	# A window of 12 rows by 70: the question about a command shows what
