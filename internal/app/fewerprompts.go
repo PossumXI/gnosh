@@ -84,10 +84,10 @@ func (l *live) slashFewerPrompts(ctx context.Context, c *SlashContext) error {
 	l.fewerLast = found
 	l.fewerMu.Unlock()
 	if len(found) == 0 {
-		c.Say("Of the commands, MCP tools and web pages in this folder's last %s, none would be asked about now in manual mode.", countWords(sessions, "session", "sessions"))
+		c.Say("Of the commands, MCP tools and web pages in this folder's last %s, none would be asked about now in manual mode.", lastSessions(sessions))
 		return nil
 	}
-	c.Say("These calls in this folder's last %s would be asked about now in manual mode; an allow rule lets every call it matches run without a question:", countWords(sessions, "session", "sessions"))
+	c.Say("These calls in this folder's last %s would be asked about now in manual mode; an allow rule lets every call it matches run without a question:", lastSessions(sessions))
 	for i, r := range found {
 		line := fmt.Sprintf("%2d. %s · %s", i+1, visible(strings.Join(r.rules, ", ")), countWords(r.calls, "call", "calls"))
 		if r.example != "" {
@@ -212,4 +212,13 @@ func recentSessionFiles(dirs []string) ([]string, int) {
 		}
 	}
 	return paths, sessions
+}
+
+// lastSessions says how many sessions were looked through, after "last":
+// "session" for one, "12 sessions".
+func lastSessions(n int) string {
+	if n == 1 {
+		return "session"
+	}
+	return countWords(n, "session", "sessions")
 }

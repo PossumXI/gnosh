@@ -59,7 +59,7 @@ func (l *live) slashSkillDoctor(ctx context.Context, c *SlashContext) error {
 		}
 		return ub - ua
 	})
-	c.Say("Your skills: what each costs in the model's window, with the first prompt and after each summary, and how often it ran in your last %s (the model's Skill calls and the ones you typed):", countWords(sessions, "session", "sessions"))
+	c.Say("Your skills: what each costs in the model's window, with the first prompt and after each summary, and how often it ran in your last %s (the model's Skill calls and the ones you typed):", lastSessions(sessions))
 	idle, idleCost := 0, 0
 	for _, sk := range all {
 		where := "not in the model's list"
