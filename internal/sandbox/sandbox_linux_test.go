@@ -100,6 +100,88 @@ func TestBubblewrapForReal(t *testing.T) {
 	}
 }
 
+// The loosenings under real bubblewrap: a command may make no user
+// namespace of its own (where this bubblewrap can refuse one), and may
+// when let; with the machine's /proc it sees the machine's processes;
+// with every Unix socket let, the machine's /run is in sight; with the
+// files left open it writes anywhere the person may, and reaches the
+// network no more. Skipped where bubblewrap cannot run.
+func TestBubblewrapLoosenings(t *testing.T) {
+	st := Check()
+	if !st.OK {
+		t.Skip(st.Why)
+	}
+	work, outside := t.TempDir(), t.TempDir()
+	temp, err := os.MkdirTemp(t.TempDir(), "sandbox-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(p Policy, script string) string {
+		t.Helper()
+		argv, err := Wrap(p, work, []string{"/bin/sh", "-c", script})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, _ := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	base := Policy{Write: []string{work}, Temp: temp}
+	if unshare, err := exec.LookPath("unshare"); err == nil {
+		probe := unshare + " -U true 2>/dev/null && echo made || echo refused"
+		if st.UsernsRefused {
+			if got := run(base, probe); got != "refused" {
+				t.Errorf("a user namespace in the sandbox: %q", got)
+			}
+		} else {
+			t.Logf("this bubblewrap cannot refuse user namespaces: %s", st.Weaker)
+		}
+		let := base
+		let.UserNamespaces = true
+		if got := run(let, probe); got != "made" {
+			t.Errorf("a user namespace, let: %q", got)
+		}
+	}
+	count := `ls /proc | grep -c '^[0-9]'`
+	own, _ := strconv.Atoi(run(base, count))
+	host := base
+	host.HostProc = true
+	machine, _ := strconv.Atoi(run(host, count))
+	if own < 1 || own > 5 || machine <= own {
+		t.Errorf("processes in sight: %d with its own /proc, %d with the machine's", own, machine)
+	}
+	if _, err := os.Stat("/run"); err == nil {
+		all := base
+		all.AllUnixSockets = true
+		if got := run(all, `ls -A /run | wc -l`); got == "0" {
+			t.Error("with every Unix socket let, /run is still out of sight")
+		}
+	}
+	open := base
+	open.FilesystemOff = true
+	got := run(open, `echo out > `+outside+`/out.txt && echo wrote; ls /tmp >/dev/null && echo tmp`)
+	if !strings.Contains(got, "wrote") {
+		t.Errorf("the files left open, a write outside: %q", got)
+	}
+	if data, err := os.ReadFile(filepath.Join(outside, "out.txt")); err != nil || string(data) != "out\n" {
+		t.Errorf("the files left open, what was written: %q, %v", data, err)
+	}
+	if bash, err := exec.LookPath("bash"); err == nil {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ln.Close()
+		probe := "(exec 3<>/dev/tcp/127.0.0.1/" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port) + ") 2>/dev/null && echo reached || echo unreached"
+		argv, err := Wrap(open, work, []string{bash, "-c", probe})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out, _ := exec.Command(argv[0], argv[1:]...).CombinedOutput(); strings.TrimSpace(string(out)) != "unreached" {
+			t.Errorf("the files left open, the network: %s", out)
+		}
+	}
+}
+
 // TestMain runs the test binary as the relay when bubblewrap starts it so,
 // as gnosh's own main does.
 func TestMain(m *testing.M) {

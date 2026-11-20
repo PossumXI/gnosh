@@ -59,7 +59,7 @@ func TestSeatbeltProfile(t *testing.T) {
 	}
 	got := seatbeltProfile(p)
 	for _, piece := range []string{
-		"(version 1)\n(allow default)\n", "(deny network*)\n(deny file-write*)\n(allow file-write*\n",
+		"(version 1)\n(allow default)\n", "(deny network*)\n(deny file-read* file-write* (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))\n(deny file-write*)\n(allow file-write*\n",
 		`(subpath "/Users/u/proj")`, `(subpath "/Users/u/we\"ird\\dir")`, `(subpath "/private/tmp/gnosh-sandbox-501")`,
 		`(literal "/private/var/x/cwd")`, `(literal "/dev/null")`, `(regex #"^/dev/fd/[0-9]+$")`,
 		"(deny appleevent-send)\n(deny job-creation)\n", `(global-name "com.apple.coreservices.launchservicesd")`,
@@ -80,5 +80,77 @@ func TestSeatbeltProfile(t *testing.T) {
 	}
 	if strings.Contains(seatbeltProfile(Policy{Network: true}), "network") {
 		t.Error("the network was denied though the policy gives it")
+	}
+}
+
+// What the settings loosen, on bubblewrap's command line: user namespaces
+// refused (where bubblewrap can, Wrap says) unless let; the machine's
+// /proc for an unprivileged container; /run left in sight for every Unix
+// socket; and with the files left open, the machine mounted writable,
+// nothing of the files confined, the relay given the proxy's socket where
+// it is.
+func TestBwrapLoosenings(t *testing.T) {
+	fs := fakeFS(map[string]bool{"/w": true, "/t": true, "/run": true, "/home/u": true, "/x/cwd": false, "/t/proxy.sock": false})
+	argv := []string{"/bin/sh", "-c", "x"}
+	args := func(p Policy) string { return strings.Join(bwrapArgs("bwrap", p, "/w", argv, fs), " ") }
+	if got := args(Policy{blockUserns: true}); !strings.HasPrefix(got, "bwrap --die-with-parent --unshare-user --disable-userns --unshare-pid ") {
+		t.Errorf("user namespaces refused: %s", got)
+	}
+	if got := args(Policy{}); strings.Contains(got, "userns") || !strings.Contains(got, "--proc /proc") || !strings.Contains(got, "--tmpfs /run") {
+		t.Errorf("the default: %s", got)
+	}
+	if got := args(Policy{HostProc: true}); strings.Contains(got, "--proc") {
+		t.Errorf("the machine's /proc: %s", got)
+	}
+	if got := args(Policy{AllUnixSockets: true}); strings.Contains(got, "/run") {
+		t.Errorf("every Unix socket: %s", got)
+	}
+	open := Policy{FilesystemOff: true, Write: []string{"/w"}, DenyRead: []string{"/home/u"}, Temp: "/t",
+		Expose: []Exposed{{Path: "/x/cwd", Write: true}}, Proxy: "/t/proxy.sock", Relay: "/gnosh"}
+	want := "bwrap --die-with-parent --unshare-pid --unshare-ipc --unshare-net --bind / / --dev /dev --proc /proc --tmpfs /run" +
+		" --chdir /w -- /gnosh " + RelayWord + " /t/proxy.sock /bin/sh -c x"
+	if got := args(open); got != want {
+		t.Errorf("the files left open:\n got %s\nwant %s", got, want)
+	}
+	if env := strings.Join(Env(open), " "); strings.Contains(env, "TMPDIR") || strings.Contains(env, "XDG_CACHE_HOME") {
+		t.Errorf("the files left open, the environment: %s", env)
+	}
+}
+
+// What the settings loosen, in the Seatbelt profile: the trust service
+// closed unless let; Apple Events; Unix sockets by path or all; a port of
+// its own and the machine's; more of macOS's services by name, prefix or
+// all; and with the files left open, no rule of the files but the
+// terminals'.
+func TestSeatbeltLoosenings(t *testing.T) {
+	base := seatbeltProfile(Policy{})
+	for _, piece := range []string{`(global-name "com.apple.trustd.agent")`, "(deny appleevent-send)", "(deny network*)"} {
+		if !strings.Contains(base, piece) {
+			t.Errorf("the default profile has no %q:\n%s", piece, base)
+		}
+	}
+	if strings.Contains(base, "unix-socket") || strings.Contains(base, "network-bind") || strings.Contains(base, "(allow mach-lookup") {
+		t.Errorf("the default profile loosens:\n%s", base)
+	}
+	got := seatbeltProfile(Policy{TrustService: true, AppleEvents: true, UnixSockets: []string{"/Users/u/.ssh/agent.sock"}, LocalBinding: true,
+		MachLookup: []string{"com.apple.CoreSimulator.*", "com.example.one"}})
+	for _, piece := range []string{
+		"(allow network-outbound\n  (remote unix-socket (path-literal \"/Users/u/.ssh/agent.sock\")))",
+		`(allow network-bind (local ip "*:*"))`, `(allow network-inbound (local ip "*:*"))`, `(allow network-outbound (remote ip "localhost:*"))`,
+		`(allow mach-lookup (global-name-prefix "com.apple.CoreSimulator.") (global-name "com.example.one"))`,
+	} {
+		if !strings.Contains(got, piece) {
+			t.Errorf("the loosened profile has no %q:\n%s", piece, got)
+		}
+	}
+	if strings.Contains(got, "trustd") || strings.Contains(got, "appleevent") {
+		t.Errorf("the trust service or Apple Events still closed:\n%s", got)
+	}
+	if got := seatbeltProfile(Policy{AllUnixSockets: true, MachLookup: []string{"x.*", "*"}}); !strings.Contains(got, "(allow network-outbound (remote unix-socket))") || !strings.Contains(got, "(allow mach-lookup)\n") {
+		t.Errorf("every socket and service:\n%s", got)
+	}
+	open := seatbeltProfile(Policy{FilesystemOff: true, Write: []string{"/Users/u/proj"}, DenyRead: []string{"/Users/u"}})
+	if strings.Contains(open, "file-write*)") || strings.Contains(open, "/Users/u") || !strings.Contains(open, `(literal "/dev/tty")`) || !strings.Contains(open, "(deny network*)") {
+		t.Errorf("the files left open:\n%s", open)
 	}
 }

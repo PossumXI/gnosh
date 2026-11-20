@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/sandbox"
 )
 
@@ -58,7 +59,7 @@ func (l *live) slashSandbox(ctx context.Context, c *SlashContext) error {
 // sandboxReport says how the sandbox stands, in a few lines.
 func (l *live) sandboxReport() string {
 	sc := l.cfg.Sandbox
-	st := sandbox.Check()
+	st := sandbox.CheckWith(sandboxSetup(sc))
 	state := l.st.sandboxOf(l.cfg)
 	var b strings.Builder
 	switch {
@@ -85,6 +86,12 @@ func (l *live) sandboxReport() string {
 	}
 	roots := l.roots
 	p := l.sandboxPolicy(roots, "", nil)
+	if p.FilesystemOff {
+		fmt.Fprintf(&b, "\nFiles: left open (filesystem.disabled, %s): its commands read and write what you may, denyRead and credentials.files are not kept from them, and they ask as any command does, auto-allow or not.", sc.Loosened["filesystem.disabled"])
+		b.WriteString(l.sandboxLooseText(sc))
+		b.WriteString(l.sandboxNetReport(sc))
+		return b.String()
+	}
 	fmt.Fprintf(&b, "\nWrites: %s, and a /tmp of its own.", l.shownList(p.Write))
 	var guarded []string
 	for _, r := range p.ReadOnly {
@@ -114,6 +121,47 @@ func (l *live) sandboxReport() string {
 	if len(sc.Excluded) > 0 {
 		fmt.Fprintf(&b, "\nRun outside it (excludedCommands): %s.", strings.Join(listValues(sc.Excluded), ", "))
 	}
+	b.WriteString(l.sandboxLooseText(sc))
+	b.WriteString(l.sandboxNetReport(sc))
+	return b.String()
+}
+
+// sandboxLooseText is the report's line of what the settings loosen, and
+// what the sandbox here cannot do, each on a line of its own; "" for
+// none.
+func (l *live) sandboxLooseText(sc config.Sandbox) string {
+	var b strings.Builder
+	if w := l.st.sandboxOf(l.cfg).weaker; w != "" {
+		fmt.Fprintf(&b, "\nHere %s.", w)
+	}
+	var loose []string
+	for _, key := range config.Loosenings {
+		if o, ok := sc.Loosened[key]; ok && key != "filesystem.disabled" {
+			loose = append(loose, key+" ("+o.String()+")")
+		}
+	}
+	if s := listValues(sc.UnixSockets); len(s) > 0 {
+		loose = append(loose, "network.allowUnixSockets: "+l.shownList(s))
+	}
+	if m := listValues(sc.MachLookup); len(m) > 0 {
+		loose = append(loose, "network.allowMachLookup: "+strings.Join(m, ", "))
+	}
+	if len(loose) > 0 {
+		fmt.Fprintf(&b, "\nLoosened: %s.", strings.Join(loose, "; "))
+	}
+	if n := len(sc.IgnoreViolations); n > 0 {
+		var what []string
+		for _, iv := range sc.IgnoreViolations {
+			what = append(what, iv.What+" for "+iv.Command)
+		}
+		fmt.Fprintf(&b, "\nNot reported when stopped (ignoreViolations): %s.", strings.Join(what, ", "))
+	}
+	return b.String()
+}
+
+// sandboxNetReport is the report's line of the network.
+func (l *live) sandboxNetReport(sc config.Sandbox) string {
+	var b strings.Builder
 	b.WriteString("\nNetwork: through gnosh's proxy")
 	if hosts := listValues(sc.AllowedDomains); len(hosts) > 0 {
 		fmt.Fprintf(&b, "; %s let through at once", strings.Join(hosts, ", "))

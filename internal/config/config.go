@@ -153,26 +153,27 @@ type Held struct {
 // the same words: its Restricts says which kinds still apply in a folder
 // that is not trusted, and its question says what each could do.
 const (
-	KindProvider    = "provider"
-	KindModel       = "model"
-	KindHost        = "host"
-	KindHook        = "hook"
-	KindHookOff     = "hook-off" // switching all hooks off
-	KindAllowRule   = "allow-rule"
-	KindAskRule     = "ask-rule"
-	KindDenyRule    = "deny-rule"
-	KindMode        = "mode"
-	KindAddDir      = "add-dir"
-	KindEnv         = "env"
-	KindOption      = "option"
-	KindExtraPath   = "extra-path"
-	KindAddress     = "address"
-	KindHiddenSkill = "hidden-skill"
-	KindRestriction = "restriction" // a setting that only takes a power away, such as disableBypassPermissionsMode
-	KindRemoval     = "removal"     // taking away a provider, a model or a host a weaker file declared
-	KindStatusLine  = "status-line"
-	KindFileSuggest = "file-suggestion"
-	KindLSPServer   = "lsp" // a language server, a program gnosh runs (the trust package's word)
+	KindProvider     = "provider"
+	KindModel        = "model"
+	KindHost         = "host"
+	KindHook         = "hook"
+	KindHookOff      = "hook-off" // switching all hooks off
+	KindAllowRule    = "allow-rule"
+	KindAskRule      = "ask-rule"
+	KindDenyRule     = "deny-rule"
+	KindMode         = "mode"
+	KindAddDir       = "add-dir"
+	KindEnv          = "env"
+	KindOption       = "option"
+	KindExtraPath    = "extra-path"
+	KindAddress      = "address"
+	KindHiddenSkill  = "hidden-skill"
+	KindRestriction  = "restriction" // a setting that only takes a power away, such as disableBypassPermissionsMode
+	KindRemoval      = "removal"     // taking away a provider, a model or a host a weaker file declared
+	KindStatusLine   = "status-line"
+	KindFileSuggest  = "file-suggestion"
+	KindLSPServer    = "lsp"           // a language server, a program gnosh runs (the trust package's word)
+	KindSandboxWider = "sandbox-wider" // a sandbox setting that lets its commands do more
 )
 
 // StatusLine is a command whose output takes the place of the status line

@@ -491,32 +491,51 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 
 // writeSigns are what a command says when the sandbox stopped a write
 // outside the folders it may write in; netSigns, when it stopped a
-// connection.
+// connection; trustSigns, when a program could not check a certificate
+// with macOS's trust service, out of the sandbox's reach.
 var (
 	writeSigns = []string{"Read-only file system", "Operation not permitted"}
 	netSigns   = []string{"Could not resolve host", "Temporary failure in name resolution", "Name or service not known",
 		"nodename nor servname provided", "Network is unreachable", "Couldn't connect to server", "Connection refused",
 		"no such host", "dial tcp", "gnosh's sandbox did not let the command reach", "CONNECT tunnel failed"}
+	trustSigns = []string{"x509: ", "tls: failed to verify certificate"}
 )
 
 // sandboxHint is the note under a sandboxed command that failed the way
 // the sandbox makes commands fail: what of the sandbox stopped it (the
 // writes, the network, or both; the rest of the sandbox is not said, as
-// it did not stop it), and the way out of it, where there is one.
+// it did not stop it), and the way out of it, where there is one. A line
+// of output the settings say not to report for the command
+// (ignoreViolations) is no sign.
 func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
 	sb := m.opt.Sandbox
 	if !a.sandboxed || sb == nil || e.reason != endExited || e.code == 0 {
 		return ""
 	}
+	var ignore []string
+	for _, ig := range sb.Ignored {
+		if ig.Command == "*" || strings.Contains(a.command, ig.Command) {
+			ignore = append(ignore, ig.What)
+		}
+	}
 	in := func(signs []string) bool {
-		return slices.ContainsFunc(signs, func(s string) bool { return strings.Contains(body, s) })
+		for line := range strings.Lines(body) {
+			if slices.ContainsFunc(signs, func(s string) bool { return strings.Contains(line, s) }) &&
+				!slices.ContainsFunc(ignore, func(w string) bool { return strings.Contains(line, w) }) {
+				return true
+			}
+		}
+		return false
 	}
 	var lets []string
-	if in(writeSigns) {
+	if sb.Writes != "" && in(writeSigns) {
 		lets = append(lets, "write only in "+sb.Writes)
 	}
 	if in(netSigns) {
 		lets = append(lets, sb.network())
+	}
+	if sb.NoTrust && in(trustSigns) {
+		lets = append(lets, "check no certificate with macOS's trust service (Go's programs check them with it)")
 	}
 	if len(lets) == 0 {
 		return ""

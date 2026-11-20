@@ -319,3 +319,42 @@ func TestSandboxHidesCredentials(t *testing.T) {
 		t.Errorf("a hidden credentials file was read: %s", got)
 	}
 }
+
+// With filesystem.disabled the sandbox leaves the files open: a command
+// writes outside the project, its network stays confined, and it asks as
+// any command does though autoAllowBashIfSandboxed is on (a command with
+// the files open could change what gnosh obeys later). /sandbox says so,
+// and lists the other loosenings and the reports not made. Skipped where
+// the sandbox cannot run.
+func TestSandboxFilesLeftOpen(t *testing.T) {
+	if st := sandbox.Check(); !st.OK {
+		t.Skip(st.Why)
+	}
+	outside, err := os.MkdirTemp("/var/tmp", "gnosh-app-open-")
+	if err != nil {
+		t.Skip("no /var/tmp")
+	}
+	t.Cleanup(func() { os.RemoveAll(outside) })
+	w := apptest.NewWorld(t)
+	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true, "filesystem": {"disabled": true},
+		"network": {"allowLocalBinding": true}, "ignoreViolations": {"*": ["/etc/hosts"]}}}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		// (Each run's first request: the call; after its result, done.)
+		if !strings.Contains(string(r.Body), `"role":"tool"`) {
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo out > ` + outside + `/out.txt && echo wrote"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-p", "write it").wantCode(t, 0)
+	if _, err := os.Stat(filepath.Join(outside, "out.txt")); err == nil {
+		t.Error("with the files left open, a sandboxed command ran without asking")
+	}
+	has(t, "the call that asked", toolResult(t, w, 1, "c1"), "approval")
+	run(t, w, "-y", "-p", "write it").wantCode(t, 0)
+	if data, err := os.ReadFile(filepath.Join(outside, "out.txt")); err != nil || string(data) != "out\n" {
+		t.Errorf("with the files left open, let run, the write outside: %q, %v", data, err)
+	}
+	r := run(t, w, "-p", "/sandbox").wantCode(t, 0)
+	has(t, "/sandbox", r.out, "Files: left open (filesystem.disabled", "they ask as any command does",
+		"Loosened: network.allowLocalBinding", "Not reported when stopped (ignoreViolations): /etc/hosts for *", "Network: through gnosh's proxy")
+}

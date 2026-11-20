@@ -682,8 +682,11 @@ func TestSettingsSandbox(t *testing.T) {
 		`{"sandbox": {"credentials": {"sigv4": {}}}}`:                                 "\"sandbox.credentials.sigv4\" is a setting Claude Code has and gnosh has not built",
 		`{"sandbox": {"credentials": {"envVars": [{"name": "1X", "mode": "deny"}]}}}`: "is not a variable's name",
 		`{"sandbox": {"credentials": {"files": [{"path": "/x", "mode": "hide"}]}}}`:   "is \"deny\" or \"mask\"",
-		`{"sandbox": {"ignoreViolations": {}}}`:                                       "a setting Claude Code has and gnosh has not built",
-		`{"sandbox": {"network": {"tlsTerminate": {}}}}`:                              "\"sandbox.network.tlsTerminate\" is a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"ignoreViolations": {"npm": "/etc/hosts"}}}`:                    "is a list of what not to report",
+		`{"sandbox": {"network": {"httpProxyPort": 8080}}}`:                           "\"sandbox.network.httpProxyPort\" is a setting Claude Code has and gnosh has not built",
+		`{"sandbox": {"network": {"allowMachLookup": ["com.*.x"]}}}`:                  "has a * other than at its end",
+		`{"sandbox": {"allowAppleEvents": "yes"}}`:                                    `"sandbox.allowAppleEvents" is true or false`,
+		`{"sandbox": {"filesystem": {"allowManagedReadPathsOnly": true}}}`:            "managed settings, which gnosh does not have",
 		`{"sandbox": {"network": {"allowedDomains": "x.com"}}}`:                       "is a list of hosts",
 		`{"sandbox": {"enabled": "yes"}}`:                                             `"sandbox.enabled" is true or false`,
 		`{"sandbox": {"bogus": 1}}`:                                                   "not a key gnosh reads under \"sandbox\"",
@@ -693,5 +696,81 @@ func TestSettingsSandbox(t *testing.T) {
 		if _, problems := load(t, withConfig(bad)); !strings.Contains(showProblems(problems), says) {
 			t.Errorf("%s: %s", bad, showProblems(problems))
 		}
+	}
+}
+
+// The sandbox's loosenings: each key Claude Code has, from the person's
+// own files; a repository's loosening waits for the trust, its false
+// keeps one off before it, and the keys Claude Code takes from the
+// person's settings alone (allowAppleEvents, allowNestedUserNamespaces,
+// filesystem.disabled, bwrapPath) are left out of a repository's file,
+// with a warning. ignoreViolations waits for the trust too; socatPath,
+// ripgrep and tlsTerminate are left out with a word of why.
+func TestSettingsSandboxLoosenings(t *testing.T) {
+	values := func(items []ListItem) string {
+		var out []string
+		for _, it := range items {
+			out = append(out, it.V)
+		}
+		return strings.Join(out, " ")
+	}
+	loose := func(sb Sandbox) string {
+		var on []string
+		for _, key := range Loosenings {
+			if sb.Loose(key) {
+				on = append(on, key)
+			}
+		}
+		return strings.Join(on, " ")
+	}
+	fsys := newFS().put(userJSON, `{"sandbox": {"enabled": true, "allowAppleEvents": true, "allowNestedUserNamespaces": true,
+		"enableWeakerNestedSandbox": true, "bwrapPath": "/opt/bwrap", "filesystem": {"disabled": true}, "socatPath": "/opt/socat",
+		"ripgrep": {"command": "/usr/bin/rg"},
+		"network": {"allowLocalBinding": true, "allowUnixSockets": ["~/.ssh/agent.sock"], "allowMachLookup": ["com.apple.CoreSimulator.*"], "tlsTerminate": {}},
+		"ignoreViolations": {"*": ["/etc/hosts"], "npm": ["/proc"]}}}`).
+		put(projJSON, `{"sandbox": {"enableWeakerNetworkIsolation": true, "allowAppleEvents": false, "bwrapPath": "/work/proj/fake-bwrap",
+		"filesystem": {"disabled": false},
+		"network": {"allowAllUnixSockets": true, "allowLocalBinding": false, "allowUnixSockets": ["/var/run/docker.sock"]},
+		"ignoreViolations": {"*": ["/x"]}}}`)
+	for _, trusted := range []bool{false, true} {
+		in := inputs(fsys)
+		in.Trusted = trusted
+		cfg, problems := load(t, in)
+		if cfg == nil {
+			t.Fatalf("refused: %s", showProblems(problems))
+		}
+		sb := cfg.Sandbox
+		want := "enableWeakerNestedSandbox allowAppleEvents allowNestedUserNamespaces filesystem.disabled"
+		wantSockets, wantIgnored := "/home/dev/.ssh/agent.sock", 2
+		if trusted {
+			want = "enableWeakerNestedSandbox enableWeakerNetworkIsolation allowAppleEvents allowNestedUserNamespaces filesystem.disabled network.allowAllUnixSockets"
+			wantSockets, wantIgnored = wantSockets+" /var/run/docker.sock", 3
+		}
+		if got := loose(sb); got != want {
+			t.Errorf("trusted %v: loosened %q, want %q", trusted, got, want)
+		}
+		if values(sb.UnixSockets) != wantSockets || values(sb.MachLookup) != "com.apple.CoreSimulator.*" || len(sb.IgnoreViolations) != wantIgnored {
+			t.Errorf("trusted %v: sockets %q, mach %q, ignored %+v", trusted, values(sb.UnixSockets), values(sb.MachLookup), sb.IgnoreViolations)
+		}
+		if sb.Bwrap != "/opt/bwrap" {
+			t.Errorf("trusted %v: bwrap %q", trusted, sb.Bwrap)
+		}
+		if iv := sb.IgnoreViolations[0]; iv.Command != "*" || iv.What != "/etc/hosts" {
+			t.Errorf("the first ignored: %+v", iv)
+		}
+		wantProblem(t, problems, Warning, projJSON, 0, "\"sandbox.allowAppleEvents\" in a project's file is not taken")
+		wantProblem(t, problems, Warning, projJSON, 0, "\"sandbox.filesystem.disabled\" in a project's file is not taken")
+		wantProblem(t, problems, Warning, projJSON, 0, "\"sandbox.bwrapPath\" in a project's file is not taken")
+		wantProblem(t, problems, Warning, userJSON, 0, "\"sandbox.socatPath\" is left out")
+		wantProblem(t, problems, Warning, userJSON, 0, "\"sandbox.ripgrep\" is left out")
+		wantProblem(t, problems, Warning, userJSON, 0, "\"sandbox.network.tlsTerminate\" is left out")
+		held := slices.ContainsFunc(cfg.Held, func(h Held) bool { return h.Kind == KindSandboxWider })
+		if held == trusted {
+			t.Errorf("trusted %v: the repository's loosenings held %v", trusted, held)
+		}
+	}
+	// A whole path only, as Claude Code takes it.
+	if _, problems := load(t, withConfig(`{"sandbox": {"bwrapPath": "bwrap"}}`)); !strings.Contains(showProblems(problems), "not a whole path") {
+		t.Errorf("a relative bwrapPath: %s", showProblems(problems))
 	}
 }

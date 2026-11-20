@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 )
 
-// check tries Seatbelt once.
-func check() Status {
+// check tries Seatbelt once (the setup is bubblewrap's).
+func check(Setup) Status {
 	tool := lookFor("sandbox-exec")
 	if tool == "" {
 		return Status{Why: "this macOS has no sandbox-exec"}
@@ -29,17 +29,14 @@ func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 	real := func(list []string) []string {
 		out := make([]string, 0, len(list))
 		for _, s := range list {
-			if s == "" {
-				continue
+			if s != "" {
+				out = append(out, realPath(s))
 			}
-			if r, err := filepath.EvalSymlinks(s); err == nil {
-				s = r
-			}
-			out = append(out, filepath.Clean(s))
 		}
 		return out
 	}
 	p.Write, p.ReadOnly, p.DenyRead, p.AllowRead = real(p.Write), real(p.ReadOnly), real(p.DenyRead), real(p.AllowRead)
+	p.UnixSockets = real(p.UnixSockets)
 	if t := real([]string{p.Temp}); len(t) == 1 {
 		p.Temp = t[0]
 	}
@@ -49,4 +46,18 @@ func Wrap(p Policy, dir string, argv []string) ([]string, error) {
 		}
 	}
 	return append([]string{st.Tool, "-p", seatbeltProfile(p)}, argv...), nil
+}
+
+// realPath is the path in the system's own spelling, links resolved; for
+// a path not there yet (a socket made later, a file denied before it is
+// written), its folder's, which is what it will be when it is there.
+func realPath(s string) string {
+	s = filepath.Clean(s)
+	if r, err := filepath.EvalSymlinks(s); err == nil {
+		return r
+	}
+	if r, err := filepath.EvalSymlinks(filepath.Dir(s)); err == nil {
+		return filepath.Join(r, filepath.Base(s))
+	}
+	return s
 }

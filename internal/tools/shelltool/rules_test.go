@@ -502,3 +502,45 @@ func TestGnokeyWithoutATerminalIsExplained(t *testing.T) {
 		t.Errorf("gnokey without a terminal:\n%s", core.TextOf(res.Content))
 	}
 }
+
+// The note under a sandboxed command that failed: what of the sandbox
+// stopped it, but not a stop the settings say not to report for that
+// command (ignoreViolations); no word of writes where the sandbox leaves
+// the files open; a certificate that could not be checked where macOS's
+// trust service is out of reach.
+func TestSandboxHintAndIgnoredReports(t *testing.T) {
+	failed := &ending{reason: endExited, code: 1}
+	sb := &Sandbox{Writes: "the session's folders", Unsandboxed: true,
+		Ignored: []Ignored{{Command: "*", What: "/etc/hosts"}, {Command: "npm install", What: "registry.npmjs.org"}}}
+	m := &Manager{opt: Options{Sandbox: sb}}
+	hint := func(command, body string) string {
+		return m.sandboxHint(bashArgs{command: command, sandboxed: true}, failed, body)
+	}
+	if got := hint("touch /etc/x", "touch: /etc/x: Read-only file system\n"); !strings.Contains(got, "write only in the session's folders") {
+		t.Errorf("a write stopped: %q", got)
+	}
+	if got := hint("probe", "probe: /etc/hosts: Operation not permitted\n"); got != "" {
+		t.Errorf("a stop the settings do not report, for every command: %q", got)
+	}
+	if got := hint("probe", "probe: /etc/hosts: Operation not permitted\nprobe: /etc/other: Operation not permitted\n"); !strings.Contains(got, "write only in") {
+		t.Errorf("another stop beside it is reported: %q", got)
+	}
+	if got := hint("npm install", "npm error: Could not resolve host: registry.npmjs.org\n"); got != "" {
+		t.Errorf("a stop not reported for npm install: %q", got)
+	}
+	if got := hint("curl https://registry.npmjs.org", "curl: (6) Could not resolve host: registry.npmjs.org\n"); !strings.Contains(got, "reach no network") {
+		t.Errorf("the same stop for another command: %q", got)
+	}
+	sb.Writes = ""
+	if got := hint("touch /etc/x", "touch: /etc/x: Read-only file system\n"); got != "" {
+		t.Errorf("a write, with the files left open: %q", got)
+	}
+	tls := "Get \"https://api.github.com/\": tls: failed to verify certificate: x509: OSStatus -26276\n"
+	if got := hint("gh api /zen", tls); got != "" {
+		t.Errorf("a certificate, with the trust service in reach: %q", got)
+	}
+	sb.NoTrust = true
+	if got := hint("gh api /zen", tls); !strings.Contains(got, "check no certificate with macOS's trust service") {
+		t.Errorf("a certificate, with the trust service out of reach: %q", got)
+	}
+}

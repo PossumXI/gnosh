@@ -5359,3 +5359,53 @@ or kept with the reason said (27).
     verbose print mode print them under the call's line. The LSP
     tool's call is headed by what it asks and where ("LSP hover
     main.go:6:10") rather than a sentence with the whole path.
+
+364. **The sandbox's loosenings, Claude Code's keys.** gnosh stopped at
+    startup on every sandbox key it had not built, so a settings file
+    copied from Claude Code could not be used. From the settings
+    reference (read 2026-11-20): `ignoreViolations` ({piece of the
+    command or "*": [piece of what was stopped]}) keeps a stop out of the
+    note under a failed command, line by line of its output, the access
+    still refused; `enableWeakerNestedSandbox` leaves the machine's /proc
+    in the sandbox (no `--proc`), for an unprivileged container, where it
+    shows the command the person's other processes, gnosh's environment
+    among them; `allowNestedUserNamespaces` lets commands make user
+    namespaces, which the sandbox now refuses by default as Claude Code's
+    does (`--unshare-user --disable-userns`, bubblewrap 0.8 and later;
+    the check tries that first and, where bubblewrap cannot, says so at
+    startup and in /sandbox); `enableWeakerNetworkIsolation` lets commands
+    reach macOS's certificate trust service, which the Seatbelt profile
+    now closes by default as Claude Code's does (checked on macOS 27:
+    with com.apple.trustd.agent denied, `security verify-cert` fails;
+    trustd fetches what a certificate names for whoever asks, a way out
+    past the proxy; Go's programs then fail TLS, and the note under such
+    a failure says why); `allowAppleEvents` drops the Apple Events deny;
+    `network.allowUnixSockets` (macOS, `remote unix-socket (path-literal)`,
+    paths resolved by their folder when not there yet),
+    `allowAllUnixSockets` (macOS: every one; Linux: /run left in sight),
+    `allowLocalBinding` (macOS: bind and accept on any local address,
+    connect to any localhost port), `allowMachLookup` (names, prefixes,
+    or every service, allowed after the denies) — each Seatbelt form
+    checked by hand with sandbox-exec and nc; `bwrapPath` (absolute,
+    from the person's own files: Claude Code's comes from managed
+    settings alone, and a repository's could name a program that makes
+    no sandbox); `filesystem.disabled` mounts the machine writable and
+    confines only the network (and the rest above): denyRead and
+    credentials.files are then not kept, and — stricter than Claude Code,
+    which documents the risk — a sandboxed command asks as any command
+    does, auto-allow or not, since it could change what gnosh and the
+    shell obey later. A repository's loosening is a new kind of setting,
+    "sandbox-wider", held until the folder is trusted, with its own
+    sentence in the trust question; its `false` keeps one off before the
+    trust, as a switch that takes a power away does (any false wins). The
+    keys Claude Code takes from the person's settings alone
+    (allowAppleEvents, allowNestedUserNamespaces, filesystem.disabled,
+    bwrapPath) are left out of a repository's file with a warning, either
+    value. socatPath (gnosh relays itself), ripgrep (gnosh's sandbox runs
+    none) and tlsTerminate (gnosh's proxy reads no HTTPS) are left out
+    with a warning; httpProxyPort and socksProxyPort are not built, and
+    allowManagedDomainsOnly and allowManagedReadPathsOnly name managed
+    settings gnosh does not have: those still stop startup. On Linux,
+    unlike Claude Code, no seccomp filter refuses Unix sockets: the
+    sockets under /run are kept out of sight instead, and a socket
+    elsewhere in sight can be reached.

@@ -314,8 +314,15 @@ type Sandbox struct {
 	Outside func(command string, asked bool) bool
 	// Unsandboxed offers dangerouslyDisableSandbox to the model.
 	Unsandboxed bool
-	// Writes says where a sandboxed command may write, for the model.
+	// Writes says where a sandboxed command may write, for the model; ""
+	// when the sandbox leaves the files open (filesystem.disabled).
 	Writes string
+	// NoTrust says the command cannot reach macOS's certificate trust
+	// service, which Go's programs check certificates with.
+	NoTrust bool
+	// Ignored are the reports of what the sandbox stopped that are not
+	// made (ignoreViolations).
+	Ignored []Ignored
 	// Hosts are the hosts a sandboxed command may reach at once, through a
 	// proxy its HTTP_PROXY names, and Network says what of the network it
 	// reaches, for the model ("" for: no network at all).
@@ -328,6 +335,13 @@ type Sandbox struct {
 	// model. Either may be nil.
 	Before func(roots []string) any
 	After  func(state any) string
+}
+
+// Ignored is a report of the sandbox's that is not made: for a command
+// holding Command ("*" for every command), of a stop whose line of output
+// holds What.
+type Ignored struct {
+	Command, What string
 }
 
 // network says what of the network a sandboxed command reaches, for the

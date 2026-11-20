@@ -35,6 +35,7 @@ const (
 	KindStoredState  = "stored-state"    // something the project's stored state would turn on
 	KindStatusLine   = "status-line"     // a command run to draw the status line
 	KindFileSuggest  = "file-suggestion" // a command run to offer paths for an @ mention
+	KindSandboxWider = "sandbox-wider"   // a sandbox setting that lets its commands do more
 )
 
 // Restricts reports whether a setting of this kind only takes something
@@ -72,6 +73,8 @@ var risks = []risk{
 		"This repository's own git settings name programs. Git would run them as you whenever the agent, or gnosh itself, so much as looks at the repository."},
 	{[]string{KindAllowRule, KindMode},
 		"Some let tools run without asking. A line hidden in any file here could then get the agent to run what these settings allow, without asking you."},
+	{[]string{KindSandboxWider},
+		"Some loosen the sandbox commands run in. A command could then reach what the sandbox would keep from it, such as your other programs' sockets or processes."},
 	{[]string{KindProvider},
 		"A provider set here would read everything the agent sees, could take your API key, and could tell the agent what to do."},
 	{[]string{KindModel},

@@ -7,25 +7,78 @@ import (
 // seatbeltProfile is the Seatbelt profile (macOS's sandbox language) for
 // the policy: everything is allowed but writing outside the folders the
 // policy names and a few devices, writing the read-only paths, reading
-// the denied ones (but those opened again inside them), and the network.
-// A later rule wins over an earlier one, which is what makes the order
-// the rule. The paths must be the system's own spelling of them, links
-// resolved (/private/tmp, not /tmp): Seatbelt matches what it is asked
-// about, which is that.
+// the denied ones (but those opened again inside them), the network
+// (Unix sockets among it), and the services that would start a program
+// outside the sandbox or fetch from the network for it. A later rule wins
+// over an earlier one, which is what makes the order the rule. The paths
+// must be the system's own spelling of them, links resolved (/private/tmp,
+// not /tmp): Seatbelt matches what it is asked about, which is that.
 func seatbeltProfile(p Policy) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n")
 	// What would start a program outside the sandbox: an Apple Event to
 	// another application, a launchd job, opening a file or an app through
 	// Launch Services (the sandbox review; Claude Code blocks these too).
-	b.WriteString("(deny appleevent-send)\n(deny job-creation)\n")
-	b.WriteString("(deny mach-lookup (global-name \"com.apple.coreservices.launchservicesd\") (global-name \"com.apple.coreservices.quarantine-resolver\"))\n")
+	// And the certificate trust service, which fetches what a certificate
+	// names for whoever asks: a way out past the proxy, closed as Claude
+	// Code closes it (Go's programs then cannot check a certificate).
+	if !p.AppleEvents {
+		b.WriteString("(deny appleevent-send)\n")
+	}
+	b.WriteString("(deny job-creation)\n")
+	b.WriteString("(deny mach-lookup (global-name \"com.apple.coreservices.launchservicesd\") (global-name \"com.apple.coreservices.quarantine-resolver\")")
+	if !p.TrustService {
+		b.WriteString(" (global-name \"com.apple.trustd.agent\")")
+	}
+	b.WriteString(")\n")
+	var names []string
+	for _, n := range p.MachLookup {
+		switch {
+		case n == "*":
+			names = []string{"*"}
+		case len(names) == 1 && names[0] == "*":
+		case strings.HasSuffix(n, "*"):
+			names = append(names, "(global-name-prefix "+sbString(strings.TrimSuffix(n, "*"))+")")
+		case n != "":
+			names = append(names, "(global-name "+sbString(n)+")")
+		}
+	}
+	switch {
+	case len(names) == 1 && names[0] == "*":
+		b.WriteString("(allow mach-lookup)\n")
+	case len(names) > 0:
+		b.WriteString("(allow mach-lookup " + strings.Join(names, " ") + ")\n")
+	}
 	if !p.Network {
+		// (Unix sockets among it.)
 		b.WriteString("(deny network*)\n")
 		if p.Proxy != "" {
 			// The one way out: the proxy, on this machine.
 			b.WriteString("(allow network-outbound (remote ip " + sbString(strings.Replace(p.Proxy, "127.0.0.1:", "localhost:", 1)) + "))\n")
 		}
+		var socks []string
+		for _, s := range p.UnixSockets {
+			if s != "" {
+				socks = append(socks, "  (remote unix-socket (path-literal "+sbString(s)+"))")
+			}
+		}
+		switch {
+		case p.AllUnixSockets:
+			b.WriteString("(allow network-outbound (remote unix-socket))\n")
+		case len(socks) > 0:
+			b.WriteString("(allow network-outbound\n" + strings.Join(socks, "\n") + ")\n")
+		}
+		if p.LocalBinding {
+			// A port of its own, on any of the machine's addresses, and
+			// any port of the machine's own.
+			b.WriteString("(allow network-bind (local ip \"*:*\"))\n(allow network-inbound (local ip \"*:*\"))\n(allow network-outbound (remote ip \"localhost:*\"))\n")
+		}
+	}
+	// The terminals are no command's (a command has none of its own, and
+	// another tab's is not its to read or to draw on: the sandbox review).
+	b.WriteString("(deny file-read* file-write* (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))\n")
+	if p.FilesystemOff {
+		return b.String()
 	}
 	b.WriteString("(deny file-write*)\n(allow file-write*\n")
 	for _, w := range append(append([]string(nil), p.Write...), p.Temp) {
@@ -33,11 +86,10 @@ func seatbeltProfile(p Policy) string {
 			b.WriteString("  (subpath " + sbString(w) + ")\n")
 		}
 	}
-	// The devices a shell writes to whatever it runs; no terminal (a
-	// command has none of its own, and another tab's is not its to read
-	// or to draw on: the sandbox review).
+	// The devices a shell writes to whatever it runs.
 	b.WriteString("  (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/dtracehelper\")\n")
 	b.WriteString("  (regex #\"^/dev/fd/[0-9]+$\"))\n")
+	// (Again after the writes allowed: a folder written in may hold them.)
 	b.WriteString("(deny file-read* file-write* (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))\n")
 	rule := func(what string, paths []string) {
 		var some []string

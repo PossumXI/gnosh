@@ -43,6 +43,15 @@ type sandboxState struct {
 	// session, so that one repository's commands cannot leave in the
 	// caches of another's.
 	temp string
+	// weaker says what the sandbox here cannot do that it does elsewhere,
+	// for the person, when there is such a thing.
+	weaker string
+}
+
+// sandboxSetup is what of the settings decides whether the sandbox can
+// run here: which bubblewrap, and whether it has a /proc of its own.
+func sandboxSetup(sc config.Sandbox) sandbox.Setup {
+	return sandbox.Setup{Bwrap: sc.Bwrap, HostProc: sc.Loose("enableWeakerNestedSandbox")}
 }
 
 // sandboxOf works the session's sandbox out, the first time it is asked.
@@ -52,9 +61,13 @@ func (st *startup) sandboxOf(cfg *config.Config) *sandboxState {
 		if !cfg.Sandbox.Enabled {
 			return
 		}
-		if c := sandbox.Check(); !c.OK {
+		c := sandbox.CheckWith(sandboxSetup(cfg.Sandbox))
+		if !c.OK {
 			s.why = c.Why
 			return
+		}
+		if !cfg.Sandbox.Loose("allowNestedUserNamespaces") {
+			s.weaker = c.Weaker
 		}
 		temp, err := os.MkdirTemp("", "gnosh-sandbox-")
 		if err != nil {
@@ -76,7 +89,12 @@ func (st *startup) sandboxPermission(cfg *config.Config) permission.Sandbox {
 	if !st.sandboxOf(cfg).on {
 		return permission.Sandbox{}
 	}
-	return permission.Sandbox{On: true, AutoAllow: cfg.Sandbox.AutoAllow, Outside: sandboxOutside(cfg.Sandbox)}
+	// With the files left open a command could change what gnosh and the
+	// shell obey later (the person's settings, a shell's startup files):
+	// it asks as any command does, auto-allow or not (DECISIONS 364;
+	// Claude Code lets such a command run, and says so).
+	auto := cfg.Sandbox.AutoAllow && !cfg.Sandbox.Loose("filesystem.disabled")
+	return permission.Sandbox{On: true, AutoAllow: auto, Outside: sandboxOutside(cfg.Sandbox)}
 }
 
 // sandboxOutside is the test, shared by the shell tool and the engine, of
@@ -108,6 +126,16 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 	if runtime.GOOS != "linux" {
 		writes = "the session's folders and $TMPDIR (this session's own)"
 	}
+	before, after := sandboxBefore, sandboxAfter
+	if sc.Loose("filesystem.disabled") {
+		// (Nothing of the files is kept: what a command the person let
+		// run makes stays.)
+		writes, before, after = "", nil, nil
+	}
+	var ignored []shelltool.Ignored
+	for _, iv := range sc.IgnoreViolations {
+		ignored = append(ignored, shelltool.Ignored{Command: iv.Command, What: iv.What})
+	}
 	return &shelltool.Sandbox{
 		Hosts:   hosts,
 		Network: l.sandboxNetworkText(network),
@@ -119,8 +147,10 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 		Outside:     sandboxOutside(sc),
 		Unsandboxed: sc.AllowUnsandboxed,
 		Writes:      writes,
-		Before:      sandboxBefore,
-		After:       sandboxAfter,
+		NoTrust:     runtime.GOOS == "darwin" && !sc.Loose("enableWeakerNetworkIsolation"),
+		Ignored:     ignored,
+		Before:      before,
+		After:       after,
 	}
 }
 
@@ -164,6 +194,16 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 		p.ReadOnly = append(p.ReadOnly, write...)
 		p.Write = append(p.Write, allow...)
 	}
+	// What the settings loosen (DECISIONS 364).
+	p.Bwrap = sc.Bwrap
+	p.FilesystemOff = sc.Loose("filesystem.disabled")
+	p.HostProc = sc.Loose("enableWeakerNestedSandbox")
+	p.UserNamespaces = sc.Loose("allowNestedUserNamespaces")
+	p.AppleEvents = sc.Loose("allowAppleEvents")
+	p.TrustService = sc.Loose("enableWeakerNetworkIsolation")
+	p.AllUnixSockets = sc.Loose("network.allowAllUnixSockets")
+	p.LocalBinding = sc.Loose("network.allowLocalBinding")
+	p.UnixSockets, p.MachLookup = listValues(sc.UnixSockets), listValues(sc.MachLookup)
 	return p
 }
 
@@ -375,6 +415,9 @@ func ruleContentFits(pattern, command string) bool {
 func (l *live) sandboxNotice() (notice string, stop error) {
 	cfg := l.cfg
 	state := l.st.sandboxOf(cfg)
+	if state.on && state.weaker != "" {
+		return "The sandbox is on, but " + state.weaker + ".", nil
+	}
 	if !cfg.Sandbox.Enabled || state.on {
 		return "", nil
 	}

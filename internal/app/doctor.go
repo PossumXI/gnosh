@@ -46,7 +46,11 @@ func (p *program) doctor(ctx context.Context, cfg *config.Config, problems []con
 			return err == nil
 		},
 		Sandbox: func() (bool, string, string) {
-			st := sandbox.Check()
+			setup := sandbox.Setup{}
+			if cfg != nil {
+				setup = sandboxSetup(cfg.Sandbox)
+			}
+			st := sandbox.CheckWith(setup)
 			return st.OK, st.Why, st.Tool
 		},
 	}

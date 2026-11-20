@@ -51,7 +51,66 @@ type Policy struct {
 	// sandbox: relay.go); on macOS the proxy's address on this machine
 	// ("localhost:port"), the one Seatbelt lets the command reach.
 	Proxy, Relay string
+
+	// FilesystemOff leaves the files as they are to the command: it reads
+	// and writes what the person may, and only the network (and the
+	// rest below) is confined (filesystem.disabled). Write, ReadOnly,
+	// DenyRead, AllowRead and Expose then do nothing, and Temp only holds
+	// the proxy's socket.
+	FilesystemOff bool
+
+	// What the settings loosen, each one of Claude Code's sandbox keys
+	// (spec/DECISIONS.md 364):
+	//
+	// HostProc shows the command the machine's /proc in place of one of
+	// its own, where bubblewrap cannot mount one, as in an unprivileged
+	// container (enableWeakerNestedSandbox): it then sees the person's
+	// other processes, gnosh among them, and what they let it read.
+	HostProc bool
+	// UserNamespaces lets it make user namespaces of its own, which the
+	// sandbox refuses where its bubblewrap can (allowNestedUserNamespaces;
+	// Chromium's sandbox, a nested bubblewrap, unshare).
+	UserNamespaces bool
+	// AppleEvents lets it send Apple Events on macOS, so that open and
+	// osascript work: it can then start another application outside the
+	// sandbox (allowAppleEvents).
+	AppleEvents bool
+	// TrustService lets it reach macOS's certificate trust service, which
+	// Go's programs check certificates with, and which fetches from the
+	// network for whoever asks (enableWeakerNetworkIsolation).
+	TrustService bool
+	// UnixSockets are the Unix sockets it may connect to on macOS
+	// (network.allowUnixSockets; Linux has no way to tell one socket
+	// from another, as in Claude Code); AllUnixSockets lets it connect
+	// to any, the machine's /run left in sight on Linux
+	// (network.allowAllUnixSockets).
+	UnixSockets    []string
+	AllUnixSockets bool
+	// LocalBinding lets it listen on a port and reach any port of this
+	// machine's own on macOS (network.allowLocalBinding); on Linux it has
+	// a loopback of its own already.
+	LocalBinding bool
+	// MachLookup are more of macOS's services it may reach, past those the
+	// sandbox refuses: a name, a name ending in * for those it begins, or
+	// "*" for every one (network.allowMachLookup).
+	MachLookup []string
+	// Bwrap is bubblewrap's path, when the settings name one (bwrapPath).
+	Bwrap string
+
+	// blockUserns refuses it user namespaces: set by Wrap, where the
+	// machine's bubblewrap can and the policy does not let it make them.
+	blockUserns bool
 }
+
+// Setup is what of a policy decides whether the sandbox can run here:
+// which bubblewrap, and whether it mounts a /proc of its own.
+type Setup struct {
+	Bwrap    string
+	HostProc bool
+}
+
+// SetupOf is the policy's setup.
+func SetupOf(p Policy) Setup { return Setup{Bwrap: p.Bwrap, HostProc: p.HostProc} }
 
 // Exposed is a file of gnosh's own a sandboxed command reaches.
 type Exposed struct {
@@ -67,8 +126,11 @@ var ErrUnsupported = errors.New("gnosh has no sandbox for this system: it sandbo
 // temporary files go, and its caches, which the person's own folders
 // (read-only to it) cannot hold.
 func Env(p Policy) []string {
-	tmp := sandboxTmp(p)
-	env := []string{"TMPDIR=" + tmp, "XDG_CACHE_HOME=" + filepath.Join(tmp, ".cache")}
+	var env []string
+	if !p.FilesystemOff {
+		tmp := sandboxTmp(p)
+		env = append(env, "TMPDIR="+tmp, "XDG_CACHE_HOME="+filepath.Join(tmp, ".cache"))
+	}
 	if u := proxyURL(p); u != "" {
 		// Every request through the proxy, the sandbox's own loopback's
 		// too (there is nothing on it but the relay).

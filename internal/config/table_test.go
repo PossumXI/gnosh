@@ -15,12 +15,12 @@ func TestKindsMatchTheTrustPackage(t *testing.T) {
 	got := []string{
 		KindProvider, KindModel, KindHost, KindHook, KindHookOff,
 		KindAllowRule, KindAskRule, KindDenyRule, KindMode, KindAddDir, KindEnv, KindOption, KindExtraPath,
-		KindAddress, KindHiddenSkill, KindRemoval, KindStatusLine, KindFileSuggest, KindLSPServer,
+		KindAddress, KindHiddenSkill, KindRemoval, KindStatusLine, KindFileSuggest, KindLSPServer, KindSandboxWider,
 	}
 	want := []string{
 		"provider", "model", "host", "hook", "hook-off",
 		"allow-rule", "ask-rule", "deny-rule", "mode", "add-dir", "env", "option", "extra-path",
-		"address", "hidden-skill", "removal", "status-line", "file-suggestion", "lsp",
+		"address", "hidden-skill", "removal", "status-line", "file-suggestion", "lsp", "sandbox-wider",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("the kinds changed:\n got %q\nwant %q\nChange internal/trust/kinds.go and its test to match.", got, want)

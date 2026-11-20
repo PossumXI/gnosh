@@ -106,7 +106,15 @@ Built:
   `network.strictAllowlist` refuses instead. `credentials.files` and
   `credentials.envVars` hide credential files and take variables away
   from sandboxed commands (Claude Code's `"mask"`, which needs its
-  TLS-terminating proxy, is hidden as `"deny"`).
+  TLS-terminating proxy, is hidden as `"deny"`). Its loosenings are read
+  as Claude Code's too: `ignoreViolations`, `enableWeakerNestedSandbox`,
+  `enableWeakerNetworkIsolation`, `allowAppleEvents`,
+  `allowNestedUserNamespaces`, `bwrapPath`, `filesystem.disabled` and
+  `network.allowUnixSockets`/`allowAllUnixSockets`/`allowLocalBinding`/
+  `allowMachLookup`; as in Claude Code, sandboxed commands may make no
+  user namespace of their own on Linux, and cannot reach macOS's
+  certificate trust service, unless those say so. A repository's
+  loosening waits for the folder's trust.
 - **Hooks:** command hooks in the shell and exec forms, in the background
   too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
   to, and their headers to the variables `httpHookAllowedEnvVars` names,

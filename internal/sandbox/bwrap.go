@@ -18,22 +18,47 @@ import (
 // A later mount covers an earlier one, which is what makes that order the
 // rule. It has its own processes (so it can signal no other) and its own
 // network, where nothing is reachable, unless the policy gives it the
-// machine's. It dies with gnosh.
+// machine's; it may make no user namespace of its own where bubblewrap
+// can refuse it one. It dies with gnosh.
+//
+// With the filesystem left open (FilesystemOff) the machine is mounted as
+// it is, writable, and nothing of the files is confined.
 func bwrapArgs(bwrap string, p Policy, dir string, argv []string, stat func(string) (isDir, ok bool)) []string {
 	there := func(s string) bool { _, ok := stat(s); return ok }
-	a := []string{bwrap, "--die-with-parent", "--unshare-pid", "--unshare-ipc"}
+	a := []string{bwrap, "--die-with-parent"}
+	if p.blockUserns {
+		a = append(a, "--unshare-user", "--disable-userns")
+	}
+	a = append(a, "--unshare-pid", "--unshare-ipc")
 	if !p.Network {
 		a = append(a, "--unshare-net")
 	}
-	a = append(a, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc")
+	if p.FilesystemOff {
+		a = append(a, "--bind", "/", "/", "--dev", "/dev")
+	} else {
+		a = append(a, "--ro-bind", "/", "/", "--dev", "/dev")
+	}
+	if !p.HostProc {
+		// (Else the machine's /proc stays, mounted with the rest.)
+		a = append(a, "--proc", "/proc")
+	}
 	// The machine's sockets out of sight: a read-only mount does not stop
 	// a connection to one, and systemd's (a job outside, as root with its
 	// private socket), D-Bus's and docker's lie under /run (the sandbox
 	// review). (/var/run is a link to it where it is not a folder.)
 	for _, r := range []string{"/run", "/var/run"} {
-		if isDir, ok := stat(r); ok && isDir && !isLink(r) {
+		if isDir, ok := stat(r); ok && isDir && !isLink(r) && !p.AllUnixSockets {
 			a = append(a, "--tmpfs", r)
 		}
+	}
+	if p.FilesystemOff {
+		a = append(a, "--chdir", filepath.Clean(dir), "--")
+		if p.Proxy != "" && p.Relay != "" {
+			// (The proxy's socket where it is: the machine's /tmp is the
+			// sandbox's.)
+			a = append(a, p.Relay, RelayWord, p.Proxy)
+		}
+		return append(a, argv...)
 	}
 	if p.Temp != "" && there(p.Temp) {
 		a = append(a, "--bind", p.Temp, "/tmp")
