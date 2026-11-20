@@ -5144,3 +5144,24 @@ or kept with the reason said (27).
     its questions about new hosts), credentials, ignoreViolations, the
     Read and Edit rules' paths added to the sandbox's lists, the read
     block's paths, and /sandbox.
+
+354. **What the sandbox keeps read-only, as Claude Code's protected
+    paths.** Claude Code's sandbox page lists what its sandbox keeps
+    write-denied inside the folders a command may write in: the files it
+    loads its configuration and code from, and those other programs run
+    or obey as they start there. gnosh's list (353) was the settings
+    files and a repository's hooks and git settings; it now takes in, in
+    each of the session's folders, gnosh's and Claude Code's skills,
+    kinds of agent, commands, rules, hooks, workflows and scheduled
+    tasks, .lsp.json beside .mcp.json, the shell's startup files
+    (.bashrc, .bash_profile, .profile, .zshrc, .zshenv and the rest),
+    .gitconfig, .envrc (direnv runs it), .vscode, .idea and .ssh, since
+    a session's folder may be the person's home; and gnosh's own folders
+    (its settings, its state, its sessions) where they lie inside one of
+    the session's, but one that holds a session's folder (a work tree
+    under the data folder), which a read-only mount would take from it.
+    On Linux only what exists is kept so (bubblewrap mounts what is
+    there): a guarded file that is not there yet can be made, which the
+    permission engine's own questions still catch where it can see the
+    write. Claude Code's handling of a top-level HEAD, objects and refs
+    (a bare repository made in the folder) is not built.

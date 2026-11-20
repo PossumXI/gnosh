@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -65,9 +66,11 @@ func (l *live) shellSandbox() *shelltool.Sandbox {
 }
 
 // sandboxPolicy is what a sandboxed command may do: write in the session's
-// folders and those the settings add, but not in the settings files gnosh
-// reads, a repository's hooks or git settings, or what the settings keep
-// read-only; read all but what the settings deny.
+// folders and those the settings add, but not in what gnosh, Claude Code
+// or another program would later run or obey outside the sandbox
+// (sandboxGuarded, gnosh's own folders when they lie in one of the
+// session's), or what the settings keep read-only; read all but what the
+// settings deny.
 func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Exposed) sandbox.Policy {
 	sc := l.cfg.Sandbox
 	p := sandbox.Policy{Temp: temp, Expose: expose}
@@ -77,18 +80,34 @@ func (l *live) sandboxPolicy(roots []string, temp string, expose []sandbox.Expos
 			p.ReadOnly = append(p.ReadOnly, filepath.Join(root, name))
 		}
 	}
+	// gnosh's own folders (its settings, its state, its sessions): but one
+	// that holds one of the session's folders (a work tree gnosh made
+	// under its data folder) is left as the folders inside it make it.
+	for _, own := range []string{l.cfg.Paths.ConfigDir, l.cfg.Paths.StateDir, l.cfg.Paths.DataDir} {
+		if own != "" && !slices.ContainsFunc(p.Write, func(w string) bool { return w != own && strings.HasPrefix(w, own+string(filepath.Separator)) }) {
+			p.ReadOnly = append(p.ReadOnly, own)
+		}
+	}
 	p.ReadOnly = append(append(p.ReadOnly, settingsFiles(l.cfg)...), listValues(sc.DenyWrite)...)
 	p.DenyRead, p.AllowRead = listValues(sc.DenyRead), listValues(sc.AllowRead)
 	return p
 }
 
 // sandboxGuarded are the paths in each of the session's folders that a
-// sandboxed command may not change, as the permission engine asks before
-// any command changes them: settings files that would widen what runs
-// next, a repository's hooks and git settings, which run outside the
-// sandbox the next time git does.
-var sandboxGuarded = []string{"gnosh.json", ".gnosh/settings.json", ".gnosh/settings.local.json", ".claude/settings.json",
-	".claude/settings.local.json", ".mcp.json", ".lsp.json", ".git/hooks", ".git/config"}
+// sandboxed command may not change, since something runs or obeys them
+// outside the sandbox later, as Claude Code's sandbox keeps its own: the
+// settings, skills, kinds of agent, commands, rules and hooks of gnosh and
+// Claude Code, the MCP and language servers' files; the files a shell, git,
+// direnv or an editor reads as it starts there (the folder may be the
+// person's home); a repository's hooks and git settings. Only what is
+// there is kept so on Linux: bubblewrap mounts what exists.
+var sandboxGuarded = []string{
+	"gnosh.json", ".gnosh/settings.json", ".gnosh/settings.local.json", ".gnosh/skills", ".gnosh/agents", ".gnosh/commands", ".gnosh/rules", ".gnosh/hooks",
+	".claude/settings.json", ".claude/settings.local.json", ".claude/skills", ".claude/agents", ".claude/commands", ".claude/rules", ".claude/hooks",
+	".claude/workflows", ".claude/scheduled_tasks.json", ".mcp.json", ".lsp.json",
+	".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig", ".envrc",
+	".vscode", ".idea", ".ssh", ".config/gnosh", ".git/hooks", ".git/config",
+}
 
 // excludedCall reports whether excludedCommands takes a command out of the
 // sandbox: a single plain command (no list, pipe, redirection, command

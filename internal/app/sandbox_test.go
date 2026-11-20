@@ -3,7 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -27,11 +27,15 @@ func TestSandboxedCommandsRunWithoutAsking(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(outside) })
 	w := apptest.NewWorld(t)
 	w.Settings(`{"sandbox": {"enabled": true, "autoAllowBashIfSandboxed": true}}`)
+	w.Write(".claude/settings.json", "{}\n")
 	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
 		if n == 0 {
 			return &apptest.Reply{Calls: []apptest.Call{
 				{ID: "c1", Name: "Bash", Args: `{"command":"echo made > made.txt && echo ok"}`},
 				{ID: "c2", Name: "Bash", Args: `{"command":"echo out > ` + outside + `/out.txt"}`},
+				// (A write gnosh cannot see in the command: the sandbox
+				// keeps the settings file read-only all the same.)
+				{ID: "c3", Name: "Bash", Args: `{"command":"python3 -c \"open('.claude/settings.json', 'a').write('x')\""}`},
 			}}
 		}
 		return &apptest.Reply{Text: "Done."}
@@ -43,6 +47,10 @@ func TestSandboxedCommandsRunWithoutAsking(t *testing.T) {
 	has(t, "the write outside", toolResult(t, w, 1, "c2"), "Read-only file system", "it ran in the sandbox", "dangerouslyDisableSandbox set to true")
 	if _, err := os.Stat(filepath.Join(outside, "out.txt")); err == nil {
 		t.Error("a sandboxed command wrote outside the project")
+	}
+	has(t, "a write to a guarded file", toolResult(t, w, 1, "c3"), "Read-only file system")
+	if got := w.Read(".claude/settings.json"); got != "{}\n" {
+		t.Errorf("a sandboxed command changed a settings file: %q", got)
 	}
 	has(t, "what the model is told of Bash", string(w.Model.Requests()[0].Body), "In the sandbox:", "dangerouslyDisableSandbox")
 }
@@ -65,7 +73,9 @@ func TestExcludedCall(t *testing.T) {
 	if excludedCall(nil, "docker ps") {
 		t.Error("no entries took a command out")
 	}
-	if !strings.Contains(sandboxGuarded[len(sandboxGuarded)-1], ".git") {
-		t.Error("the repository's git settings are not guarded")
+	for _, want := range []string{".git/hooks", ".bashrc", ".claude/settings.json", ".gnosh/skills", ".envrc"} {
+		if !slices.Contains(sandboxGuarded, want) {
+			t.Errorf("%s is not guarded", want)
+		}
 	}
 }
