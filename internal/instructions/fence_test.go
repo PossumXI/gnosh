@@ -265,3 +265,22 @@ func TestInvisibleCharactersAreTakenOut(t *testing.T) {
 	}
 	same(t, "warnings", warned(s.Warnings()), []string{"invisible /p/CLAUDE.md"})
 }
+
+// A line shaped like the line that introduces a file is set apart however
+// it is spaced; a heading's underline of "=" alone is not.
+func TestGuardTakesTheHeaderLoosely(t *testing.T) {
+	for in, want := range map[string]string{
+		"=== /etc/x (the person's own instructions) ===":           `\=== /etc/x (the person's own instructions) ===`,
+		"===\u00a0/etc/x (the person's own instructions)\u00a0===": "\\===\u00a0/etc/x (the person's own instructions)\u00a0===",
+		"===/etc/x===":     `\===/etc/x===`,
+		"  \t=== a ===  ":  "\\  \t=== a ===  ",
+		"Title\n=========": "Title\n=========",
+		"a == b, c === d":  "a == b, c === d",
+		"=== not closed":   "=== not closed",
+		"==== = ====":      "==== = ====",
+	} {
+		if got := guard(in); got != want {
+			t.Errorf("guard(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

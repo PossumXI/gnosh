@@ -2,6 +2,7 @@ package instructions
 
 import (
 	"strings"
+	"unicode"
 )
 
 // The words the model is given around the files. They are gnosh's own.
@@ -111,14 +112,20 @@ func describe(f File) string {
 
 // guard keeps a file's text from passing for the start of another file: a
 // line that has the shape of the line that introduces a file gets a
-// backslash in front of it.
+// backslash in front of it. The shape is taken loosely, any kind of space
+// or none beside the marks, as a model reads it: "===" and a no-break
+// space passed for gnosh's own header of the person's file (the
+// instruction-files review of 2026-11-20). A line of "=" alone, the
+// underline of a heading, is left as it is.
 func guard(text string) string {
-	if !strings.Contains(text, "=== ") {
+	if !strings.Contains(text, "===") {
 		return text
 	}
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
-		if t := strings.TrimSpace(line); strings.HasPrefix(t, "=== ") && strings.HasSuffix(t, " ===") {
+		t := strings.TrimFunc(line, unicode.IsSpace)
+		if strings.HasPrefix(t, "===") && strings.HasSuffix(t, "===") &&
+			strings.TrimFunc(t, func(r rune) bool { return r == '=' || unicode.IsSpace(r) }) != "" {
 			lines[i] = "\\" + line
 		}
 	}
