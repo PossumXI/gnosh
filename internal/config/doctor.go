@@ -454,15 +454,25 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 	case len(cfg.Held) == 0:
 		add("trust", Fine, "this folder is not trusted, and none of its settings waits for trust.")
 	default:
+		// Each with where it is written, a hook's above all, as Claude
+		// Code's trust question says since 2.1.329.
 		var some []string
 		for _, h := range cfg.Held[:min(len(cfg.Held), 5)] {
-			some = append(some, fmt.Sprintf("%q", h.Text))
+			s := fmt.Sprintf("%q", h.Text)
+			if o := h.Origin.String(); o != "" {
+				s += " (" + o + ")"
+			}
+			some = append(some, s)
 		}
 		more := ""
 		if len(cfg.Held) > len(some) {
 			more = fmt.Sprintf(" and %d more", len(cfg.Held)-len(some))
 		}
-		add("trust", Note, "this folder is not trusted, so %d of its settings are held: %s%s. To use them: gnosh trust, or --trust-folder for one run.", len(cfg.Held), list(some), more)
+		are := "are"
+		if len(cfg.Held) == 1 {
+			are = "is"
+		}
+		add("trust", Note, "this folder is not trusted, so %d of its settings %s held: %s%s. To use them: gnosh trust, or --trust-folder for one run.", len(cfg.Held), are, list(some), more)
 	}
 
 	// 8. Environment.
