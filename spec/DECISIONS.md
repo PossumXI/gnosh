@@ -4749,3 +4749,12 @@ or kept with the reason said (27).
     8 MiB, and never less than the usual 100,000 bytes, and the default
     count of lines does not apply unless limit is given. A file longer
     than that room is cut where it runs out, and the note says so.
+
+330. **CLAUDE_CODE_GLOB_NO_IGNORE is read.** Claude Code's Glob lists the
+    files .gitignore leaves out unless CLAUDE_CODE_GLOB_NO_IGNORE=false;
+    gnosh's Glob leaves them out (the package brief's choice) and did not
+    read the variable at all (the search-tools review of 2026-11-20).
+    gnosh now reads it, from the shell or a settings file's env block:
+    true lists the ignored files, as Claude Code does by default; false,
+    or not set, keeps gnosh's way. A value that is neither is a warning
+    and not used. Grep, as in Claude Code, honours .gitignore either way.

@@ -57,6 +57,9 @@ func (l *live) buildTools() error {
 	if limits.GlobTimeout.Set {
 		fo.SearchTimeout = limits.GlobTimeout.V
 	}
+	if limits.GlobNoIgnore.Set {
+		fo.GlobNoIgnore = limits.GlobNoIgnore.V
+	}
 	names := fstools.Defaults()
 	var all []core.Tool
 	for _, t := range fstools.New(fo) {
