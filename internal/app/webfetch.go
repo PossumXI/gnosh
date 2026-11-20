@@ -31,9 +31,6 @@ const webFetchName = "WebFetch"
 // with offset.
 const webFetchMaxChars = 100_000
 
-// webFetchCacheFor is how long a fetched page is kept for another call.
-const webFetchCacheFor = 15 * time.Minute
-
 const webFetchDescription = `Fetches a page from the web and answers a request about it.
 
 The page is turned into Markdown, and a separate, smaller model reads it with your request and answers; you get that answer, not the raw page, so say exactly what you need from it (a command, a function's signature, the steps of a procedure, whether it says something). The answer may leave out what you did not ask for.
