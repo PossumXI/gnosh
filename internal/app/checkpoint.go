@@ -769,7 +769,7 @@ func (c *checkpoints) restore(cps []fileCheckpoint, how restoreHow) (done, faile
 			continue
 		}
 		if cp.Large {
-			failed = append(failed, fmt.Sprintf("%s: it was too large to keep (%s)", path, byteCount(cp.Size)))
+			failed = append(failed, fmt.Sprintf("%s: it was too large to keep (%s)", path, ByteCount(cp.Size)))
 			continue
 		}
 		if why := foldersChanged(cp.Path, show); why != "" {
@@ -820,7 +820,7 @@ func (c *checkpoints) restore(cps []fileCheckpoint, how restoreHow) (done, faile
 			}
 			if !same {
 				if info.Size() > setAsideMost {
-					failed = append(failed, fmt.Sprintf("%s: it holds %s now, more than gnosh sets aside before putting a file back (%s), so it is left as it is", path, byteCount(info.Size()), byteCount(setAsideMost)))
+					failed = append(failed, fmt.Sprintf("%s: it holds %s now, more than gnosh sets aside before putting a file back (%s), so it is left as it is", path, ByteCount(info.Size()), ByteCount(setAsideMost)))
 					continue
 				}
 				name, err := c.setAside(cp.Path)

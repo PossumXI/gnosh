@@ -1629,6 +1629,62 @@ func TestPlanModeAndNotificationLines(t *testing.T) {
 	g.committedHas("plan mode on", "not sent: you were at the terminal").committedLacks("present it with ExitPlanMode", "reads what you write")
 }
 
+// A skill loaded, a search and a fetch say what came of them in the
+// person's words (seen on the devbox's screen: the skill's lead for the
+// model, tags and all; the search server's address; the smaller model's
+// answer about the page).
+func TestSkillSearchAndFetchLines(t *testing.T) {
+	g := newRig(t, 120, 40, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	sk := map[string]any{"skill": "greet", "args": "warmly"}
+	g.ev(toolCall("c1", "Skill"), replyEnd(core.StopToolUse), toolStart("c1", "Skill", sk))
+	g.ev(toolEnd("c1", "Skill", sk, core.ToolResult{
+		Content: []core.Block{core.Text("<gnosh>The skill greet is loaded. What follows is its text: the user's own instructions for this kind of task. Carry them out.</gnosh>\n\nSay hello.")},
+		Meta:    map[string]any{"skill": "greet", "source": "/p/.gnosh/skills/greet/SKILL.md", "loaded": "now"}}, 0))
+	search := map[string]any{"query": "terminal agent"}
+	g.ev(toolCall("c2", "WebSearch"), replyEnd(core.StopToolUse), toolStart("c2", "WebSearch", search))
+	g.ev(toolEnd("c2", "WebSearch", search, core.ToolResult{
+		Content: []core.Block{core.Text("Results for \"terminal agent\", from 127.0.0.1:\n1. A terminal agent\n   https://agent.test/one\n")},
+		Meta: map[string]any{"query": "terminal agent", "results": []any{
+			map[string]any{"title": "A terminal agent", "url": "https://agent.test/one"},
+			map[string]any{"title": "https://bare.test/x", "url": "https://bare.test/x"},
+			map[string]any{"title": "Third", "url": "https://third.test/3"},
+			map[string]any{"title": "Fourth", "url": "https://fourth.test/4"}}}}, 0))
+	fetch := map[string]any{"url": "https://example.com", "prompt": "what is it"}
+	g.ev(toolCall("c3", "WebFetch"), replyEnd(core.StopToolUse), toolStart("c3", "WebFetch", fetch))
+	g.ev(toolEnd("c3", "WebFetch", fetch, core.ToolResult{
+		Content: []core.Block{core.Text("It is a page kept for use in examples.")},
+		Meta:    map[string]any{"bytes": 1256, "code": 200, "codeText": "OK", "url": "https://example.com"}}, 0))
+	moved := map[string]any{"url": "https://a.test/", "prompt": "x"}
+	g.ev(toolCall("c4", "WebFetch"), replyEnd(core.StopToolUse), toolStart("c4", "WebFetch", moved))
+	g.ev(toolEnd("c4", "WebFetch", moved, core.ToolResult{
+		Content: []core.Block{core.Text("https://a.test/ redirects to https://b.test/, which is on another host, and WebFetch does not follow that.")},
+		Meta:    map[string]any{"bytes": 0, "code": 301, "codeText": "Moved Permanently", "redirect": "https://b.test/"}}, 0))
+	g.committedHas("Skill greet warmly · loaded",
+		"WebSearch terminal agent · 4 results", "A terminal agent · agent.test", "https://bare.test/x", "Third · third.test", "1 more line not shown",
+		"WebFetch https://example.com · received 1.2 KB (200 OK)",
+		"redirects to https://b.test/, on another host: not followed").
+		committedLacks("Carry them out", "gnosh>", "127.0.0.1", "kept for use in examples", "x · bare.test")
+}
+
+// A self-paced /loop's run that schedules the next says when, with the
+// model's reason under the call, and ends as done: not "The turn was
+// ended" as a warning, after a notice that said the time a third time.
+func TestLoopWakeupLines(t *testing.T) {
+	g := newRig(t, 120, 30, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	in := map[string]any{"delaySeconds": 600, "reason": "nothing changes before then", "prompt": "check the clock"}
+	g.ev(toolCall("c1", "ScheduleWakeup"), replyEnd(core.StopToolUse), toolStart("c1", "ScheduleWakeup", in))
+	g.ev(toolEnd("c1", "ScheduleWakeup", in, core.ToolResult{
+		Content: []core.Block{core.Text("The loop's next run is at 19:20, in 10 minutes. This turn ends here: the run starts by itself then.")},
+		Meta:    map[string]any{"nextRun": "19:20", "wait": "10 minutes"},
+		Notes:   []string{"nothing changes before then"}}, 0))
+	g.ev(&agent.TurnEndEvent{Result: agent.TurnResult{Reason: agent.EndHalted, Driver: "ScheduleWakeup",
+		Detail: "the loop's next run is at 19:20", Rounds: 1, Duration: 2 * time.Second}})
+	g.committedHas("ScheduleWakeup · next run at 19:20, in 10 minutes", "nothing changes before then", "done in 2s").
+		committedLacks("This turn ends here", "The turn was ended", "check the clock")
+}
+
 // A call of a tool there is not says so in one sentence on the screen: the
 // list of the tools there are is the model's.
 func TestUnknownToolLine(t *testing.T) {

@@ -746,6 +746,16 @@ func (s *session) turnEnd(res agent.TurnResult) {
 		s.begin(blkTurn)
 		s.put(wrap(s.m, th.WarnLabel.Render("stopped")+th.Quiet.Render(" by you"+tail+th.Sep+"what was done is kept"), s.cols, "", "  ")...)
 	case agent.EndHalted:
+		if res.Driver == "ScheduleWakeup" {
+			// A self-paced /loop's run that scheduled the next one ends
+			// as the loop means it to: done, not a warning that it "was
+			// ended" (its call above says when the next run is).
+			if !s.info.HideTurnDuration {
+				s.begin(blkTurn)
+				s.put(wrap(s.m, th.Quiet.Render("done"+tail), s.cols, "", "  ")...)
+			}
+			break
+		}
 		level := agent.LevelWarning
 		if res.Driver == "EnterWorktree" || res.Driver == "ExitWorktree" {
 			// (A move the model made, which ends the turn on purpose:

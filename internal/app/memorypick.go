@@ -29,7 +29,7 @@ func (l *live) memoryFiles() []MemoryFile {
 	seen := map[string]bool{}
 	if l.instr != nil {
 		for _, f := range l.instr.Files() {
-			about := strings.ToLower(string(f.Scope)) + ", " + byteCount(f.Size)
+			about := strings.ToLower(string(f.Scope)) + ", " + ByteCount(f.Size)
 			if f.Late {
 				about += ", read when a file under it was touched"
 			}

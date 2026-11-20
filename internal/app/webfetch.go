@@ -152,6 +152,7 @@ func (t *webFetchTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	meta := map[string]any{"bytes": page.Bytes, "code": page.Code, "codeText": page.Status, "durationMs": page.Took.Milliseconds(), "url": page.URL}
 	if page.Redirect != "" {
 		res := core.TextResult(fmt.Sprintf("%s redirects to %s, which is on another host, and WebFetch does not follow that. Fetch %s itself if it is the page you want.", key, page.Redirect, page.Redirect))
+		meta["redirect"] = page.Redirect
 		res.Meta = meta
 		return res, nil
 	}
@@ -163,7 +164,7 @@ func (t *webFetchTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	if c.binary {
 		meta["contentType"] = page.ContentType
 		if c.saved == "" {
-			res := core.ErrorResult(fmt.Sprintf("%s is %s, not text, and longer than the %s WebFetch keeps, so nothing was saved. Download it with curl through Bash if you need it.", page.URL, firstOf(page.ContentType, "of no type it names"), byteCount(int64(page.Bytes))))
+			res := core.ErrorResult(fmt.Sprintf("%s is %s, not text, and longer than the %s WebFetch keeps, so nothing was saved. Download it with curl through Bash if you need it.", page.URL, firstOf(page.ContentType, "of no type it names"), ByteCount(int64(page.Bytes))))
 			res.Meta = meta
 			return res, nil
 		}
@@ -307,7 +308,7 @@ func extensionOf(media, address string) string {
 // savedNote tells the model what a fetched file that is not text is, where
 // it was kept, and how to look into it.
 func savedNote(p webtool.Page, file string) string {
-	what := byteCount(int64(p.Bytes))
+	what := ByteCount(int64(p.Bytes))
 	if p.ContentType != "" {
 		what = p.ContentType + ", " + what
 	}

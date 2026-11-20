@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -499,6 +500,16 @@ func callHead(cwd, home, name string, raw []byte, action *core.Action) head {
 		h.arg = oneLine(get("url"))
 	case "WebSearch":
 		h.arg = oneLine(get("query"))
+	case "ScheduleWakeup":
+		// Its result says when the next run is ("Schedule the loop's
+		// next run" before it said nothing more).
+	case "Skill":
+		// The skill and what it was given, as Claude Code heads the call
+		// (the action's summary, for the question, names its file whole).
+		h.arg = oneLine(strings.TrimPrefix(strings.TrimSpace(get("skill")), "/"))
+		if a := oneLine(get("args")); a != "" {
+			h.arg += " " + a
+		}
 	case "TaskOutput", "TaskStop":
 		h.arg = oneLine(get("task_id"))
 	case app.DeliverToolName:
@@ -934,6 +945,58 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		// The answers stand in the question's own record just above: the
 		// result's words for the model said them again, cut short.
 		return "answered", nil
+	case "ScheduleWakeup":
+		// When the loop runs next (the result's "This turn ends here" is
+		// the model's); the model's reason is the call's note.
+		if when, _ := meta["nextRun"].(string); when != "" {
+			summary = "next run at " + oneLine(when)
+			if wait, _ := meta["wait"].(string); wait != "" {
+				summary += ", in " + oneLine(wait)
+			}
+			return summary, nil
+		}
+	case "Skill":
+		// The result is the skill's text under a lead written for the
+		// model ("Carry them out"), seen on the devbox's screen tags and
+		// all. A forked skill's result is its sub-agent's report, and is
+		// shown as any other.
+		switch loaded, _ := meta["loaded"].(string); loaded {
+		case "now":
+			return "loaded", nil
+		case "again":
+			return "loaded already", nil
+		}
+	case "WebSearch":
+		// The results by title and site, as a person scans them: the
+		// result lists them for the model, with the search server's
+		// address and how to read on.
+		if hits := s.searchHits(meta["results"]); len(hits) > 0 {
+			return count(len(hits), "result", "results"), s.clipHead(hits, s.limit(resultLines))
+		}
+	case "WebFetch":
+		// What came back, as Claude Code says it ("Received 1.2KB (200
+		// OK)"): the result is the smaller model's answer about the
+		// page, for the model, which the reply puts in its own words.
+		if to, _ := meta["redirect"].(string); to != "" {
+			return "redirects to " + oneLine(to) + ", on another host: not followed", nil
+		}
+		n, hasBytes := metaInt(meta, "bytes")
+		code, hasCode := metaInt(meta, "code")
+		if !hasBytes || !hasCode {
+			break
+		}
+		got := app.ByteCount(int64(n))
+		if kind, _ := meta["contentType"].(string); kind != "" {
+			got = oneLine(kind) + ", " + got
+		}
+		if file, _ := meta["savedTo"].(string); file != "" {
+			return "received " + got + " · saved to " + showPath(s.cwd, s.home, file), nil
+		}
+		status := fmt.Sprint(code)
+		if words := oneLine(str(meta, "codeText")); words != "" {
+			status += " " + words
+		}
+		return "received " + got + " (" + status + ")", nil
 	case "ExitPlanMode":
 		// The plan approved, in the person's words (the result is the
 		// model's: "carry the plan out").
@@ -960,6 +1023,44 @@ func (s *session) resultSummary(name string, res core.ToolResult, text string) (
 		}
 	}
 	return "", s.clipHead(lines, s.limit(resultLines))
+}
+
+// searchHits is a WebSearch's results as a person reads them, a title and
+// its site on each line, from the call's meta: the list as the tool made
+// it, or as it reads back from a session's file.
+func (s *session) searchHits(v any) []string {
+	var hits []string
+	add := func(title, address string) {
+		line := oneLine(title)
+		site := address
+		if u, err := url.Parse(address); err == nil && u.Hostname() != "" {
+			site = u.Hostname()
+		}
+		switch site = oneLine(site); {
+		case line == "" || title == address:
+			line = oneLine(address)
+		case site != "":
+			line += s.th.Sep + site
+		}
+		if line != "" {
+			hits = append(hits, line)
+		}
+	}
+	switch list := v.(type) {
+	case []map[string]string:
+		for _, r := range list {
+			add(r["title"], r["url"])
+		}
+	case []any:
+		for _, item := range list {
+			if r, ok := item.(map[string]any); ok {
+				title, _ := r["title"].(string)
+				address, _ := r["url"].(string)
+				add(title, address)
+			}
+		}
+	}
+	return hits
 }
 
 // nonBlank drops the blank lines of a result: its first lines under a

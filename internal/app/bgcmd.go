@@ -63,7 +63,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 			return cli.ExitFailure
 		}
 		if prompt = joinPrompt(piped, prompt); len(prompt) > maxPipedPrompt {
-			p.errf("what was piped in is %s with the prompt, more than a run in the background can be handed (%s), so nothing was started. Save it to a file and name the file in the prompt.", byteCount(int64(len(prompt))), byteCount(maxPipedPrompt))
+			p.errf("what was piped in is %s with the prompt, more than a run in the background can be handed (%s), so nothing was started. Save it to a file and name the file in the prompt.", ByteCount(int64(len(prompt))), ByteCount(maxPipedPrompt))
 			return cli.ExitFailure
 		}
 	}

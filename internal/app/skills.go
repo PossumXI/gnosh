@@ -1011,8 +1011,12 @@ func (t *skillTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 		return out, nil
 	}
 	if again {
+		meta["loaded"] = "again"
 		return core.ToolResult{Content: []core.Block{core.Text(fmt.Sprintf("The skill %s is already in this conversation with the same text, where it was last loaded. Follow it from there.", sk.Name))}, Meta: meta}, nil
 	}
+	// (The screen says "loaded": the result is the skill's text, with a
+	// lead written for the model.)
+	meta["loaded"] = "now"
 	lead := fmt.Sprintf("The skill %s is loaded. What follows is its text: the user's own instructions for this kind of task. Carry them out.", sk.Name)
 	return core.ToolResult{Content: []core.Block{core.Text(prompt.Wrap(lead) + "\n\n" + text)}, Meta: meta}, nil
 }

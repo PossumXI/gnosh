@@ -226,15 +226,24 @@ func (t *wakeTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	l.loopMu.Lock()
 	self.fallback, self.scheduled = false, task.next
 	l.loopMu.Unlock()
-	text := fmt.Sprintf("The loop's next run is at %s, in %s. This turn ends here: the run starts by itself then.", whenText(task.next, now), roundTime(task.next.Sub(now)))
-	if reason != "" {
-		l.notice(agent.LevelInfo, "loop", fmt.Sprintf("Next /loop run at %s: %s", whenText(task.next, now), reason))
-	}
+	when, wait := whenText(task.next, now), waitWords(task.next.Sub(now))
+	text := fmt.Sprintf("The loop's next run is at %s, in %s. This turn ends here: the run starts by itself then.", when, wait)
 	// The turn ends with the round, as the run's work is done when it
 	// schedules the next: a model that went on would only wait.
 	res := core.TextResult(text)
-	res.Meta = map[string]any{agent.MetaHalt: "the loop's next run is at " + whenText(task.next, now)}
+	res.Meta = map[string]any{agent.MetaHalt: "the loop's next run is at " + when, "nextRun": when, "wait": wait}
+	if reason != "" {
+		// The model's reason, under the call (where a notice of its own
+		// said the next run's time again, seen on the devbox's screen).
+		res.Notes = []string{reason}
+	}
 	return res, nil
+}
+
+// waitWords says how long until a run, to the minute: "10 minutes",
+// "1 hour".
+func waitWords(d time.Duration) string {
+	return everyWords(max(d.Round(time.Minute), time.Minute))
 }
 
 // savedTask is a task as the session's file keeps it.

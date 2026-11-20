@@ -265,7 +265,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 			state = "a Monitor's, " + state
 		}
 		c.Say("%s  %s: %s", t.ID, state, oneLine(t.Command, 100))
-		c.Say("     its output: %s (%s)", t.OutputFile, byteCount(t.OutputBytes))
+		c.Say("     its output: %s (%s)", t.OutputFile, ByteCount(t.OutputBytes))
 	}
 	if running > 0 || len(agents) > 0 || len(scheduled) > 0 {
 		c.Say("/tasks stop <id> stops one.")
@@ -384,7 +384,7 @@ func (l *live) slashMemory(ctx context.Context, c *SlashContext) error {
 	var files []string
 	if l.instr != nil {
 		for _, f := range l.instr.Files() {
-			line := fmt.Sprintf("  %s (%s, %s)", f.Path, strings.ToLower(string(f.Scope)), byteCount(f.Size))
+			line := fmt.Sprintf("  %s (%s, %s)", f.Path, strings.ToLower(string(f.Scope)), ByteCount(f.Size))
 			if f.Late {
 				line += ", read when a file under it was touched"
 			}
@@ -407,8 +407,8 @@ func (l *live) slashMemory(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
-// byteCount writes a size in bytes for a person.
-func byteCount(n int64) string {
+// ByteCount writes a size in bytes for a person.
+func ByteCount(n int64) string {
 	switch {
 	case n < 1024:
 		return fmt.Sprintf("%d bytes", n)

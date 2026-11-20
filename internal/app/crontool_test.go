@@ -145,7 +145,7 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/loop check the build")
 	s.see("The prompt runs now, and again when the model says")
-	s.see("Next /loop run at 10:02: waiting on CI")
+	s.see("  waiting on CI")
 	s.see("the loop's next run is at 10:02")
 	clk.add(2 * time.Minute)
 	s.see("The self-paced /loop runs again")
@@ -158,7 +158,7 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.exit()
 	reqs := w.Model.Requests()
 	has(t, "the loop's first run", string(reqs[0].Body), "check the build", "This prompt runs as a self-paced /loop")
-	has(t, "the first schedule", toolResult(t, w, 1, "c1"), "The loop's next run is at 10:02, in 2m0s. This turn ends here")
+	has(t, "the first schedule", toolResult(t, w, 1, "c1"), "The loop's next run is at 10:02, in 2 minutes. This turn ends here")
 	has(t, "the second schedule", toolResult(t, w, 1, "c2"), "This call did not run: the turn was ended first (the loop's next run is at 10:02)")
 	has(t, "the loop's second run", string(reqs[1].Body), "This is a run of the self-paced /loop")
 }
