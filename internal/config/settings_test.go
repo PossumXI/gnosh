@@ -134,8 +134,8 @@ func TestSettingsRefusals(t *testing.T) {
 		{"a mode gnosh does not have", `{"permissions": {"defaultMode": "yolo"}}`, 1, []string{`"yolo"`, "not a permission mode", "default, plan, acceptEdits, dontAsk, bypassPermissions"}},
 		{"a mode that is not a string", `{"permissions": {"defaultMode": true}}`, 1, []string{`"permissions.defaultMode" is one of`}},
 		{"a switch with another value", `{"permissions": {"disableBypassPermissionsMode": true}}`, 1, []string{`takes the one value "disable"`}},
-		{"a guard Claude Code has and gnosh has not built", `{"permissions": {"blockReadsOutsideWorkingDirectories": true}}`, 1, []string{`"permissions.blockReadsOutsideWorkingDirectories" is a setting Claude Code has and gnosh has not built`, "would not hold anything back"}},
-		{"the other one", `{"permissions": {"blockWritesOutsideWorkingDirectories": true}}`, 1, []string{"a setting Claude Code has and gnosh has not built"}},
+		{"a block that is not a truth value", `{"permissions": {"blockReadsOutsideWorkingDirectories": "yes"}}`, 1, []string{`"permissions.blockReadsOutsideWorkingDirectories" is true or false`, "a string"}},
+		{"the other one", `{"permissions": {"blockWritesOutsideWorkingDirectories": 1}}`, 1, []string{`"permissions.blockWritesOutsideWorkingDirectories" is true or false`}},
 		{"directories that are not a list", `{"permissions": {"additionalDirectories": "/x"}}`, 1, []string{"is a list of directories"}},
 
 		{"an event gnosh does not fire", "{\"hooks\": {\n \"pre_tool_use\": []}}", 2, []string{`"pre_tool_use"`, "Did you mean PreToolUse?"}},
@@ -392,6 +392,28 @@ func TestSettingsModesThatAreNotHonoured(t *testing.T) {
 	cfg = mustLoad(t, inputs(newFS().put(userJSON, `{"permissions": {"defaultMode": "manual"}}`)))
 	if cfg.Permissions.Mode.V != "default" {
 		t.Errorf("manual is another word for default: %+v", cfg.Permissions.Mode)
+	}
+}
+
+// Claude Code's blocks outside the working directories: a true in any
+// file holds, the project's too (it only takes away), and false is the same
+// as not set, so a repository cannot lift the person's. The additional
+// directories only a project's file adds are told apart, since the blocks
+// do not count them.
+func TestSettingsBlocksOutsideWorkingDirectories(t *testing.T) {
+	fsys := newFS().put(userJSON, `{"permissions": {"blockReadsOutsideWorkingDirectories": true, "additionalDirectories": ["/srv/mine"]}}`).
+		put(projJSON, `{"permissions": {"blockReadsOutsideWorkingDirectories": false, "blockWritesOutsideWorkingDirectories": true, "additionalDirectories": ["/srv/theirs"]}}`)
+	cfg := mustLoad(t, inputs(fsys))
+	p := cfg.Permissions
+	if !p.BlockReads.V || p.BlockReads.Origin.File != userJSON || !p.BlockWrites.V || p.BlockWrites.Origin.File != projJSON {
+		t.Errorf("blocks: reads %+v, writes %+v", p.BlockReads, p.BlockWrites)
+	}
+	if len(p.ProjectDirs) != 1 || p.ProjectDirs[0] != "/srv/theirs" || len(p.Dirs) != 2 {
+		t.Errorf("dirs %+v, the project's %v", p.Dirs, p.ProjectDirs)
+	}
+	cfg = mustLoad(t, inputs(newFS().put(userJSON, `{"permissions": {"blockReadsOutsideWorkingDirectories": false}}`)))
+	if cfg.Permissions.BlockReads.Set || cfg.Permissions.BlockWrites.Set {
+		t.Errorf("false sets nothing: %+v", cfg.Permissions)
 	}
 }
 

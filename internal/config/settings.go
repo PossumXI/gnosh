@@ -74,11 +74,27 @@ func (s *source) settingsPermissions(f jfield) {
 			v := m.val.b
 			s.add(op{kind: KindMode, text: "denyInsteadOfPrompting", origin: o, feature: FeaturePermissions, what: "a permission setting",
 				apply: func(b *builder) { b.denyInstead.put(v, o) }})
-		default:
-			if slices.Contains(claudeCodePermissionKeys, m.key) {
-				s.errorf(m.line, "\"permissions.%s\" is a setting Claude Code has and gnosh has not built, so it would not hold anything back here. Take it out of this file.", m.key)
+		case "blockReadsOutsideWorkingDirectories", "blockWritesOutsideWorkingDirectories":
+			if m.val.kind != jBool {
+				s.errorf(m.line, "\"permissions.%s\" is true or false, and here it is %s.", m.key, m.val.kind.word())
 				continue
 			}
+			if !m.val.b {
+				// (false is the same as not set: a true in any other file
+				// still holds, so a repository can turn the block on for
+				// itself and cannot lift the person's, as in Claude Code.)
+				continue
+			}
+			reads := m.key == "blockReadsOutsideWorkingDirectories"
+			s.add(op{kind: KindRestriction, text: m.key, origin: o, feature: FeaturePermissions, what: "a permission setting",
+				apply: func(b *builder) {
+					if reads {
+						b.blockReads.put(true, o)
+					} else {
+						b.blockWrites.put(true, o)
+					}
+				}})
+		default:
 			s.errorf(m.line, "%s is not a key gnosh reads under \"permissions\". The keys are: %s.", showName(m.key), keyNames(permissionKeys))
 		}
 	}

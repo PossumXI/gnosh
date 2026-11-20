@@ -452,14 +452,63 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	for _, l := range cfg.Permissions.Layers {
 		o.Layers = append(o.Layers, ruleLayer(l))
 	}
-	if len(cfg.Permissions.Dirs) > 0 {
-		layer := permission.Layer{Scope: permission.ScopeCLI, Name: "additional directories"}
-		for _, d := range cfg.Permissions.Dirs {
-			layer.Dirs = append(layer.Dirs, d.V)
+	// The additional directories, the person's and the project's apart:
+	// the blocks outside the working directories do not count those only
+	// the project's own files add.
+	mine := permission.Layer{Scope: permission.ScopeCLI, Name: "additional directories"}
+	theirs := permission.Layer{Scope: permission.ScopeProject, FromProject: true, Name: "the project's additional directories"}
+	for _, d := range cfg.Permissions.Dirs {
+		if slices.Contains(cfg.Permissions.ProjectDirs, d.V) {
+			theirs.Dirs = append(theirs.Dirs, d.V)
+		} else {
+			mine.Dirs = append(mine.Dirs, d.V)
 		}
-		o.Layers = append(o.Layers, layer)
+	}
+	for _, ly := range []permission.Layer{mine, theirs} {
+		if len(ly.Dirs) > 0 {
+			o.Layers = append(o.Layers, ly)
+		}
+	}
+	o.BlockReads, o.BlockWrites = cfg.Permissions.BlockReads.V, cfg.Permissions.BlockWrites.V
+	if o.BlockReads || o.BlockWrites {
+		o.OwnReads, o.SettingsFiles = st.ownReads(cfg), settingsFiles(cfg)
+		if s := strings.TrimSpace(st.inputs.Flags.Settings); s != "" && !strings.HasPrefix(s, "{") {
+			o.SettingsFiles = append(o.SettingsFiles, st.p.absFrom(s))
+		}
 	}
 	return o
+}
+
+// ownReads are gnosh's own files that the read block lets the file tools
+// reach all the same (permission.Options.OwnReads): the project's sessions,
+// where a command's saved output, a fetched page and a pasted picture are
+// kept, and the folders of skills, sub-agents, commands and rules, the
+// person's and the project's, which may lie above the working directory.
+func (st *startup) ownReads(cfg *config.Config) []string {
+	// (From cfg, not st.cfg: the rules are checked, with these options,
+	// while the config is still being loaded.)
+	root := st.runState
+	if root == "" {
+		root = cfg.Paths.StateDir
+	}
+	out := []string{(&transcript.Store{Dir: root}).ProjectDir(cfg.Paths.Cwd)}
+	for _, kind := range []string{"skills", "agents", "commands", "rules"} {
+		out = append(out, userDefDirs(cfg, kind)...)
+		out = append(out, projectDefDirs(cfg, kind, nil)...)
+	}
+	return out
+}
+
+// settingsFiles are the settings files gnosh reads, there or not yet,
+// which the write block refuses to let a tool change wherever they are
+// (permission.Options.SettingsFiles): a settings file could lift the block,
+// or bring hooks. (A file given to --settings is added by the caller.)
+func settingsFiles(cfg *config.Config) []string {
+	out := []string{cfg.Paths.UserSettings, filepath.Join(cfg.Paths.Cwd, "gnosh.json"), cfg.Paths.LocalSettings}
+	if p := cfg.Paths.ProjectSettings; p != "" && !slices.Contains(out, p) {
+		out = append(out, p)
+	}
+	return out
 }
 
 // ruleLayer turns one source of rules of the configuration into the

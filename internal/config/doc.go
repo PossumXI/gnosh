@@ -61,7 +61,11 @@
 //
 //	permissions      allow, ask and deny (lists of rules), defaultMode,
 //	                 additionalDirectories, disableBypassPermissionsMode,
-//	                 disableAutoMode, denyInsteadOfPrompting
+//	                 disableAutoMode, denyInsteadOfPrompting,
+//	                 blockReadsOutsideWorkingDirectories and
+//	                 blockWritesOutsideWorkingDirectories (a true in any
+//	                 file holds; the directories only a project's file
+//	                 adds do not count for them)
 //	hooks            event, then matcher groups, then command handlers, each
 //	                 with an "if" filter if it likes (one permission rule)
 //	env              variables for the commands and hooks gnosh starts

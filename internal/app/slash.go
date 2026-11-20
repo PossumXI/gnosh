@@ -978,6 +978,17 @@ func (l *live) slashPermissions(ctx context.Context, c *SlashContext) error {
 	for _, d := range x.HeldDirs {
 		c.Say("  %s  (waits for the folder to be trusted)", d)
 	}
+	if x.BlockReads || x.BlockWrites {
+		var what []string
+		if x.BlockReads {
+			what = append(what, "read")
+		}
+		if x.BlockWrites {
+			what = append(what, "change")
+		}
+		c.Say("The file tools %s nothing outside these folders, in every mode (blockReadsOutsideWorkingDirectories, blockWritesOutsideWorkingDirectories): %s.",
+			strings.Join(what, " or "), strings.Join(x.BlockDirs, ", "))
+	}
 	for _, list := range []permission.List{permission.ListDeny, permission.ListAsk, permission.ListAllow} {
 		var lines []string
 		for _, r := range x.Rules {

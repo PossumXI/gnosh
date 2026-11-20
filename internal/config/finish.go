@@ -444,7 +444,13 @@ func (ld *loader) timeouts(local bool, limits Limits) Timeouts {
 // permissions settles the starting mode and gathers the rules.
 func (ld *loader) permissions() Permissions {
 	in, b := ld.in, ld.b
-	perm := Permissions{Dirs: b.dirs, BypassDisabled: b.bypassDisabled, DenyInsteadOfPrompting: b.denyInstead}
+	perm := Permissions{Dirs: b.dirs, BypassDisabled: b.bypassDisabled, DenyInsteadOfPrompting: b.denyInstead,
+		BlockReads: b.blockReads, BlockWrites: b.blockWrites}
+	for _, d := range b.dirs {
+		if d.Origin.File != "" && slices.Contains(ld.projectFiles, d.Origin.File) {
+			perm.ProjectDirs = append(perm.ProjectDirs, d.V)
+		}
+	}
 	for _, l := range b.layers {
 		if len(l.Allow)+len(l.Ask)+len(l.Deny) > 0 {
 			perm.Layers = append(perm.Layers, *l)

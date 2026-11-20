@@ -4853,3 +4853,28 @@ or kept with the reason said (27).
     as "keep no page"; Claude Code's reference says it takes plain digits
     only, and "0, a decimal, or any other spelling keeps the default" (15
     minutes). gnosh now does the same, with a warning doctor shows.
+
+340. **The blocks outside the working directories.** Claude Code's
+    permissions keys blockReadsOutsideWorkingDirectories and
+    blockWritesOutsideWorkingDirectories, which gnosh refused as unbuilt,
+    are built with Claude Code's meaning (its settings reference and
+    permissions pages, read 2026-11-20). With the read block, Read, Grep
+    and Glob refuse a path outside the working directories in every mode,
+    bypassPermissions too, and say to ask for /add-dir; search results
+    and @ mentions leave such files out; a shell command that reads one,
+    or whose files gnosh cannot tell, asks in every mode (dontAsk
+    refuses). With the write block, Write, Edit and NotebookEdit refuse
+    such a path, and refuse a settings file of gnosh's anywhere (the
+    person's gnosh.json, the project's, its settings.local.json, a
+    --settings file), since one could add hooks or rules; EnterWorktree
+    and ExitWorktree are off; shell commands are not held, as in Claude
+    Code. No allow rule lets a file tool through either block. A true in
+    any file holds and false is the same as unset, so a repository can
+    turn a block on and cannot lift the person's; the working directories
+    counted are the primary one and those the person added (--add-dir,
+    /add-dir, their own files), not those only the project's files add.
+    gnosh's own files stay readable: the project's sessions (saved
+    command output, fetched pages, pasted pictures) and the folders of
+    skills, sub-agents, commands and rules. The blocks are a step of
+    their own (StageBlock), after the deny rules and before everything
+    that could pass a call.

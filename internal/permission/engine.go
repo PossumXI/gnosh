@@ -90,6 +90,28 @@ type Options struct {
 	// DisableBypass forbids ModeBypass (the settings key
 	// disableBypassPermissionsMode).
 	DisableBypass bool
+	// BlockReads and BlockWrites are Claude Code's permissions keys
+	// blockReadsOutsideWorkingDirectories and
+	// blockWritesOutsideWorkingDirectories. With BlockReads, Read, Grep and
+	// Glob refuse a path outside the working directories in every mode,
+	// bypassPermissions too, and a shell command that reads one, or whose
+	// files cannot be told, asks in every mode. With BlockWrites, Write,
+	// Edit and NotebookEdit refuse such a path, and a settings file
+	// (SettingsFiles) wherever it is, and EnterWorktree and ExitWorktree
+	// are off. No allow rule lets a call through either block. The
+	// working directories they count are the primary one and those a
+	// layer the project did not supply adds (Layer.FromProject).
+	BlockReads, BlockWrites bool
+	// OwnReads are gnosh's own files and folders that the read block lets
+	// the file tools reach all the same: what the model is pointed at (a
+	// command's saved output, a fetched page, a pasted picture) and what
+	// gnosh reads for it (skills, agents, commands, rules). Each covers
+	// itself and everything under it.
+	OwnReads []string
+	// SettingsFiles are the settings files the write block refuses
+	// wherever they are, the working directories too: one could lift the
+	// block.
+	SettingsFiles []string
 	// Resolve follows symbolic links in a cleaned absolute path and
 	// returns where it really leads; for a path that does not exist yet
 	// it resolves the part that does. Nil means the paths the engine is
@@ -147,10 +169,14 @@ type Engine struct {
 	glob      func(string) ([]string, error)
 	gitRuns   bool
 	repoOf    func(string) string
-	layers    []*layer
-	session   *layer
-	saved     *layer
-	notes     []string
+	// The blocks (Options.BlockReads and BlockWrites), and the paths they
+	// pass over and keep, each as given and with its links followed.
+	blockReads, blockWrites bool
+	ownReads, settingsFiles []string
+	layers                  []*layer
+	session                 *layer
+	saved                   *layer
+	notes                   []string
 }
 
 // RuleError is a rule that cannot be applied. It names the rule and where
@@ -194,7 +220,12 @@ func New(o Options) (*Engine, error) {
 		glob:     o.Glob,
 		gitRuns:  o.GitRunsPrograms,
 		repoOf:   o.RepoOf,
+
+		blockReads:  o.BlockReads,
+		blockWrites: o.BlockWrites,
 	}
+	e.ownReads = withLinks(o.OwnReads, o.Resolve)
+	e.settingsFiles = withLinks(o.SettingsFiles, o.Resolve)
 	e.cur = e.cwd
 	if e.home != "" {
 		e.home = path.Clean(e.home)
@@ -666,13 +697,21 @@ func (e *Engine) RemoveLayer(scope Scope, name string) {
 }
 
 // ReadDenied reports whether a Read deny rule covers the cleaned absolute
-// path, as written or as resolved. File discovery and search results
-// leave such files out.
+// path, as written or as resolved, or the read block (Options.BlockReads)
+// refuses it. File discovery and search results leave such files out.
 func (e *Engine) ReadDenied(p string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	req := &request{}
-	return e.pathHit(ListDeny, toolRead, e.expand(req, []string{p})) != nil
+	ps := e.expand(req, []string{p})
+	if e.blockReads {
+		for _, q := range ps {
+			if e.outsideBlock(q) && !e.ownRead(q) {
+				return true
+			}
+		}
+	}
+	return e.pathHit(ListDeny, toolRead, ps) != nil
 }
 
 // EditDenied reports whether an Edit deny rule covers the cleaned absolute
@@ -753,6 +792,10 @@ func (e *Engine) toolOff(canon string) *offReason {
 	if e.restrict && !isMCP(canon) && !e.only[canon] {
 		return &offReason{why: "--tools does not list " + canon}
 	}
+	if e.blockWrites && (canon == "EnterWorktree" || canon == "ExitWorktree") {
+		// (Claude Code takes them away under the write block too.)
+		return &offReason{why: "the setting permissions.blockWritesOutsideWorkingDirectories is on"}
+	}
 	family := canon
 	if canon == toolMonitor {
 		family = toolBash
@@ -796,6 +839,11 @@ type Explanation struct {
 	Dirs []string
 	// HeldDirs are additional directories that wait for trust.
 	HeldDirs []string
+	// BlockReads and BlockWrites say which blocks outside the working
+	// directories are on (Options.BlockReads and BlockWrites), and
+	// BlockDirs are the working directories they count.
+	BlockReads, BlockWrites bool
+	BlockDirs               []string
 	// Rules lists every rule: deny first, then ask, then allow, each in
 	// the order of the layers.
 	Rules []RuleInfo
@@ -809,7 +857,11 @@ type Explanation struct {
 func (e *Engine) Explain() Explanation {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	x := Explanation{Mode: e.mode, Trusted: e.trusted, Dirs: e.workDirs(), Notes: append([]string(nil), e.notes...)}
+	x := Explanation{Mode: e.mode, Trusted: e.trusted, Dirs: e.workDirs(), Notes: append([]string(nil), e.notes...),
+		BlockReads: e.blockReads, BlockWrites: e.blockWrites}
+	if e.blockReads || e.blockWrites {
+		x.BlockDirs = e.blockDirs()
+	}
 	for _, list := range []List{ListDeny, ListAsk, ListAllow} {
 		for _, ly := range e.all() {
 			var rs []*crule

@@ -729,6 +729,11 @@ func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) De
 		return Decision{Behavior: Deny, Stage: StageDeny, Rule: c.Rule.String(), Source: c.layer.Name,
 			Reason: "The deny rule " + c.Rule.String() + " from " + c.layer.Name + " refuses this."}
 	}
+	// 1b. The blocks outside the working directories (block.go), which no
+	// ask rule turns into a question and no mode or allow rule passes.
+	if d, ok := e.blocked(req); ok {
+		return d
+	}
 	// 2. Ask rules.
 	if c := e.match(ListAsk, req); c != nil {
 		return Decision{Behavior: Ask, Stage: StageAsk, Rule: c.Rule.String(), Source: c.layer.Name,

@@ -86,6 +86,11 @@ const (
 	StageTool Stage = "tool"
 	// StageDeny: a deny rule matched.
 	StageDeny Stage = "deny-rule"
+	// StageBlock: blockReadsOutsideWorkingDirectories or
+	// blockWritesOutsideWorkingDirectories (Options.BlockReads and
+	// BlockWrites) refused the call, or asks about a command whose reads
+	// it cannot rule out, in every mode.
+	StageBlock Stage = "block"
 	// StageAsk: an ask rule matched.
 	StageAsk Stage = "ask-rule"
 	// StageSafety: one of the checks no allow rule passes: a protected

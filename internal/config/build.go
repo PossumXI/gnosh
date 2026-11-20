@@ -52,6 +52,8 @@ type builder struct {
 	modeFromUser   bool
 	bypassDisabled Value[bool]
 	denyInstead    Value[bool]
+	blockReads     Value[bool]
+	blockWrites    Value[bool]
 	dirs           []ListItem
 
 	env           map[string]EnvVar
@@ -483,6 +485,14 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 	if !ok(KindRestriction) && b.bypassDisabled.Set && from(b.bypassDisabled.Origin) {
 		note("disableBypassPermissionsMode")
 		b.bypassDisabled = Value[bool]{}
+	}
+	if !ok(KindRestriction) && b.blockReads.Set && from(b.blockReads.Origin) {
+		note("blockReadsOutsideWorkingDirectories")
+		b.blockReads = Value[bool]{}
+	}
+	if !ok(KindRestriction) && b.blockWrites.Set && from(b.blockWrites.Origin) {
+		note("blockWritesOutsideWorkingDirectories")
+		b.blockWrites = Value[bool]{}
 	}
 	if !ok(KindAddDir) {
 		b.dirs = slices.DeleteFunc(b.dirs, func(d ListItem) bool {

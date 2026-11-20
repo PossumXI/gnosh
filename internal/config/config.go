@@ -433,6 +433,18 @@ type Permissions struct {
 	BypassDisabled Value[bool]
 	// DenyInsteadOfPrompting refuses what would ask, and goes on.
 	DenyInsteadOfPrompting Value[bool]
+	// BlockReads and BlockWrites are Claude Code's
+	// blockReadsOutsideWorkingDirectories and
+	// blockWritesOutsideWorkingDirectories: the file tools refuse to read,
+	// or to change, a path outside the working directories, in every
+	// mode. A true in any file holds; false is the same as not set.
+	BlockReads, BlockWrites Value[bool]
+	// ProjectDirs are those of Dirs that a file the project supplied
+	// added (its gnosh.json, or a settings.local.json gnosh did not
+	// write). The blocks do not count them as working directories, as
+	// Claude Code's do not: a repository can turn a block on for itself,
+	// and cannot widen the person's.
+	ProjectDirs []string
 	// Layers are the rules, one layer per file or flag that gave any,
 	// weakest first. Deny rules of every layer count, then ask rules, then
 	// allow rules, so the order matters only for display.

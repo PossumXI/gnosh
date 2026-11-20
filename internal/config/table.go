@@ -147,6 +147,8 @@ var permissionKeys = []keyDef{
 	{"disableBypassPermissionsMode", FeaturePermissions, "\"disable\" forbids skipping permissions", fromClaudeCode},
 	{"disableAutoMode", "", "\"disable\"; gnosh has no auto mode, so it changes nothing", fromClaudeCode},
 	{"denyInsteadOfPrompting", FeaturePermissions, "refuse what would ask; not from a project's file", fromClaudeCode},
+	{"blockReadsOutsideWorkingDirectories", FeaturePermissions, "true: Read, Grep and Glob refuse paths outside the working directories, in every mode", fromClaudeCode},
+	{"blockWritesOutsideWorkingDirectories", FeaturePermissions, "true: Write, Edit and NotebookEdit refuse paths outside the working directories, in every mode", fromClaudeCode},
 }
 
 // claudeCodeKeys are the settings keys Claude Code documents that gnosh
@@ -167,10 +169,6 @@ var claudeCodeKeys = []string{
 	"strictKnownMarketplaces", "pluginConfigs", "feedbackDrafts", "feedbackSurveyRate", "autoMode",
 	"useAutoModeDuringPlan",
 }
-
-// claudeCodePermissionKeys are the keys of Claude Code's permissions object
-// that gnosh has not built (spec/cc/permissions.md).
-var claudeCodePermissionKeys = []string{"blockReadsOutsideWorkingDirectories", "blockWritesOutsideWorkingDirectories"}
 
 // providerType describes one value of a provider's "type".
 type providerType struct {
