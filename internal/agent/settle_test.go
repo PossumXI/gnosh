@@ -48,7 +48,7 @@ func TestKilledProcessIsSettledOnOpen(t *testing.T) {
 		t.Errorf("%d prompts came back", n)
 	}
 	n := notices(r.rec, LevelInfo)
-	if len(n) != 1 || !strings.Contains(n[0], "gnosh was stopped before this turn finished") || !strings.Contains(n[0], "Edit, Bash") {
+	if len(n) != 1 || !strings.Contains(n[0], "gnosh was stopped before this turn finished") || !strings.Contains(n[0], "Edit (/a), Bash (go test)") {
 		t.Errorf("the person was told %v", n)
 	}
 

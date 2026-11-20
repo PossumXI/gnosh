@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -619,7 +620,7 @@ func (a *Agent) settle() error {
 			Kind: EntryResult, ToolUseID: u.ID, ToolName: u.Name,
 			Result: core.ErrorResult(a.texts.Killed), Interrupted: true,
 		})
-		names = append(names, u.Name)
+		names = append(names, openCallName(u.Name, u.Input))
 	}
 	detail := ""
 	if live {
@@ -714,4 +715,27 @@ func promptOf(e Entry) Prompt {
 		p.Attachments = append(p.Attachments, b)
 	}
 	return p
+}
+
+// openCallName names a call left without a result for the person: the
+// tool, and what it was about where its arguments say (the file, the
+// command's first line, the address), cut short. "Write" alone, in the
+// note a resumed session shows, said nothing of which file (seen on the
+// devbox's screen).
+func openCallName(name string, input json.RawMessage) string {
+	var args map[string]any
+	if json.Unmarshal(input, &args) != nil {
+		return name
+	}
+	for _, key := range []string{"file_path", "notebook_path", "command", "url", "pattern", "description", "query", "skill"} {
+		v, _ := args[key].(string)
+		if v = strings.TrimSpace(strings.SplitN(strings.TrimSpace(v), "\n", 2)[0]); v == "" {
+			continue
+		}
+		if r := []rune(v); len(r) > 60 {
+			v = string(r[:57]) + "..."
+		}
+		return name + " (" + v + ")"
+	}
+	return name
 }
