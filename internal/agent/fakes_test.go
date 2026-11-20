@@ -49,6 +49,9 @@ type fakeModel struct {
 	// request longer than that is refused, and refused counts them.
 	window  int
 	refused int
+	// says makes a refusal carry the server's own numbers, as llama.cpp's
+	// does (n_prompt_tokens, n_ctx).
+	says    bool
 	longest int // the longest request that was accepted, in real tokens
 }
 
@@ -114,10 +117,14 @@ func (f *fakeModel) Stream(ctx context.Context, req *core.Request) iter.Seq2[cor
 		// A request the server cannot hold is refused before anything is
 		// answered.
 		f.refused++
-		st = step{err: &core.ProviderError{
+		pe := &core.ProviderError{
 			Provider: f.name, Kind: core.ErrContextTooLong, Status: 400,
 			Message: fmt.Sprintf("the request (%d tokens) exceeds the available context size (%d tokens)", real, window),
-		}}
+		}
+		if f.says {
+			pe.Tokens, pe.Window = real, window
+		}
+		st = step{err: pe}
 	case len(f.script) > 0:
 		st = f.script[0]
 		f.script = f.script[1:]

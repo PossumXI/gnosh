@@ -5521,3 +5521,19 @@ or kept with the reason said (27).
     and in doctor (Status.NoFilter, apart from the user namespace note,
     which allowNestedUserNamespaces makes moot), as Claude Code's sandbox
     runs where its filter is missing and says so.
+
+370. **A refusal as too long is read for the provider's own numbers.**
+    Seen on the devbox's screen: llama.cpp's refusal carried
+    n_prompt_tokens 40000 and n_ctx 32768, and gnosh, with "no count of
+    the provider's own to go by", took the window for its own estimate of
+    the request (15,407) and then said no request could fit. The error
+    now carries what the provider said (core.ProviderError Tokens and
+    Window): llama.cpp's two fields, and the counts in vLLM's ("maximum
+    context length is N tokens. However, you requested M tokens (P in the
+    messages...)", or "your prompt contains at least P input tokens"),
+    OpenAI's ("your messages resulted in M tokens") and Anthropic's
+    ("prompt is too long: M tokens > N maximum") words. The agent takes the
+    stated window as the window, at once and exactly, and the stated count
+    against its own estimate as how much it under-counts; only when the
+    provider says nothing, or nothing it says moves anything, does it guess
+    as before, so a request is never sent again as it was.

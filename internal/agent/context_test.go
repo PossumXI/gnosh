@@ -911,3 +911,34 @@ func TestTakeRoomIsSharedWithinARound(t *testing.T) {
 		t.Errorf("ResultMost of an assumed window = %d, want 0", got)
 	}
 }
+
+// A server that says its numbers in its refusal (llama.cpp's n_ctx and
+// n_prompt_tokens) is taken at its word: its window is the window at
+// once, exactly, where a guess had taken a far smaller one and found that
+// nothing could fit.
+func TestContextTooLongWithTheServersNumbers(t *testing.T) {
+	log := &slideLog{memLog: newMemLog()}
+	j := &job{want: 12}
+	r := newRig(t, func(o *Options) {
+		o.Log = log // the loop believes in a window of 100,000
+		o.Tools = []core.Tool{fileTool(600)}
+	})
+	r.model.honest, r.model.says = true, true
+	r.model.window = 3000
+	r.model.answer(j.respond)
+
+	res := r.run("read twelve files")
+	if res.Reason != EndCompleted || res.Text != "done" {
+		t.Fatalf("result = %+v", res)
+	}
+	if r.model.refused != 1 {
+		t.Errorf("%d requests were refused, want exactly the first surprise", r.model.refused)
+	}
+	if c := r.a.Context(); c.Window != 3000 || !c.Known {
+		t.Errorf("the window the loop now believes in = %+v, want the server's 3000", c)
+	}
+	warn := notices(r.rec, LevelWarning)
+	if len(warn) != 1 || !strings.Contains(warn[0], "against a window of 3,000") {
+		t.Errorf("warnings = %v", warn)
+	}
+}

@@ -390,3 +390,28 @@ func FuzzReadErrorBody(f *testing.F) {
 		}
 	})
 }
+
+// A refusal as too long carries the service's own numbers where it gives
+// them: llama.cpp's fields, and the counts in vLLM's, OpenAI's and
+// Anthropic's words.
+func TestTooLongNumbers(t *testing.T) {
+	p := &provider{name: "local"}
+	e := p.apiError(400, nil, []byte(`{"error": {"code": 400, "message": "the request exceeds the available context size, try increasing it", "type": "exceed_context_size_error", "n_prompt_tokens": 40000, "n_ctx": 32768}}`))
+	if e.Kind != core.ErrContextTooLong || e.Tokens != 40000 || e.Window != 32768 {
+		t.Errorf("llama.cpp: %+v", e)
+	}
+	for msg, want := range map[string][2]int{
+		"This model's maximum context length is 32768 tokens. However, you requested 40000 tokens (35000 in the messages, 5000 in the completion).":                                           {35000, 32768},
+		"This model's maximum context length is 32768 tokens. However, you requested 5000 output tokens and your prompt contains at least 30000 input tokens, for a total of at least 35000.": {30000, 32768},
+		"This model's maximum context length is 128000 tokens. However, your messages resulted in 130000 tokens.":                                                                             {130000, 128000},
+		"prompt is too long: 210000 tokens > 200000 maximum": {210000, 200000},
+		"the request exceeds the available context size":     {0, 0},
+	} {
+		if tok, win := tooLongNumbers(msg); tok != want[0] || win != want[1] {
+			t.Errorf("%q: %d %d, want %v", msg, tok, win, want)
+		}
+	}
+	if e := p.apiError(400, nil, []byte(`{"error": {"message": "prompt is too long: 210000 tokens > 200000 maximum", "type": "invalid_request_error"}}`)); e.Tokens != 210000 || e.Window != 200000 {
+		t.Errorf("Anthropic's words: %+v", e)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -164,6 +165,9 @@ type errorInfo struct {
 	status int
 	// retryAfter is a wait the body asks for, or zero.
 	retryAfter time.Duration
+	// tokens and window are llama.cpp's n_prompt_tokens and n_ctx, on
+	// a request too long for the model, or zero.
+	tokens, window int
 }
 
 // readErrorBody reads a service's error out of a response body or out of
@@ -232,6 +236,13 @@ func (info *errorInfo) take(e map[string]any) {
 		case json.Number:
 			if n, err := strconv.Atoi(v.String()); err == nil && n >= 100 && n <= 599 && info.status == 0 {
 				info.status = n
+			}
+		}
+	}
+	for k, to := range map[string]*int{"n_prompt_tokens": &info.tokens, "n_ctx": &info.window} {
+		if v, ok := e[k].(json.Number); ok && *to == 0 {
+			if n, err := strconv.Atoi(v.String()); err == nil && n > 0 {
+				*to = n
 			}
 		}
 	}
@@ -357,6 +368,12 @@ func (p *provider) apiError(status int, header http.Header, body []byte) *core.P
 		Message:  info.message,
 		Body:     string(clip(body, bodyStart)),
 	}
+	if kind == core.ErrContextTooLong {
+		e.Tokens, e.Window = info.tokens, info.window
+		if e.Tokens == 0 && e.Window == 0 {
+			e.Tokens, e.Window = tooLongNumbers(info.message)
+		}
+	}
 	if header != nil {
 		e.RetryAfter = retryAfterHeader(header, p.now)
 	}
@@ -386,6 +403,43 @@ func (p *provider) apiError(status int, header http.Header, body []byte) *core.P
 		}
 	}
 	return e
+}
+
+// The numbers of a "too long" message, as the services write them:
+//
+//	This model's maximum context length is 32768 tokens. However, you requested 40000 tokens (35000 in the messages, 5000 in the completion).   vLLM
+//	... However, you requested 5000 output tokens and your prompt contains at least 30000 input tokens, for a total of ...                     vLLM, later
+//	This model's maximum context length is 128000 tokens. However, your messages resulted in 130000 tokens.                                     OpenAI
+//	prompt is too long: 210000 tokens > 200000 maximum                                                                                          Anthropic
+var (
+	maxContextRe = regexp.MustCompile(`maximum context length is (\d+) tokens`)
+	inMessagesRe = regexp.MustCompile(`\((\d+) in the messages|prompt contains at least (\d+) input tokens`)
+	requestedRe  = regexp.MustCompile(`(?:requested|resulted in) (\d+) tokens`)
+	tooLongRe    = regexp.MustCompile(`prompt is too long: (\d+) tokens > (\d+) maximum`)
+)
+
+// tooLongNumbers reads how many tokens a refused request held, as the
+// service counted them, and how many its model holds, out of its
+// message; zero for what it does not say.
+func tooLongNumbers(msg string) (tokens, window int) {
+	num := func(re *regexp.Regexp, i int) int {
+		if m := re.FindStringSubmatch(msg); m != nil {
+			for _, g := range m[i:] {
+				if n, err := strconv.Atoi(g); err == nil {
+					return n
+				}
+			}
+		}
+		return 0
+	}
+	if t := num(tooLongRe, 1); t > 0 {
+		return t, num(tooLongRe, 2)
+	}
+	window = num(maxContextRe, 1)
+	if tokens = num(inMessagesRe, 1); tokens == 0 {
+		tokens = num(requestedRe, 1)
+	}
+	return tokens, window
 }
 
 // retryAfterHeader reads how long a response asks the caller to wait: the
