@@ -1040,7 +1040,7 @@ func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
 		list := permission.List(verb)
 		added, err := l.engine.Keep(rule, list)
 		if err != nil {
-			c.Say("%s was not added: %v.", rule, strings.TrimRight(err.Error(), "."))
+			c.Say("%s was not added: %v.", visible(rule), strings.TrimRight(err.Error(), "."))
 			return
 		}
 		err = l.editLocalRules(func(lists map[string][]string) {
@@ -1054,10 +1054,10 @@ func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
 				// that was in force already stays.)
 				l.engine.Unkeep(rule, list)
 			}
-			c.Say("%s was not added: %v.", rule, strings.TrimRight(err.Error(), "."))
+			c.Say("%s was not added: %v.", visible(rule), strings.TrimRight(err.Error(), "."))
 			return
 		}
-		c.Say("The %s rule %s is in force, and kept in %s.", verb, rule, local)
+		c.Say("The %s rule %s is in force, and kept in %s.", verb, visible(rule), local)
 	case "remove", "rm", "delete":
 		// remove [allow|ask|deny] <rule>: with a list named, the rule is
 		// taken out of that list alone (the picker names it), so that an
@@ -1099,17 +1099,17 @@ func (l *live) permissionsAct(c *SlashContext, verb, rule string) {
 					})
 				})
 				if err != nil {
-					c.Say("The %s rule %s is out of force for this session, and could not be taken out of %s: %v.", r.List, want, local, strings.TrimRight(err.Error(), "."))
+					c.Say("The %s rule %s is out of force for this session, and could not be taken out of %s: %v.", r.List, visible(want), local, strings.TrimRight(err.Error(), "."))
 					continue
 				}
-				c.Say("The %s rule %s is taken out.", r.List, want)
+				c.Say("The %s rule %s is taken out.", r.List, visible(want))
 			default:
 				elsewhere = append(elsewhere, fmt.Sprintf("the %s rule %s comes from %s", r.List, want, r.Source))
 			}
 		}
 		switch {
 		case !found:
-			c.Say("No rule %s is in force; /permissions lists them.", want)
+			c.Say("No rule %s is in force; /permissions lists them.", visible(want))
 		case len(elsewhere) > 0:
 			c.Say("%s, which gnosh does not write (it may hold your comments): take it out there, and it goes once the file is saved, as gnosh reads it again before its next request.", strings.Join(elsewhere, "; "))
 		}

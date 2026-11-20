@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -53,12 +54,10 @@ func (l *live) slashFewerPrompts(ctx context.Context, c *SlashContext) error {
 		last := l.fewerLast
 		l.fewerMu.Unlock()
 		if len(last) == 0 {
-			// (A run of its own, as gnosh -p runs it: the list worked out
-			// again, from the same sessions, numbered the same.)
-			last, _ = l.askedRules(ctx)
-			if len(last) == 0 {
-				return errors.New("there is nothing to add: no call in this folder's sessions would be asked about now")
-			}
+			// The numbers are those of a list the person has seen: worked
+			// out again here, newer sessions could have moved them, and a
+			// rule never shown would be kept (the review of 2026-11-20).
+			return errors.New("the numbers are those of the list /fewer-permission-prompts gives, and it has given none in this session yet: list first, or keep a rule by its words with /permissions allow <rule>")
 		}
 		var pick []askedRule
 		if len(args) == 2 && args[1] == "all" {
@@ -116,13 +115,27 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 	byRules := map[string]*askedRule{}
 	judged := 0
 	for _, f := range files {
-		for e, err := range transcript.ReadFile(ctx, f, nil) {
+		// The calls of the file that would ask now, by their ids, until
+		// their results say they ran: one the person refused, or that was
+		// cut off, counts for nothing (the review of 2026-11-20: refused
+		// calls, made again and again, would have topped the list).
+		asking := map[string]*askedRule{}
+		for te, err := range transcript.ReadFile(ctx, f, nil) {
 			if err != nil || ctx.Err() != nil {
 				break
 			}
-			if e.Type != transcript.TypeAssistant {
+			for _, e := range decode(&te) {
+				if e.Kind == agent.EntryResult {
+					if r := asking[e.ToolUseID]; r != nil && !e.Denied && !e.Interrupted {
+						r.calls++
+					}
+					delete(asking, e.ToolUseID)
+				}
+			}
+			if te.Type != transcript.TypeAssistant {
 				continue
 			}
+			e := te
 			for _, b := range e.Message.ToolUses() {
 				t := tools[b.Name]
 				if t == nil || !(b.Name == shelltool.BashName || b.Name == webFetchName || strings.HasPrefix(b.Name, "mcp__")) || judged >= fewerCalls {
@@ -156,13 +169,15 @@ func (l *live) askedRules(ctx context.Context) ([]askedRule, int) {
 					r = &askedRule{rules: rules, example: firstOf(act.Command, act.URL)}
 					byRules[key] = r
 				}
-				r.calls++
+				asking[b.ID] = r
 			}
 		}
 	}
 	var out []askedRule
 	for _, r := range byRules {
-		out = append(out, *r)
+		if r.calls > 0 {
+			out = append(out, *r)
+		}
 	}
 	slices.SortFunc(out, func(a, b askedRule) int {
 		if a.calls != b.calls {
@@ -192,8 +207,17 @@ func recentSessionFiles(dirs []string) ([]string, int) {
 			continue
 		}
 		seen[dir] = true
-		own, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
-		subs, _ := filepath.Glob(filepath.Join(dir, "*", "subagents", "*.jsonl"))
+		// (Read as folders, not patterns: a [ or * in the store's path
+		// is a name.)
+		own := jsonlIn(dir)
+		var subs []string
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, d := range entries {
+				if d.IsDir() {
+					subs = append(subs, jsonlIn(filepath.Join(dir, d.Name(), "subagents"))...)
+				}
+			}
+		}
 		for i, path := range append(own, subs...) {
 			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
 				found = append(found, file{path, info.ModTime(), i < len(own)})
@@ -221,4 +245,19 @@ func lastSessions(n int) string {
 		return "session"
 	}
 	return countWords(n, "session", "sessions")
+}
+
+// jsonlIn are the session files in a folder.
+func jsonlIn(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, d := range entries {
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".jsonl") {
+			out = append(out, filepath.Join(dir, d.Name()))
+		}
+	}
+	return out
 }
