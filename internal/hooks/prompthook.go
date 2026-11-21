@@ -53,6 +53,21 @@ const (
 	agentTimeoutDefault  = 60 * time.Second
 )
 
+// promptWaitMost is how long, past its limit, a prompt hook may wait for a
+// model that is busy with another request.
+const promptWaitMost = 10 * time.Minute
+
+// answerLimitKey carries, to Options.Prompt, how long the model has to
+// answer a prompt hook once it is asked.
+type answerLimitKey struct{}
+
+// AnswerLimit returns how long a prompt hook, whose question ctx carries,
+// gives the model to answer once it is asked, and whether ctx says.
+func AnswerLimit(ctx context.Context) (time.Duration, bool) {
+	d, ok := ctx.Value(answerLimitKey{}).(time.Duration)
+	return d, ok
+}
+
 // judgement is a prompt hook's answer.
 type judgement struct {
 	OK         *bool  `json:"ok"`
@@ -81,14 +96,23 @@ func (r *Runner) askModel(ctx context.Context, h Hook, event []byte, limit time.
 	} else {
 		text += "\n\n" + string(event)
 	}
-	cctx, cancel := context.WithTimeout(ctx, limit)
+	// A prompt hook's limit is the model's to answer in once it is asked
+	// (AnswerLimit): its wait for a model busy with another request (a
+	// /btw) does not count, or a check failed closed for want of a turn
+	// (the side-request review of 2026-11-19). The wait has its own bound,
+	// past the limit; an agent hook's sub-agent has the limit as before.
+	most := limit
+	if !h.Agent {
+		most += promptWaitMost
+	}
+	cctx, cancel := context.WithTimeout(context.WithValue(ctx, answerLimitKey{}, limit), most)
 	defer cancel()
 	answer, err := ask(cctx, h.Model, text)
 	switch {
 	case ctx.Err() != nil:
 		p.cancelled = true
 		return p
-	case cctx.Err() != nil:
+	case cctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		p.timedOut = true
 		return p
 	case err != nil:

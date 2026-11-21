@@ -179,11 +179,11 @@ func (s *session) writeFold() {
 		return
 	}
 	line := s.foldLine(false)
-	hint := s.th.Sep + "Ctrl+O shows them"
+	hint := s.transcriptHint(s.th.Sep, "shows them")
 	if s.fold.calls == 0 {
-		hint = s.th.Sep + "Ctrl+O shows it"
+		hint = s.transcriptHint(s.th.Sep, "shows it")
 	}
-	if with := line + s.th.Quiet.Render(hint); s.m.VisibleWidth(with) <= s.cols {
+	if with := line + s.th.Quiet.Render(hint); hint != "" && s.m.VisibleWidth(with) <= s.cols {
 		line = with
 	}
 	s.fold = fold{}
@@ -193,10 +193,11 @@ func (s *session) writeFold() {
 
 // foldsCall reports whether focus view takes the call that ended into the
 // fold: every call but a deliverable, which is the thing the person asked
-// for and stands on its own, and one a hook said something about, which
-// is written whole so that what the hook said is seen.
+// for and stands on its own, and one a hook said something about or one
+// with notes for the person (the new problems an edit brought), which is
+// written whole so that what was said is seen (the sandbox review).
 func (s *session) foldsCall(c *call, ev *agent.ToolEndEvent) bool {
-	if !s.focus || len(c.hooks) > 0 {
+	if !s.focus || len(c.hooks) > 0 || len(ev.Result.Notes) > 0 {
 		return false
 	}
 	_, _, ok := app.DeliverableOf(ev.Result.Meta)

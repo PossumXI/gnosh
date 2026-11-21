@@ -47,7 +47,7 @@ func (l *live) backgroundOff(owner *subSession) string {
 	switch {
 	case owner != nil:
 		return "a sub-agent waits for the sub-agents it starts"
-	case l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1":
+	case l.envOn("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"):
 		return "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS is set"
 	case l.inv.Bare:
 		return "minimal mode (--bare) has no background work"
@@ -70,7 +70,7 @@ func (l *live) backgroundAgent(id string) (*bgAgent, bool) {
 
 // startBackground runs a sub-agent that is ready to start in the
 // background, and returns what the Agent call returns: that it started.
-func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
+func (l *live) startBackground(s *subSession, in agentInput, stopsAt int64) core.ToolResult {
 	ctx, cancel := context.WithCancel(l.ctx)
 	b := &bgAgent{id: s.id, desc: firstOf(strings.TrimSpace(in.Description), "a task"), kind: s.def.Name,
 		started: l.p.now(), cancel: cancel, done: make(chan struct{})}
@@ -78,10 +78,18 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 		b.output = s.ts.Path()
 	}
 	l.bgMu.Lock()
+	if l.bgStops != stopsAt {
+		l.bgMu.Unlock()
+		cancel()
+		s.close()
+		return core.ErrorResult("The sub-agent was not started: the sub-agents in the background were stopped while it was being made ready.")
+	}
 	l.bgAgents = append(l.bgAgents, b)
+	// (Counted under the lock: a stop's Wait comes after its own look at
+	// the list, so it never meets the count going up from nothing.)
+	l.bgWG.Add(1)
 	l.bgMu.Unlock()
 	l.noteBackground()
-	l.bgWG.Add(1)
 	go func() {
 		defer l.bgWG.Done()
 		defer close(b.done)
@@ -183,13 +191,31 @@ func (l *live) stopBackgroundAgent(b *bgAgent) {
 }
 
 // stopBackgroundAgents stops every one, as the session closes, and waits
-// for them as long as wait.
+// for them as long as wait. One being made ready meanwhile is not started.
 func (l *live) stopBackgroundAgents(wait time.Duration) {
+	l.bgMu.Lock()
+	l.bgStops++
+	l.bgMu.Unlock()
 	for _, b := range l.backgroundAgents() {
 		b.cancel()
 	}
 	waitGroup(&l.bgWG, wait)
 }
+
+// bgStopsNow is how many times the background sub-agents were all
+// stopped. A sub-agent made ready to run in the background starts only if
+// they were not stopped since (startBackground): Ctrl+X Ctrl+K while one
+// is being made, or taken up again by SendMessage, stops it too, as Claude
+// Code 2.1.329 fixed for its own.
+func (l *live) bgStopsNow() int64 {
+	l.bgMu.Lock()
+	defer l.bgMu.Unlock()
+	return l.bgStops
+}
+
+// whileSubIsMade, when set, is called between a background sub-agent's
+// being made and its start. Tests stop the background sub-agents there.
+var whileSubIsMade func(l *live)
 
 // stopAgentTool is TaskStop: the shell's, which stops a background
 // command, and which here also stops a background sub-agent by its id.

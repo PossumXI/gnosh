@@ -3,6 +3,7 @@ package permission
 import (
 	"errors"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -14,6 +15,9 @@ type pathPattern struct {
 	// segs are the pattern's segments from the filesystem root; "**"
 	// stands for any number of directories, none included.
 	segs []string
+	// orig are segs as written, before fold made them keys: the path a
+	// rule names, for the sandbox's lists (SandboxPaths).
+	orig []string
 	// relative is set for patterns anchored at the current directory by
 	// being written as "path" or "./path". These are the rules a "!"
 	// pattern can reopen.
@@ -131,6 +135,7 @@ func (e *Engine) parsePattern(spec string, list List, ly *layer, negate, whole b
 		head = append(head, EscapePath(s))
 	}
 	p.segs = append(head, segs...)
+	p.orig = slices.Clone(p.segs)
 	if p.fold {
 		for i, s := range p.segs {
 			p.segs[i] = guardPattern(s)
@@ -140,11 +145,11 @@ func (e *Engine) parsePattern(spec string, list List, ly *layer, negate, whole b
 		for {
 			switch {
 			case len(p.segs) >= 3 && p.segs[0] == "system" && p.segs[1] == "volumes" && p.segs[2] == "data":
-				p.segs = p.segs[3:]
+				p.segs, p.orig = p.segs[3:], p.orig[3:]
 			case len(p.segs) >= 1 && p.segs[0] == ".nofollow":
-				p.segs = p.segs[1:]
+				p.segs, p.orig = p.segs[1:], p.orig[1:]
 			case len(p.segs) >= 2 && p.segs[0] == ".resolve" && isDigits(p.segs[1]):
-				p.segs = p.segs[2:]
+				p.segs, p.orig = p.segs[2:], p.orig[2:]
 			default:
 				return p, nil
 			}

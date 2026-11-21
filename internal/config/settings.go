@@ -46,7 +46,7 @@ func (s *source) settingsPermissions(f jfield) {
 				}
 				dir, at := absPath(d.str, s.home, s.cwd), s.at(d.line)
 				s.add(op{kind: KindAddDir, text: "additional directory " + dir, origin: at, feature: FeaturePermissions, what: "an additional directory",
-					apply: func(b *builder) { addItem(&b.dirs, dir, at) }})
+					apply: func(b *builder) { b.addDir(dir, at) }})
 			}
 		case "disableBypassPermissionsMode":
 			if m.val.kind != jString || m.val.str != "disable" {
@@ -74,11 +74,27 @@ func (s *source) settingsPermissions(f jfield) {
 			v := m.val.b
 			s.add(op{kind: KindMode, text: "denyInsteadOfPrompting", origin: o, feature: FeaturePermissions, what: "a permission setting",
 				apply: func(b *builder) { b.denyInstead.put(v, o) }})
-		default:
-			if slices.Contains(claudeCodePermissionKeys, m.key) {
-				s.errorf(m.line, "\"permissions.%s\" is a setting Claude Code has and gnosh has not built, so it would not hold anything back here. Take it out of this file.", m.key)
+		case "blockReadsOutsideWorkingDirectories", "blockWritesOutsideWorkingDirectories":
+			if m.val.kind != jBool {
+				s.errorf(m.line, "\"permissions.%s\" is true or false, and here it is %s.", m.key, m.val.kind.word())
 				continue
 			}
+			if !m.val.b {
+				// (false is the same as not set: a true in any other file
+				// still holds, so a repository can turn the block on for
+				// itself and cannot lift the person's, as in Claude Code.)
+				continue
+			}
+			reads := m.key == "blockReadsOutsideWorkingDirectories"
+			s.add(op{kind: KindRestriction, text: m.key, origin: o, feature: FeaturePermissions, what: "a permission setting",
+				apply: func(b *builder) {
+					if reads {
+						b.blockReads.put(true, o)
+					} else {
+						b.blockWrites.put(true, o)
+					}
+				}})
+		default:
 			s.errorf(m.line, "%s is not a key gnosh reads under \"permissions\". The keys are: %s.", showName(m.key), keyNames(permissionKeys))
 		}
 	}
@@ -551,6 +567,10 @@ func (s *source) settingsEnv(f jfield) {
 			s.errorf(m.line, "the value of \"env.%s\" is a string (put a number in quotes), and here it is %s.", m.key, m.val.kind.word())
 			continue
 		}
+		if handoffMarker(m.key) {
+			s.probs.warnf(s.file, m.line, "\"env.%s\" is not taken from a settings file: gnosh sets it itself, to tell the gnosh it starts again what happened, and a gnosh a command starts must not be told so (it would take a move or a restart that never was).", m.key)
+			continue
+		}
 		if movesOwnDirs(m.key) && (s.scope == "project" || s.scope == "local") {
 			s.probs.warnf(s.file, m.line, "\"env.%s\" is not taken from a project's file: it moves where gnosh and the programs it starts keep their own files. Set it in your own gnosh.json if you mean it.", m.key)
 			continue
@@ -560,6 +580,19 @@ func (s *source) settingsEnv(f jfield) {
 		s.add(op{kind: KindEnv, text: "env " + m.key, origin: v.Origin, feature: FeatureEnv, what: "a variable for commands",
 			apply: func(b *builder) { b.setEnv(v) }})
 	}
+}
+
+// handoffMarker reports whether a variable is one gnosh puts on the gnosh
+// it starts again (/restart, /cd, a work tree, a run in the background),
+// which the new one takes at its word: a settings file's env block put it
+// on every command, so a gnosh a command started was told of a move that
+// never was (the cd review of 2026-11-19).
+func handoffMarker(name string) bool {
+	switch name {
+	case "GNOSH_RESTARTED", "GNOSH_MOVED_FROM", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS":
+		return true
+	}
+	return false
 }
 
 // movesOwnDirs reports whether a variable moves where gnosh, or a program

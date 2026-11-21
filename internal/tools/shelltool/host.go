@@ -79,18 +79,31 @@ func remoteScript(command string) string {
 //	                                 keys are known stays ssh's own business; that an unknown one
 //	                                 is refused is gnosh's rule
 //	-o ConnectTimeout=20             reaching the machine and logging in may take this long
+//	-a -x                            no agent and no X display are lent to the other machine,
+//	-o ClearAllForwardings=yes       and no port is forwarded either way, whatever the person's
+//	-o PermitLocalCommand=no         ssh configuration says: with the person's agent a command
+//	                                 there could log in, with the person's keys, to machines
+//	                                 nobody declared, and a forward back would open a way into
+//	                                 this one; and nothing runs here after the login
+//	-o ControlMaster=no              a connection the person shares is used, but gnosh's never
+//	                                 becomes one: it would outlive the command, or end with it
+//	                                 for the person's own sessions (the hosts review of
+//	                                 2026-11-19)
 //	--                               nothing after it is read as an option, whatever it looks like
 //	destination                      as the person declared it
 //	the command                      one argument, read only by the shell of the other machine
 //
-// Keys, agents, ports, jump hosts and shared connections are left to the
-// person's ssh configuration.
+// Keys and jump hosts are left to the person's ssh configuration.
 func (m *Manager) sshArgs(h *Host, command string) []string {
 	return []string{
 		"-T",
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=yes",
 		"-o", "ConnectTimeout=" + strconv.Itoa(max(int(math.Ceil(m.opt.ConnectTimeout.Seconds())), 1)),
+		"-a", "-x",
+		"-o", "ClearAllForwardings=yes",
+		"-o", "PermitLocalCommand=no",
+		"-o", "ControlMaster=no",
 		"--",
 		h.Target,
 		remoteScript(command),
@@ -422,9 +435,12 @@ func (j *job) farEnd(e *ending) farEnd {
 	h := j.host
 	started, dir, before, after := j.side.read()
 	f := farEnd{started: started, dir: dir}
+	// (What came on the error stream around the command is ssh's on this
+	// machine, or the login's on the other one, whose startup files may
+	// print: it was all called ssh's. The hosts review of 2026-11-19.)
 	said := func(text string) {
 		if line := oneLine(text, 700); line != "" {
-			f.notes = append(f.notes, "ssh on this machine said: "+line)
+			f.notes = append(f.notes, "ssh on this machine, or the login on "+h.Name+", said: "+line)
 		}
 	}
 	switch {

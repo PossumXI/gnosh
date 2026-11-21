@@ -34,6 +34,9 @@
 #	ssh ai-remote bash -s -- bgfail < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- repo < tools/dev/box-ui-check.sh
 #	ssh ai-remote bash -s -- trusttype < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- imports < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- short < tools/dev/box-ui-check.sh
+#	ssh ai-remote bash -s -- notebook < tools/dev/box-ui-check.sh
 #
 #   basic       one short turn
 #   plan        plan mode: the model presents a plan with ExitPlanMode, and
@@ -53,6 +56,9 @@
 #               and its read-only tools
 #   fork        a skill with context: fork, typed: a sub-agent counts the
 #               lines of notes.txt, and the model answers its report
+#   forkgrant   a forked skill whose allowed-tools let its sub-agent touch
+#               stamped.txt: the sub-agent runs it without a question
+#               (DECISIONS 270), and the file is there
 #   monitor     the model watches a command with Monitor: its lines come as
 #               notes, then the news that it ended (permissions skipped, in
 #               the scratch folder)
@@ -160,6 +166,12 @@
 #   rewind      (acceptEdits) the model writes note.txt, the person changes
 #               it by hand, and /rewind 1 files takes it away again, keeping
 #               what the person wrote beside the session
+#   rewindsum   two turns, then /rewind 2 summarize: the model summarizes
+#               what followed the second prompt, the conversation goes back
+#               to before it with the summary kept, and a third prompt is
+#               answered from it (the reply should name both words)
+#   rewindsumb  two turns, then /rewind 2 summarize-before: what came
+#               before the second prompt becomes a summary
 #   subask      the model has a sub-agent run a command; the sub-agent's
 #               question says which sub-agent asks ("The sub-agent
 #               general-purpose asks: Allow Bash?")
@@ -173,6 +185,13 @@
 #   trusttype   "fix the 2 failing tests" typed as the trust question comes
 #               up does not answer it; 1 (No) after a pause, and the words
 #               are in the prompt box (no model)
+#   imports     the project's AGENTS.md brings in ~/shared/notes.md: the
+#               person is asked once whether to load files from outside the
+#               project, 1 (Yes) loads it, and the model answers from it
+#   short       a window of 12 rows by 70: the question about a command
+#               shows every choice, and 1 answers it
+#   notebook    (acceptEdits) the model reads sums.ipynb (cells, ids,
+#               outputs) and changes its code cell with NotebookEdit
 #
 # The full interface is tested in CI with a scripted model; this is the
 # look at it with a real one, which is how a model writing gnosh's tags
@@ -184,10 +203,14 @@ S=gnosh-uicheck-$scenario
 flags=""
 hooks=""
 opts=""
+cols=110
+rows=40
 base=http://127.0.0.1:8080
 case "$scenario" in
-basic | mention | config | fork | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype) ;;
+basic | mention | config | fork | forkgrant | model | transcript | restart | keys | bgsession | invisible | cache | cron | selfloop | shelltab | agents | fallback | subask | trustmcp | trusttype | rewindsum | rewindsumb | imports) ;;
 bgfail) flags="agents" ;;
+short) cols=70 rows=12 ;;
+notebook) flags="--permission-mode acceptEdits" ;;
 repo) flags="agents --permission-mode acceptEdits" ;;
 rewind | compact) flags="--permission-mode acceptEdits" ;;
 vim) opts='"editorMode": "vim", ' ;;
@@ -195,6 +218,12 @@ suggest) opts='"promptSuggestionEnabled": true, ' ;;
 askaway) opts='"askUserQuestionTimeout": "60s", '; flags="--permission-mode acceptEdits" ;;
 focus) opts='"viewMode": "focus", ' ;;
 failhint) base=http://127.0.0.1:9 ;;
+sandbox)
+	# (The sandbox on, its commands run without asking; -y lets the
+	# retry outside it run.)
+	flags="-y"
+	hooks="\"sandbox\": { \"enabled\": true, \"autoAllowBashIfSandboxed\": true },"
+	;;
 secreview) flags="--trust-folder" ;;
 simplify) flags="--permission-mode acceptEdits --trust-folder" ;;
 agent) flags="--agent Explore" ;;
@@ -213,7 +242,7 @@ hookwake) hooks="\"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\"
 filesuggest) hooks="\"fileSuggestion\": { \"type\": \"command\", \"command\": \"$T/config/gnosh/files.sh\" }," ;;
 hooks) hooks="\"hooks\": { \"PreToolUse\": [ { \"matcher\": \"Bash\", \"hooks\": [ { \"type\": \"command\", \"command\": \"true\", \"if\": \"Bash(rm *)\", \"timeout\": 5 } ] } ], \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"true\" } ] } ] }," ;;
 *)
-	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, subask, compact, filesuggest, trustmcp, trusttype)" >&2
+	echo "box-ui-check: no scenario $scenario (basic, plan, background, btw, mention, config, hookwake, hooks, leftover, agent, fork, forkgrant, monitor, worktree, wtflag, entertree, cron, selfloop, channel, relay, focus, panel, model, transcript, vim, secreview, restart, keys, bgsession, suggest, invisible, failhint, cache, cd, elicit, agenthook, agentmcp, shelltab, simplify, askaway, agents, bgfail, repo, fallback, subtask, rewind, rewindsum, rewindsumb, subask, compact, filesuggest, trustmcp, trusttype, imports, short, notebook, sandbox)" >&2
 	exit 2
 	;;
 esac
@@ -248,6 +277,26 @@ cat > "$T/config/gnosh/gnosh.json" <<EOF
 }
 EOF
 printf 'alpha\nbeta\ngamma\n' > "$T/work/notes.txt"
+if [ "$scenario" = notebook ]; then
+	cat > "$T/work/sums.ipynb" <<'JSON'
+{
+ "cells": [
+  {"cell_type": "markdown", "id": "intro01", "metadata": {}, "source": ["# Sums"]},
+  {"cell_type": "code", "execution_count": 1, "id": "sum0002", "metadata": {}, "outputs": [{"name": "stdout", "output_type": "stream", "text": ["3\n"]}], "source": ["print(1 + 2)"]}
+ ],
+ "metadata": {"language_info": {"name": "python"}},
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
+JSON
+fi
+if [ "$scenario" = imports ]; then
+	# A project file that brings in a file from outside the project: the
+	# person is asked once whether to load it (DECISIONS 305).
+	mkdir -p "$T/home/shared"
+	printf 'The shared word is PELICAN.\n' > "$T/home/shared/notes.md"
+	printf 'Read @~/shared/notes.md before you answer.\n' > "$T/work/AGENTS.md"
+fi
 if [ "$scenario" = trustmcp ] || [ "$scenario" = trusttype ]; then
 	# A folder whose only own content is an MCP server and a skill that
 	# lets a command run without asking: the trust question names both
@@ -326,6 +375,18 @@ description: Counts the lines of a file in a sub-agent.
 context: fork
 ---
 Count the lines of the file notes.txt in the working directory. Report the count as one number.
+EOF
+fi
+if [ "$scenario" = forkgrant ]; then
+	mkdir -p "$T/config/gnosh/skills/stamp"
+	cat > "$T/config/gnosh/skills/stamp/SKILL.md" <<'EOF'
+---
+description: Stamps the working directory, in a sub-agent.
+context: fork
+allowed-tools: Bash(touch stamped.txt)
+---
+Run exactly this one command with your Bash tool, and nothing else: touch stamped.txt
+Then report the one word: stamped.
 EOF
 fi
 cd "$T/work" || exit 1
@@ -417,7 +478,7 @@ if [ "$scenario" = restart ]; then
 	bin=$T/bin/gnosh
 fi
 envs="env -i HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache PATH=/usr/local/bin:/usr/bin:/bin TERM=tmux-256color LANG=C.UTF-8"
-tmux new-session -d -s "$S" -x 110 -y 40 "$envs $bin $flags"
+tmux new-session -d -s "$S" -x "$cols" -y "$rows" "$envs $bin $flags"
 if [ "$scenario" = trusttype ]; then
 	# Someone types their first prompt as gnosh starts, a key every tenth
 	# of a second: the trust question waits for a pause, and the 2 in it
@@ -474,6 +535,27 @@ agents)
 	echo "=== watching it: $(screen | grep -o '1-[0-9] answers[^·]*' | head -1)"
 	tmux send-keys -t "$S" 1
 	done_when() { [ -s "$T/work/out/asked.txt" ] && screen | grep -q "done [0-9]"; }
+	;;
+notebook)
+	# (acceptEdits) The model reads a notebook, its cells and outputs, and
+	# changes one cell with NotebookEdit; the file stays a notebook.
+	tmux send-keys -t "$S" "Read sums.ipynb, then use the NotebookEdit tool to change the code cell so that it prints 2 + 2 instead of 1 + 2. Then say what the cell printed before." Enter
+	done_when() { grep -q '2 + 2' "$T/work/sums.ipynb" 2>/dev/null && screen | grep -q "done in"; }
+	;;
+short)
+	# A window of 12 rows by 70: the question about a command shows what
+	# it asks and every choice, and the first answers it (Claude Code
+	# 2.1.329 fixed panels and questions cut off in short windows).
+	tmux send-keys -t "$S" "Run exactly this command with the Bash tool, and nothing else: touch made.txt" Enter
+	for i in $(seq 1 300); do
+		sleep 1
+		tmux capture-pane -p -t "$S" | grep -q "1\. Yes, this once" && break
+	done
+	sleep 1
+	echo "=== the question in 12 rows ($i s)"
+	tmux capture-pane -p -t "$S"
+	tmux send-keys -t "$S" 1
+	done_when() { [ -e "$T/work/made.txt" ] && screen | grep -q "done in"; }
 	;;
 basic)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
@@ -557,6 +639,10 @@ agent)
 	;;
 fork)
 	tmux send-keys -t "$S" "/countlines" Enter
+	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
+	;;
+forkgrant)
+	tmux send-keys -t "$S" "/stamp" Enter
 	done_when() { screen | grep -q "ran in a sub-agent" && [ "$(screen | grep -c "done in")" -ge 1 ]; }
 	;;
 model)
@@ -794,10 +880,24 @@ failhint)
 	tmux send-keys -t "$S" "Reply with exactly these three words: all is well" Enter
 	done_when() { screen | grep -q 'to try again'; }
 	;;
+sandbox)
+	# A write outside the project fails in the sandbox; the model is to
+	# run it again outside, as the Bash tool's description says.
+	mkdir -p "$T/outside"
+	tmux send-keys -t "$S" "With one Bash command, write the word done into the file $T/outside/out.txt, like this: echo done > $T/outside/out.txt. If the sandbox stops it, do what the Bash tool's description says to do. Then say done." Enter
+	done_when() { [ -s "$T/outside/out.txt" ]; }
+	;;
 trusttype)
 	# (Under "before": the question, still up after the typing.)
 	tmux send-keys -t "$S" "1"
 	done_when() { tmux capture-pane -p -t "$S" | grep -q "> fix the 2 failing tests" && screen | grep -q "Trust this folder? No"; }
+	;;
+imports)
+	# (The question is on the screen above, under "before".)
+	tmux send-keys -t "$S" "1"
+	sleep 2
+	tmux send-keys -t "$S" "What is the shared word? Answer with that one word and call no tool." Enter
+	done_when() { screen | grep -q "PELICAN" && screen | grep -q "done in" && ls "$T"/data/gnosh/imports/*.json >/dev/null 2>&1; }
 	;;
 trustmcp)
 	# (The question is on the screen above, under "before".)
@@ -823,6 +923,24 @@ rewind)
 	echo "by hand" > "$T/work/note.txt"
 	tmux send-keys -t "$S" "/rewind 1 files" Enter
 	done_when() { [ ! -e "$T/work/note.txt" ] && screen | grep -q "what it held is kept at"; }
+	;;
+rewindsum | rewindsumb)
+	tmux send-keys -t "$S" "Remember the word PELICAN. Reply with the one word ok, and call no tool." Enter
+	for i in $(seq 1 180); do sleep 1; [ "$(screen | grep -c "done in")" -ge 1 ] && break; done
+	tmux send-keys -t "$S" "Remember the word OTTER too. Reply with the one word ok, and call no tool." Enter
+	for i in $(seq 1 180); do sleep 1; [ "$(screen | grep -c "done in")" -ge 2 ] && break; done
+	if [ "$scenario" = rewindsumb ]; then
+		tmux send-keys -t "$S" "/rewind 2 summarize-before" Enter
+		done_when() { screen | grep -q "The conversation before your prompt was summarized\|No summary was made"; }
+	else
+		tmux send-keys -t "$S" "/rewind 2 summarize" Enter
+		for i in $(seq 1 300); do sleep 1; screen | grep -q "kept as a summary\|No summary was made" && break; done
+		# (The second prompt is back in the box: Ctrl+C clears it.)
+		tmux send-keys -t "$S" C-c
+		sleep 1
+		tmux send-keys -t "$S" "Which words did I ask you to remember, in all? Reply with them only, and call no tool." Enter
+		done_when() { screen | grep -q "kept as a summary" && [ "$(screen | grep -c "done in")" -ge 3 ]; }
+	fi
 	;;
 subask)
 	# A sub-agent's question names the sub-agent that asks (a4ef214).
@@ -954,6 +1072,9 @@ if [ "$scenario" = filesuggest ] || [ "$scenario" = trusttype ]; then
 	tmux send-keys -t "$S" C-u
 	sleep 1
 fi
+if [ "$scenario" = rewindsum ] || [ "$scenario" = rewindsumb ]; then
+	echo "=== the last lines: $(screen | grep -v '^ *$' | tail -10 | tr '\n' '|')"
+fi
 if [ "$scenario" = compact ]; then
 	echo "=== given back: $(screen | grep -o 'Given back after the summary[^·]*' | head -1)"
 	echo "=== notes.txt: $(tr '\n' ' ' < "$T/work/notes.txt")"
@@ -970,6 +1091,9 @@ if [ "$scenario" = agents ]; then
 	tmux send-keys -t "$S" Escape
 	sleep 2
 	echo "=== back in the session: $(screen | grep -v '^ *$' | tail -3 | tr '\n' '|')"
+fi
+if [ "$scenario" = forkgrant ]; then
+	echo "=== stamped.txt: $([ -e "$T/work/stamped.txt" ] && echo there || echo none)"
 fi
 if [ "$scenario" = plan ]; then
 	echo "=== hello.txt: $(cat "$T/work/hello.txt" 2>/dev/null || echo none)"

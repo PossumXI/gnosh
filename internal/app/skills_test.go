@@ -314,7 +314,7 @@ func TestDefinitionFolders(t *testing.T) {
 	w := apptest.NewWorld(t)
 	own := w.Write(w.ConfigDir()+"/agents/reviewer.md", agentFile("reviewer", "gnosh's own reviewer."))
 	w.Write(w.Home+"/.claude/agents/reviewer.md", agentFile("reviewer", "Claude Code's reviewer."))
-	theirs := w.Write(w.Home+"/.claude/agents/tester.md", agentFile("tester", "Runs the tests."))
+	theirs := w.Write(w.Home+"/.claude/agents/tester.md", "---\nname: tester\ndescription: Runs the tests.\nautoCompactWindow: 200k\n---\nDo as asked.\n")
 	project := w.Write(".gnosh/agents/fixer.md", agentFile("fixer", "The project's fixer."))
 	w.Write(".claude/agents/fixer.md", agentFile("fixer", "The project's other fixer."))
 	skillOwn := w.Write(w.ConfigDir()+"/skills/ship/SKILL.md", shipSkill)
@@ -326,6 +326,8 @@ func TestDefinitionFolders(t *testing.T) {
 		"the sub-agent kind general-purpose is gnosh's own",
 		"the sub-agent kind reviewer is defined in "+own,
 		"the sub-agent kind tester is defined in "+theirs,
+		// (Claude Code reads "200k" as 200 and says so only in its debug log.)
+		"the sub-agent kind tester's autoCompactWindow, 200k, is not used: it is a whole number of tokens, 100000 or more",
 		"the skill ship is "+skillOwn,
 		"this folder defines 1 kind of sub-agent and 2 skills of its own, which are not read because the folder is not trusted")
 	hasNot(t, "doctor in a folder that is not trusted", r.out, "fixer", "deploy", "lint", "Claude Code's reviewer")
@@ -663,4 +665,81 @@ func TestSkillNamedLikeABuiltinIsSaidSo(t *testing.T) {
 	out := run(t, w, "-p", "/skills").wantCode(t, 0).out
 	has(t, "/skills", out, "(the model may load it; typing /help runs gnosh's own command of that name)",
 		"(nobody can run it: typing /clear runs gnosh's own command of that name, and the model may not load it)")
+}
+
+// A prompt with long pastes in it goes as it was typed, and a line after
+// it tells the model which lines were pasted rather than typed (Claude
+// Code 2.1.328 marks pasted text too).
+func TestPastedLinesAreSaidToBePasted(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Read."}, apptest.Reply{Text: "Typed."})
+	text := "here is the log:\n" + strings.Repeat("ERROR db down\n", 12) + "what broke?"
+	start := strings.Index(text, "ERROR")
+	end := strings.LastIndex(text, "\n") + 1
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		if _, err := c.Submit(agent.Prompt{Text: text, Meta: map[string]any{MetaPasted: [][2]int{{start, end}}}}); err != nil {
+			return 1
+		}
+		_ = c.Wait(ctx)
+		if _, err := c.Submit(agent.Prompt{Text: "and now?"}); err != nil {
+			return 1
+		}
+		_ = c.Wait(ctx)
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	first := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
+	has(t, "the first prompt", first, text, "The prompt above holds text the user pasted rather than typed (lines 2 to 13)")
+	hasNot(t, "the second prompt", lastUser(t, w.Model.Requests()[1]), "pasted")
+}
+
+// A project data folder that is a link out of the project is said to be
+// one at the start: what gnosh writes there would land where a cloned
+// repository's link points.
+func TestDataFolderLinkedOutIsSaidToBe(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
+	outside := w.Root + "/elsewhere"
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, w.Path(".gnosh")); err != nil {
+		t.Skip("no links here:", err)
+	}
+	r := run(t, w, "-p", "hello").wantCode(t, 0)
+	has(t, "stderr", r.err, "The project's data folder "+w.Path(".gnosh")+" is a link to "+outside+", outside the project")
+}
+
+// A forked skill's allowed-tools are the sub-agent's it runs in, and no
+// leave for the agent that loaded it (the skills review of 2026-11-19:
+// they held for every agent of the session until the person's next
+// prompt).
+func TestForkedSkillGrantIsItsSubAgentsAlone(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Skill", Args: `{"skill":"maker","args":"x"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "s1", Name: "Bash", Args: `{"command":"touch by-the-fork.txt"}`}}},
+		apptest.Reply{Text: "FORK-REPORT: made it."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"touch by-the-parent.txt"}`}}},
+		apptest.Reply{Text: "Done."})
+	w.Write(w.ConfigDir()+"/skills/maker/SKILL.md", "---\ndescription: Makes files.\ncontext: fork\nallowed-tools: Bash(touch *)\n---\nMake by-the-fork.txt with touch.\n")
+	run(t, w, "-p", "--allowedTools", "Skill(maker *)", "--", "make the files").wantCode(t, 0)
+	if !w.Exists("by-the-fork.txt") {
+		t.Errorf("the forked skill's sub-agent could not use the skill's grant: %s", toolResult(t, w, 2, "s1"))
+	}
+	if w.Exists("by-the-parent.txt") {
+		t.Errorf("the agent that loaded a forked skill ran a command under the grant of its sub-agent")
+	}
+	has(t, "what the parent was told of its own touch", toolResult(t, w, 4, "c2"), "needs a person's approval")
+	w.Model.Done()
+}
+
+// /skills says what each skill costs in the model's window, as Claude
+// Code's /skill-doctor does: its line in the list the model is told of,
+// or that it is not in that list; and the whole list's cost.
+func TestSkillsSayTheirCost(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write(w.ConfigDir()+"/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploy the service to the staging box, with the checks that come first.\n---\nSteps.\n")
+	w.Write(w.ConfigDir()+"/skills/secret/SKILL.md", "---\nname: secret\ndescription: Only the user runs this.\ndisable-model-invocation: true\n---\nSteps.\n")
+	out := run(t, w, "-p", "/skills").wantCode(t, 0).out
+	has(t, "/skills", out, "/deploy", "about 2", "tokens in the model's window", "/secret", "not in the model's list",
+		"The model is told of 1 skill in about")
 }

@@ -876,3 +876,69 @@ func TestManualCompact(t *testing.T) {
 	}
 	r.checkLog()
 }
+
+// The calls of one round share the context's room (TakeRoom): what one
+// takes the next cannot have, until it is handed back or a new round
+// begins, and none takes more than it asks for. What a call of an old
+// round hands back late is not counted in the new one. A result may take
+// a quarter of a known window (ResultMost), and any of an unknown one.
+func TestTakeRoomIsSharedWithinARound(t *testing.T) {
+	a := &Agent{}
+	if n, _ := a.TakeRoom(100); n != 0 {
+		t.Errorf("before the first count: %d tokens, want none", n)
+	}
+	a.context = ContextStatus{Window: 1000, Known: true, Point: 800, Used: 300}
+	a.newRoomRound()
+	n1, give1 := a.TakeRoom(400)
+	n2, _ := a.TakeRoom(400)
+	if n1 != 400 || n2 != 100 {
+		t.Errorf("took %d and %d of 500, want 400 and 100", n1, n2)
+	}
+	give1(300)
+	n3, give3 := a.TakeRoom(1000)
+	if n3 != 300 {
+		t.Errorf("after 300 handed back: %d, want 300", n3)
+	}
+	a.newRoomRound()
+	give3(300)
+	if n, _ := a.TakeRoom(1000); n != 500 {
+		t.Errorf("a new round: %d, want the 500 left", n)
+	}
+	if got := a.context.ResultMost(); got != 250 {
+		t.Errorf("ResultMost = %d, want a quarter of 1000", got)
+	}
+	if got := (ContextStatus{Window: 1000}).ResultMost(); got != 0 {
+		t.Errorf("ResultMost of an assumed window = %d, want 0", got)
+	}
+}
+
+// A server that says its numbers in its refusal (llama.cpp's n_ctx and
+// n_prompt_tokens) is taken at its word: its window is the window at
+// once, exactly, where a guess had taken a far smaller one and found that
+// nothing could fit.
+func TestContextTooLongWithTheServersNumbers(t *testing.T) {
+	log := &slideLog{memLog: newMemLog()}
+	j := &job{want: 12}
+	r := newRig(t, func(o *Options) {
+		o.Log = log // the loop believes in a window of 100,000
+		o.Tools = []core.Tool{fileTool(600)}
+	})
+	r.model.honest, r.model.says = true, true
+	r.model.window = 3000
+	r.model.answer(j.respond)
+
+	res := r.run("read twelve files")
+	if res.Reason != EndCompleted || res.Text != "done" {
+		t.Fatalf("result = %+v", res)
+	}
+	if r.model.refused != 1 {
+		t.Errorf("%d requests were refused, want exactly the first surprise", r.model.refused)
+	}
+	if c := r.a.Context(); c.Window != 3000 || !c.Known {
+		t.Errorf("the window the loop now believes in = %+v, want the server's 3000", c)
+	}
+	warn := notices(r.rec, LevelWarning)
+	if len(warn) != 1 || !strings.Contains(warn[0], "against a window of 3,000") {
+		t.Errorf("warnings = %v", warn)
+	}
+}

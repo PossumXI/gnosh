@@ -123,6 +123,10 @@ type agentTool struct {
 	// owner is the sub-agent whose tool this is, or nil in the session the
 	// person is in.
 	owner *subSession
+	// grant, for the sub-agent a forked skill runs in, is that skill: its
+	// allowed-tools and disallowed-tools hold for the sub-agent alone,
+	// from its start to its end.
+	grant *skill.Skill
 }
 
 // agentInput is the tool's arguments. The last four are Claude Code's and
@@ -189,6 +193,12 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if strings.TrimSpace(in.Isolation) == "worktree" {
 		def.Isolation = "worktree"
 	}
+	if def.Isolation == "worktree" && l.engine.Mode() == permission.ModePlan {
+		// While planning nothing is changed, a work tree and its git
+		// branch among it: the sub-agent, which plans too, works without
+		// one (the plan review of 2026-11-19).
+		def.Isolation = ""
+	}
 	if e := strings.TrimSpace(in.Effort); e != "" {
 		def.Effort = e
 	}
@@ -209,12 +219,27 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if background {
 		subCtx = l.ctx
 	}
+	stopsAt := l.bgStopsNow()
 	s, err := l.newSub(subCtx, parent, t.owner, def, call.ID, strings.TrimSpace(in.Model), background, "")
 	if err != nil {
 		return core.ErrorResult("No sub-agent was started: " + strings.TrimRight(err.Error(), ".") + "."), nil
 	}
+	if t.grant != nil {
+		if refusal := l.addSkillGrant(s.id, *t.grant); refusal != "" {
+			s.close()
+			return core.ErrorResult("No sub-agent was started: " + strings.TrimRight(refusal, ".") + "."), nil
+		}
+	}
 	if background {
-		return l.startBackground(s, in), nil
+		if ctx.Err() != nil {
+			// The turn was stopped while it was being made ready.
+			s.close()
+			return core.ErrorResult("No sub-agent was started: the turn was stopped while it was being made ready."), nil
+		}
+		if whileSubIsMade != nil {
+			whileSubIsMade(l)
+		}
+		return l.startBackground(s, in, stopsAt), nil
 	}
 	defer s.close()
 	started := l.p.now()
@@ -242,7 +267,7 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 // person's permissions. Safe mode reads none but gnosh's own.
 func (l *live) agentDefs() *agentdef.Set {
 	set := agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.defRoots()), l.st.agents)
-	if l.p.env["CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS"] == "1" {
+	if l.envOn("CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS") {
 		// Claude Code's switch for its two looking kinds: gnosh's own go.
 		set = set.WithoutBuiltin("Explore", "Plan")
 	}
@@ -483,11 +508,6 @@ func (l *live) cannotRunAgent(def agentdef.Def) string {
 	if def.Source != "" {
 		where = def.Source
 	}
-	switch {
-	case len(def.Other) > 0:
-		return fmt.Sprintf("the kind %q asks for %s in its definition (%s), and this gnosh does not have that for sub-agents yet. It is not run without: that would be another agent than the one its author wrote. Use another kind, or take the setting out of the file.",
-			def.Name, strings.Join(def.Other, ", "), where)
-	}
 	if _, why := l.skillsToPreload(def); why != "" {
 		return why + "."
 	}
@@ -552,6 +572,8 @@ type subSession struct {
 	wt          *worktree
 	start, tree string
 	treeAt      *core.WorkTree
+	// memory is the folder of its kind's memory (agentmemory.go), or "".
+	memory string
 
 	calls  atomic.Int64 // the tool calls it has made
 	capped atomic.Bool  // it reached its definition's maxTurns
@@ -617,10 +639,7 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.instr, err = l.readInstructions(ctx); err != nil {
 		return s, err
 	}
-	s.log.onCut = func() { s.instr.Forget() }
-	if s.preloaded, err = l.preloadParts(def, s.id); err != nil {
-		return s, err
-	}
+	s.log.onCut = func() { forgetGone(s.log, s.instr) }
 	if s.dropHooks, err = l.agentHooks(def, s.id); err != nil {
 		return s, err
 	}
@@ -642,6 +661,16 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		}
 		// (So that SendMessage knows it is not to be resumed without it.)
 		_, _ = s.ts.AppendAll(transcript.MetaEntry(metaWorkTree, s.wt.path))
+	}
+	// The skills its kind preloads, their commands run where it starts:
+	// in its work tree when it has one (they ran in the session's folder,
+	// before the tree was made).
+	pre := s.env()
+	if s.treeAt != nil {
+		pre.Cwd = s.start
+	}
+	if s.preloaded, err = l.preloadParts(def, pre); err != nil {
+		return s, err
 	}
 
 	// The features' part in it.
@@ -701,6 +730,21 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		}
 	}
 
+	// Its kind's memory, where it keeps one: the folder made if need be,
+	// and the beginning of its index read.
+	var memIndex string
+	var memCut bool
+	if def.Memory != "" && !l.memoryOff() {
+		dir, base := l.agentMemoryDir(def)
+		if dir == "" || base == "" {
+			return s, fmt.Errorf("its memory (%s) has no folder to be kept in here", def.Memory)
+		}
+		if memIndex, memCut, err = openAgentMemory(dir, base, def.Memory); err != nil {
+			return s, fmt.Errorf("its memory could not be opened: %w", err)
+		}
+		s.memory = dir
+	}
+
 	l.connectAgentMCP(s)
 	tools, err := s.tools()
 	if err != nil {
@@ -729,6 +773,9 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.wt != nil {
 		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentWorkTree(s.wt.path, s.wt.repo))
 	}
+	if s.memory != "" {
+		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentMemory(s.memory, memoryScopeWords(def.Memory), memIndex, memCut))
+	}
 	// A sub-agent makes commits too, signed as the session's are.
 	in.AttributionCommit, in.AttributionPR = l.cfg.Attribution.Commit, l.cfg.Attribution.PR
 
@@ -745,16 +792,16 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		Cwd:     s.start,
 	}
 	if s.wt != nil {
-		sub.Roots = append(slices.Clone(l.roots), s.tree)
+		sub.Roots = s.roots()
 		sub.Tree = s.treeAt
 	}
 	// The model: the call's, then the kind's (inherit is the session's),
 	// then CLAUDE_CODE_SUBAGENT_MODEL, which with
 	// CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 is over the first two.
 	name := firstOf(model, def.Model)
-	envModel := strings.TrimSpace(l.p.env["CLAUDE_CODE_SUBAGENT_MODEL"])
+	envModel := strings.TrimSpace(l.envVar("CLAUDE_CODE_SUBAGENT_MODEL"))
 	switch {
-	case envModel != "" && l.p.env["CLAUDE_CODE_SUBAGENT_MODEL_FORCE"] == "1":
+	case envModel != "" && l.envOn("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"):
 		name = envModel
 	case name == "" && !def.InheritModel:
 		name = envModel
@@ -770,6 +817,12 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 		return s, err
 	}
 	l.agentEffort(s.agent, def)
+	if def.CompactWindow > 0 {
+		// Its kind's autoCompactWindow, where lower than the session's,
+		// with CLAUDE_AUTOCOMPACT_PCT_OVERRIDE taken of it, as Claude Code
+		// does; its model's own window bounds it as any agent's.
+		s.agent.SetCompactAt(l.compactAtWindow(lowerWindow(def.CompactWindow, l.cfg.Options.AutoCompactWindow)))
+	}
 	l.subMu.Lock()
 	if l.subs == nil {
 		l.subs = map[*subSession]struct{}{}
@@ -862,7 +915,14 @@ func (s *subSession) tools() ([]core.Tool, error) {
 			continue
 		}
 		if s.def.ToolsSet && !toolListed(s.def.Tools, name, false) {
-			continue
+			// Read, Write and Edit, for its memory, whatever its list
+			// says, as Claude Code gives them, but for files in the memory
+			// folder only (memoryOnly); a list of tools taken away still
+			// takes them.
+			if s.memory == "" || !memoryTools[name] {
+				continue
+			}
+			t = memoryOnly{Tool: t, dir: s.memory}
 		}
 		seen[name] = true
 		out = append(out, t)
@@ -884,14 +944,22 @@ func (s *subSession) env() *core.ToolEnv {
 	if s.owner != nil {
 		startedBy = s.owner.id
 	}
-	roots := slices.Clone(s.l.roots)
-	env := &core.ToolEnv{Cwd: cwd, SessionID: s.id, ParentSessionID: startedBy, Store: s.store}
+	env := &core.ToolEnv{Cwd: cwd, SessionID: s.id, ParentSessionID: startedBy, Store: s.store, Roots: s.roots()}
 	if s.treeAt != nil {
-		roots = append(roots, s.tree)
 		env.Tree = s.treeAt
 	}
-	env.Roots = roots
 	return env
+}
+
+// roots are the folders the sub-agent works in: the session's, and its
+// work tree. (Not its memory's: it keeps that with Read, Write and Edit,
+// and its commands, in the sandbox, are not to write there.)
+func (s *subSession) roots() []string {
+	roots := slices.Clone(s.l.roots)
+	if s.treeAt != nil {
+		roots = append(roots, s.tree)
+	}
+	return roots
 }
 
 // moments joins the sub-agent's moments to the SubagentStart hooks, to
@@ -1067,6 +1135,7 @@ func (s *subSession) stopHooks(ctx context.Context, end agent.TurnEnd) (agent.Ve
 		AgentType:            s.def.Name,
 		StopHookActive:       end.Streak > 0,
 		LastAssistantMessage: end.Text,
+		Extra:                l.stopLists(),
 	})
 	switch {
 	case err != nil:
@@ -1159,7 +1228,7 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.To
 	if s.owner == nil && takesMore(s.def, status) && !out.IsError {
 		// Its id, which SendMessage takes to give it more to do.
 		if n := len(out.Content); n > 0 && out.Content[n-1].Type == core.BlockText {
-			out.Content[n-1].Text += "\n\n[agent id: " + s.id + "]"
+			out.Content[n-1].Text += "\n\n" + AgentIDLine(s.id)
 		}
 	}
 	if wt := s.wt; wt != nil {
@@ -1188,6 +1257,11 @@ func (s *subSession) close() {
 		l := s.l
 		if s.agent != nil {
 			_ = s.agent.Close()
+		}
+		// The grants of the skills it loaded, or ran as a forked skill
+		// for, end with it.
+		if l.engine != nil {
+			l.engine.RemoveAgentLayers(s.id, permission.ScopeSkill)
 		}
 		l.closeAgentMCP(s)
 		if s.dropHooks != nil {
@@ -1219,3 +1293,7 @@ func (s *subSession) close() {
 		}
 	})
 }
+
+// AgentIDLine is the line a sub-agent's report ends with, its id for
+// SendMessage: for the model, which the screen leaves out.
+func AgentIDLine(id string) string { return "[agent id: " + id + "]" }

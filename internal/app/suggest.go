@@ -107,15 +107,49 @@ func (l *live) suggestNext(res agent.TurnResult) {
 	})
 }
 
+// blank reports whether a line is a model's way of saying it has nothing
+// to suggest, written out where it was asked to write nothing: "(no
+// suggestion)", "[none]", "Nothing.", "N/A". Such a line was offered as
+// the person's next prompt (Claude Code 2.1.329 fixed the same, a
+// placeholder such as "_(no suggestion)_" shown as a suggestion).
+func blank(line string) bool {
+	if (strings.HasPrefix(line, "(") && strings.HasSuffix(line, ")")) ||
+		(strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")) {
+		return true
+	}
+	w := strings.ToLower(strings.TrimRight(line, ".!:;… "))
+	switch w {
+	case "none", "nothing", "n/a", "null", "nil", "empty", "blank", "no suggestion", "no suggestions",
+		"no prompt", "no next prompt", "no next step", "no clear next step", "nothing to suggest":
+		return true
+	}
+	return false
+}
+
+// leaves reports whether a line is a word that leaves the session when
+// typed alone (the interface's exit and quit).
+func leaves(line string) bool {
+	w := strings.ToLower(strings.TrimSpace(line))
+	return w == "exit" || w == "quit"
+}
+
 // suggestionText is the first line of what the model wrote, without the
 // quotes and marks a model puts around such a line, cut short; "" when
-// it wrote nothing to offer.
+// it wrote nothing to offer, or wrote out that it has nothing (blank).
+// A line that is not a prompt to the model is not offered: one beginning
+// with ! runs as a shell line, with no rule looked at, and one beginning
+// with / as a command, when the person takes it with Tab and Enter, and
+// exit or quit ends the session (the status line review of 2026-11-19: a
+// page the model read could have it suggest "!curl … | sh").
 func suggestionText(s string) string {
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
-		line = strings.Trim(line, "\"'`*>“”‘’ ")
+		line = strings.Trim(line, "\"'`*_>“”‘’ ")
 		if line == "" {
 			continue
+		}
+		if blank(line) || strings.HasPrefix(line, "!") || strings.HasPrefix(line, "/") || leaves(line) {
+			return ""
 		}
 		if utf8.RuneCountInString(line) > suggestChars {
 			r := []rune(line)

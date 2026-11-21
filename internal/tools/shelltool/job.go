@@ -13,6 +13,9 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/envscrub"
+	"github.com/gnosh-ai/gnosh/internal/sandbox"
 )
 
 // The script every shell is given. It keeps the command out of the script
@@ -89,6 +92,9 @@ type ending struct {
 	swept    bool           // what the command left behind was stopped at once instead of being left running
 	unread   bool           // the last of the output had not been read when the command's end was recorded
 	finalDir string         // the directory the shell said it ended in, or empty
+	// sandboxNote says what the sandbox took away that the command made
+	// (Options.Sandbox.After), or is empty.
+	sandboxNote string
 }
 
 // failed reports whether the command counts as having failed.
@@ -125,6 +131,14 @@ type job struct {
 	out     *output
 	cwdFile string // where the shell writes the directory it ends in
 	cmdFile string // the command itself, when it was too long to pass as an argument
+	// sandboxed says the command runs inside the sandbox
+	// (Options.Sandbox), and sandboxEnv is what the sandbox sets beside
+	// the command's own variables.
+	sandboxed  bool
+	sandboxEnv []string
+	// sandboxWas is what Options.Sandbox.Before returned for the command.
+	sandboxWas any
+	roots      []string // the session's folders, for the sandbox
 
 	sink atomic.Pointer[progressSink] // where live output goes while a call is listening
 	mon  *watcher                     // a Monitor's command: what passes its lines on; nil for any other
@@ -163,6 +177,7 @@ func newJob(m *Manager, a bashArgs, dir string) *job {
 		dir:         dir,
 		host:        a.host,
 		spool:       a.spool,
+		sandboxed:   a.sandboxed,
 		stop:        make(chan endReason, 1),
 		move:        make(chan struct{}, 1),
 		exited:      make(chan struct{}),
@@ -217,7 +232,19 @@ func (j *job) launch(dir, name string) error {
 			}
 			script, arg = fileWrapper, j.cmdFile
 		}
-		cmd = exec.Command(m.shell, "-c", script, filepath.Base(m.shell), j.cwdFile, arg, m.opt.EnvFile)
+		argv := []string{m.shell, "-c", oomFirst + script, filepath.Base(m.shell), j.cwdFile, arg, m.opt.EnvFile}
+		if j.sandboxed {
+			wrapped, err := j.sandbox(argv)
+			if err != nil {
+				r.Close()
+				w.Close()
+				return fail(err)
+			}
+			argv = wrapped
+		} else if m.opt.Isolate != nil {
+			argv = m.opt.Isolate(argv)
+		}
+		cmd = exec.Command(argv[0], argv[1:]...)
 		cmd.Stdout, cmd.Stderr = w, w
 	} else {
 		// The command's own two streams are joined on the other machine
@@ -236,8 +263,12 @@ func (j *job) launch(dir, name string) error {
 		j.out.where = " on this machine"
 	}
 	cmd.Dir = j.dir
-	// The mark goes last, where the settings' own env cannot take it out.
-	cmd.Env = commandEnv(m.opt.Environ(), j.dir, append(slices.Clip(m.opt.Env), m.markEntry()))
+	// The mark goes last, where the settings' own env cannot take it out;
+	// the sandbox's own places for temporary files and caches before it.
+	cmd.Env = commandEnv(m.opt.Environ(), j.dir, append(append(slices.Clip(m.opt.Env), j.sandboxEnv...), m.markEntry()))
+	if m.opt.Scrub {
+		cmd.Env = envscrub.Env(cmd.Env)
+	}
 	cmd.Stdin = nil // the null device
 	// A session of its own: the shell leads a new process group, which is
 	// what gets signalled, and has no terminal, so nothing in it can stop
@@ -487,6 +518,9 @@ func (j *job) finish(why endReason, limit time.Duration) {
 		}
 	}
 	e.finalDir = j.finalDir()
+	if sb := m.opt.Sandbox; j.sandboxed && sb != nil && sb.After != nil {
+		e.sandboxNote = sb.After(j.sandboxWas)
+	}
 	if j.cmdFile != "" {
 		os.Remove(j.cmdFile)
 	}
@@ -724,4 +758,30 @@ func waitFor(ch <-chan struct{}, d time.Duration) bool {
 	case <-timer.C:
 		return false
 	}
+}
+
+// sandbox wraps the shell's command line in the sandbox, which reaches the
+// files of gnosh's own the shell uses: the one it writes its last
+// directory to (made now, since only a file that is there can be given),
+// the command's file and the environment file.
+func (j *job) sandbox(argv []string) ([]string, error) {
+	if err := os.WriteFile(j.cwdFile, nil, 0o600); err != nil {
+		return nil, fmt.Errorf("shelltool: making the file for the last directory: %w", err)
+	}
+	expose := []sandbox.Exposed{{Path: j.cwdFile, Write: true}}
+	if j.cmdFile != "" {
+		expose = append(expose, sandbox.Exposed{Path: j.cmdFile})
+	}
+	if f := j.m.opt.EnvFile; f != "" {
+		expose = append(expose, sandbox.Exposed{Path: f})
+	}
+	wrapped, env, err := j.m.opt.Sandbox.Wrap(j.dir, j.roots, argv, expose)
+	if err != nil {
+		return nil, refusal("The command was not run: it would run in the sandbox, and the sandbox cannot start (" + err.Error() + ").")
+	}
+	j.sandboxEnv = env
+	if b := j.m.opt.Sandbox.Before; b != nil {
+		j.sandboxWas = b(j.roots)
+	}
+	return wrapped, nil
 }

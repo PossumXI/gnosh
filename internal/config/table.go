@@ -93,12 +93,16 @@ var topKeys = []keyDef{
 	{"hooks", FeatureHooks, "hooks, in Claude Code's shape", fromClaudeCode + ": the settings key"},
 	{"env", FeatureEnv, "variables for the commands and hooks gnosh starts", fromClaudeCode + ": the settings key"},
 	{"disableAllHooks", "", "switch every hook off", fromClaudeCode + ": the settings key"},
+	{"allowedHttpHookUrls", FeatureHooks, "the URL patterns an http hook may post to (* is any run of characters); every file's list is merged, and an empty one lets none", fromClaudeCode + ": the settings key"},
+	{"httpHookAllowedEnvVars", FeatureHooks, "the variables an http hook's headers may take, beside the hook's own allowedEnvVars; every file's list is merged", fromClaudeCode + ": the settings key"},
 	{"agent", "", "the kind of agent the session runs as: its prompt, its tools and its model", fromClaudeCode + ": the settings key"},
 	{"statusLine", "", "a command whose output is the status line under the prompt", fromClaudeCode + ": the settings key"},
 	{"fileSuggestion", "", "a command that offers the paths an @ mention completes to, in place of gnosh's own search", fromClaudeCode + ": the settings key"},
 	{"attribution", "", "the lines the model ends its commits' messages and its pull requests' descriptions with: {\"commit\": ..., \"pr\": ...}; none by default", fromClaudeCode + ": the settings key"},
 	{"includeCoAuthoredBy", "", "Claude Code's older word for leaving its attribution out: taken, and changes nothing, as gnosh adds none of its own", fromClaudeCode + ": the settings key"},
 	{"skillOverrides", "", "how far each skill is seen, by its name: on, name-only, user-invocable-only or off", fromClaudeCode + ": the settings key"},
+	{"sandbox", "", "run the shell's commands in the operating system's sandbox (bubblewrap, Seatbelt): {\"enabled\": true, \"autoAllowBashIfSandboxed\": true, \"excludedCommands\": [...], \"filesystem\": {\"allowWrite\": [...], \"denyRead\": [...]}}", fromClaudeCode + ": the settings key"},
+	{"lspServers", "", "language servers, each under a name, with the files they are for: diagnostics after edits, and the LSP tool", fromClaudeCode + ": a plugin's .lsp.json and manifest key"},
 	{"$schema", "", "accepted and not read", fromClaudeCode + ": the settings key"},
 }
 
@@ -147,6 +151,8 @@ var permissionKeys = []keyDef{
 	{"disableBypassPermissionsMode", FeaturePermissions, "\"disable\" forbids skipping permissions", fromClaudeCode},
 	{"disableAutoMode", "", "\"disable\"; gnosh has no auto mode, so it changes nothing", fromClaudeCode},
 	{"denyInsteadOfPrompting", FeaturePermissions, "refuse what would ask; not from a project's file", fromClaudeCode},
+	{"blockReadsOutsideWorkingDirectories", FeaturePermissions, "true: Read, Grep and Glob refuse paths outside the working directories, in every mode", fromClaudeCode},
+	{"blockWritesOutsideWorkingDirectories", FeaturePermissions, "true: Write, Edit and NotebookEdit refuse paths outside the working directories, in every mode", fromClaudeCode},
 }
 
 // claudeCodeKeys are the settings keys Claude Code documents that gnosh
@@ -161,16 +167,12 @@ var claudeCodeKeys = []string{
 	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
 	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "enabledMcpjsonServers",
 	"disabledMcpjsonServers", "enableAllProjectMcpServers", "allowedMcpServers", "deniedMcpServers",
-	"allowedHttpHookUrls", "httpHookAllowedEnvVars", "worktree", "sandbox",
+	"worktree",
 	"apiKeyHelper", "awsAuthRefresh", "forceLoginMethod", "allowedProviders", "availableModels", "modelPicker",
 	"modelPricing", "advisorModel", "fastMode", "enabledPlugins", "extraKnownMarketplaces",
 	"strictKnownMarketplaces", "pluginConfigs", "feedbackDrafts", "feedbackSurveyRate", "autoMode",
 	"useAutoModeDuringPlan",
 }
-
-// claudeCodePermissionKeys are the keys of Claude Code's permissions object
-// that gnosh has not built (spec/cc/permissions.md).
-var claudeCodePermissionKeys = []string{"blockReadsOutsideWorkingDirectories", "blockWritesOutsideWorkingDirectories"}
 
 // providerType describes one value of a provider's "type".
 type providerType struct {

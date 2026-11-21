@@ -13,7 +13,6 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
-	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/trust"
 )
@@ -62,7 +61,7 @@ func (l *live) slashCd(ctx context.Context, c *SlashContext) error {
 	case !info.IsDir():
 		return fmt.Errorf("%s is a file; /cd takes a folder", dir)
 	}
-	if permission.PathKey(dir) == permission.PathKey(cur) {
+	if sameDir(dir, cur) {
 		c.Say("The session works in %s already.", dir)
 		return nil
 	}
@@ -73,6 +72,15 @@ func (l *live) slashCd(ctx context.Context, c *SlashContext) error {
 	if why := l.engine.CdRefusal(names); why != "" {
 		return fmt.Errorf("the session stays in %s. %s", cur, why)
 	}
+	// The folder as every start of gnosh names it, its links followed:
+	// filed under the path as typed (/tmp/proj where the start finds
+	// /private/tmp/proj), the session was not found there again (the cd
+	// review of 2026-11-19).
+	typed := dir
+	if dir = names[len(names)-1]; sameDir(dir, cur) {
+		c.Say("The session works in %s already.", dir)
+		return nil
+	}
 	// What a turn or the background is doing would be stopped: that is
 	// said before the person is asked anything.
 	if _, err := l.goOnArgs(c, "cd"); err != nil {
@@ -80,6 +88,16 @@ func (l *live) slashCd(ctx context.Context, c *SlashContext) error {
 	}
 	sessionOnly, err := l.cdTrust(ctx, c, dir, cur)
 	if err != nil {
+		return err
+	}
+	// The question may have waited a long time: the folder is looked at
+	// again, and so is what the session is doing, which a scheduled prompt
+	// may have set going meanwhile; then the move is the last step that
+	// can fail (a session half moved kept running where it was).
+	if now, err := dirNames(typed); err != nil || now[len(now)-1] != dir {
+		return fmt.Errorf("the session stays in %s: %s is not the folder it was when it was asked about", cur, typed)
+	}
+	if _, err := l.goOnArgs(c, "cd"); err != nil {
 		return err
 	}
 	if err := l.moveSession(dir); err != nil {
@@ -97,6 +115,14 @@ func (l *live) slashCd(ctx context.Context, c *SlashContext) error {
 	p.restartMu.Unlock()
 	c.Say("The session moves to %s: gnosh starts again there, with that folder's own settings, instructions and skills.%s", dir, l.loopEndsNote())
 	return nil
+}
+
+// sameDir reports whether a and b are the one folder, by the files they
+// are: a path's key folds case, which a case-sensitive disk does not.
+func sameDir(a, b string) bool {
+	ai, aerr := os.Stat(a)
+	bi, berr := os.Stat(b)
+	return aerr == nil && berr == nil && os.SameFile(ai, bi)
 }
 
 // cdTarget is the folder /cd names: ~ is the home folder, and a path that
@@ -261,14 +287,22 @@ func (l *live) moveSession(dir string) error {
 	if oldFile == newFile {
 		return nil
 	}
-	// What belongs to the session alone goes with it; should it not, the
-	// conversation still goes on, so that is noted and no more.
+	// What belongs to the session alone goes with it: its folder beside
+	// its file, where its checkpoints are, and the one under the working
+	// folder's project, where its spool is, when that is another (a
+	// session opened with -r from another folder: its checkpoints were
+	// left behind, and /rewind could not put files back; the cd review of
+	// 2026-11-19). Should one not go, the conversation still goes on, and
+	// the person is told.
 	id := l.ts.ID()
-	from := l.st.dirs(id).Session
-	to := filepath.Join(l.store.ProjectDir(dir), id)
-	if _, err := os.Lstat(from); err == nil {
-		if err := os.Rename(from, to); err != nil {
+	to := strings.TrimSuffix(newFile, ".jsonl")
+	for _, from := range []string{strings.TrimSuffix(oldFile, ".jsonl"), l.st.dirs(id).Session} {
+		if from == to {
+			continue
+		}
+		if err := moveInto(from, to); err != nil {
 			l.flog.logf("session", "the session's folder %s could not go along to %s: %v", from, to, err)
+			l.notice(agent.LevelWarning, "session", fmt.Sprintf("The session's folder %s could not go along to %s (%v): what is in it, the checkpoints /rewind uses among them, stays there.", from, to, err))
 		}
 	}
 	log := strings.TrimSuffix(oldFile, ".jsonl") + ".background.log"
@@ -276,6 +310,39 @@ func (l *live) moveSession(dir string) error {
 		_ = os.Rename(log, strings.TrimSuffix(newFile, ".jsonl")+".background.log")
 	}
 	return nil
+}
+
+// moveInto puts the folder from at to: renamed when nothing is there yet,
+// and otherwise its entries moved in one by one, those already there
+// left as they are. A from that is not there moves nothing.
+func moveInto(from, to string) error {
+	if _, err := os.Lstat(from); err != nil {
+		return nil
+	}
+	if _, err := os.Lstat(to); errors.Is(err, os.ErrNotExist) {
+		return os.Rename(from, to)
+	}
+	entries, err := os.ReadDir(from)
+	if err != nil {
+		return err
+	}
+	var first error
+	for _, e := range entries {
+		dst := filepath.Join(to, e.Name())
+		if _, err := os.Lstat(dst); err == nil {
+			if e.IsDir() {
+				if err := moveInto(filepath.Join(from, e.Name()), dst); err != nil && first == nil {
+					first = err
+				}
+			}
+			continue
+		}
+		if err := os.Rename(filepath.Join(from, e.Name()), dst); err != nil && first == nil {
+			first = err
+		}
+	}
+	_ = os.Remove(from) // only when it is empty now
+	return first
 }
 
 // movingEnv is what the gnosh /cd starts is told, the folder the session

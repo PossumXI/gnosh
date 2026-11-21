@@ -32,7 +32,20 @@ type Layer struct {
 	Dirs []string
 	// DefaultMode is the settings key defaultMode, or "".
 	DefaultMode string
+	// Agent, when not "", keeps the layer's rules to the calls of one
+	// agent: a skill's grant is for the agent that loaded the skill (for
+	// a forked skill, the sub-agent it runs in), and is no leave for the
+	// agent that started it nor for the others beside it. It is a
+	// sub-agent's id, or MainAgent for the session's own agent, whose
+	// sub-agents all work for it and have its grants too. Only DecideFor
+	// and the other Decide forms read it: the rest of the engine
+	// (ToolEnabled, ReadDenied, Explain) takes every layer.
+	Agent string
 }
+
+// MainAgent stands for the session's own agent in Layer.Agent, as ""
+// does in DecideFor: its calls carry no agent id.
+const MainAgent = "(the session's own agent)"
 
 // Options is everything the engine is told. It reads nothing by itself.
 type Options struct {
@@ -77,6 +90,34 @@ type Options struct {
 	// DisableBypass forbids ModeBypass (the settings key
 	// disableBypassPermissionsMode).
 	DisableBypass bool
+	// BlockReads and BlockWrites are Claude Code's permissions keys
+	// blockReadsOutsideWorkingDirectories and
+	// blockWritesOutsideWorkingDirectories. With BlockReads, Read, Grep and
+	// Glob refuse a path outside the working directories in every mode,
+	// bypassPermissions too, and a shell command that reads one, or whose
+	// files cannot be told, asks in every mode. With BlockWrites, Write,
+	// Edit and NotebookEdit refuse such a path, and a settings file
+	// (SettingsFiles) wherever it is, and EnterWorktree and ExitWorktree
+	// are off. No allow rule lets a call through either block. The
+	// working directories they count are the primary one and those a
+	// layer the project did not supply adds (Layer.FromProject).
+	BlockReads, BlockWrites bool
+	// OwnReads are gnosh's own files and folders that the read block lets
+	// the file tools reach all the same: what the model is pointed at (a
+	// command's saved output, a fetched page, a pasted picture) and what
+	// gnosh reads for it (skills, agents, commands, rules). Each covers
+	// itself and everything under it.
+	OwnReads []string
+	// SettingsFiles are the settings files the write block refuses
+	// wherever they are, the working directories too: one could lift the
+	// block. SettingsNames are the ends of a path that make a file one
+	// wherever it is ("gnosh.json", ".gnosh/settings.local.json"): a
+	// subfolder's is the settings of a session started there.
+	SettingsFiles []string
+	SettingsNames []string
+	// Sandbox is how Bash commands run in the operating system's sandbox
+	// (sandbox.go); its zero value is no sandbox.
+	Sandbox Sandbox
 	// Resolve follows symbolic links in a cleaned absolute path and
 	// returns where it really leads; for a path that does not exist yet
 	// it resolves the part that does. Nil means the paths the engine is
@@ -118,6 +159,7 @@ type layer struct {
 // Engine decides, for each tool call, whether it runs, is refused, or a
 // person is asked first. It is safe for use from several goroutines.
 type Engine struct {
+	sandbox   Sandbox
 	mu        *sync.RWMutex
 	mode      Mode
 	cwd       string // the primary working directory
@@ -134,10 +176,16 @@ type Engine struct {
 	glob      func(string) ([]string, error)
 	gitRuns   bool
 	repoOf    func(string) string
-	layers    []*layer
-	session   *layer
-	saved     *layer
-	notes     []string
+	// The blocks (Options.BlockReads and BlockWrites), and the paths they
+	// pass over and keep, each as given and with its links followed.
+	blockReads, blockWrites bool
+	ownReads, settingsFiles []string
+	settingsNames           []string
+	links                   *sync.Map // a folder's links, looked up once (block.go linked)
+	layers                  []*layer
+	session                 *layer
+	saved                   *layer
+	notes                   []string
 }
 
 // RuleError is a rule that cannot be applied. It names the rule and where
@@ -181,7 +229,15 @@ func New(o Options) (*Engine, error) {
 		glob:     o.Glob,
 		gitRuns:  o.GitRunsPrograms,
 		repoOf:   o.RepoOf,
+
+		blockReads:    o.BlockReads,
+		blockWrites:   o.BlockWrites,
+		settingsNames: o.SettingsNames,
+		sandbox:       o.Sandbox,
+		links:         &sync.Map{},
 	}
+	e.ownReads = withLinks(o.OwnReads, o.Resolve)
+	e.settingsFiles = withLinks(o.SettingsFiles, o.Resolve)
 	e.cur = e.cwd
 	if e.home != "" {
 		e.home = path.Clean(e.home)
@@ -456,6 +512,37 @@ func (e *Engine) Unkeep(rule string, list List) {
 	e.saved.drop(rule, list)
 }
 
+// KeepOnly drops from the rules kept for the project every one that the
+// project's local settings file no longer holds (held: its rules, by list),
+// as that file is read again: a rule the person took out of it by hand
+// stayed in force until the session ended (the approvals review of
+// 2026-11-19).
+func (e *Engine) KeepOnly(held map[List][]string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, list := range []List{ListAllow, ListAsk, ListDeny} {
+		cs, _ := e.saved.list(list)
+		if cs == nil {
+			continue
+		}
+		in := map[string]bool{}
+		for _, rule := range held[list] {
+			if r, err := ParseRule(rule); err == nil {
+				in[r.String()] = true
+			}
+		}
+		var gone []string
+		for _, c := range *cs {
+			if !in[c.Rule.String()] {
+				gone = append(gone, c.Rule.String())
+			}
+		}
+		for _, rule := range gone {
+			e.saved.drop(rule, list)
+		}
+	}
+}
+
 // keepIn adds rule to the list of the layer ly, once; added is false when
 // it was there already.
 func (e *Engine) keepIn(ly *layer, rule string, list List) (added bool, err error) {
@@ -567,6 +654,46 @@ func (e *Engine) RemoveLayers(scope Scope) {
 	e.layers = kept
 }
 
+// RemoveAgentLayers drops the layers of the scope kept to one agent
+// (Layer.Agent; "" for the session's own), as when the turn its skills'
+// grants were for is over, or the sub-agent they were for has ended.
+func (e *Engine) RemoveAgentLayers(agent string, scope Scope) {
+	agent = agentKey(agent)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	kept := e.layers[:0:0]
+	for _, ly := range e.layers {
+		if ly.Scope != scope || ly.Agent != agent {
+			kept = append(kept, ly)
+		}
+	}
+	e.layers = kept
+}
+
+// agentKey is how Layer.Agent names the agent with that id: MainAgent for
+// the session's own, whose calls carry none.
+func agentKey(agent string) string {
+	if agent == "" {
+		return MainAgent
+	}
+	return agent
+}
+
+// forAgent is the engine as the calls of one agent ("" for the session's
+// own) see it: without the layers kept to other sub-agents. (The session's
+// own agent's are every agent's: its sub-agents work for it.) The caller
+// holds e.mu, and uses what it returns only while it does.
+func (e *Engine) forAgent(agent string) *Engine {
+	agent = agentKey(agent)
+	other := func(ly *layer) bool { return ly.Agent != "" && ly.Agent != MainAgent && ly.Agent != agent }
+	if !slices.ContainsFunc(e.layers, other) {
+		return e
+	}
+	v := *e
+	v.layers = slices.DeleteFunc(slices.Clone(e.layers), other)
+	return &v
+}
+
 // RemoveLayer drops the last layer of the scope with that name that was
 // passed to New or AddLayer, as when a skill whose grant was put in force
 // is not run after all.
@@ -582,13 +709,31 @@ func (e *Engine) RemoveLayer(scope Scope, name string) {
 }
 
 // ReadDenied reports whether a Read deny rule covers the cleaned absolute
-// path, as written or as resolved. File discovery and search results
-// leave such files out.
+// path, as written or as resolved, or the read block (Options.BlockReads)
+// refuses it. File discovery and search results leave such files out.
 func (e *Engine) ReadDenied(p string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	req := &request{}
-	return e.pathHit(ListDeny, toolRead, e.expand(req, []string{p})) != nil
+	ps := e.expand(req, []string{p})
+	if e.blockReads {
+		dirs := e.blockDirs()
+		for _, q := range ps {
+			if outside(dirs, q) && !e.ownRead(q) {
+				return true
+			}
+		}
+	}
+	return e.pathHit(ListDeny, toolRead, ps) != nil
+}
+
+// EditDenied reports whether an Edit deny rule covers the cleaned absolute
+// path, as written or as resolved. A rewind leaves such a file as it is.
+func (e *Engine) EditDenied(p string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	req := &request{}
+	return e.pathHit(ListDeny, toolEdit, e.expand(req, []string{p})) != nil
 }
 
 // all returns every layer, the session's own included.
@@ -660,6 +805,10 @@ func (e *Engine) toolOff(canon string) *offReason {
 	if e.restrict && !isMCP(canon) && !e.only[canon] {
 		return &offReason{why: "--tools does not list " + canon}
 	}
+	if e.blockWrites && (canon == "EnterWorktree" || canon == "ExitWorktree") {
+		// (Claude Code takes them away under the write block too.)
+		return &offReason{why: "the setting permissions.blockWritesOutsideWorkingDirectories is on"}
+	}
 	family := canon
 	if canon == toolMonitor {
 		family = toolBash
@@ -703,6 +852,11 @@ type Explanation struct {
 	Dirs []string
 	// HeldDirs are additional directories that wait for trust.
 	HeldDirs []string
+	// BlockReads and BlockWrites say which blocks outside the working
+	// directories are on (Options.BlockReads and BlockWrites), and
+	// BlockDirs are the working directories they count.
+	BlockReads, BlockWrites bool
+	BlockDirs               []string
 	// Rules lists every rule: deny first, then ask, then allow, each in
 	// the order of the layers.
 	Rules []RuleInfo
@@ -716,7 +870,11 @@ type Explanation struct {
 func (e *Engine) Explain() Explanation {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	x := Explanation{Mode: e.mode, Trusted: e.trusted, Dirs: e.workDirs(), Notes: append([]string(nil), e.notes...)}
+	x := Explanation{Mode: e.mode, Trusted: e.trusted, Dirs: e.workDirs(), Notes: append([]string(nil), e.notes...),
+		BlockReads: e.blockReads, BlockWrites: e.blockWrites}
+	if e.blockReads || e.blockWrites {
+		x.BlockDirs = e.blockDirs()
+	}
 	for _, list := range []List{ListDeny, ListAsk, ListAllow} {
 		for _, ly := range e.all() {
 			var rs []*crule

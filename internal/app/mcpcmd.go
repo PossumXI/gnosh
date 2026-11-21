@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -66,6 +67,21 @@ func (m mcpPlaces) place(scope string) mcp.Place {
 		return mcp.Place{Path: m.user}
 	}
 	return mcp.Place{Path: m.user, Project: m.root}
+}
+
+// projectLeadsOut is where the project's .mcp.json leads when it is a link
+// out of the project, or "": a project server written through it was one
+// of wherever it led, the person's own mcp.json among them, started in
+// every project with no trust question (the settings-commands review of
+// 2026-11-20).
+func (m mcpPlaces) projectLeadsOut() string {
+	if _, err := os.Lstat(m.project); err != nil {
+		return ""
+	}
+	if target, out := trust.LeadsOut(m.project, m.root); out {
+		return firstOf(target, m.project)
+	}
+	return ""
 }
 
 // where says, for the person, where a scope keeps its servers.
@@ -143,6 +159,10 @@ func (p *program) mcpAdd(inv cli.Invocation, places mcpPlaces) int {
 		p.errf("the entry of %s would not be used: %v. Nothing was added.", name, err)
 		return cli.ExitFailure
 	}
+	if target := places.projectLeadsOut(); scope == "project" && target != "" {
+		p.errf("the project's .mcp.json is a link to %s, outside the project, so nothing was added; gnosh does not write a project's servers through it.", target)
+		return cli.ExitFailure
+	}
 	pl := places.place(scope)
 	had, err := mcp.Lookup(pl, name)
 	if err != nil {
@@ -204,6 +224,10 @@ func (p *program) mcpRemove(inv cli.Invocation, places mcpPlaces) int {
 			ws = append(ws, places.where(scope))
 		}
 		p.errf("%s is in more than one place: %s. Say which with -s (%s); nothing was removed.", name, strings.Join(ws, ", and "), strings.Join(in, ", "))
+		return cli.ExitFailure
+	}
+	if target := places.projectLeadsOut(); in[0] == "project" && target != "" {
+		p.errf("the project's .mcp.json is a link to %s, outside the project, so nothing was removed; gnosh does not write a project's servers through it.", target)
 		return cli.ExitFailure
 	}
 	if _, err := mcp.Delete(places.place(in[0]), name); err != nil {
@@ -358,7 +382,7 @@ func (p *program) mcpCheck(ctx context.Context, c mcp.Config, root string, st *s
 	if c.Type == "http" {
 		opt.Auth = &mcp.Authorizer{Logins: st.mcpLogins(), Server: c.URL, HTTP: &http.Client{Timeout: 30 * time.Second}}
 	}
-	client, err := mcpConnect(ctx, c, root, p.o.Environ, []string{root}, opt)
+	client, err := mcpConnect(ctx, c, root, p.mcpEnviron(), []string{root}, opt)
 	if _, ok := errNeedsAuth(err); ok {
 		return "wants a sign-in: gnosh mcp login " + c.Name
 	}
@@ -415,7 +439,7 @@ func (p *program) mcpSignIn(ctx context.Context, inv cli.Invocation, places mcpP
 	www := ""
 	probe := mcp.Options{ClientName: "gnosh", ClientVersion: firstOf(p.o.BuildID, "devel"), StartTimeout: st.cfg.Limits.MCPTimeout.V}
 	pctx, cancel := context.WithTimeout(ctx, st.cfg.Limits.MCPTimeout.V)
-	client, err := mcpConnect(pctx, c, places.root, p.o.Environ, []string{places.root}, probe)
+	client, err := mcpConnect(pctx, c, places.root, p.mcpEnviron(), []string{places.root}, probe)
 	cancel()
 	if na, ok := errNeedsAuth(err); ok {
 		www = na.WWWAuthenticate

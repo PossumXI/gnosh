@@ -52,8 +52,8 @@ func (l *live) runAsAgent() error {
 	if !ok {
 		return fmt.Errorf("%s names the agent %q, and there is no kind of agent of that name. The kinds are: %s. Nothing was started", from, name, strings.Join(defs.Names(), ", "))
 	}
-	if len(def.Other) > 0 {
-		return fmt.Errorf("the agent %s (%s) asks for %s, which a session cannot have yet, so it is not run as something else. Nothing was started", def.Name, firstOf(def.Source, def.Scope), strings.Join(def.Other, ", "))
+	if def.Memory != "" && !l.memoryOff() {
+		return fmt.Errorf("the agent %s (%s) keeps a memory of its own (memory: %s), which gnosh gives the sub-agents of its kind but not yet a session run as one, so it is not run without it. Nothing was started", def.Name, firstOf(def.Source, def.Scope), def.Memory)
 	}
 	if _, why := l.skillsToPreload(def); why != "" {
 		return fmt.Errorf("%s. Nothing was started", why)

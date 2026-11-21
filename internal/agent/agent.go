@@ -162,6 +162,13 @@ type Options struct {
 	// results. The loop itself never reads a tool's output as
 	// instructions.
 	CleanResult func(call core.ToolCall, res core.ToolResult) core.ToolResult
+	// Reroute, when not nil, is given every tool call as the model wrote
+	// it (through CleanInput), and says of one that is plainly meant for
+	// another of the session's tools the call to make in its place: Gno
+	// for mem typed into the shell. The gate, the hooks and the tool see
+	// that call, and its result starts with note, in gnosh's marker, which
+	// tells the model what was done and what to call next time.
+	Reroute func(call core.ToolCall) (to core.ToolCall, note string, ok bool)
 	// Outgoing, when not nil, is given every request just before it is
 	// sent, main, summary and side alike, with the name of the provider it
 	// goes to. It may change the request, which is the loop's own copy.
@@ -280,9 +287,18 @@ type Agent struct {
 	beforeAsk State
 	state     State
 	running   []RunningCall
-	totals    Totals
-	cachePrev cachePrint // the last main request, for Totals.Cache
-	context   ContextStatus
+	// unfinished are the calls of the round under way whose end has not
+	// been told yet: begun, asked about or running. A side question takes
+	// them as still running (side.go): a call is shown before the gate is
+	// asked about it, and only joins running after.
+	unfinished map[string]bool
+	totals     Totals
+	cachePrev  cachePrint // the last main request, for Totals.Cache
+	context    ContextStatus
+	// roomTaken is the room the calls of the round running now have
+	// taken (TakeRoom), and roomRound counts the rounds, so that what is
+	// given back late goes to the round it came from.
+	roomTaken, roomRound int
 
 	// The rest belongs to the session's goroutine alone.
 	settled      bool
@@ -338,6 +354,9 @@ func (s *submission) resolve(r TurnResult) {
 type command struct {
 	compact      bool
 	instructions string
+	// part is the part of the conversation a summary is of, or nil for
+	// all of it.
+	part *SummaryPart
 }
 
 type ctxKey struct{}
@@ -761,6 +780,38 @@ func (a *Agent) Context() ContextStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.context
+}
+
+// TakeRoom is for a tool call whose result may fill what is left of the
+// context, as Read's with allow_large: it returns how many tokens, at
+// most most, the call may use of the room left before room has to be
+// made (ContextStatus.Room), less what the other calls of the same round
+// took, since none of their results is counted yet. give hands back,
+// once the call is done, what it did not use. Before the conversation is
+// first counted there is no room.
+func (a *Agent) TakeRoom(most int) (n int, give func(unused int)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	n = max(min(a.context.Room()-a.roomTaken, most), 0)
+	a.roomTaken += n
+	round := a.roomRound
+	return n, func(unused int) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.roomRound == round {
+			a.roomTaken -= min(max(unused, 0), n)
+		}
+	}
+}
+
+// newRoomRound starts a round of tool calls for TakeRoom: the room the
+// last count left is whole again, since what the last round's calls took
+// has been counted since.
+func (a *Agent) newRoomRound() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.roomTaken = 0
+	a.roomRound++
 }
 
 // SetCwd moves the session's working directory, as a command's cd does in

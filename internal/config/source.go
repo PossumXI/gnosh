@@ -38,6 +38,10 @@ type source struct {
 	layer Layer
 	// scope is "user", "project", "local" or "command line".
 	scope string
+	// theirs says the file is the repository's, not the person's: a
+	// project's, or a local file gnosh did not write (one shipped in the
+	// repository), which waits for the folder's trust as a project's does.
+	theirs bool
 	// baseDir is the directory the file is in.
 	baseDir string
 	// ruleDir is what a permission rule's "/path" is under.

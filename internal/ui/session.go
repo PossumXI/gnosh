@@ -172,6 +172,8 @@ type session struct {
 	// record showed it whole: the note that the turn goes on does not say
 	// it again.
 	hookSaid string
+	// pasting says a Ctrl+V is reading the clipboard (picture.go).
+	pasting bool
 	// profile, light and themed are config's, for the theme option
 	// (themecmd.go).
 	profile text.Profile
@@ -320,10 +322,12 @@ type session struct {
 	loop  bool
 
 	// cmdq are slash commands that wait for the turn to end, cmdRun the
-	// one that is running, and cmdStop what stops it.
-	cmdq    []string
-	cmdRun  string
-	cmdStop context.CancelFunc
+	// one that is running, and cmdStop what stops it. cmdShown says the
+	// running one was shown as typed when it started.
+	cmdq     []string
+	cmdRun   string
+	cmdStop  context.CancelFunc
+	cmdShown bool
 
 	// What the status line says.
 	info app.SessionInfo
@@ -482,7 +486,11 @@ func (s *session) header() {
 		where += th.Quiet.Render(" (" + s.branch + ")")
 	}
 	s.put(wrap(s.m, where, s.cols, "", "  ")...)
-	s.put(wrap(s.m, th.Quiet.Render("? shows the keys"+th.Sep+"/help lists the commands"+th.Sep+"Esc stops a turn"), s.cols, "", "")...)
+	welcome := "? shows the keys" + th.Sep + "/help lists the commands"
+	if k := s.keyHint("chat:cancel", "Esc"); k != "" {
+		welcome += th.Sep + k + " stops a turn"
+	}
+	s.put(wrap(s.m, th.Quiet.Render(welcome), s.cols, "", "")...)
 	s.put(wrap(s.m, th.credits(), s.cols, "", "")...)
 }
 

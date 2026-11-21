@@ -418,7 +418,7 @@ func listFlag(words []word) string {
 // ("cp x/.env ." writes ./.env; a source's pattern stays a pattern there:
 // "cp x/.e* ." writes what .e* matches in the folder). install -d makes
 // every folder it is given.
-func copiedInto(name string, args []word) (sources, writes, lands []word) {
+func copiedInto(name string, args []word) (sources, writes []word, lands []copyLanding) {
 	var ops, dirs []word
 	makesDirs := false
 	rest := false
@@ -485,11 +485,27 @@ func copiedInto(name string, args []word) (sources, writes, lands []word) {
 		}
 		for _, src := range sources {
 			if into, ok := placedIn(dir, src, name == "scp" || name == "rsync"); ok {
-				lands = append(lands, into)
+				ld := copyLanding{into: into, dir: dir, src: src}
+				if host, _, ok := strings.Cut(src.joined(), ":"); (name == "scp" || name == "rsync") && ok && !strings.Contains(host, "/") {
+					ld.remote = true // (host:path: its names are the far side's)
+				}
+				lands = append(lands, ld)
 			}
 		}
 	}
 	return sources, writes, lands
+}
+
+// copyLanding is where a copy (cp, mv, ln, install, rsync, scp) puts a source
+// in a folder: into is the folder and the source's last name as the line
+// writes them ("cp x/.env ." writes ./.env), dir and src the folder and
+// the source themselves, for working out the names a pattern lands under:
+// those of what it matches, which are not in the folder yet (oracle seed
+// 176). remote marks a source on another machine (scp's host:path), whose
+// pattern matches the files there, not here.
+type copyLanding struct {
+	into, dir, src word
+	remote         bool
 }
 
 // placedIn is the name the source src gets in the folder dir: dir, a

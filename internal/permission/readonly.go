@@ -148,12 +148,11 @@ type cmdFacts struct {
 	fsEdit bool
 	// reads and writes are the operands the command reads and changes.
 	reads, writes []word
-	// lands are the names a copy (cp, mv, ln, install, rsync, scp) gets
-	// in its place where the place is a folder: each source's last name
-	// there ("cp x/.env ." writes ./.env). They are held to the Read and
+	// lands are the places a copy (cp, mv, ln, install, rsync, scp) puts
+	// its sources in a folder (copyLanding). They are held to the Read and
 	// Edit rules and the protected paths; where the copy lands for the
 	// working directories, cpLands says.
-	lands []word
+	lands []copyLanding
 	// rewrites are files the command may put back as they are (see
 	// sedFacts): nothing in them changes, but a link among them would be
 	// replaced by a copy of what it leads to.

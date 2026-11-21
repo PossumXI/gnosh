@@ -36,7 +36,7 @@ type Imitation struct {
 func (m Imitation) Found() bool { return len(m.Marked) > 0 || len(m.Bypass) > 0 }
 
 // harnessTags are the names of the tags that read as a harness's notes.
-var harnessTags = []string{tagName, memTag, "system-reminder"}
+var harnessTags = []string{tagName, memTag, agentMemoryTag, "system-reminder"}
 
 // turnLabels begin a line that reads as a turn of a conversation.
 var turnLabels = []string{"Human:", "Assistant:"}

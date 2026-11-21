@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -167,5 +168,68 @@ func TestSettingsFlagFileWatchedWithCwd(t *testing.T) {
 	has(t, "the rule added to the --settings file", toolResult(t, w, 2, "c2"), "This call did not run", "Bash(rm *)")
 	if !w.Exists("sub/a.txt") {
 		t.Errorf("the rm ran past the deny rule added to the --settings file")
+	}
+}
+
+// A settings file gnosh writes is taken as taken in only when it stood as
+// gnosh last took it in: a change of the person's made meanwhile (a deny
+// rule added while a question waited) is in the write too, and is taken in
+// as any change is (the approvals review of 2026-11-19).
+func TestOwnWriteLeavesAHandEditToBeTakenIn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.local.json")
+	write := func(s string) {
+		if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("{}")
+	l := &live{}
+	l.settings.stamps, l.settings.accepted = map[string]fileStamp{}, map[string]fileStamp{}
+	taken := stampOf(path)
+	l.settings.stamps[path], l.settings.accepted[path] = taken, taken
+
+	// Over the file as it was taken in: gnosh's own, taken in already.
+	write(`{"permissions": {"allow": ["Bash(make)"]}}`)
+	l.sawOwnWrite(path, taken)
+	if l.settings.accepted[path] != stampOf(path) {
+		t.Error("gnosh's own write over an unchanged file was not marked as taken in")
+	}
+
+	// The person changed the file first: what gnosh then writes is left to
+	// be taken in.
+	write(`{"permissions": {"allow": ["Bash(make)"], "deny": ["Bash(rm *)"]}}`)
+	before := stampOf(path)
+	write(`{"permissions": {"allow": ["Bash(make)", "Bash(ls)"], "deny": ["Bash(rm *)"]}}`)
+	accepted := l.settings.accepted[path]
+	l.sawOwnWrite(path, before)
+	if l.settings.accepted[path] != accepted {
+		t.Error("a write over a hand edit not yet taken in was marked as taken in")
+	}
+}
+
+// A host given a new address under the same name while the session runs is
+// reached there from then on, and the model is told so (the hosts review
+// of 2026-11-19: only the names were compared, and the old address kept).
+func TestHostMovedWhileTheSessionRuns(t *testing.T) {
+	w := apptest.NewWorld(t)
+	far := w.FarMachine()
+	w.Settings(`{"hosts": {"render": {"ssh": "root@203.0.113.7"}}}`)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		switch n {
+		case 0:
+			w.Settings(`{"hosts": {"render": {"ssh": "root@203.0.113.9"}}}`)
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo first"}`}}}
+		case 1:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"echo there","host":"render"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-y", "-p", "go").wantCode(t, 0)
+	has(t, "what the model was told", string(w.Model.Requests()[1].Body), "the machines Bash's host may name are now render (root@203.0.113.9)")
+	if got := toolResult(t, w, 2, "c2"); !strings.HasPrefix(got, "<host>render (root@203.0.113.9)</host>") {
+		t.Errorf("the call naming the moved host: %q", got)
+	}
+	if calls := far.Calls(); len(calls) != 1 || calls[0] != "root@203.0.113.9" {
+		t.Errorf("ssh was called for %q, want once for the new address", calls)
 	}
 }

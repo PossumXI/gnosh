@@ -558,6 +558,8 @@ type controls struct {
 	level     string
 	// suggest answers SuggestFiles, the person's own @ search, when set.
 	suggest func(query string) ([]string, error)
+	// picture answers PastePicture (Ctrl+V), when set.
+	picture func(ctx context.Context) (string, error)
 	// agentsStopped counts the calls of StopBackgroundAgents, and
 	// agentsRunning is what each says it stopped.
 	agentsStopped int
@@ -940,4 +942,12 @@ func (g *rig) start() *rig {
 	meta := g.c.prompts[n-1].Meta
 	g.c.mu.Unlock()
 	return g.ev(busy(), turnStart(), &agent.PromptEvent{ID: id, Prompt: agent.Prompt{ID: id, Text: words, Meta: meta}}, request(1))
+}
+
+// PastePicture is what picture says, or that there is no clipboard.
+func (c *controls) PastePicture(ctx context.Context) (string, error) {
+	if c.picture == nil {
+		return "", app.ErrNoClipboard
+	}
+	return c.picture(ctx)
 }

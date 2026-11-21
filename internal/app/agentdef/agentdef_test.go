@@ -38,10 +38,10 @@ func TestBuiltin(t *testing.T) {
 	if gp.ToolsSet || gp.OmitInstructions {
 		t.Errorf("general-purpose is to have every tool and the instruction files: %+v", gp)
 	}
-	if strings.Join(ex.Tools, " ") != "Read Glob Grep" || !ex.ToolsSet || !ex.OmitInstructions {
+	if strings.Join(ex.Tools, " ") != "Read Glob Grep LSP" || !ex.ToolsSet || !ex.OmitInstructions {
 		t.Errorf("Explore is to read and search only, without the instruction files: %+v", ex)
 	}
-	if pl := byName["Plan"]; strings.Join(pl.Tools, " ") != "Read Glob Grep" || !pl.ToolsSet || !pl.OmitInstructions {
+	if pl := byName["Plan"]; strings.Join(pl.Tools, " ") != "Read Glob Grep LSP" || !pl.ToolsSet || !pl.OmitInstructions {
 		t.Errorf("Plan is to read and search only, without the instruction files: %+v", pl)
 	}
 }
@@ -62,7 +62,7 @@ func TestParse(t *testing.T) {
 		strings.Join(d.Tools, ",") != strings.Join(want.Tools, ",") || !d.ToolsSet ||
 		strings.Join(d.Disallowed, ",") != strings.Join(want.Disallowed, ",") ||
 		d.Model != "" || d.PermissionMode != "plan" || d.MaxTurns != 12 || !d.OmitInstructions ||
-		len(d.Other) != 0 || string(d.Hooks) != `{"PreToolUse":[{"matcher":"Bash"}]}` {
+		string(d.Hooks) != `{"PreToolUse":[{"matcher":"Bash"}]}` {
 		t.Errorf("read as %+v", d)
 	}
 
@@ -86,7 +86,7 @@ func TestParse(t *testing.T) {
 
 	// The skills it preloads, as a list or with commas, and its effort.
 	d, reason = Parse("---\nname: careful\ndescription: Checks.\nskills:\n  - review-list\n  - ' style '\neffort: high\n---\nCheck.")
-	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" || len(d.Other) != 0 {
+	if reason != "" || strings.Join(d.Skills, ",") != "review-list,style" || d.Effort != "high" {
 		t.Errorf("read as %+v (%s)", d, reason)
 	}
 	if d, _ = Parse("---\nname: c\ndescription: d\nskills: a, b\n---\nx"); strings.Join(d.Skills, ",") != "a,b" {
@@ -220,7 +220,7 @@ func TestParseMCPServers(t *testing.T) {
 	if reason != "" {
 		t.Fatalf("skipped: %s", reason)
 	}
-	if len(d.MCPServers) != 2 || d.MCPServers[0].Name != "playwright" || d.MCPServers[1].Name != "github" || d.MCPServers[1].Inline != nil || len(d.Other) != 0 {
+	if len(d.MCPServers) != 2 || d.MCPServers[0].Name != "playwright" || d.MCPServers[1].Name != "github" || d.MCPServers[1].Inline != nil {
 		t.Fatalf("read as %+v", d.MCPServers)
 	}
 	var own struct {
@@ -287,5 +287,66 @@ func TestSettingInAnotherCase(t *testing.T) {
 	}
 	if d, reason := Parse("---\nname: reader\ndescription: Reads.\ncolor: blue\n---\nRead.\n"); reason != "" || d.Name != "reader" {
 		t.Errorf("a definition with an unknown key: %q", reason)
+	}
+}
+
+// memory is user, project or local, in a file and in --agents' JSON; any
+// other word, or a name that names no folder, keeps the definition from
+// being used (DECISIONS 374).
+func TestParseMemory(t *testing.T) {
+	file := func(name, memory string) string {
+		return "---\nname: " + name + "\ndescription: Reviews.\nmemory: " + memory + "\n---\nReview.\n"
+	}
+	for _, scope := range []string{"user", "project", "local"} {
+		if d, reason := Parse(file("reviewer", scope)); reason != "" || d.Memory != scope {
+			t.Errorf("memory: %s: %q, %+v", scope, reason, d)
+		}
+	}
+	if _, reason := Parse(file("reviewer", "forever")); !strings.Contains(reason, "user, project or local") {
+		t.Errorf("memory: forever: %q", reason)
+	}
+	if _, reason := Parse(file("team/reviewer", "project")); !strings.Contains(reason, "names no folder") {
+		t.Errorf("a name with a slash, with a memory: %q", reason)
+	}
+	if _, reason := Parse(file("team/reviewer", "")); reason != "" {
+		t.Errorf("a name with a slash, without a memory: %q", reason)
+	}
+	defs, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "local"}}`)
+	if err != nil || len(defs) != 1 || defs[0].Memory != "local" {
+		t.Errorf("memory in JSON: %v %+v", err, defs)
+	}
+	if _, err := FromJSON(`{"reviewer": {"description": "Reviews.", "prompt": "Review.", "memory": "always"}}`); err == nil || !strings.Contains(err.Error(), "user, project or local") {
+		t.Errorf("memory: always, in JSON: %v", err)
+	}
+}
+
+// autoCompactWindow is a whole number of tokens, 100000 or more, in a file
+// and in JSON; another value is noted and not used, and the definition is
+// used without it, as Claude Code runs it ("200k" is not 200,000).
+func TestParseCompactWindow(t *testing.T) {
+	file := func(window string) Def {
+		t.Helper()
+		d, reason := Parse("---\nname: reader\ndescription: Reads logs.\nautoCompactWindow: " + window + "\n---\nRead.\n")
+		if reason != "" {
+			t.Fatalf("autoCompactWindow: %s: %s", window, reason)
+		}
+		return d
+	}
+	if d := file("200000"); d.CompactWindow != 200000 || d.CompactWindowUnused != "" {
+		t.Errorf("200000: %+v", d)
+	}
+	for _, bad := range []string{"200k", "99999", "-5"} {
+		if d := file(bad); d.CompactWindow != 0 || d.CompactWindowUnused != bad {
+			t.Errorf("%s: %+v", bad, d)
+		}
+	}
+	defs, err := FromJSON(`{"a": {"description": "A.", "prompt": "A.", "autoCompactWindow": 150000}, "b": {"description": "B.", "prompt": "B.", "autoCompactWindow": 40000}}`)
+	if err != nil || len(defs) != 2 {
+		t.Fatalf("JSON: %v %+v", err, defs)
+	}
+	for _, d := range defs {
+		if d.Name == "a" && d.CompactWindow != 150000 || d.Name == "b" && (d.CompactWindow != 0 || d.CompactWindowUnused != "40000") {
+			t.Errorf("JSON %s: %+v", d.Name, d)
+		}
 	}
 }

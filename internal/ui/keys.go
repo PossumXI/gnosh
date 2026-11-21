@@ -3,8 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -262,6 +262,14 @@ func (s *session) typed(ev term.Event, k *term.Key) {
 		return
 	}
 	res := q.ui.Handle(ev)
+	if k != nil && !res.Handled && k.Mod&term.ModAlt != 0 && (k.Code == term.KeyRune || k.Code == term.KeyEscape) {
+		// Esc with a key typed straight after it reaches gnosh, from a
+		// terminal that sends Alt as Esc and the key, as that key with
+		// Alt: a key the question has no use for, it is the Esc it began
+		// with, which was lost (Claude Code 2.1.328 declines with such a
+		// key too).
+		res = q.ui.Handle(term.Key{Code: term.KeyEscape})
+	}
 	if k == nil && !res.Handled {
 		// A paste the question has no field open for goes into the
 		// prompt box, in sight under the question, instead of nowhere
@@ -353,7 +361,11 @@ func (s *session) global(k term.Key) bool {
 			s.hideTasks = false
 		default:
 			s.hideTasks = true
-			s.flash("The task list is out of sight. Ctrl+T shows it again.")
+			if k := s.keyHint("app:toggleTodos", "Ctrl+T"); k != "" {
+				s.flash("The task list is out of sight. " + k + " shows it again.")
+			} else {
+				s.flash("The task list is out of sight.")
+			}
 		}
 	case k.Is('b', term.ModCtrl):
 		s.background()
@@ -458,6 +470,19 @@ func (s *session) box(ev term.Event, k *term.Key) {
 		case k.IsKey(term.KeyTab, term.ModShift):
 			s.cycleMode()
 			return
+		case k.Is('v', term.ModCtrl) && s.ed.Mode() == editor.ModePrompt && !s.ed.Searching():
+			// (Not into the history search, which would take @image-N
+			// for what to look for.)
+			s.pastePicture()
+			return
+		}
+	}
+	if p, ok := ev.(term.Paste); ok && s.ed.Mode() == editor.ModePrompt && !s.ed.Searching() {
+		// Files dragged in: their paths become @ mentions (picture.go).
+		if text, ok := s.picturePaths(p.Text); ok {
+			p.Text = s.spaced(text)
+			ev = p
+			s.flash("The picture goes with the prompt.")
 		}
 	}
 	s.ed.SetBusy(s.busy || s.cmdRun != "")
@@ -515,10 +540,7 @@ func (s *session) box(ev term.Event, k *term.Key) {
 // queues it. Either way it shows as queued until it is seen going out,
 // so it is never out of sight.
 func (s *session) send(d editor.Draft) {
-	p := agent.Prompt{Text: d.Text, Attachments: s.attach}
-	if len(d.Pastes) > 0 {
-		p.Meta = map[string]any{metaPastes: d.Pastes}
-	}
+	p := agent.Prompt{Text: d.Text, Attachments: s.attach, Meta: pastedMeta(d.Pastes)}
 	id, err := s.c.Submit(p)
 	if err != nil {
 		s.restore(d)
@@ -658,12 +680,29 @@ func shownCommand(line string) (shown string, held bool) {
 // and Esc stops it.
 func (s *session) run(line string) {
 	if s.cmdRun != "" {
+		if sideCommand(s.cmdRun) && exitCommand(line) {
+			// /exit does not wait behind a side question, which may take
+			// minutes: that is let go, and /exit is next.
+			if s.cmdStop != nil {
+				s.cmdStop()
+			}
+			s.cmdq = append([]string{line}, s.cmdq...)
+			s.queued()
+			return
+		}
 		s.cmdq = append(s.cmdq, line)
 		s.queued()
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cmdRun, s.cmdStop = line, cancel
+	// A command of the session's is shown as typed when it starts, as a
+	// prompt is: what it says meanwhile (the notes of a summary it waits
+	// for, minutes on a local model) comes after it. A line that may be no
+	// command is shown once it has run (ran).
+	if s.cmdShown = s.isCommand(line); s.cmdShown {
+		s.showTyped(line)
+	}
 	c := s.c
 	s.host.spawn(func() func() {
 		res, err := c.Command(ctx, line)
@@ -672,6 +711,48 @@ func (s *session) run(line string) {
 			s.ran(line, res, err)
 		}
 	})
+}
+
+// sideCommand reports whether line is a side question's command: /btw or
+// /recap, which only wait for the model's answer.
+func sideCommand(line string) bool {
+	word, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "/"), " ")
+	switch strings.ToLower(word) {
+	case "btw", "recap":
+		return true
+	}
+	return false
+}
+
+// exitCommand reports whether line ends the session: /exit or /quit.
+func exitCommand(line string) bool {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "/exit", "/quit":
+		return true
+	}
+	return false
+}
+
+// isCommand reports whether line names one of the session's commands, by
+// its name or one of its aliases.
+func (s *session) isCommand(line string) bool {
+	word, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "/"), " ")
+	word = strings.ToLower(word)
+	for _, c := range s.info.CommandList {
+		if c.Name == word || slices.Contains(c.Aliases, word) {
+			return true
+		}
+	}
+	return false
+}
+
+// showTyped puts a command line into the scrollback as the person typed
+// it, with what is not to be kept of it held back (shownCommand).
+func (s *session) showTyped(line string) {
+	th := &s.th
+	shown, _ := shownCommand(line)
+	s.begin(blkPrompt)
+	s.put(wrap(s.m, th.PromptText.Render(oneLine(shown)), s.cols, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", s.m.Width(th.PromptMark)))...)
 }
 
 // verboseSet reads a /config line for the verbose option set true or
@@ -704,7 +785,8 @@ func configSet(line, key string) (string, bool) {
 
 // ran takes in what a slash command came to.
 func (s *session) ran(line string, res app.CommandResult, err error) {
-	s.cmdRun, s.cmdStop = "", nil
+	shown := s.cmdShown
+	s.cmdRun, s.cmdStop, s.cmdShown = "", nil, false
 	s.dirty = true
 	word, _, _ := strings.Cut(line, " ")
 	switch {
@@ -716,10 +798,15 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 		// A prompt that happens to begin with a slash, such as a path.
 		s.send(editor.Draft{Text: line})
 	default:
-		th := &s.th
-		shown, held := shownCommand(line)
-		s.begin(blkPrompt)
-		s.put(wrap(s.m, th.PromptText.Render(oneLine(shown)), s.cols, th.Prompt.Render(th.PromptMark), strings.Repeat(" ", s.m.Width(th.PromptMark)))...)
+		_, held := shownCommand(line)
+		switch {
+		case !shown:
+			s.showTyped(line)
+		case s.last != blkPrompt && strings.TrimSpace(res.Text) != "":
+			// Something came between: what the command says is a block
+			// of its own.
+			s.begin(blkText)
+		}
 		for _, l := range safeLines(res.Text) {
 			s.put(wrap(s.m, l, s.cols, "", "")...)
 		}
@@ -823,6 +910,14 @@ func (s *session) nextCommand() {
 // slash command that is running. The line above the box says so until
 // the turn's end arrives.
 func (s *session) interrupt() {
+	if s.cmdStop != nil && sideCommand(s.cmdRun) {
+		// A side question (/btw, /recap) waits: Esc lets it go, and the
+		// turn goes on; Esc again stops the turn (the side-request review
+		// of 2026-11-19).
+		s.cmdStop()
+		s.dirty = true
+		return
+	}
 	if s.cmdStop != nil {
 		s.cmdStop()
 	}
@@ -853,8 +948,7 @@ func (s *session) takeBack() {
 		}
 	}
 	for _, p := range s.c.TakeQueued() {
-		spans, _ := p.Meta[metaPastes].([]editor.Span)
-		add(p.Text, spans)
+		add(p.Text, pastesOf(p.Meta))
 		s.attach = append(s.attach, p.Attachments...)
 		for i, x := range s.sending {
 			if x.draft.Text == p.Text {
@@ -928,7 +1022,11 @@ func (s *session) cycleMode() {
 		if next == "bypassPermissions" {
 			s.notice(agent.LevelWarning, "The permission mode is now BYPASS PERMISSIONS: nothing asks before it runs, except what a deny rule or an ask rule names and the removals gnosh always asks about. Shift+Tab leaves it.")
 		} else {
-			s.flash("Permission mode: " + modeNames[next] + ". Shift+Tab goes on to the next.")
+			if k := s.keyHint("chat:cycleMode", "Shift+Tab"); k != "" {
+				s.flash("Permission mode: " + modeNames[next] + ". " + k + " goes on to the next.")
+			} else {
+				s.flash("Permission mode: " + modeNames[next] + ".")
+			}
 		}
 		s.dirty = true
 		return
@@ -1171,6 +1269,7 @@ func (s *session) help() {
 		{"Ctrl+T", "hide or show the task list"},
 		{"Ctrl+G", "edit the prompt in your editor (also Ctrl+X Ctrl+E)"},
 		{"Ctrl+S", "put the prompt aside, and bring it back"},
+		{"Ctrl+V", "paste the picture on the clipboard (or drag a picture's file in)"},
 		{"Ctrl+L", "draw the bottom of the screen again"},
 		{"Ctrl+Z", "suspend gnosh; fg brings it back"},
 		{"/config editorMode=vim", "vim's keys in the box: Esc for NORMAL mode, i to type, v to select"},
@@ -1180,15 +1279,29 @@ func (s *session) help() {
 	for _, r := range rows {
 		wide = max(wide, s.m.Width(r[0]))
 	}
+	own := s.ownKeys()
+	for _, r := range own {
+		wide = max(wide, s.m.Width(r[0]))
+	}
 	s.begin(blkText)
 	s.put(th.ToolName.Render("Keys"))
-	for _, r := range rows {
-		key := r[0] + strings.Repeat(" ", wide-s.m.Width(r[0]))
-		rest := strings.Repeat(" ", wide+4)
-		if s.cols < wide+24 {
-			rest = "    "
+	list := func(rows [][2]string) {
+		for _, r := range rows {
+			key := r[0] + strings.Repeat(" ", wide-s.m.Width(r[0]))
+			rest := strings.Repeat(" ", wide+4)
+			if s.cols < wide+24 {
+				rest = "    "
+			}
+			s.put(wrap(s.m, th.Quiet.Render(r[1]), s.cols, "  "+key+"  ", rest)...)
 		}
-		s.put(wrap(s.m, th.Quiet.Render(r[1]), s.cols, "  "+key+"  ", rest)...)
+	}
+	list(rows)
+	if len(own) > 0 {
+		// The person's own keys, as Claude Code's hints follow its
+		// keybindings.json (2.1.329): what each does here, in the words
+		// of the list above.
+		s.put(wrap(s.m, th.ToolName.Render("Yours, from "+showPath(s.cwd, s.home, s.keys.path)), s.cols, "", "  ")...)
+		list(own)
 	}
 	var missing []string
 	if _, ok := s.c.(sheller); !ok {
@@ -1236,7 +1349,16 @@ func loadThen[T any](s *session, again string, read func() T, show func(T)) {
 				// typed for it is not for the box, where Enter sends.
 				return
 			}
+			list := s.q
 			for _, ev := range held {
+				if s.q != list {
+					// The list was answered, and what that opened (the
+					// rewind's choice of what to put back) was not seen
+					// when the rest was typed: Esc Esc Enter Enter must
+					// not put the files back unseen (the rewind review of
+					// 2026-11-19). The rest is let go.
+					break
+				}
 				s.refeed(ev)
 			}
 		}
@@ -1265,7 +1387,7 @@ func (s *session) dropList(why string) {
 
 // rewindNote is what the menu says of the files a rewind can and cannot
 // put back.
-const rewindNote = "What a file holds when it is put back is kept first; what shell commands changed in other files is not put back."
+const rewindNote = "Each goes back as it was before that prompt, and what it holds now is kept first. Files only shell commands or sub-agents changed are not followed."
 
 // rewind opens the list of the person's prompts, the newest first, to
 // take the conversation back to before one of them. It is what Esc Esc
@@ -1307,12 +1429,19 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		number := len(points) - res.Index
 		point := points[number-1]
 		// The choices, as Claude Code offers them: the conversation and the
-		// files, the conversation alone, or the files alone; the ones about
-		// files only where Write or Edit changed one since.
-		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + oneLine(point.Text)}}
+		// files, the conversation alone, or the files alone (the ones about
+		// files only where one of the files followed changed since); and a
+		// summary of what followed the prompt, gone back from, or of what
+		// came before it (not for the first prompt).
+		// (A long prompt, pasted, would take the rows the files and the
+		// choices need.)
+		sure := &question{q: agent.Question{Kind: "rewind", Title: "Go back to before: " + fit(s.m, oneLine(point.Text), rewindTitleMost)}}
 		var opts []menu.Option
 		var commands []string
-		body := []string{"Write and Edit changed no file since then. " + rewindNote}
+		body := []string{"No file this session's Write and Edit changed has changed since then: files only shell commands or sub-agents changed are not followed."}
+		if point.FilesWhy != "" {
+			body = []string{"No file can be put back: " + oneLine(point.FilesWhy) + "."}
+		}
 		if n := len(point.Files); n > 0 {
 			shown := point.Files
 			if len(shown) > 5 {
@@ -1320,13 +1449,15 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			}
 			names := make([]string, len(shown))
 			for i, f := range shown {
-				names[i] = filepath.Base(f)
+				// (A name the model gave a file may hold anything: the
+				// menu keeps styles and links.)
+				names[i] = pathShown(f)
 			}
 			more := ""
 			if n > len(shown) {
 				more = fmt.Sprintf(" and %d more", n-len(shown))
 			}
-			body = []string{fmt.Sprintf("Write and Edit changed %s since then: %s%s. %s", count(n, "file", "files"), strings.Join(names, ", "), more, rewindNote)}
+			body = []string{fmt.Sprintf("%s changed since then: %s%s. %s", count(n, "file", "files"), strings.Join(names, ", "), more, rewindNote)}
 			opts = append(opts, menu.Option{Label: "Go back, and put the files back", Description: "the conversation and the files as they were"})
 			commands = append(commands, fmt.Sprintf("/rewind %d all", number))
 		}
@@ -1335,6 +1466,20 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 		if len(point.Files) > 0 {
 			opts = append(opts, menu.Option{Label: "Put the files back only", Description: "the conversation stays as it is"})
 			commands = append(commands, fmt.Sprintf("/rewind %d files", number))
+		}
+		if point.InView {
+			// (Of a prompt the model still reads: one a summary or a slide
+			// took out has nothing before or after it to summarize.)
+			// (Each takes, as Claude Code's do, what the summary is to
+			// keep, typed on its row after Tab.)
+			opts = append(opts, menu.Option{Label: "Summarize from here", Description: "go back to before it, keeping a summary of what followed; the files stay",
+				Text: menu.TextOptional, Placeholder: "what the summary is to keep, if anything in particular"})
+			commands = append(commands, fmt.Sprintf("/rewind %d summarize", number))
+			if number > 1 {
+				opts = append(opts, menu.Option{Label: "Summarize up to here", Description: "what came before it becomes a summary; it and what followed stay",
+					Text: menu.TextOptional, Placeholder: "what the summary is to keep, if anything in particular"})
+				commands = append(commands, fmt.Sprintf("/rewind %d summarize-before", number))
+			}
 		}
 		opts = append(opts, menu.Option{Label: "Never mind"})
 		sure.ui = menu.NewSelect(menu.SelectOptions{
@@ -1345,11 +1490,34 @@ func (s *session) rewindMenu(points []app.RewindPoint) {
 			if res.Cancelled || res.Index < 0 || res.Index >= len(commands) {
 				return
 			}
-			s.run(commands[res.Index])
+			line := commands[res.Index]
+			if guide := strings.Join(strings.Fields(res.Text), " "); guide != "" && strings.Contains(line, " summarize") {
+				line += " " + guide
+			}
+			s.run(line)
 		}
 		s.openLocal(sure)
 	}
 	s.openLocal(pick)
+}
+
+// rewindTitleMost is how many cells of the prompt a rewind's confirmation
+// shows.
+const rewindTitleMost = 100
+
+// pathShown is a path for a menu: on one line, with the marks that turn
+// the order text is drawn in written out, so that a name cannot pass for
+// another.
+func pathShown(p string) string {
+	var b strings.Builder
+	for _, r := range oneLine(p) {
+		if bidiMark(r) {
+			fmt.Fprintf(&b, "\\u%04X", r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // openLocal puts a menu of the interface's own on the screen. The person
@@ -1379,10 +1547,7 @@ func (s *session) withdrawLast() {
 			// It went out to the model in the meantime.
 			continue
 		}
-		d := editor.Draft{Text: p.Text}
-		if spans, ok := p.Meta[metaPastes].([]editor.Span); ok {
-			d.Pastes = spans
-		}
+		d := editor.Draft{Text: p.Text, Pastes: pastesOf(p.Meta)}
 		s.attach = append(s.attach, p.Attachments...)
 		for j, x := range s.sending {
 			if x.id == queued[i].ID {

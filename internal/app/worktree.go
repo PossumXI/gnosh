@@ -55,7 +55,7 @@ var gitEnvDrop = []string{"GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE=", "GIT_
 // without the variables that would point it elsewhere. An error says what
 // git said.
 func (l *live) git(ctx context.Context, dir string, args ...string) (string, error) {
-	return runGit(ctx, l.p.o.Environ, dir, args...)
+	return runGit(ctx, l.p.childEnviron(), dir, args...)
 }
 
 // runGit is live.git for code that has no session yet: git in dir, in
@@ -142,10 +142,10 @@ func (l *live) makeWorktree(ctx context.Context, cwd, id string) (*worktree, str
 	if _, err := l.git(ctx, top, "rev-parse", "--verify", "--quiet", "refs/heads/"+wt.branch); err == nil || fileExists(wt.path) {
 		return nil, "", fmt.Errorf("the branch %s or the folder %s is there already, so no work tree was made", wt.branch, wt.path)
 	}
-	if err := addTree(ctx, l.p.o.Environ, wt, true); err != nil {
+	if err := addTree(ctx, l.p.childEnviron(), wt, true); err != nil {
 		return nil, "", err
 	}
-	copied, err := copyIncluded(ctx, l.p.o.Environ, wt)
+	copied, err := copyIncluded(ctx, l.p.childEnviron(), wt)
 	if len(copied) > 0 {
 		l.flog.logf("turn", "the work tree %s has copies of %s, as %s names them", wt.path, fewOf(copied, 20), includeFile)
 	}
@@ -180,7 +180,7 @@ func (l *live) endWorktree(wt *worktree) (note string, kept bool) {
 		return fmt.Sprintf("[It worked in its own git work tree, %s, on the branch %s, which started at %s: %s. None of it is in the folder you work in. Look at it there, and merge the branch or copy what you want; then git -C %s worktree remove --force %s and git -C %s branch -D %s take it away.]",
 			wt.path, wt.branch, shortCommit(wt.base), why, wt.repo, wt.path, wt.repo, wt.branch), true
 	}
-	what, err := treeHolds(ctx, l.p.o.Environ, wt)
+	what, err := treeHolds(ctx, l.p.childEnviron(), wt)
 	if err != nil {
 		return keep(err.Error() + ", so the work tree is kept")
 	}

@@ -63,7 +63,7 @@ func (p *program) backgroundCommand(ctx context.Context, inv cli.Invocation) int
 			return cli.ExitFailure
 		}
 		if prompt = joinPrompt(piped, prompt); len(prompt) > maxPipedPrompt {
-			p.errf("what was piped in is %s with the prompt, more than a run in the background can be handed (%s), so nothing was started. Save it to a file and name the file in the prompt.", byteCount(int64(len(prompt))), byteCount(maxPipedPrompt))
+			p.errf("what was piped in is %s with the prompt, more than a run in the background can be handed (%s), so nothing was started. Save it to a file and name the file in the prompt.", ByteCount(int64(len(prompt))), ByteCount(maxPipedPrompt))
 			return cli.ExitFailure
 		}
 	}
@@ -169,7 +169,20 @@ func (p *program) bgSession(ctx context.Context, st *startup, inv cli.Invocation
 		if !fileExists(word) {
 			return "", "", fmt.Errorf("there is no session file %s", word)
 		}
-		return idOf(word), word, nil
+		// Only one of gnosh's own: a run's log, its process id and the
+		// token its questions are answered with go beside its session's
+		// file, where gnosh agents, stop and logs look, and the run goes
+		// on by the session's id (the relay review of 2026-11-19: one
+		// from elsewhere had them put beside it, and went on with
+		// another session or none).
+		id := idOf(word)
+		own, err := store.Path(id)
+		a, aerr := os.Stat(own)
+		b, berr := os.Stat(word)
+		if err != nil || aerr != nil || berr != nil || !os.SameFile(a, b) {
+			return "", "", fmt.Errorf("%s is not one of gnosh's own session files: gnosh -r %s brings a copy of it in, and gnosh --bg -r <that copy's id> then goes on with it in the background", word, word)
+		}
+		return id, own, nil
 	}
 	if path, err := store.Path(word); err == nil {
 		return idOf(path), path, nil
@@ -406,6 +419,13 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 	if !inv.JSON && p.o.AgentView != nil {
 		return p.agentViewOn(st, inv, "")
 	}
+	if p.o.StdoutIsTerminal {
+		// The list names runs by their prompts, which may be a model's
+		// words: on a terminal they are printed plain, as other
+		// subcommands' output is (printsFromOutside; the relay review of
+		// 2026-11-19).
+		p.stdout.w = plainWriter{p.stdout.w}
+	}
 	now := p.now()
 	since := now.Add(-runsKept)
 	if inv.All {
@@ -492,6 +512,11 @@ func (p *program) agentsCommand(ctx context.Context, inv cli.Invocation) int {
 // its command line names the session. A process id is used again once
 // its process has ended, and a stop must not reach another program.
 func runIsFor(pid int, id string) bool {
+	// (An id that names no session is no run's: "" is in every command
+	// line. The relay review of 2026-11-19.)
+	if !transcript.ValidID(id) {
+		return false
+	}
 	// (A process that is gone is told so without running anything: most
 	// runs listed are over, and the agent view looks every second.)
 	if p, err := os.FindProcess(pid); err != nil || p.Signal(syscall.Signal(0)) != nil {
@@ -500,6 +525,9 @@ func runIsFor(pid int, id string) bool {
 	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil {
 		return strings.Contains(string(data), id)
 	}
-	out, err := exec.Command("ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
+	// -ww: the whole command line. Without a terminal to fit, ps may cut
+	// it to 79 columns, before the session's id, which a run's command
+	// line names last (the relay review of 2026-11-19).
+	out, err := exec.Command("ps", "-ww", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
 	return err == nil && strings.Contains(string(out), id)
 }

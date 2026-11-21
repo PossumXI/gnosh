@@ -61,11 +61,30 @@
 //
 //	permissions      allow, ask and deny (lists of rules), defaultMode,
 //	                 additionalDirectories, disableBypassPermissionsMode,
-//	                 disableAutoMode, denyInsteadOfPrompting
+//	                 disableAutoMode, denyInsteadOfPrompting,
+//	                 blockReadsOutsideWorkingDirectories and
+//	                 blockWritesOutsideWorkingDirectories (a true in any
+//	                 file holds; the directories only a project's file
+//	                 adds do not count for them)
 //	hooks            event, then matcher groups, then command handlers, each
 //	                 with an "if" filter if it likes (one permission rule)
 //	env              variables for the commands and hooks gnosh starts
 //	disableAllHooks  true switches every hook off, and the status line
+//	sandbox          {"enabled": true, ...}: the shell's commands run in
+//	                 the operating system's sandbox (bubblewrap on Linux,
+//	                 Seatbelt on macOS): writes only in the working
+//	                 folders, no network; autoAllowBashIfSandboxed,
+//	                 excludedCommands, allowUnsandboxedCommands,
+//	                 failIfUnavailable, filesystem.allowWrite/denyWrite/
+//	                 allowRead/denyRead. A project's file can turn it on
+//	                 and narrow it before trust, never turn it off
+//	allowedHttpHookUrls, httpHookAllowedEnvVars
+//	                 the URL patterns an http hook may post to (* is any
+//	                 run of characters), and the variables its headers may
+//	                 take beside its own allowedEnvVars: every file's list
+//	                 merged, a project's once the folder is trusted (it
+//	                 would switch off the person's own hooks), and an
+//	                 empty list lets none
 //	statusLine       {"type": "command", "command": ..., "padding": ...,
 //	                 "refreshInterval": ...}: a command whose output is the
 //	                 status line under the prompt; a program to run, so a
@@ -85,6 +104,15 @@
 //	                 file says), "name-only", "user-invocable-only" or
 //	                 "off"; a later file wins, and a folder that is not
 //	                 trusted keeps its own, since each only takes away
+//	lspServers       language servers, each under a name, with the fields
+//	                 of Claude Code's .lsp.json entries (command, args,
+//	                 extensionToLanguage, env, initializationOptions,
+//	                 settings, workspaceFolder, the three timeouts in
+//	                 milliseconds, restartOnCrash, maxRestarts,
+//	                 diagnostics): a server is started for the first file of
+//	                 its endings that is read or changed, gives the model
+//	                 the problems a change brings, and answers the LSP
+//	                 tool; a project's waits for trust, none in safe mode
 //	$schema          accepted and not read
 //
 // gnosh's own keys stand beside them:
@@ -258,7 +286,11 @@
 // API_TIMEOUT_MS, BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS,
 // BASH_MAX_OUTPUT_LENGTH, CLAUDE_CODE_MAX_OUTPUT_TOKENS,
 // CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS,
-// CLAUDE_CODE_GLOB_TIMEOUT_SECONDS, CLAUDE_CODE_AUTO_COMPACT_WINDOW,
+// CLAUDE_CODE_GLOB_TIMEOUT_SECONDS, CLAUDE_CODE_GLOB_NO_IGNORE (gnosh's
+// Glob honours .gitignore unless it is true, the opposite of Claude Code's
+// default), CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS,
+// CLAUDE_CODE_WEBFETCH_DEADLINE_MS, MCP_TIMEOUT, MCP_TOOL_TIMEOUT,
+// MAX_MCP_OUTPUT_TOKENS, CLAUDE_CODE_AUTO_COMPACT_WINDOW,
 // CLAUDE_AUTOCOMPACT_PCT_OVERRIDE and CLAUDE_CODE_SAFE_MODE, of which one
 // in the env block of a config file wins over the shell's; and
 // ANTHROPIC_API_KEY and OPENAI_API_KEY, from the shell's environment

@@ -315,6 +315,10 @@ func TestProtectedPaths(t *testing.T) {
 		"/proj/.gnosh/worktrees/agent-1", "/proj/.gnosh/worktrees/.gitignore",
 		"/proj/.gnosh/worktrees/agent-1/.git", "/proj/.gnosh/worktrees/agent-1/.gnosh/settings.local.json",
 		"/proj/.gnosh/worktrees/agent-1/sub/.envrc",
+		// In an agent's memory folder, what is not a note of its.
+		"/proj/.claude/agent-memory/rev/run.sh", "/proj/.claude/agent-memory/x.md", "/proj/.gnosh/agent-memory/rev/.git/x.md",
+		"/proj/.claude/agent-memory/rev/.claude/settings.json", "/home/u/.config/gnosh/agent-memory/rev/hook.json",
+		"/home/u/.config/gnosh/agents/rev.md",
 	}
 	open := []string{
 		"/proj/a.go", "/proj/git/config", "/proj/.github/workflows/ci.yml", "/proj/.claude/worktrees/w/a.go",
@@ -323,9 +327,12 @@ func TestProtectedPaths(t *testing.T) {
 		"/proj/gnoshrc", "/proj/.gnoshrc", "/proj/gnosh.json.bak",
 		// What is inside a work tree gnosh made for a sub-agent.
 		"/proj/.gnosh/worktrees/agent-1/a.go", "/proj/.gnosh/worktrees/agent-1/sub/b.go",
+		// The notes in an agent's memory folder, as Claude Code leaves them.
+		"/proj/.claude/agent-memory/rev/MEMORY.md", "/proj/.gnosh/agent-memory-local/rev/notes/tests.md",
+		"/home/u/.claude/agent-memory/rev/MEMORY.md", "/home/u/.config/gnosh/agent-memory/rev/MEMORY.md",
 	}
 	o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
-	o.Protected = []string{"/custom/settings.json", "/var/mem/store", "/proj/.gnosh"}
+	o.Protected = []string{"/custom/settings.json", "/var/mem/store", "/proj/.gnosh", "/home/u/.config/gnosh"}
 	o.WorkTrees = []string{"/proj/.gnosh/worktrees"}
 	e := mustEngine(t, o)
 	for _, p := range protected {

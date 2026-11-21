@@ -11,12 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/execpath"
 )
 
 // Options is what a Runner is given about the program and the machine
@@ -116,6 +117,12 @@ type Options struct {
 	// when it ended, from a goroutine of its own. Nil drops it.
 	Background func(Background)
 
+	// Lifecycle is told as each hook starts and as it ends (Life), from
+	// the goroutine that runs it, for Claude Code's stream-json lines
+	// hook_started and hook_response. It must not block. Nil tells
+	// nothing.
+	Lifecycle func(Life)
+
 	// MCP calls a tool of a connected MCP server for an mcp_tool hook,
 	// and returns the text it answered with, and whether the tool said it
 	// failed. Nil: such a hook could not run.
@@ -129,6 +136,17 @@ type Options struct {
 	// its tools, and returns the sub-agent's last message (the app's
 	// agenthook.go). Without it an agent hook could not run.
 	Agent func(ctx context.Context, model, task string) (string, error)
+
+	// HTTPURLs is Claude Code's allowedHttpHookUrls: when not nil, an
+	// http hook runs only when its URL fits one of these patterns (see
+	// urlAllowed), and any other is passed over as if it were not there,
+	// as Claude Code passes it over; Check warns of it. Empty but not
+	// nil: no http hook runs.
+	HTTPURLs []string
+	// HTTPEnvVars is Claude Code's httpHookAllowedEnvVars: when not nil,
+	// an http hook's header takes a variable only when both the hook's
+	// own allowedEnvVars and this list name it.
+	HTTPEnvVars []string
 }
 
 const (
@@ -456,6 +474,8 @@ func (r *Runner) Run(ctx context.Context, in Input) (Outcome, error) {
 	for i, h := range sel {
 		stdin, env := feed(h)
 		all.Go(func() {
+			id := r.lifeStart(&in)
+			defer func() { r.lifeEnd(id, &in, procs[i]) }()
 			if h.URL != "" {
 				procs[i] = r.post(ctx, h.Hook, stdin, env, timeoutFor(h.Event, h.Timeout))
 				return
@@ -525,16 +545,26 @@ func sameHandler(a, b Hook) bool {
 // monitorTool is the tool whose commands Bash hooks guard.
 const monitorTool = "Monitor"
 
-// bashOfMonitor is a Monitor call's input as a Bash call's: its command
-// and its description. What cannot be read is passed on as it is.
+// bashOfMonitor is a Monitor call's input as the Bash call's that runs its
+// command: the command, its description, its time (timeout_ms as timeout),
+// and run_in_background, which a Monitor's command always is (the hosts
+// review of 2026-11-19: a hook that refuses commands in the background
+// let a Monitor's through). What cannot be read is passed on as it is.
 func bashOfMonitor(input json.RawMessage) json.RawMessage {
-	var m struct {
-		Command     *string `json:"command"`
-		Description *string `json:"description,omitempty"`
+	var in struct {
+		Command     *string          `json:"command"`
+		Description *string          `json:"description"`
+		TimeoutMs   *json.RawMessage `json:"timeout_ms"`
 	}
-	if json.Unmarshal(input, &m) != nil || m.Command == nil {
+	if json.Unmarshal(input, &in) != nil || in.Command == nil {
 		return input
 	}
+	m := struct {
+		Command      *string          `json:"command"`
+		Description  *string          `json:"description,omitempty"`
+		Timeout      *json.RawMessage `json:"timeout,omitempty"`
+		InBackground bool             `json:"run_in_background"`
+	}{in.Command, in.Description, in.TimeoutMs, true}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return input
@@ -579,6 +609,11 @@ func (r *Runner) choose(in *Input, info eventInfo) []selected {
 			continue
 		}
 		if h.Agent && in.NoAgentHooks {
+			continue
+		}
+		if h.URL != "" && !r.urlAllowed(h.URL) {
+			// (allowedHttpHookUrls does not let it post there: it is not
+			// run, as in Claude Code, and Check has warned of it.)
 			continue
 		}
 		matched, guardOnly := true, false
@@ -890,31 +925,10 @@ func isClosed(ch <-chan struct{}) bool {
 
 // program finds the program of a hook in the exec form: a name that holds
 // a slash is a path, from dir when it is relative, and a bare name is
-// looked for on the PATH the hook is given.
+// looked for in the absolute folders of the PATH the hook is given.
 func program(name string, env []string, dir string) (string, error) {
-	if strings.Contains(name, "/") {
-		if !filepath.IsAbs(name) {
-			name = filepath.Join(dir, name)
-		}
-		return name, nil
-	}
-	path := ""
-	for _, kv := range env {
-		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
-			path = v
-		}
-	}
-	for _, d := range filepath.SplitList(path) {
-		if !filepath.IsAbs(d) {
-			// An empty or relative entry would be the folder the hook
-			// works in, which a repository fills: it is passed over, as Go's
-			// own lookup does.
-			continue
-		}
-		p := filepath.Join(d, name)
-		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return p, nil
-		}
+	if p, ok := execpath.Find(name, env, dir); ok {
+		return p, nil
 	}
 	return "", fmt.Errorf("%s is not a program on the PATH the hook is given", name)
 }
@@ -963,7 +977,7 @@ func (r *Runner) post(ctx context.Context, h Hook, body []byte, env []string, li
 	}
 	for name, val := range h.Headers {
 		req.Header.Set(name, os.Expand(val, func(v string) string {
-			if slices.Contains(h.AllowedEnvVars, v) {
+			if slices.Contains(h.AllowedEnvVars, v) && (r.opts.HTTPEnvVars == nil || slices.Contains(r.opts.HTTPEnvVars, v)) {
 				return vars[v]
 			}
 			return ""

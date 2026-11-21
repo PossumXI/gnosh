@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -66,8 +67,12 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 				return err
 			}
 		} else if r, ok := findRow(rows, key); !ok {
-			_, err := config.ParseOption(key, "")
-			return err
+			if _, was := saved[key]; !was {
+				_, err := config.ParseOption(key, "")
+				return err
+			}
+			// An option another version of gnosh saved, which this one
+			// does not know: taken off.
 		} else if r.List {
 			return fmt.Errorf("%s holds a list, and a list is set in gnosh.json", key)
 		}
@@ -83,7 +88,11 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 		return fmt.Errorf("nothing was saved: %w", err)
 	}
 	for _, ch := range changes {
-		r, _ := findRow(rows, ch.key)
+		r, known := findRow(rows, ch.key)
+		if !known {
+			c.Say("%s, an option this gnosh does not know, is no longer kept.", ch.key)
+			continue
+		}
 		if ch.raw != nil && r.Origin.Layer <= config.LayerState && l.applyOption(ch.key, ch.raw) {
 			c.Say("%s is %s from now on, in this session and later ones, in every project whose own files do not set it.", ch.key, jsonText(ch.raw))
 			continue
@@ -93,11 +102,9 @@ func (l *live) slashConfig(ctx context.Context, c *SlashContext) error {
 			continue
 		}
 		if ch.raw == nil {
+			l.forgetLive(ch.key)
 			c.Say("%s is no longer set with /config: when gnosh next starts the config files decide (in this session it is %s, from %s).", ch.key, r.Text, l.originText(r))
 			continue
-		}
-		if ch.raw == nil {
-			l.forgetLive(ch.key)
 		}
 		c.Say("%s is %s when gnosh next starts, in every project whose own files do not set it.", ch.key, jsonText(ch.raw))
 		if r.Origin.Layer > config.LayerState {
@@ -238,9 +245,20 @@ func (l *live) optionRows() []config.OptionValue {
 func jsonText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		return s
+		return shownValue(s)
 	}
 	return string(raw)
+}
+
+// shownValue is a value as /config shows it: an address that carries a
+// user name, a password or a query string without them, as the listing
+// shows it; /config key=value said it back whole (the settings-commands
+// review of 2026-11-20).
+func shownValue(s string) string {
+	if u, err := url.Parse(s); err == nil && u.Scheme != "" && u.Host != "" && (u.User != nil || u.RawQuery != "") {
+		return config.DisplayURL(s)
+	}
+	return s
 }
 
 // listOptions says every option's value in this session and what set it.
@@ -293,7 +311,7 @@ func pendingNote(r config.OptionValue, saved map[string]json.RawMessage) string 
 	shown := buf.String()
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		shown = s
+		shown = shownValue(s)
 	}
 	if r.Origin.Layer > config.LayerState {
 		return "(set with /config to " + shown + "; what sets it here outranks that)"
@@ -418,13 +436,13 @@ func (l *live) viewModeNow() string {
 // viewModeOff is what /focus off sets the viewMode option to: nothing,
 // so that the verbose option decides again, unless one of the person's
 // config files sets focus, which a /config setting must then outweigh:
-// the view verbose gives.
+// the view verbose gives. (Whether /focus on ran earlier in the session
+// does not matter: it made /focus off take the setting away, and the
+// file's focus came back the next session: the settings-commands review
+// of 2026-11-20.)
 func (l *live) viewModeOff() string {
-	l.configMu.Lock()
-	_, now := l.configNow["viewMode"]
-	l.configMu.Unlock()
 	o := l.cfg.Options.ViewMode
-	if now || !o.Set || o.Origin.Layer == config.LayerState || o.V != "focus" {
+	if !o.Set || o.Origin.Layer == config.LayerState || o.V != "focus" {
 		return ""
 	}
 	if l.cfg.Options.Verbose.V {
@@ -458,7 +476,17 @@ func (l *live) viewModeSet() string {
 func (l *live) slashTheme(ctx context.Context, c *SlashContext) error {
 	name := strings.ToLower(strings.TrimSpace(c.Args))
 	if name == "" {
-		c.Say("The theme is %s: auto (for the background the terminal says it has), dark, light, or ansi (the terminal's own sixteen colours). /theme <name> sets it.", firstOf(l.cfg.Options.Theme.V, "auto"))
+		// As it is now: what /theme set in this session, else what the
+		// session started with (the start value was said after a change).
+		now := firstOf(l.cfg.Options.Theme.V, "auto")
+		l.configMu.Lock()
+		raw, ok := l.configNow["theme"]
+		l.configMu.Unlock()
+		var set string
+		if ok && json.Unmarshal(raw, &set) == nil && set != "" {
+			now = set
+		}
+		c.Say("The theme is %s: auto (for the background the terminal says it has), dark, light, or ansi (the terminal's own sixteen colours). /theme <name> sets it.", now)
 		return nil
 	}
 	set := *c

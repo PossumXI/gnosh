@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
@@ -51,6 +52,11 @@ type Options struct {
 	// the session's front end decides; once the program has begun to shut
 	// down, another one calls Exit at once. Nil means no signals arrive.
 	Signals <-chan os.Signal
+	// AnswerWait, when not nil, is how long after the plain front end puts
+	// a question a line typed is still taken for one typed before the
+	// question could be read (the default is answerWait; the tests, which
+	// type at once, set none).
+	AnswerWait *time.Duration
 	// Exit, when not nil, ends the process at once with the code it is
 	// given. It is called for a second signal, when the first is already
 	// being acted on, and for nothing else.
@@ -137,8 +143,10 @@ type program struct {
 
 	// runAsks is the base of the files the permission questions of this
 	// run in the background go through to the agent view (runasks.go), or
-	// "" when there is nobody to ask.
+	// "" when there is nobody to ask. runOut, for such a run, is what it
+	// prints on its way into its log.
 	runAsks string
+	runOut  *runOutput
 
 	// started is the program file as gnosh started from it (nil when it
 	// is not known), and restart the command line /restart asked to start
@@ -166,6 +174,20 @@ type program struct {
 	// starts, and treeMoving what EnterWorktree or ExitWorktree did, for
 	// the one they start (TreeMoveEnv, as JSON).
 	moving, treeMoving string
+	// runs are the /fork and /subtask runs a session of this program
+	// started and watches, by id (*watchedRun): kept here, and watched
+	// again, when the session is opened again (a rewind), so that a
+	// rewind of the files still waits for them and a /subtask's answer
+	// still comes back.
+	runs sync.Map
+}
+
+// watchedRun is a /fork or /subtask run a session watches.
+type watchedRun struct {
+	// session is the session that started it; what is "fork" or
+	// "subtask"; log and path are its log and its session's file; task
+	// is what a /subtask run was set to do.
+	session, what, log, path, task string
 }
 
 // lockedWriter lets several goroutines write whole lines to one stream.
@@ -179,6 +201,78 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.w.Write(p)
+}
+
+// printsFromOutside reports whether a command prints text that comes in
+// part from outside gnosh, to be made plain on a terminal. Sessions draw
+// through their own renderer, and the agent view and attach take the
+// terminal over.
+func printsFromOutside(c cli.Command) bool {
+	switch c {
+	case cli.CmdInteractive, cli.CmdPrint, cli.CmdAgents, cli.CmdAttach, cli.CmdSSH, cli.CmdHelp, cli.CmdVersion:
+		return false
+	}
+	return true
+}
+
+// plainWriter writes what it is given with every control character but
+// the line break and the tab, every C1 control, and every mark that
+// turns the order text is drawn in written out as its escape (\x1b,
+// \u202e), so that nothing printed acts on the terminal: a cloned
+// repository's .mcp.json naming a server with an escape sequence in it
+// moved the cursor, set the title or wrote the clipboard when gnosh mcp
+// list printed it (the terminal review of 2026-11-19).
+type plainWriter struct{ w io.Writer }
+
+func (pw plainWriter) Write(b []byte) (int, error) {
+	if _, err := io.WriteString(pw.w, plainText(string(b))); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+// plainText is s with what would act on a terminal written as escapes.
+func plainText(s string) string {
+	clean := true
+	for _, r := range s {
+		if actsOnTerminal(r) || r == utf8.RuneError {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+		case r < 0x80 && actsOnTerminal(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case actsOnTerminal(r):
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
+// actsOnTerminal reports whether r, printed, could act on a terminal or
+// change how the text around it is drawn.
+func actsOnTerminal(r rune) bool {
+	switch {
+	case r == '\n', r == '\t':
+		return false
+	case r < 0x20, r == 0x7f, r >= 0x80 && r < 0xa0:
+		return true
+	case r == 0x200e, r == 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0xfeff:
+		return true
+	}
+	return false
 }
 
 // Main runs gnosh and returns the process's exit code. It is the whole
@@ -255,6 +349,8 @@ func newProgram(o Options) *program {
 		// (runasks.go), as /restart's is.
 		if filepath.IsAbs(base) {
 			p.runAsks = filepath.Clean(base)
+			p.runOut = &runOutput{w: p.stdout.w}
+			p.stdout.w, p.stderr.w = p.runOut.to(p.stdout.w), p.runOut.to(p.stderr.w)
 		}
 		delete(p.env, AsksEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, AsksEnv+"=") })
@@ -306,7 +402,7 @@ var built = []string{
 	"session list", "session show", "session last", "session rename",
 	"session --json",
 	"prompt show", "prompt path", "prompt export", "prompt export --force",
-	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",
+	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages", "--include-hook-events",
 	"--reasoning-effort", "--small-model", "--fallback-model",
 	"--permission-mode",
 	"--permission-mode=default", "--permission-mode=plan", "--permission-mode=acceptEdits",
@@ -376,6 +472,12 @@ func (p *program) run(ctx context.Context) int {
 		return cli.ExitFailure
 	}
 
+	if p.o.StdoutIsTerminal && printsFromOutside(inv.Command) {
+		// What these print comes in part from outside gnosh (a server's
+		// name, a session's title, a fact mem keeps, a path in a cloned
+		// repository's files): to a terminal it goes plain.
+		p.stdout.w, p.stderr.w = plainWriter{p.stdout.w}, plainWriter{p.stderr.w}
+	}
 	switch inv.Command {
 	case cli.CmdHelp:
 		text, err := table.Help(inv.HelpFor...)
@@ -512,6 +614,7 @@ func (p *program) runEnded(code int) {
 	if p.runAsks == "" {
 		return
 	}
+	p.runOut.flush()
 	f, err := os.OpenFile(p.runAsks+".log", os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		return

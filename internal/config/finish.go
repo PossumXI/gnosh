@@ -5,9 +5,12 @@ import (
 	"maps"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/envscrub"
 )
 
 // The time limits of a model request when nothing sets them (LM-1, LM-2,
@@ -74,7 +77,7 @@ func (ld *loader) finish() *Config {
 			continue
 		}
 		flags.add(op{kind: KindAddDir, text: "additional directory " + dir, origin: o, feature: FeaturePermissions, what: "an additional directory",
-			apply: func(b *builder) { addItem(&b.dirs, dir, o) }})
+			apply: func(b *builder) { b.addDir(dir, o) }})
 	}
 	for _, o := range flags.ops {
 		b.run(o)
@@ -109,6 +112,11 @@ func (ld *loader) finish() *Config {
 	default:
 		cfg.Hooks = b.hooks
 	}
+	cfg.HTTPHookURLs, cfg.HTTPHookEnvVars = b.hookURLs.list(), b.hookEnvVars.list()
+	cfg.Sandbox = b.sandbox.finish()
+	if envscrub.On([]string{envscrub.Var + "=" + ld.env[envscrub.Var]}) {
+		cfg.Sandbox.scrub(runtime.GOOS)
+	}
 	if b.statusLine.Set {
 		switch {
 		case cfg.Switches.SafeMode.V:
@@ -121,6 +129,9 @@ func (ld *loader) finish() *Config {
 		}
 	}
 	cfg.Attribution = b.attribution.V
+	if !cfg.Switches.SafeMode.V {
+		cfg.LSPServers = ld.lspServerList()
+	}
 	if b.fileSuggestion.Set {
 		switch {
 		case cfg.Switches.SafeMode.V:
@@ -444,7 +455,21 @@ func (ld *loader) timeouts(local bool, limits Limits) Timeouts {
 // permissions settles the starting mode and gathers the rules.
 func (ld *loader) permissions() Permissions {
 	in, b := ld.in, ld.b
-	perm := Permissions{Dirs: b.dirs, BypassDisabled: b.bypassDisabled, DenyInsteadOfPrompting: b.denyInstead}
+	perm := Permissions{Dirs: b.dirs, BypassDisabled: b.bypassDisabled, DenyInsteadOfPrompting: b.denyInstead,
+		BlockReads: b.blockReads, BlockWrites: b.blockWrites}
+	for _, d := range b.dirs {
+		// The project's only when no file or flag of the person's named it
+		// too: --add-dir and the person's own files are read after the
+		// project's gnosh.json, which named it first (the blocks review of
+		// 2026-11-20).
+		mine := false
+		for _, o := range b.dirNamed[d.V] {
+			mine = mine || o.File == "" || !slices.Contains(ld.projectFiles, o.File)
+		}
+		if !mine {
+			perm.ProjectDirs = append(perm.ProjectDirs, d.V)
+		}
+	}
 	for _, l := range b.layers {
 		if len(l.Allow)+len(l.Ask)+len(l.Deny) > 0 {
 			perm.Layers = append(perm.Layers, *l)
@@ -577,6 +602,19 @@ func (p Permissions) Rules(which string) []Rule {
 		}
 	}
 	return out
+}
+
+// EnvEntry returns what the env block of the settings files gives a
+// variable, with the file it came from, and whether it gives one: Claude
+// Code sets its own process's environment from that block, so its
+// variables may come from there as well as from the shell.
+func (c *Config) EnvEntry(name string) (EnvVar, bool) {
+	for _, v := range c.Env {
+		if v.Name == name {
+			return v, true
+		}
+	}
+	return EnvVar{}, false
 }
 
 // CommandEnv returns the env block in the form a command's environment is

@@ -113,7 +113,7 @@ is gnosh's priority.
 | `/debug [description]` | — | Turn on debug logging for the session and help diagnose a problem. | P2 |
 | `/release-notes` | — | Changelog viewer. | P2 |
 | `/theme`, `/color`, `/tui`, `/focus`, `/scroll-speed`, `/terminal-setup` | — | Look and rendering. | P2 / own design |
-| `/security-review`, `/code-review` (`/review`), `/simplify`, `/verify`, `/run`, `/batch`, `/update-config`, `/fewer-permission-prompts` | — | Bundled skills: prompts shipped with Claude Code. gnosh ships none of Anthropic's text; equivalents, if wanted, are gnosh's own skills. | not adopted as built-ins |
+| `/security-review`, `/code-review` (`/review`), `/simplify`, `/verify`, `/run`, `/batch`, `/update-config`, `/fewer-permission-prompts` | — | Bundled skills: prompts shipped with Claude Code. gnosh ships none of Anthropic's text; its equivalents are its own. Built: `/security-review`, `/code-review` (`/review`), `/simplify`, and `/fewer-permission-prompts`, which gnosh's engine works out itself rather than a model (DECISIONS 376); also `/skill-doctor` (DECISIONS 377). | the rest not adopted |
 
 Removed in Claude Code, do not add: `/vim` (v2.1.92; use the editor-mode
 setting), `/pr-comments` (v2.1.91), `/ultraplan`.

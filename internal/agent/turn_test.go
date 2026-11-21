@@ -874,8 +874,29 @@ func TestToolAndHookHalt(t *testing.T) {
 		r := newRig(t, func(o *Options) { o.Tools = []core.Tool{stops, tool("Bash", nil)} })
 		r.model.push(use(tc("a", "Agent", `{}`), tc("b", "Bash", `{}`)))
 		res := r.run("delegate")
-		if res.Reason != EndHalted || res.Detail != "a hook stopped the sub-agent" || res.Driver != "Agent" {
+		if res.Reason != EndHalted || res.Detail != "a hook stopped the sub-agent" || res.Driver != "Agent" || res.Planned {
 			t.Fatalf("result = %+v", res)
+		}
+		r.checkLog()
+	})
+	// A tool that ends the turn as it means to (a /loop's next run
+	// scheduled) says so: the result is planned, its notice information.
+	t.Run("planned", func(t *testing.T) {
+		wakes := tool("ScheduleWakeup", func(context.Context, core.ToolCall, *core.ToolEnv) (core.ToolResult, error) {
+			res := core.TextResult("the next run is at 19:20")
+			res.Meta = map[string]any{MetaHalt: "the loop's next run is at 19:20", MetaPlanned: true}
+			return res, nil
+		})
+		r := newRig(t, func(o *Options) { o.Tools = []core.Tool{wakes} })
+		r.model.push(use(tc("a", "ScheduleWakeup", `{}`)))
+		res := r.run("loop")
+		if res.Reason != EndHalted || !res.Planned || res.Driver != "ScheduleWakeup" {
+			t.Fatalf("result = %+v", res)
+		}
+		for _, n := range eventsOf[*NoticeEvent](r.rec) {
+			if n.TurnEnd && n.Level != LevelInfo {
+				t.Errorf("the planned end's notice is %s: %q", n.Level, n.Text)
+			}
 		}
 		r.checkLog()
 	})

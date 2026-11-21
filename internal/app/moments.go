@@ -95,6 +95,12 @@ func (l *live) showHooks(in hooks.Input, out hooks.Outcome) {
 	}
 	source := "hook:" + string(in.Event)
 	for _, m := range out.SystemMessages {
+		if in.ToolUseID != "" && slices.ContainsFunc(out.Records, func(r hooks.Record) bool { return strings.Contains(r.String(), m) }) {
+			// (Shown whole with the call, in the hook's own line: as a
+			// warning too it stood above the call, twice over. Seen on the
+			// devbox's screen.)
+			continue
+		}
 		l.notice(agent.LevelWarning, source, m)
 	}
 	for _, w := range out.Warnings {
@@ -183,7 +189,7 @@ func (l *live) moments() agent.Moments {
 	}
 	// (The paths a prompt mentions come before what the features add, so
 	// that mem's line stays the last a prompt carries.)
-	m.PromptLines = append(m.PromptLines, l.firstPromptLines, l.mentionLines)
+	m.PromptLines = append(m.PromptLines, l.firstPromptLines, l.mentionLines, l.pastedLines)
 	m.BeforeRequest = append(m.BeforeRequest, l.turnCap, l.settingsChanged)
 	m.MoreRounds = l.moreRounds
 	var busy []func(context.Context) func()
@@ -539,7 +545,26 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 	var v agent.ToolVerdict
 	var errs []error
 	v.Context = append(v.Context, l.lateInstructionsFor(ctx, instr, done)...)
+	if path := shellRead(done); path != "" && fstools.MarkRead(env(), path) == nil {
+		// A file viewed with cat, head, grep and the like counts as read,
+		// as in Claude Code: it may be edited, and its folder's
+		// instruction files arrive (shellread.go).
+		v.Context = append(v.Context, l.lateInstructionsAt(ctx, instr, path)...)
+	}
 	v.Context = append(v.Context, l.skillsForFile(done)...)
+	if path, change := lspPath(done); path != "" && l.lspSrv != nil {
+		// The file's language server is told of it; a change gives the
+		// model the problems it brought (lsp.go).
+		if change {
+			parts, note := l.lspSrv.changed(ctx, path)
+			v.Context = append(v.Context, parts...)
+			if note != "" {
+				v.Notes = append(v.Notes, note)
+			}
+		} else {
+			l.lspSrv.opened(path)
+		}
+	}
 	for _, c := range contribs {
 		if c.c.AfterTool == nil {
 			continue
@@ -633,7 +658,7 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 	path := ""
 	var before os.FileInfo
 	names := fstools.Defaults()
-	if !done.Result.IsError && (done.Call.Name == names.WriteName || done.Call.Name == names.EditName) {
+	if !done.Result.IsError && (done.Call.Name == names.WriteName || done.Call.Name == names.EditName || done.Call.Name == names.NotebookEditName) {
 		if path = touchedPath(done); path != "" {
 			before, _ = os.Stat(path)
 		}
@@ -798,6 +823,14 @@ func (l *live) beforeSummary(ctx context.Context, info agent.SummaryInfo) (strin
 // "compact".
 func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agent.Part, error) {
 	var parts []agent.Part
+	// The system prompt is made again, as at the start: what it is made
+	// of (the tools there are now, a project that has come to hold Gno
+	// code) may have changed since, and a summary has spent the cache it
+	// kept warm. Claude Code 2.1.328 does so after an automatic summary
+	// as after /compact.
+	if system, err := l.systemPrompt(); err == nil && !slices.Equal(system, l.systemNow()) {
+		l.putSystem(system)
+	}
 	// The model no longer sees any file it read: Edit and Write refuse to
 	// change one until Read has shown it again, as after a slide, so that
 	// no file is written from a copy the model can no longer see. The ones
@@ -807,10 +840,31 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	if l.instr != nil {
 		// The files given along the way are forgotten, so that each is
 		// given again when the model next works where it applies; the
-		// ones in effect from the start are given back now.
-		l.instr.Forget()
+		// ones in effect from the start are given back now, read again
+		// when one has changed since, as Claude Code reads them after a
+		// summary.
+		reread := false
+		if len(l.instr.Changed(ctx)) > 0 {
+			ws, err := l.instr.Reload(ctx)
+			if reread = err == nil; !reread && ctx.Err() == nil {
+				l.notice(agent.LevelWarning, "instructions", "The instruction files changed, and could not be read again after the summary ("+err.Error()+"), so those read before are given back.")
+			}
+			for _, w := range ws {
+				l.notice(agent.LevelWarning, "instructions", w.Text)
+			}
+		}
+		if !reread {
+			l.instr.Forget()
+		}
 		if text := l.startInstructions(); text != "" {
 			parts = append(parts, agent.Part{Source: "instructions", Text: text})
+			var given []instructions.File
+			for _, f := range l.instr.Files() {
+				if !f.Late {
+					given = append(given, f)
+				}
+			}
+			l.instructionsLoaded(given, "", "compact")
 		}
 	}
 	if text := l.startAgentTypes(); text != "" {
@@ -999,6 +1053,7 @@ func (l *live) stopHooks(ctx context.Context, end agent.TurnEnd) (agent.Verdict,
 		Event:                hooks.Stop,
 		StopHookActive:       end.Streak > 0,
 		LastAssistantMessage: end.Text,
+		Extra:                l.stopLists(),
 	})
 	switch {
 	case err != nil:

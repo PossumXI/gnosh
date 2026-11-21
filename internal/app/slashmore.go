@@ -117,6 +117,15 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	args := strings.Fields(c.Args)
 	switch {
 	case len(args) == 2 && args[0] == "stop":
+		if found, wake := l.unschedule(args[1]); found {
+			if wake {
+				l.endSelfLoop("its next run was cancelled")
+				c.Say("The self-paced /loop's next run, %s, is cancelled, and the loop is over.", args[1])
+				return nil
+			}
+			c.Say("The scheduled prompt %s is cancelled.", args[1])
+			return nil
+		}
 		if b := l.findBackgroundAgent(args[1]); b != nil {
 			l.stopBackgroundAgent(b)
 			c.Say("The background sub-agent %s is stopped: %s", b.id, oneLine(b.desc, 100))
@@ -182,6 +191,28 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 			c.Say("     The model can give %s more to do (SendMessage to its id): ask it to.", strings.Join(more, ", "))
 		}
 	}
+	// The prompts the session has scheduled (CronCreate, /loop) and the
+	// goal it works towards, as Claude Code 2.1.329's /tasks has them.
+	scheduled := l.scheduled()
+	now := l.p.now()
+	for _, t := range scheduled {
+		if t.wake {
+			c.Say("%s  the self-paced /loop's next run, at %s: %s", t.id, whenText(t.next, now), oneLine(t.prompt, 100))
+			continue
+		}
+		how := "recurring"
+		if !t.recurring {
+			how = "once"
+		}
+		who := "a scheduled prompt"
+		if t.loop {
+			who = "/loop's prompt"
+		}
+		c.Say("%s  %s, %q %s, next run %s: %s", t.id, who, t.sched, how, whenText(t.next, now), oneLine(t.prompt, 100))
+	}
+	if goal := l.statusFacts()["goal"]; goal != "" {
+		c.Say("goal  %s (/goal clear ends it)", oneLine(goal, 100))
+	}
 	// The runs /background and /fork started from this folder, from any
 	// session: they outlive the session that started them.
 	for _, r := range l.backgroundRuns() {
@@ -203,7 +234,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 		}
 	}
 	if l.shell == nil {
-		if len(agents) == 0 {
+		if len(agents) == 0 && len(scheduled) == 0 {
 			c.Say("This session runs no commands, so none runs in the background.")
 		} else {
 			c.Say("/tasks stop <id> stops one.")
@@ -212,7 +243,7 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 	}
 	tasks := l.shell.Tasks()
 	if len(tasks) == 0 {
-		if len(agents) == 0 {
+		if len(agents) == 0 && len(scheduled) == 0 {
 			c.Say("No command has run in the background in this session. Ctrl+B moves one that is running into the background.")
 		} else {
 			c.Say("/tasks stop <id> stops one.")
@@ -234,9 +265,9 @@ func (l *live) slashTasks(ctx context.Context, c *SlashContext) error {
 			state = "a Monitor's, " + state
 		}
 		c.Say("%s  %s: %s", t.ID, state, oneLine(t.Command, 100))
-		c.Say("     its output: %s (%s)", t.OutputFile, byteCount(t.OutputBytes))
+		c.Say("     its output: %s (%s)", t.OutputFile, ByteCount(t.OutputBytes))
 	}
-	if running > 0 || len(agents) > 0 {
+	if running > 0 || len(agents) > 0 || len(scheduled) > 0 {
 		c.Say("/tasks stop <id> stops one.")
 	}
 	return nil
@@ -341,6 +372,11 @@ func (l *live) slashAgents(ctx context.Context, c *SlashContext) error {
 			about = "(no description)"
 		}
 		c.Say("  %s (%s): %s", d.Name, where, about)
+		if d.Scope != "built-in" {
+			// What the picker shows of it, on a line: its tools, its model
+			// and the rest of what its file sets.
+			c.Say("    %s", visible(oneLine(strings.Join(agentDetails(d), " · "), 600)))
+		}
 	}
 	c.Say("A new kind is a Markdown file in %s, or in .gnosh/agents/ in a trusted project; ask the model to write one.", filepath.Join(l.cfg.Paths.ConfigDir, "agents"))
 	return nil
@@ -353,7 +389,7 @@ func (l *live) slashMemory(ctx context.Context, c *SlashContext) error {
 	var files []string
 	if l.instr != nil {
 		for _, f := range l.instr.Files() {
-			line := fmt.Sprintf("  %s (%s, %s)", f.Path, strings.ToLower(string(f.Scope)), byteCount(f.Size))
+			line := fmt.Sprintf("  %s (%s, %s)", f.Path, strings.ToLower(string(f.Scope)), ByteCount(f.Size))
 			if f.Late {
 				line += ", read when a file under it was touched"
 			}
@@ -372,12 +408,12 @@ func (l *live) slashMemory(ctx context.Context, c *SlashContext) error {
 		c.Say("Yours, for every project: %s", l.cfg.Context.Global[0].V)
 	}
 	c.Say("The project's, shared with whoever works on it: %s (/init has the model write it)", filepath.Join(l.cfg.Paths.ProjectRoot, "GNOSH.md"))
-	c.Say("They are read as a session starts, and a change shows in the next one. What the model keeps for itself between sessions is mem: /mem shows it.")
+	c.Say("They are read as a session starts, and read again after a summary (/compact) when one has changed. What the model keeps for itself between sessions is mem: /mem shows it.")
 	return nil
 }
 
-// byteCount writes a size in bytes for a person.
-func byteCount(n int64) string {
+// ByteCount writes a size in bytes for a person.
+func ByteCount(n int64) string {
 	switch {
 	case n < 1024:
 		return fmt.Sprintf("%d bytes", n)
@@ -444,32 +480,11 @@ func (l *live) slashCopy(ctx context.Context, c *SlashContext) error {
 	return nil
 }
 
-// pasteSafe is text as it may go on the clipboard. What it is pasted into
-// next may be a terminal, so its control characters go, but for tab and
-// the line breaks: a carriage return becomes a newline, and goes before
-// one. An escape sequence in a reply (ESC [201~ ends a bracketed paste)
-// could otherwise have the rest of it taken as typed (the TUI review of
-// 2026-11-19).
-func pasteSafe(s string) string {
-	s = strings.ReplaceAll(strings.ToValidUTF8(s, "�"), "\r\n", "\n")
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\t' || r == '\n':
-			return r
-		case r == '\r':
-			return '\n'
-		case r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0:
-			return -1
-		}
-		return r
-	}, s)
-}
-
 // toClipboard puts text on the person's clipboard: with this machine's
 // own tool where the person's terminal is on this machine, and otherwise
 // through the terminal (OSC 52); and says which, of what (which).
 func (l *live) toClipboard(ctx context.Context, c *SlashContext, which, text string) {
-	text = pasteSafe(text)
+	text = clipboard.Plain(text)
 	size := countWords(utf8.RuneCountInString(text), "character", "characters")
 	failed := ""
 	if tool := clipboard.Tool(runtime.GOOS, l.p.getenv, l.p.lookPath); tool != nil {
@@ -491,8 +506,11 @@ const exportClipboard = "--clipboard"
 // slashExport is /export [file | --clipboard]: the conversation as plain
 // text, in a file, or on the clipboard. A relative name is the working
 // directory's, a name with no extension gets .txt, and with no name it is
-// <date>-<session's name>.txt there. A file that is there already is
-// never written over.
+// <date>-<session's name>.txt there, or in the folder named. A file that
+// is there already is never written over. The file is the person's alone,
+// as the session's own file is, and holds no control character but tabs
+// and line breaks: what commands printed is in it (the hosts review of
+// 2026-11-19: it was readable by all, and cat replayed escape sequences).
 func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
 	name := strings.TrimSpace(c.Args)
 	if name == exportClipboard {
@@ -500,21 +518,28 @@ func (l *live) slashExport(ctx context.Context, c *SlashContext) error {
 		l.toClipboard(ctx, c, "The conversation", exportText(l.ts.Entries()))
 		return nil
 	}
+	title, _ := l.title()
+	byDefault := l.p.now().Format("2006-01-02") + "-" + fileSlug(firstOf(title, "session")) + ".txt"
 	if name == "" {
-		title, _ := l.title()
-		name = l.p.now().Format("2006-01-02") + "-" + fileSlug(firstOf(title, "session")) + ".txt"
+		name = byDefault
 	}
 	switch {
+	case name == "~":
+		name = l.cfg.Paths.Home
 	case strings.HasPrefix(name, "~/"):
 		name = filepath.Join(l.cfg.Paths.Home, name[2:])
 	case !filepath.IsAbs(name):
 		name = filepath.Join(l.cwd(), name)
 	}
+	if info, err := os.Stat(name); err == nil && info.IsDir() {
+		// (/export ~/Desktop wrote ~/Desktop.txt.)
+		name = filepath.Join(name, byDefault)
+	}
 	if filepath.Ext(name) == "" {
 		name += ".txt"
 	}
-	text := exportText(l.ts.Entries())
-	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	text := clipboard.Plain(exportText(l.ts.Entries()))
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	switch {
 	case errors.Is(err, os.ErrExist):
 		return fmt.Errorf("%s is there already, and /export writes over nothing; give it another name", name)
@@ -621,7 +646,11 @@ func exportText(entries []transcript.Entry) string {
 				}
 			}
 		case transcript.TypeSummary:
-			put("", "", "(The conversation up to here was summarized for the model.)")
+			if e.Covers != "" {
+				put("", "", "(The conversation before an earlier prompt was summarized for the model; what followed that prompt stays.)")
+			} else {
+				put("", "", "(The conversation up to here was summarized for the model.)")
+			}
 		}
 	}
 	return b.String()

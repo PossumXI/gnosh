@@ -179,8 +179,8 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 	// machine (left blank, or named "local") as the call for this machine
 	// that it is, and any other as a command on another machine, which
 	// always asks.
-	d := l.reach(cwd, call, action, l.engine.DecideAt(cwd, call.Name, call, action))
-	d = l.resumeAsStart(ctx, cwd, call, d).WithHook(verdict, hookReason)
+	d := l.reach(req.AgentID, cwd, call, action, l.engine.DecideFor(req.AgentID, cwd, call.Name, call, action))
+	d = l.resumeAsStart(ctx, req.AgentID, cwd, call, d).WithHook(verdict, hookReason)
 	confirm := action.Confirm && cannot == nil
 	if confirm {
 		// Asked every time: a kept approval would be the rule that this
@@ -194,7 +194,12 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		}
 		d.Reason = "This call throws away something that cannot be got back, so gnosh asks before it runs, whatever the rules and the mode allow."
 	case permission.Deny:
-		return agent.Decision{Reason: "This call did not run. " + d.Reason + " Do the work another way if there is one, or say what you could not do."}, nil
+		why := d.Reason
+		if !l.planApproved() {
+			// (No ExitPlanMode is offered to present a plan with.)
+			why = strings.Replace(why, permission.PresentPlan, planInAnswer, 1)
+		}
+		return agent.Decision{Reason: "This call did not run. " + why + " Do the work another way if there is one, or say what you could not do."}, nil
 	}
 
 	// 3. Somebody has to say yes.
@@ -208,7 +213,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		}
 		return agent.Decision{Reason: l.unattended(d), Unattended: true}, nil
 	}
-	if !confirm && l.hooks.has(hooks.PermissionRequest) {
+	if !confirm && !d.PersonOnly && l.hooks.has(hooks.PermissionRequest) {
 		out, err := l.hooks.run(ctx, hooks.Input{
 			Event: hooks.PermissionRequest, Cwd: cwd,
 			ToolName: call.Name, ToolInput: hookToolInput(call, cwd, l.cfg.Paths.Home),
@@ -256,6 +261,15 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 			}
 		}
 		q.Title = asker + " asks: " + q.Title
+		// What a yes keeps holds for the whole session, its conversation
+		// and every agent of it, not for the asking one alone: said, where
+		// the title invites reading it as that agent's (the approvals
+		// review of 2026-11-19).
+		for i := range q.Choices {
+			if strings.HasPrefix(q.Choices[i].Key, "always:") {
+				q.Choices[i].Label = strings.Replace(q.Choices[i].Label, "Yes, and ", "Yes, for the whole session and all its agents, and ", 1)
+			}
+		}
 	}
 	if changed != nil {
 		// A hook changed the call: the question shows what will run, not
@@ -263,7 +277,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 		act := action
 		q.Action = &act
 	}
-	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical, Stops: stops}
+	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical || d.PersonOnly, Stops: stops}
 	for i, s := range d.Suggestions {
 		if s.Mode != "" {
 			data.Modes["always:"+strconv.Itoa(i)] = string(s.Mode)
@@ -309,7 +323,8 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 // feature's own keeping, and returns the answer that holds for the call:
 // own, which is the engine's answer for the call as its own tool's, or
 // the engine's answer for the call of gnosh's own tool that reaches the
-// same thing, whichever is the stricter.
+// same thing, whichever is the stricter. who is the id of the agent that
+// made the call ("" for the session's own), as the engine is told it.
 //
 // A feature's tool is known to the engine by its name alone: quiet, or
 // asking every time. What a call of it touches is said by the tool
@@ -329,7 +344,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Deci
 //     the tool's own answer stands.)
 //
 // Nothing here makes an answer milder than the engine's own.
-func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
+func (l *live) reach(who, cwd string, call core.ToolCall, action core.Action, own permission.Decision) permission.Decision {
 	if own.Behavior == permission.Deny || !l.featureTool(call.Name) {
 		return own
 	}
@@ -360,7 +375,7 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 		}
 		input := json.RawMessage(`{"command":` + string(quoted) + `,"host":` + string(host) + `}`)
 		own = stricter(own, call.Name+" runs a command on another machine for this call, which is judged as that command is.",
-			l.engine.DecideAt(cwd, shelltool.BashName,
+			l.engine.DecideFor(who, cwd, shelltool.BashName,
 				core.ToolCall{ID: call.ID, Name: shelltool.BashName, Input: input},
 				core.Action{Kind: core.ActionExecute, Command: action.Command, Summary: action.Summary}))
 	case core.ActionRead:
@@ -373,7 +388,7 @@ func (l *live) reach(cwd string, call core.ToolCall, action core.Action, own per
 			if err != nil {
 				continue
 			}
-			d := l.engine.DecideAt(cwd, read,
+			d := l.engine.DecideFor(who, cwd, read,
 				core.ToolCall{ID: call.ID, Name: read, Input: json.RawMessage(`{"file_path":` + string(quoted) + `}`)},
 				core.Action{Kind: core.ActionRead, Paths: []string{path}, Summary: action.Summary})
 			if d.Stage == permission.StageTool {
@@ -409,7 +424,7 @@ func stricter(own permission.Decision, why string, other permission.Decision) pe
 // one of that kind more to do, as it covers starting one. A call whose
 // sub-agent cannot be found is left as it is; it refuses itself when it
 // runs.
-func (l *live) resumeAsStart(ctx context.Context, cwd string, call core.ToolCall, own permission.Decision) permission.Decision {
+func (l *live) resumeAsStart(ctx context.Context, who, cwd string, call core.ToolCall, own permission.Decision) permission.Decision {
 	if call.Name != sendMessageName || own.Behavior == permission.Deny {
 		return own
 	}
@@ -429,7 +444,7 @@ func (l *live) resumeAsStart(ctx context.Context, cwd string, call core.ToolCall
 	as := core.ToolCall{ID: call.ID, Name: agentToolName, Input: input}
 	act, _ := (&agentTool{l: l}).Describe(as, nil)
 	return stricter(own, sendMessageName+" gives a "+kind+" sub-agent more to do, which is judged as starting one is.",
-		l.engine.DecideAt(cwd, agentToolName, as, act))
+		l.engine.DecideFor(who, cwd, agentToolName, as, act))
 }
 
 // featureTool reports whether a tool is one a feature brought, and not
@@ -656,12 +671,29 @@ func (l *live) permissionQuestion(call core.ToolCall, action core.Action, d perm
 		choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: label})
 	}
 	choices = append(choices, agent.Choice{Key: "no", Label: "No (alone it stops the turn; with words after it, the model reads them and carries on)"})
+	// (An MCP tool by the name its call has on the screen; the rules keep
+	// the tool's own name.)
+	name := call.Name
+	if server, tool, ok := MCPToolParts(call.Name); ok {
+		name = server + " - " + tool + " (MCP)"
+	}
 	return agent.Question{
 		Kind:    "permission",
-		Title:   "Allow " + call.Name + "?",
+		Title:   "Allow " + name + "?",
 		Text:    strings.TrimRight(b.String(), "\n"),
 		Choices: choices,
 	}
+}
+
+// MCPToolParts splits an MCP tool's name, mcp__server__tool, into the
+// server's and the tool's.
+func MCPToolParts(name string) (server, tool string, ok bool) {
+	rest, ok := strings.CutPrefix(name, "mcp__")
+	if !ok {
+		return "", "", false
+	}
+	server, tool, ok = strings.Cut(rest, "__")
+	return server, tool, ok && server != "" && tool != ""
 }
 
 // planQuestion is the question ExitPlanMode puts: the plan, and whether to
@@ -676,17 +708,28 @@ func (l *live) planQuestion(call core.ToolCall, d permission.Decision) agent.Que
 	if plan == "" {
 		plan = "(The model gave no plan.)"
 	}
-	choices := []agent.Choice{{Key: "yes", Label: "Yes, carry it out, asking about each edit"}}
+	// What each yes switches the session to, said in the choice (the plan
+	// review of 2026-11-19: the second one switched it to acceptEdits for
+	// good, and said neither).
+	choices := []agent.Choice{{Key: "yes", Label: "Yes, carry it out in the default mode, asking about each edit"}}
 	for i, s := range d.Suggestions {
 		if s.Mode == permission.ModeAcceptEdits {
-			choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: "Yes, carry it out, and accept its edits without asking"})
+			choices = append(choices, agent.Choice{Key: "always:" + strconv.Itoa(i), Label: "Yes, and switch the session to acceptEdits: edits, and commands that make, move or remove files in the working folders, run without asking until you change the mode"})
 		}
 	}
 	choices = append(choices, agent.Choice{Key: "no", Label: "No, keep planning (say what to change after it; alone it stops the turn)"})
+	// The plan as the model wrote it, each line set apart from the choices
+	// below it (a plan ending "2. No, keep planning" passed for one); the
+	// screen makes each line safe, and tabs and backslashes stay as they
+	// are (they were shown as \x09 and \\).
+	lines := strings.Split(plan, "\n")
+	for i, line := range lines {
+		lines[i] = "│ " + line
+	}
 	return agent.Question{
 		Kind:    "permission",
 		Title:   "Carry out this plan?",
-		Text:    showLines(plan),
+		Text:    strings.Join(lines, "\n"),
 		Choices: choices,
 	}
 }
@@ -725,6 +768,12 @@ func (l *live) keepApproval(s permission.Suggestion) {
 		return
 	}
 	if err := l.saveRules(kept); err != nil {
+		// Held for the session alone: the rules kept for the project are
+		// what its file holds, which a later reading of it puts back.
+		for _, rule := range kept {
+			l.engine.Unkeep(rule, permission.ListAllow)
+			_ = l.engine.Grant(rule, permission.GrantSession)
+		}
 		l.notice(agent.LevelWarning, "permission", fmt.Sprintf("The approval holds for this session, but it could not be written down (%v), so gnosh will ask again next time.", err))
 	}
 }
@@ -795,6 +844,16 @@ func (l *live) editLocalRules(change func(lists map[string][]string)) error {
 func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) error) error {
 	path := l.cfg.Paths.LocalSettings
 	dir := filepath.Dir(path)
+	// Never through a link: a repository's .gnosh, or its settings file,
+	// linked to the person's own gnosh.json had a copy of it, keys and
+	// all, written into the repository (the settings-commands review of
+	// 2026-11-20).
+	if target := dataDirLeadsOut(l.cfg); target != "" {
+		return fmt.Errorf("the project's data folder %s is a link to %s, outside the project, so gnosh does not write there; remove the link", dir, target)
+	}
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a link, and the file gnosh keeps your saved approvals in never is one, so nothing was written; remove the link", path)
+	}
 	_, statErr := os.Stat(dir)
 	fresh := errors.Is(statErr, os.ErrNotExist)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -811,6 +870,7 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 		return fmt.Errorf("the settings file is being written by another gnosh: %w", err)
 	}
 	defer release()
+	before := stampOf(path)
 
 	doc := map[string]json.RawMessage{}
 	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) > 0 {
@@ -842,9 +902,82 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if err := config.WriteFileAtomic(path, content, 0o600); err != nil {
 		return err
 	}
-	// (What gnosh writes it has put in force already.)
-	l.sawOwnWrite(path)
+	if err := config.NoteLocalWrite(l.cfg.Paths.StateDir, path, content); err != nil {
+		l.flog.logf("config", "%v", err)
+	}
+	keepOutOfGit(path)
+	// (What gnosh writes it has put in force already, unless the file
+	// held a change of the person's that was not yet taken in.)
+	l.sawOwnWrite(path, before)
 	return nil
+}
+
+// keepOutOfGit has git pass over the settings file gnosh writes, by a line
+// in the repository's info/exclude, which git keeps for this clone and
+// never commits, unless the data folder's own .gitignore already does. The
+// .gitignore was written only when gnosh made the folder, and a folder a
+// work tree or the repository's own agents made first left the file to be
+// committed with the person's saved approvals (the settings-commands
+// review of 2026-11-20). Claude Code puts its own file in git's excludes
+// the same way, on first write.
+func keepOutOfGit(path string) {
+	if data, err := os.ReadFile(filepath.Join(filepath.Dir(path), ".gitignore")); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if l := strings.TrimSpace(line); l == "*" || l == filepath.Base(path) || l == "/"+filepath.Base(path) {
+				return
+			}
+		}
+	}
+	top := ""
+	for d := filepath.Dir(path); ; d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			top = d
+			break
+		}
+		if d == filepath.Dir(d) {
+			return
+		}
+	}
+	gd := repoGitDir(top)
+	if gd == "" {
+		return
+	}
+	if data, err := os.ReadFile(filepath.Join(gd, "commondir")); err == nil {
+		// A linked work tree's excludes are the repository's.
+		common := strings.TrimSpace(string(data))
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(gd, common)
+		}
+		gd = filepath.Clean(common)
+	}
+	rel, err := filepath.Rel(top, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return
+	}
+	line := "/" + filepath.ToSlash(rel)
+	exclude := filepath.Join(gd, "info", "exclude")
+	if info, err := os.Lstat(exclude); err == nil && !info.Mode().IsRegular() {
+		return
+	}
+	data, _ := os.ReadFile(exclude)
+	for _, l := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(l) == line {
+			return
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(exclude), 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(exclude, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	lead := ""
+	if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
+		lead = "\n"
+	}
+	_, _ = f.WriteString(lead + "# gnosh keeps this clone's saved approvals here\n" + line + "\n")
 }
 
 // outsideTree says why a session or sub-agent with the work tree t may not change

@@ -100,11 +100,19 @@ type Def struct {
 	// one of its own, Inline (an entry in the shape .mcp.json writes one,
 	// under Name), connected while the agent runs.
 	MCPServers []MCPServer
-	// Other lists the fields of the frontmatter that change what the
-	// sub-agent is or may do and that this package only notes: memory. A
-	// caller that cannot honour one must say so, and not run the agent as
-	// if the field were not there.
-	Other []string
+	// Memory is where the agent keeps a memory of its own, a folder that
+	// outlasts its sessions (memory): "user", across every project;
+	// "project", in the project, shared with whoever works on it; "local",
+	// in the project, kept out of version control; or "" for none.
+	Memory string
+	// CompactWindow is the window of context, in tokens, at which the
+	// agent's sub-agents make room (autoCompactWindow), when it is lower
+	// than their session's: 100000 or more, or 0. CompactWindowUnused is
+	// a value written that is not that (Claude Code reads "200k" as 200,
+	// below the least, and runs the agent as if it were not there), as
+	// written, for /agents to say.
+	CompactWindow       int
+	CompactWindowUnused string
 
 	// Scope is "built-in", "user" or "project", and Source the file the
 	// definition was read from (empty for a built-in).
@@ -390,7 +398,7 @@ func (s *Set) Skipped() []Skipped { return slices.Clone(s.skipped) }
 
 // knownKeys are the settings of a definition gnosh reads.
 var knownKeys = []string{"name", "description", "tools", "disallowedTools", "model", "permissionMode", "maxTurns",
-	"omitClaudeMd", "background", "skills", "effort", "initialPrompt", "hooks", "isolation", "mcpServers", "memory"}
+	"omitClaudeMd", "background", "skills", "effort", "initialPrompt", "hooks", "isolation", "mcpServers", "memory", "autoCompactWindow"}
 
 // Parse reads one definition from the text of a file. reason is empty
 // when it could be read, and otherwise says why the file is skipped.
@@ -471,10 +479,16 @@ func Parse(text string) (d Def, reason string) {
 				return d, "its mcpServers " + why
 			}
 			d.MCPServers = servers
+		case "autoCompactWindow":
+			d.compactWindow(strings.TrimSpace(f.scalar))
 		case "memory":
-			if f.scalar != "" || len(f.items) > 0 || f.nested {
-				d.Other = append(d.Other, f.key)
+			if len(f.items) > 0 || f.nested {
+				return d, "its memory is not one word: user, project or local"
 			}
+			if why := memoryScope(f.scalar); why != "" {
+				return d, why
+			}
+			d.Memory = f.scalar
 		default:
 			// A setting gnosh knows, in another letter case
 			// ("disallowedtools"), would be passed over, and the agent run
@@ -518,8 +532,33 @@ func (d Def) problem() string {
 		return fmt.Sprintf("the name %q cannot be an agent's: a name does not start with a dash, holds no colon, and is at most 256 characters long", clip(d.Name, 80))
 	case d.Description == "":
 		return fmt.Sprintf("the agent %q has no description, which is what says when to use it", d.Name)
+	case d.Memory != "" && (strings.ContainsAny(d.Name, `/\`+"\x00") || d.Name == "." || d.Name == ".."):
+		return fmt.Sprintf("the agent %q keeps a memory, in a folder named as the agent is, and its name names no folder", clip(d.Name, 80))
 	}
 	return ""
+}
+
+// MinCompactWindow is the least autoCompactWindow taken, as Claude Code's.
+const MinCompactWindow = 100000
+
+// compactWindow takes an autoCompactWindow as written: a whole number of
+// tokens, MinCompactWindow or more, or else a value noted as not used.
+func (d *Def) compactWindow(s string) {
+	if n, err := strconv.Atoi(s); err == nil && n >= MinCompactWindow {
+		d.CompactWindow, d.CompactWindowUnused = n, ""
+	} else if s != "" && s != "null" {
+		d.CompactWindow, d.CompactWindowUnused = 0, clip(s, 40)
+	}
+}
+
+// memoryScope says what is wrong with a memory field's word, or "": it is
+// user, project or local (or nothing, for none).
+func memoryScope(s string) string {
+	switch s {
+	case "", "user", "project", "local":
+		return ""
+	}
+	return fmt.Sprintf("its memory is %q, and a memory is user, project or local", clip(s, 40))
 }
 
 func clip(s string, n int) string {

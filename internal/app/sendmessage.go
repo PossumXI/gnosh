@@ -148,11 +148,20 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 	if e := meta[metaEffort]; e != "" {
 		def.Effort = e
 	}
+	stopsAt := l.bgStopsNow()
 	s, err := l.newSub(l.ctx, l.agent, nil, def, call.ID, meta[metaModel], true, to)
 	if err != nil {
 		return refuse("%v", err)
 	}
-	out := l.startBackground(s, agentInput{Description: firstOf(strings.TrimSpace(in.Summary), "more to do"), Prompt: message})
+	if ctx.Err() != nil {
+		// The turn was stopped while it was being made ready again.
+		s.close()
+		return refuse("the turn was stopped while the sub-agent %s was being made ready, so it was not taken up", to)
+	}
+	if whileSubIsMade != nil {
+		whileSubIsMade(l)
+	}
+	out := l.startBackground(s, agentInput{Description: firstOf(strings.TrimSpace(in.Summary), "more to do"), Prompt: message}, stopsAt)
 	return out, nil
 }
 

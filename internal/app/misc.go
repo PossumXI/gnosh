@@ -481,6 +481,23 @@ func toolLine(name string, input []byte) string {
 		}
 		return line
 	}
+	if op, _ := args["operation"].(string); name == lspToolName && op != "" {
+		// What is asked, and where: the file, at line:character.
+		line := name + ": " + oneLine(op, 40)
+		if q, _ := args["query"].(string); q != "" {
+			line += " " + oneLine(q, 80)
+		}
+		if p, _ := args["filePath"].(string); p != "" {
+			line += " " + oneLine(p, 200)
+			if n, ok := args["line"].(float64); ok && n >= 1 {
+				line += fmt.Sprintf(":%d", int(n))
+				if c, ok := args["character"].(float64); ok && c >= 1 {
+					line += fmt.Sprintf(":%d", int(c))
+				}
+			}
+		}
+		return line
+	}
 	for _, key := range []string{"command", "file_path", "pattern", "path", "url", "task_id", "code", "description", "name"} {
 		if v, ok := args[key].(string); ok && v != "" {
 			return name + ": " + oneLine(v, 200)

@@ -30,7 +30,9 @@ Built:
   ended.
 - **A session** in the terminal's own scrollback. Opened again (`-r`,
   `-c`, `/resume`), it shows where it left off: its last prompt and the
-  model's last answer.
+  model's last answer. A picture goes with a prompt by Ctrl+V (the
+  clipboard of the machine gnosh runs on), by dragging its file into the
+  terminal, or as `@` and its path.
 - **Runs in the background**, as Claude Code's background sessions: a
   session goes on without the terminal (`/background`, `/fork`), or
   starts that way from a shell (`gnosh --bg "fix the flaky test"`, as
@@ -58,22 +60,80 @@ Built:
     work in).
   - A run that ended with an error, or was killed, is marked failed (✗)
     and says how it ended.
-- **Tools:** the file and shell tools, WebFetch (a page read by the small
-  model with the model's request, from the open web only), WebSearch on a
+- **Tools:** the file and shell tools (Read gives a PDF's text page by
+  page where poppler is installed, a Jupyter notebook's cells, which
+  NotebookEdit changes one at a time, and a large picture shrunk to fit),
+  WebFetch (a page read by the small model with the model's request, from
+  the open web only; a PDF, a picture or an archive is saved to a file
+  instead), WebSearch on a
   SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,
   with SearXNG's JSON format on; no tool without it), commands on
   declared hosts over ssh, and MCP servers, those gnosh starts itself and
   those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
-  `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
+  `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; one
+  gnosh starts runs in the folder, so your own wait for its trust; their
   tools are `mcp__<server>__<tool>`, and a server may ask you for a few
-  values in the middle of a call, Claude Code's elicitation).
+  values in the middle of a call, Claude Code's elicitation). Language
+  servers named in `lspServers` (`{"gopls": {"command": "gopls", "args":
+  ["serve"], "extensionToLanguage": {".go": "go"}}}`, Claude Code's
+  `.lsp.json` entries) give the model the errors and warnings each edit
+  brings, and the LSP tool: where a symbol is defined, what refers to it,
+  its type, a file's or the workspace's symbols, implementations, calls.
 - **Permissions:** modes, plan mode included (the model presents its plan
-  with ExitPlanMode and you approve it), and rules. The model's own
+  with ExitPlanMode and you approve it), and rules; Claude Code's
+  `blockReadsOutsideWorkingDirectories` and
+  `blockWritesOutsideWorkingDirectories` keep the file tools inside the
+  working directories in every mode, `-y` too. The model's own
   questions (AskUserQuestion) can close by themselves after a while
   without a key, so that a session you left goes on
   (`"options": {"askUserQuestionTimeout": "5m"}`, or 60s or 10m).
+- **Sandbox:** Claude Code's `"sandbox": {"enabled": true}` runs the
+  shell's commands inside the operating system's own sandbox (bubblewrap
+  on Linux, Seatbelt on macOS): they write only in the session's folders
+  and a /tmp of their own, and reach no network. With
+  `"autoAllowBashIfSandboxed": true` such a command runs without asking
+  (the deny and ask rules and gnosh's own checks still hold); one that
+  fails because of the sandbox can be run again outside it, after asking
+  (`dangerouslyDisableSandbox`), and `excludedCommands`,
+  `allowUnsandboxedCommands`, `failIfUnavailable` and
+  `filesystem.allowWrite`/`denyWrite`/`allowRead`/`denyRead` are read as
+  Claude Code's; `network.allowedDomains` (and `deniedDomains`) let a
+  sandboxed command reach those hosts through gnosh's own proxy, and no
+  other (no socat needed: gnosh relays itself). `/sandbox` says how it
+  stands and chooses its mode. A host no setting lets through is asked
+  about, as Claude Code asks (Yes for the session, or kept as a
+  `WebFetch(domain:…)` allow rule, which lets a host through too);
+  `network.strictAllowlist` refuses instead. `credentials.files` and
+  `credentials.envVars` hide credential files and take variables away
+  from sandboxed commands (Claude Code's `"mask"`, which needs its
+  TLS-terminating proxy, is hidden as `"deny"`). Its loosenings are read
+  as Claude Code's too: `ignoreViolations`, `enableWeakerNestedSandbox`,
+  `enableWeakerNetworkIsolation`, `allowAppleEvents`,
+  `allowNestedUserNamespaces`, `bwrapPath`, `filesystem.disabled` and
+  `network.allowUnixSockets`/`allowAllUnixSockets`/`allowLocalBinding`/
+  `allowMachLookup`; as in Claude Code, sandboxed commands may make no
+  user namespace and open no new Unix socket on Linux (gnosh puts a
+  seccomp filter on them itself), and cannot reach macOS's certificate
+  trust service, unless those say so. A repository's loosening waits for
+  the folder's trust. Paths the sandbox hides stay hidden: a credential
+  is hidden last, whatever else opens it, and on macOS no folder holding
+  a hidden path can be renamed away, no link on the way to a kept path
+  replaced, no volume mounted over one, no application's preferences
+  written, and no signal sent to a process outside the sandbox.
+- **Credentials kept from what gnosh starts:** Claude Code's
+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` starts the shell's commands,
+  hooks, MCP and LSP servers and the rest without the API keys, tokens
+  and passwords gnosh was started with (by their names or the shape of
+  their values; GitHub tokens, proxies and `GIT_CONFIG_*` stay, a
+  package index keeps its URL without the password), keeps the sandbox
+  from being loosened, and on Linux runs every command with a /proc of
+  its own; `CLAUDE_CODE_SCRIPT_CAPS` caps how often a script may run in
+  a session, and `CLAUDE_CODE_MCP_ALLOWLIST_ENV` starts MCP servers from
+  a bare environment.
 - **Hooks:** command hooks in the shell and exec forms, in the background
-  too, http hooks, mcp_tool hooks, prompt hooks (a rule or a condition
+  too, http hooks (kept to the URLs `allowedHttpHookUrls` lets them post
+  to, and their headers to the variables `httpHookAllowedEnvVars` names,
+  when those are set), mcp_tool hooks, prompt hooks (a rule or a condition
   the model judges, `{"ok": false, "reason": ...}` blocking as a command
   hook's answer would) and agent hooks (the same question put to a
   sub-agent that may read, search and run commands first), with Claude
@@ -94,7 +154,11 @@ Built:
 - **Sub-agents** in the foreground and, in a session, in the background:
   general-purpose, Explore, Plan and your own, given more to do once they
   end with SendMessage. Your own may name MCP servers (`mcpServers`): the
-  session's, or servers of their own, connected only while they run.
+  session's, or servers of their own, connected only while they run. And
+  they may keep a memory (`memory: user`, `project` or `local`): a folder
+  of notes that outlasts their sessions, whose `MEMORY.md` each starts
+  with, as Claude Code's do (one shared with Claude Code for a kind
+  defined in a `.claude` folder).
 - **`mem`** and frames, with the close check, `/goal`, the slide, peers'
   turn locks, and `gnosh mem`.
 - **Commands:** `gnosh doctor`, `gnosh trust`, `gnosh mcp` (add, add-json,
@@ -213,9 +277,11 @@ copy of the conversation works on the prompt in the background while this
 session goes on), `/subtask` (as `/fork`, and what the copy answers comes
 back to this conversation when it is done), `/compact`, `/resume` (by number, id, name, or words from
 a session's name or first prompt), `/branch`, `/rewind` (the
-conversation, the files Write and Edit changed, or both; what a file holds
-is kept before it is put back, and the copies of your 100 most recent
-prompts are kept), `/model`, `/effort`,
+conversation, the files Write and Edit changed, or both, the files as they
+were when the prompt went out, whatever changed them since; what a file
+holds is kept before it is put back, and the copies of your 100 most recent
+prompts are kept; or a summary of what followed a prompt, going back to
+before it, or of what came before it), `/model`, `/effort`,
 `/config`, `/plan`, `/permissions`, `/add-dir`, `/cd` (the session moves to
 another folder and goes on there, with that folder's settings, instructions
 and skills; Cd rules say where it may go), `/status`, `/context`, `/btw`
@@ -246,7 +312,11 @@ files anywhere else. With nothing after them, `/model`,
 `/skills` open pickers, `/hooks` a browser of the hooks in force and
 `/agents` one of the kinds of sub-agent, as Claude Code's do (`/permissions allow`, `ask`,
 `deny` or `remove` and a rule changes the rules at once, and `/skills <name>
-off` and the like set Claude Code's `skillOverrides`); Alt+T turns thinking on
+off` and the like set Claude Code's `skillOverrides`). `/fewer-permission-prompts`
+lists the allow rules that would have spared this folder's sessions the most
+questions, as gnosh's engine judges their calls today, and `add 1 3` keeps
+the ones you pick (only those that read); `/skill-doctor` says what each
+skill costs and how often it ran, the ones never run first. Alt+T turns thinking on
 or off, Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents
 in the background. `/panel` (or the `sidePanel` option) draws the session on
 the whole screen beside a side panel of the files it changed and its

@@ -3773,3 +3773,2108 @@ or kept with the reason said (27).
     file is now written where it is: its other names see the new content
     and it stays whose it was, and the result says why it was written so.
     One the process may not write so is replaced as any other.
+
+251. **After a summary the system prompt is made again.** It was made once,
+    at the start (and again only for /output-style), so what it is made
+    of and what changed since, the tools there are now, a project that
+    came to hold Gno code, the --append-system-prompt-file, stayed as they
+    were at the start. A summary has spent the cache the unchanged prompt
+    kept warm, so after one, automatic or /compact, the prompt is made
+    again, as Claude Code 2.1.328 does after an automatic summary as after
+    /compact.
+
+252. **A deliverables register that is no file gnosh wrote is not read.**
+    The register is looked for in the project's data folder as every
+    session there starts, and was read by following whatever stood there:
+    a cloned repository's register.json linked to /dev/zero filled the
+    memory, one linked to the terminal hung gnosh (the deliverables
+    review of 2026-11-19). A link, a folder, a pipe or a file over 16 MiB
+    is now refused unread, with what it is said; the file is read only
+    while it is the one looked at, and its cache knows it by its inode too.
+
+253. **The deliverables server keeps what it serves from its origin.**
+    127.0.0.1:7777 is the same site as every service on the machine's
+    loopback, and one origin for every project's files, so a delivered
+    page with a script could reach the others (the deliverables review of
+    2026-11-19). Pages, SVG and XML are now served under a sandbox policy
+    that gives them an origin of their own (scripts still run); a service
+    worker is never served, and the token alone is no longer an address,
+    so none could claim every address; only a request that names this
+    machine (a loopback address or localhost) is answered, which a page
+    that rebinds its own name to 127.0.0.1 does not; idle connections
+    close; and nothing is kept in the browser's cache.
+
+254. **A delivered file is served only while it is still that file.** The
+    server refused a file whose own name had become a link, but followed a
+    folder on the way that had, and served whatever another account had
+    since put at the path (a file in /tmp cleaned away and made again); a
+    pipe put there since held the open; and a link or a host could carry
+    characters that draw as nothing or turn the text around, so the line
+    the person saw was not where it led (the deliverables review of
+    2026-11-19). Now a file is served only while its path, its links
+    followed, is the one recorded and it belongs to this account or root;
+    it is opened without waiting; a target or a host with such characters
+    is refused; and the note that the port was taken says that earlier
+    addresses on it now reach whatever holds it.
+
+255. **Deliver is held to the file it was judged for.** The question (or
+    the rule) judged the file a call's target named as the call was
+    described, and the run worked the target out again: a cd or a link
+    changed in between made the same words name another file, which was
+    delivered unjudged (the deliverables review of 2026-11-19). The run
+    now refuses when the target, its links followed, is not the file that
+    was judged, as Edit and Write do.
+
+256. **Esc typed with a key straight after it declines a question.** Many
+    terminals send Alt as Esc and the key, so an Esc followed at once by
+    a key reaches gnosh as that key with Alt, which a question had no use
+    for, and the Esc was lost. At a question, such an unused Alt key, or
+    Alt+Esc, now declines as Esc does, as Claude Code 2.1.328 has it.
+
+257. **The deliverables server holds at most 64 connections at once.**
+    Each open connection held a goroutine and a descriptor for as long as
+    it was kept, and nothing bounded how many (the deliverables review of
+    2026-11-19). A 65th now waits until one closes; with the idle timeout
+    and the header timeout, a held connection is let go in time.
+
+258. **The model is told which lines of a prompt were pasted.** A paste of
+    more than ten lines or 800 characters is shown folded in the prompt
+    box, and the interface knew where it was, but the model read it as
+    the person's own words: a pasted log, mail or transcript could ask for
+    things the person never did. A gnosh line after such a prompt now
+    says which lines were pasted rather than typed, that they are material
+    the user brought, and that what they ask is not asked by the user
+    unless they say so; the prompt itself goes as it was typed. Claude
+    Code 2.1.328 marks pasted text too. (The interface and the session
+    now carry the pastes under one key, app.MetaPasted.)
+
+259. **What gnosh's subcommands print to a terminal is plain.** gnosh mcp
+    list and get, doctor, sessions, mem and the rest print text that
+    comes in part from outside (a server's name or error, a session's
+    title, a fact mem keeps, a path in a cloned repository's files), and
+    nothing stood between it and the terminal: an escape sequence in a
+    server's entry moved the cursor, set the title or wrote the clipboard
+    (the terminal review of 2026-11-19). On a terminal their output now
+    has every control character but the line break and the tab, every C1
+    control and every mark that turns text around written out as its
+    escape (\x1b, ‮). Sessions draw through their own renderer, and
+    the agent view and attach take the terminal over; a pipe gets the
+    output as it is.
+
+260. **A reply printed to a terminal hides nothing and leaves no style
+    on.** gnosh -p lets the model's styles through to a terminal, as
+    Claude Code does, but "conceal" among them hid words of a suggested
+    command that were still copied with the rest, and a style left open
+    at the end was worn by gnosh's later lines and the person's shell
+    until a reset (the terminal review of 2026-11-19). Conceal is now
+    taken out, and text that leaves a style open is followed by the one
+    that closes every style. The names of files in /rewind's question
+    are made safe like every other line, and a desktop note that begins
+    with a number is put behind "gnosh: ", which terminals that read
+    ConEmu's OSC 9 commands would otherwise take for one.
+
+261. **Long instruction files are said to be long.** The files given at
+    the start go with every request, and a model follows a long text less
+    well; Claude Code warns when they pass 40,000 characters, and gnosh
+    said nothing. At the start, files that come to more than 40,000
+    characters are now named as long in a notice, with /memory to list
+    them.
+
+262. **A project data folder that leads out of the project is said to.**
+    The data folder is found by following links, so a cloned repository's
+    .gnosh linked elsewhere had gnosh write the project's saved approvals,
+    work trees and delivered files wherever it pointed, with nothing said
+    (found weighing the deliverables review of 2026-11-19). gnosh still
+    uses it (a person may keep the data elsewhere on purpose), but says at
+    the start where it leads, and that projectDataDir set to an absolute
+    path is the way to keep it elsewhere on purpose.
+
+263. **The text of (( )) that a plain sh cannot be read as commands is
+    unreadable.** A shell with no (( )) runs its text as commands in two
+    subshells, and the engine reads it so too; where that reading failed
+    it was dropped, so "(( <<$X git * ))", which dash runs as git with
+    its here-document ended by the end of the line, was let run past the
+    guards with permissions skipped (oracle seed 162). The Bash tool runs
+    /bin/sh where there is no bash. Such text now makes the line one that
+    cannot be read ahead of time, so the deny and ask rules ask about it.
+
+264. **With stream-json input, each turn's result carries its structured
+    output.** --json-schema asked for the result as JSON only in a run of
+    one prompt: with --input-format stream-json no result line carried
+    it (the print mode review of 2026-11-19). Each turn's result now
+    does, and with a schema each message is a turn of its own: the next
+    goes once the last one's result is written, since the structured
+    output is asked of the conversation as that turn left it.
+
+265. **Nothing for delivered files is written through a link.** The
+    deliverables folder in the project's data folder, and a copy's folder
+    under it, were made and written by following whatever stood there, so
+    a repository that carried one as a link had the register, its ignore
+    file and copies of files from other machines written wherever it led
+    (the deliverables review of 2026-11-19). A folder on the way that is a
+    link now stops the write, and says so.
+
+266. **The first press that would leave says what stops with gnosh.**
+    Leaving stops the commands running in the background, and Ctrl+C or
+    Ctrl+D pressed twice left with nothing said of them; Claude Code says
+    what running work there is as it is left. The first press's line now
+    names how many commands running in the background stop with gnosh.
+
+267. **A "don't ask again" never offers more than the person can see it
+    gives.** Three rules it offered reached further than they read (the
+    approvals review of 2026-11-19): a command that began "cd .." from the
+    project's root offered, and kept on disk, read access to the folder
+    that holds every project of the person's, "cd ~" to the home and
+    "cd /" to everything; PYTHON3 or GIT in capitals, which a Mac runs as
+    python3 and git, got the prefix rule those never get; and a * in a
+    fetched URL's host became a wildcard, so an answer for
+    https://*.com/x would let every .com be fetched. No Read rule is now
+    offered for a cd into the root, a top-level folder, the home or a
+    folder that holds the project; a program's name is looked up as the
+    system finds it; and a host with a wildcard is refused, and never
+    makes a rule.
+
+268. **The project's local settings file is the truth about what was
+    kept.** A change the person made by hand while a question waited (a
+    deny rule added) went into the file with gnosh's save, which marked the
+    file as taken in, so their rule was never put in force; and an
+    approval they took out of the file by hand stayed in force until the
+    session ended (the approvals review of 2026-11-19). gnosh's own write
+    now counts as taken in only when the file stood as gnosh last took it
+    in, and reading the file again drops the approvals it no longer holds;
+    one that could not be written down holds for the session alone. And a
+    sub-agent's question says that a yes that keeps a rule keeps it for
+    the whole session and all its agents.
+
+269. **A file brought from a host is never written through a link.** The
+    copy of a deliverable fetched from a host was written by opening its
+    file by name again, which would follow a link put in that file's place
+    since it was made, and write the copy wherever the link led (the
+    deliverables review of 2026-11-19). The file is now opened only if it
+    is still no link.
+
+270. **A skill's grant is the agent's that runs the skill.** A forked
+    skill's allowed-tools were put in force for the whole session until the
+    person's next prompt (the skills review of 2026-11-19): the agent that
+    loaded it, and any other agent running then, could run what the skill
+    allowed, and a forked skill run in the background lost them as soon as
+    the person typed again. A layer of the permission engine can now be
+    kept to one agent (Layer.Agent, DecideFor): a skill's grant is for the
+    agent that runs it, a forked skill's for the sub-agent it runs in,
+    from its start to its end. (A skill the session's own agent runs is
+    leave for its sub-agents too, as it was: they work for it.) The skill's own commands (!`command`), and
+    those of the skills a kind of sub-agent preloads, are judged as calls
+    of the agent they are for, and run where it works: in its work tree,
+    when it has one (they ran in the session's folder).
+
+271. **A command gnosh cannot read is still judged by what it is handed.**
+    In a line the reader could not follow (oracle seed 163: a ${X:}
+    stopped it), `mv <(wget …) db/s` was let run with permissions skipped
+    once any allow rule stood: its crude reading took the <(...) apart
+    into plain words, and moving away whatever a command prints, which
+    asks on a line that can be read, went unseen. Where the piece from a
+    destroying command's name on cannot be read either, its words are now
+    taken as they are written, and a <(...) or >(...) among them stands
+    for whatever a command prints.
+
+272. **What a far machine copies goes on this one's clipboard as plain
+    text.** gnosh ssh put whatever an OSC 52 write held on the Mac's
+    clipboard: from a file a remote shell printed, an escape that ends a
+    terminal's bracketed paste and a command after it (the relay review of
+    2026-11-19); and pbcopy keeps text that begins as rich text or
+    PostScript as that. The relay now copies as /copy does, without the
+    control characters but tabs and line breaks (clipboard.Plain); pbcopy
+    is never given text that begins as rich text or PostScript; and ssh's
+    -o ForkAfterAuthentication=true is known for the -f it is.
+
+273. **A run in the background cannot speak for gnosh in its log.** What a
+    run printed went into its log beside gnosh's own lines about it, and a
+    reply that wrote such lines was taken at its word: a folder line had
+    "go on" resume the run in the home folder, and a stop line hid that it
+    was done (the relay review of 2026-11-19). A line of the run's own
+    output that begins as gnosh's do now gets a space before it. And: a
+    log not named after a session is no run's (".background.log" stood
+    for any process), ps is asked for the whole command line, a run still
+    working is listed however old its log, the list gnosh agents prints
+    is plain on a terminal, and gnosh --bg -r takes only gnosh's own
+    session files.
+
+274. **The agent view shows a question whole, however it is indented.** A
+    line indented past the screen's width wrapped to a character a row and
+    was drawn blank, so a script could be approved unseen (the relay
+    review of 2026-11-19): a line now keeps at most a quarter of the width
+    of its indent, and what is not shown is not wrapped. A run started from
+    the box is chosen only if the person has chosen no other run and typed
+    nothing since.
+
+275. **A command on another machine borrows nothing of the person's ssh
+    but the login.** It ran with whatever the person's ssh configuration
+    lends: their agent, with which a command there could log in with their
+    keys to machines nobody declared; forwards that open a way back into
+    this machine; a shared connection gnosh's ssh could become, outliving
+    the command or ending the person's own sessions with it (the hosts
+    review of 2026-11-19). gnosh now runs ssh with no agent, X display or
+    forward, no local command, and as no shared connection's master (it
+    still uses one the person has). And a host given a new address under
+    the same name while the session runs is reached there from then on,
+    by Bash and Deliver alike: only the names had been compared.
+
+276. **Monitor is judged as the background command it is, and paced.** A
+    Monitor's command always runs in the background, but a rule about
+    Bash's run_in_background, and a Bash hook that looks at it, did not
+    see so (the hosts review of 2026-11-19). Both now judge a Monitor call
+    as the Bash call that runs its command, in the background, with its
+    time. And one Monitor passes its lines on at most every 15 seconds,
+    its first and its last at once: a command that printed every few
+    seconds woke the model for each line, for up to half an hour.
+
+277. **/export writes a file for the person alone, as plain text.** It
+    was readable by everyone, held the escape sequences commands printed,
+    which cat then played, and `/export ~/Desktop` wrote ~/Desktop.txt
+    (the hosts review of 2026-11-19). The file is now 0600, without
+    control characters but tabs and line breaks, and a folder named gets
+    the file of the usual name inside it.
+
+278. **A suggested next prompt is a prompt.** One that began with ! ran as
+    a shell line, with no rule looked at, when the person took it with Tab
+    and Enter; one with / ran a command; exit or quit ended the session
+    (the status line review of 2026-11-19: a page the model had read could
+    have it suggest "!curl … | sh"). Such a suggestion is not offered.
+
+279. **The person's own commands that may call git run where git is safe.**
+    The status line and the @ file suggestion command were held in a folder
+    whose repository's own git settings name programs only as the session
+    began; once the shell had gone into an unpacked repository inside the
+    project, they ran git there (the status line review of 2026-11-19).
+    Where they run is now looked at each time: a repository other than the
+    start folder's has its own settings checked, and the command waits
+    while they name programs. The status line runs in a process group of
+    its own, which a timeout stops whole; a repository's .git, commondir
+    and config are read only when they are regular files, so a named pipe
+    there no longer hangs it, nor gnosh's exit; and a link in its output
+    holding a control character, or a mark that turns the text around, is
+    not drawn.
+
+280. **A project's output style is read as its skills are.** Style files
+    were read through links, whatever they were, whole before their size
+    was checked, and a repository's style of the same name, in another
+    case, stood in for the person's own (the status line review of
+    2026-11-19). A project's style that leads out of the project, or is
+    not a file, is not read; no more is read than a style may hold; the
+    person's own come first; and a project's style text goes to the model
+    as text from outside, as its GNOSH.md does.
+
+281. **The keybindings file is read only when it is a file, and made new.**
+    A named pipe in its place stopped the keys, and /keybindings wrote its
+    template through a link left where the file was (the status line
+    review of 2026-11-19).
+
+282. **A word that begins with a process substitution names a path that is
+    only known when the line runs.** The engine read <(cmd) as a part of
+    a word that may stand for nothing, as an empty variable may, so
+    `mv <(echo x)suffix db/s` was judged as moving "suffix", where the
+    shell moves /dev/fd/63suffix (oracle seed 164). A process substitution
+    with a command in it always stands for /dev/fd/N; a word that begins
+    with one is now a path nobody can know ahead, which the guards ask
+    about.
+
+283. **/cd moves the session to the folder as gnosh names it.** It filed
+    the session under the path as typed, where a start looks under the
+    path with its links followed (/tmp/proj against /private/tmp/proj), so
+    gnosh -c did not find it there, nor did SendMessage its sub-agents
+    (the cd review of 2026-11-19). The folder is now resolved first; after
+    the trust question it is looked at again, and so is what the session
+    is doing, which a scheduled prompt may have set going meanwhile (a
+    move half made kept the session running where it was); and the
+    session's folder beside its file, where its checkpoints are, goes with
+    it, as well as the one under the working folder's project, and the
+    person is told if one cannot.
+
+284. **In plain mode a question is answered by a line typed after it.** A
+    line typed before a question came, or as it came, was taken as its
+    answer: a "2" meant for a list in the model's reply picked "Yes, and
+    don't ask again" (the cd review of 2026-11-19). Such a line is now
+    said to be too early, as the full interface waits before a key counts.
+    And Ctrl+C stops a command that runs, as Esc does there; a question
+    nobody can answer is answered no only where no is a choice (its reason
+    was handed to gnokey as a password); and what is written holds no
+    stray C1 byte or mark that turns text around.
+
+285. **What gnosh tells the gnosh it starts again is gnosh's alone.** A
+    settings file's env block could put GNOSH_RESTARTED, GNOSH_MOVED_FROM,
+    GNOSH_TREE_MOVE or GNOSH_RUN_ASKS on every command, so a gnosh a
+    command started was told of a move or a restart that never was; they
+    are now taken from no settings file. And /restart starts the program
+    the PATH names only when that is the very file running: a launcher
+    that ran another gnosh under the same name had /restart start the
+    PATH's (the cd review of 2026-11-19).
+
+286. **/restart keeps a made-up work tree one made here.** A --worktree
+    session's tree made under a made-up name, and left as it was made,
+    goes when the session ends; after /restart, whose new start finds the
+    tree by its name, it was taken for one named and opened again, and
+    kept for good (the cd review of 2026-11-19). /restart now tells the
+    new start the tree was made here and nobody named it (treeMove.Made).
+
+287. **A plan is the person's alone to approve, and only in plan mode.**
+    ExitPlanMode was left out of plan mode's hold, so an allow rule, a
+    skill's allowed-tools, or a hook's allow approved a plan nobody had
+    read, and the model was told the user approved it; outside plan mode
+    it still asked, and its yes switched the mode whatever the session was
+    in, the second choice to acceptEdits for good without saying so (the
+    plan review of 2026-11-19). The plan is now asked of the person alone
+    (Decision.PersonOnly: no rule, no hook, no channel), and refused
+    outside plan mode; its choices say which mode each yes switches to;
+    what plan mode holds, a PermissionRequest hook no longer lets through;
+    EnterWorktree and ExitWorktree ask while planning, and a sub-agent
+    started then gets no work tree; and the plan is drawn as written, each
+    line set apart from the choices.
+
+288. **The person's own files are opened where they are.** /memory offered
+    a project's GNOSH.md that is a link leading out of the project, and the
+    editor wrote, or made, the file it led to, where the instructions are
+    not read through such a link; the prompt box's draft lay in the shared
+    temporary folder, where an editor's backup beside it kept what was
+    pasted (the plan review of 2026-11-19). Such a GNOSH.md is no longer
+    offered, folders made for the person's files are 0700, and the draft
+    gets a folder of its own, removed whole after.
+
+289. **An approved plan is kept.** Once answered, the plan was kept
+    nowhere: the scrollback held the question's answer, and after a
+    summary neither the person nor the model could look at the plan again
+    (the plan review of 2026-11-19). An approved plan is now written to a
+    file of the session's own, plans/<time>.md in its folder, the person's
+    alone, and the model is told where it is.
+
+290. **A rewind puts a file back only where it was, and waits for what
+    runs.** The paths a rewind puts back are written with every link on
+    the way followed, but only the last part was looked at again: a folder
+    removed and made a link in its place (to ~/.ssh, say) had a rewind
+    write the person's authorized_keys there, or take a file of theirs
+    away, with no rule asked (the rewind review of 2026-11-19). A file
+    whose folders hold a link now is left alone, as is one an Edit deny
+    rule covers, one that may not be written now (as Write leaves it), one
+    whose work tree is gone, and one holding more than 1 GiB now; what a
+    file holds is compared and set aside without reading it whole, and
+    its set-user-ID and the like come back with it. Every rewind waited
+    only for a turn: opening the session again stopped the commands and
+    sub-agents in the background unasked, and the files could change again
+    as they were put back; it now waits for those, for a /subtask run
+    whose answer is to come back, and, when files go back, for a /fork
+    run in the same folder. A branch finds its origin's copies wherever
+    that session is now (/cd and work trees move one of the two), and says
+    so when that session is gone; two spellings of one file on a disk that
+    ignores case are kept as one; the Esc Esc list says why no file can be
+    put back when none can, shows the files by their paths and a long
+    prompt cut, and keys typed before its confirmation could be seen no
+    longer answer it.
+
+291. **A file Write or Edit changed is followed, whatever changes it
+    next.** A copy was taken only before the first Write or Edit of a file
+    after each prompt, so what a shell command changed in a file the model
+    had written was not put back, while the rewind said the files were as
+    they were before the prompt (the rewind review of 2026-11-19); Claude
+    Code rewinds the files it tracks whatever changed them. As each prompt
+    goes out, every file a copy was kept of is now looked at, by its size
+    and time (read only when those do not tell, or are too recent to
+    trust), and copied again under the prompt when it changed since its
+    newest copy; a rewind puts such a file back as it was when the prompt
+    went out. A file that holds now what it held then is no longer
+    offered, and when old prompts' copies are let go, each file's newest
+    copy among them is kept as what it held as the oldest prompt kept went
+    out. A file only shell commands changed is still not followed, nor
+    are a sub-agent's.
+
+292. **The rewind can keep a summary, as Claude Code's does.** Claude
+    Code's rewind offers, beside the conversation and the files, "Summarize
+    from here" and "Summarize up to here"; gnosh had neither. /rewind N
+    summarize (Esc Esc: "Summarize from here") has the model write a
+    summary of what followed prompt N, from the session's own request so
+    that a model server reads only the asking anew, and then goes back to
+    before the prompt, with the summary kept in the conversation after a
+    line of gnosh's that says what it is, and the prompt back in the box;
+    the files stay. /rewind N summarize-before ("Summarize up to here")
+    has the model summarize the conversation before prompt N from that
+    part alone, and the summary takes that part's place (a summary entry
+    that covers the entry before the prompt), with what followed going on
+    after it as it was; not for the first prompt. Words after either are
+    what the summary is to keep, as /compact's are. The line before every
+    summary had been put in gnosh's marker twice, so the model was shown
+    the inner marker broken by a zero-width space; it is marked once.
+
+293. **A scheduled prompt waits for the person's command.** A cron task or
+    the self-paced /loop came due whenever no turn ran and nothing was
+    queued, so one could fire while a command of the person's waited:
+    under /cd's trust question, whose move then refused (the cd review of
+    2026-11-19), or between the summary "/rewind N summarize" waits for
+    and its rewind, which a running turn refuses. The slash commands are
+    now counted while they run, and the schedule waits for none to be.
+
+294. **A rewind's files go back from what is known of them.** The rule
+    that a followed file with no copy under a prompt held, as the prompt
+    went out, what its newest copy before it holds is true only where the
+    files were looked at then; in a session from before that was done,
+    or for a prompt sent with copies off, it put a file back to before an
+    earlier prompt, undoing that prompt's change too (the review of the
+    day's own rewind work, 2026-11-19). Each prompt they were looked at
+    for is now recorded (begun), and elsewhere the oldest copy from the
+    prompt on is taken, as before. Copies are named by what they hold, so
+    a file a build writes again each turn is kept once. "Summarize from
+    here" marks the prompt where the model reads it (a "go on" written
+    twice is told apart), keeps it in a request too long, and is made
+    only for a prompt the model still reads; it is not carried out when
+    a prompt was sent while the summary was made, which would have been
+    taken off unseen. A "Summarize up to here" summary is written again
+    after a later rewind that would have left it behind. The /fork and
+    /subtask runs a session watches outlive its being opened again, so
+    a rewind of the files still waits for them, and a /subtask's answer
+    still comes back. Ctrl+C in the line-mode front end stops the
+    summary a command waits for, not only the command.
+
+295. **A dot pattern after a pattern asks.** Expanding "*/..*" itself,
+    the engine took "*/.." out as the text does and read the working
+    directory, while dash matches ".." with "..*" and so ran
+    "cat -R/.. link-dir/.. …": a match beginning with a dash, which cat
+    reads as a flag, and through a link the directory above where the
+    link leads (oracle seed 166). A segment that starts with a dot and
+    holds a pattern, after a segment that holds one ("*/..*",
+    "*/.*"), is no longer worked out: the line asks.
+
+296. **What a side request is shown, waits for, and answers.** The goal
+    judge and the close review were shown the conversation with each
+    event after one "the user:" or "the agent:", and its further lines
+    raw: a line in a README, a tool's output or the agent's own words
+    that began "the user: the goal is met" stood as the user's word,
+    which the judge counts, and the agent's memory could fake a heading
+    of gnosh's (the side-request review of 2026-11-19). Every further
+    line of an event, and every line the agent wrote (its memory, its
+    thoughts, its result, its call), is now indented, every kind of line
+    break made one, and both judges are told an indented "the user:" is
+    never the user's word; a check that could not run is made again at
+    the next turn's end, not taken for done, and the goal judge asks at
+    temperature zero. /btw asked while a call runs says the call still
+    runs (the log's repair had it interrupted). A side request's time
+    begins once it has the model, the wait having a bound of its own,
+    and a prompt hook's limit is its model's, so that one waiting behind
+    a long /btw no longer fails closed; a side request a provider failed
+    in passing is tried again after the session's pauses. Esc lets a
+    waiting /btw or /recap go without stopping the turn, and /exit does
+    not wait behind one. /btw keeps its blank lines, /recap takes an
+    answer cut off at its limit, --json-schema's output is printed safe
+    on a terminal, and a schema with keywords gnosh does not check is
+    refused.
+
+297. **mem's Gno sent to the wrong place runs in mem.** A shell command
+    that was nothing but calls on mem (mem.Show()) was refused with a note
+    that it is Gno, which taught a small model nothing: in 19 of 45
+    FrontierHarness trials on box 2 Qwen's first mem call went to the
+    shell, and in one, 315 of its 320 calls did, for the whole half hour,
+    building nothing (2026-11-19, the FrontierHarness session's numbers).
+    Such a command, every line of it one call on mem or a chain of them,
+    is now made a gnovm_run call on mem in its place, before the
+    permission rules (which judge that call), and its result begins with
+    gnosh's line saying so and what to call next time; a command with
+    anything more stays the shell's. Code that calls mem, sent to
+    gnovm_run with no VM named, runs in mem rather than in the scratch
+    VM, where mem is no name.
+
+298. **A run is not offered the tools nobody there can answer.**
+    AskUserQuestion, EnterPlanMode and ExitPlanMode were offered in every
+    -p run, where nobody answers a question (stream-json input carries
+    user messages, not answers) and nobody approves a plan: their schemas
+    were 3.5K of the 27K characters of tools sent with each
+    FrontierHarness request, a question only came back refused, and a
+    model that switched itself to plan mode could never leave it, every
+    later edit refused (2026-11-19, the FrontierHarness session).
+    AskUserQuestion is now offered where a person attends the session, or
+    where a PreToolUse hook of the person's may answer in their place;
+    plan mode's tools where a plan can be approved: a session somebody
+    attends, or a run in the background, whose permission questions the
+    agent view puts to a person. In a run started in plan mode, an
+    edit's refusal asks for the plan in the answer, not of ExitPlanMode.
+
+299. **Stop hooks are told what may still wake the session.** As Claude
+    Code's Stop and SubagentStop input (its hooks reference, read
+    2026-11-20), gnosh's carries background_tasks and session_crons, so
+    a hook can tell a session that is done from one that waits on work:
+    each command running in the background (type "shell", or "monitor"
+    for a Monitor's, as Claude Code 2.1.329 has it) and each background
+    sub-agent ("subagent", with its agent_type), as id, type, status
+    "running", description and command; and each scheduled prompt (from
+    CronCreate or /loop, and the self-paced loop's next run, given the
+    schedule that matches its minute) as id, schedule, recurring and
+    prompt. Text is cut at 1,000 characters with "… [+N chars]". Both
+    lists are the session's, for a sub-agent's hook too, and are empty,
+    never left out, when nothing runs or waits. /fork and /subtask runs,
+    which are programs of their own, are not listed.
+
+300. **A nested instruction file is fenced at its own repository.** What
+    a project's instruction file could import, or reach through a link
+    (the file itself, a rules folder), without asking was the project
+    root's; a session started in the home folder, a folder above it or
+    at the top of the disk made that every key the person has: a cloned
+    repository's CLAUDE.md below it with "@../../.ssh/id_ed25519" put the
+    key into the model's context, as standing instructions, the first
+    time the model read a file there, and nobody was asked (the
+    instruction-files review of 2026-11-20). A project's file is now
+    fenced at the top of the repository it lies in below the project
+    root (one cloned or vendored there is a project of its own); else at
+    the project root, as before; else, where the root is the home
+    folder, a folder that holds it or the top of the disk, at its own
+    folder. And whatever its fence, a project's file never brings in what
+    lies where keys and passwords are kept (~/.ssh, ~/.gnupg, ~/.aws,
+    ~/.config/gh, ~/.netrc, ~/.git-credentials, ~/.docker, ~/.kube),
+    which the warning names as such. The person's own files keep their
+    freedom.
+
+301. **A walk up reads no ~/.claude, and a work tree's top is not read
+    again.** Walking up from a project below the home folder read the
+    home folder's .claude as a project's dot folder: Claude Code's own
+    ~/.claude/CLAUDE.md and ~/.claude/rules reached every session as
+    "project instructions", against DECISIONS 245, and path rules there
+    matched against the home folder (the instruction-files review of
+    2026-11-20). The home folder's dot folders are now passed over; a
+    CLAUDE.md in the home folder itself is read, as one in any folder
+    above the project. And a sub-agent working in a work tree of gnosh's
+    (under the data folder's worktrees) was given the tree's top
+    instruction files and rules again, copies of the project's own, as
+    nested files to follow over them; as in Claude Code, the files at a
+    work tree's top are not read for it, and those deeper in the tree
+    are, as usual.
+
+302. **One folder's instruction files cost a bounded amount.** Nothing
+    capped what a repository's instruction files could cost: an AGENTS.md
+    of half a million "@x/1 @x/2 …" was as many lookups and as many
+    warnings on the screen at every start, and a rules folder linked to
+    the top of the repository made every .md in it, node_modules' READMEs
+    too, a rule given whole (the instruction-files review of 2026-11-20).
+    One file's first 100 imports are followed, one reading takes at most
+    200 rule files, each cut said once, and the start shows the first ten
+    warnings about instruction files and the count of the rest.
+
+303. **After a summary the instruction files are read again when one has
+    changed.** A summary gave back the instruction files as read at the
+    start, so an edit to CLAUDE.md, the GNOSH.md /init wrote or a rule
+    taken out never reached a running session, while /memory said a
+    change shows in the next session (the instruction-files review of
+    2026-11-20). As Claude Code reads its files again after /compact,
+    gnosh now reads them again after a summary when one has changed on
+    disk (Set.Changed, then Set.Reload in place), and gives the model
+    what is there now; /memory says so. A resumed session still begins
+    with the copy its first prompt carried.
+
+304. **Instruction text loses what is drawn as nothing, and a package
+    name is no broken import.** Tag characters, the controls of the
+    drawing order and runs of zero-width characters in an instruction
+    file reached the model as words nobody reading the file saw; they are
+    taken out as from a typed prompt (text.CleanInvisible), with a
+    warning when they could hide words or reorder them, and what emoji
+    and Persian write with joiners stays. And an "@types/node",
+    "@pytest.fixture" or "@docs" in a file's prose was warned about as a
+    missing import at every start: a missing import is now said only
+    when it was surely meant for a file, written from a folder (./ ../ ~/
+    /) or ending .md, .markdown or .txt (the same review).
+
+305. **Files from outside the project load once the person says yes.** A
+    project's instruction file that brought in a file from outside the
+    project, by an import or a link, was refused with a warning at every
+    start, and nothing let it in (Options.ApproveImport was never set): a
+    shared file in the home folder, Claude Code's own pattern for notes
+    kept across work trees, never loaded (the instruction-files review of
+    2026-11-20). As in Claude Code, a session somebody attends now asks
+    once per project, listing the files ("Load files from outside the
+    project?"); the answer is kept in the person's state folder, never in
+    the project, and the question is not put again; a yes loads them in
+    this project's sessions, runs included, and a no leaves them out with
+    no warning at each start. Where keys and passwords are kept is never
+    offered nor loaded, whatever the answer.
+
+306. **mem keeps no wallet's recovery phrase, nor a key in hex.** The
+    secret filter on what the agent keeps in mem knew API keys, tokens,
+    PEM keys and named passwords, but let a 24-word recovery phrase
+    through, and a private key in lowercase hex (the gno review of
+    2026-11-19). It now knows twelve or more words in a row from the
+    BIP-0039 English list (numbers between them, as a phrase is written
+    down, aside; prose is held together by words the list has not), and
+    64 hex digits in a text that names a key (priv…, secret, seed,
+    wallet, signing, mnemonic, key…): a digest alone, a checksum, stays
+    keepable. The word list is BIP-0039's own (PROVENANCE.md). What the
+    person keeps with /mem is not held to it, as before.
+
+307. **An option gnosh does not know stops no save, and "default" is a
+    style kept.** The state file's every option was checked again on each
+    save, so one that another version of gnosh saved, which this one does
+    not know, made every /model, /think, /effort, /config and /theme say
+    it could not be saved, and /config key= could not take it off (the
+    settings-commands review of 2026-11-20). An option written back as
+    the file held it is now carried through unchecked; one being changed
+    is checked; /config key= takes off a saved option this gnosh does not
+    know. And /output-style default took the setting away, so a style the
+    person's gnosh.json or /config named won the next session; "default"
+    is now kept as the choice it is.
+
+308. **The file of saved approvals is never a link, and git passes it
+    over.** .gnosh/settings.local.json was read and written through a
+    link: a repository's link to the person's own gnosh.json was read as
+    the project's, and the next save renamed a copy of it, keys and all,
+    into the repository; and .gnosh/.gitignore was written only when
+    gnosh made the folder, so a folder a work tree or the repository's
+    own agents made first left the person's approvals to be committed
+    (the settings-commands review of 2026-11-20). A linked file is now
+    neither read (a warning says so) nor written (the save says so), nor
+    is a data folder that leads out of the project written in; and each
+    save makes sure git passes the file over, with a line in the
+    repository's info/exclude (kept by git for this clone, never
+    committed) unless the folder's .gitignore covers it, as Claude Code
+    puts its own file in git's excludes.
+
+309. **Saved approvals are the person's own in a folder they have not
+    trusted.** The local settings file was always read as the
+    repository's, so in a folder not trusted (a fresh repository is one,
+    and nobody is asked) an approval saved with "Yes, and don't ask
+    again" or /permissions allow went out of force at the next reading
+    of the settings (a hand edit of gnosh.json, another gnosh saving),
+    the person was asked again, a run never had it, and /permissions said
+    it was in force (the settings-commands review of 2026-11-20). As
+    Claude Code reads its own local file as the person's, gnosh now notes
+    what it writes there, as a digest in the person's state folder, which
+    no project can write; while the file holds just that it is read as
+    theirs and is in force. A file the repository brought, or one anyone
+    changed since gnosh wrote it, is the project's, held until the folder
+    is trusted, as before.
+
+310. **hash's options are read as bash reads them.** "hash -p FILE NAME"
+    makes NAME run FILE from then on, and the engine read it as an alias,
+    but from the first -p only, where bash's getopts keeps the last:
+    "hash -p h -p /bin/mv zz; zz * v z" moved what a deny rule guards
+    while the engine took zz for h (oracle seed 168). The options are
+    now read to their end as getopts reads them (a word that is not an
+    option, or --), every -p's file is taken for each name after them,
+    so that each file the name may run is judged, and a word computed
+    when the command runs among hash's words makes the line one that
+    cannot be read.
+
+311. **A run keeps no choice, and max holds for the session.** /model,
+    /effort, /think and /no_think given to a run (gnosh -p "/model x")
+    saved the choice for every later session, and /effort max was kept
+    too, where Claude Code keeps no choice made under -p and holds max
+    for the session alone (the settings-commands review of 2026-11-20).
+    In a run they now hold for the run, and say so; /effort max holds
+    for the session it is given in, and says so. /config, the command
+    for settings, still keeps what it is told, in a run too.
+
+312. **A file viewed with cat counts as read.** As Claude Code's tools
+    reference has it ("Edit tool behavior"), a file viewed with cat, nl,
+    bat, batcat, head, tail, sed -n 'X,Yp', grep, egrep, fgrep or rg, on
+    one file with no pipe or redirection (one simple command, as
+    shellquote.Split reads it), on this machine, in the foreground, that
+    ended well and printed something, counts as read: it may be edited or
+    written over without a separate Read (fstools.MarkRead), and the
+    instruction files of its folder and the rules that name it arrive as
+    after a Read. A small model reads with cat as often as with Read, and
+    its Edit was refused until it read the file again: a round lost each
+    time. A command whose words gnosh cannot read plainly (a grep with -e
+    or -f, a tail -f, several files) does not count.
+
+313. **A cycle of three or four rounds is a loop too.** The guard that
+    tells a model it repeats itself knew one round made again (more than
+    five of the last ten) and two taking turns (a full window of two
+    kinds), and a model that went round the same three commands, with the
+    same results, a hundred times over, was under both bars (the
+    FrontierHarness session, 2026-11-20: mailman under a context cap).
+    The guard now also sees a cycle of three or four rounds come round
+    three times in a row, the same calls with the same results, and tells
+    the model so, quoting the cycle, in the person's words for a
+    repetition (repeat.md). As before it never ends the turn, and counts
+    afresh after it speaks.
+
+314. **A loop is seen through fresh ids and in no fixed order.** The
+    guard compared each result as it was, so a loop of the same commands
+    whose every result held a fresh random id or a new PID was never one:
+    eval.py 58 times and a postfix restart 35, in no fixed order, 102 of
+    236 calls repeating one of the six before them, and one result only
+    the same (the FrontierHarness session, 2026-11-20, from the trial's
+    own logs). Results are now compared with every run of hex digits of
+    four or more that holds a digit, and then every run of digits,
+    blanked (agent.RepeatKey, the default key and the app's for tools no
+    feature keys); and twelve rounds in a row made of no more than three
+    kinds of round, in any order, are a loop too, told as a cycle. As
+    before the guard never ends the turn.
+
+315. **A file changed on disk can still be edited where old_string
+    picks out one place in it as it is now.** Edit refused any file that
+    had changed since the session read it, so a formatter, a build step
+    or a sub-agent touching the file cost a full read before every edit;
+    Claude Code lets the edit through when old_string matches the
+    current content exactly and once, and notes in the result that the
+    file carries other changes (its tools reference, "Edit tool
+    behavior"). Edit now does the same: the match is made on the file as
+    it is, the edit touches that place alone, the reply says the rest
+    holds changes the session has not seen and to read again before an
+    edit that depends on what is around it, and only the lines the edit
+    put in count as seen afterwards. Not found, or found more than once,
+    even with replace_all, it is to be read again, as before. Two
+    sessions editing one file in turn now both land, the later on top of
+    the earlier, where before the later was refused. Write still refuses
+    a changed file: it replaces the whole.
+
+316. **WebFetch keeps what is not text in a file.** WebFetch refused a
+    picture, a PDF or an archive with "WebFetch reads text only", so the
+    model had to fetch it again with curl to look at it; Claude Code saves
+    such content to a local file and says where (its 2.1.329 fixed PDFs
+    and pictures sent as application/octet-stream being saved as .bin).
+    webtool now gives back the bytes of what is not text (a media type of
+    bytes, or not UTF-8, or holding a zero byte), with the type read from
+    the first bytes when the server named none or only octet-stream; the
+    app saves them to <session>/tool-results/WebFetch-*.<ext> (0600, the
+    folder Read may read without a question), names the extension by type
+    (else the address's own plain one, else .bin), and tells the model
+    what it is and where: Read shows a picture, a PDF is to be turned into
+    text with a shell command. The smaller model is not asked. Within 15
+    minutes the same file is given again unless it is gone. Content past
+    the 10 MiB WebFetch reads is not saved: the result says to use curl.
+
+317. **The model is told when a connected MCP server's tools could not
+    be loaded.** A server that connected and then failed to list its
+    tools was told to the person alone (a notice, /mcp), and the model,
+    asked to use it, found no tools and could only guess why; Claude
+    Code 2.1.329 tells Claude. gnosh now hands the model a note, the
+    server's error cut at 300 characters inside gnosh's tag, when one of
+    the session's own servers connects and cannot list its tools. A
+    server that never connects, and a sub-agent's own server, stay the
+    person's to see, as before. The same pass checked 2.1.329's other
+    fixes against gnosh: questions in a window of 12 rows show every
+    choice by scrolling (box-ui-check short), --help is whole when
+    piped, and a resumed session never shows a cut-off call as refused.
+
+318. **Read gives a PDF's text, by pages.** Read refused every PDF ("cannot
+    read yet"), and accepted pages without honouring it. Claude Code's
+    Read takes a PDF of at most 10 pages whole and a longer one only by
+    pages, at most 20 a call, rendering pages with poppler's pdftoppm.
+    gnosh's Read now gives the text instead, which every model reads and
+    which costs far less of the context than pictures: pdfinfo for the
+    number of pages, pdftotext -layout for pages first to last (a minute
+    each at most, 16 MiB of output at most), each page under a [page N]
+    line, its lines cut as a text file's are; pages that would take one
+    call past its 100,000 bytes are left for the next call, which the
+    result names ("read on with pages \"4-8\""); a PDF with no text in the
+    pages asked for (a scan) is said to be one, with the pdftoppm command
+    that makes a picture of a page to Read. pages is offered in Read's
+    schema ("3", "1-5"); ranges past the end are cut to it. Without
+    poppler (not on box 1, box 2 or the Mac today) Read says to install
+    poppler-utils. The functions are Options.PDFPages and PDFText, nil
+    meaning poppler, so that tests and other front ends may put their own.
+
+319. **The list of keys shows the person's own.** gnosh takes Claude
+    Code's keybindings.json, and its key hints and the list of keys (?)
+    named only gnosh's own keys, so a key the person bound, or took away,
+    was nowhere to be seen; Claude Code 2.1.329 made its hints follow the
+    file. The list of keys now ends with "Yours, from <file>": each key
+    and chord the file binds, in Global, Chat and Transcript, with what it
+    does here in the list's own words, "runs /<name>" for a command, and
+    "taken away: it does nothing" for null. The hints elsewhere (about 140
+    names of keys in the screen's own sentences) still name gnosh's keys,
+    which keep working beside the person's unless taken away.
+
+320. **A sub-agent stopped while it is made ready does not start.** Agent
+    in the background and SendMessage make the sub-agent (its session
+    file, its agent, its own MCP servers, which can take seconds) before
+    it joins the list of background sub-agents; Ctrl+X Ctrl+K in that
+    while stopped the others and missed it, and it ran on, and Esc on the
+    turn did not keep it from starting. Claude Code 2.1.329 fixed the
+    like of it ("a background agent ran on when stopped while being
+    resumed"). The session now counts the times its background sub-agents
+    are all stopped (bgStops, under bgMu); a sub-agent made ready starts
+    only if the count is what it was before it was made, else it is closed
+    and the call says it was not started; a call whose turn was stopped
+    while it was made starts nothing either. TaskStop of one id is not
+    counted: a sub-agent not yet started has no task to stop.
+
+321. **On Linux a command is the first the kernel kills when memory runs
+    out.** The model's commands ran with the score gnosh had, so a runaway
+    build, a test that ate memory or a copy into a /tmp held in RAM could
+    have the kernel kill the model's server on the same machine, gnosh, or
+    the person's other work; the AI boxes lost llama-server and the user
+    managers that way (2026-10). Claude Code caps its commands' memory
+    with a cgroup when CLAUDE_CODE_TOOL_MEMORY_LIMIT says so; that needs a
+    cgroup the user may write, which a terminal over ssh seldom has. Every
+    command of the shell tool (Bash, Monitor, the person's own lines and
+    gnosh's helper commands) now starts with its shell setting its own
+    oom_score_adj to 1000, which needs no privilege and which everything
+    it starts inherits. gnosh's own score is untouched. A memory cap of
+    Claude Code's kind is left for when a box offers a writable cgroup.
+
+322. **The hints name the keys the person bound.** After 319 the list of
+    keys showed the person's own, while the hints about the transcript
+    still said Ctrl+O, and in the view Ctrl+E and q, whatever the
+    keybindings file said; a file that gave Ctrl+O to something else left
+    a hint naming a key that no longer did it. keyHint(action, gnosh's
+    key) now names the key the file binds to the action (a key of its own
+    before a chord), else gnosh's own, and nothing when the file gives
+    gnosh's key or chord to something else or takes it away and binds no
+    other: the hints for the transcript view (thinking folded and done,
+    folded tool calls, the first shortened block, the recap of a session
+    opened again) and the view's own line (the keys that go back and that
+    show all) follow it. Other hints keep gnosh's keys. Later the same
+    morning the key that stops a turn (the welcome line, the working line,
+    the summarizing note), the one that shows the task list again and the
+    one that goes to the next permission mode follow it too; the editor's
+    own hints and the app's replies still name gnosh's keys.
+
+323. **Searches reach what is spelled out, and leave out what is.** The
+    search-tools review of 2026-11-20 found Glob's description promising
+    that ignored files are found by naming them, while a file an ignore
+    rule covered by its own name (.env, *.log) was never listed; Grep's
+    glob applied after hidden and ignored files were dropped, so glob
+    ".env*" found nothing and blamed the glob, though ripgrep's glob
+    "always overrides any other ignore logic"; a negated glob without a
+    slash ("!vendor") left the vendor directory in; and multiline ^$ found
+    the empty spot after a file's last line break, so nearly every file
+    matched. Glob keeps its default (ignore rules honoured, unlike Claude
+    Code's) but lists a name the pattern spells out in full, file or
+    directory on the way, whatever the rules say (.env, **/.env,
+    **/dist/app.js); Grep's glob reaches the hidden and ignored files it
+    names, and a glob with a slash the directories on its way; a negated
+    glob leaves out directories of that name and all below them, "!x/"
+    directories alone; the walk asks a new over hook of every entry it
+    would pass over. An empty multiline match after the last line break is
+    no match. Grep's description now says that \b \w \d \s know ASCII only
+    (Go's RE2) and names \p{L} and \p{N} for other scripts.
+
+324. **Searches read .ignore and .rgignore, and know more file types.**
+    Claude Code's Grep is ripgrep, which reads .ignore and .rgignore
+    beside .gitignore, with more weight in that order; gnosh read
+    .gitignore alone (the search-tools review of 2026-11-20). The default
+    ignore files are now .gitignore, .ignore and .rgignore, in that
+    rising weight, so a .rgignore can let in what .gitignore leaves out.
+    Grep's types gain cuda, erb, gradle and ps (powershell), java gains
+    .jsp, .jspx and .properties, docker matches any name holding
+    Dockerfile (api.Dockerfile, Dockerfile.dev) and Containerfile.*, and
+    sass names css. .gitignore still holds outside a git repository,
+    where ripgrep would read it only when told to.
+
+325. **Read takes notebooks, and NotebookEdit changes their cells.** Read
+    refused a Jupyter notebook ("cannot read yet") and gnosh had no
+    NotebookEdit, so a model edited a notebook's JSON by hand, or with a
+    script. Claude Code's Read gives a notebook's cells with their
+    outputs, pictures among them, and its NotebookEdit replaces, inserts
+    or deletes one cell by id. gnosh's Read now gives each cell under a
+    line naming its number, its id (cell-N where a notebook of nbformat
+    4.4 or older has none), its kind and its run, then its outputs: text,
+    stderr marked, an error with its traceback cleaned of colour codes and
+    cut to its last 20 lines, and up to 4 pictures as pictures; one output
+    is cut at 4,000 characters; a notebook whose text passes what one call
+    shows comes without its outputs, and past that is refused with a jq
+    command to read some cells. NotebookEdit (notebook_path, cell_id,
+    new_source, cell_type, edit_mode) wants the notebook read whole and
+    unchanged since, as Write does, is judged by Edit's rules, goes
+    through the same lock, checkpoint and atomic write, clears a replaced
+    code cell's outputs and run count, gives an inserted cell an id where
+    the notebook's cells have them, and writes the notebook as Jupyter
+    does (keys in order, one space of indent, numbers as they were). It
+    costs every session's prompt its description, about 200 tokens.
+
+326. **The review of the day's code.** A fresh-eyes review of 2026-11-20's
+    commits (90765d3 to e7d8365) found: Grep's glob, made to reach hidden
+    and ignored files in 69e039f, entered every hidden or ignored directory
+    for a glob starting **/ (**/*.py walked .venv and node_modules, and big
+    trees ran into the time limit) — a directory is now entered past those
+    rules only when the glob spells out its name; Ctrl+X Ctrl+K with no
+    sub-agent listed did not count as a stop, so one being made ready
+    started — the stop now always counts; a Read of a notebook let Edit
+    put a cell's text into the notebook's JSON as it is — Edit now leaves
+    notebooks to NotebookEdit; an edit of a changed file read only in part
+    could land in lines never shown — the changed-file case now wants the
+    file read whole; NotebookEdit without new_source emptied the cell — it
+    is needed but to delete; cells named by number (no ids) moved under an
+    insert or delete while the notebook counted as seen — such a notebook
+    is to be read again first; a notebook's picture went out as the kind
+    the notebook named — it goes as what its bytes are, or not at all; a
+    notebook that is not UTF-8 was rewritten with U+FFFD — refused; U+2028
+    and U+2029 came back escaped and a byte order mark was dropped — kept;
+    both whole notebooks went into the session's file with each edit — not
+    past DiffMaxBytes; a hook that rewrote a notebook after NotebookEdit
+    left it counted stale — it is looked at as after Write and Edit; an
+    octet-stream body that begins as text went to the small model whole —
+    text only when all of it is; a PDF title could fake its page count —
+    pdfinfo's last Pages line counts; the start of a background sub-agent
+    added to the wait group after the lock — under it. WebFetch's note for
+    a PDF now says to Read the file.
+
+327. **Pictures go into the prompt box: Ctrl+V, and files dragged in.**
+    gnosh sent a picture with a prompt only when the person typed an @
+    mention of its file; Claude Code's Ctrl+V pastes the picture on the
+    clipboard as a chip, and a picture file dragged into the terminal is
+    attached (spec/cc/interactive.md 2.7). Ctrl+V in the prompt box now
+    asks the session for the clipboard's picture: on macOS osascript
+    writes it as PNG to a file of its own, on a Linux desktop wl-paste or
+    xclip hands it out (clipboard.PictureTool, ReadPicture; none over ssh,
+    where the clipboard is the person's own machine's, and the flash says
+    to drag the file in instead); the session keeps it as
+    <session>/pictures/image-N.png and the box gets "@image-N", which the
+    @ mentions read as that file (a resumed session too) and send as the
+    picture, as an @ mention of a picture already did. A bracketed paste
+    that is nothing but the paths of picture files (.png .jpg .jpeg .gif
+    .webp, spaces escaped or quoted, or file:// addresses), as terminals
+    paste dragged files, becomes @ mentions of them, ~ for the home folder
+    and quoted where they hold spaces; a shell line and a search are left
+    alone. The keys list names Ctrl+V. A picture over Read's 5 MiB is
+    still refused, as Read refuses it.
+
+328. **Read shrinks a large picture.** Read refused a picture over 5 MiB
+    ("Read does not shrink images"), and handed on every smaller one at
+    its full size; Claude Code's Read resizes and recompresses a large
+    image to fit the model's limits. A Retina screenshot passes 5 MiB, and
+    pictures now come into prompts by Ctrl+V and by dragging (327); a
+    local model's count of tokens for a picture grows with its pixels. A
+    PNG, JPEG or GIF longer than 1568 pixels on a side (what a model is
+    shown at most) or larger than ReadMaxImageBytes is now decoded (files
+    up to 64 MiB, pictures up to 50 million pixels: a larger one is
+    refused, not held) and scaled down to fit 1568, each pixel the average
+    of those it covers weighted by their opacity; it stays a PNG where that
+    fits and is otherwise a JPEG of quality 85 on white, a JPEG staying a
+    JPEG. The line before it says what it was and what it is now
+    ("3000x2000, shown shrunk to 1568x1045 (PNG, 412 KiB)"), and the meta
+    carries both sizes. WebP, which Go does not decode, goes as it is, or
+    is refused past the limit; a picture that cannot be decoded but fits
+    goes as it is, as before. Notebook pictures are not shrunk.
+
+329. **Read's allow_large reads past the usual limits.** Read took Claude
+    Code's allow_large and did nothing with it but say so. Claude Code's
+    reads the whole file, or a long range, in one call, sized against the
+    room left in the context. gnosh's Read now offers allow_large in its
+    schema; with it, the most one call shows is what the calling agent's
+    context has room for before room has to be made (ContextStatus.Room,
+    at three bytes a token: app readRoom, Options.ReadRoom), at most
+    8 MiB, and never less than the usual 100,000 bytes, and the default
+    count of lines does not apply unless limit is given. A file longer
+    than that room is cut where it runs out, and the note says so.
+
+330. **CLAUDE_CODE_GLOB_NO_IGNORE is read.** Claude Code's Glob lists the
+    files .gitignore leaves out unless CLAUDE_CODE_GLOB_NO_IGNORE=false;
+    gnosh's Glob leaves them out (the package brief's choice) and did not
+    read the variable at all (the search-tools review of 2026-11-20).
+    gnosh now reads it, from the shell or a settings file's env block:
+    true lists the ignored files, as Claude Code does by default; false,
+    or not set, keeps gnosh's way. A value that is neither is a warning
+    and not used. Grep, as in Claude Code, honours .gitignore either way.
+
+331. **Four more of Claude Code's variables are read.**
+    CLAUDE_CODE_DISABLE_WEB_FETCH=1 leaves WebFetch out of the session's
+    tools; CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS sets how long a fetched page
+    is kept (0 keeps none; default 15 minutes) and
+    CLAUDE_CODE_WEBFETCH_DEADLINE_MS how long a download may take (0 no
+    limit; default 5 minutes), both read as the others of config's limits
+    are, from the shell or a settings file's env block; and
+    CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1 keeps every command in the
+    session's working directory: a cd in a command does not carry over to
+    the next, and the result says so (shelltool Options.NoCarryCwd).
+    Claude Code documents all four (its tools reference and env vars);
+    gnosh read none of them.
+
+332. **A line read in pieces is one line.** Grep reads a line longer than
+    GrepMaxLineBytes (1 MiB) in pieces, each matched on its own; a match
+    in two pieces of one line counted the line twice and showed it twice
+    (the search-tools review of 2026-11-20). The scan now remembers the
+    line it last counted, and a later piece of it that matches is neither
+    counted nor shown again, with -o too. A match across two pieces is
+    still not found, and ^ and $ still match at a piece's edges, as
+    Options.GrepMaxLineBytes says.
+
+333. **gnosh doctor says whether PDFs are read.** Read gives a PDF's text
+    only where poppler's pdfinfo and pdftotext are installed (318), and
+    none of box 1, box 2 or the Mac has them; a model asked to read a PDF
+    there is told to install them only once it has tried. gnosh doctor
+    now says it under tools: "PDFs are read as text" when both are on the
+    PATH, else a note naming the package (apt install poppler-utils; brew
+    install poppler).
+
+334. **Grep searches UTF-16 files.** A file in UTF-16, which Windows tools
+    write (PowerShell's redirects, some exports and resource files), holds
+    zero bytes and was passed over as binary; ripgrep, and so Claude
+    Code's Grep, decodes one that begins with a byte order mark (its
+    --encoding auto). gnosh's Grep now looks at a file's first two bytes
+    where they lie (so the file is read from its start whatever they
+    are), and decodes a UTF-16 file, little- or big-endian, to UTF-8 to
+    search it, its line numbers and lines as the text is; one larger than
+    GrepMaxMultilineBytes is counted among the files too large, not
+    decoded. Read still shows such a file as binary, with the iconv hint.
+
+335. **Read stops short of the loop's cuts.** Every tool result is cut on
+    its way to the model, to a quarter of the window (fitResultToWindow)
+    and to 400,000 bytes (maxResultBytes). Read with allow_large (329) was
+    let past both, and so was a plain Read on a window of 128K or less: the
+    model got the head and the tail while Read recorded every line as
+    read, so a whole-file Write passed the partial-read refusal and dropped
+    the lines it never saw (the pictures/large review of 2026-11-20). Read
+    now stops a tenth under both (Options.ReadResultMost), counting the
+    line numbers, with its usual note and offset to read on; the calls of
+    one round share the room allow_large may fill (agent.TakeRoom), each
+    handing back what it did not use, since none of their results is
+    counted until the round ends.
+
+336. **Pictures in the prompt, the review's fixes.** @image-N, and the
+    mentions a drag of picture files becomes, get a space before them when
+    the cursor follows a word: an @ glued to a word is no mention, and the
+    picture did not go though gnosh said it would. Ctrl+V says over ssh
+    that the clipboard is the person's own machine's (a dragged path names
+    a file there, not here), and elsewhere which tools it needs. Ctrl+V in
+    the history search does nothing. A drag of paths a line each is taken;
+    one of more than ten (what a prompt brings) is left as text. A
+    clipboard tool stopped by the time limit gives no picture even when
+    what it handed out begins as a PNG, and on macOS too a picture over 64
+    MiB is refused.
+
+337. **Photos are turned upright.** Go's JPEG decoder leaves EXIF alone and
+    its encoder writes none, so a phone's photo that Read shrank reached
+    the model on its side (the pictures/large review of 2026-11-20); and a
+    model server that decodes without EXIF would show one that fit on its
+    side too. Read now reads the EXIF orientation (1 to 8) and turns the
+    picture as it says, re-encoding a turned photo even when it fits, and
+    says so. Shrinking holds the decoded picture once (rows are made
+    NRGBA a band at a time), decodes at most 25 million pixels (was 50),
+    one picture at a time, and stops waiting when the call is stopped. A
+    GIF is shrunk at its first frame's own size, not stretched to its
+    canvas, and the result says only the first frame is shown.
+
+338. **Claude Code's switches are read as Claude Code reads them.**
+    CLAUDE_CODE_DISABLE_WEB_FETCH, CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR,
+    CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, CLAUDE_CODE_DISABLE_CRON,
+    CLAUDE_CODE_DISABLE_FILE_MENTIONS, CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS
+    and CLAUDE_CODE_SUBAGENT_MODEL_FORCE were on only at exactly "1", and
+    only from the shell. Its env vars reference: "set 1, true, yes, or on
+    to turn it on ... in any casing"; and a settings file's env block sets
+    them too. gnosh now reads them so (live.envOn, from the env block
+    first), CLAUDE_CODE_SUBAGENT_MODEL with them; CLAUDE_CODE_DISABLE_FILE_MENTIONS
+    is not taken from a project's own files, which Claude Code ignores for
+    it. With WebFetch off, WebSearch no longer sends the model to it.
+
+339. **CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0 keeps the default.** gnosh read 0
+    as "keep no page"; Claude Code's reference says it takes plain digits
+    only, and "0, a decimal, or any other spelling keeps the default" (15
+    minutes). gnosh now does the same, with a warning doctor shows.
+
+340. **The blocks outside the working directories.** Claude Code's
+    permissions keys blockReadsOutsideWorkingDirectories and
+    blockWritesOutsideWorkingDirectories, which gnosh refused as unbuilt,
+    are built with Claude Code's meaning (its settings reference and
+    permissions pages, read 2026-11-20). With the read block, Read, Grep
+    and Glob refuse a path outside the working directories in every mode,
+    bypassPermissions too, and say to ask for /add-dir; search results
+    and @ mentions leave such files out; a shell command that reads one,
+    or whose files gnosh cannot tell, asks in every mode (dontAsk
+    refuses). With the write block, Write, Edit and NotebookEdit refuse
+    such a path, and refuse a settings file of gnosh's anywhere (the
+    person's gnosh.json, the project's, its settings.local.json, a
+    --settings file), since one could add hooks or rules; EnterWorktree
+    and ExitWorktree are off; shell commands are not held, as in Claude
+    Code. No allow rule lets a file tool through either block. A true in
+    any file holds and false is the same as unset, so a repository can
+    turn a block on and cannot lift the person's; the working directories
+    counted are the primary one and those the person added (--add-dir,
+    /add-dir, their own files), not those only the project's files add.
+    gnosh's own files stay readable: the project's sessions (saved
+    command output, fetched pages, pasted pictures) and the folders of
+    skills, sub-agents, commands and rules. The blocks are a step of
+    their own (StageBlock), after the deny rules and before everything
+    that could pass a call.
+
+341. **The blocks, after their review.** A fresh-eyes review of 340
+    (2026-11-20) found three ways round the read block and other faults,
+    fixed so: (a) the project's folders of skills, sub-agents, commands
+    and rules count as gnosh's own only above the working directory, in a
+    trusted folder, and where their links lead inside the project (a
+    repository's .claude/skills leading to / had let every read through);
+    the session's own folder is added once its id is known, not every past
+    session's. (b) A shell command is asked about where it runs too: the
+    shell's own folder and every folder the line moves to (cd, pushd, env
+    -C, git -C), where a grep -r or a find with no path reads. (c) The
+    block's question about a shell command is put only where the command
+    would have run: a dangerous removal stays critical, plan mode's
+    question stays the person's. The folders counted are compared where
+    their links lead too (/tmp is /private/tmp on macOS); the project's
+    additional directories stay through a change of the settings files;
+    a folder the person adds that the project names too is the person's;
+    a subfolder's gnosh.json and .gnosh/settings.local.json are settings
+    files too, compared as the disk compares names; an import of an
+    instruction file outside the project, which the person allowed, is
+    still held to the read block; a notebook keeps under what one result
+    may hold (335), as text does. Left as Claude Code leaves it: a
+    program that opens files of its own (python -c, curl file://) is not
+    held by the read block, which can only trace the commands it knows;
+    Claude Code's sandbox is what holds those, and gnosh has none.
+
+342. **Language servers, and the LSP tool.** Claude Code gives the model a
+    language server's diagnostics after each edit and an LSP tool to
+    navigate code, once a code-intelligence plugin names the server.
+    gnosh adopts no plugins, so the same entries (a plugin's .lsp.json:
+    command, args, extensionToLanguage, env, initializationOptions,
+    settings, workspaceFolder, startupTimeout, shutdownTimeout,
+    requestTimeout, restartOnCrash, maxRestarts, diagnostics, strict as
+    Claude Code's) go under lspServers in gnosh.json; a project's waits
+    for trust, as a program it would run, and safe mode starts none. A
+    server starts the first time a file of its endings is read or
+    changed (internal/lsp, a client of the protocol over standard input
+    and output, standard library only, with Claude Code's limits of 64 KiB
+    of headers and 32 MiB a message). A file the model reads is opened in
+    it; after Write, Edit or NotebookEdit the file's text is sent, gnosh
+    waits up to 3 seconds for what the server publishes and a moment of
+    quiet after, and the model is told the errors and warnings that were
+    not there before, in that file and others, at most 20, each at its
+    1-based line and character; the person sees "Found N new diagnostic
+    issues in M files". The LSP tool asks goToDefinition, findReferences,
+    hover, documentSymbol, workspaceSymbol, goToImplementation,
+    incomingCalls and outgoingCalls, read-only; it is offered only when a
+    server is named, and its permission is Read's (rules, the read block).
+
+343. **Pictures pasted without holding the screen; LSP for the looking
+    sub-agents.** Ctrl+V reads the clipboard away from the screen's loop,
+    as a slash command's job runs (a clipboard tool may take ten
+    seconds); a second Ctrl+V meanwhile is told it is still being read,
+    and a picture that comes after the box turned into a shell line or a
+    search is kept and named, not put into the command. A paste of
+    dragged picture paths checks its files for a second at most (a
+    network mount that does not answer leaves the paste as text). The
+    Explore and Plan kinds of sub-agent list LSP beside Read, Glob and
+    Grep: a kind that lists a tool the session has not got goes without
+    it. And a line of a file a language server names is shown (in the
+    LSP tool's answers, and beside a change's new problems) only where
+    the Read deny rules and the read block would let the model read it:
+    a server may name any file.
+
+344. **Language servers, after their review.** A fresh-eyes review of 342
+    (2026-11-20) found the trust seams loose, fixed so: a server starts
+    only in a trusted folder, the person's own too (a server reads the
+    folder's code, and rust-analyzer's build scripts or a workspace's own
+    TypeScript run in it), and a folder is asked about when the person
+    has servers, as Claude Code asks for its workspace trust; gnosh -p
+    starts one only where the folder is recorded as trusted or with
+    --trust-folder. A project's entry is held under the trust package's
+    word for a server, with its whole command line and the names of its
+    variables in the question. A command is a program found on the PATH
+    by its name, or a path from / or ~/, never one of the folder's. A
+    server starts in the background with its own time limit
+    (startupTimeout); a change or a question waits for it only as long as
+    it can, and no lock is held across a start or a close. Each file's
+    diagnostics as the model last knew them are the base a change's new
+    problems are counted against (a file's own at its first reading are
+    not new), a publish of an older version is not taken for the new one,
+    and files that changed on disk are sent again before a change or a
+    question. A file the Read deny rules or the read block keep from the
+    model gives no line and no problems; the server's words go outside
+    gnosh's own tags; messages are clipped, call sites capped, and a
+    negative line is no crash. In the client: the process is known before
+    reading starts, a send whose context ended sends nothing and leaves
+    the next writer's deadline alone, and the server's requests are
+    answered sixteen at a time.
+
+345. **gnosh doctor and the language servers.** For each server of
+    lspServers, doctor says whether its program can be started (found on
+    the PATH, or the path it names is there): fine when it is, a note
+    naming the program when it is not, and a note that it waits for the
+    folder's trust in a folder that is not trusted (344), so that a server
+    that never starts is not a mystery found only by its silence.
+
+346. **A started program is found on the PATH it is given.** A language
+    server or an MCP server named by its bare name is looked for on the
+    PATH of the environment it is started with (its entry's env, else, for
+    a language server, the settings' env block, else gnosh's own), as
+    hooks in the exec form
+    already were, and as Claude Code finds it: Node looks a program up on
+    the PATH of the env it is given, while Go's exec looks only at the
+    process's own, so a server installed where only its env's PATH leads
+    did not start. Only absolute folders of it are looked in: an empty or
+    relative entry would be the folder the program starts in, which a
+    repository fills. The name stays the program's first argument.
+    gnosh doctor looks for a language server's program the same way.
+
+347. **Limits on http hooks.** Claude Code's allowedHttpHookUrls and
+    httpHookAllowedEnvVars, read as its settings reference has them: lists
+    merged across every file that gives them, in force once any file does,
+    an empty list included (no http hook runs; no header takes a variable).
+    An http hook whose URL fits none of the patterns (* is any run of
+    characters; scheme and host whatever their case, a host's trailing
+    dot no part of it) is passed over as if it were not there, as Claude
+    Code passes it over, and the startup check warns of it, so that a
+    guard that never runs is not a mystery. A URL with a user name in it
+    fits no pattern: in http://localhost:80@elsewhere/ the host is
+    elsewhere, though "http://localhost:*" fits the text. A header takes a
+    variable only when both the hook's allowedEnvVars and the list name
+    it. They only take a power away, so a project's lists count in a
+    folder that is not trusted too (KindRestriction), as the blocks do: a
+    project's list can widen the person's own only for hooks that run,
+    and a project's hooks wait for trust.
+
+348. **An http hook's address is shown the one way everywhere.** The
+    config review of 2026-11-19 took the query, the user and the long
+    pieces of the path (often a webhook's secret) out of an http hook's
+    address in /status, gnosh doctor and /hooks, but the hooks package's
+    own command line still carried the whole address into the startup
+    check's warnings and the records of hook runs. The shortening now
+    lives in the hooks package (ShownURL), and config's command line uses
+    it, so there is one rule.
+
+349. **The http hook limits, after their review.** A fresh-eyes review of
+    347 (2026-11-20) found two holes, closed so. A project's
+    allowedHttpHookUrls or httpHookAllowedEnvVars waits for the folder's
+    trust, as its disableAllHooks does (the hook-off kind, whose sentence
+    in the trust question is that some settings switch off things you set
+    up yourself): an empty list from a repository just cloned had switched
+    off the person's own http guard, which then let through what it
+    guarded, with only a startup warning to show for it. And a * in a
+    pattern's scheme and host stands for host characters alone (no /, ?,
+    #, @ or :), unless it ends the pattern: "https://*.example.com/*" had
+    taken "https://attacker.test/.example.com/x", the * reaching into the
+    path. A URL with no host name fits nothing. gnosh doctor looks for a
+    language server's program at the path it names, when its PATH is its
+    own, and no longer calls a missing one installed.
+
+350. **Language servers, the second review.** A second fresh-eyes review
+    (2026-11-20, of 344) found these, fixed so. A hover describes what is
+    defined, a constant's value among it: when what is at the place is
+    defined in a file the Read deny rules or the read block keep from the
+    model, the hover is not shown (the definition is asked for first). The
+    symbols and calls of such a file are left out of the LSP tool's
+    lists, their names being its text; its paths are still shown, as
+    places, without their lines. Each server keeps its own record of the
+    diagnostics the model knows: one server's change had taken another's
+    files out of a shared record, and that one's next change then told
+    every old problem as new. A file with no record when it changes
+    (its server answered too late for opened) takes what the server last
+    said of it before the change. The file's text is read once the
+    server's slot is held, so an older text cannot be sent as the newer.
+    A writer to a server waits for the one before it only as long as its
+    own context lets (a channel and not a mutex): the reader, answering a
+    request itself, had waited behind a writer held up by a server that
+    read nothing. A diagnostic's source is clipped as its message is.
+    Left, and known: a server's message about a file the model may read
+    can quote what another file holds (a constant's value in a type
+    error); that file's problems are told, words and all.
+
+351. **The person's own MCP servers wait for the folder's trust.** A
+    server gnosh starts runs in the project's folder and reads what a
+    repository put there before anything else: npx reads the folder's
+    .npmrc (which can name another registry) and node_modules/.bin, uvx
+    its uv.toml, a relative command is the folder's own file, and a
+    ${CLAUDE_PROJECT_DIR} path in the arguments runs the folder's code.
+    The second review of 2026-11-20 found that the person's own servers
+    (mcp.json, every project's and this folder's own, and a kind of
+    sub-agent's) started in a folder not yet trusted, where hooks had a
+    guard and language servers waited (344). Now a server gnosh would
+    start waits for the trust, as Claude Code's do behind its workspace
+    trust dialog, and the trust question names the person's (so a new
+    folder is asked about when the person has such servers); /mcp says
+    why it is not connected. Servers given with --mcp-config are the
+    person's word for this run and start; a server at a URL runs nothing
+    here and does not wait. gnosh mcp list and get, run by the person from
+    a shell, still start a server to see how it stands.
+
+352. **A sandbox for the shell's commands (the package).** Claude Code's
+    Bash sandbox (code.claude.com/docs/en/sandboxing), built from its
+    docs alone, in
+    internal/sandbox: the command line that runs a command inside the
+    operating system's own sandbox, and a check, made once, that the
+    sandbox can run here. On Linux it is bubblewrap: the machine mounted
+    read-only, a /dev and a /proc of the sandbox's own, its own processes
+    (it can signal no other) and its own network (nothing reachable, the
+    machine's loopback neither), dying with gnosh; the folders it may
+    write in mounted writable, the read-only paths inside them read-only
+    again, the denied paths hidden (an empty folder, or the null device
+    for a file), the paths inside those it may read after all opened
+    again, and a denied path inside one of those hidden again (the
+    narrower wins, as in Claude Code). On macOS it is Seatbelt
+    (sandbox-exec) with a profile that allows everything but writes
+    outside those folders (and the devices a shell writes to), writes to
+    the read-only paths, reads of the denied ones and the network, the
+    paths in the system's own spelling (/private/tmp). The sandbox's
+    temporary folder is the person's own (/tmp/gnosh-sandbox-<uid>, 0700,
+    no link), kept from one command to the next: on Linux it is /tmp
+    inside the sandbox, the real one out of sight, so that a command that
+    writes /tmp/x works and finds it next time, and gnosh's own files in
+    the real /tmp are out of reach; on macOS, where Seatbelt cannot move a
+    folder, it is TMPDIR. Caches go under it too (XDG_CACHE_HOME): the
+    person's own are read-only to a sandboxed command, and one it could
+    write would be one a later command outside the sandbox trusts. A
+    path that is not there is not mounted (bubblewrap mounts only what
+    exists, and making a place for it would change the folder). Which
+    commands run in it, and what they may do without asking, is the shell
+    tool's and the permission engine's (353).
+
+353. **The sandbox, joined to the shell and the permissions.** With
+    Claude Code's "sandbox": {"enabled": true}, the shell's commands on
+    this machine run in the sandbox of 352, writing in the session's
+    folders (and filesystem.allowWrite) and a /tmp of their own, and
+    reaching no network. The settings files gnosh reads, gnosh.json,
+    .gnosh/, .claude/settings*.json, .mcp.json and .lsp.json in each
+    folder, a repository's .git/hooks and .git/config, and
+    filesystem.denyWrite stay read-only to them, since each would widen
+    what runs next, or run outside the sandbox the next time git does;
+    filesystem.denyRead hides paths and allowRead opens paths inside
+    them again. A command excludedCommands names runs outside it: a
+    single plain command fitting an entry as a Bash(...) rule's content
+    does, never a list, a pipe, a redirection, a substitution, a cd,
+    sudo, eval or xargs, nor a git command with a path that leads
+    elsewhere (Claude Code keeps those in). The model is told of the
+    sandbox in the Bash tool's description, and a command that fails
+    with what the sandbox makes commands say gets a note under it; it may
+    ask to run one again outside the sandbox (dangerouslyDisableSandbox,
+    offered unless allowUnsandboxedCommands is false), and that call is
+    judged as any command is. With autoAllowBashIfSandboxed a command
+    that runs in the sandbox needs no approval, as if an allow rule
+    covered it: after the deny rules, the ask rules (a bare Bash one
+    included, where Claude Code passes it over: stricter) and the checks
+    no allow rule passes (a protected file, a dangerous removal), which
+    hold as for every command, where Claude Code lets most of them
+    through; never in plan mode, for a command on another machine, or
+    for a Monitor's. The engine and the shell tool decide which commands
+    run outside by the one test. A sandbox the settings turn on that
+    cannot run here (no bubblewrap, a system that will not let it make
+    its namespaces) is a notice at startup, and the commands run outside
+    it, asking as they would without it; with failIfUnavailable gnosh
+    does not start. gnosh doctor says how it stands. In the settings, a
+    project's file can turn the sandbox on and narrow it before the
+    folder is trusted (enabled, failIfUnavailable,
+    allowUnsandboxedCommands false, autoAllowBashIfSandboxed false, the
+    deny lists), and never turn the person's off; what widens it waits
+    for the trust (autoAllowBashIfSandboxed true, excludedCommands,
+    allowWrite, allowRead). Paths are Claude Code's: /x and //x from the
+    root, ~/x from home, ./x or x from the project's root in a project's
+    file and from the person's config folder in their own. Not built:
+    sandbox.network (no domain is let through: Claude Code's proxy and
+    its questions about new hosts), credentials, ignoreViolations, the
+    Read and Edit rules' paths added to the sandbox's lists, the read
+    block's paths, and /sandbox.
+
+354. **What the sandbox keeps read-only, as Claude Code's protected
+    paths.** Claude Code's sandbox page lists what its sandbox keeps
+    write-denied inside the folders a command may write in: the files it
+    loads its configuration and code from, and those other programs run
+    or obey as they start there. gnosh's list (353) was the settings
+    files and a repository's hooks and git settings; it now takes in, in
+    each of the session's folders, gnosh's and Claude Code's skills,
+    kinds of agent, commands, rules, hooks, workflows and scheduled
+    tasks, .lsp.json beside .mcp.json, the shell's startup files
+    (.bashrc, .bash_profile, .profile, .zshrc, .zshenv and the rest),
+    .gitconfig, .envrc (direnv runs it), .vscode, .idea and .ssh, since
+    a session's folder may be the person's home; and gnosh's own folders
+    (its settings, its state, its sessions) where they lie inside one of
+    the session's, but one that holds a session's folder (a work tree
+    under the data folder), which a read-only mount would take from it.
+    On Linux only what exists is kept so (bubblewrap mounts what is
+    there): a guarded file that is not there yet can be made, which the
+    permission engine's own questions still catch where it can see the
+    write. Claude Code's handling of a top-level HEAD, objects and refs
+    (a bare repository made in the folder) is not built.
+
+355. **/sandbox.** Claude Code's /sandbox is a panel: its Config and
+    Dependencies tabs say how the sandbox stands, its Mode and Overrides
+    tabs choose auto-allow or regular permissions and whether a command
+    may fall back to running unsandboxed, saved to the project's local
+    settings. gnosh's /sandbox says the same in a few lines (on or off and
+    from which file, the program that makes it or why it cannot run, the
+    mode, strict or not, where commands write, what is read-only within
+    those folders, what may not be read, the excluded commands, and that
+    there is no network), and takes a word for the choice: auto, regular,
+    off, strict, loose, saved to .gnosh/settings.local.json as Claude Code
+    saves to .claude/settings.local.json. The choice is in force from the
+    session's next start (/restart): the shell tool and the permission
+    engine take the sandbox as the session starts. It works in a gnosh -p
+    run too.
+
+356. **The sandbox's network: allowed hosts through gnosh's proxy.**
+    Claude Code's sandbox.network.allowedDomains and deniedDomains, read
+    as its settings reference has them (a name, *.name for the names
+    below it and not itself, an address with IPv6 in brackets, each with
+    :port for that port alone; a denied entry wins). With hosts allowed,
+    the session starts a proxy outside the sandbox (internal/sandbox
+    proxy.go): CONNECT for HTTPS and anything else over TCP, plain HTTP
+    for http:// addresses, no redirect followed, and any other host
+    refused with a 403 whose body says why and how to allow it, which is
+    what the model reads. A host whose every address is this machine's
+    own or its network's (a name that leads to 127.0.0.1, a cloud's
+    metadata address) is refused unless it is named as an address or as
+    localhost: an allowed name of the internet's may not become a way to
+    the machine's own servers. The proxy dials the address it checked.
+    A sandboxed command is told the proxy in HTTP_PROXY and HTTPS_PROXY
+    (both spellings) with NO_PROXY empty, since inside the sandbox even
+    the loopback is its own. On Linux the sandbox keeps its own network,
+    and the proxy listens on a socket in the sandbox's temporary folder,
+    its /tmp; inside, gnosh itself (the same program, with the first word
+    sandbox-relay, dispatched before anything else in main as
+    gnovm-worker is) listens on 127.0.0.1:3128 and carries each
+    connection to that socket, then runs the command and returns its
+    status, so no socat is needed, where Claude Code needs it; the
+    program is mounted read-only in the sandbox, which matters when it
+    lies under the real /tmp. On macOS the proxy listens on this
+    machine's loopback, and the Seatbelt profile lets the command reach
+    that one port and nothing else (checked on macOS 27 by hand). A host
+    not in the lists is refused: Claude Code asks the person about a new
+    host, by mode, and gnosh does not yet; its strictAllowlist is taken
+    and changes nothing. A repository's allowedDomains waits for the
+    folder's trust (the address kind: sending work off this computer);
+    its deniedDomains do not. The model is told the hosts it may reach;
+    /sandbox names them. Not built: Claude Code's tlsTerminate, the
+    socket and local-binding switches, its own proxy ports, and SOCKS.
+
+357. **The sandbox, after its review (first part).** A fresh-eyes review
+    of 352-353 (2026-11-20) found ways out, closed so. The engine and the
+    shell tool now take the sandbox from one state worked out once per
+    session (on, it can run, and the session's own temporary folder was
+    made), so neither lets a command go as sandboxed that the other runs
+    outside: a temporary folder that could not be made had left the
+    engine letting commands run without asking and the shell running
+    them outside. The engine reads dangerouslyDisableSandbox as the tool
+    does, failing safe: "true" in quotes, or anything but false, is
+    asking out. The temporary folder is the session's own (a fresh name,
+    removed at the end), not one per person: one repository's commands
+    could leave in the caches another's builds then trust, and a folder
+    another user made first would have stopped the sandbox. On Linux
+    /run (and /var/run where it is a folder) is an empty folder inside:
+    a read-only mount does not stop a connection to a socket, and
+    systemd's (a job outside, as root through its private socket),
+    D-Bus's and docker's lie there. On macOS the profile denies Apple
+    Events to other applications, launchd jobs (job-creation) and Launch
+    Services (open), and the terminals (/dev/tty, /dev/ttys*), which a
+    command has none of its own and another tab's is not its to read or
+    to draw on. bwrap and sandbox-exec are found in /usr/bin and /bin
+    alone, never on the PATH, where a sandboxed command could leave one
+    that makes no sandbox. A local settings file the repository shipped
+    (one gnosh did not write) is the repository's: it cannot turn the
+    person's sandbox off; and the person's autoAllowBashIfSandboxed goes
+    with their own sandbox, not one a repository turned on. A denyRead
+    over a working folder (Claude Code's own example, ~/ with "."
+    opened again) no longer takes the folder from its commands: the
+    folders they write in and gnosh's own files are opened again after
+    the denies, and a narrower deny inside still holds. gnosh's own files
+    (the one the shell writes where it ended) are made writable after the
+    read-only paths, which may hold them. The Read and Edit rules' paths
+    are taken as written: a deny rule's are folded for matching, and the
+    folded path was not there to hide on a case-sensitive disk (a hidden
+    file now reads as "Permission denied"). excludedCommands keeps in the
+    sandbox a git command with --git-dir, --work-tree, --template, -c,
+    -C and the like, and any command with a tab or a character outside
+    plain ASCII; 2>&1 no longer keeps a command in. The person's own
+    commands typed with ! run outside the sandbox, as Claude Code runs
+    them. The model is told the truth: /tmp is the session's own on
+    Linux, $TMPDIR on macOS, and a call asked out of the sandbox is
+    judged as any command is (an allow rule or the mode may let it run).
+    Left for the second part: whole folders for the guarded paths, a
+    guarded path that does not exist yet, and git's other ways to its
+    settings and hooks.
+
+358. **The sandbox, after its review (second part).** What the sandbox
+    keeps read-only is mounted as whole folders where it can be: gnosh's
+    .gnosh and Claude Code's .claude (settings, skills, kinds of agent,
+    commands, rules, hooks), .vscode, .idea, .ssh; a folder mounted so
+    cannot be renamed away and made again, as a file mounted inside it
+    could (mv .gnosh .g; mkdir .gnosh). git's own: a repository's hooks,
+    config, commondir, config.worktree and modules, any of which would
+    have git run something outside the sandbox the next time the person
+    runs git (core.fsmonitor in a config commondir leads to); in a work
+    tree, its .git file, and the repository's git folder made the
+    command's to write in, so that a commit works in the sandbox, with
+    those paths in it read-only; a folder that is a bare repository's
+    keeps its HEAD, config and hooks read-only, and a top-level config
+    file is read-only even with no HEAD. What bubblewrap cannot keep from
+    being made, where nothing was there to mount (Claude Code's .claude,
+    gnosh.json, .mcp.json, .lsp.json, a top-level HEAD, .git/commondir,
+    .git/config.worktree), is taken away after the sandboxed command that
+    made it, and the result says so, for the model (gnosh's own .gnosh,
+    which gnosh itself makes, is not among them). And with the sandbox
+    on, the project's own settings files (gnosh.json, the local one) that
+    change while the session runs are not taken in: a command in the
+    sandbox could have written one with rules for the next call, asking
+    out of the sandbox among them; the person is told, and they are read
+    at the next start. The Read and Edit rules' paths go into the
+    sandbox's lists as Claude Code adds them (Read deny: not to be read;
+    Edit deny: read-only; Edit allow: writable), those written out in
+    full or with a last /**. Left: a nested repository's or a submodule's
+    working copy's own .git, and the person's git settings outside the
+    session's folders, which are read-only to a sandboxed command anyway.
+
+359. **gnosh's own folder made for the sandbox.** With the sandbox on,
+    the project's data folder (.gnosh) is made as the session starts, as
+    gnosh makes it to save there (its .gitignore keeping it out of git),
+    so that it is there to mount read-only: made by a sandboxed command,
+    a kind of agent in it would run its hooks outside, and since gnosh
+    makes the folder itself, it is not among what is taken away after a
+    command (358).
+
+360. **The sandbox asks about a new host.** As Claude Code does, a host a
+    sandboxed command reaches for that neither sandbox.network list names
+    is put to the person while the command waits: "Yes" lets commands
+    reach it for the session, "Yes, and don't ask again" keeps a
+    WebFetch(domain:<host>) allow rule in the project's local settings,
+    "No" refuses it; once per host for the session, however many
+    connections reach for it at once, the answer kept. By mode, as in
+    Claude Code: bypassPermissions lets it through, dontAsk refuses, and
+    a run nobody attends refuses, saying so. WebFetch(domain:...) allow
+    rules let their hosts through as allowedDomains does (a WebFetch deny
+    rule refuses its host), as Claude Code takes them into its sandbox's
+    allowed domains. network.strictAllowlist, from the person's own files
+    alone (a repository can turn it neither on nor off), refuses instead
+    of asking. The proxy now starts whenever the sandbox is on, so a
+    sandboxed command always has HTTP_PROXY and HTTPS_PROXY set, and the
+    model is told how its network stands (let through at once, asked
+    about, or refused). deniedDomains is never asked about.
+
+361. **The sandbox's credentials.** Claude Code's sandbox.credentials:
+    files ({"path": ..., "mode": "deny"}) a sandboxed command may not
+    read, hidden as filesystem.denyRead hides a path, and envVars
+    ({"name": ..., "mode": "deny"}) it is not given, taken out of its
+    environment. Claude Code's "mask" mode (a stand-in value inside the
+    sandbox, the real one put in by its proxy on the way out, which
+    needs the proxy to end TLS) is not built: an entry in that mode is
+    hidden as "deny" hides it, which keeps the credential from the
+    command all the same and may stop a tool that wants it, and the
+    person is told so. Its mask fields are taken and change nothing;
+    allowPlaintextInject, awsPairs and sigv4 are refused as not built.
+    Both lists only take a power away, so a project's count before the
+    folder is trusted; the lists of every file are merged. A variable a
+    SessionStart hook writes into the environment file is set again by
+    that file inside the sandbox: such a credential is the hook's to
+    keep out.
+
+362. **The trust question sets the person's own servers apart.** Seen
+    on the devbox's screen: with only the person's own MCP server held
+    (351), the trust question said the folder's own settings "would add"
+    it, and its No said "start with your own settings only", though the
+    server, the person's own, waits for the yes too. A holding of the
+    person's own (their language servers, their MCP servers gnosh starts)
+    is now listed apart, as settings of their own that would run programs
+    in the folder; the risk said for it is that programs of their own
+    started there read what the folder holds; and No says those wait
+    ("No: not now, my own servers here waiting too"). gnosh trust's report
+    lists them too, as now running in the folder.
+
+363. **A call's result can carry notes for the person, shown under its
+    block.** Seen on the devbox's screen with gopls: "Found 1 new
+    diagnostic issue in 1 file (gopls)." printed above the Edit it was
+    about, because the after-call step runs before the call's end is
+    drawn, and a notice is drawn when it is made. A ToolResult now has
+    Notes, short lines for the person that are never sent to the model
+    (which has the problems themselves); an after-call step's verdict
+    adds them, the screen draws them under the call's block (a call
+    shown as one line grows a block to hold them), and plain and
+    verbose print mode print them under the call's line. The LSP
+    tool's call is headed by what it asks and where ("LSP hover
+    main.go:6:10") rather than a sentence with the whole path.
+
+364. **The sandbox's loosenings, Claude Code's keys.** gnosh stopped at
+    startup on every sandbox key it had not built, so a settings file
+    copied from Claude Code could not be used. From the settings
+    reference (read 2026-11-20): `ignoreViolations` ({piece of the
+    command or "*": [piece of what was stopped]}) keeps a stop out of the
+    note under a failed command, line by line of its output, the access
+    still refused; `enableWeakerNestedSandbox` leaves the machine's /proc
+    in the sandbox (no `--proc`), for an unprivileged container, where it
+    shows the command the person's other processes, gnosh's environment
+    among them; `allowNestedUserNamespaces` lets commands make user
+    namespaces, which the sandbox now refuses by default as Claude Code's
+    does (`--unshare-user --disable-userns`, bubblewrap 0.8 and later;
+    the check tries that first and, where bubblewrap cannot, says so at
+    startup and in /sandbox); `enableWeakerNetworkIsolation` lets commands
+    reach macOS's certificate trust service, which the Seatbelt profile
+    now closes by default as Claude Code's does (checked on macOS 27:
+    with com.apple.trustd.agent denied, `security verify-cert` fails;
+    trustd fetches what a certificate names for whoever asks, a way out
+    past the proxy; Go's programs then fail TLS, and the note under such
+    a failure says why); `allowAppleEvents` drops the Apple Events deny;
+    `network.allowUnixSockets` (macOS, `remote unix-socket (path-literal)`,
+    paths resolved by their folder when not there yet),
+    `allowAllUnixSockets` (macOS: every one; Linux: /run left in sight),
+    `allowLocalBinding` (macOS: bind and accept on any local address,
+    connect to any localhost port), `allowMachLookup` (names, prefixes,
+    or every service, allowed after the denies) — each Seatbelt form
+    checked by hand with sandbox-exec and nc; `bwrapPath` (absolute,
+    from the person's own files: Claude Code's comes from managed
+    settings alone, and a repository's could name a program that makes
+    no sandbox); `filesystem.disabled` mounts the machine writable and
+    confines only the network (and the rest above): denyRead and
+    credentials.files are then not kept, and — stricter than Claude Code,
+    which documents the risk — a sandboxed command asks as any command
+    does, auto-allow or not, since it could change what gnosh and the
+    shell obey later. A repository's loosening is a new kind of setting,
+    "sandbox-wider", held until the folder is trusted, with its own
+    sentence in the trust question; its `false` keeps one off before the
+    trust, as a switch that takes a power away does (any false wins). The
+    keys Claude Code takes from the person's settings alone
+    (allowAppleEvents, allowNestedUserNamespaces, filesystem.disabled,
+    bwrapPath) are left out of a repository's file with a warning, either
+    value. socatPath (gnosh relays itself), ripgrep (gnosh's sandbox runs
+    none) and tlsTerminate (gnosh's proxy reads no HTTPS) are left out
+    with a warning; httpProxyPort and socksProxyPort are not built, and
+    allowManagedDomainsOnly and allowManagedReadPathsOnly name managed
+    settings gnosh does not have: those still stop startup. On Linux,
+    unlike Claude Code, no seccomp filter refuses Unix sockets: the
+    sockets under /run are kept out of sight instead, and a socket
+    elsewhere in sight can be reached.
+
+365. **What the sandbox hides stays hidden.** From the second sandbox
+    review. Seatbelt matches paths,
+    so on macOS a folder renamed took what was in it out from under the
+    rules: `mv conf c2 && cat c2/secret.yml` read a denied file, and —
+    checked by hand — moving the project folder itself into the
+    sandbox's temporary folder gave up any denied or read-only path in
+    it. The profile now refuses `file-write-unlink` (rename and delete)
+    under a path the command may not read, but in what is opened again
+    inside one, and on every folder that holds a denied, read-only or
+    hidden path, up to the root; writing inside them still works, and a
+    link or a clone of a denied file was already refused (all checked
+    with sandbox-exec against the generated profile on macOS 27). On
+    Linux a mount cannot be renamed and moves with its folder (tested).
+    The credentials the settings hide are a list of their own
+    (Policy.Hidden), hidden last on both systems, so that no allowRead,
+    folder written in, or Edit allow rule brings one back ("no scope can
+    remove one that another scope added", as Claude Code says). A
+    pattern in denyRead, credentials.files or a Read deny rule (Claude
+    Code's docs write `~/**/.env`) had hidden nothing; the sandbox now
+    finds the paths it matches the first time it is needed, once for the
+    session, in a walk of at most 200000 entries that follows no link
+    into a folder, and /sandbox says how many it found, that one made
+    since is not among them, and when the walk stopped short; in
+    allowWrite, denyWrite and allowRead a pattern is left out with a
+    warning, as Claude Code takes none there on Linux. The variables the
+    settings hide are given first, so hiding HTTPS_PROXY cannot take the
+    sandbox's own; PATH, HOME and PWD are not hidden. On macOS the note
+    under a failed command says a refused read may be what stopped it,
+    as Seatbelt words a refused read as a refused write.
+
+366. **The sandbox's proxy keeps to the rules and to what it showed.**
+    From the second sandbox review. A WebFetch(domain:...) deny rule now
+    refuses its host to sandboxed commands in every mode (bypass had let
+    it through, and default mode asked about it), an ask rule has the
+    person asked even where a list or an allow rule names the host (in
+    bypass too, as an ask rule asks of a tool call), and an allow rule
+    with a * inside a name ("*npmjs.org") or alone counts for nothing
+    there, as Claude Code's sandbox does not take one (Engine.FetchRule,
+    in place of FetchAllows). The proxy takes a host only as a name of
+    letters, digits, dashes and underscores whose last label is not all
+    digits, or an address written in full (HostName): `CONNECT
+    *npmjs.org` would have had a "Yes, and don't ask again" kept as a
+    wildcard rule, and `2130706433`, which rules fold to 127.0.0.1, one
+    that opened every port of the machine. The question says the answer
+    is for the host on every port, and when the host is an address of the
+    machine or its network. With strictAllowlist only the person's own
+    allow rules and allowedDomains count (a project's file, its local one
+    too, is left out), as Claude Code leaves a repository's out. An
+    answer the mode gives (bypass, dontAsk, nobody there) is no longer
+    kept for the session, as the mode may change; the person's is. At
+    most 40 hosts are asked about in a session; a connection waiting on
+    another's question stops waiting when its own request is taken back.
+    The proxy's check for a name that leads to the machine itself now
+    counts the shared address space carriers and Tailscale use
+    (100.64.0.0/10) and every address of the machine's own interfaces, its
+    public ones among them. The model is told that, with nobody there, a
+    host no rule names goes as the permission mode says.
+
+367. **A filter refuses sandboxed commands new Unix sockets on Linux.**
+    Claude Code's Linux sandbox has a seccomp filter that refuses
+    socket(AF_UNIX, ...) (sandbox.network.allowAllUnixSockets lifts it);
+    gnosh only kept /run out of sight, so a socket elsewhere in sight (an
+    editor's server or an agent under the home folder) could be reached
+    and could run what it was told outside the sandbox. gnosh now puts
+    such a filter on the command itself: bubblewrap runs gnosh again as
+    `gnosh sandbox-filter <argv>`, which sets no_new_privs, installs a
+    classic BPF program with prctl(PR_SET_SECCOMP) on its own thread and
+    becomes the command (execve keeps the filter for it and what it
+    starts). The program refuses socket(AF_UNIX) and io_uring_setup
+    (whose rings make sockets past a seccomp filter) with EAFNOSUPPORT,
+    "Address family not supported by protocol", which the note under a
+    failed command recognises; 32-bit calls the same, socketcall(2)
+    whole; an x32 call or one of an unknown architecture kills the
+    process; socketpair stays (its sockets reach nothing outside). It is
+    made for amd64 and arm64; elsewhere the startup notice and /sandbox
+    say nothing keeps Unix sockets from commands. The relay to the proxy,
+    which must make Unix sockets, runs before the filter, and sets itself
+    not dumpable so that a command cannot attach to it. gnosh's own
+    program is mounted read-only in sight wherever it lies (under the
+    real /tmp, in a denied folder), last, so that a sandboxed command
+    cannot change what runs outside later. Tested with a BPF interpreter
+    over both machines' programs and under real bubblewrap, as root and
+    as nobody (Python: a Unix socket refused, a pair and an internet
+    socket made, every Unix socket let with allowAllUnixSockets; curl
+    through the relay with the filter on).
+
+368. **Hook events in stream-json.** Claude Code's `--include-hook-events`
+    (with `--output-format stream-json`): each hook's start and end as
+    system lines `hook_started` {hook_id, hook_name, hook_event} and
+    `hook_response` {…, output, stdout, stderr, exit_code, outcome:
+    success | error | cancelled}, one ID for both; the SessionStart
+    hooks' are written without the flag, as Claude Code writes them (gnosh
+    has no Setup moment). hook_name is the moment and what its matcher was
+    tested against ("PostToolUse:Bash", "SessionStart:startup"). The
+    hooks runner tells Options.Lifecycle from each hook's goroutine, a
+    background hook's end when it is done; the session sends it on as an
+    event only in a stream-json run. `hook_progress` (a long hook's
+    output as it comes) is not written: gnosh reads a hook's output when
+    it ends.
+
+369. **The sandbox runs without the Unix socket filter where it cannot be
+    put on.** The check tried bubblewrap but not the filter (367): where
+    a kernel or a container refuses prctl's seccomp, every sandboxed
+    command would have failed with "the sandbox could not refuse Unix
+    sockets here". The check now tries `gnosh sandbox-filter /bin/sh -c :`
+    once too (Setup carries the filter's program, gnosh's own path, left
+    out where allowAllUnixSockets lets every socket); where it fails, the
+    sandbox runs without the filter and says so at startup, in /sandbox
+    and in doctor (Status.NoFilter, apart from the user namespace note,
+    which allowNestedUserNamespaces makes moot), as Claude Code's sandbox
+    runs where its filter is missing and says so.
+
+370. **A refusal as too long is read for the provider's own numbers.**
+    Seen on the devbox's screen: llama.cpp's refusal carried
+    n_prompt_tokens 40000 and n_ctx 32768, and gnosh, with "no count of
+    the provider's own to go by", took the window for its own estimate of
+    the request (15,407) and then said no request could fit. The error
+    now carries what the provider said (core.ProviderError Tokens and
+    Window): llama.cpp's two fields, and the counts in vLLM's ("maximum
+    context length is N tokens. However, you requested M tokens (P in the
+    messages...)", or "your prompt contains at least P input tokens"),
+    OpenAI's ("your messages resulted in M tokens") and Anthropic's
+    ("prompt is too long: M tokens > N maximum") words. The agent takes the
+    stated window as the window, at once and exactly, and the stated count
+    against its own estimate as how much it under-counts; only when the
+    provider says nothing, or nothing it says moves anything, does it guess
+    as before, so a request is never sent again as it was.
+
+371. **What the third sandbox review found is closed.** A narrower read
+    of the Unix socket filter (367, 369) and of the guards against moving
+    things out (365). On macOS a folder cloned whole (clonefile(2)) took
+    the denied and hidden files in it along, readable: Seatbelt asks
+    about the folder only (365's "a clone of a denied file was refused"
+    held for a file, not for a folder that holds one). With anything
+    denied or hidden, the profile now refuses cloning a folder; files are
+    still cloned one by one (cp -c, cp -cR, ditto --clone), each asked
+    about (checked with sandbox-exec on macOS 27). On Linux the relay
+    connected to the proxy's socket by its path in the /tmp the command
+    writes, so a command could put a link to another socket in its place
+    (docker's, an agent's) and reach that through the relay, past the
+    filter. The socket is now mounted read-only onto itself, with the
+    files left open too: a mount point is neither deleted nor renamed,
+    and a socket on a read-only mount still takes connections. On macOS
+    what allowRead opens again inside a denied folder could be deleted or
+    moved out; rename and delete now come back only where writing does,
+    as the read-only mount keeps such a path in place on Linux. Where
+    gnosh cannot find its own program the filter was dropped without a
+    word; the startup notice and /sandbox now say so. A datagram
+    socketpair can still be pointed by path at a datagram socket in
+    sight; few are, the sandbox's /run, /dev and /tmp being its own, and
+    pairs stay, as programs need them (367 said they reach nothing).
+
+372. **gnosh is the sandbox's first process, behind the filter.** From
+    the third sandbox review: bubblewrap's own init, the sandbox's pid
+    1, is dumpable and has no filter, so where any process of the same
+    user may be traced (kernel.yama.ptrace_scope 0, as Debian, Fedora
+    and RHEL ship) a command could attach to it, have it make a Unix
+    socket and take that with pidfd_getfd, past the filter of 367.
+    Wherever the filter is on, bubblewrap now runs with --as-pid-1, and
+    the first process is gnosh's: the relay to the proxy when there is
+    one (already not dumpable), or else the filter, which then stays,
+    not dumpable, and starts the command from its filtered thread
+    instead of becoming it. Either is the namespace's init as
+    bubblewrap's was: the command's status comes back (a signal's as
+    128 and its number), what it leaves running ends when it ends (as
+    with bubblewrap's init, checked), orphans are reaped, and SIGTERM,
+    SIGINT, SIGHUP and SIGQUIT are taken and let be, as the command,
+    of the same process group, is sent the same and ends as it likes
+    (the relay serves its connections meanwhile). Where bubblewrap is
+    too old for --as-pid-1, the filter's trial fails and the sandbox
+    runs without the filter, saying so (369). Tested under bubblewrap
+    0.9 as root and as nobody: the first process's files under /proc
+    are closed to an unprivileged command, and through gnosh a
+    sandboxed Bash call ran as pid 12 under the relay with Unix
+    sockets refused.
+
+373. **What gnosh was started with stays with gnosh.** From the third
+    sandbox review's leads: Go opens its own files close-on-exec, but a
+    descriptor left open by whatever started gnosh (a connected Unix
+    socket, an agent's) passed to every command gnosh ran, a sandboxed
+    one too, which could use it without making a socket. gnosh now marks
+    every descriptor it was started with, past the standard three,
+    close-on-exec as it starts (Linux and macOS). And on macOS a path the
+    sandbox names that is not there yet is spelled as it will be: the
+    nearest folder above it that is there, links resolved, then the
+    rest (only its own folder was looked at, so a denied path two
+    folders down under a link, as /tmp is, matched neither spelling).
+    Where anything is denied or hidden, the macOS profile also refuses
+    Spotlight's services (com.apple.metadata.mds and those named after
+    it): Spotlight reads what the command may not, and mdfind's queries,
+    a match at a time, could spell a denied file out (checked: refused,
+    mdfind finds nothing). allowMachLookup can name them again.
+
+374. **A kind of agent may keep a memory.** Claude Code's subagents take
+    `memory: user | project | local`: a folder of their own that outlasts
+    their sessions (its docs: the subagent's system prompt holds the first
+    200 lines or 25 KB of MEMORY.md, whichever comes first, with
+    instructions to keep it, and Read, Write and Edit are enabled for
+    it); gnosh refused a definition with it by name. It now keeps one:
+    for a definition of gnosh's own (its folders, --agents), the user's in
+    gnosh's config folder (agent-memory/<name>), a project's in
+    .gnosh/agent-memory/<name>, a local one in
+    .gnosh/agent-memory-local/<name> (made with a .gitignore of "*"); for
+    one from a .claude folder, Claude Code's places (~/.claude/agent-memory,
+    .claude/agent-memory, .claude/agent-memory-local), so that both keep
+    one memory of the same agent. Each sub-agent of the kind is told, last
+    in its system prompt, where the folder is, what to keep there and
+    how, and is given the beginning of its MEMORY.md (defused, as a report
+    is, and unable to close its block); Read, Write and Edit are its
+    whatever its tools list says, unless its disallowedTools takes them.
+    The notes, the Markdown files under an agent-memory folder of
+    .claude, .gnosh or gnosh's config folder, are left out of the
+    protected paths, as Claude Code leaves them: a change to one asks as
+    any edit does (acceptEdits lets one in the project be written); what
+    else lies there is protected as before. The folder gnosh makes may
+    hold no link below the person's or the project's folder, and
+    MEMORY.md is read without following one, as a project could otherwise
+    lead an agent's notes anywhere, or a file of the person's into its
+    prompt; such a folder keeps the sub-agent from starting, and says why.
+    The folder is not one of the sub-agent's working folders: its
+    commands, in the sandbox, do not write there. CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+    turns memories off, as in Claude Code. A session run as such an agent
+    (--agent) is refused, saying so, as it was. A name with a slash, or .
+    or .., keeps a definition with a memory from being used.
+
+375. **A kind of agent may make room earlier.** Claude Code's subagents
+    take autoCompactWindow, a token count of 100000 or more at which the
+    subagent compacts, when lower than the window it would otherwise have
+    (the lowest of the field, the model's window and
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW); a value below 100000, or "200k",
+    which it reads as 200, is ignored and the subagent loads as if the
+    field were absent; a session run as the agent (--agent) takes no
+    account of it. gnosh refused a JSON definition with it (--agents) and
+    passed it over in a file. It now takes a whole number of 100000 or
+    more, in a file or in JSON: that kind's sub-agents make room at the
+    lower of it and the session's window (autoCompactWindow or
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW), with CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
+    taken of it, the model's own window bounding it as any agent's. Any
+    other value is not used, and /agents says so; the definition is used
+    without it.
+
+376. **/fewer-permission-prompts, worked out by the engine.** Claude Code
+    ships it as a skill: the model scans the transcripts for common
+    read-only Bash and MCP calls and adds a prioritized allowlist to the
+    project's settings. gnosh's judges each Bash, MCP and WebFetch call of
+    the folder's newest 200 session files and their sub-agents' (at most
+    5000 calls) as manual mode would today (Engine.DecideAs), and groups
+    those that would be asked about by the widest rules their question
+    would offer (the prefix rule, "Bash(kubectl get *)", where the engine
+    finds one sensible), the most calls first, 20 at most, with a call
+    each as it was written. Which of them only read is the person's to
+    say, not a model's: `/fewer-permission-prompts add 1 3` (or `add all`)
+    keeps those, each as /permissions allow keeps one, in the project's
+    local settings file; a run of its own (gnosh -p) works the list out
+    again first, numbered the same. A model reading JSONL transcripts for
+    this, the way Claude Code's skill does, is slow and unsure on a small
+    local model; the engine's own judgement is the one that asks.
+
+377. **/skill-doctor.** Claude Code's reports what each skill costs and
+    how often it is used, flags the listed ones never invoked, and says
+    where to turn them off, the costliest first. gnosh's says, for each
+    skill, its scope, what its line costs in the model's window (as
+    /skills does), and how often it ran in the newest 200 session files
+    of every folder and their sub-agents': the model's Skill calls, and
+    the skills the person typed (named by the words gnosh sends ahead of
+    a typed skill). Those never run come first, the costliest first, each
+    with /skills <name> off (or name-only); then the rest, the most run
+    first; and how many tokens the never-run ones take.
+
+378. **What the review of today's memory, sandbox and permission work
+    found is closed.** A read-only review of 456d17f, 536e8cb and
+    702f7f8 found no High hole in them, and one Medium in older code: the
+    resolver the permission engine is given (app resolvePath) tidied a
+    link's target as text, so "a/../hooks/pre-commit", with a a link to
+    .git/info, was taken to land beside the link, where the system writes
+    .git/hooks/pre-commit: a repository could have cp write a git hook,
+    unasked in acceptEdits, on a machine whose sandbox is off. It now walks
+    the target piece by piece from where the link is, as the file tools
+    already did (fstools.FollowLinks), and such a cp asks. The Lows: a
+    MEMORY.md could close the block it is given in with </AGENT-MEMORY> or
+    < /agent-memory (now any letter case and blanks are broken);
+    /fewer-permission-prompts counted calls the person had refused (now
+    only calls that ran count), and a number with no list shown in the
+    session was worked out again behind the person's back (now it asks for
+    the list first, or the rule's words with /permissions allow); the rules
+    it keeps are said with their invisible characters made visible; the
+    session store's folder is read as a folder, not a pattern. The sandbox's
+    first process takes over only the signals it was not started ignoring
+    (a command run under nohup kept SIGHUP ignored before). Read, Write
+    and Edit given to a kind of agent for its memory, where its tools list
+    leaves them out, now work on files in its memory folder only, links
+    followed, as Claude Code's docs do not forbid and a kind listed as only
+    reading would otherwise change the project, unasked in acceptEdits.
+    And, seen while testing these under load: a call is shown before the
+    gate is asked about it and joins the running ones only after, so a
+    side question asked between was told it was interrupted; the calls of
+    the round under way are now taken as still running until their end is
+    told.
+
+379. **The sandbox keeps what lies on the way to a kept path.** The rules
+    on a path kept from a command (read-only, denied, hidden) were written
+    for the path as its links resolve, which is all Seatbelt matches; tried
+    on scratch files on a Mac, a command could rename a file of its own
+    over a ~/.zshrc that a dotfile manager keeps by a link (the rule held
+    the link's target, not the link), and could make a .gnosh not there
+    yet a link to a folder of its own and write its settings.json in that
+    (the rule held the path as it would be, which the link took elsewhere).
+    On macOS each link met on the way to a kept path, in a folder the
+    command may write in, is now kept read-only by its own name, and each
+    folder not there yet on the way may not be made a link, or have one
+    renamed in (Seatbelt's vnode-type SYMLINK); a folder may still be
+    made there. On Linux bubblewrap mounts on what a path leads to, and a
+    mount cannot be put on a link: a link on the way is not kept, as a
+    path not there yet is not (354), and the permission engine's own
+    questions catch what they can see. But bubblewrap was given the paths
+    as written, and finds where to mount inside the sandbox it is making,
+    where a link to an absolute path leads nowhere: a session's folder
+    reached through one, or a kept file that is one, stopped every
+    command (tried on the devbox). The paths it mounts on, and the folder
+    the command starts in, are now resolved first. And the cleanup review
+    of the day's work is applied: /fewer-permission-prompts stops at the
+    calls it judges, reads a result's fields only for a call it waits on,
+    judges a call made again (as a loop's are) once, and describes past
+    calls without their ids, which the shell keeps account of; a copy's
+    landing is one record; the memory tools keep Read's running beside
+    other reading calls; and a kind of agent's list of the fields gnosh
+    could not honour, empty since its memory and its compact window came
+    in, is gone with the code that read it.
+
+380. **A tool says when it ends the turn on purpose.** A self-paced
+    /loop's ScheduleWakeup and the work tree moves end the turn as they
+    mean to, and the front ends told those ends from a halt by their tool
+    names: the screen showed the loop's as done and the moves' as a
+    quieter notice, the plain front end said "ended", and the agent's own
+    notice was a warning for all. Such a tool now puts MetaPlanned beside
+    MetaHalt; the turn's result says Planned; the agent's notice is
+    information ("The turn ended: ..."); the screen shows done, the plain
+    front end "-- done (why)", and a print run would report success (none
+    of these tools is offered there now). The other half of the cleanup
+    review's point, each tool writing the words the screen shows for its
+    result in place of the screen's case for each tool, is not done: the
+    screen's per-tool lines are Claude Code's way too, and the words would
+    only move. And /sandbox on Linux names the links on the way to a kept
+    path that 379 leaves unkept there, with what they lead to kept.
+
+381. **No volume mounted over a folder on macOS.** Tried on scratch files
+    on a Mac: under the sandbox's profile a command could lay a disk image
+    of its own over a kept folder (hdiutil attach -mountpoint .claude,
+    diskutil mount -mountPoint, diskutil image attach --mountPoint), or at
+    one not there yet that it made; the mount is made by a service
+    outside the sandbox, and gnosh, or git through a .git/hooks so
+    covered, would then obey its files. Seatbelt's (deny file-mount),
+    which those services ask the sandbox about, now stands whenever the
+    files are confined: each of the three is refused under gnosh's own
+    profile, and ordinary work and hdiutil create still run. A volume
+    mounted where macOS puts one, under /Volumes, is not stopped, and
+    covers nothing. On Linux the sandbox has a mount namespace of its own
+    and no new privileges, so a mount there (fusermount's) is the
+    sandbox's alone.
+
+382. **No application's preferences written from the macOS sandbox, and
+    no signal sent out of it.**
+    The preferences service (cfprefsd, which defaults write and every
+    program's settings go through) writes ~/Library/Preferences outside
+    the sandbox, past every path rule: tried with a made-up domain, a
+    sandboxed defaults write landed although writes to that folder were
+    denied, and Terminal's preferences, for one, can name a command for
+    each new window to run. Seatbelt's (deny user-preference-write) now
+    stands whenever the files are confined; reading preferences still
+    works. Also tried while looking for more such services: launchctl
+    setenv is refused to a sandboxed command by launchd itself. And a
+    command could signal any of the person's processes (gnosh itself, an
+    editor, a server, an agent), where Linux's sandbox, with a pid
+    namespace of its own, sees none of them: (deny signal) with (allow
+    signal (target same-sandbox)) now keeps it to its own, its children
+    and its shell still signalled (tried on a Mac). A server a command
+    left running in the background is stopped through gnosh, as on
+    Linux. What is left different: on macOS a command still reads the
+    person's other processes' command lines (pgrep -lf); Seatbelt's
+    process-info rule does not hide them (tried).
+
+383. **/code-review --max-findings.** Claude Code's /code-review takes
+    --max-findings <n>, or all for every finding, and keeps the choice
+    until --max-findings default. gnosh's /review (and /code-review)
+    takes it the same way, as --max-findings n or --max-findings=n, from
+    1 to 1000: the model is told to report at most n findings, the most
+    important first, or every one; low's three give way to it. The
+    choice is kept in the user's state file (reviewMaxFindings, beside
+    the models /model keeps), from a session somebody attends; a run
+    (-p) uses it for itself alone, as it keeps no choice. A value the
+    state file holds that this gnosh cannot read is left out, and the
+    review reports as its level asks.
+
+384. **CLAUDE_CODE_SUBPROCESS_ENV_SCRUB.** Claude Code, with this
+    variable set to 1, starts its subprocesses (commands, hooks, stdio MCP
+    servers) without the credentials it was started with, and keeps them
+    for its own requests; its docs give the rules by example. gnosh does
+    the same (internal/envscrub; 1, true, yes or on): the shell's
+    commands, a skill's !`commands`, hooks, stdio MCP servers (their own
+    env from their settings laid over the scrubbed one, as that is how
+    the person hands them what they need), LSP servers, the status line,
+    the file suggestion command, gnokey and gnosh's own git (a
+    repository's git hooks run under it) start from the environment
+    with no variable whose name says credential (TOKEN, SECRET, PASSWORD,
+    PASSWD, PASSPHRASE, APIKEY, CREDENTIAL(S), API_KEY, ACCESS_KEY,
+    PRIVATE_KEY, AUTH_KEY, a long value under a name ending in KEY) or
+    whose value has a credential's shape (a key a service hands out: sk-,
+    ghp_, glpat-, AKIA... with a digit in what follows; a private key; a
+    JSON web token; a URL with a password in it), and no
+    CLAUDE_CONFIG_DIR, GNOSH_CONFIG_DIR or GNOSH_DATA_DIR; the settings'
+    env block's included. Kept, as in Claude Code: GITHUB_TOKEN, GH_TOKEN
+    and their Enterprise names, the proxies (HTTP(S)_PROXY, ALL_PROXY,
+    NO_PROXY), GIT_CONFIG_COUNT and GIT_CONFIG_KEY_n/VALUE_n; a package
+    index's URL (*INDEX_URL, *_REGISTRY, *_INDEX) without the name and
+    password in it; and a file's path, which is where a credential is
+    kept, not the credential (GOOGLE_APPLICATION_CREDENTIALS,
+    PASSWORD_STORE_DIR). gnosh started again by gnosh (/restart, a work
+    tree, the background) keeps them. With the scrub on, the sandbox
+    takes back filesystem.disabled from every file, and on Linux every
+    command runs in it: the person's ! commands too, excludedCommands,
+    the model's asking out of it and allowNestedUserNamespaces taken
+    back; /sandbox says so. CLAUDE_CODE_SCRIPT_CAPS and
+    CLAUDE_CODE_MCP_ALLOWLIST_ENV are 385.
+
+385. **CLAUDE_CODE_MCP_ALLOWLIST_ENV and CLAUDE_CODE_SCRIPT_CAPS.** Two
+    of Claude Code's companions to the scrub (384). With
+    CLAUDE_CODE_MCP_ALLOWLIST_ENV on, a stdio MCP server starts from a
+    baseline alone, what a program needs to run as the person (PATH,
+    HOME, USER, LOGNAME, SHELL, TERM, LANG, LANGUAGE, LC_*, TZ, the
+    temporary folder's variables, the XDG folders), with its own env
+    from its settings laid over it, in place of the environment gnosh
+    was started with; Claude Code's docs say "a safe baseline
+    environment" and name none, so the list is gnosh's. With the scrub
+    on, CLAUDE_CODE_SCRIPT_CAPS, a JSON object of whole numbers by a
+    text ({"deploy.sh": 2}), caps how many of the model's commands
+    holding each text may run in the session, its sub-agents' with it:
+    one more is refused, saying which cap; the text is matched as it is
+    written, so "./deploy.sh $(x)" counts, and what runs a script again
+    by other means (xargs, find -exec) is not seen, as Claude Code's
+    docs say of theirs. The person's own ! commands are not counted. A
+    value that cannot be read caps nothing, and the person is told. And
+    the scrub's PID namespace: on Linux, Claude Code runs commands with
+    the scrub in a PID namespace of their own, and without one the scrub
+    would mean little there, since a command reads the environment of the
+    person's other processes, gnosh's and the shell that started it among
+    them, through /proc (/proc/<pid>/environ). gnosh's sandbox gives its
+    commands one already; a command that runs outside it, with the scrub
+    on, runs under bubblewrap with the files as they are and a /proc of
+    its own (--dev-bind / / --unshare-pid --proc /proc): tried on the
+    devbox, it sees five processes, not gnosh's. Where bubblewrap cannot
+    make one, the person is told. On macOS another process's environment
+    is not readable (sysctl's KERN_PROCARGS2 gives its arguments alone,
+    inside the sandbox and out: tried), so the scrub needs no more there.
+    /status says the scrub is on.
+
+386. **A session's name: 200 characters, and none that is invisible.**
+    Claude Code, from every place a session is named, replaces control
+    and invisible characters with spaces, caps the name at 200
+    characters, and refuses a name that is empty once the invisible
+    characters are out ("That name is empty once..."). gnosh cleaned
+    names the same way but cut them at 120 bytes, and took an invisible
+    name for no name (/rename showed the old one, /clear cleared
+    unnamed, gnosh session rename wrote an empty name). Now a name the
+    person gives (/rename, /clear, /branch, gnosh session rename,
+    --name) keeps up to 200 characters, and one that is nothing once its
+    invisible characters are out is refused, saying so; --name is
+    refused before a session is made. The name gnosh makes of a first
+    prompt stays as short as lists show it (120 bytes, with an ellipsis).

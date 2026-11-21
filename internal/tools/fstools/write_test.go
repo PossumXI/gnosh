@@ -477,9 +477,12 @@ func TestWriteInPlaceNeverLosesTheFile(t *testing.T) {
 }
 
 // Two sessions of one process, a session and its sub-agent, take turns on
-// a file: the second finds the file changed under it, and is told to read
-// it again. Each passed its check against what it had read, and the later
-// write undid the earlier one (the Edit/Write review of 2026-11-19).
+// a file. Each passed its check against what it had read, and the later
+// write undid the earlier one (the Edit/Write review of 2026-11-19). The
+// second edit now waits for the first, then goes in on top of it where
+// its old_string still picks out one place, as Claude Code lets an edit
+// of a changed file, and says the file had changed; a Write over the
+// file by the session that no longer has it as it is is refused.
 func TestTwoSessionsTakeTurnsOnAFile(t *testing.T) {
 	f := newFixture(t, Options{})
 	p := f.file("shared.go", "package x\n\nimport \"fmt\"\n")
@@ -519,12 +522,14 @@ func TestTwoSessionsTakeTurnsOnAFile(t *testing.T) {
 		t.Fatalf("the first edit failed: %s", core.TextOf(res.Content))
 	}
 	res := <-theirs
-	if !res.IsError {
-		t.Fatalf("the other session's edit went through on a file that changed under it: %s", core.TextOf(res.Content))
+	if res.IsError {
+		t.Fatalf("the other session's edit failed: %s", core.TextOf(res.Content))
 	}
-	if got := f.content(p); !strings.Contains(got, "\"os\"") || strings.Contains(got, "\"io\"") {
-		t.Errorf("the file holds %q", got)
+	mustContain(t, core.TextOf(res.Content), "had changed on disk since this session last read it")
+	if got := f.content(p); !strings.Contains(got, "\"os\"") || !strings.Contains(got, "\"io\"") {
+		t.Errorf("one edit undid the other: the file holds %q", got)
 	}
+	f.fails(f.write, in{"file_path": p, "content": "package x\n"}, "has changed on disk")
 }
 
 // A file written whole keeps its own CRLF line endings and byte order

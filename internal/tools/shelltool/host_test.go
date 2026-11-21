@@ -77,6 +77,10 @@ func TestHostCommand(t *testing.T) {
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=yes",
 		"-o", "ConnectTimeout=20",
+		"-a", "-x",
+		"-o", "ClearAllForwardings=yes",
+		"-o", "PermitLocalCommand=no",
+		"-o", "ControlMaster=no",
 		"--",
 		"root@203.0.113.7",
 		script(`'echo hello; pwd; echo "$GNOSH $AGENT $AI_AGENT $PAGER"; echo err >&2; echo last'`),
@@ -307,7 +311,7 @@ func TestHostConnectionFailures(t *testing.T) {
 		words []string // what the result must say
 	}{
 		{"refuse", []string{"not run: render (root@203.0.113.7) refused the connection: nothing answers ssh at its address. Nothing was run on render",
-			"ssh on this machine said: ssh: connect to host 203.0.113.7 port 22: Connection refused", "if it keeps failing, tell the user"}},
+			"ssh on this machine, or the login on render, said: ssh: connect to host 203.0.113.7 port 22: Connection refused", "if it keeps failing, tell the user"}},
 		{"timeout", []string{"render (root@203.0.113.7) did not answer within 20 s. Nothing was run on render", "Connection timed out"}},
 		{"unknown-key", []string{"this account's ssh has no key on record for render (root@203.0.113.7), and gnosh never accepts a machine's key by itself, so no connection was made. Nothing was run on render",
 			"The user has to connect once by hand, check the key's fingerprint and accept it (ssh root@203.0.113.7)", "do not try to reach the machine another way",
@@ -404,7 +408,7 @@ func TestHostSSHsOwnWords(t *testing.T) {
 	if res.IsError || printed(res) != "the command itself" {
 		t.Errorf("result = %q", core.TextOf(res.Content))
 	}
-	if !hasNote(res, "ssh on this machine said: Warning: Permanently added '203.0.113.7' (ED25519) to the list of known hosts.") {
+	if !hasNote(res, "ssh on this machine, or the login on render, said: Warning: Permanently added '203.0.113.7' (ED25519) to the list of known hosts.") {
 		t.Errorf("what ssh said is not in the notes:\n%s", core.TextOf(res.Content))
 	}
 }
@@ -638,7 +642,7 @@ func TestHostConnectionLost(t *testing.T) {
 	if !res.IsError || headline != "the connection to render was lost while the command ran there; what it had printed is below" || body != "before" {
 		t.Errorf("headline = %q, output = %q (IsError %v)", headline, body, res.IsError)
 	}
-	for _, want := range []string{"ssh on this machine said: client_loop: send disconnect: Broken pipe", "how the command ended on render is not known", "or still be running"} {
+	for _, want := range []string{"ssh on this machine, or the login on render, said: client_loop: send disconnect: Broken pipe", "how the command ended on render is not known", "or still be running"} {
 		if !hasNote(res, want) {
 			t.Errorf("no note with %q in:\n%s", want, core.TextOf(res.Content))
 		}
@@ -702,7 +706,7 @@ func TestHostCommandTooLong(t *testing.T) {
 	m := newManager(t, o)
 	res := onHost(t, m, newEnv(t), "render", "cat > big.txt <<'EOF'\n"+strings.Repeat("0123456789abcdef\n", 8000)+"EOF")
 	text := core.TextOf(res.Content)
-	if !res.IsError || !strings.Contains(text, "goes to ssh as one argument") || !strings.Contains(text, "Send it in parts") {
+	if !res.IsError || !strings.Contains(text, "as it goes to ssh, quoted, as one argument") || !strings.Contains(text, "Send it in parts") {
 		t.Errorf("result = %.300q", text)
 	}
 	if len(box.calls()) != 0 {
@@ -776,7 +780,7 @@ func TestTryHost(t *testing.T) {
 
 	box.plan(plan{Mode: "unknown-key"})
 	got := m.TryHost(t.Context(), "web")
-	for _, want := range []string{"no key on record for web (deploy@203.0.113.8)", "connect once by hand", "ssh on this machine said"} {
+	for _, want := range []string{"no key on record for web (deploy@203.0.113.8)", "connect once by hand", "ssh on this machine, or the login on web, said"} {
 		if got.Dir != "" || !strings.Contains(got.Problem, want) {
 			t.Errorf("TryHost = %+v, want a problem that says %q", got, want)
 		}

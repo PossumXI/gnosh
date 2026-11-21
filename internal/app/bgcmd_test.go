@@ -330,10 +330,6 @@ func TestBackgroundGoesOnWithASession(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "First."})
 	run(t, w, "-p", "the first prompt").wantCode(t, 0)
 	w.Model.Done()
-	files, _ := filepath.Glob(filepath.Join(w.Root, "*", "gnosh", "projects", "*", "*.jsonl"))
-	if len(files) != 1 {
-		files, _ = filepath.Glob(filepath.Join(w.Root, "**", "*.jsonl"))
-	}
 	var session string
 	_ = filepath.WalkDir(w.Root, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".jsonl") && !strings.Contains(p, "checkpoints") {

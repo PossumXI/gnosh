@@ -354,6 +354,43 @@ func TestSideQuestionWhileACallRuns(t *testing.T) {
 	}
 }
 
+// So too while the call waits on the gate, shown and not yet run: it is
+// not interrupted (seen under load: the call joined the running ones only
+// once the gate let it, and a side question asked between was told it was
+// interrupted).
+func TestSideQuestionWhileACallWaitsOnTheGate(t *testing.T) {
+	asked, release := make(chan struct{}), make(chan struct{})
+	r := newRig(t, func(o *Options) {
+		o.Tools = []core.Tool{tool("Bash", func(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+			return core.TextResult("done at last"), nil
+		})}
+		o.Gate = GateFunc(func(ctx context.Context, req GateRequest) (Decision, error) {
+			close(asked)
+			<-release
+			return Decision{Allow: true}, nil
+		})
+	})
+	r.model.push(use(tc("c1", "Bash", `{"command":"sleep 9"}`)))
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("run the slow thing") }()
+	<-asked
+	r.model.push(say("It waits for you."), say("All done."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "btw", Session: true, Prompt: "what is it doing?"})
+	if err != nil || res.Text != "It waits for you." {
+		t.Fatalf("result = %+v, err = %v", res, err)
+	}
+	reqs := r.model.requests()
+	side := reqs[len(reqs)-1]
+	last := side.Messages[len(side.Messages)-1]
+	if len(last.Blocks) != 2 || !strings.Contains(core.TextOf(last.Blocks[0].Content), "Still running: nobody interrupted this call") {
+		t.Errorf("the side question's last message: %+v", last)
+	}
+	close(release)
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("turn = %+v", res)
+	}
+}
+
 // A side request that gives way (Yield) is stopped when the session's own
 // next request wants the model, so a turn never waits behind it; one that
 // does not give way is waited for.
@@ -408,5 +445,40 @@ func TestImagesLeftOutAreTold(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("the person was told %d times that the model cannot take images, want once", n)
+	}
+}
+
+// A side request's time begins once it has the model: one that waits
+// behind another (a prompt hook behind a long /btw) is not failed for the
+// wait, which has a bound of its own (the side-request review of
+// 2026-11-19).
+func TestSideTimeBeginsWithTheModel(t *testing.T) {
+	r := newRig(t, func(o *Options) {})
+	r.a.modelLock <- struct{}{} // another request has the model
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		<-r.a.modelLock
+	}()
+	r.model.push(say("Allowed."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "hook", Prompt: "is it allowed?", Timeout: 100 * time.Millisecond})
+	if err != nil || res.Text != "Allowed." {
+		t.Fatalf("a side request that waited longer than its time for the model: %+v, %v", res, err)
+	}
+}
+
+// A side request a provider fails in passing (a 429, a model server that
+// restarts) is sent again after the session's own pauses, as the
+// session's own requests are; one that gives way (a suggestion) is not
+// (the side-request review of 2026-11-19).
+func TestSideTriesAgainAfterAPassingFailure(t *testing.T) {
+	r := newRig(t, func(o *Options) {})
+	r.model.push(broken(core.ErrRateLimit, 429), broken(core.ErrServer, 503), say("Judged."))
+	res, err := r.a.Side(context.Background(), SideRequest{Purpose: "goal-judge", Prompt: "does it hold?"})
+	if err != nil || res.Text != "Judged." {
+		t.Fatalf("a judge a provider failed in passing: %+v, %v", res, err)
+	}
+	r.model.push(broken(core.ErrRateLimit, 429), say("not asked"))
+	if _, err := r.a.Side(context.Background(), SideRequest{Purpose: "suggestion", Yield: true, Prompt: "next?"}); err == nil {
+		t.Error("a request that gives way was tried again")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
@@ -64,6 +65,21 @@ type Config struct {
 	// HooksOff says why Hooks is empty although AllHooks is not: "safe
 	// mode", or the setting that switched them off. Empty otherwise.
 	HooksOff string
+	// HTTPHookURLs is Claude Code's allowedHttpHookUrls, the lists of all
+	// the files that give it, merged: an http hook runs only when its URL
+	// fits one of the patterns. Nil when no file gives it (any URL), empty
+	// but not nil when the files give only empty lists (no http hook
+	// runs). A project's waits for the folder's trust, as its
+	// disableAllHooks does: it would switch off the person's own hooks.
+	HTTPHookURLs []ListItem
+	// Sandbox is the sandbox settings: whether the shell's commands run in
+	// the operating system's sandbox, and what they may do there.
+	Sandbox Sandbox
+	// HTTPHookEnvVars is Claude Code's httpHookAllowedEnvVars, merged the
+	// same way: an http hook's header takes a variable only when both the
+	// hook's own allowedEnvVars and this list name it. Nil when no file
+	// gives it.
+	HTTPHookEnvVars []ListItem
 	// StatusLine is the command whose output is the status line under the
 	// prompt (Claude Code's statusLine), or nil. It is nil in safe mode
 	// and when disableAllHooks is set, as hooks are; StatusLineOff then
@@ -77,6 +93,9 @@ type Config struct {
 	// then says why.
 	FileSuggestion    *FileSuggestion
 	FileSuggestionOff string
+	// LSPServers are the language servers of the lspServers key, by name
+	// (lsp.go): none in safe mode.
+	LSPServers []LSPServer
 	// Attribution is what the model adds to the git commits and pull
 	// requests it makes (Claude Code's attribution). gnosh adds none of
 	// its own: both are empty unless a file sets them.
@@ -134,25 +153,27 @@ type Held struct {
 // the same words: its Restricts says which kinds still apply in a folder
 // that is not trusted, and its question says what each could do.
 const (
-	KindProvider    = "provider"
-	KindModel       = "model"
-	KindHost        = "host"
-	KindHook        = "hook"
-	KindHookOff     = "hook-off" // switching all hooks off
-	KindAllowRule   = "allow-rule"
-	KindAskRule     = "ask-rule"
-	KindDenyRule    = "deny-rule"
-	KindMode        = "mode"
-	KindAddDir      = "add-dir"
-	KindEnv         = "env"
-	KindOption      = "option"
-	KindExtraPath   = "extra-path"
-	KindAddress     = "address"
-	KindHiddenSkill = "hidden-skill"
-	KindRestriction = "restriction" // a setting that only takes a power away, such as disableBypassPermissionsMode
-	KindRemoval     = "removal"     // taking away a provider, a model or a host a weaker file declared
-	KindStatusLine  = "status-line"
-	KindFileSuggest = "file-suggestion"
+	KindProvider     = "provider"
+	KindModel        = "model"
+	KindHost         = "host"
+	KindHook         = "hook"
+	KindHookOff      = "hook-off" // switching all hooks off
+	KindAllowRule    = "allow-rule"
+	KindAskRule      = "ask-rule"
+	KindDenyRule     = "deny-rule"
+	KindMode         = "mode"
+	KindAddDir       = "add-dir"
+	KindEnv          = "env"
+	KindOption       = "option"
+	KindExtraPath    = "extra-path"
+	KindAddress      = "address"
+	KindHiddenSkill  = "hidden-skill"
+	KindRestriction  = "restriction" // a setting that only takes a power away, such as disableBypassPermissionsMode
+	KindRemoval      = "removal"     // taking away a provider, a model or a host a weaker file declared
+	KindStatusLine   = "status-line"
+	KindFileSuggest  = "file-suggestion"
+	KindLSPServer    = "lsp"           // a language server, a program gnosh runs (the trust package's word)
+	KindSandboxWider = "sandbox-wider" // a sandbox setting that lets its commands do more
 )
 
 // StatusLine is a command whose output takes the place of the status line
@@ -402,7 +423,7 @@ type Hook struct {
 // quoted where a shell would need it.
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
-		return "POST " + ShownHookURL(h.URL)
+		return "POST " + hooks.ShownURL(h.URL)
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool
@@ -433,6 +454,18 @@ type Permissions struct {
 	BypassDisabled Value[bool]
 	// DenyInsteadOfPrompting refuses what would ask, and goes on.
 	DenyInsteadOfPrompting Value[bool]
+	// BlockReads and BlockWrites are Claude Code's
+	// blockReadsOutsideWorkingDirectories and
+	// blockWritesOutsideWorkingDirectories: the file tools refuse to read,
+	// or to change, a path outside the working directories, in every
+	// mode. A true in any file holds; false is the same as not set.
+	BlockReads, BlockWrites Value[bool]
+	// ProjectDirs are those of Dirs that a file the project supplied
+	// added (its gnosh.json, or a settings.local.json gnosh did not
+	// write). The blocks do not count them as working directories, as
+	// Claude Code's do not: a repository can turn a block on for itself,
+	// and cannot widen the person's.
+	ProjectDirs []string
 	// Layers are the rules, one layer per file or flag that gave any,
 	// weakest first. Deny rules of every layer count, then ask rules, then
 	// allow rules, so the order matters only for display.

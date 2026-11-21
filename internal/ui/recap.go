@@ -49,7 +49,15 @@ func (s *session) recap() {
 	}
 	th := &s.th
 	s.begin(blkTurn)
-	s.put(wrap(s.m, th.Quiet.Render("Where this session left off (Ctrl+O shows all of it):"), s.cols, "", "")...)
+	head := "Where this session left off:"
+	if h := s.transcriptHint("", "shows all of it"); h != "" {
+		head = "Where this session left off (" + h + "):"
+	}
+	s.put(wrap(s.m, th.Quiet.Render(head), s.cols, "", "")...)
+	rest := "…"
+	if h := s.transcriptHint("", "shows the rest"); h != "" {
+		rest = "… (" + h + ")"
+	}
 	s.begin(blkPrompt)
 	mark := th.Prompt.Render(th.PromptMark)
 	indent := strings.Repeat(" ", s.m.Width(th.PromptMark))
@@ -72,7 +80,7 @@ func (s *session) recap() {
 		s.put(wrap(s.m, th.PromptText.Render(l), s.cols, first, indent)...)
 	}
 	if cut {
-		s.put(wrap(s.m, th.Quiet.Render("… (Ctrl+O shows the rest)"), s.cols, indent, indent)...)
+		s.put(wrap(s.m, th.Quiet.Render(rest), s.cols, indent, indent)...)
 	}
 	if answer == "" {
 		return
@@ -80,7 +88,7 @@ func (s *session) recap() {
 	md := markdown.New(markdown.Options{Width: s.cols, Profile: s.th.Profile, Theme: s.th.Markdown, Metrics: s.m})
 	lines := append(md.Write(answer), md.Close()...)
 	if len(lines) > recapLines {
-		lines = append(lines[:recapLines], th.Quiet.Render("… (Ctrl+O shows the rest)"))
+		lines = append(lines[:recapLines], th.Quiet.Render(rest))
 	}
 	s.begin(blkAnswer)
 	s.put(lines...)

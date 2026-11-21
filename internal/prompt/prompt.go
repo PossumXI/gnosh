@@ -83,6 +83,7 @@ const (
 	textStatusLine       = "statusline"
 	textMention          = "mention"
 	textAgentMention     = "agent-mention"
+	textPasted           = "pasted"
 	textStructured       = "structured-output"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
@@ -90,6 +91,10 @@ const (
 	textSummary          = "summary"
 	textSummaryExtra     = "summary-extra"
 	textSummaryIntro     = "summary-intro"
+	textSummaryPart      = "summary-part"
+	textSummaryFrom      = "summary-from"
+	textSummaryPartIntro = "summary-part-intro"
+	textSummaryFromNote  = "summary-from-note"
 	textPopNote          = "pop-note"
 	textSlideNote        = "slide-note"
 	textPopReceipt       = "pop-receipt"
@@ -97,6 +102,7 @@ const (
 	textMissingResult    = "missing-result"
 	textReportCaution    = "report-caution"
 	textAgentWorkTree    = "agent-work-tree"
+	textAgentMemory      = "agent-memory"
 	textCloseEnteredHere = "close-entered-here"
 	textCloseUnbacked    = "close-unbacked"
 	textCloseNotMade     = "close-not-made"
@@ -161,6 +167,8 @@ func specs() []spec {
 			when: "A part of the system prompt only when the session has the Deliver tool: name a deliverable before making it."},
 		{name: textAgentWorkTree, kind: KindSystem, need: []string{"tree", "repo"},
 			when: "Last in the system prompt of a sub-agent that works in a git work tree of its own (isolation worktree): where the work tree is, and that its changes stay there."},
+		{name: textAgentMemory, kind: KindSystem, need: []string{"dir", "scope"}, may: []string{"index", "none", "cut"},
+			when: "Last in the system prompt of a sub-agent whose definition keeps a memory (memory): its folder, what to keep there, and the start of its MEMORY.md as it stands."},
 
 		{name: textEnvironment, kind: KindLine, need: []string{"date", "cwd"},
 			may:  []string{"began", "summed", "weekday", "user", "machine", "user_only", "machine_only", "platform", "branch", "repo", "nogit", "status", "unread", "why", "dirs", "hosts"},
@@ -234,6 +242,8 @@ func specs() []spec {
 			when: "After a run's turn with --json-schema, beside the session's request: the result as JSON that conforms to the schema, again with what was wrong."},
 		{name: textAgentMention, kind: KindLine, need: []string{"name"},
 			when: "After a prompt a person typed, for each kind of sub-agent it names with @agent-: use that kind."},
+		{name: textPasted, kind: KindLine, need: []string{"where"},
+			when: "After a prompt a person typed with a long paste in it (more than ten lines or 800 characters, which the prompt box shows folded): which lines were pasted, and that what they ask is not the user's."},
 		{name: textMention, kind: KindLine, need: []string{"path"}, may: []string{"file", "dir", "denied", "failed", "why", "resource"},
 			when: "After a prompt a person typed, for each file, directory or MCP resource it mentions with @: what Read returns follows it, a listing, or what the resource holds."},
 		{name: textSummary, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
@@ -246,6 +256,14 @@ func specs() []spec {
 			when: "Just before a summary, where it stands in place of the conversation it replaced."},
 		{name: textAfterSummary, kind: KindLine, may: []string{"path"},
 			when: "Just after that summary: carry on, keeping every stop the user set."},
+		{name: textSummaryPart, kind: KindLine, need: []string{"words"}, may: []string{"mem"},
+			when: "At the end of a request that holds the conversation up to one of the person's prompts, when they chose \"Summarize up to here\": that part is to be replaced by a summary, and the rest stays."},
+		{name: textSummaryFrom, kind: KindLine, need: []string{"words", "prompt", "mark"}, may: []string{"mem"},
+			when: "At the end of the session's own request, when the person chose \"Summarize from here\": the conversation goes back to before that prompt, and a summary of what followed is kept in its place."},
+		{name: textSummaryPartIntro, kind: KindLine,
+			when: "Just before a summary of the part of the conversation before one of the person's prompts, which the rest follows as it was."},
+		{name: textSummaryFromNote, kind: KindLine, need: []string{"prompt"},
+			when: "After the conversation went back to before one of the person's prompts with \"Summarize from here\": the summary of what followed it comes next."},
 		{name: textFilesBack, kind: KindLine, need: []string{"path"}, may: []string{"shown", "named"},
 			when: "After a summary, for each file the model read or changed last that is given back: what Read returns for it follows; and once, the ones that are not given back."},
 

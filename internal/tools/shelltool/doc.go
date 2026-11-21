@@ -153,6 +153,10 @@
 // say "eval" where they would say "-c", and the shell holds two variables
 // of the wrapper's, __gnosh_cwd and __gnosh_cmd.
 //
+// On Linux the shell first sets its oom_score_adj to 1000, the most, which
+// what it starts inherits: when the machine runs out of memory the kernel
+// kills a command of the model's before anything else (oom_linux.go).
+//
 // The environment is the parent's (Options.Environ) with these laid over
 // it, and then Options.Env over those:
 //

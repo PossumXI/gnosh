@@ -54,6 +54,7 @@ type outcome struct {
 	reason    EndReason
 	detail    string
 	driver    string
+	planned   bool
 	objection string
 	err       error
 	kind      string
@@ -238,7 +239,7 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 			case ro.stopped:
 				return stoppedOutcome()
 			case ro.halt != "":
-				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy}
+				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy, planned: ro.planned}
 			}
 			if ctx.Err() != nil {
 				// Stopped as the round's tools ended: the turn ends as
@@ -352,7 +353,7 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 			// is never sent again as it is: room is made first.
 			a.emit(&RetryEvent{Purpose: "main", Attempt: 1, Kind: core.ErrContextTooLong, Status: long.cause.Status,
 				Message: fr.su.model.label() + " refused the request as too long for the model. gnosh makes room and asks again."})
-			a.refusedAsTooLong(fr)
+			a.refusedAsTooLong(fr, long.cause)
 			continue
 		default:
 			if serr := a.storePartial(t, rep, fr.su.model, core.StopError); serr != nil {
@@ -380,12 +381,48 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 // refusedAsTooLong is called when the provider refused a request as too
 // long for the model, though the loop had taken it to fit. Either the
 // loop's estimate was too low or the model's window is smaller than the
-// loop was told. With no count of the provider's own to go by, the
+// loop was told. What the provider said of it decides, when it said: its
+// window is the window, and its count of the request scales the
+// estimates (llama.cpp's n_ctx and n_prompt_tokens; a guess had taken
+// the window for 15K tokens where the server said 32K, and found that
+// nothing could fit). With no count of the provider's own to go by, the
 // estimate is the likelier culprit, and it is scaled up until this request
 // counts as too long; otherwise the window is taken to be smaller. Either
 // way the next fit must make the request shorter.
-func (a *Agent) refusedAsTooLong(fr fitted) {
+func (a *Agent) refusedAsTooLong(fr fitted, cause *core.ProviderError) {
 	m := fr.su.model
+	if cause != nil && (cause.Window > 0 || cause.Tokens > 0) {
+		said := m.label() + " refused the request as too long"
+		switch {
+		case cause.Tokens > 0 && cause.Window > 0:
+			said += fmt.Sprintf(": it counted %s tokens in it, against a window of %s", exact(cause.Tokens), exact(cause.Window))
+		case cause.Tokens > 0:
+			said += fmt.Sprintf(": it counted %s tokens in it", exact(cause.Tokens))
+		default:
+			said += fmt.Sprintf(": its window is %s tokens", exact(cause.Window))
+		}
+		changed := false
+		if cause.Tokens > 0 && fr.est > 0 {
+			if c := min(float64(cause.Tokens)/float64(fr.est), 3); c > a.calib {
+				a.calib, changed = c, true
+				a.notice(LevelWarning, "context", fmt.Sprintf("%s, where gnosh had taken it for about %s. gnosh's estimates were too low; it now counts %.0f%% more, and makes room.",
+					said, tokens(fr.predicted), (c-1)*100))
+				said = ""
+			}
+		}
+		if cause.Window > 0 && cause.Window < fr.lim.window {
+			if said == "" {
+				said = m.label() + fmt.Sprintf(" said its window is %s tokens", exact(cause.Window))
+			}
+			a.learnWindow(m, cause.Window, said)
+			changed = true
+		}
+		if changed {
+			return
+		}
+		// (Nothing it said moves anything: as with no word from it, so
+		// that the request is never sent again as it was.)
+	}
 	if !(a.anchor.ok && a.anchor.model == modelKey(m)) && fr.est > 0 {
 		c := min(max(float64(fr.lim.window+1)/float64(fr.est), a.calib), 3)
 		if scale(fr.est, c) > fr.lim.hard {
@@ -784,6 +821,7 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 		Reason:      out.reason,
 		Detail:      out.detail,
 		Driver:      out.driver,
+		Planned:     out.planned,
 		Objection:   out.objection,
 		Err:         out.err,
 		ErrorKind:   out.kind,
@@ -844,8 +882,13 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 	case EndFailed:
 		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelError, Source: "loop", Text: strings.TrimSpace("The turn failed. " + res.Detail)})
 	case EndHalted:
-		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelWarning, Source: firstNonEmpty(res.Driver, "loop"),
-			Text: "The turn was ended: " + firstNonEmpty(res.Detail, "no reason was given") + "."})
+		level, words := LevelWarning, "The turn was ended: "
+		if res.Planned {
+			// (A tool ended it as it meant to.)
+			level, words = LevelInfo, "The turn ended: "
+		}
+		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: level, Source: firstNonEmpty(res.Driver, "loop"),
+			Text: words + firstNonEmpty(res.Detail, "no reason was given") + "."})
 	case EndModelStopped:
 		a.noticeAs(&NoticeEvent{TurnEnd: true, Level: LevelWarning, Source: "driver:" + res.Driver, Text: fmt.Sprintf(
 			"The model chose to stop. Its reason: %s\nWhat held the turn open: %s",

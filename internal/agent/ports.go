@@ -345,9 +345,13 @@ type Entry struct {
 	Reason EndReason
 
 	// Trigger is "auto" or "manual" for an EntrySummary, and PreTokens is
-	// about how long the conversation was before it.
+	// about how long the conversation was before it. Covers names the
+	// session-file entry a summary of part of the conversation stands in
+	// for, up to and including it (SummaryPart); empty, the summary stands
+	// in for everything before it.
 	Trigger   string
 	PreTokens int
+	Covers    string
 }
 
 // Gate answers one question: may this tool call run? Behind it are the
@@ -441,6 +445,15 @@ type Concurrent interface {
 // it; an adapter for an outside tool must never copy it from what that tool
 // sent.
 const MetaHalt = "gnosh.halt"
+
+// MetaPlanned is the key of core.ToolResult.Meta by which a tool that ends
+// the turn (MetaHalt) says that the end is what the call was for, not
+// something gone wrong: a /loop's run that has scheduled the next one, a
+// move into or out of a work tree. Its value is true. The turn's result
+// says so (TurnResult.Planned), its notice is information, not a warning,
+// and the front ends show the turn as done. Only the harness's own tools
+// set it.
+const MetaPlanned = "gnosh.planned"
 
 // StopWork is the error a moment returns to stop the work it stands before,
 // as a hook's "continue": false does: the session's start refuses the
@@ -685,6 +698,10 @@ type ToolVerdict struct {
 	// says why, for the person.
 	Halt   bool
 	Reason string
+	// Notes are lines for the person, shown under the call
+	// (core.ToolResult.Notes): placed there, and not given as notices,
+	// which would stand above the call, drawn once it is done.
+	Notes []string
 }
 
 // SummaryInfo is what BeforeSummary and AfterSummary are told.

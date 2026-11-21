@@ -352,8 +352,7 @@ func TestFailedLocalServerIsRemembered(t *testing.T) {
 // failed one.
 func TestStopWhileAFallbackIsMade(t *testing.T) {
 	making := make(chan struct{})
-	var r *rig
-	r = newRig(t, func(o *Options) {
+	r := newRig(t, func(o *Options) {
 		o.Fallbacks = []Fallback{{Name: "slow/m", Make: func(ctx context.Context) (Model, error) {
 			close(making)
 			<-ctx.Done()

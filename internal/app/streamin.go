@@ -150,7 +150,12 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 		unstarted[id] = true
 	}
 	drain := func() {
-		for len(unstarted) == 0 && len(backlog) > 0 {
+		// With --json-schema each message is a turn of its own, and the
+		// next goes only once the last one's result, structured output
+		// and all, is written: the structured output is asked of the
+		// conversation as that turn left it, which a next turn already
+		// running would have gone on with.
+		for len(unstarted) == 0 && (f.inv.JSONSchema == "" || len(pending) == 0) && len(backlog) > 0 {
 			m := backlog[0]
 			backlog = backlog[1:]
 			handle(m)
@@ -220,6 +225,17 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 				// woke the model. Its result line is written too.
 				f.emitResult(c, res)
 				last, ended = res, true
+			}
+			if found && f.inv.JSONSchema != "" {
+				// Each turn's result carries the structured output asked
+				// for, as a run of one prompt's does; it was left out of
+				// every one here.
+				f.structured, f.structuredErr = nil, ""
+				if res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped {
+					if sig := f.guarded(ctx, c, func(ctx context.Context) { f.structured, f.structuredErr = f.structuredOutput(ctx, c) }); sig != nil {
+						return f.stoppedBySignal(c, "", sig, c.State())
+					}
+				}
 			}
 			if found {
 				f.mu.Lock()

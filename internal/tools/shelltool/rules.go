@@ -325,8 +325,8 @@ func (m *Manager) rules(a bashArgs, env *core.ToolEnv, person bool) error {
 				argBackground, argHost, h.Name)
 		}
 		if n := len(remoteScript(a.command)); n > maxRemoteCommand {
-			return fmt.Errorf("the command is %s long, and a command for another machine goes to ssh as one argument, of at most %s. Send it in parts: a long file can be written on %s by several commands that each add to it (cat >> FILE <<'EOF' ... EOF)",
-				byteSize(int64(len(a.command))), byteSize(maxRemoteCommand), h.Name)
+			return fmt.Errorf("the command is %s long, %s as it goes to ssh, quoted, as one argument, of at most %s. Send it in parts: a long file can be written on %s by several commands that each add to it (cat >> FILE <<'EOF' ... EOF)",
+				byteSize(int64(len(a.command))), byteSize(int64(n)), byteSize(maxRemoteCommand), h.Name)
 		}
 	}
 	if gnokeyPassword(a.command) {
@@ -487,4 +487,74 @@ func (m *Manager) hints(a bashArgs, e *ending, body string, own bool) []string {
 		notes = append(notes, "gnokey asked for the key's password, and a command here has no terminal to type it in, nor may it be given one: signing goes through the gnokey tool, which asks the user for the password at a masked prompt. If you have that tool, call it with this gnokey command; if not, give the user the exact command to run in their own terminal, and stop. Do not look for another way")
 	}
 	return notes
+}
+
+// writeSigns are what a command says when the sandbox stopped a write
+// outside the folders it may write in; netSigns, when it stopped a
+// connection; trustSigns, when a program could not check a certificate
+// with macOS's trust service, out of the sandbox's reach.
+var (
+	writeSigns = []string{"Read-only file system", "Operation not permitted"}
+	netSigns   = []string{"Could not resolve host", "Temporary failure in name resolution", "Name or service not known",
+		"nodename nor servname provided", "Network is unreachable", "Couldn't connect to server", "Connection refused",
+		"no such host", "dial tcp", "gnosh's sandbox did not let the command reach", "CONNECT tunnel failed"}
+	trustSigns = []string{"x509: ", "tls: failed to verify certificate"}
+	// (The error gnosh's filter gives a Unix socket on Linux, which
+	// nothing else in the sandbox gives.)
+	unixSigns = []string{"Address family not supported by protocol"}
+)
+
+// sandboxHint is the note under a sandboxed command that failed the way
+// the sandbox makes commands fail: what of the sandbox stopped it (the
+// writes, the network, or both; the rest of the sandbox is not said, as
+// it did not stop it), and the way out of it, where there is one. A line
+// of output the settings say not to report for the command
+// (ignoreViolations) is no sign.
+func (m *Manager) sandboxHint(a bashArgs, e *ending, body string) string {
+	sb := m.opt.Sandbox
+	if !a.sandboxed || sb == nil || e.reason != endExited || e.code == 0 {
+		return ""
+	}
+	var ignore []string
+	for _, ig := range sb.Ignored {
+		if ig.Command == "*" || strings.Contains(a.command, ig.Command) {
+			ignore = append(ignore, ig.What)
+		}
+	}
+	in := func(signs []string) bool {
+		for line := range strings.Lines(body) {
+			if slices.ContainsFunc(signs, func(s string) bool { return strings.Contains(line, s) }) &&
+				!slices.ContainsFunc(ignore, func(w string) bool { return strings.Contains(line, w) }) {
+				return true
+			}
+		}
+		return false
+	}
+	var lets []string
+	if sb.Writes != "" && in(writeSigns) {
+		w := "write only in " + sb.Writes
+		if sb.HidesReads && !in(writeSigns[:1]) {
+			// (Not "Read-only file system": it may as well have been a
+			// read the settings refuse, which is told the same way.)
+			w += ", and read nothing the settings keep from it"
+		}
+		lets = append(lets, w)
+	}
+	if in(netSigns) {
+		lets = append(lets, sb.network())
+	}
+	if sb.NoTrust && in(trustSigns) {
+		lets = append(lets, "check no certificate with macOS's trust service (Go's programs check them with it)")
+	}
+	if in(unixSigns) {
+		lets = append(lets, "open no Unix socket (an agent's, a database's, docker's)")
+	}
+	if len(lets) == 0 {
+		return ""
+	}
+	said := "it ran in the sandbox, which lets it " + strings.Join(lets, ", and ")
+	if sb.Unsandboxed {
+		return said + ": if that is what stopped it, run it again with " + argNoSandbox + " set to true (that call is judged as any command is)"
+	}
+	return said + ", and which cannot be left in this session: if that is what stopped it, tell the person"
 }

@@ -25,6 +25,12 @@ type Decision struct {
 	// one; in ModeBypass the caller asks with a time limit, and refuses
 	// where nobody can answer.
 	Critical bool
+	// PersonOnly marks a call only a person may approve, though it is no
+	// danger: what plan mode holds (a call that may change something while
+	// the session plans, and the plan itself, ExitPlanMode). No rule and
+	// no hook approves it, and no channel is asked (the plan review of
+	// 2026-11-19: a hook's allow approved a plan nobody had read).
+	PersonOnly bool
 	// Suggestions are the choices a "yes, and don't ask again" answer
 	// could make, narrowest first. It is empty when no rule could cover
 	// the call, and then only a one-time yes is offered.
@@ -137,7 +143,7 @@ type request struct {
 func (e *Engine) Decide(tool string, call core.ToolCall, action core.Action) Decision {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.decideLocked(tool, call, action)
+	return e.forAgent("").decideLocked(tool, call, action)
 }
 
 // DecideAs judges a call as Decide does, but as if the session were in
@@ -152,7 +158,7 @@ func (e *Engine) DecideAs(mode Mode, tool string, call core.ToolCall, action cor
 		return Decision{Behavior: Deny, Stage: StageMode, Mode: e.mode,
 			Reason: "The call was to be judged in the mode \"" + string(mode) + "\", which is not one this session may use."}
 	}
-	as := *e
+	as := *e.forAgent("")
 	as.mode = mode
 	return as.decideLocked(tool, call, action)
 }
@@ -165,14 +171,24 @@ func (e *Engine) DecideAs(mode Mode, tool string, call core.ToolCall, action cor
 // may have told it something else, so that "rm -rf *" in the project would
 // be judged as the same words in some folder under it. Here the directory
 // and the question are one step, and the engine's own directory is left as
-// it is. A dir that is not an absolute path changes nothing.
+// it is. A dir that is not an absolute path changes nothing. The call is
+// the session's own agent's: DecideFor judges a sub-agent's.
 func (e *Engine) DecideAt(dir, tool string, call core.ToolCall, action core.Action) Decision {
+	return e.DecideFor("", dir, tool, call, action)
+}
+
+// DecideFor judges a call of one agent as DecideAt does: agent is the id
+// of the sub-agent that made it, or "" for the session's own agent. The
+// layers kept to another sub-agent (Layer.Agent: a forked skill another
+// sub-agent runs) play no part.
+func (e *Engine) DecideFor(agent, dir, tool string, call core.ToolCall, action core.Action) Decision {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	v := e.forAgent(agent)
 	if !strings.HasPrefix(dir, "/") {
-		return e.decideLocked(tool, call, action)
+		return v.decideLocked(tool, call, action)
 	}
-	at := *e
+	at := *v
 	at.cur = path.Clean(dir)
 	return at.decideLocked(tool, call, action)
 }
@@ -699,6 +715,25 @@ func (e *Engine) decideLocked(tool string, call core.ToolCall, action core.Actio
 }
 
 func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) Decision {
+	var req *request
+	d := e.decideSteps(canon, call, action, &req)
+	if d.Behavior == Allow && req != nil {
+		// The read block's question about a shell command (block.go) is
+		// put only where the command would have run: anything stricter
+		// that the steps found (a dangerous removal, plan mode's question
+		// for the person, a refusal) stands as it is (the blocks review
+		// of 2026-11-20).
+		if bd, ok := e.shellBlocked(req); ok {
+			return bd
+		}
+	}
+	return d
+}
+
+// decideSteps goes through the steps of a decision, all but the read
+// block's question about a shell command, and puts in made the call's
+// request once it is worked out.
+func (e *Engine) decideSteps(canon string, call core.ToolCall, action core.Action, made **request) Decision {
 	if off := e.toolOff(canon); off != nil {
 		if off.rule != nil {
 			return Decision{Behavior: Deny, Stage: StageTool, Rule: off.rule.Rule.String(), Source: off.rule.layer.Name,
@@ -707,11 +742,18 @@ func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) De
 		return Decision{Behavior: Deny, Stage: StageTool, Reason: canon + " is switched off: " + off.why + "."}
 	}
 	req := e.newRequest(canon, call, action)
+	*made = req
 
 	// 1. Deny rules, from every layer.
 	if c := e.match(ListDeny, req); c != nil {
 		return Decision{Behavior: Deny, Stage: StageDeny, Rule: c.Rule.String(), Source: c.layer.Name,
 			Reason: "The deny rule " + c.Rule.String() + " from " + c.layer.Name + " refuses this."}
+	}
+	// 1b. The blocks of the file tools outside the working directories
+	// (block.go), which no ask rule turns into a question and no mode or
+	// allow rule passes.
+	if d, ok := e.blocked(req); ok {
+		return d
 	}
 	// 2. Ask rules.
 	if c := e.match(ListAsk, req); c != nil {
@@ -741,6 +783,9 @@ func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) De
 	// 4. Allow rules, then what the mode lets run.
 	switch req.info.class {
 	case classShell:
+		if d, ok := e.sandboxAllows(req); ok {
+			return d
+		}
 		return e.decideShell(req)
 	case classFileRead:
 		return e.decideRead(req)
@@ -749,6 +794,12 @@ func (e *Engine) decide(canon string, call core.ToolCall, action core.Action) De
 	case classFetch:
 		return e.decideFetch(req)
 	case classAgent, classQuiet:
+		if e.mode == ModePlan && (canon == "EnterWorktree" || canon == "ExitWorktree") {
+			// A work tree is made or removed with git: while planning, a
+			// person decides (the plan review of 2026-11-19).
+			return Decision{Behavior: Ask, Stage: StageMode, PersonOnly: true,
+				Reason: "Plan mode: " + canon + " makes or removes a git work tree and its branch, so a person decides."}
+		}
 		return Decision{Behavior: Allow, Stage: StageMode, Reason: canon + " never needs approval; what it starts is judged call by call."}
 	}
 	return e.decideOther(req)
@@ -854,14 +905,15 @@ func absOnly(ps []string) []string {
 // that a rule is held against the path as written and as resolved: a deny
 // rule applies when either matches, an allow rule only when both do.
 func (e *Engine) expand(req *request, paths []string) []string {
+	// (Kept once each by a set: a pattern copied into a folder gives a
+	// name for each of its matches, which may be thousands.)
 	var out []string
+	seen := map[string]bool{}
 	add := func(p string) {
-		for _, o := range out {
-			if o == p {
-				return
-			}
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
 		}
-		out = append(out, p)
 	}
 	for _, p := range paths {
 		if !strings.HasPrefix(p, "/") {
@@ -899,6 +951,13 @@ func (e *Engine) match(list List, req *request) *crule {
 			}
 		case kindParam:
 			if c.canon == req.canon && paramMatch(req.input, c.param, c.value) {
+				return c
+			}
+			// A Monitor call is a Bash command run in the background, and
+			// Bash's rules about its arguments hold for it as for that
+			// call: a deny of Bash(run_in_background:true) did not cover
+			// it (the hosts review of 2026-11-19).
+			if c.canon == toolBash && req.canon == toolMonitor && paramMatch(monitorAsBash(req.input), c.param, c.value) {
 				return c
 			}
 		case kindCommand:
@@ -1039,6 +1098,20 @@ func (e *Engine) allowsPath(p string, edit bool) *crule {
 
 // paramMatch reports whether the input has the scalar parameter with a
 // value the pattern covers.
+// monitorAsBash is a Monitor call's arguments as those of the Bash call
+// that runs its command: in the background, with timeout_ms as timeout.
+func monitorAsBash(input map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(input)+1)
+	for k, v := range input {
+		if k == "timeout_ms" {
+			k = "timeout"
+		}
+		out[k] = v
+	}
+	out["run_in_background"] = json.RawMessage("true")
+	return out
+}
+
 func paramMatch(input map[string]json.RawMessage, name, pat string) bool {
 	raw, ok := input[name]
 	if !ok {

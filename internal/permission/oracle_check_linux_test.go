@@ -467,7 +467,6 @@ type lineCheck struct {
 	line  string
 	view  *bashView // the engine's reading
 	plain *Engine
-	runs  []shellRun
 }
 
 // guardHit says which deny or ask rule names something the run did, or
@@ -543,8 +542,8 @@ func (lc *lineCheck) guardHit(e *Engine, rs ruleSet, r shellRun, rcs []ranCmd) s
 		}
 		// A copy lands under its place by the source's name where the
 		// place is a folder, as it is in the jail after the run.
-		for _, w := range f.lands {
-			if abs, ok := cleanAbs(w.joined(), rc.cwd); ok {
+		for _, ld := range f.lands {
+			if abs, ok := cleanAbs(ld.into.joined(), rc.cwd); ok {
 				if st, err := os.Stat(path.Dir(abs)); err == nil && st.IsDir() {
 					writes = append(writes, abs)
 				}
@@ -1242,6 +1241,12 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 			}
 		}
 		switch name {
+		case ":":
+			// The trace reader leaves every ":" out (parseTrace: what
+			// stands after it may be another stage's lines), so it is not
+			// looked for. (Oracle seed 171: ": #${X:=x}; cat *", a ":"
+			// with a comment, as the engine read it.)
+			continue
 		case "[[":
 			// bash refuses a test it cannot make sense of, and runs
 			// nothing.

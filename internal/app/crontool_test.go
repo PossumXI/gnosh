@@ -1,6 +1,9 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -114,7 +117,7 @@ func TestScheduledPromptsOffered(t *testing.T) {
 	s.typeLine("hi")
 	s.see("ok")
 	s.typeLine("/loop 5m check")
-	s.see("Scheduled prompts are off (CLAUDE_CODE_DISABLE_CRON=1).")
+	s.see("Scheduled prompts are off (CLAUDE_CODE_DISABLE_CRON).")
 	s.typeLine("/exit")
 	s.exit()
 	if body := string(w.Model.Requests()[1].Body); strings.Contains(body, `"CronCreate"`) {
@@ -142,8 +145,8 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.see("Type a prompt and Enter.")
 	s.typeLine("/loop check the build")
 	s.see("The prompt runs now, and again when the model says")
-	s.see("Next /loop run at 10:02: waiting on CI")
-	s.see("the loop's next run is at 10:02")
+	s.see("  waiting on CI")
+	s.see("-- done (the loop's next run is at 10:02)") // (planned: not "ended")
 	clk.add(2 * time.Minute)
 	s.see("The self-paced /loop runs again")
 	s.see("Checked again.")
@@ -155,7 +158,7 @@ func TestSelfPacedLoop(t *testing.T) {
 	s.exit()
 	reqs := w.Model.Requests()
 	has(t, "the loop's first run", string(reqs[0].Body), "check the build", "This prompt runs as a self-paced /loop")
-	has(t, "the first schedule", toolResult(t, w, 1, "c1"), "The loop's next run is at 10:02, in 2m0s. This turn ends here")
+	has(t, "the first schedule", toolResult(t, w, 1, "c1"), "The loop's next run is at 10:02, in 2 minutes. This turn ends here")
 	has(t, "the second schedule", toolResult(t, w, 1, "c2"), "This call did not run: the turn was ended first (the loop's next run is at 10:02)")
 	has(t, "the loop's second run", string(reqs[1].Body), "This is a run of the self-paced /loop")
 }
@@ -222,4 +225,78 @@ func TestSelfPacedLoopIgnoresOtherTurns(t *testing.T) {
 	if out := s.out.String(); strings.Contains(out, "scheduled no next one") {
 		t.Errorf("a turn of the person's was taken for a run of the loop:\n%s", out)
 	}
+}
+
+// A scheduled prompt waits while a command of the person's runs: one that
+// came due under /cd's trust question started a turn the move then had to
+// refuse (the cd review of 2026-11-19), and one between the summary
+// "/rewind N summarize" waits for and its rewind would have the rewind
+// refused.
+func TestScheduledPromptWaitsForACommand(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "CronCreate", Args: `{"cron":"* * * * *","prompt":"say pong","recurring":false}`}}},
+		apptest.Reply{Text: "Scheduled."},
+		apptest.Reply{Text: "pong"},
+	)
+	lib := filepath.Join(w.Root, "lib")
+	if err := os.MkdirAll(lib, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "gnosh.json"), []byte(`{"permissions": {"allow": ["Bash(make *)"]}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
+	s := sitWith(t, w, func(o *Options) {
+		o.Now = clk.Now
+		o.Relaunch = func(args, env []string) error { return os.ErrPermission }
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("remind me to say pong in a minute")
+	s.see("Scheduled.")
+	// (/cd refuses while the turn is still ending: the reply is on the
+	// screen a moment before the turn's last line.)
+	s.see("-- done in")
+	s.typeLine("/cd ../lib")
+	s.see("Trust " + lib + "?")
+	clk.add(time.Minute)
+	// (The schedule is looked at once a second.)
+	time.Sleep(2500 * time.Millisecond)
+	if n := len(w.Model.Requests()); n != 2 {
+		t.Fatalf("the model was asked %d times while /cd's question waited: a scheduled prompt went out under it", n)
+	}
+	s.typeLine("1")
+	s.see("was not trusted")
+	s.see("Scheduled task ")
+	s.see("pong")
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// /tasks lists the prompts scheduled in the session, as Claude Code
+// 2.1.329's does, and /tasks stop with one's id cancels it.
+func TestTasksListsScheduledPrompts(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "CronCreate", Args: `{"cron":"*/5 * * * *","prompt":"check the build"}`}}},
+		apptest.Reply{Text: "Scheduled."},
+	)
+	clk := &clock{now: time.Date(2026, 11, 18, 10, 0, 30, 0, time.Local)}
+	s := sitWith(t, w, func(o *Options) { o.Now = clk.Now })
+	s.see("Type a prompt and Enter.")
+	s.typeLine("check the build every five minutes")
+	s.see("Scheduled.")
+	s.see("-- done in")
+	s.typeLine("/tasks")
+	s.see(`a scheduled prompt, "*/5 * * * *" recurring, next run`)
+	s.see("check the build")
+	s.see("/tasks stop <id> stops one.")
+	m := regexp.MustCompile(`(\S+)  a scheduled prompt`).FindStringSubmatch(s.out.String())
+	if m == nil {
+		t.Fatalf("no id in:\n%s", s.out.String())
+	}
+	s.typeLine("/tasks stop " + m[1])
+	s.see("The scheduled prompt " + m[1] + " is cancelled.")
+	s.typeLine("/tasks")
+	s.see("No command has run in the background in this session.")
+	s.typeLine("/exit")
+	s.exit()
 }

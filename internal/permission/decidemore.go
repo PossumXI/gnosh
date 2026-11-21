@@ -481,10 +481,15 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 		}
 		read = true
 	}
+	plain := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
 	// From each such name on, the piece as it is written, read as a line
 	// of its own: so a word of the shell's own before the name does not
 	// keep it from being read ("do mv <(date) 0"), and what the command is
-	// handed keeps its <(...), which the words below take apart.
+	// handed keeps its <(...), which the words below take apart. Where
+	// that cannot be read either, its words as they are written: a <(...)
+	// among them stands for whatever a command prints, not for the text
+	// it holds ("mv <(wget =x${X:} origin) db/s", where the ${X:} kept
+	// the line from being read: oracle seed 163).
 	for _, tail := range nameTails(piece) {
 		if tail == piece && read {
 			continue
@@ -495,6 +500,10 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 					return why
 				}
 			}
+		} else if ws := writtenWords(tail); len(ws) > 0 {
+			if why := e.removalDanger(plain, &simpleCmd{words: ws}, dirs, nil); why != "" {
+				return why
+			}
 		}
 	}
 	// The words from the command's name on, as they are written. In a
@@ -503,7 +512,6 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 	// runs, made so in a piece of the line that this one does not hold
 	// ("alias zz=" on the line before, and then "zz rsync -a --delete src/
 	// ."). The piece's own program was judged above, as it was read.
-	plain := &bashView{sc: &script{ok: true}, vars: map[string]*lineVar{}}
 	for _, i := range from {
 		if read && i == 0 {
 			continue
@@ -528,6 +536,49 @@ func (e *Engine) crudeDanger(piece string, dirs []string) string {
 		}
 	}
 	return ""
+}
+
+// writtenWords cuts a command that could not be read, from its name on,
+// into its words as they are written: at blanks outside quotes, (...) and
+// ${...}, up to what ends the command. A process substitution, <(...) or
+// >(...), is a word that stands for whatever a command prints; the others
+// are their text without quotes and backslashes.
+func writtenWords(tail string) []word {
+	cut := make([]bool, len(tail))
+	end := len(tail)
+	scanShell(tail, func(i, depth int) bool {
+		if depth != 0 {
+			return true
+		}
+		switch tail[i] {
+		case ' ', '\t':
+			cut[i] = true
+		case '\n', ';', '|', '&':
+			end = i
+			return false
+		}
+		return true
+	})
+	var ws []word
+	unquote := strings.NewReplacer("'", "", "\"", "", "\\", "")
+	for i := 0; i < end; {
+		if cut[i] {
+			i++
+			continue
+		}
+		j := i
+		for j < end && !cut[j] {
+			j++
+		}
+		w := tail[i:j]
+		if strings.HasPrefix(w, "<(") || strings.HasPrefix(w, ">(") {
+			ws = append(ws, word{raw: w, parts: []wordPart{{kind: partSubst, proc: true}}})
+		} else {
+			ws = append(ws, litOf(unquote.Replace(w)))
+		}
+		i = j
+	}
+	return ws
 }
 
 // decideRead judges Read, Grep and Glob: inside the working directories,
@@ -564,11 +615,16 @@ func (e *Engine) decideRead(req *request) Decision {
 	return Decision{Behavior: Allow, Stage: StageMode, Reason: "Reading inside the working directories needs no approval."}
 }
 
+// PresentPlan ends plan mode's refusal of an edit. A program that offers
+// no ExitPlanMode, nobody being there to approve a plan, says something
+// else in its place.
+const PresentPlan = "Present the plan with ExitPlanMode."
+
 // decideEdit judges Edit, Write and NotebookEdit.
 func (e *Engine) decideEdit(req *request) Decision {
 	if e.mode == ModePlan {
 		return Decision{Behavior: Deny, Stage: StageMode,
-			Reason: "Plan mode is on: nothing is changed until the plan is approved. Present the plan with ExitPlanMode."}
+			Reason: "Plan mode is on: nothing is changed until the plan is approved. " + PresentPlan}
 	}
 	if c := e.match(ListAllow, req); c != nil {
 		return allowedBy(c)
@@ -619,7 +675,12 @@ func (e *Engine) decideFetch(req *request) Decision {
 		return d
 	}
 	d.Reason = "Fetching from " + req.host + " asks first."
-	d.Suggestions = []Suggestion{{Rules: []string{"WebFetch(domain:" + req.host + ")"}, Scope: GrantLocal}}
+	if !strings.Contains(req.host, "*") {
+		// (A * in a host is a wildcard in the rule it would make: an
+		// answer for https://*.com/x would let every .com be fetched
+		// unasked; the approvals review of 2026-11-19.)
+		d.Suggestions = []Suggestion{{Rules: []string{"WebFetch(domain:" + req.host + ")"}, Scope: GrantLocal}}
+	}
 	return d
 }
 
@@ -627,24 +688,35 @@ func (e *Engine) decideFetch(req *request) Decision {
 // unless an allow rule names the tool.
 func (e *Engine) decideOther(req *request) Decision {
 	plan := e.mode == ModePlan
+	if req.canon == "ExitPlanMode" {
+		// The plan is the person's alone to approve: no allow rule, no
+		// hook and no channel approves a plan nobody has read, and the
+		// session leaves plan mode only on their yes (the plan review of
+		// 2026-11-19). Approving it can also accept the edits that carry
+		// it out. Outside plan mode there is no plan to approve, and its
+		// yes switched the mode whatever the session was in.
+		if !plan {
+			return Decision{Behavior: Deny, Stage: StageMode,
+				Reason: "ExitPlanMode is for plan mode, and the session is in the " + string(e.mode) + " mode: there is no plan to present. Carry the task out, or switch to plan mode with EnterPlanMode first."}
+		}
+		return Decision{Behavior: Ask, Stage: StageMode, PersonOnly: true,
+			Reason:      "The plan is ready; a person approves it or asks for more.",
+			Suggestions: []Suggestion{{Mode: ModeAcceptEdits}}}
+	}
 	// While planning, an approval reaches only what does not change
-	// anything: searching the web, and presenting the plan.
-	holds := plan && req.canon != toolWebSearch && req.canon != "ExitPlanMode"
+	// anything: searching the web.
+	holds := plan && req.canon != toolWebSearch
 	if !holds {
 		if c := e.match(ListAllow, req); c != nil {
 			return allowedBy(c)
 		}
 	}
-	d := Decision{Behavior: Ask, Stage: StageMode, hookAllow: !holds, Reason: req.canon + " asks first unless an allow rule names it."}
+	d := Decision{Behavior: Ask, Stage: StageMode, hookAllow: !holds, PersonOnly: holds, Reason: req.canon + " asks first unless an allow rule names it."}
 	if holds {
 		d.Reason = "Plan mode: " + req.canon + " may change things, so a person decides."
 		return d
 	}
 	switch {
-	case req.canon == "ExitPlanMode":
-		// Approving the plan can also accept the edits that carry it out.
-		d.Reason = "The plan is ready; a person approves it or asks for more."
-		d.Suggestions = []Suggestion{{Mode: ModeAcceptEdits}}
 	case req.canon == toolWebSearch:
 		d.Suggestions = []Suggestion{{Rules: []string{toolWebSearch}, Scope: GrantLocal}}
 	case req.info.class == classSkill:

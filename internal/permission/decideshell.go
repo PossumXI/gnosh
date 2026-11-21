@@ -380,6 +380,15 @@ func (e *Engine) dotMatches(pattern string) (out []string, ok bool) {
 		if !strings.HasPrefix(seg, ".") || !hasPathMagic(seg) {
 			continue
 		}
+		if hasPathMagic(strings.Join(segs[:i], "/")) {
+			// "*/..*": each match of what comes before is a name of its
+			// own, which the text would take out with the "..": a match
+			// may begin with a dash and reach the command as a flag
+			// ("-R/.."), and through a link its ".." is the directory
+			// above where the link leads (oracle seed 166). It is not
+			// worked out: the caller asks.
+			return nil, false
+		}
 		for _, name := range []string{".", ".."} {
 			if !segMatch(seg, name) {
 				continue
@@ -769,8 +778,13 @@ func (e *Engine) shellPaths(req *request) {
 			// ~+ is the directory the shell is in, ~- the one it was in
 			// before and ~2 one that pushd put by: each is one of those
 			// the line may be in.
-			if w.joined() != "~+"+rest && !v.moves {
-				return // no cd on the line: the word stays as it is written
+			if !v.moves && !stackTop(w) {
+				// No cd on the line: ~- is OLDPWD, which the shell is not
+				// given, and ~2 a place the stack does not have, so the
+				// word stays as it is written. (~+, ~0, ~+0 and ~-0 are
+				// the directory the shell is in, the one place the stack
+				// always holds: oracle seed 172.)
+				return
 			}
 			for _, d := range dirs {
 				part := litOf(d + rest)
@@ -944,8 +958,20 @@ func (e *Engine) shellPaths(req *request) {
 		for _, w := range f.writes {
 			add(w, &writes)
 		}
-		for _, w := range f.lands {
-			add(w, &writes)
+		for _, ld := range f.lands {
+			add(ld.into, &writes)
+			if !ld.into.glob || ld.remote || !ld.dir.static() || !ld.src.static() {
+				continue
+			}
+			// A pattern copied into a folder lands under the names of what
+			// it matches, which are not there yet: "cp * build/" writes
+			// build/a.txt, which build/* matched nothing of, and a deny rule
+			// on *.txt was passed by (oracle seed 176). Each match's name,
+			// in each folder the copy lands in, is held to the rules.
+			var folders, names []string
+			add(ld.dir, &folders)
+			add(ld.src, &names)
+			writes = append(writes, landedNames(folders, names)...)
 		}
 		if trees, copies := treeOps(u.cmd.words); len(trees)+len(copies) > 0 {
 			e.treeGuards(trees, copies, dirs, req, &writes)
@@ -1225,6 +1251,22 @@ func dirTilde(w word) (rest string, ok bool) {
 		return "", false
 	}
 	return l[i:], true
+}
+
+// stackTop reports whether a word dirTilde takes is the directory the
+// shell is in on a line that has not moved: ~+ is that directory, and ~0,
+// ~+0 and ~-0 (any count of zeros) are the first and the last of the
+// directory stack, which is that directory alone until a pushd.
+func stackTop(w word) bool {
+	head, _, _ := strings.Cut(w.joined(), "/")
+	digits := strings.TrimPrefix(head, "~")
+	if digits == "+" {
+		return true
+	}
+	if strings.HasPrefix(digits, "+") || strings.HasPrefix(digits, "-") {
+		digits = digits[1:]
+	}
+	return digits != "" && strings.Trim(digits, "0") == ""
 }
 
 // allLit reports whether a word is made of literal text alone.
@@ -1903,7 +1945,7 @@ func (e *Engine) decideShell(req *request) Decision {
 		if plan {
 			reason = "Plan mode: " + reason
 		}
-		return Decision{Behavior: Ask, Stage: StageMode, Reason: reason, hookAllow: !plan}
+		return Decision{Behavior: Ask, Stage: StageMode, Reason: reason, hookAllow: !plan, PersonOnly: plan}
 	}
 	if !plan {
 		if c := e.match(ListAllow, req); c != nil {
@@ -2052,7 +2094,12 @@ var noPrefix = map[string]bool{
 // that directory.
 func (e *Engine) suggestRules(c *simpleCmd, f cmdFacts, st *lineState) (exact, prefix string) {
 	if f.name == "cd" && f.cd != nil {
-		if abs, _, ok := e.absAll(*f.cd, st.dirs); ok && len(abs) == 1 {
+		// Not for a folder the Read tool would offer no such rule for
+		// either: the root, a top-level folder, the home, a folder that
+		// holds the project. "cd .. && ls" from the project's root offered
+		// Read(//<all the person's projects>/**), kept on disk (the
+		// approvals review of 2026-11-19).
+		if abs, _, ok := e.absAll(*f.cd, st.dirs); ok && len(abs) == 1 && abs[0] != "/" && e.criticalDir(abs[0]) == "" {
 			return "Read(/" + EscapePath(abs[0]) + "/**)", ""
 		}
 		return "", ""
@@ -2076,7 +2123,11 @@ func (e *Engine) suggestRules(c *simpleCmd, f cmdFacts, st *lineState) (exact, p
 		return "", ""
 	}
 	name := c.words[0].joined()
-	if noPrefix[baseName(name)] || strings.Contains(name, "/") || prefixOnlyExact(c.words) || len(c.words) == 1 {
+	// The program as a system that does not tell capitals apart finds
+	// it: PYTHON3 runs python3 on a Mac, and Bash(PYTHON3 *) would let
+	// any script run (the approvals review of 2026-11-19).
+	key := progKey(baseName(name))
+	if noPrefix[key] || strings.Contains(name, "/") || prefixOnlyExact(c.words) || len(c.words) == 1 {
 		return exact, ""
 	}
 	head := name
@@ -2085,7 +2136,7 @@ func (e *Engine) suggestRules(c *simpleCmd, f cmdFacts, st *lineState) (exact, p
 		if len(c.words) == 2 {
 			return exact, ""
 		}
-	} else if needsSubcommand[name] {
+	} else if needsSubcommand[key] {
 		return exact, ""
 	}
 	if prefix = "Bash(" + head + " *)"; !covers(prefix) {
@@ -2111,4 +2162,18 @@ func subcommandLike(w word) bool {
 		}
 	}
 	return true
+}
+
+// landedNames are the paths a copy makes in folders: each name's last
+// piece in each folder.
+func landedNames(folders, names []string) []string {
+	var out []string
+	for _, f := range folders {
+		for _, n := range names {
+			if b := path.Base(n); b != "." && b != ".." && b != "/" {
+				out = append(out, path.Join(f, b))
+			}
+		}
+	}
+	return out
 }

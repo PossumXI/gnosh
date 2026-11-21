@@ -66,12 +66,18 @@ type treeMove struct {
 	// it into starts again there (/restart), and the tree stays one
 	// ExitWorktree may take it back from. Nothing is said of it.
 	Carried bool `json:"carried,omitempty"`
+	// Made is the tree of a --worktree session that the gnosh before made
+	// and nobody named, which /restart starts again in: it stays one made
+	// here, which goes at the end when it is left as made, though the new
+	// start finds it by the name (the cd review of 2026-11-19: it was kept
+	// for good, as one named and opened again).
+	Made string `json:"made,omitempty"`
 }
 
 // readTreeMove reads TreeMoveEnv's value; what cannot be read is no move.
 func readTreeMove(s string) treeMove {
 	var m treeMove
-	if json.Unmarshal([]byte(s), &m) != nil || m.Entered != "" && !filepath.IsAbs(m.Entered) || m.Left != "" && !filepath.IsAbs(m.Left) {
+	if json.Unmarshal([]byte(s), &m) != nil || m.Entered != "" && !filepath.IsAbs(m.Entered) || m.Left != "" && !filepath.IsAbs(m.Left) || m.Made != "" && !filepath.IsAbs(m.Made) {
 		return treeMove{}
 	}
 	return m
@@ -124,7 +130,7 @@ func (t *enterTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	}
 	tctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	tree, start, err := makeTree(tctx, l.p.o.Environ, l.st.folder, l.cfg.Paths.DataDir, name, named)
+	tree, start, err := makeTree(tctx, l.p.childEnviron(), l.st.folder, l.cfg.Paths.DataDir, name, named)
 	if err != nil {
 		return core.ErrorResult("No work tree could be had: " + err.Error() + "."), nil
 	}
@@ -133,8 +139,8 @@ func (t *enterTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 		if !tree.reused {
 			uctx, done := context.WithTimeout(context.Background(), time.Minute)
 			defer done()
-			if _, err := runGit(uctx, l.p.o.Environ, tree.repo, "worktree", "remove", "--force", tree.path); err == nil {
-				_, _ = runGit(uctx, l.p.o.Environ, tree.repo, "branch", "-D", tree.branch)
+			if _, err := runGit(uctx, l.p.childEnviron(), tree.repo, "worktree", "remove", "--force", tree.path); err == nil {
+				_, _ = runGit(uctx, l.p.childEnviron(), tree.repo, "branch", "-D", tree.branch)
 			}
 		}
 	}
@@ -156,7 +162,7 @@ func (t *enterTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.T
 	}
 	l.restartWhy.Store(ptrTo("The session moves into the git work tree " + tree.path + ": gnosh starts again there." + l.loopEndsNote()))
 	res := core.TextResult(text)
-	res.Meta = map[string]any{agent.MetaHalt: "the session moves into the work tree " + tree.path}
+	res.Meta = map[string]any{agent.MetaHalt: "the session moves into the work tree " + tree.path, agent.MetaPlanned: true}
 	return res, nil
 }
 
@@ -211,14 +217,14 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	defer cancel()
 	removed, keptBranch := false, ""
 	if in.Action == "remove" {
-		what, err := treeHolds(tctx, l.p.o.Environ, &tree.worktree)
+		what, err := treeHolds(tctx, l.p.childEnviron(), &tree.worktree)
 		switch {
 		case err != nil:
 			return core.ErrorResult("Whether the work tree holds work could not be told (" + err.Error() + "), so it was not removed. Call again with action keep, or try again."), nil
 		case len(what) > 0 && !in.Discard:
 			return core.ErrorResult(fmt.Sprintf("The work tree %s holds %s, which removing it would lose, so it was not removed. Ask the user: then call again with discard_changes true to remove it anyway, or with action keep.", tree.path, strings.Join(what, " and "))), nil
 		}
-		if _, err := runGit(tctx, l.p.o.Environ, tree.repo, "worktree", "remove", "--force", tree.path); err != nil {
+		if _, err := runGit(tctx, l.p.childEnviron(), tree.repo, "worktree", "remove", "--force", tree.path); err != nil {
 			return core.ErrorResult("The work tree could not be removed (" + err.Error() + "). Call again with action keep to leave it."), nil
 		}
 		// The branch goes only as far as git agrees that nothing on it is
@@ -227,7 +233,7 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 		if in.Discard {
 			del = "-D"
 		}
-		if _, err := runGit(tctx, l.p.o.Environ, tree.repo, "branch", del, tree.branch); err != nil {
+		if _, err := runGit(tctx, l.p.childEnviron(), tree.repo, "branch", del, tree.branch); err != nil {
 			keptBranch = " Its branch " + tree.branch + " is kept: git would not delete it (" + oneLine(err.Error(), 200) + ")."
 		}
 		removed = true
@@ -248,7 +254,7 @@ func (t *exitTreeTool) Run(ctx context.Context, call core.ToolCall, env *core.To
 	}
 	l.restartWhy.Store(ptrTo("The session goes back to " + tree.from + ": gnosh starts again there." + l.loopEndsNote()))
 	res := core.TextResult(text)
-	res.Meta = map[string]any{agent.MetaHalt: "the session leaves the work tree " + tree.path}
+	res.Meta = map[string]any{agent.MetaHalt: "the session leaves the work tree " + tree.path, agent.MetaPlanned: true}
 	return res, nil
 }
 

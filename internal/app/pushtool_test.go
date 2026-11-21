@@ -16,7 +16,7 @@ func TestPushText(t *testing.T) {
 		{"build done:\n0 failures", "build done: 0 failures"},
 		{"a\x1b]9;forged\x07b", "a ]9;forged b"},
 		{"x\u009dy\u0085z", "x y z"},
-		{"pay ‮exe.txt‬ now", "pay exe.txt now"},
+		{"pay \u202eexe.txt\u202c now", "pay exe.txt now"},
 		{"a bad \xff byte", "a bad byte"},
 		{" \t\x00 ", ""},
 	} {

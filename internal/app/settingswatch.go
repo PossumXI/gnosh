@@ -15,6 +15,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // The settings files are looked at again while the session runs, before a
@@ -96,12 +97,17 @@ func (l *live) settingsPaths() []string {
 
 // sawOwnWrite notes a settings file gnosh itself just wrote (saved
 // approvals, /permissions, /skills): what it put in force already is not
-// a change to take in again.
-func (l *live) sawOwnWrite(path string) {
+// a change to take in again. before is how the file stood when gnosh read
+// it to write it: when that is not how gnosh last took it in, the person
+// changed it by hand meanwhile, the write holds their change too, and it
+// is taken in as any change is; marked as gnosh's own, a deny rule they
+// added while a question waited was never put in force (the approvals
+// review of 2026-11-19).
+func (l *live) sawOwnWrite(path string, before fileStamp) {
 	w := &l.settings
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.stamps != nil {
+	if w.stamps != nil && w.accepted[path] == before {
 		s := stampOf(path)
 		w.stamps[path], w.accepted[path] = s, s
 	}
@@ -156,6 +162,9 @@ func (l *live) settingsChanged(ctx context.Context, info agent.RequestInfo) ([]a
 	}
 	w.mu.Unlock()
 	if !changed || len(pending) == 0 {
+		return nil, nil
+	}
+	if pending = l.sandboxHeldSettings(pending); len(pending) == 0 {
 		return nil, nil
 	}
 	names := make([]string, len(pending))
@@ -246,13 +255,11 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 	var parts []agent.Part
 	var done []string
 	if l.shell != nil {
-		was := l.shell.HostNames()
-		hosts := shellHosts(cfg)
-		var now []string
-		for _, h := range hosts {
-			now = append(now, h.Name)
-		}
-		if !slices.Equal(was, now) {
+		// The whole of each entry: a host given a new address, or a new
+		// description, under the same name kept its old one (the hosts
+		// review of 2026-11-19).
+		was, hosts := l.shell.Hosts(), shelltool.Declared(shellHosts(cfg))
+		if !slices.Equal(was, hosts) {
 			l.shell.SetHosts(hosts)
 			l.settings.mu.Lock()
 			l.settings.hosts = append([]config.Host{}, cfg.Hosts...)
@@ -274,6 +281,7 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 	for _, sc := range []permission.Scope{permission.ScopeUser, permission.ScopeProject, permission.ScopeLocal, permission.ScopeSettingsFlag} {
 		l.engine.RemoveLayers(sc)
 	}
+	held := map[permission.List][]string{}
 	for _, ly := range cfg.Permissions.Layers {
 		layer := ruleLayer(ly)
 		switch layer.Scope {
@@ -282,9 +290,56 @@ func (l *live) applySettings(cfg *config.Config, which string) []agent.Part {
 				l.notice(agent.LevelWarning, "settings", fmt.Sprintf("A rule of %s could not be put in force (%v).", layer.Name, err))
 			}
 		}
+		if layer.Scope == permission.ScopeLocal {
+			held[permission.ListAllow] = append(held[permission.ListAllow], layer.Allow...)
+			held[permission.ListAsk] = append(held[permission.ListAsk], layer.Ask...)
+			held[permission.ListDeny] = append(held[permission.ListDeny], layer.Deny...)
+		}
 	}
+	// The approvals kept at a prompt are what the local file holds: one
+	// taken out of it by hand is no longer in force.
+	l.engine.KeepOnly(held)
 	done = append(done, "its permission rules")
 	l.flog.logf("settings", "%s changed: %s in force", which, strings.Join(done, " and "))
 	l.notice(agent.LevelInfo, "settings", fmt.Sprintf("%s changed: %s are in force now; the rest of what it says (hooks, env, options, the model) takes effect in a new session.", which, strings.Join(done, " and ")))
 	return parts
+}
+
+// sandboxHeldSettings leaves out of the changes to take in the project's
+// own settings files while the sandbox is on: a command in it may write
+// in the project's folder, and one that wrote a settings file there (one
+// that was not there to keep read-only) would have given itself rules
+// for the next call, asking out of the sandbox among them (the sandbox
+// review). They are read when the session starts again, and the person is
+// told so, once for each change. The person's own files go on as before.
+func (l *live) sandboxHeldSettings(pending []string) []string {
+	if l.st == nil || !l.st.sandboxOf(l.cfg).on {
+		return pending
+	}
+	project := []string{l.cfg.Paths.LocalSettings}
+	if p := filepath.Join(l.st.inputs.Cwd, "gnosh.json"); p != l.cfg.Paths.UserSettings {
+		project = append(project, p)
+	}
+	var keep, held []string
+	for _, p := range pending {
+		if slices.Contains(project, p) {
+			held = append(held, p)
+		} else {
+			keep = append(keep, p)
+		}
+	}
+	if len(held) > 0 {
+		w := &l.settings
+		w.mu.Lock()
+		for _, p := range held {
+			w.accepted[p] = w.stamps[p]
+		}
+		w.mu.Unlock()
+		names := make([]string, len(held))
+		for i, p := range held {
+			names[i] = l.tilde(p)
+		}
+		l.notice(agent.LevelWarning, "settings", fmt.Sprintf("%s changed during the session. With the sandbox on, a command in it could have written it, so it is not taken in now: it is read when the session starts again (/restart).", strings.Join(names, " and ")))
+	}
+	return keep
 }

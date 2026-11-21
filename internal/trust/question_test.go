@@ -311,3 +311,29 @@ func TestLeadsOut(t *testing.T) {
 		t.Error("a link into the second folder given leads out")
 	}
 }
+
+// The person's own settings that would run a program in the folder are
+// set apart from the folder's: they are not the folder's settings, and a
+// No keeps them waiting too, which the No says.
+func TestQuestionSetsThePersonsOwnApart(t *testing.T) {
+	f := Folder{Root: "/work/repo"}
+	q := NewQuestion(f, nil, []Holding{{Kind: KindMCPLocal, Text: "your MCP server notes (npx -y notes)", File: "/home/u/.config/gnosh/mcp.json", Own: true}})
+	s := q.String()
+	for _, want := range []string{"These settings of your own would run programs in this folder, and wait for a yes too:", "your MCP server notes",
+		"Your own programs started here read what the folder holds", "No: start without the folder's settings, and with those of your own that run in it waiting"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the question has no %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Its own settings are not in force") {
+		t.Errorf("the person's own were called the folder's:\n%s", s)
+	}
+	q = NewQuestion(f, []string{"/work/repo/gnosh.json"}, []Holding{
+		{Kind: KindHook, Text: "a hook", File: "/work/repo/gnosh.json"},
+		{Kind: KindLSP, Text: "your language server gopls", Own: true},
+	})
+	s = q.Facts()
+	if !strings.Contains(s, "They would add:\n  - a hook") || !strings.Contains(s, "These settings of your own would run programs in this folder, and wait for a yes too:\n  - your language server gopls") {
+		t.Errorf("both, in the facts:\n%s", s)
+	}
+}

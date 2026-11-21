@@ -43,6 +43,35 @@ func (s *Set) Summary(in SummaryInput) string {
 	return Wrap(ask)
 }
 
+// SummaryPart returns the request for a summary of the conversation up to
+// one of the person's prompts, which the summary is to take the place of,
+// while what follows it stays (the rewind's "Summarize up to here"). It
+// goes at the end of a request that holds that part alone. It is not in
+// the marker: the loop puts it there, with the person's instructions.
+func (s *Set) SummaryPart(words int, mem bool) string {
+	if words <= 0 {
+		words = SummaryWords
+	}
+	vals := values{"words": strconv.Itoa(words)}
+	vals.flag("mem", mem)
+	return s.bare(textSummaryPart, vals)
+}
+
+// SummaryFrom returns the request for a summary of the conversation from
+// the person's prompt that begins with prompt on, which they are setting
+// aside (the rewind's "Summarize from here"): mark is what stands at the
+// end of that message, in gnosh's marker, so that a prompt written twice
+// ("go on") is told apart. It goes at the end of the session's own
+// request; the loop puts it in the marker.
+func (s *Set) SummaryFrom(prompt, mark string, words int, mem bool) string {
+	if words <= 0 {
+		words = SummaryWords
+	}
+	vals := values{"words": strconv.Itoa(words), "prompt": oneLine(prompt, maxQuote), "mark": oneLine(mark, maxName)}
+	vals.flag("mem", mem)
+	return s.bare(textSummaryFrom, vals)
+}
+
 // SideRequest is a small request gnosh makes for itself, to a model that
 // sees nothing else of the session: no tools, and as little thinking as
 // the model allows.
@@ -119,12 +148,12 @@ func (s *Set) CloseReview(in CloseReviewInput) SideRequest {
 	files, moreFiles := keepFiles(in.Files, in.Result)
 	vals := values{
 		"todo":       oneLine(in.Todo, maxTitle),
-		"thoughts":   lines(in.Thoughts, maxBlock),
+		"thoughts":   Indented(lines(in.Thoughts, maxBlock)),
 		"ask":        clipChars(strings.TrimSpace(in.Ask), 2000),
 		"files":      strings.Join(files, ", "),
 		"commands":   strings.Join(cmds, "\n"),
-		"result":     strings.TrimSpace(in.Result),
-		"code":       clipChars(strings.TrimSpace(in.Code), 4000),
+		"result":     Indented(in.Result),
+		"code":       Indented(clipChars(strings.TrimSpace(in.Code), 4000)),
 		"transcript": strings.TrimSpace(in.Transcript),
 	}
 	for _, name := range []string{"thoughts", "files", "commands", "result", "transcript"} {
@@ -260,7 +289,7 @@ type GoalJudgeInput struct {
 func (s *Set) GoalJudge(in GoalJudgeInput) SideRequest {
 	vals := values{
 		"condition":    strings.TrimSpace(in.Condition),
-		"mem":          strings.TrimSpace(in.Mem),
+		"mem":          Indented(in.Mem),
 		"conversation": strings.TrimSpace(in.Conversation),
 	}
 	vals.flag("no_mem", vals["mem"] == "")

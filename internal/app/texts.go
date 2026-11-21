@@ -42,6 +42,9 @@ func loopTexts(set *prompt.Set, mem bool, path string) (agent.Texts, error) {
 	format(&t.RepeatNudge, "repeat", map[string]string{"calls": "%[3]s"})
 	// The loop gives: how many rounds were looked at, and the two calls.
 	format(&t.RepeatPair, "repeat", map[string]string{"calls": "%[2]s"})
+	// The loop gives: how many rounds were looked at, how many make the
+	// cycle, and its rounds.
+	format(&t.RepeatCycle, "repeat", map[string]string{"calls": "%[3]s"})
 	// The loop gives: the marker, and how many times in a row.
 	format(&t.Checkpoint, "checkpoint", map[string]string{"marker": "%[1]s", "count": "%[2]d"})
 	// The loop gives: the check's name, and the error.
@@ -87,7 +90,8 @@ func loopTexts(set *prompt.Set, mem bool, path string) (agent.Texts, error) {
 
 // maxResultBytes is the most text one tool result may carry to the model,
 // whatever the tool itself let through. Every tool of gnosh's own has a
-// smaller limit; this one is the net under them all.
+// smaller limit (Read's, even with allow_large, is a tenth under it:
+// readResultMost); this one is the net under them all.
 const maxResultBytes = 400_000
 
 // markEscape is the mark written as a JSON escape, which is how a model

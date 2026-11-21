@@ -50,6 +50,10 @@ type printer struct {
 	inv     cli.Invocation
 	format  string
 	verbose bool
+	// retrySaid is the failure whose retries standard error was last told
+	// of: the next tries of the same failure go unsaid without --verbose
+	// (a model server down said the same paragraph every 15 seconds).
+	retrySaid string
 	// live says standard output is a terminal, where a person watches the
 	// words arrive. safe is what of the reply may be written there: its
 	// styles, and no other escape sequence (text.SafeStream).
@@ -547,11 +551,20 @@ func (f *printer) Event(ev any) {
 			// here: its retry threw away the session's own reply, and its
 			// stream-json message, half written.)
 			f.buf.Reset()
-			f.safe.Reset()
+			if end := f.safe.End(); end != "" {
+				fmt.Fprint(f.p.stdout, end)
+			}
 			f.inMessage = false
 			f.partialEnd(core.StopCancelled, core.Usage{})
 		}
-		f.stderr("%s", ev.Message)
+		// Said once a failure, as its tries go on (each in stream-json's
+		// api_retry lines, and on standard error with --verbose); said
+		// again when it is another, or after the model answered.
+		said := fmt.Sprintf("%s/%s/%s/%d", ev.Agent, ev.Purpose, ev.Kind, ev.Status)
+		if f.verbose || ev.Attempt <= 1 || ev.FellBack != "" || said != f.retrySaid {
+			f.stderr("%s", ev.Message)
+		}
+		f.retrySaid = said
 		f.line(retryLine{Type: "system", Subtype: "api_retry", UUID: newUUID(), SessionID: f.sessionID(),
 			Attempt: ev.Attempt, RetryDelayMS: ev.Wait.Milliseconds(), ErrorStatus: statusOrNil(ev.Status), Error: string(ev.Kind)})
 	case *agent.ToolEndEvent:
@@ -570,6 +583,9 @@ func (f *printer) Event(ev any) {
 				f.stderr("%s%s%s", indent, ev.Name, mark)
 			} else {
 				f.stderr("%s%s (%s)%s", indent, toolLine(ev.Name, ev.Input), resultLine(ev.Result, ev.Denied, ev.Interrupted), mark)
+				for _, n := range ev.Result.Notes {
+					f.stderr("%s  %s", indent, visible(n))
+				}
 			}
 		}
 		if ev.Denied && ev.Unattended && !f.toldUnattended {
@@ -632,6 +648,12 @@ func (f *printer) Event(ev any) {
 	case *CapEvent:
 		f.capped, f.cappedTurn = true, ev.Turn
 		f.stderr("the run has had its %d turns of the model (--max-turns) and stops here.", ev.Turns)
+	case *HookLifeEvent:
+		// As Claude Code: the SessionStart hooks' always, the others'
+		// with --include-hook-events (no hook_progress lines).
+		if f.inv.IncludeHookEvents || ev.Life.Event == hooks.SessionStart {
+			f.line(hookLineOf(f, ev.Life))
+		}
 	case *agent.TurnEndEvent:
 		f.offer(ev.Result)
 	case *agent.PromptReturnedEvent:
@@ -756,7 +778,11 @@ func (f *printer) endReply() {
 		}
 		f.buf.Reset()
 	}
-	f.safe.Reset()
+	if end := f.safe.End(); end != "" {
+		// (A style the reply opened is closed: gnosh's own lines and the
+		// person's shell come after it.)
+		fmt.Fprint(f.p.stdout, end)
+	}
 	f.inMessage = false
 }
 
@@ -871,6 +897,44 @@ type infoLine struct {
 	SessionID string `json:"session_id"`
 	Content   string `json:"content"`
 	Level     string `json:"level"`
+}
+
+// HookLifeEvent is a hook's start or end, for stream-json's hook_started
+// and hook_response lines.
+type HookLifeEvent struct {
+	Life hooks.Life
+}
+
+// hookLine is a system line of a hook's: hook_started, or hook_response
+// with what it wrote and how it ended.
+type hookLine struct {
+	Type      string  `json:"type"`
+	Subtype   string  `json:"subtype"`
+	UUID      string  `json:"uuid"`
+	SessionID string  `json:"session_id"`
+	HookID    string  `json:"hook_id"`
+	HookName  string  `json:"hook_name"`
+	HookEvent string  `json:"hook_event"`
+	Output    *string `json:"output,omitempty"`
+	Stdout    *string `json:"stdout,omitempty"`
+	Stderr    *string `json:"stderr,omitempty"`
+	ExitCode  *int    `json:"exit_code,omitempty"`
+	Outcome   string  `json:"outcome,omitempty"`
+}
+
+// hookLineOf is the line for a hook's start or end.
+func hookLineOf(f *printer, life hooks.Life) hookLine {
+	f.init()
+	l := hookLine{Type: "system", Subtype: "hook_started", UUID: newUUID(), SessionID: f.sessionID(),
+		HookID: life.ID, HookName: life.Name, HookEvent: string(life.Event)}
+	if life.Ended {
+		out := life.Stdout + life.Stderr
+		l.Subtype, l.Output, l.Stdout, l.Stderr, l.Outcome = "hook_response", &out, &life.Stdout, &life.Stderr, life.Outcome
+		if life.ExitCode >= 0 {
+			l.ExitCode = &life.ExitCode
+		}
+	}
+	return l
 }
 
 type retryLine struct {
@@ -1190,7 +1254,7 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) && f.structuredErr != "":
 		fail("error_max_structured_output_retries", "structured_output_retry_exhausted", f.structuredErr)
-	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped:
+	case res.Reason == agent.EndCompleted, res.Reason == agent.EndModelStopped, res.Reason == agent.EndHalted && res.Planned:
 		obj.Subtype, obj.Result, obj.TerminalReason = "success", ptr(dropEchoedLine(res.Text)), "completed"
 		obj.StructuredOutput = f.structured
 	case res.Reason == agent.EndRefused:
@@ -1238,9 +1302,16 @@ func (f *printer) report(c Controls, res agent.TurnResult) int {
 			f.encode(obj)
 		}
 	case f.inv.JSONSchema != "":
-		// The text format prints the structured output alone.
+		// The text format prints the structured output alone: on a
+		// terminal, with what its strings hold (a model's words) unable to
+		// do more than colour themselves, as a command's report is (the
+		// side-request review of 2026-11-19).
 		if f.structured != nil {
-			fmt.Fprintln(f.p.stdout, string(f.structured))
+			out := string(f.structured)
+			if f.live {
+				out = strings.TrimRight(text.Safe(out), "\n")
+			}
+			fmt.Fprintln(f.p.stdout, out)
 		} else if f.structuredErr != "" {
 			f.stderr("%s", f.structuredErr)
 		}

@@ -16,10 +16,16 @@ func TestMarkdownOfAPageMadeToBlowUp(t *testing.T) {
 		"paragraphs":   strings.Repeat("x<p>", 2_600_000),
 		"open links":   strings.Repeat(`<a href="h">x`, 500_000),
 	}
+	// (Seconds, where the blow-up ran for minutes; the race detector makes
+	// it several times slower: 22.8 s in the -race run of 2026-11-19.)
+	most := 20 * time.Second
+	if raceDetector {
+		most *= 10
+	}
 	for name, page := range pages {
 		start := time.Now()
 		got := Markdown(page)
-		if took := time.Since(start); took > 20*time.Second {
+		if took := time.Since(start); took > most {
 			t.Errorf("%s: took %s", name, took)
 		}
 		if len(got) > markdownMax+1000 {

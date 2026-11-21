@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -32,6 +31,8 @@ import (
 type startup struct {
 	p   *program
 	inv cli.Invocation
+	// sandbox is the session's sandbox, worked out once (sandbox.go).
+	sandbox sandboxState
 
 	// attended says a person is there to be asked: the session is an
 	// interactive one, and its front end can be typed into.
@@ -78,7 +79,7 @@ type startup struct {
 // as Claude Code writes it, WebFetch(domain:...) say, was refused.
 func ownTools() []string {
 	d := fstools.Defaults()
-	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
+	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, d.NotebookEditName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
 		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, enterTreeName, exitTreeName, cronCreateName, cronListName, cronDeleteName, scheduleWakeupName, pushName, skillToolName, gnokeyToolName}
 }
 
@@ -452,14 +453,74 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	for _, l := range cfg.Permissions.Layers {
 		o.Layers = append(o.Layers, ruleLayer(l))
 	}
-	if len(cfg.Permissions.Dirs) > 0 {
-		layer := permission.Layer{Scope: permission.ScopeCLI, Name: "additional directories"}
-		for _, d := range cfg.Permissions.Dirs {
-			layer.Dirs = append(layer.Dirs, d.V)
+	// The additional directories, the person's and the project's apart:
+	// the blocks outside the working directories do not count those only
+	// the project's own files add. (Both under the command line's scope,
+	// which a change of the settings files mid-session leaves in place.)
+	mine := permission.Layer{Scope: permission.ScopeCLI, Name: "additional directories"}
+	theirs := permission.Layer{Scope: permission.ScopeCLI, FromProject: true, Name: "the project's additional directories"}
+	for _, d := range cfg.Permissions.Dirs {
+		if slices.Contains(cfg.Permissions.ProjectDirs, d.V) {
+			theirs.Dirs = append(theirs.Dirs, d.V)
+		} else {
+			mine.Dirs = append(mine.Dirs, d.V)
 		}
-		o.Layers = append(o.Layers, layer)
+	}
+	for _, ly := range []permission.Layer{mine, theirs} {
+		if len(ly.Dirs) > 0 {
+			o.Layers = append(o.Layers, ly)
+		}
+	}
+	o.Sandbox = st.sandboxPermission(cfg)
+	o.BlockReads, o.BlockWrites = cfg.Permissions.BlockReads.V, cfg.Permissions.BlockWrites.V
+	if o.BlockReads || o.BlockWrites {
+		o.OwnReads, o.SettingsFiles = ownReads(cfg), settingsFiles(cfg)
+		o.SettingsNames = []string{"gnosh.json", filepath.Join(filepath.Base(cfg.Paths.DataDir), "settings.local.json")}
+		if s := strings.TrimSpace(st.inputs.Flags.Settings); s != "" && !strings.HasPrefix(s, "{") {
+			o.SettingsFiles = append(o.SettingsFiles, st.p.absFrom(s))
+		}
 	}
 	return o
+}
+
+// ownReads are gnosh's own files that the read block lets the file tools
+// reach all the same (permission.Options.OwnReads): the folders of
+// skills, sub-agents, commands and rules, the person's, and the project's
+// that lie above the working directory, in a trusted folder and really
+// inside the project once their links are followed: a repository's
+// .claude/skills that leads to / would otherwise let every read through
+// (the blocks review of 2026-11-20). The session's own folder is added
+// once it is known (live.ownSession).
+func ownReads(cfg *config.Config) []string {
+	var out []string
+	root := cfg.Paths.ProjectRoot
+	for _, kind := range []string{"skills", "agents", "commands", "rules"} {
+		out = append(out, userDefDirs(cfg, kind)...)
+		if !cfg.Trusted || root == "" {
+			continue
+		}
+		for _, d := range projectDefDirs(cfg, kind, nil) {
+			if within(d, cfg.Paths.Cwd) {
+				continue // (readable as the working directory's own)
+			}
+			if real, err := filepath.EvalSymlinks(d); err == nil && within(real, root) {
+				out = append(out, d)
+			}
+		}
+	}
+	return out
+}
+
+// settingsFiles are the settings files gnosh reads, there or not yet,
+// which the write block refuses to let a tool change wherever they are
+// (permission.Options.SettingsFiles): a settings file could lift the block,
+// or bring hooks. (A file given to --settings is added by the caller.)
+func settingsFiles(cfg *config.Config) []string {
+	out := []string{cfg.Paths.UserSettings, filepath.Join(cfg.Paths.Cwd, "gnosh.json"), cfg.Paths.LocalSettings}
+	if p := cfg.Paths.ProjectSettings; p != "" && !slices.Contains(out, p) {
+		out = append(out, p)
+	}
+	return out
 }
 
 // ruleLayer turns one source of rules of the configuration into the
@@ -610,11 +671,26 @@ func (st *startup) hookOptions(cfg *config.Config) hooks.Options {
 		ProjectDir: cfg.Paths.ProjectRoot,
 		StartDir:   cfg.Paths.Cwd,
 		Untrusted:  !st.trusted,
-		Environ:    func() []string { return overlayEnv(base, extra) },
+		Environ:    func() []string { return st.p.childEnv(overlayEnv(base, extra)) },
 		Now:        st.p.now,
 		ToolNames:  st.p.toolNames(),
 		Guards:     guards,
+		// (nil stays nil: no file gives the list, and nothing is limited.)
+		HTTPURLs:    listValues(cfg.HTTPHookURLs),
+		HTTPEnvVars: listValues(cfg.HTTPHookEnvVars),
 	}
+}
+
+// listValues is the values of a config list, nil for nil.
+func listValues(items []config.ListItem) []string {
+	if items == nil {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.V)
+	}
+	return out
 }
 
 // overlayEnv lays the env block of the settings over an environment:
@@ -673,10 +749,6 @@ func checkExcludes(cfg *config.Config) []config.Problem {
 	return out
 }
 
-// resolvePath follows the symbolic links of a cleaned absolute path and
-// returns where it really leads. For a path that does not exist yet it
-// resolves the part that does, and a link that points at nothing is
-// followed to where it points: a write through it would land there.
 // repoGitDir is the permission engine's RepoOf: the git directory of the
 // repository that holds dir, as git finds it going up from dir (a .git
 // folder, or the folder a .git file names), with its links followed; ""
@@ -715,52 +787,17 @@ func repoGitDir(dir string) string {
 	}
 }
 
+// resolvePath follows the symbolic links of a cleaned absolute path and
+// returns where it really leads. For a path that does not exist yet it
+// resolves the part that does, and a link that points at nothing is
+// followed to where it points: a write through it would land there. A
+// link's target is walked piece by piece from where the link is, as the
+// system walks it: tidied as text first, "a/../hooks/pre-commit" with a a
+// link to .git/info was hooks/pre-commit beside the link, where the
+// system writes .git/hooks/pre-commit (the review of 2026-11-20).
 func resolvePath(p string) (string, error) {
-	return resolveDepth(filepath.Clean(p), 0)
-}
-
-func resolveDepth(p string, depth int) (string, error) {
-	if depth > 40 {
-		return "", fmt.Errorf("%s leads through too many symbolic links", p)
-	}
-	rest := ""
-	for cur := p; ; {
-		real, err := filepath.EvalSymlinks(cur)
-		if err == nil {
-			return filepath.Join(real, rest), nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", err
-		}
-		if li, lerr := os.Lstat(cur); lerr == nil && li.Mode()&fs.ModeSymlink != 0 {
-			target, rerr := os.Readlink(cur)
-			if rerr != nil {
-				return "", rerr
-			}
-			if !filepath.IsAbs(target) {
-				// The target is read from the folder the link is in, as
-				// the system reads it: that folder as it really is, past
-				// the links on the way to it ("d/../.." is not the text's
-				// folder when d is a link).
-				dir, derr := resolveDepth(filepath.Dir(cur), depth+1)
-				if derr != nil {
-					return "", derr
-				}
-				target = filepath.Join(dir, target)
-			}
-			real, err := resolveDepth(filepath.Clean(target), depth+1)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(real, rest), nil
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return p, nil
-		}
-		rest = filepath.Join(filepath.Base(cur), rest)
-		cur = parent
-	}
+	real, _, err := fstools.FollowLinks(p)
+	return real, err
 }
 
 // globPaths expands a file name pattern the way a shell would, to cleaned

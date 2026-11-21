@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ func (t bashTool) Spec() core.ToolSpec { return t.m.bashSpec() }
 // Action's summary, which is what a person is shown.
 func (t bashTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
 	a, err := t.m.bashArgs(call.Input)
+	t.m.remoteCall(call.ID, a.host != nil)
 	if err == nil {
 		err = t.m.rules(a, env, t.person)
 	}
@@ -53,11 +56,24 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 	if err != nil {
 		return core.ErrorResult(err.Error()), nil
 	}
+	if t.person && !m.opt.PersonSandboxed {
+		// The person's own command, typed with !, runs as they typed it,
+		// outside the sandbox, as Claude Code runs it.
+		a.sandboxed = false
+	}
+	if !t.person {
+		if why := m.capped(a.command); why != "" {
+			return core.ErrorResult(why), nil
+		}
+	}
 	if env == nil || !filepath.IsAbs(env.Cwd) {
 		return core.ToolResult{}, errors.New("shelltool: the tool was given no working directory to run the command in")
 	}
 	if !a.background && a.host == nil && call.ID != "" {
 		defer m.expect(call.ID)()
+	}
+	if a.host != nil {
+		defer m.remoteCall(call.ID, false)
 	}
 	if ctx.Err() != nil {
 		return core.ErrorResult("The command was not started: the call was cancelled first."), nil
@@ -103,6 +119,7 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 		return nil, err
 	}
 	j := newJob(m, a, cwd)
+	j.roots = env.Roots
 	if cwd != env.Cwd {
 		j.gone = env.Cwd
 	}
@@ -235,6 +252,12 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 	}
 	if !person {
 		notes = append(notes, m.hints(a, e, body, own && !far.unsure && e.reaped && e.sig == 0)...)
+		if n := m.sandboxHint(a, e, body); n != "" {
+			notes = append(notes, n)
+		}
+		if e.sandboxNote != "" {
+			notes = append(notes, e.sandboxNote)
+		}
 	}
 	notes = append(notes, far.notes...)
 	if len(e.alive) > 0 {
@@ -290,6 +313,8 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 		}
 	case ownExit && e.finalDir == "":
 		notes = append(notes, "the shell did not say where it ended (the command replaced it with exec, or set an EXIT trap of its own), so the working directory is still "+stampText(env.Cwd))
+	case ownExit && where.to != "" && m.opt.NoCarryCwd:
+		notes = append(notes, "the working directory stays "+stampText(env.Cwd)+": a change of directory does not carry over to the next command here (CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR)")
 	case ownExit && where.to != "":
 		res.Cwd = where.to
 		notes = append(notes, "working directory is now "+stampText(where.to))
@@ -466,4 +491,32 @@ func compose(headline, body string, notes []string, ran bool) string {
 		text += "[" + note + "]"
 	}
 	return text
+}
+
+// capped counts the model's command against Options.ScriptCaps, and says
+// why it may not run when a cap it falls under is used up; then nothing
+// is counted.
+func (m *Manager) capped(command string) string {
+	if len(m.opt.ScriptCaps) == 0 {
+		return ""
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var under []string
+	for _, text := range slices.Sorted(maps.Keys(m.opt.ScriptCaps)) {
+		if text == "" || !strings.Contains(command, text) {
+			continue
+		}
+		if most := max(m.opt.ScriptCaps[text], 0); m.capRuns[text] >= most {
+			return fmt.Sprintf("The command was not run: a command holding %q may run %d time(s) in this session (CLAUDE_CODE_SCRIPT_CAPS), and that many have run.", text, most)
+		}
+		under = append(under, text)
+	}
+	if len(under) > 0 && m.capRuns == nil {
+		m.capRuns = map[string]int{}
+	}
+	for _, text := range under {
+		m.capRuns[text]++
+	}
+	return ""
 }

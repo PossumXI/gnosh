@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,7 +26,69 @@ func (st *startup) heldList() []trust.Holding {
 		held = append(held, trust.Holding{Kind: h.Kind, Text: h.Text, File: h.Origin.File, Line: h.Origin.Line})
 	}
 	held = append(held, st.gitPrograms...)
+	held = append(held, lspHoldings(st.cfg)...)
+	held = append(held, userMCPHoldings(st.cfg)...)
 	return append(held, projectHoldings(st.cfg)...)
+}
+
+// userMCPHoldings are the person's own MCP servers that gnosh starts (in
+// mcp.json: every project's, and this folder's own), which would run in
+// this folder and read what a repository put there (an .npmrc for npx, a
+// relative command): they wait for the folder to be trusted, as the
+// language servers do, so a folder is asked about when the person has
+// such servers (the second review of 2026-11-20). Safe mode reads none.
+func userMCPHoldings(cfg *config.Config) []trust.Holding {
+	if cfg.Switches.SafeMode.V {
+		return nil
+	}
+	path := filepath.Join(cfg.Paths.ConfigDir, "mcp.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var f struct {
+		Servers  map[string]json.RawMessage `json:"mcpServers"`
+		Projects map[string]struct {
+			Servers map[string]json.RawMessage `json:"mcpServers"`
+		} `json:"projects"`
+	}
+	if json.Unmarshal(data, &f) != nil {
+		return nil // (the session says what is wrong with the file)
+	}
+	servers := maps.Clone(f.Servers)
+	if servers == nil {
+		servers = map[string]json.RawMessage{}
+	}
+	maps.Copy(servers, f.Projects[cfg.Paths.ProjectRoot].Servers)
+	var out []trust.Holding
+	for _, name := range slices.Sorted(maps.Keys(servers)) {
+		var e struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}
+		if json.Unmarshal(servers[name], &e) != nil || e.Command == "" {
+			continue
+		}
+		out = append(out, trust.Holding{Kind: trust.KindMCPLocal, File: path, Own: true,
+			Text: "your MCP server " + name + " (" + strings.Join(append([]string{e.Command}, e.Args...), " ") + "), which would start in this folder and read what is there"})
+	}
+	return out
+}
+
+// lspHoldings are the person's own language servers, which would read
+// this folder's code and may run some of it (a build script, a macro, the
+// workspace's own TypeScript): they wait for the folder to be trusted, as
+// Claude Code's wait for its workspace trust, so a folder is asked about
+// when the person has servers for it to run (the language servers review
+// of 2026-11-20). A project's own are held by its settings file already.
+func lspHoldings(cfg *config.Config) []trust.Holding {
+	var out []trust.Holding
+	for _, srv := range cfg.LSPServers {
+		line := strings.Join(append([]string{srv.Command}, srv.Args...), " ")
+		out = append(out, trust.Holding{Kind: trust.KindLSP, Text: "your language server " + srv.Name + " (" + line + "), which would read this folder's code and may run some of it",
+			File: srv.Origin.File, Line: srv.Origin.Line, Own: true})
+	}
+	return out
 }
 
 // projectHoldings is what a folder's own definitions would run, or let
@@ -144,6 +207,31 @@ func (l *live) gitRunsPrograms() bool {
 	return !l.st.trusted && len(l.st.gitPrograms) > 0
 }
 
+// gitRunsProgramsAt is gitRunsPrograms for git run in dir, where the shell
+// may have gone since the session began: a repository there that is not
+// the start folder's (an archive unpacked with its .git, say) has its own
+// settings looked at, whether or not the folder is trusted, as the
+// permission engine asks about the model's own git there. The person's
+// status line and file suggestion commands, which may call git, ran in
+// such a repository past the start folder's check (the status line review
+// of 2026-11-19). What cannot be told counts as naming programs.
+func (l *live) gitRunsProgramsAt(dir string) bool {
+	if l.gitRunsPrograms() {
+		return true
+	}
+	if dir == "" || dir == l.st.folder.Start {
+		return false
+	}
+	folder, err := trust.Resolve(dir, l.p.home)
+	if err != nil {
+		return true
+	}
+	if folder.GitDir == "" || folder.GitDir == l.st.folder.GitDir {
+		return false
+	}
+	return len(trust.GitPrograms(folder)) > 0
+}
+
 // ownCommandEnv is the environment of a command of the person's own that
 // gnosh starts (the status line, the file suggestion command, gnokey): the
 // one gnosh was started with, under the settings' env block, where a
@@ -151,5 +239,5 @@ func (l *live) gitRunsPrograms() bool {
 // it was, a variable the person had taken away stayed in (the config review
 // of 2026-11-19).
 func (l *live) ownCommandEnv() []string {
-	return overlayEnv(l.p.o.Environ, l.cfg.CommandEnv())
+	return l.p.childEnv(overlayEnv(l.p.o.Environ, l.cfg.CommandEnv()))
 }

@@ -32,7 +32,7 @@ func TestContextAndRename(t *testing.T) {
 	s.see("The model's window is 100.0K tokens")
 	s.see("In use at the last count: about ")
 	s.see("gnosh's instructions to the model")
-	s.see("what the model is told of its 19 tools")
+	s.see("what the model is told of its 20 tools")
 	s.see("the conversation")
 	s.see("/context all lists each tool and each instruction file.")
 	s.typeLine("/context all")
@@ -175,10 +175,8 @@ func TestBtwSideQuestion(t *testing.T) {
 	run(t, w, "-p", "remember the number seven").wantCode(t, 0)
 	w.Model.Add(apptest.Reply{Text: "It was seven.\n\nNothing else was said."})
 	r := run(t, w, "-c", "-p", "/btw which number was it?").wantCode(t, 0)
-	has(t, "the answer", r.out, "It was seven.", "Nothing else was said.")
-	if strings.Contains(r.out, "\n\n") {
-		t.Errorf("the answer kept an empty line: %q", r.out)
-	}
+	// (Its blank line stays: Jae put them back on 2026-11-19.)
+	has(t, "the answer", r.out, "It was seven.\n\nNothing else was said.")
 	reqs := w.Model.Requests()
 	sent := string(reqs[len(reqs)-1].Body)
 	has(t, "the side question's request", sent, "remember the number seven", "Noted: seven.", "which number was it?", "side question", `"name":"Bash"`)
@@ -197,6 +195,34 @@ func TestBtwSideQuestion(t *testing.T) {
 	has(t, "the recap request", string(reqs[len(reqs)-1].Body), "remember the number seven", "In one line")
 	data, _ = os.ReadFile(w.Sessions()[0])
 	hasNot(t, "the session's file after /recap", string(data), "In one line", "I did.")
+}
+
+// /btw asked while a command runs says the command still runs: the
+// session's own log gives a call with no result yet one that says it was
+// interrupted, and the side question was sent that (the side-request
+// review of 2026-11-19).
+func TestBtwWhileACommandRuns(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 4"}`}}},
+		apptest.Reply{Text: "It is still sleeping."},
+		apptest.Reply{Text: "Slept."},
+	)
+	s := sit(t, w, "-y")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("run the slow thing")
+	s.see("sleep 4")
+	s.typeLine("/btw what is it doing?")
+	s.see("It is still sleeping.")
+	s.see("Slept.")
+	s.typeLine("/exit")
+	s.exit()
+	reqs := w.Model.Requests()
+	if len(reqs) < 2 {
+		t.Fatalf("the model was asked %d times", len(reqs))
+	}
+	side := string(reqs[1].Body)
+	has(t, "the side question", side, "Still running: nobody interrupted this call", "what is it doing?")
+	hasNot(t, "the side question", side, "interrupted before it finished")
 }
 
 // /recap with no conversation yet says so, and asks no model.
@@ -535,5 +561,71 @@ func TestUserPromptExpansionHook(t *testing.T) {
 	has(t, "stderr", r.err, "a UserPromptExpansion hook the user set up blocked it", "no deploys on Friday")
 	if len(w.Model.Requests()) != n {
 		t.Errorf("the model was asked although the hook blocked the expansion")
+	}
+}
+
+// A session's name keeps no escape sequence, control character or
+// character drawn as nothing, whatever it was made of (the
+// settings-commands review of 2026-11-20).
+func TestCleanTitle(t *testing.T) {
+	for in, want := range map[string]string{
+		"fix the  flaky\ttest":                "fix the flaky test",
+		"fix \x1b[31mthe\x1b[0m bug":          "fix the bug",
+		"title\x1b]0;owned\x07 here":          "title here",
+		"bell\x07 and \u0085next and \u009bx": "bell and next and x",
+		"right\u202eto left":                  "rightto left",
+	} {
+		if got := cleanTitle(in); got != want {
+			t.Errorf("cleanTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// At most 200 characters, as Claude Code caps a name, counted as
+	// characters, not bytes.
+	if got := cleanTitle(strings.Repeat("é", 250)); got != strings.Repeat("é", 200) {
+		t.Errorf("a long name kept %d characters, want 200", len([]rune(got)))
+	}
+}
+
+// A name that is nothing once its invisible characters are taken out is
+// refused wherever a session is named, as Claude Code refuses it; a name
+// not given is no error.
+func TestInvisibleNameRefused(t *testing.T) {
+	if _, err := personsTitle("\u200b\u2060"); err == nil {
+		t.Errorf("an invisible name was taken")
+	}
+	if name, err := personsTitle("   "); err != nil || name != "" {
+		t.Errorf("no name given: %q, %v", name, err)
+	}
+	w := apptest.NewWorld(t)
+	r := run(t, w, "-p", "/rename \u200b\u200b")
+	has(t, "/rename of an invisible name", r.out+r.err, "that name is empty once its invisible characters are taken out")
+	r = run(t, w, "--name", "\u2060", "-p", "/status")
+	has(t, "--name of an invisible name", r.out+r.err, "--name: that name is empty")
+}
+
+// A PostToolUse hook's warning is said once: in the hook's own line with
+// the call, where it is whole there; a warning too long for that line is
+// said in full as well (seen on the devbox's screen: the same words above
+// the call and under it).
+func TestToolHookWarningSaidOnce(t *testing.T) {
+	w := apptest.NewWorld(t)
+	long := strings.Repeat("the lint found a long list of things to look at ", 6)
+	short := w.Script(w.Home+"/hooks/short.sh", `echo '{"systemMessage": "lint: 2 warnings"}'`)
+	lng := w.Script(w.Home+"/hooks/long.sh", `echo '{"systemMessage": "`+long+`"}'`)
+	w.Hook("PostToolUse", "Bash", short)
+	w.Hook("PostToolUse", "Bash", lng)
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		if !strings.Contains(string(r.Body), `"role":"tool"`) {
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"true"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	r := run(t, w, "-y", "-p", "go")
+	r.wantCode(t, 0)
+	if n := strings.Count(r.err, "lint: 2 warnings"); n != 1 {
+		t.Errorf("the short warning was said %d times:\n%s", n, r.err)
+	}
+	if n := strings.Count(r.err, strings.TrimSpace(long)); n != 1 {
+		t.Errorf("the long warning was said whole %d times:\n%s", n, r.err)
 	}
 }

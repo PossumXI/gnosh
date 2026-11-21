@@ -48,7 +48,7 @@ func TestRunJSONFormat(t *testing.T) {
 	}
 }
 
-const wantStream = `{"type":"system","subtype":"init","uuid":"UUID","session_id":"UUID","cwd":"ROOT/proj","model":"test-model","tools":["Read","Write","Edit","Glob","Grep","Bash","TaskStop","Monitor","WebFetch","Agent","SendMessage","AskUserQuestion","EnterPlanMode","ExitPlanMode"],"mcp_servers":[],"permissionMode":"default","slash_commands":["help","exit","background","restart","clear","compact","think","no_think","effort","model","status","release-notes","license","focus","theme","config","loop","noloop","permissions","hooks","output-style","skills","reload-skills","autocompact","context","btw","statusline","recap","rename","keybindings","color","resume","fork","subtask","branch","rewind","plan","add-dir","cd","panel","tasks","cost","agents","memory","mcp","diff","export","copy","review","security-review","simplify","init","debug","doctor"],"output_style":"default","skills":[],"plugins":[],"apiKeySource":"none","gnosh_version":"test-build"}
+const wantStream = `{"type":"system","subtype":"init","uuid":"UUID","session_id":"UUID","cwd":"ROOT/proj","model":"test-model","tools":["Read","Write","Edit","Glob","Grep","NotebookEdit","Bash","TaskStop","Monitor","WebFetch","Agent","SendMessage"],"mcp_servers":[],"permissionMode":"default","slash_commands":["help","exit","background","restart","clear","compact","think","no_think","effort","model","status","release-notes","license","focus","theme","config","loop","noloop","permissions","fewer-permission-prompts","hooks","output-style","skills","skill-doctor","reload-skills","autocompact","context","btw","statusline","recap","rename","keybindings","color","resume","fork","subtask","branch","rewind","plan","add-dir","sandbox","cd","panel","tasks","cost","agents","memory","mcp","diff","export","copy","review","security-review","simplify","init","debug","doctor"],"output_style":"default","skills":[],"plugins":[],"apiKeySource":"none","gnosh_version":"test-build"}
 {"type":"assistant","uuid":"UUID","session_id":"UUID","parent_tool_use_id":null,"message":{"id":"msg_ID_1","type":"message","role":"assistant","model":"test-model","content":[{"type":"text","text":"Let me look."}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
 {"type":"assistant","uuid":"UUID","session_id":"UUID","parent_tool_use_id":null,"message":{"id":"msg_ID_1","type":"message","role":"assistant","model":"test-model","content":[{"type":"tool_use","id":"call_ID","name":"Read","input":{"file_path":"a.txt"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
 {"type":"user","uuid":"UUID","session_id":"UUID","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_ID","content":"1\ttwo plus two\n"}]},"tool_use_result":{"file":{"filePath":"ROOT/proj/a.txt","numLines":1,"startLine":1,"totalLines":1},"type":"text"}}
@@ -577,5 +577,31 @@ func TestStreamJSONMaxTurnsPerMessage(t *testing.T) {
 	}
 	if results[1]["subtype"] != "success" || results[1]["result"] != "Second answer." || results[1]["is_error"] != false {
 		t.Errorf("the second message's result: %v", results[1])
+	}
+}
+
+// With stream-json input, each turn's result line carries the structured
+// output --json-schema asks for, as a run of one prompt's does: it was
+// left out of every one (the print mode review of 2026-11-19).
+func TestStreamJSONInputWithAJSONSchema(t *testing.T) {
+	schema := `{"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}`
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "There are three files."}, apptest.Reply{Text: `{"count": 3}`},
+		apptest.Reply{Text: "And four dirs."}, apptest.Reply{Text: `{"count": 4}`})
+	o := testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--json-schema", schema)
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"how many files?"}}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":"and dirs?"}}` + "\n")
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o).wantCode(t, 0)
+	var counts []string
+	for _, l := range jsonLines(t, r.out) {
+		if l["type"] == "result" {
+			out, _ := l["structured_output"].(map[string]any)
+			counts = append(counts, fmt.Sprint(out["count"]))
+		}
+	}
+	if strings.Join(counts, " ") != "3 4" {
+		t.Errorf("the results' structured output: %v\n%s", counts, r.out)
 	}
 }

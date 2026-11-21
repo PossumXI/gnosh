@@ -192,7 +192,7 @@ func TestMarkRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.setTime(f.file("changes.txt", "after, and longer\n"), 5)
-	f.fails(f.edit, in{"file_path": q, "old_string": "after", "new_string": "x"}, "has changed on disk")
+	f.fails(f.edit, in{"file_path": q, "old_string": "before", "new_string": "x"}, "has changed on disk")
 
 	// Through a link it is the target that is marked.
 	link := f.symlink("shown-elsewhere.txt", "link")

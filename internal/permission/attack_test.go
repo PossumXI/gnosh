@@ -164,6 +164,17 @@ func TestShellAttacks(t *testing.T) {
 		{"sh runs rm x in two subshells", ModeBypass, attackGuards, "((rm x))", Deny},
 		{"sh runs what the variable holds", ModeBypass, attackGuards, "x=rm; (( $x -rf y ))", Deny},
 		{"sh runs the word after a variable that holds nothing", ModeBypass, attackGuards, "(( $X rm x ))", Deny},
+		{"sh ends a here-document at the end of the text, and runs the command (oracle seed 162)", ModeBypass, attackGuards, "(( <<$X rm x ))", Ask},
+		{"the same with a command no guard names", ModeBypass, attackGuards, "(( <<$X git * ))", Ask},
+		// A line nobody could read (the ${X:}) in which mv is handed a
+		// <(...): it moves away whatever the command prints (oracle seed
+		// 163).
+		{"mv moves away what a process substitution names, in a line nobody could read (oracle seed 163)", ModeBypass, rules{allow: []string{"Bash(mv)"}}, "if mv <(wget =x${X:} origin) db/s; then true; fi", Ask},
+		{"the same in the line the oracle made", ModeBypass, rules{allow: []string{"Bash(mv)", "Bash(dirname *)", "Bash(stat *)"}}, "stat --printf=@OUT@/secret.txt -q -f `dirname --zero -z src {a,b}` +%s ;\nman sneaky.txt bar | if mv <(wget =x${X:} origin) db/s; then git --exec-path=. --abbrev {fd}> out.txt < sneaky.txt; fi", Ask},
+		{"the same with no rules", ModeBypass, none, "mv <(wget =x${X:} origin) db/s", Ask},
+		// "<(cmd)x" is /dev/fd/63x, never x alone (oracle seed 164).
+		{"mv moves away a path a process substitution names, with text after it (oracle seed 164)", ModeBypass, none, "mv <(echo x)suffix db/s", Ask},
+		{"the line the oracle made", ModeBypass, none, "mv >(pwd @WORK@/a.txt origin${HOME^h})mv >(pwd @WORK@/a.txt or[[iin${HOME^h})|[ -e x ]", Ask},
 		{"sh runs the word after two variables that hold nothing", ModeBypass, attackGuards, "(($X $Y git push origin))", Deny},
 		{"sh runs the first file a * names, after a variable that holds nothing", ModeBypass, attackGuards, "(( $a * $b ))", Ask},
 		{"sh runs rm y after the &>", "", rules{allow: []string{"Bash(ls *)"}}, "ls &>/dev/null rm y", Ask},
@@ -197,6 +208,9 @@ func TestShellAttacks(t *testing.T) {
 		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=\nmake build; zz rl1d; zz zz r\\m x", Deny},
 		{"an alias of nothing makes dash read the next word as an alias", ModeBypass, attackGuards, "alias zz=' '\nzz zz zz rm x", Deny},
 		{"hash -p makes ls run another file", ModeBypass, attackGuards, "hash -p /usr/bin/rm ls; ls x", Deny},
+		// bash keeps the last -p; only the first was read (oracle seed 168).
+		{"hash's last -p is the file", ModeBypass, attackGuards, "hash -p h -p /usr/bin/mv zz; zz build x", Deny},
+		{"hash's -p in one word, the last", ModeBypass, attackGuards, "hash -ph -p/usr/bin/mv zz; zz build x", Deny},
 		{"mapfile -C runs its callback", ModeBypass, attackGuards, "mapfile -C 'rm' -c 1 a <<< x", Deny},
 		{"compgen -C runs its argument", ModeBypass, attackGuards, "compgen -C 'rm x'", Deny},
 		// A pattern that a ".." takes back out is the directory it stands
@@ -365,6 +379,14 @@ func TestShellAttacks(t *testing.T) {
 		{"$OLDPWD is where the line was, also after a cd that goes nowhere", ModeBypass, attackGuards, "cd .; cat $OLDPWD/.env", Deny},
 		{"~1 is a directory pushd put by", ModeBypass, attackGuards, "pushd src >/dev/null; cat ~1/.env", Deny},
 		{"~-0 is a directory pushd put by", ModeBypass, attackGuards, "pushd src; cat ~-0/.env", Deny},
+		// The directory stack always holds the directory the shell is in,
+		// so ~0, ~+0 and ~-0 are it on a line with no cd (oracle seed 172:
+		// "type-t main > ~0/.bashrc" made .bashrc).
+		{"~0 is the directory the line is in", ModeBypass, attackGuards, "cat ~0/.env", Deny},
+		{"~+0 is the directory the line is in", ModeBypass, attackGuards, "cat ~+0/.env", Deny},
+		{"~-0 is the directory the line is in", ModeBypass, attackGuards, "cat ~-00/.env", Deny},
+		{"~0 is the directory the line is in, for a write too", ModeBypass, attackGuards, "echo x > ~0/build/out.o", Deny},
+		{"a write through ~0 to a file gnosh guards asks", "", rules{allow: []string{"Bash"}}, "type-t main > ~0/.bashrc > out.txt", Ask},
 		{"what is not written of the program's name may be a blank", ModeBypass, attackGuards, "printf -v s ' '; cat${s}.env", Deny},
 		{"what is not written of the program's name may be a blank", ModeBypass, attackGuards, "cat$X.env", Deny},
 		// A program gnosh knows nothing about, handed the file by name.
@@ -860,7 +882,9 @@ func TestShellAttacks(t *testing.T) {
 		"printf -v s ' '; rm${s}-rf${s}/", "rm$X-rf$X/", "eval \"rm${X}-rf${X}/\"", "rm${X}-rf${X}*", "sudo rm$X-r$X..", "rmdir$X/", "sudo $RM -rf /", "env $X -rf ~", "timeout 5 rm$X-rf$X/", "nice ${RM:-rm} -rf /", "sudo -n $RM -rf ..",
 		"nohup $(which rm) -rf ~", "command $RM -rf /", "xargs $RM -rf / < /dev/null", "env X=1 $RM -rf /",
 		// The directory the line was in before.
-		"cd src; rm -rf ~-", "cd src && rm -rf $OLDPWD", "cd /tmp; rm -rf ~-/..", "cd src; rm -rf \"$OLDPWD\"/*", "cd src; rm -rf ~-/", "pushd src; rm -rf ~1", "pushd /tmp; rm -rf ~1/..", "pushd src; rm -rf ~-0/*"} {
+		"cd src; rm -rf ~-", "cd src && rm -rf $OLDPWD", "cd /tmp; rm -rf ~-/..", "cd src; rm -rf \"$OLDPWD\"/*", "cd src; rm -rf ~-/", "pushd src; rm -rf ~1", "pushd /tmp; rm -rf ~1/..", "pushd src; rm -rf ~-0/*",
+		// ~0, ~+0 and ~-0 are the directory the line is in.
+		"rm -rf ~0", "rm -rf ~0/*", "rm -rf ~+0/*", "rmdir ~-0", "rm -rf ~00/"} {
 		if d := bash(engine(t, ModeBypass, rules{}), cmd); !d.Critical {
 			t.Errorf("%q: not flagged as a dangerous removal (%s)", cmd, d.Reason)
 		}
@@ -970,6 +994,12 @@ func TestPatternThatClimbs(t *testing.T) {
 		"cat l*/../secret.txt":              Ask,
 		"cat sr*/../a.go":                   Allow, // a match that is no link: the project's own a.go
 		"cat src/*/../../a.go":              Allow,
+		// A dot pattern after a pattern: dash matches ".." with "..*",
+		// so "cat */..*" ran "cat -R/.. link-dir/.. …", a flag and the
+		// directory above a link's target, while the text took "*/.."
+		// for the working directory (oracle seed 166).
+		"cat */..*":  Ask,
+		"ls -d */.*": Ask,
 	} {
 		if d := bash(e, cmd); d.Behavior != want {
 			t.Errorf("%q: got %s (%s), want %s", cmd, d.Behavior, d.Reason, want)

@@ -1,17 +1,24 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"os/user"
 	"path"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
@@ -42,7 +49,7 @@ func (t looker) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, er
 // is not in the list at all.
 func (l *live) buildTools() error {
 	limits := l.cfg.Limits
-	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied}
+	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied, ReadRoom: l.readRoom, ReadResultMost: l.readResultMost}
 	if limits.FileReadMaxTokens.V > 0 {
 		// The limit is given in tokens, and the file tools count bytes: a
 		// token is about four of them.
@@ -50,6 +57,9 @@ func (l *live) buildTools() error {
 	}
 	if limits.GlobTimeout.Set {
 		fo.SearchTimeout = limits.GlobTimeout.V
+	}
+	if limits.GlobNoIgnore.Set {
+		fo.GlobNoIgnore = limits.GlobNoIgnore.V
 	}
 	names := fstools.Defaults()
 	var all []core.Tool
@@ -65,13 +75,17 @@ func (l *live) buildTools() error {
 	so := shelltool.Options{
 		Environ:             func() []string { return slices.Clone(l.p.o.Environ) },
 		Env:                 l.cfg.CommandEnv(),
+		Scrub:               l.p.scrubbing(),
+		PersonSandboxed:     l.cfg.Sandbox.Scrubbed && runtime.GOOS == "linux",
+		ScriptCaps:          l.scriptCaps(),
 		EnvFile:             l.envFile(),
 		SpoolDir:            l.spoolDir(),
 		Now:                 l.p.now,
 		DefaultTimeout:      limits.BashDefaultTimeout.V,
 		MaxTimeout:          limits.BashMaxTimeout.V,
 		TimeoutToBackground: true,
-		NoBackground:        l.inv.Bare || l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1",
+		NoBackground:        l.inv.Bare || l.envOn("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"),
+		NoCarryCwd:          l.envOn("CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"),
 		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
 		MaxOutputChars:      bashOutputChars(l.cfg),
 		NoOutputTool:        true,
@@ -84,6 +98,10 @@ func (l *live) buildTools() error {
 	}
 	if slices.Contains(so.ToolNames, gnoRunTool) {
 		so.Misread = misreadGno
+	}
+	so.Sandbox = l.shellSandbox()
+	if l.p.scrubbing() && runtime.GOOS == "linux" {
+		so.Isolate = l.pidIsolation()
 	}
 	if l.interactive || l.inv.Command == cli.CmdPrint {
 		// A session somebody attends is told when a background command
@@ -101,10 +119,19 @@ func (l *live) buildTools() error {
 	}
 	l.shell = shelltool.New(so)
 	all = append(all, l.wrapStop(l.shell.Tools())...)
-	all = append(all, &webFetchTool{l: l})
+	if len(l.cfg.LSPServers) > 0 {
+		// (Only with a language server named: lsp.go.)
+		l.lspSrv = newLSPServers(l, l.cfg.LSPServers)
+		all = append(all, &lspTool{s: l.lspSrv})
+	}
+	noFetch := l.envOn("CLAUDE_CODE_DISABLE_WEB_FETCH")
+	if !noFetch {
+		// (CLAUDE_CODE_DISABLE_WEB_FETCH turns it off, as in Claude Code.)
+		all = append(all, &webFetchTool{l: l, cacheFor: limits.WebFetchCacheTTL.V, deadline: limits.WebFetchDeadline.V})
+	}
 	if u := strings.TrimRight(l.cfg.Options.WebSearchURL.V, "/"); u != "" {
 		// (Only with a search server named: see websearch.go.)
-		all = append(all, &webSearchTool{l: l, base: u})
+		all = append(all, &webSearchTool{l: l, base: u, noFetch: noFetch})
 	}
 	// gnosh's own tools, as a sub-agent starts from them.
 	l.own = l.own[:0]
@@ -122,15 +149,21 @@ func (l *live) buildTools() error {
 		// where sub-agents may be started at all.
 		all = append(all, &sendMessageTool{l: l})
 	}
+	// A run has nobody to put a question to, whatever its input format
+	// (stream-json carries user messages, no answers): a tool that only
+	// asks is offered where a person is there, or where a PreToolUse hook
+	// the person set up may answer in their place, and plan mode's where a
+	// plan can be approved (planApproved). Offered in a run, the three
+	// schemas were 3.5K of the 27K characters of tools sent with every
+	// request of a FrontierHarness run, and a call of one came back
+	// refused (the FrontierHarness session, 2026-11-19).
 	deny := l.cfg.Permissions.DenyInsteadOfPrompting.V
-	if l.inv.PermissionPrompts != "none" && !deny {
+	if l.inv.PermissionPrompts != "none" && !deny && (l.interactive || l.hooks.has(hooks.PreToolUse)) {
 		// (With --permission-prompts none nobody answers, and a tool that
 		// asks a person is no tool.)
 		all = append(all, &askTool{l: l})
 	}
-	if !deny {
-		// (permissions.denyInsteadOfPrompting takes the plan tools away
-		// too, as in Claude Code: a plan is approved by a person.)
+	if l.planApproved() {
 		all = append(all, &enterPlanTool{l: l}, &exitPlanTool{l: l})
 	}
 	if l.interactive && l.p.o.Relaunch != nil {
@@ -346,7 +379,9 @@ func (l *live) closeShell() {
 		}
 	case <-time.After(60 * time.Second):
 		l.p.warnf("the session's commands had not all stopped after a minute; gnosh goes on without waiting for them.")
+		return // (their sandbox's folder is left to them)
 	}
+	l.closeSandbox()
 }
 
 // gnoRunTool is the GnoVM feature's tool that runs Gno, mem's calls among
@@ -355,6 +390,87 @@ const gnoRunTool = "gnovm_run"
 
 // gnoCall finds a call on mem written as Gno: mem.Show(), mem.Todo(...).
 var gnoCall = regexp.MustCompile(`\bmem\.[A-Z][A-Za-z0-9_]*\(`)
+
+// rerouteGno is the loop's Reroute: a shell command that is nothing but
+// calls on mem, written as Gno (mem.Show(), mem.Todo("x").Push()), runs in
+// mem by gnovm_run in its place. Refused with a note, it taught a small
+// model nothing: in 19 of 45 FrontierHarness trials on box 2 (2026-11-19)
+// Qwen's first mem call went to the shell, and in one 315 of its 320 calls
+// did, for the whole half hour. What a command for another machine, or in
+// the background, says stays the shell's.
+func (l *live) rerouteGno(call core.ToolCall) (core.ToolCall, string, bool) {
+	if call.Name != shelltool.BashName || !slices.Contains(l.toolNames(), gnoRunTool) {
+		return core.ToolCall{}, "", false
+	}
+	var in struct {
+		Command    string `json:"command"`
+		Host       string `json:"host"`
+		Background bool   `json:"run_in_background"`
+	}
+	if json.Unmarshal(call.Input, &in) != nil || in.Host != "" || in.Background {
+		return core.ToolCall{}, "", false
+	}
+	code, ok := memCode(in.Command)
+	if !ok {
+		return core.ToolCall{}, "", false
+	}
+	input, err := json.Marshal(map[string]string{"code": code, "name": memVM})
+	if err != nil {
+		return core.ToolCall{}, "", false
+	}
+	note := "That was Gno for mem, which no shell runs, so gnosh ran it with " + gnoRunTool + ` (name "` + memVM + `") in its place; this is what it returned. Call ` + gnoRunTool + " for mem from here on."
+	return core.ToolCall{ID: call.ID, Name: gnoRunTool, Input: input}, note, true
+}
+
+// memCode returns a command that is nothing but calls on mem, each line
+// one Gno call, or a chain of them, on mem (mem.Show(),
+// mem.Todo("x").Push()), as the Gno to run. A line with anything more is
+// the shell's ("mem.Show() && rm -r build").
+func memCode(command string) (string, bool) {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(command), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !memStatement(line) {
+			return "", false
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return "", false
+	}
+	return strings.Join(lines, "\n"), true
+}
+
+// memStatement reports whether a line is one call on mem, or a chain of
+// calls that begins with one: read as Go, which Gno is written in.
+func memStatement(line string) bool {
+	e, err := parser.ParseExpr(strings.TrimSuffix(line, ";"))
+	if err != nil {
+		return false
+	}
+	call, ok := e.(*ast.CallExpr)
+	for ok {
+		sel, isSel := call.Fun.(*ast.SelectorExpr)
+		if !isSel {
+			return false
+		}
+		switch x := sel.X.(type) {
+		case *ast.Ident:
+			return x.Name == memVM && ast.IsExported(sel.Sel.Name)
+		case *ast.CallExpr:
+			call = x
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// memVM is the name of mem's VM to gnovm_run (gnovm.MemVM).
+const memVM = "mem"
 
 // misreadGno says of a command that it was Gno for mem typed into a shell,
 // when it was: mem, one of its calls, or a name made up from it or from the
@@ -371,4 +487,48 @@ func misreadGno(command string, programs []string) string {
 		}
 	}
 	return ""
+}
+
+// bytesPerToken is how the loop counts text it has not had counted by a
+// server: three bytes a token.
+const bytesPerToken = 3
+
+// readRoom is how many bytes of text a Read with allow_large may return:
+// about what the calling agent's context has room for before room has to
+// be made, as Claude Code sizes allow_large to the room left in the
+// context. The calls of one round share that room (agent.TakeRoom), and
+// none takes more than one result may hold (readResultMost).
+func (l *live) readRoom(ctx context.Context) (int, func(used int)) {
+	a := l.callerOf(ctx)
+	if a == nil {
+		return 0, func(int) {}
+	}
+	n, give := a.TakeRoom(l.readResultMost(ctx) / bytesPerToken)
+	return n * bytesPerToken, func(used int) {
+		give(n - (used+bytesPerToken-1)/bytesPerToken)
+	}
+}
+
+// readResultMost is the most bytes one Read result may hold: a tenth
+// under the cuts every tool result gets on its way to the model, to a
+// quarter of the window (in the agent loop) and to maxResultBytes, so that
+// Read stops before them and what it records as read is what the model is
+// shown. The tenth is for Read's own note and the loop's rounding.
+func (l *live) readResultMost(ctx context.Context) int {
+	most := maxResultBytes
+	if a := l.callerOf(ctx); a != nil {
+		if t := a.Context().ResultMost(); t > 0 {
+			most = min(most, t*bytesPerToken)
+		}
+	}
+	return most * 9 / 10
+}
+
+// callerOf is the agent whose tool call ctx belongs to: a sub-agent's own,
+// or the session's.
+func (l *live) callerOf(ctx context.Context) *agent.Agent {
+	if a := agent.FromContext(ctx); a != nil {
+		return a
+	}
+	return l.agent
 }

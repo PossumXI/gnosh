@@ -52,7 +52,7 @@ func TestInvisibleCharactersTakenOut(t *testing.T) {
 	if got := g.c.sent(); len(got) != 3 || got[2] != want {
 		t.Fatalf("the folded paste was sent as %d bytes", len(got[len(got)-1]))
 	}
-	spans, _ := g.c.prompts[2].Meta[metaPastes].([]editor.Span)
+	spans := pastesOf(g.c.prompts[2].Meta)
 	if len(spans) != 1 || spans[0] != (editor.Span{Start: 6, End: 906}) {
 		t.Errorf("the paste is marked at %v, want 6 to 906", spans)
 	}

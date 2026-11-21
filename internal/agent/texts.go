@@ -40,6 +40,10 @@ type Texts struct {
 	// RepeatPair is the same for two calls taking turns. It is given the
 	// number of rounds looked at and the two calls.
 	RepeatPair string
+	// RepeatCycle is the same for a cycle of three or four rounds come
+	// round again and again. It is given the number of rounds looked at,
+	// the length of the cycle, and its rounds.
+	RepeatCycle string
 
 	// Checkpoint asks the model to judge whether there is a real reason to
 	// stop. It is given the marker and how many times in a row the turn
@@ -143,6 +147,8 @@ var defaultTexts = Texts{
 		"Making it again will tell you nothing new. Answer with what you have, or take a different approach.",
 	RepeatPair: "Your last %d rounds only went back and forth between the same calls, with the same results each time:\n\n%s\n\n" +
 		"Making them again will tell you nothing new. Answer with what you have, or take a different approach.",
+	RepeatCycle: "Your last %d rounds went round the same %d rounds again and again, with the same results each time:\n\n%s\n\n" +
+		"Making them again will tell you nothing new. Answer with what you have, or take a different approach.",
 
 	Checkpoint: "Decide this first, honestly, before anything else: is there a genuine reason to stop here? " +
 		"A genuine reason is one of these: the task cannot be done as asked; you are blocked on something only the user can give or decide; " +
@@ -217,6 +223,7 @@ func (t Texts) fill() Texts {
 	set(&d.EmptyNotice, t.EmptyNotice)
 	set(&d.RepeatNudge, t.RepeatNudge)
 	set(&d.RepeatPair, t.RepeatPair)
+	set(&d.RepeatCycle, t.RepeatCycle)
 	set(&d.Checkpoint, t.Checkpoint)
 	set(&d.DriverFailed, t.DriverFailed)
 	set(&d.StoppedBefore, t.StoppedBefore)

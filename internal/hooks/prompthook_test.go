@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -78,8 +79,18 @@ func TestPromptHookFailures(t *testing.T) {
 	reply := "Sure, that looks fine to me."
 	opts.Prompt = func(ctx context.Context, model, text string) (string, error) {
 		if reply == "" {
-			<-ctx.Done()
-			return "", ctx.Err()
+			// (As the session's model does: the limit is the answer's,
+			// AnswerLimit, and is past.)
+			limit, ok := AnswerLimit(ctx)
+			if !ok {
+				t.Error("a prompt hook's question does not say its limit")
+			}
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(limit):
+				return "", fmt.Errorf("no answer within %s: %w", limit, context.DeadlineExceeded)
+			}
 		}
 		return reply, nil
 	}

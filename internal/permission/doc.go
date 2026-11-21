@@ -26,6 +26,12 @@
 //     --tools left it out): refused.
 //  2. Deny rules, from every source: refused. A deny from any source beats
 //     an allow from any other, and no allow rule carves a hole in one.
+//     Then the blocks outside the working directories, Claude Code's
+//     blockReadsOutsideWorkingDirectories and
+//     blockWritesOutsideWorkingDirectories (Options.BlockReads and
+//     BlockWrites, block.go): a file tool's read or change outside them
+//     is refused, and a shell command that reads outside them, or whose
+//     files cannot be told, is asked about, in every mode.
 //  3. Ask rules: a person is asked, in every mode (dontAsk refuses).
 //  4. The checks that no allow rule and no hook approval passes: a change
 //     to a protected path, a dangerous removal, a guard that could not be
@@ -55,8 +61,9 @@
 //   - dontAsk: runs what default runs and what allow rules cover, and
 //     refuses everything that would have asked.
 //   - bypassPermissions: runs everything except what a deny rule refuses,
-//     what an ask rule or a hook wants asked, a dangerous removal, and a
-//     command a deny or ask rule could not be checked against.
+//     what an ask rule or a hook wants asked, a dangerous removal, a
+//     command a deny or ask rule could not be checked against, and what
+//     the blocks outside the working directories refuse or ask about.
 //
 // "manual" is another name for default. "auto" is not a gnosh mode and
 // reads as default, with a note in Explain. A project's settings can

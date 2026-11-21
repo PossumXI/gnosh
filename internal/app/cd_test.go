@@ -72,8 +72,13 @@ func TestCd(t *testing.T) {
 		t.Fatalf("after a no, the project lists %d sessions", len(list))
 	}
 
-	// A yes moves it.
-	s.typeLine("/cd ../lib")
+	// A yes moves it: through a link, to the folder the link leads to,
+	// as every start of gnosh names it (the cd review of 2026-11-19: it
+	// was filed under the link's path, where no start looks).
+	if err := os.Symlink(lib, filepath.Join(w.Root, "liblink")); err != nil {
+		t.Fatal(err)
+	}
+	s.typeLine("/cd ../liblink")
 	s.see("Trust " + lib + "?")
 	s.typeLine("2")
 	s.see("The session moves to " + lib + ": gnosh starts again there, with that folder's own settings, instructions and skills.")

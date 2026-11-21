@@ -43,6 +43,7 @@ func TestMCPToolNamesTwiceAndDescriptions(t *testing.T) {
 	xy := w.Script(w.Home+"/bin/xy.sh", fakeMCPTools(`[{"name":"c","description":"From x.y."}]`))
 	other := w.Script(w.Home+"/bin/other.sh", fakeMCPTools(`[{"name":"wave","description":"Waves."}]`))
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"dup": {"command": "`+dup+`"}, "a": {"command": "`+a+`"}, "a__b": {"command": "`+ab+`"}, "x.y": {"command": "`+xy+`"}, "x_y": {"command": "`+xy+`"}, "other": {"command": "`+other+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "-y", "-p", "hi").wantCode(t, 0)
 	has(t, "stderr", r.err, `the server "a__b": its tools would be named mcp__a__b__<tool>, and a rule for the tools of another server could cover them`)
 	req := w.Model.Requests()[0]
@@ -93,6 +94,7 @@ func TestMCPLongToolName(t *testing.T) {
 		apptest.Reply{Text: "Searched."})
 	srv := w.Script(w.Home+"/bin/docs.sh", fakeMCPTools(`[{"name":"`+long+`","description":"Searches."}]`))
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"company-internal-documentation": {"command": "`+srv+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	run(t, w, "-y", "-p", "search the docs").wantCode(t, 0)
 	names := toolNamesOf(w.Model.Requests()[0])
 	if !slices.Contains(names, name) {
@@ -115,6 +117,7 @@ func TestMCPToolsWhoseInputIsNotAnObject(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
 	srv := w.Script(w.Home+"/bin/s.sh", fakeMCPTools(`[{"name":"good","inputSchema":{"type":"object","properties":{"a":{"type":"string"}}}},{"name":"list","inputSchema":{"type":"array"}},{"name":"words","inputSchema":"a string"},{"name":"untyped","inputSchema":{"properties":{"b":{"type":"number"}}}}]`))
 	w.Write(w.ConfigDir()+"/mcp.json", `{"mcpServers": {"s": {"command": "`+srv+`"}}}`)
+	run(t, w, "trust").wantCode(t, 0) // (the person's own MCP servers wait for trust)
 	r := run(t, w, "-y", "-p", "hi").wantCode(t, 0)
 	has(t, "stderr", r.err, "The MCP server s lists tools whose input is not described as an object (list, words)")
 	req := w.Model.Requests()[0]

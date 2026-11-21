@@ -1099,3 +1099,26 @@ func TestAgentViewDrawsNamesSafely(t *testing.T) {
 	g.keys(`<Esc> <Ctrl+S>`)
 	check("grouped by folder")
 }
+
+// A question's line indented past the width is still read: it keeps at
+// most a quarter of the width of its indent, where it wrapped to a cell a
+// row and was drawn blank; and what is not shown of a long question is
+// not wrapped (the relay review of 2026-11-19).
+func TestAgentViewQuestionIndentedFarIsShown(t *testing.T) {
+	g := newAgentRig(t)
+	q := &app.AgentQuestion{ID: "q1", Title: "Allow Bash?",
+		Text: "  $ python3 - <<'EOF'\n" + strings.Repeat(" ", 200) + "import os; os.system('HIDDEN-PAYLOAD')\nEOF"}
+	rows := strings.Join(g.v.questionLines(q, 60, 16), "\n")
+	if !strings.Contains(rows, "HIDDEN-PAYLOAD") {
+		t.Errorf("the line indented 200 columns is not on the screen:\n%s", rows)
+	}
+	long := &app.AgentQuestion{ID: "q2", Title: "Allow Bash?", Text: strings.Repeat("a line of the script\n", 100000)}
+	start := time.Now()
+	rows = strings.Join(g.v.questionLines(long, 60, 16), "\n")
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("a long question took %s to draw", took)
+	}
+	if !strings.Contains(rows, "… 1 more row and 99,98") || !strings.Contains(rows, " more lines") {
+		t.Errorf("the rows not shown are not counted:\n%s", rows)
+	}
+}

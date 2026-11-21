@@ -73,14 +73,20 @@ func agentDetails(d agentdef.Def) []string {
 	if d.Background {
 		out = append(out, "Runs in the background")
 	}
+	if d.Memory != "" {
+		out = append(out, "Keeps a memory of its own: "+memoryScopeWords(d.Memory)+" ("+d.Memory+")")
+	}
+	switch {
+	case d.CompactWindow > 0:
+		out = append(out, fmt.Sprintf("Makes room at %s tokens of context, or the session's point where earlier (autoCompactWindow)", thousands(d.CompactWindow)))
+	case d.CompactWindowUnused != "":
+		out = append(out, fmt.Sprintf("Its autoCompactWindow, %s, is not used: it is a whole number of tokens, %s or more", d.CompactWindowUnused, thousands(agentdef.MinCompactWindow)))
+	}
 	if d.Hooks != nil {
 		out = append(out, "Has hooks of its own")
 	}
 	if d.OmitInstructions {
 		out = append(out, "Starts without the instruction files")
-	}
-	if len(d.Other) > 0 {
-		out = append(out, "Asks for "+strings.Join(d.Other, ", ")+", which gnosh does not have: it is not started")
 	}
 	return out
 }

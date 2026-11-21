@@ -20,6 +20,15 @@ import (
 // wait is then the server's, not the model's (box 1, 16 November: turns
 // stopped after 11 to 13 minutes of waiting, with nothing said of why).
 
+// ModeEvent tells the front end the permission mode changed from the
+// session's side (a plan approved, EnterPlanMode, a "switch to
+// acceptEdits" answer): the screen read it only as a turn ended, and showed
+// plan mode while asking about an edit after the plan was approved (seen on
+// the devbox's screen).
+type ModeEvent struct {
+	Mode string
+}
+
 // ServerLoadEvent tells the front end what the model server is doing while
 // the session waits for a reply to start. Text "" says there is nothing
 // more to show.

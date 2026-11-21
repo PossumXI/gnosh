@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -202,4 +203,29 @@ func hasTool(tools []core.ToolSpec, name string) bool {
 // the person's checkout at repo, and that its changes stay there.
 func (s *Set) AgentWorkTree(tree, repo string) string {
 	return s.fill(textAgentWorkTree, values{"tree": tree, "repo": repo})
+}
+
+// memoryClose finds what could close the block MEMORY.md is given in, in
+// any letter case and with blanks inside ("</AGENT-MEMORY>", "< /agent-memory":
+// the review of 2026-11-20). Untrusted breaks such a tag wherever it
+// stands whole; this catches one left open at the very end of the index,
+// which the line after it would close.
+var memoryClose = regexp.MustCompile(`(?i)<(\s*/\s*agent-memory)`)
+
+// AgentMemory is the part of a sub-agent's system prompt, sent last, for
+// a kind of agent that keeps a memory of its own (its definition's
+// memory): the folder dir, kept as scope says ("in this project, ..."),
+// and index, the beginning of its MEMORY.md, or "" where there is none;
+// cut says index is not all of it. What the index holds was written by
+// an agent, and is given defused, as a report is.
+func (s *Set) AgentMemory(dir, scope, index string, cut bool) string {
+	v := values{"dir": dir, "scope": scope}
+	if index = strings.TrimRight(index, "\n"); strings.TrimSpace(index) == "" {
+		v.flag("none", true)
+	} else {
+		// (Nor can it close the block it stands in.)
+		v["index"] = memoryClose.ReplaceAllString(Untrusted(index), "<"+Mark+"$1")
+		v.flag("cut", cut)
+	}
+	return s.fill(textAgentMemory, v)
 }

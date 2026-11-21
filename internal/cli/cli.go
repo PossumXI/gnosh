@@ -181,6 +181,10 @@ type Invocation struct {
 	// IncludePartialMessages is --include-partial-messages: stream-json
 	// also carries the main agent's replies as streaming events.
 	IncludePartialMessages bool
+	// IncludeHookEvents is --include-hook-events: stream-json carries
+	// every hook's start and end (hook_started, hook_response), not only
+	// the SessionStart hooks'.
+	IncludeHookEvents bool
 	// Agents is --agents: sub-agents defined for this run, as a JSON
 	// object of agents by name, or the path of a file that holds one.
 	Agents string

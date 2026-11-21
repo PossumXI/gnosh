@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -214,7 +215,10 @@ func (s *session) placeholder() string {
 	case s.busy && len(s.personQueue()) > 0:
 		return "Type to queue another prompt; Up takes the queue back"
 	case s.busy:
-		return "Type to queue a prompt; Esc stops the turn"
+		if k := s.keyHint("chat:cancel", "Esc"); k != "" {
+			return "Type to queue a prompt; " + k + " stops the turn"
+		}
+		return "Type to queue a prompt"
 	case s.failHint != "":
 		return s.failHint
 	}
@@ -268,7 +272,9 @@ func (s *session) streamLines(width int) []string {
 			if !s.detail {
 				// Folded, only its last rows show: say every time how
 				// to have all of it.
-				head += s.th.Quiet.Render(s.th.Sep + "Ctrl+O shows all of it")
+				if h := s.transcriptHint(s.th.Sep, "shows all of it"); h != "" {
+					head += s.th.Quiet.Render(h)
+				}
 			}
 			out = append(out, fit(s.m, head, width))
 		}
@@ -451,6 +457,13 @@ func (s *session) hintLines(width int, now time.Time) []string {
 		words = s.hint
 	case s.q == nil || s.q.guarded:
 		words = s.ed.Hint().String()
+		if h := s.ed.Hint(); h == editor.HintCtrlCExit || h == editor.HintCtrlDExit {
+			// Leaving stops what runs in the background: said before the
+			// second press, not found out after it.
+			if n, err := strconv.Atoi(oneLine(s.facts["background"])); err == nil && n > 0 {
+				words += ": " + count(n, "command running in the background stops", "commands running in the background stop") + " with it"
+			}
+		}
 	}
 	if words == "" {
 		return nil
@@ -571,8 +584,8 @@ func (s *session) activityLine(width int, now time.Time) string {
 	if extra != "" {
 		parts = append(parts, extra)
 	}
-	if !s.stopping && s.q == nil {
-		parts = append(parts, "Esc stops")
+	if k := s.keyHint("chat:cancel", "Esc"); k != "" && !s.stopping && s.q == nil {
+		parts = append(parts, k+" stops")
 	}
 	// As many of the parts as fit; what gnosh is doing is always there.
 	rest := ""
@@ -627,14 +640,17 @@ func (s *session) running() string {
 		if h.shell {
 			return "running " + firstNonEmpty(h.arg, "a command")
 		}
+		// (The name as the call's heading gives it: an MCP tool's as
+		// Claude Code names it.)
+		name := firstNonEmpty(h.name, oneLine(c.name))
 		if h.arg != "" {
-			return "running " + oneLine(c.name) + " " + h.arg
+			return "running " + name + " " + h.arg
 		}
-		return "running " + oneLine(c.name)
+		return "running " + name
 	}
 	names := make([]string, len(started))
 	for i, c := range started {
-		names[i] = oneLine(c.name)
+		names[i] = firstNonEmpty(s.headOf(c.name, c.input, &c.action).name, oneLine(c.name))
 	}
 	return fmt.Sprintf("running %d tool calls: %s", len(started), strings.Join(names, ", "))
 }

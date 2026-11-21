@@ -506,7 +506,8 @@ func TestClaudeCodeVariables(t *testing.T) {
 	def := mustLoad(t, in).Limits
 	if def.APITimeout.Set || def.BashDefaultTimeout.V != 2*time.Minute || def.BashMaxTimeout.V != 10*time.Minute || def.BashMaxOutput.V != 30000 ||
 		def.MaxOutputTokens.Set || def.FileReadMaxTokens.V != 25000 || def.GlobTimeout.Set || def.AutoCompactPct.Set ||
-		def.MCPTimeout.V != 30*time.Second || def.MCPToolTimeout.Set || def.MCPMaxOutputTokens.V != 25000 {
+		def.MCPTimeout.V != 30*time.Second || def.MCPToolTimeout.Set || def.MCPMaxOutputTokens.V != 25000 ||
+		def.WebFetchCacheTTL.V != 15*time.Minute || def.WebFetchDeadline.V != 5*time.Minute {
 		t.Errorf("defaults: %+v", def)
 	}
 
@@ -514,7 +515,8 @@ func TestClaudeCodeVariables(t *testing.T) {
 		"API_TIMEOUT_MS=30000", "BASH_DEFAULT_TIMEOUT_MS=60000", "BASH_MAX_TIMEOUT_MS=900000", "BASH_MAX_OUTPUT_LENGTH=50000",
 		"CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000", "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000", "CLAUDE_CODE_GLOB_TIMEOUT_SECONDS=20",
 		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80",
-		"MCP_TIMEOUT=5000", "MCP_TOOL_TIMEOUT=60000", "MAX_MCP_OUTPUT_TOKENS=1000")
+		"MCP_TIMEOUT=5000", "MCP_TOOL_TIMEOUT=60000", "MAX_MCP_OUTPUT_TOKENS=1000", "CLAUDE_CODE_GLOB_NO_IGNORE=true",
+		"CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=60000", "CLAUDE_CODE_WEBFETCH_DEADLINE_MS=90000")
 	cfg, problems := load(t, in)
 	if cfg == nil || len(problems) != 0 {
 		t.Fatalf("good values load without a word:\n%s", showProblems(problems))
@@ -523,7 +525,8 @@ func TestClaudeCodeVariables(t *testing.T) {
 	if l.APITimeout.V != 30*time.Second || l.BashDefaultTimeout.V != time.Minute || l.BashMaxTimeout.V != 15*time.Minute || l.BashMaxOutput.V != 50000 ||
 		l.MaxOutputTokens.V != 8000 || l.FileReadMaxTokens.V != 10000 || l.GlobTimeout.V != 20*time.Second ||
 		cfg.Options.AutoCompactWindow.V != 150000 || l.AutoCompactPct.V != 80 ||
-		l.MCPTimeout.V != 5*time.Second || l.MCPToolTimeout.V != time.Minute || l.MCPMaxOutputTokens.V != 1000 {
+		l.MCPTimeout.V != 5*time.Second || l.MCPToolTimeout.V != time.Minute || l.MCPMaxOutputTokens.V != 1000 ||
+		!l.GlobNoIgnore.Set || !l.GlobNoIgnore.V || !l.WebFetchCacheTTL.Set || l.WebFetchCacheTTL.V != time.Minute || l.WebFetchDeadline.V != 90*time.Second {
 		t.Errorf("limits: %+v", l)
 	}
 	if o := l.BashMaxOutput.Origin; o.Layer != LayerEnv || o.Name != "$BASH_MAX_OUTPUT_LENGTH" {
@@ -534,17 +537,19 @@ func TestClaudeCodeVariables(t *testing.T) {
 	in = inputs(newFS())
 	in.Environ = append(in.Environ,
 		"API_TIMEOUT_MS=soon", "BASH_DEFAULT_TIMEOUT_MS=-5", "BASH_MAX_TIMEOUT_MS=1000", "BASH_MAX_OUTPUT_LENGTH=999999",
-		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=5", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=250", "MCP_TIMEOUT=0")
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW=5", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=250", "MCP_TIMEOUT=0", "CLAUDE_CODE_GLOB_NO_IGNORE=maybe",
+		"CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS=0")
 	cfg, problems = load(t, in)
 	if cfg == nil {
 		t.Fatalf("a bad value in one of Claude Code's variables never stops startup:\n%s", showProblems(problems))
 	}
 	l = cfg.Limits
 	if l.APITimeout.Set || l.BashDefaultTimeout.V != 2*time.Minute || l.BashMaxTimeout.V != 2*time.Minute || l.BashMaxOutput.V != 150000 ||
-		cfg.Options.AutoCompactWindow.Set || l.AutoCompactPct.Set || l.MCPTimeout.V != 30*time.Second {
+		cfg.Options.AutoCompactWindow.Set || l.AutoCompactPct.Set || l.MCPTimeout.V != 30*time.Second || l.GlobNoIgnore.Set ||
+		l.WebFetchCacheTTL.Set || l.WebFetchCacheTTL.V != 15*time.Minute {
 		t.Errorf("limits after bad values: %+v", l)
 	}
-	if len(cfg.BadEnv) != 7 || len(Warnings(problems)) != 7 {
+	if len(cfg.BadEnv) != 9 || len(Warnings(problems)) != 9 {
 		t.Errorf("each bad value is reported once: %d for doctor, %d warnings:\n%s", len(cfg.BadEnv), len(Warnings(problems)), showProblems(problems))
 	}
 	wantProblem(t, problems, Warning, "$API_TIMEOUT_MS", 0, `"soon"`, "not a whole number")
@@ -2208,6 +2213,16 @@ func TestProjectEnvCannotMoveOwnDirs(t *testing.T) {
 	in = inputs(newFS().put(userJSON, `{"env": {"TMPDIR": "/mine"}}`))
 	if got := envOf(mustLoad(t, in)); !slices.Equal(got, []string{"TMPDIR=/mine"}) {
 		t.Errorf("the person's own env: %q", got)
+	}
+	// What gnosh tells the gnosh it starts again is taken from no file,
+	// the person's own neither (the cd review of 2026-11-19).
+	in = inputs(newFS().put(userJSON, `{"env": {"GNOSH_MOVED_FROM": "/tmp/x", "GNOSH_RESTARTED": "1", "GNOSH_TREE_MOVE": "{}", "GNOSH_RUN_ASKS": "/tmp/r", "KEEP": "1"}}`))
+	cfg, probs = load(t, in)
+	if got := envOf(cfg); !slices.Equal(got, []string{"KEEP=1"}) {
+		t.Errorf("the markers in force: %q", got)
+	}
+	for _, name := range []string{"GNOSH_MOVED_FROM", "GNOSH_RESTARTED", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS"} {
+		wantProblem(t, probs, Warning, userJSON, 1, `"env.`+name+`" is not taken from a settings file`)
 	}
 }
 

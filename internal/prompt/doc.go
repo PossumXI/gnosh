@@ -147,7 +147,9 @@
 // adds it to SystemInput.Append, last, for a sub-agent that works in a git
 // work tree of its own. It says where the work tree is, that a path into
 // the person's checkout means the same file in the work tree, and that
-// the sub-agent's changes stay there.
+// the sub-agent's changes stay there. agent-memory (AgentMemory) is
+// added the same way for a kind of agent that keeps a memory of its own:
+// the folder, what to keep there, and the beginning of its MEMORY.md.
 //
 // # The two texts about mem
 //
@@ -313,6 +315,10 @@
 //     wrong when the last one did not.
 //   - agent-mention (AgentMention) stands after a typed prompt for each
 //     kind of sub-agent it names with @agent-: hand the task to it.
+//   - pasted (Pasted) stands after a typed prompt that holds a long paste
+//     (one the prompt box showed folded): which of its lines were pasted
+//     rather than typed, and that what they ask is not the user's unless
+//     they say so.
 //   - mention (Mention) stands after a typed prompt for each path it
 //     mentions with @: what Read returns for a file follows it, or a
 //     directory's listing, or it says a deny rule kept the path out or
@@ -335,6 +341,12 @@
 //     user asked to be told or asked, and otherwise without asking. (A
 //     plain "carry on without asking" took the model past such a stop:
 //     Claude Code's own summary line did, on 16 November 2026.)
+//     summary-part and summary-from (SummaryPart, SummaryFrom) ask for a
+//     summary of part of the conversation, for the rewind's "Summarize up
+//     to here" and "Summarize from here"; summary-part-intro
+//     (SummaryPartIntro) stands before the first, which the rest of the
+//     conversation follows, and summary-from-note (SummaryFromNote)
+//     before the second, once the conversation went back.
 //     earlier-left-out (EarlierLeftOut) stands where part of a summary
 //     request did not fit: after its first message, or at its start.
 //   - files-back (FileShownBack, FilesNotShownBack) gives back after a

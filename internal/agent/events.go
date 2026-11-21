@@ -116,6 +116,9 @@ type TurnResult struct {
 	// Driver is the driver that halted the turn or at whose checkpoint the
 	// model stopped.
 	Driver string
+	// Planned is, for EndHalted, that the tool that ended the turn meant
+	// to (MetaPlanned): the turn is done, nothing went wrong.
+	Planned bool
 	// Err is the failure of an EndFailed turn, in plain words.
 	Err error
 	// ErrorKind sorts that failure: "rate_limit", "overloaded",
@@ -572,6 +575,11 @@ type SummaryEvent struct {
 	Phase string
 	// Trigger is "auto" or "manual".
 	Trigger string
+	// Part says which part of the conversation the summary is of, when it
+	// is not all of it: "before" a prompt of the person's, which the
+	// summary takes the place of, or "after" one, whose summary goes to
+	// the person's command and is not kept (SummaryPart).
+	Part string
 	// PreTokens and PostTokens are about how long the conversation was
 	// before and after.
 	PreTokens  int
@@ -713,4 +721,14 @@ func (c ContextStatus) Room() int {
 		return 0
 	}
 	return c.Point - c.Used
+}
+
+// ResultMost is the most tokens one tool result may take before the loop
+// cuts it, a quarter of the window (fitResultToWindow), or 0 while the
+// window is not known, when nothing is cut.
+func (c ContextStatus) ResultMost() int {
+	if !c.Known || c.Window <= 0 {
+		return 0
+	}
+	return c.Window / resultShare
 }

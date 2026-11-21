@@ -330,7 +330,7 @@ func TestPasteWhileSomethingElseHasTheKeys(t *testing.T) {
 // asks to let it run (the TUI review of 2026-11-19).
 func TestQuestionShowsInvisibleCharacters(t *testing.T) {
 	q := permission("q1")
-	q.Text = "  $ cat /tmp/‮txt.exe​\nWhy gnosh asks: no rule allows it."
+	q.Text = "  $ cat /tmp/\u202etxt.exe\u200b\nWhy gnosh asks: no rule allows it."
 	g := newRig(t, 80, 30, text.NoColor)
 	g.keys(`"go" <Enter>`).start()
 	g.ev(&agent.QuestionEvent{Question: q})
@@ -617,6 +617,15 @@ func TestLeaving(t *testing.T) {
 		t.Fatal("Ctrl+D Ctrl+D did not leave gnosh")
 	}
 
+	// With commands running in the background, the first press says they
+	// stop with gnosh.
+	g = newRig(t, 100, 24, text.NoColor)
+	g.ev(facts{"background": "2"})
+	g.keys(`<Ctrl+D>`).liveHas("Ctrl+D again to leave gnosh: 2 commands running in the background stop with it")
+	g = newRig(t, 100, 24, text.NoColor)
+	g.ev(facts{"background": "1"})
+	g.keys(`<Ctrl+C>`).liveHas("Ctrl+C again to leave gnosh: 1 command running in the background stops with it")
+
 	g = newRig(t, 80, 24, text.NoColor)
 	g.keys(`"/exit" <Enter>`)
 	if !g.s.done {
@@ -887,6 +896,11 @@ func TestCustomStatusLine(t *testing.T) {
 		"\x1b]8;;https://example.org\x1b\\link":                 "\x1b]8;;https://example.org\x1b\\link\x1b]8;;\x1b\\",
 		"\x1b]8;;https://example.org\x07link\x1b]8;;\x07 after": "\x1b]8;;https://example.org\x07link\x1b]8;;\x07 after",
 		"tab\there\r":                                           "tab here",
+		// A link with a control or C1 character inside goes whole, and so
+		// does a mark that turns the text around (the status line review
+		// of 2026-11-19).
+		"\x1b]8;;x\u009c\v\v\x1b\\link": "link",
+		"a\u202eb":                      "ab",
 	} {
 		if got := statusText(in); got != want {
 			t.Errorf("statusText(%q) = %q, want %q", in, got, want)
@@ -1432,4 +1446,268 @@ func TestPasswordTypedEarly(t *testing.T) {
 	if strings.Contains(g.scr.Dump(), "hunt") || strings.Contains(g.scr.Dump(), "er22") {
 		t.Fatalf("the password is on the screen\n%s", g.dump())
 	}
+}
+
+// Esc with a key typed straight after it arrives from many terminals as
+// that key with Alt: at a question with no use for it, it declines as the
+// Esc it began with (Claude Code 2.1.328); before, it was lost.
+func TestEscTypedWithAKeyDeclines(t *testing.T) {
+	for _, keys := range []string{`<Alt+x>`, `<Alt+Esc>`} {
+		g := newRig(t, 80, 30, text.NoColor)
+		g.keys(`"go" <Enter>`).start()
+		g.ev(&agent.QuestionEvent{Question: permission("q1")})
+		g.liveHas("Allow Bash?")
+		g.wait(time.Second).keys(keys)
+		if len(g.c.answers) != 1 || g.c.answers[0].ans.Choice != "no" {
+			t.Errorf("%s at a question answered %+v, want no", keys, g.c.answers)
+		}
+	}
+}
+
+// A Read of a PDF says which of its pages it read, and of how many.
+func TestReadOfAPDFSaysItsPages(t *testing.T) {
+	g := newRig(t, 80, 24, text.NoColor)
+	g.keys(`"read the paper" <Enter>`).start()
+	part := map[string]any{"file_path": "/home/jae/src/proj/paper.pdf", "pages": "3-5"}
+	whole := map[string]any{"file_path": "/home/jae/src/proj/short.pdf"}
+	g.ev(toolCall("c1", "Read"), toolCall("c2", "Read"), replyEnd(core.StopToolUse))
+	g.ev(toolStart("c1", "Read", part), toolStart("c2", "Read", whole))
+	g.ev(toolEnd("c1", "Read", part, core.ToolResult{Content: []core.Block{core.Text("[page 3]\nx\n")},
+		Meta: map[string]any{"type": "pdf", "file": map[string]any{"numPages": 12, "firstPage": 3, "lastPage": 5}}}, 0))
+	g.ev(toolEnd("c2", "Read", whole, core.ToolResult{Content: []core.Block{core.Text("[page 1]\nx\n")},
+		Meta: map[string]any{"type": "pdf", "file": map[string]any{"numPages": 4, "firstPage": 1, "lastPage": 4}}}, 0))
+	g.once("Read paper.pdf (pages 3-5)").committedHas("pages 3-5 of 12", "4 pages of a PDF")
+}
+
+// A note that travels with a call's result (the language server's count
+// of new problems after an edit) is drawn under the call's block, never
+// above it; and a question to the language server is headed by what it
+// asks and where.
+func TestNotesUnderTheCall(t *testing.T) {
+	each(t, func(t *testing.T, cols int) {
+		g := newRig(t, cols, 30, text.NoColor)
+		g.keys(`"rename it" <Enter>`).start()
+		args := map[string]any{"file_path": "/home/jae/src/proj/a.go", "old_string": "Old", "new_string": "New"}
+		g.ev(toolCall("c1", "Edit"), replyEnd(core.StopToolUse), toolStart("c1", "Edit", args))
+		g.ev(toolEnd("c1", "Edit", args, core.ToolResult{
+			Content: []core.Block{core.Text("edited")},
+			Display: &core.Display{Kind: "diff", Path: "/home/jae/src/proj/a.go", Before: "func Old() {}\n", After: "func New() {}\n"},
+			Notes:   []string{"Found 1 new diagnostic issue in 1 file (gopls)."},
+		}, 0))
+		g.committedHas("+ func New() {}", "Found 1 new diagnostic issue in 1 file (gopls).")
+		all := g.scroll()
+		if strings.Index(all, "Found 1 new") < strings.Index(all, "+ func New() {}") {
+			t.Errorf("the note is above the call's block:\n%s", all)
+		}
+		lsp := map[string]any{"operation": "hover", "filePath": "/home/jae/src/proj/a.go", "line": 12, "character": 5}
+		g.ev(toolCall("c2", "LSP"), replyEnd(core.StopToolUse), toolStart("c2", "LSP", lsp))
+		g.liveHas("LSP hover a.go:12:5")
+		g.ev(toolEnd("c2", "LSP", lsp, core.ToolResult{Content: []core.Block{core.Text("func New()")}}, 0))
+		g.committedLacks("Ask the language server")
+		g.show("a note under an edit")
+	})
+}
+
+// The mode the session changes itself in the middle of a turn (a plan
+// approved) shows at once, not when the turn ends: the screen said plan
+// mode while it asked about an edit after the approval.
+func TestModeChangedByTheSession(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`<Shift+Tab> <Shift+Tab>`).liveHas("plan mode")
+	g.keys(`"plan it" <Enter>`).start()
+	_ = g.c.SetMode("default")
+	g.ev(&app.ModeEvent{Mode: "default"})
+	// (The status line's; the hint Shift+Tab left still names plan mode.)
+	g.liveHas("manual mode ·").liveLacks("plan mode ·")
+}
+
+// An approved plan's call says so in the person's words, and where the
+// plan is kept: the model's text ("carry the plan out") is not theirs.
+func TestPlanApprovedLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"plan it" <Enter>`).start()
+	args := map[string]any{"plan": "1. Do it."}
+	g.ev(toolCall("c1", "ExitPlanMode"), replyEnd(core.StopToolUse), toolStart("c1", "ExitPlanMode", args))
+	g.ev(toolEnd("c1", "ExitPlanMode", args, core.ToolResult{
+		Content: []core.Block{core.Text("The user approved the plan. The session is in the default mode now: carry the plan out.")},
+		Meta:    map[string]any{"approved": true, "mode": "default", "planFile": "/home/jae/.local/share/gnosh/plans/1.md"},
+	}, 0))
+	g.committedHas("approved · manual mode", "the plan is kept in ~/.local/share/gnosh/plans/1.md").committedLacks("carry the plan out")
+}
+
+// An answered AskUserQuestion's call says "answered": the answers stand in
+// the question's own record above it, and the result's words for the
+// model said them again, cut short.
+func TestAskUserQuestionAnsweredLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"set it up" <Enter>`).start()
+	args := map[string]any{"questions": []any{map[string]any{"question": "Which database?", "header": "Database", "options": []any{}}}}
+	g.ev(toolCall("c1", "AskUserQuestion"), replyEnd(core.StopToolUse), toolStart("c1", "AskUserQuestion", args))
+	g.ev(toolEnd("c1", "AskUserQuestion", args, core.ToolResult{
+		Content: []core.Block{core.Text("The user answered:\n1. Which database?\n   Answer: Postgres\n2. Which checks?\n   Answer: Unit tests")},
+	}, 0))
+	g.committedHas("answered").committedLacks("The user answered", "more lines not shown")
+}
+
+// A provider that answers again after failed tries is said to once on the
+// screen, with the tries counted: the agent's own notice of it is left out
+// (it was said twice).
+func TestProviderBackSaidOnce(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"hello" <Enter>`).start()
+	g.ev(&agent.RetryEvent{Purpose: "main", Attempt: 1, Kind: core.ErrServer, Status: 500, Message: "the server failed on its own side (HTTP 500). Trying again in 5s."})
+	g.ev(&agent.NoticeEvent{Level: agent.LevelInfo, Source: agent.SourceProviderBack, Text: "the server is answering again, 5s after it stopped."})
+	g.ev(said("Back.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
+	g.committedHas("answers again, after 1 failed try").committedLacks("is answering again")
+}
+
+// A Bash call that came whole with no command is named as any call is,
+// its failure on its line, not drawn as a prompt with nothing after it.
+func TestBashCallWithNoCommand(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"look" <Enter>`).start()
+	args := map[string]any{"cmd": "ls"}
+	g.ev(toolCall("c1", "Bash"), replyEnd(core.StopToolUse), toolStart("c1", "Bash", args))
+	g.ev(toolEnd("c1", "Bash", args, core.ToolResult{Content: []core.Block{core.Text("This call did not run: command is missing: give the shell command to run.")}, IsError: true}, 0))
+	g.committedHas("Bash", "command is missing").committedLacks("✗ $")
+}
+
+// An MCP tool's call is named as Claude Code names it: the server and the
+// tool, then the first arguments as they were written.
+func TestMCPCallHeading(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"echo it" <Enter>`).start()
+	raw := []byte(`{"text": "hello from the model", "times": 2, "nested": {"a": 1}}`)
+	g.ev(toolCall("c1", "mcp__echo__say_it"), replyEnd(core.StopToolUse), &agent.ToolStartEvent{CallID: "c1", Name: "mcp__echo__say_it", Input: raw})
+	g.liveHas(`echo - say_it (MCP) text: "hello from the model", times: 2`).liveLacks("mcp__echo__say_it")
+	if s, tl, ok := app.MCPToolParts("mcp__a_b__c__d"); !ok || s != "a_b" || tl != "c__d" {
+		t.Errorf("MCPToolParts: %q %q %v", s, tl, ok)
+	}
+	if _, _, ok := app.MCPToolParts("mcp__nothing"); ok {
+		t.Error("a name with no tool was taken")
+	}
+}
+
+// A command started in the background, and a Monitor, are shown in the
+// person's words: where the output goes, and the id; not the model's
+// ("Read that file... You will be told when it ends", "comes to you as
+// notices... end your reply"), which the screen showed, and then said again.
+func TestBackgroundStartsInThePersonsWords(t *testing.T) {
+	g := newRig(t, 120, 30, text.NoColor)
+	g.keys(`"start them" <Enter>`).start()
+	bash := map[string]any{"command": "make watch", "run_in_background": true}
+	g.ev(toolCall("c1", "Bash"), replyEnd(core.StopToolUse), toolStart("c1", "Bash", bash))
+	g.ev(toolEnd("c1", "Bash", bash, core.ToolResult{
+		Content: []core.Block{core.Text("Started in the background as bg1 (process group 42).\nIts output is collected in /home/jae/.local/share/gnosh/x/bg1.out. Read that file to see it; TaskStop stops the command. You will be told when it ends.")},
+		Meta:    map[string]any{"backgroundTaskId": "bg1", "persistedOutputPath": "/home/jae/.local/share/gnosh/x/bg1.out"},
+	}, 0))
+	mon := map[string]any{"command": "tail -f log", "description": "watch the log"}
+	g.ev(toolCall("c2", "Monitor"), replyEnd(core.StopToolUse), toolStart("c2", "Monitor", mon))
+	g.ev(toolEnd("c2", "Monitor", mon, core.ToolResult{
+		Content: []core.Block{core.Text("Monitor bg2 watches: watch the log. What the command prints comes to you as notices from gnosh. Go on with other work, or end your reply to wait for the lines.")},
+		Meta:    map[string]any{"taskId": "bg2", "persistedOutputPath": "/home/jae/.local/share/gnosh/x/bg2.out"},
+	}, 0))
+	sub := map[string]any{"description": "survey the tests", "prompt": "Survey the tests.", "run_in_background": true}
+	g.ev(toolCall("c3", "Agent"), replyEnd(core.StopToolUse), toolStart("c3", "Agent", sub))
+	g.ev(toolEnd("c3", "Agent", sub, core.ToolResult{
+		Content: []core.Block{core.Text("The sub-agent is working in the background on: survey the tests. Its id is a7. Its report will come to you as a notice from gnosh when it ends; until then it is still running, so do not report what it found before that notice arrives.")},
+		Meta:    map[string]any{"status": "async_launched", "agentId": "a7", "agentType": "general-purpose"},
+	}, 0))
+	// A report shown without the id that ends it for the model.
+	fg := map[string]any{"description": "count the tests", "prompt": "Count them."}
+	g.ev(toolCall("c4", "Agent"), replyEnd(core.StopToolUse), toolStart("c4", "Agent", fg))
+	g.ev(toolEnd("c4", "Agent", fg, core.ToolResult{
+		Content: []core.Block{core.Text("There are 12 tests.\nAll of them pass.\n\n[agent id: a9]")},
+		Meta:    map[string]any{"status": "completed", "agentId": "a9"},
+	}, 0))
+	g.committedHas("its output goes to ~/.local/share/gnosh/x/bg1.out", "running in the background as bg1",
+		"watching as bg2", "its output goes to ~/.local/share/gnosh/x/bg2.out",
+		"Agent survey the tests · running in the background as a7", "There are 12 tests.", "All of them pass.").
+		committedLacks("Read that file", "You will be told", "comes to you as notices", "end your reply", "do not report what it found", "[agent id: a9]")
+}
+
+// EnterPlanMode and PushNotification say what came of them in the
+// person's words, not the model's.
+func TestPlanModeAndNotificationLines(t *testing.T) {
+	g := newRig(t, 120, 30, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	g.ev(toolCall("c1", "EnterPlanMode"), replyEnd(core.StopToolUse), toolStart("c1", "EnterPlanMode", map[string]any{}))
+	g.ev(toolEnd("c1", "EnterPlanMode", map[string]any{}, core.ToolResult{
+		Content: []core.Block{core.Text("Plan mode is on: read, search and think, and change nothing. When the plan is ready, present it with ExitPlanMode.")},
+		Meta:    map[string]any{"planMode": true}}, 0))
+	push := map[string]any{"message": "done"}
+	g.ev(toolCall("c2", "PushNotification"), replyEnd(core.StopToolUse), toolStart("c2", "PushNotification", push))
+	g.ev(toolEnd("c2", "PushNotification", push, core.ToolResult{
+		Content: []core.Block{core.Text("Notification not sent: the user is at the terminal and reads what you write.")},
+		Meta:    map[string]any{"notSent": "you were at the terminal"}}, 0))
+	g.committedHas("plan mode on", "not sent: you were at the terminal").committedLacks("present it with ExitPlanMode", "reads what you write")
+}
+
+// A skill loaded, a search and a fetch say what came of them in the
+// person's words (seen on the devbox's screen: the skill's lead for the
+// model, tags and all; the search server's address; the smaller model's
+// answer about the page).
+func TestSkillSearchAndFetchLines(t *testing.T) {
+	g := newRig(t, 120, 40, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	sk := map[string]any{"skill": "greet", "args": "warmly"}
+	g.ev(toolCall("c1", "Skill"), replyEnd(core.StopToolUse), toolStart("c1", "Skill", sk))
+	g.ev(toolEnd("c1", "Skill", sk, core.ToolResult{
+		Content: []core.Block{core.Text("<gnosh>The skill greet is loaded. What follows is its text: the user's own instructions for this kind of task. Carry them out.</gnosh>\n\nSay hello.")},
+		Meta:    map[string]any{"skill": "greet", "source": "/p/.gnosh/skills/greet/SKILL.md", "loaded": "now"}}, 0))
+	search := map[string]any{"query": "terminal agent"}
+	g.ev(toolCall("c2", "WebSearch"), replyEnd(core.StopToolUse), toolStart("c2", "WebSearch", search))
+	g.ev(toolEnd("c2", "WebSearch", search, core.ToolResult{
+		Content: []core.Block{core.Text("Results for \"terminal agent\", from 127.0.0.1:\n1. A terminal agent\n   https://agent.test/one\n")},
+		Meta: map[string]any{"query": "terminal agent", "results": []any{
+			map[string]any{"title": "A terminal agent", "url": "https://agent.test/one"},
+			map[string]any{"title": "https://bare.test/x", "url": "https://bare.test/x"},
+			map[string]any{"title": "Third", "url": "https://third.test/3"},
+			map[string]any{"title": "Fourth", "url": "https://fourth.test/4"}}}}, 0))
+	fetch := map[string]any{"url": "https://example.com", "prompt": "what is it"}
+	g.ev(toolCall("c3", "WebFetch"), replyEnd(core.StopToolUse), toolStart("c3", "WebFetch", fetch))
+	g.ev(toolEnd("c3", "WebFetch", fetch, core.ToolResult{
+		Content: []core.Block{core.Text("It is a page kept for use in examples.")},
+		Meta:    map[string]any{"bytes": 1256, "code": 200, "codeText": "OK", "url": "https://example.com"}}, 0))
+	moved := map[string]any{"url": "https://a.test/", "prompt": "x"}
+	g.ev(toolCall("c4", "WebFetch"), replyEnd(core.StopToolUse), toolStart("c4", "WebFetch", moved))
+	g.ev(toolEnd("c4", "WebFetch", moved, core.ToolResult{
+		Content: []core.Block{core.Text("https://a.test/ redirects to https://b.test/, which is on another host, and WebFetch does not follow that.")},
+		Meta:    map[string]any{"bytes": 0, "code": 301, "codeText": "Moved Permanently", "redirect": "https://b.test/"}}, 0))
+	g.committedHas("Skill greet warmly · loaded",
+		"WebSearch terminal agent · 4 results", "A terminal agent · agent.test", "https://bare.test/x", "Third · third.test", "1 more line not shown",
+		"WebFetch https://example.com · received 1.2 KB (200 OK)",
+		"redirects to https://b.test/, on another host: not followed").
+		committedLacks("Carry them out", "gnosh>", "127.0.0.1", "kept for use in examples", "x · bare.test")
+}
+
+// A self-paced /loop's run that schedules the next says when, with the
+// model's reason under the call, and ends as done: not "The turn was
+// ended" as a warning, after a notice that said the time a third time.
+func TestLoopWakeupLines(t *testing.T) {
+	g := newRig(t, 120, 30, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	in := map[string]any{"delaySeconds": 600, "reason": "nothing changes before then", "prompt": "check the clock"}
+	g.ev(toolCall("c1", "ScheduleWakeup"), replyEnd(core.StopToolUse), toolStart("c1", "ScheduleWakeup", in))
+	g.ev(toolEnd("c1", "ScheduleWakeup", in, core.ToolResult{
+		Content: []core.Block{core.Text("The loop's next run is at 19:20, in 10 minutes. This turn ends here: the run starts by itself then.")},
+		Meta:    map[string]any{"nextRun": "19:20", "wait": "10 minutes"},
+		Notes:   []string{"nothing changes before then"}}, 0))
+	g.ev(&agent.TurnEndEvent{Result: agent.TurnResult{Reason: agent.EndHalted, Driver: "ScheduleWakeup", Planned: true,
+		Detail: "the loop's next run is at 19:20", Rounds: 1, Duration: 2 * time.Second}})
+	g.committedHas("ScheduleWakeup · next run at 19:20, in 10 minutes", "nothing changes before then", "done in 2s").
+		committedLacks("This turn ends here", "The turn was ended", "check the clock")
+}
+
+// A call of a tool there is not says so in one sentence on the screen: the
+// list of the tools there are is the model's.
+func TestUnknownToolLine(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	args := map[string]any{"x": 1}
+	g.ev(toolCall("c1", "Foo"), replyEnd(core.StopToolUse), toolStart("c1", "Foo", args))
+	g.ev(toolEnd("c1", "Foo", args, core.ToolResult{
+		Content: []core.Block{core.Text(`There is no tool named "Foo", so nothing ran. The tools you have are: Bash, Edit, Read.`)},
+		IsError: true, Meta: map[string]any{"unknownTool": true}}, 0))
+	g.committedHas(`There is no tool named "Foo", so nothing ran.`).committedLacks("The tools you have are")
 }

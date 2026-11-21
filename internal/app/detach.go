@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
@@ -150,14 +151,15 @@ func (l *live) forkRun(ctx context.Context, c *SlashContext, subtask bool) error
 		return fmt.Errorf("the copy %s was made, and could not be started (%v): gnosh -r %s opens it", id, err, id)
 	}
 	writeRunPID(log, pid)
+	task := ""
+	if subtask {
+		task = prompt
+	}
+	l.p.runs.Store(id, &watchedRun{session: l.ts.ID(), what: what, log: log, path: path, task: task})
 	if t := l.st.tree; t != nil {
 		// The run works in this session's work tree, which must outlive
 		// this session.
 		t.forked.Store(true)
-	}
-	task := ""
-	if subtask {
-		task = prompt
 	}
 	l.background(func(ctx context.Context) { l.watchRun(ctx, id, log, path, task) })
 	if subtask {
@@ -240,11 +242,25 @@ func (l *live) watchRun(ctx context.Context, id, logPath, path, task string) {
 			l.notice(agent.LevelWarning, what, fmt.Sprintf("The %s %s ended without taking its session (what it printed is in %s).%s", what, RunShort(id), l.tilde(logPath), said))
 			end.State, end.Why = prompt.AgentFailed, "it ended without starting"
 		}
+		l.p.runs.Delete(id)
 		if task != "" {
 			l.subtaskEnded(end, r.output)
 		}
 		return
 	}
+}
+
+// watchRuns watches again, in a session opened anew (a rewind), the /fork
+// and /subtask runs it started that still work: what ends them is said,
+// and a /subtask's answer comes back, as in the session before.
+func (l *live) watchRuns() {
+	own := l.ts.ID()
+	l.p.runs.Range(func(id, v any) bool {
+		if r := v.(*watchedRun); r.session == own {
+			l.background(func(ctx context.Context) { l.watchRun(ctx, id.(string), r.log, r.path, r.task) })
+		}
+		return true
+	})
 }
 
 // subtaskEnded gives the model what a run /subtask started printed, once
@@ -290,6 +306,75 @@ func (l *live) copySession(what string) (id, path string, err error) {
 		err = cerr
 	}
 	return id, path, err
+}
+
+// runMark begins every line gnosh writes into a run's log about the run.
+const runMark = "gnosh: "
+
+// runOutput is what a run in the background prints, on its way into its
+// log: a line of it that begins as gnosh's own lines about the run do
+// (runMark) gets a space before it, so that nothing the run prints, a
+// model's reply among it, is taken for gnosh's word about the run: the
+// folder it works in, its session, that it was stopped (the relay review
+// of 2026-11-19: a reply that wrote them had "go on" resume the run in
+// the home folder). gnosh's own lines go into the log the other way:
+// logHead, runEnded, stopping and renaming a run. The run's standard
+// output and its standard error are one file, so they go through one
+// runOutput, which knows where its lines begin.
+type runOutput struct {
+	mu      sync.Mutex
+	w       io.Writer // where flush writes
+	mid     bool      // within a line
+	pending []byte    // the start of a line, while it may be runMark
+}
+
+// to is a writer to w through o.
+func (o *runOutput) to(w io.Writer) io.Writer { return runOutputTo{o, w} }
+
+type runOutputTo struct {
+	o *runOutput
+	w io.Writer
+}
+
+func (t runOutputTo) Write(b []byte) (int, error) {
+	o := t.o
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	out := make([]byte, 0, len(b)+len(o.pending)+1)
+	for _, c := range b {
+		if o.mid {
+			out = append(out, c)
+			o.mid = c != '\n'
+			continue
+		}
+		o.pending = append(o.pending, c)
+		mark := string(o.pending) == runMark
+		if mark || !strings.HasPrefix(runMark, string(o.pending)) {
+			if mark {
+				out = append(out, ' ')
+			}
+			out = append(out, o.pending...)
+			o.mid = c != '\n'
+			o.pending = o.pending[:0]
+		}
+	}
+	if _, err := t.w.Write(out); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+// flush writes what is held of the start of a line: the run is ending.
+func (o *runOutput) flush() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if len(o.pending) > 0 {
+		_, _ = o.w.Write(o.pending)
+		o.pending, o.mid = o.pending[:0], true
+	}
 }
 
 // logHead begins a run's log with what it is: when it started, the
@@ -423,11 +508,19 @@ func runsIn(dirs []string, since time.Time) []backgroundRun {
 		paths, _ := filepath.Glob(filepath.Join(dir, "*.background.log"))
 		for _, p := range paths {
 			info, err := os.Stat(p)
-			if err != nil || info.ModTime().Before(since) {
+			if err != nil {
 				continue
 			}
+			// gnosh names a run's log after its session, so a log named
+			// otherwise is no run's (".background.log" would be the run
+			// of every process: the relay review of 2026-11-19). And an
+			// old log is left out unless its run still works: one that
+			// waits on a question for more than a week is still there.
 			id := strings.TrimSuffix(filepath.Base(p), ".background.log")
-			r := readRunLog(p, id, info.ModTime())
+			if !transcript.ValidID(id) || info.ModTime().Before(since) && !runAlive(id, p, "") {
+				continue
+			}
+			r := readRunLogKept(p, id, info)
 			r.session = id
 			r.file = firstOf(r.file, filepath.Join(dir, id+".jsonl"))
 			r.running = runAlive(id, p, r.file)
@@ -487,6 +580,46 @@ const runLogRead = 1 << 20
 // line of this session's, the lines that follow it at once, and gnosh
 // stop's line with its time; the run's output, which may quote any of
 // them, is not.
+// runLogsRead keeps, by its path, what readRunLog read of each log, while
+// the log stays as it was: the agent view lists the runs every second,
+// and read every log again each time, up to runLogRead of each (the relay
+// review of 2026-11-19).
+var runLogsRead struct {
+	sync.Mutex
+	m map[string]keptRunLog
+}
+
+type keptRunLog struct {
+	id   string
+	info os.FileInfo
+	run  backgroundRun
+}
+
+// readRunLogKept is readRunLog of the log at path, whose file is info,
+// from what was read of it before when it is the same file, of the same
+// size and time, as then. (A log is only ever added to, or started
+// afresh.)
+func readRunLogKept(path, id string, info os.FileInfo) backgroundRun {
+	runLogsRead.Lock()
+	k, ok := runLogsRead.m[path]
+	runLogsRead.Unlock()
+	if ok && k.id == id && os.SameFile(k.info, info) && k.info.Size() == info.Size() && k.info.ModTime().Equal(info.ModTime()) {
+		r := k.run
+		r.output = slices.Clone(r.output)
+		return r
+	}
+	r := readRunLog(path, id, info.ModTime())
+	k = keptRunLog{id: id, info: info, run: r}
+	k.run.output = slices.Clone(r.output)
+	runLogsRead.Lock()
+	if runLogsRead.m == nil || len(runLogsRead.m) >= 4096 {
+		runLogsRead.m = map[string]keptRunLog{}
+	}
+	runLogsRead.m[path] = k
+	runLogsRead.Unlock()
+	return r
+}
+
 func readRunLog(path, id string, started time.Time) backgroundRun {
 	r := backgroundRun{log: path, started: started}
 	f, err := os.Open(path)

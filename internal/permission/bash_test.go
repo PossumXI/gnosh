@@ -452,6 +452,34 @@ func TestBashReadOnlyWithFileSystem(t *testing.T) {
 	}
 }
 
+// A pattern copied into a folder lands under the names of what it
+// matches, which are not in the folder yet: each is held to the Edit
+// rules, in every mode (oracle seed 176: "cp * x build/" with
+// permissions skipped wrote build/a.txt past a deny rule on *.txt).
+func TestPatternCopiedIntoAFolder(t *testing.T) {
+	fs := fakeFS{files: []string{"/proj/a.txt", "/proj/b.go", "/proj/src/c.txt", "/proj/src/d.go", "/proj/build/old.go"}}
+	for _, mode := range []Mode{ModeBypass, ModeAcceptEdits, ModeDefault} {
+		o := testOptions(mode, rules{deny: []string{"Edit(*.txt)"}})
+		o.Resolve, o.Glob = fs.resolve, fs.glob
+		e := mustEngine(t, o)
+		for cmd, denied := range map[string]bool{
+			"cp * build/":           true,
+			"cp * x build/":         true,
+			"cp ${HOME:+* x} build": true,
+			"mv src/* build":        true,
+			"cp -t build src/*":     true,
+			"ln -s src/* build/":    true,
+			"cp *.go build/":        false,
+			"cp src/*.go build/":    false,
+		} {
+			d := bash(e, cmd)
+			if denied && d.Behavior != Deny || !denied && d.Behavior == Deny {
+				t.Errorf("%s: %q: got %s (%s), want denied %v", mode, cmd, d.Behavior, d.Reason, denied)
+			}
+		}
+	}
+}
+
 func TestBashAcceptEdits(t *testing.T) {
 	var cases []bashCase
 	for _, cmd := range []string{
@@ -622,5 +650,11 @@ func TestMonitorUsesBashRules(t *testing.T) {
 	}
 	if d := mon("make watch"); d.Behavior != Ask {
 		t.Errorf("Monitor asks otherwise: %+v", d)
+	}
+	// Its command runs in the background, which Bash's rules about that
+	// argument cover (the hosts review of 2026-11-19).
+	e = engine(t, ModeDefault, rules{allow: []string{"Bash(npm run *)"}, deny: []string{"Bash(run_in_background:true)"}})
+	if d := mon("npm run dev"); d.Behavior != Deny {
+		t.Errorf("Monitor under a deny of Bash(run_in_background:true): %+v", d)
 	}
 }

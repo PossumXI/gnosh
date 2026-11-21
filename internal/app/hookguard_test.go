@@ -308,6 +308,13 @@ func TestSubAgentQuestionNamesIt(t *testing.T) {
 	if !strings.HasPrefix(q.Title, "The sub-agent general-purpose asks: Allow Bash?") {
 		t.Errorf("the question's title is %q", q.Title)
 	}
+	// A yes that keeps a rule says it holds for the whole session, not for
+	// the asking sub-agent alone.
+	for _, ch := range q.Choices {
+		if strings.HasPrefix(ch.Key, "always:") && !strings.HasPrefix(ch.Label, "Yes, for the whole session and all its agents, and don't ask again") {
+			t.Errorf("a sub-agent's question offers %q", ch.Label)
+		}
+	}
 }
 
 // CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH and CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
