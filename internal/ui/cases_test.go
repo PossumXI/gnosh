@@ -976,7 +976,7 @@ func TestRedactLine(t *testing.T) {
 	}
 }
 
-// The session's task list stands under the prompt box, the way the
+// The session's task list stands above the prompt box, the way the
 // session last set it: what is done, what is in hand, what is to do.
 // Ctrl+T puts it out of sight and brings it back, and nothing of it is
 // ever written into the scrollback.
@@ -990,24 +990,35 @@ func TestTaskList(t *testing.T) {
 	}
 	g.ev(&app.TasksEvent{Tasks: list})
 	g.liveHas("  [x] Read the spec", "  [>] Wiring the gate", "  [ ] Test it^[[2J", "tasks 1/3")
-	// Under the box, above the status line.
-	box, first, status := -1, -1, -1
-	for i, l := range g.live {
-		switch {
-		case strings.HasPrefix(l, ">"):
-			box = i
-		case strings.Contains(l, "[x] Read the spec"):
-			first = i
-		case strings.Contains(l, "manual mode"):
-			status = i
+	// Above the box, which the status line follows: the box and its
+	// line are the region's last rows, as in Claude Code (Jae,
+	// 2026-11-21: "the todos should be above the prompt not below it").
+	places := func() (working, first, box, status int) {
+		working, first, box, status = -1, -1, -1, -1
+		for i, l := range g.live {
+			switch {
+			case strings.HasPrefix(l, "* "):
+				working = i
+			case strings.HasPrefix(l, ">"):
+				box = i
+			case strings.Contains(l, "Read the spec"):
+				first = i
+			case strings.Contains(l, "manual mode"):
+				status = i
+			}
 		}
+		return working, first, box, status
 	}
-	if !(box >= 0 && box < first && first+2 < status) {
-		t.Fatalf("the box is on row %d, the list begins on row %d, the status line is row %d:\n%s", box, first, status, strings.Join(g.live, "\n"))
+	if _, first, box, status := places(); !(first >= 0 && first+2 < box && box+1 == status) {
+		t.Fatalf("the list begins on row %d, the box is on row %d, the status line is row %d:\n%s", first, box, status, strings.Join(g.live, "\n"))
 	}
-	// It stays where it is while a turn runs and while the person types.
+	// It stays where it is while a turn runs and while the person types,
+	// under the line that says what gnosh is doing.
 	g.keys(`"go" <Enter>`).ev(busy(), turnStart(), promptOut("p1", "go"), request(1), said("Working on it.\n"))
 	g.liveHas("[>] Wiring the gate", "* ")
+	if working, first, box, status := places(); !(working >= 0 && working+1 == first && first+2 < box && box+1 == status) {
+		t.Fatalf("the working line is row %d, the list begins on row %d, the box is on row %d, the status line is row %d:\n%s", working, first, box, status, strings.Join(g.live, "\n"))
+	}
 	list[1].Status, list[2].Status = app.TaskCompleted, app.TaskInProgress
 	g.ev(&app.TasksEvent{Tasks: list})
 	g.liveHas("[x] Wire the gate", "[>] Test it", "tasks 2/3").liveLacks("Wiring the gate")

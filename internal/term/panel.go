@@ -163,6 +163,21 @@ func (p *Panel) TextWidth() int {
 func (p *Panel) Commit(lines ...string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.commitLocked(lines)
+	return p.paintLocked()
+}
+
+// CommitLive is Commit and then SetLive, drawn once, as
+// Renderer.CommitLive is.
+func (p *Panel) CommitLive(commit, live []string, cursorRow, cursorCol int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.commitLocked(commit)
+	p.setLiveLocked(live, cursorRow, cursorCol)
+	return p.paintLocked()
+}
+
+func (p *Panel) commitLocked(lines []string) {
 	n := 0
 	for _, l := range lines {
 		for _, part := range strings.Split(l, "\n") {
@@ -178,7 +193,6 @@ func (p *Panel) Commit(lines ...string) error {
 	if p.back > 0 {
 		p.back += n
 	}
-	return p.paintLocked()
 }
 
 // SetLines puts lines in place of everything committed, and draws. While
@@ -217,12 +231,7 @@ func (p *Panel) SetView(lines, live []string, cursorRow, cursorCol int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	top := p.topLocked()
-	p.live = p.live[:0]
-	for _, l := range live {
-		p.live = append(p.live, p.left.prepare(l))
-	}
-	p.wantShown = cursorRow >= 0
-	p.wantRow, p.wantCol = max(cursorRow, 0), max(cursorCol, 0)
+	p.setLiveLocked(live, cursorRow, cursorCol)
 	p.setLinesLocked(lines, top)
 	return p.paintLocked()
 }
@@ -254,13 +263,17 @@ func (p *Panel) ScrollTo(row int) bool {
 func (p *Panel) SetLive(lines []string, cursorRow, cursorCol int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.setLiveLocked(lines, cursorRow, cursorCol)
+	return p.paintLocked()
+}
+
+func (p *Panel) setLiveLocked(lines []string, cursorRow, cursorCol int) {
 	p.live = p.live[:0]
 	for _, l := range lines {
 		p.live = append(p.live, p.left.prepare(l))
 	}
 	p.wantShown = cursorRow >= 0
 	p.wantRow, p.wantCol = max(cursorRow, 0), max(cursorCol, 0)
-	return p.paintLocked()
 }
 
 // SetPanel replaces what the panel shows, a row a line from its top.

@@ -77,11 +77,23 @@
 //	  output
 //	a blank row
 //	one line that says what gnosh is doing or waiting for, while it is busy
+//	the session's task list, unless Ctrl+T has put it out of sight
 //	the prompts and commands that wait for their turn
 //	the question, when one is put; otherwise the prompt box
-//	the session's task list, unless Ctrl+T has put it out of sight
 //	the status line
 //	a short notice that a key called for, for a few seconds, wrapped
+//
+// The prompt box and the lines that go with it are the last rows, and the
+// task list stands above them, as in Claude Code (Jae, 21 November 2026,
+// over ssh to the Mac Studio: "the txt field (and attached lines ...) do
+// not stay on the bottom of the screen... and the todos should be above
+// the prompt not below it... things like that. vs claude code"). The
+// region follows the conversation down the screen, and once it reaches
+// the bottom it stays there: the renderer is told which row the cursor is
+// on (the terminal is asked when gnosh starts, and again after a resize
+// or after the screen was lent to the shell or an editor), and when the
+// region gets shorter at the bottom it keeps its last row on the screen's
+// last row, with blank rows above it that the next committed lines fill.
 //
 // The line that says what gnosh is doing is always the truth as the
 // session reports it, in plain words with the time that state has lasted:
@@ -133,7 +145,8 @@
 // one by one, the least needed first and the permission mode last.
 //
 // The task list is the session's own (app.TasksEvent: what mem holds as
-// the frame's tasks). It stands under the prompt box, a row a task:
+// the frame's tasks). It stands above the prompt box, under the row that
+// says what gnosh is doing, a row a task, as Claude Code shows its list:
 // "[x]" for one that is done, "[>]" for the one in hand, in the words it
 // has while it is being done, "[ ]" for one still to do. It takes eight
 // rows at most; a longer list shows the tasks around the one in hand and
@@ -147,7 +160,8 @@
 //
 // Something moves from the live region to the scrollback in one step: the
 // lines are committed and the next live region no longer holds them, in
-// the same frame. Nothing is in both, and nothing is in neither.
+// the same frame and the same write (term.Renderer.CommitLive). Nothing is
+// in both, and nothing is in neither, not even for a moment on the screen.
 //
 // # Typing while the model works
 //

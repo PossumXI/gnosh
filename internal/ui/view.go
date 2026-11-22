@@ -19,11 +19,18 @@ import (
 //	each call being written or run: its heading, and its last output
 //	(a blank row)
 //	what gnosh is doing or waiting for   one row, only while it is busy
+//	the session's task list, unless Ctrl+T has put it out of sight
 //	the prompts that wait for their turn
 //	the question, when one is put; otherwise the prompt box
-//	the session's task list, unless Ctrl+T has put it out of sight
 //	the status line                    one row
 //	a short notice a key called for    for a few seconds; wrapped, three rows at most
+//
+// The rows a person types into, and the status line and notice that go
+// with them, are the region's last rows, as Claude Code's input box is
+// the last thing on its screen; the task list stands above them, under
+// the row that says what gnosh is doing (Jae, 2026-11-21: "the todos
+// should be above the prompt not below it"). Once the region has come
+// down to the bottom of the screen, the renderer keeps it there.
 //
 // It is kept small: everything above the row that says what gnosh is
 // doing is cut from its top when the region would grow past its bound,
@@ -168,6 +175,7 @@ func (s *session) compose() (lines []string, row, col int) {
 	if act != "" {
 		lines = append(lines, act)
 	}
+	lines = append(lines, tasks...)
 	lines = append(lines, notes...)
 	if midRow >= 0 {
 		row, col = len(lines)+midRow, midCol
@@ -175,7 +183,6 @@ func (s *session) compose() (lines []string, row, col int) {
 		row = -1
 	}
 	lines = append(lines, mid...)
-	lines = append(lines, tasks...)
 	lines = append(lines, status...)
 	lines = append(lines, hint...)
 
@@ -373,7 +380,7 @@ func (s *session) queueLines(width, most int) []string {
 	return rows
 }
 
-// taskLines draws the session's task list under the prompt box: a box for
+// taskLines draws the session's task list above the prompt box: a box for
 // each task, ticked when it is done and pointed at when it is the one in
 // hand, which reads the way it does while it is being done. A list longer
 // than its rows shows the tasks around the one in hand, and counts the

@@ -227,6 +227,21 @@ calls, notices and questions still stand under each other), a blank row
 above and below what is still being written, and one before the change a
 question shows.
 
+21 November 2026, using gnosh over ssh on the Mac Studio, with a screenshot
+of the working line, the prompt, five tasks under it and the status line:
+
+> gnosh as i'm using it ssh studio... the txt field (and attached lines see clipboard do not stay on the bottom of the screen... and the todos should be above the prompt not below it... things like that. vs claude code
+
+Set: the task list stands above the prompt box, under the line that says
+what gnosh is doing, and the box with its status line is the last thing on
+the screen, as in Claude Code. Once the live region has come down to the
+bottom of the screen it stays there, and lines that move from it to the
+scrollback are drawn once (`spec/DECISIONS.md` item 387). Claude's part:
+finding the two causes, keeping the box down with blank rows above the
+region rather than below it, following the cursor's row through the
+renderer's own writes, and leaving the region where it is until it first
+reaches the bottom, as Claude Code's classic screen does.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

@@ -471,8 +471,12 @@ func (u *UI) open() error {
 
 	// The renderer begins at the cursor and takes it to be at the start
 	// of an empty line. The command before gnosh may have left it in the
-	// middle of one, so a terminal that answers questions is asked.
+	// middle of one, so a terminal that answers questions is asked. The
+	// answer also tells the renderer which row of the screen it begins
+	// on, so that it can keep the live region at the bottom of the screen
+	// once the region gets there; an answer that comes late still does.
 	if u.caps.Answered && t.QueryCursorPosition() == nil {
+		u.r.AskedCursor()
 		timer := time.NewTimer(200 * time.Millisecond)
 		defer timer.Stop()
 	wait:
@@ -483,9 +487,12 @@ func (u *UI) open() error {
 					break wait
 				}
 				if r, isReply := ev.(term.Reply); isReply && r.Kind == term.ReplyCursorPosition {
+					row := r.Row
 					if r.Col > 1 {
 						_, _ = t.Write([]byte("\r\n"))
+						row = min(row+1, rows)
 					}
+					u.r.CursorAnswer(row)
 					break wait
 				}
 				u.ahead = append(u.ahead, ev)
@@ -797,6 +804,13 @@ func (u *UI) terminal(ev term.Event) {
 func (u *UI) terminalOne(ev term.Event) {
 	switch ev := ev.(type) {
 	case term.Reply:
+		if ev.Kind == term.ReplyCursorPosition {
+			// Where the cursor is, as the renderer asked (askCursor).
+			if u.r != nil {
+				u.r.CursorAnswer(ev.Row)
+			}
+			return
+		}
 		// An answer that came later than the probe waited for it.
 		if u.caps.Note(ev) {
 			u.setModes()
@@ -821,6 +835,22 @@ func (u *UI) draw() {
 		return
 	}
 	u.s.frame()
+	u.askCursor()
+}
+
+// askCursor asks the terminal which row the cursor is on when the
+// renderer has lost track of it (the terminal was resized, or lent to the
+// shell or an editor), so that the live region can keep to the bottom of
+// the screen again. It asks only while the session draws on the
+// scrollback itself: on the side panel's screen, or a view's, the answer
+// would tell of the wrong screen.
+func (u *UI) askCursor() {
+	if u.t == nil || u.r == nil || !u.caps.Answered || u.s == nil || u.s.r != screen(u.r) || !u.r.WantsCursor() {
+		return
+	}
+	if u.t.QueryCursorPosition() == nil {
+		u.r.AskedCursor()
+	}
 }
 
 // heard is a signal that one of the two sides has told of and the other

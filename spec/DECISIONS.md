@@ -5878,3 +5878,43 @@ or kept with the reason said (27).
     invisible characters are out is refused, saying so; --name is
     refused before a session is made. The name gnosh makes of a first
     prompt stays as short as lists show it (120 bytes, with an ellipsis).
+
+387. **The prompt box keeps to the bottom of the screen, and the task list
+    stands above it.** Jae, 21 November 2026, using gnosh over ssh on the
+    Mac Studio: "the txt field (and attached lines see clipboard do not
+    stay on the bottom of the screen... and the todos should be above the
+    prompt not below it... things like that. vs claude code". His
+    screenshot had the working line, then the prompt, then five tasks,
+    then the status line. Two things moved the box up off the last row.
+    Lines that moved from the live region to the scrollback were
+    committed in one write, which drew the old region again under them,
+    and the region without them was set in a second: at the bottom of the
+    screen the first write scrolled the screen by their height, and the
+    second left as many rows empty under the box (tried in the screen
+    emulator: three streamed lines committed left the box four rows up).
+    And the region gets shorter by itself all the time (a folded
+    thought's rows go when it ends, the working line when a turn ends, a
+    list when it closes), which the renderer met by erasing the rows it
+    gave up, at the bottom. Now the session commits and redraws in one
+    write (term.Renderer.CommitLive; the side panel's too). And the
+    renderer keeps the region at the bottom once it has come down to it:
+    it is told which row the cursor is on (gnosh already asked the
+    terminal where the cursor is at start, for the column; now the row is
+    kept, and the terminal is asked again after a resize and after the
+    screen was lent to the shell or an editor), follows that row through
+    its own cursor movements, and when the region would leave rows empty
+    under it, puts blank rows above it instead, which the next committed
+    lines fill, so nothing scrolls for them. Until the region reaches the
+    bottom, near the top of a screen not yet full, it shrinks as before,
+    as Claude Code's classic screen does: the box follows the
+    conversation down. An answer that comes after more was drawn is
+    brought up to date with the moves since its question; only the last
+    question's answer counts, one asked before a resize or a Reset does
+    not, and a terminal slow to answer is asked again. Clear (exit,
+    Ctrl+Z, the editor, Ctrl+L) takes the blank rows away with the
+    region, so the shell's prompt comes right under the conversation; a
+    terminal that answers no questions keeps the old behaviour. The task
+    list moved above the box, under the working line, as Claude Code
+    shows its list; the prompts that wait stay right above the box, and
+    the box, its status line and a key's short notice are the region's
+    last rows.

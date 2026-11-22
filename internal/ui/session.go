@@ -611,24 +611,23 @@ func (s *session) leave(code int, why string) {
 	s.done, s.code, s.why = true, code, why
 }
 
+// liveCommitter is a screen that commits lines and replaces the live
+// region in one write (term.Renderer, term.Panel).
+type liveCommitter interface {
+	CommitLive(commit, lines []string, cursorRow, cursorCol int) error
+}
+
 // frame writes what is waiting: first the lines to commit, for good, and
 // then the live region as it stands now. It is the only place the session
 // writes to the terminal.
 func (s *session) frame() {
-	if len(s.pending) > 0 {
-		if s.onCommit != nil {
-			s.onCommit(s.pending)
+	if s.agents != nil || s.view != nil {
+		s.commitPending()
+		if s.agents != nil {
+			s.agentsFrame()
+		} else {
+			s.viewFrame()
 		}
-		s.keep(s.r.Commit(s.pending...))
-		s.pending = s.pending[:0]
-	}
-	if s.agents != nil {
-		s.agentsFrame()
-		s.dirty = false
-		return
-	}
-	if s.view != nil {
-		s.viewFrame()
 		s.dirty = false
 		return
 	}
@@ -636,11 +635,40 @@ func (s *session) frame() {
 		s.keep(s.panel.SetPanel(s.panelLines(s.panel.TextWidth())))
 	}
 	lines, row, col := s.compose()
+	// What moves from the live region to the scrollback goes in the same
+	// write as the region without it: committed first and drawn again
+	// below, it would stand on the screen twice for a moment, and at the
+	// bottom of the screen push the box up off the last row.
+	if lc, both := s.r.(liveCommitter); both && len(s.pending) > 0 {
+		if s.onCommit != nil {
+			s.onCommit(s.pending)
+		}
+		if s.onLive != nil {
+			s.onLive(lines, row, col)
+		}
+		s.keep(lc.CommitLive(s.pending, lines, row, col))
+		s.pending = s.pending[:0]
+		s.dirty = false
+		return
+	}
+	s.commitPending()
 	if s.onLive != nil {
 		s.onLive(lines, row, col)
 	}
 	s.keep(s.r.SetLive(lines, row, col))
 	s.dirty = false
+}
+
+// commitPending commits the lines that wait, by themselves.
+func (s *session) commitPending() {
+	if len(s.pending) == 0 {
+		return
+	}
+	if s.onCommit != nil {
+		s.onCommit(s.pending)
+	}
+	s.keep(s.r.Commit(s.pending...))
+	s.pending = s.pending[:0]
 }
 
 // keep remembers the first error a write to the terminal gave. A terminal
