@@ -7,6 +7,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/markdown"
 	"github.com/gnosh-ai/gnosh/internal/text"
 )
 
@@ -246,5 +247,25 @@ func TestTheWordExitLeaves(t *testing.T) {
 	g.keys(`"exit the loop early" <Enter>`)
 	if g.s.done {
 		t.Fatal("a prompt that begins with exit left gnosh")
+	}
+}
+
+// What an answer quotes is not in the answer's green: the bar is purple,
+// the words in the terminal's own colour (Jae, 21 November 2026: "the
+// stuff to the right of the purple bar shouldn't be green").
+func TestQuotedWordsAreNotTheReplysGreen(t *testing.T) {
+	for _, p := range []text.Profile{text.TrueColor, text.ANSI256, text.ANSI16} {
+		th := DefaultTheme(p)
+		green := text.Style{}.Fg(th.Palette.Reply).In(p).Sequence()
+		opts := markdown.Options{Width: 60, Profile: p, Theme: th.Markdown}
+		said := markdown.Render("I said so.\n", opts)
+		if len(said) == 0 || !strings.Contains(said[0], green) {
+			t.Fatalf("profile %v: the answer's own words are not green: %q", p, said)
+		}
+		for _, l := range markdown.Render("> *None of the three.* They said so.\n", opts) {
+			if strings.Contains(l, green) {
+				t.Errorf("profile %v: a quoted line is in the answer's green: %q", p, l)
+			}
+		}
 	}
 }

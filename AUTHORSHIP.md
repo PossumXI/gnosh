@@ -252,6 +252,14 @@ already says; what mem decided stays (`spec/DECISIONS.md` item 388).
 Claude's part: doing it on the screen only, matching the code's strings
 as mem cuts and flattens them, and leaving the model's wording to him.
 
+Later that evening, of an answer quoting jarvis behind the purple bar:
+
+> see clipboard... the stuff to the right of the purple bar shouldn't be green.
+
+Set: a quote's words are in the terminal's own colour, behind the purple bar
+(`spec/DECISIONS.md` item 389). Claude's part: the terminal's own colour
+rather than a grey, so that a long quote stays easy to read.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

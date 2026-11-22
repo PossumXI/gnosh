@@ -5940,3 +5940,16 @@ or kept with the reason said (27).
     untouched. The model went on to say the question a third time in its
     reply ("Full quote:"); what the model is told about that is its
     prompt's wording, left to Jae.
+
+389. **What an answer quotes is not in the answer's green.** Jae, 21
+    November 2026, with a screenshot of an answer quoting jarvis behind
+    the purple bar: "the stuff to the right of the purple bar shouldn't
+    be green". The Markdown renderer drew a block quote's prose in Text,
+    which gnosh sets to the answers' phosphor green (item about Jae's 16
+    November colours), so a quote read as the model's own words. The
+    Markdown theme now has a Quote style, the prose of a block quote in
+    place of Text, with emphasis, links and code drawn over it as over
+    Text; gnosh sets it to the terminal's own colour, and the bar stays
+    purple. The renderer's own default theme draws prose and quotes
+    alike in the terminal's colour, so nothing changes there. A heading
+    or a table inside a quote keeps its own look.

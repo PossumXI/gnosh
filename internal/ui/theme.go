@@ -372,6 +372,9 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 	md.Link = plain.Fg(pal.Purple).Underline()
 	md.LinkAddress = plain.Fg(pal.Lilac)
 	md.HTML = plain.Fg(pal.Lilac)
+	// What an answer quotes is not in the answer's green: the terminal's
+	// own colour, behind the purple bar.
+	md.Quote = plain
 	md.QuoteMark = plain.Fg(pal.Purple)
 	md.ListMark = plain.Fg(pal.Purple)
 	md.TaskOpen = plain.Fg(pal.Purple)
