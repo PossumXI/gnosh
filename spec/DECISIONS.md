@@ -5918,3 +5918,25 @@ or kept with the reason said (27).
     shows its list; the prompts that wait stay right above the box, and
     the box, its status line and a key's short notice are the region's
     last rows.
+
+388. **A Gno call's receipt does not quote again what its code says.** Jae,
+    21 November 2026, with a screenshot of a mem.Ask call on the Mac
+    Studio: "see clipboard... there's redundancy". The call was shown
+    headed by its code, which held a long question for him, and mem's
+    receipt under it began "asked `decode-gothfry-lyrics/jarvis-settled-
+    holds-no` "Jarvis settled it: it holds no wallet, and the /agent
+    studio-kid reservation onl…"": mem names what a call made by its
+    name and its title, and the title was the code's own words, cut
+    short. Now the person is shown the receipt without the quoted texts
+    that a string in the call's code already holds (whole, or cut short
+    with "…"; line breaks and runs of spaces count as one space, as a
+    receipt's line writes them, and a text under three letters is left):
+    "asked `…/jarvis-settled-holds-no` (for the user); `decode-gothfry-
+    lyrics` waits on it; next: `…/pull-comments-quoting-lyrics` "pull
+    comments quoting lyrics"". What mem decided stays, with the titles
+    of items the code does not name. The model's copy of the receipt is
+    as mem wrote it: the change is the screen's (internal/ui/memecho.go),
+    and mem's receipts, its documents and the recorded runs are
+    untouched. The model went on to say the question a third time in its
+    reply ("Full quote:"); what the model is told about that is its
+    prompt's wording, left to Jae.

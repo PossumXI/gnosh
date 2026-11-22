@@ -242,6 +242,16 @@ region rather than below it, following the cursor's row through the
 renderer's own writes, and leaving the region where it is until it first
 reaches the bottom, as Claude Code's classic screen does.
 
+The same evening, with a screenshot of a mem.Ask call whose receipt
+quoted the question again under the code that held it:
+
+> see clipboard... there's redundancy
+
+Set: the receipt under a Gno call no longer quotes what the call's code
+already says; what mem decided stays (`spec/DECISIONS.md` item 388).
+Claude's part: doing it on the screen only, matching the code's strings
+as mem cuts and flattens them, and leaving the model's wording to him.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

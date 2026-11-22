@@ -836,6 +836,10 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 		}
 		summary = took
 	default:
+		if ev.Name == "gnovm_run" {
+			// The receipt quotes again what the code just above says.
+			text = withoutEchoes(text, str(argsOf(input), "code"))
+		}
 		summary, under = s.resultSummary(ev.Name, res, text)
 		summary = join(summary, took)
 	}
