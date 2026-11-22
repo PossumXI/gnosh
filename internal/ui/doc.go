@@ -88,12 +88,14 @@
 // over ssh to the Mac Studio: "the txt field (and attached lines ...) do
 // not stay on the bottom of the screen... and the todos should be above
 // the prompt not below it... things like that. vs claude code"). The
-// region follows the conversation down the screen, and once it reaches
-// the bottom it stays there: the renderer is told which row the cursor is
-// on (the terminal is asked when gnosh starts, and again after a resize
-// or after the screen was lent to the shell or an editor), and when the
-// region gets shorter at the bottom it keeps its last row on the screen's
-// last row, with blank rows above it that the next committed lines fill.
+// region stands on the bottom rows of the screen from the first frame,
+// whatever is above it (Jae, 22 November 2026: "the text field is not
+// fixed on bottom of screen"): the renderer is told which row the cursor
+// is on (the terminal is asked when gnosh starts, and again after a resize
+// or after the screen was lent to the shell or an editor), and keeps the
+// region's last row on the screen's last row, with blank rows above it
+// that the next committed lines fill. The conversation fills the screen
+// from the top down to the region, as in a chat.
 //
 // The line that says what gnosh is doing is always the truth as the
 // session reports it, in plain words with the time that state has lasted:

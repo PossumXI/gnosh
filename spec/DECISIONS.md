@@ -5953,3 +5953,19 @@ or kept with the reason said (27).
     purple. The renderer's own default theme draws prose and quotes
     alike in the terminal's colour, so nothing changes there. A heading
     or a table inside a quote keeps its own look.
+
+390. **The prompt box is on the bottom rows of the screen from the first
+    frame.** Jae, 22 November 2026, after item 387 shipped and he logged
+    in to the Mac Studio again, now inside tmux: "it's still doing that
+    thing here the text field is not fixed on bottom of screen". Item 387
+    kept the live region at the bottom only once it had come down to it,
+    as Claude Code's classic screen does, so on a screen not yet full (a
+    new tmux window, a short conversation) the box stood under the
+    conversation, mid-screen. Now, whenever the renderer knows the
+    cursor's row, the region's last row is the screen's last row from the
+    first frame: blank rows above the region make up the difference, and
+    the conversation fills the screen from the top down to it, as in a
+    chat, or Claude Code's fullscreen mode. Clear still takes the blank
+    rows away with the region, so the shell's prompt comes right under the
+    conversation when gnosh ends; a terminal that answers no questions
+    keeps the old behaviour.

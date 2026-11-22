@@ -29,8 +29,9 @@ import (
 // with them, are the region's last rows, as Claude Code's input box is
 // the last thing on its screen; the task list stands above them, under
 // the row that says what gnosh is doing (Jae, 2026-11-21: "the todos
-// should be above the prompt not below it"). Once the region has come
-// down to the bottom of the screen, the renderer keeps it there.
+// should be above the prompt not below it"). The renderer keeps the
+// region on the bottom rows of the screen from the first frame (Jae,
+// 2026-11-22: "the text field is not fixed on bottom of screen").
 //
 // It is kept small: everything above the row that says what gnosh is
 // doing is cut from its top when the region would grow past its bound,

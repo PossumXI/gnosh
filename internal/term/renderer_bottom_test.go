@@ -71,17 +71,18 @@ func TestCommitLive(t *testing.T) {
 	g.check("CommitLive with nothing to commit")
 }
 
-// The live region follows the conversation down the screen, and once it
-// is at the bottom it stays there: when it gets shorter, blank rows above
-// it make up the difference, and the next lines committed fill them.
+// The live region stands on the bottom rows of the screen from the first
+// frame on: when it is shorter than the rows below its top, blank rows
+// above it make up the difference, and the next lines committed fill them
+// (Jae, 2026-11-22: "the text field is not fixed on bottom of screen").
 func TestLiveRegionKeptAtTheBottom(t *testing.T) {
 	scr := vtest.New(30, 10)
 	scr.SetScrollOnClear(true)
 	r := NewRenderer(scr, 30, 10, vtest.Width)
 	told(r, scr)
 
-	// Near the top of an empty screen the region gets shorter as it
-	// always did: a list that closes takes its rows with it.
+	// On an empty screen too: the box is on the last rows at once, and a
+	// list that closes leaves it there.
 	set := func(row int, lines ...string) {
 		t.Helper()
 		if err := r.SetLive(lines, row, 2); err != nil {
@@ -97,16 +98,22 @@ func TestLiveRegionKeptAtTheBottom(t *testing.T) {
 		sameRow(t, r, scr, fmt.Sprintf("CommitLive(%q, %q)", commit, lines))
 	}
 	set(0, "> /", "/model", "/mem", "status")
-	set(0, "> ", "status")
-	if got := scr.Lines()[:3]; !reflect.DeepEqual(got, []string{">", "status", ""}) {
-		t.Fatalf("near the top the box should stay where it was: %q", got)
+	if got := lastRows(scr, 4); !reflect.DeepEqual(got, []string{"> /", "/model", "/mem", "status"}) {
+		t.Fatalf("on an empty screen the region is not on the last rows: %q\n%s", got, scr.Dump())
 	}
-	if r.bottom {
-		t.Fatal("the region was taken to be at the bottom of the screen")
+	set(0, "> ", "status")
+	want := []string{"", "", "", "", "", "", "", "", ">", "status"}
+	if got := scr.Lines(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("after the list closed the screen is\n  %q\nwant\n  %q", got, want)
 	}
 
-	// The conversation brings it down to the bottom.
-	for i := 0; i < 12; i++ {
+	// The conversation fills the screen from the top, and the box stays.
+	commitLive([]string{"line 0"}, 0, "> ", "status")
+	want = []string{"line 0", "", "", "", "", "", "", "", ">", "status"}
+	if got := scr.Lines(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("after one line the screen is\n  %q\nwant\n  %q", got, want)
+	}
+	for i := 1; i < 12; i++ {
 		commitLive([]string{fmt.Sprint("line ", i)}, 0, "> ", "status")
 	}
 	if got := lastRows(scr, 2); !reflect.DeepEqual(got, []string{">", "status"}) {
@@ -117,7 +124,7 @@ func TestLiveRegionKeptAtTheBottom(t *testing.T) {
 	// committed; the thought's rows go. The box stays on the last rows.
 	set(5, "", "~ thinking", "  a", "  b", "", "act", "> ", "status")
 	commitLive([]string{"answer 1", "answer 2"}, 1, "act", "> ", "status")
-	want := []string{"line 10", "line 11", "answer 1", "answer 2", "", "", "", "act", ">", "status"}
+	want = []string{"line 10", "line 11", "answer 1", "answer 2", "", "", "", "act", ">", "status"}
 	if got := scr.Lines(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("after the reply was committed the screen is\n  %q\nwant\n  %q", got, want)
 	}
@@ -301,7 +308,7 @@ func TestLiveRegionBackAtTheBottomAfterResize(t *testing.T) {
 // Whatever is drawn, in any order, with the cursor's row known: the
 // renderer's count of the row is the terminal's; every committed line is
 // on the terminal once and in order, then only blank rows, then the live
-// region; and once the region has reached the last row it ends there.
+// region, whose last row is the screen's last row.
 func TestLiveRegionAtTheBottomRandom(t *testing.T) {
 	for seed := int64(1); seed <= 200; seed++ {
 		rng := rand.New(rand.NewSource(seed))
@@ -316,7 +323,6 @@ func TestLiveRegionAtTheBottomRandom(t *testing.T) {
 		var committed, live []string
 		n := 0
 		line := func() string { n++; return fmt.Sprint("c", n) }
-		reached := false
 		for step := 0; step < 60; step++ {
 			live = live[:0]
 			for i := rng.Intn(rows); i >= 0; i-- {
@@ -365,12 +371,8 @@ func TestLiveRegionAtTheBottomRandom(t *testing.T) {
 			if !reflect.DeepEqual(rest, committed) && !(len(rest) == 0 && len(committed) == 0) {
 				t.Fatalf("%s: above the live region the terminal holds\n  %q\nwant the committed lines\n  %q\n%s", what, rest, committed, scr.Dump())
 			}
-			bottomRow := len(scr.AllLines()) - len(scr.Scrollback()) - 1
-			if bottomRow == rows-1 {
-				reached = true
-			}
-			if reached && r.bottom && bottomRow != rows-1 {
-				t.Fatalf("%s: the region reached the bottom and then ended on row %d of %d:\n%s", what, bottomRow, rows, scr.Dump())
+			if bottomRow := len(scr.AllLines()) - len(scr.Scrollback()) - 1; bottomRow != rows-1 {
+				t.Fatalf("%s: the region ends on row %d of %d, not on the last:\n%s", what, bottomRow, rows, scr.Dump())
 			}
 		}
 	}

@@ -24,12 +24,14 @@ import (
 // It may also be told which row of the screen the cursor is on, as the
 // terminal reports it (AskedCursor, CursorAnswer); it then follows that row
 // through its own writes. Knowing it, the renderer keeps the live region
-// at the bottom of the screen once the region has come down to it, as the
-// input box of a program that owns the screen stays put: when the region
-// gets shorter, blank rows above it make up the difference, instead of the
-// rows below it being left empty, and the next committed lines fill those
-// blank rows first. A resize, or the screen lent to another program,
-// loses the row until the terminal is asked again (WantsCursor).
+// on the bottom rows of the screen, as the input box of a program that
+// owns the screen stays put: from the first frame on, when the region is
+// shorter than the rows from its top to the screen's last, blank rows
+// above it make up the difference, instead of the rows below it being left
+// empty, and the next committed lines fill those blank rows first (Jae, 22
+// November 2026: "the text field is not fixed on bottom of screen"). A
+// resize, or the screen lent to another program, loses the row until the
+// terminal is asked again (WantsCursor).
 //
 // Lines given to the renderer are already styled and already wrapped. Each
 // must stand on its own: its colours end with it, and it takes exactly one
@@ -71,20 +73,17 @@ type Renderer struct {
 	stale bool
 
 	// at is the row of the screen the cursor is on, counted from 0 at
-	// the top, while known is true. bottom is true once the live region
-	// has reached the screen's last row: from then on it is kept there.
-	// owed counts the cursor position questions the terminal has not
-	// answered yet, and void how many of those no longer count (they were
-	// asked before a resize or a Reset). moved is what the renderer did
-	// to the cursor since the last question was asked, for its answer to
-	// be brought up to date: rows up as negative numbers, line feeds as
-	// positive ones.
-	at     int
-	known  bool
-	bottom bool
-	owed   int
-	void   int
-	moved  []int
+	// the top, while known is true. owed counts the cursor position
+	// questions the terminal has not answered yet, and void how many of
+	// those no longer count (they were asked before a resize or a Reset).
+	// moved is what the renderer did to the cursor since the last question
+	// was asked, for its answer to be brought up to date: rows up as
+	// negative numbers, line feeds as positive ones.
+	at    int
+	known bool
+	owed  int
+	void  int
+	moved []int
 
 	body []byte
 	buf  []byte
@@ -176,9 +175,10 @@ func (r *Renderer) prepareCommit(lines []string) []rline {
 // and nothing at all is written when nothing did.
 //
 // When there are more lines than the terminal has rows, the last rows are
-// shown; the rest wait until there is room. When the region is kept at
-// the bottom of the screen (see Renderer) and lines are fewer than the
-// rows it took, blank rows above them take the rest.
+// shown; the rest wait until there is room. When the renderer knows the
+// cursor's row (see Renderer), blank rows above lines that do not reach the
+// screen's last row take the rest, so that the region's last line is the
+// screen's.
 func (r *Renderer) SetLive(lines []string, cursorRow, cursorCol int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -427,20 +427,14 @@ func (r *Renderer) rowsAboveCursor() int {
 }
 
 // padding is how many blank rows go between n committed lines and a live
-// region of h rows, so that the region's last row stays on the screen's
-// last row once it has come down to it (see Renderer).
+// region of h rows, so that the region's last row is the screen's last row
+// (see Renderer).
 func (r *Renderer) padding(n, h int) int {
 	if !r.known || r.stale || h == 0 {
 		return 0
 	}
 	top := r.at - r.row
 	if top < 0 {
-		return 0
-	}
-	if top+max(len(r.screen), 1) >= r.rows {
-		r.bottom = true
-	}
-	if !r.bottom {
 		return 0
 	}
 	return max(r.rows-top-n-h, 0)

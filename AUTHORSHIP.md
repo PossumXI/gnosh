@@ -260,6 +260,14 @@ Set: a quote's words are in the terminal's own colour, behind the purple bar
 (`spec/DECISIONS.md` item 389). Claude's part: the terminal's own colour
 rather than a grey, so that a long quote stays easy to read.
 
+22 November 2026, after the box fix shipped and he logged in to the Mac
+Studio again, inside tmux:
+
+> it's still doing that thing here the text field is not fixed on bottom of screen.
+
+Set: the box stands on the bottom rows from the first frame, whatever is
+above it (`spec/DECISIONS.md` item 390).
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
